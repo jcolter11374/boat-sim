@@ -76,18 +76,42 @@ voyage:
 # crossing matches the design doc FMEA; Ravi varies them in Monte Carlo.
 hazards:
   enabled: true
-  critical_wave_frac_of_length: 0.35  # breaking wave ~35 % of hull length rolls it (Wolfson/Fastnet)
-  knockdown_scale: 0.02      # GUESS: share of breakers that are plunging and catch it beam-on
+  # Knockdowns: whitecap-based rate adapted from the Randolph drone-boat model (#52).
+  critical_wave_frac_of_length: 0.55  # breaker 55 % of hull length capsizes it (Wolfson/Fastnet)
+  critical_wave_frac_of_beam: 1.2     # Randolph: floor for short hulls
+  breaker_height_frac_of_hs: 0.25     # GUESS (Randolph): Rayleigh scale of breaker heights
+  beam_on_share: 0.25                 # GUESS (Randolph)
+  knockdown_scale: 1.0                # multiplier for Monte Carlo spread
   damage_ref_hs_m: 3.0       # per-knockdown odds below scale with (Hs / 3 m)^2
-  p_inverted_stuck: 1.5e-4   # GUESS: per knockdown; ~0.7 % per crossing (FMEA row 5)
+  p_inverted_stuck: 4.0e-5   # GUESS: per knockdown; ~0.7 % per crossing (FMEA row 5)
   p_part:                    # GUESS: per knockdown at Hs 3 m
-    panel_100w_a: 1.5e-4
-    panel_100w_b: 1.5e-4
-    panel_50w: 1.5e-4
-    ais_whip: 1.0e-4
-    rudder: 5.0e-5
+    panel_100w_a: 4.0e-5
+    panel_100w_b: 4.0e-5
+    panel_50w: 4.0e-5
+    ais_whip: 2.5e-5
+    rudder: 1.5e-5
   ship_speed_ms: 7.0         # GUESS: ~14 kt merchant ship
   ship_beam_m: 32.0          # GUESS
   p_avoid_with_ais: 0.975    # GUESS: ~1 % strike odds per crossing (FMEA row 3)
   p_avoid_without_ais: 0.95  # design doc: losing AIS roughly doubles collision risk
   p_lost_given_strike: 0.8   # GUESS
+  p_leak_given_strike: 1.0   # Randolph drone-boat default: a survived hit leaves a leak
+  # Wear, water and people (rates per day). Starting point: the Randolph team's
+  # drone-boat defaults (MIT, see THIRD_PARTY_NOTICES.md), changed where our design
+  # differs. All GUESS: see vessel/hazards.py for the reasoning and real-world anchors.
+  failures_enabled: true
+  leak_per_day: 0.0025               # GUESS (Randolph), x (1 + (Hs/3)^2)
+  electronics_per_day: 0.0012        # GUESS (Randolph), per box, two boxes
+  electronics_wet_multiplier: 6      # GUESS (Randolph)
+  software_hang_per_day: 0.02        # GUESS (Randolph)
+  watchdog_recovers: 0.95            # GUESS (Randolph)
+  steering_per_day: 0.002            # GUESS (Randolph), x (1 + Hs/4)
+  steering_jam_share: 0.6            # GUESS (Randolph)
+  rudder_jam_drag_mult: 1.25         # GUESS
+  entangle_per_day: 0.003            # GUESS (Randolph); x3 near land, x2 Sargasso, x2 Gulf Stream
+  entangle_extra_drag: 3.0           # GUESS (Randolph): drag x4 while caught
+  entangle_clear_per_day: 0.5        # GUESS: reverse-thrust cycles (Randolph 0.15, no reverse)
+  p_thruster_wrap: 0.1               # GUESS
+  capture_per_day: 0.002             # GUESS (Randolph), within 50 km of land only
+  unknown_p_by_60_days: 0.03         # design doc FMEA row 2: early-life defect or unknown
+  unknown_shape: 0.5                 # GUESS: front-loaded (infant mortality)
