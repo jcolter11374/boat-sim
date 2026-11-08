@@ -11,7 +11,13 @@ dependencies = ["numpy>=1.26", "pandas>=2.1", "pyyaml>=6"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
-data = ["xarray>=2024.1", "netCDF4>=1.6", "cdsapi>=0.7", "copernicusmarine>=1.0"]
+data = [
+  "xarray>=2024.1",
+  "netCDF4>=1.6",
+  "zarr>=2.18",
+  "gcsfs>=2024.2",
+  "copernicusmarine>=2.0",
+]
 reports = ["plotly>=5", "folium>=0.16"]
 
 [tool.setuptools.packages.find]
