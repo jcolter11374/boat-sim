@@ -190,3 +190,23 @@ def test_default_route_still_arrives():
         _components(EnvState(ghi=1000.0), WaypointAutopilot()), T0, *START, default_mission()
     )
     assert log.outcome == Outcome.ARRIVED
+
+
+def test_resent_identical_route_keeps_place_and_track():
+    """Base's daily ack resends the same route; the boat must not restart it."""
+    o = (37.0, -70.0)
+    wp1 = destination(*o, 90.0, 100_000.0)
+    wp2 = destination(*o, 90.0, 300_000.0)
+    ap = WaypointAutopilot()
+    m = Mission([Waypoint(*wp1), Waypoint(*wp2)])
+    ap.update(Sensors(T0, *o, 90.0, 1.0), m, T0)
+    past = destination(*o, 90.0, 150_000.0)
+    t1 = T0 + timedelta(hours=10)
+    ap.update(Sensors(t1, *past, 90.0, 1.0), m, t1)
+    assert m.active_index == 1
+    origin = ap._origin
+    ack = Mission([Waypoint(*wp1), Waypoint(*wp2)], version=1)
+    t2 = t1 + timedelta(minutes=10)
+    cmd = ap.update(Sensors(t2, *past, 90.0, 1.0), ack, t2)
+    assert ack.active_index == 1 and ap._origin == origin
+    assert 60.0 < cmd.heading < 120.0  # still east, not back to wp1

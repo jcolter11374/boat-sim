@@ -2,5 +2,6 @@
 Owner: Sam (thread 3)."""
 
 from boatsim.basestation.base import BasePolicy, HoldCoursePolicy
+from boatsim.basestation.replan import ForecastReplanPolicy
 
-__all__ = ["BasePolicy", "HoldCoursePolicy"]
+__all__ = ["BasePolicy", "ForecastReplanPolicy", "HoldCoursePolicy"]
