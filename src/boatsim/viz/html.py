@@ -26,6 +26,7 @@ Owner: Iris.
 from __future__ import annotations
 
 import html
+import json
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -230,19 +231,7 @@ def map_figure(tracks: list[dict]):
         )
     )
     _layout(fig, "Sample tracks", height=480)
-    fig.update_geos(
-        projection_type="natural earth",
-        lataxis_range=[20, 65],
-        lonaxis_range=[-85, 10],
-        showland=True,
-        landcolor="#f0efec",
-        showocean=True,
-        oceancolor=SURFACE,
-        coastlinecolor=AXIS,
-        countrycolor=GRID,
-        showcountries=True,
-        bgcolor=SURFACE,
-    )
+    _geo(fig)
     fig.update_layout(legend={"orientation": "h", "y": -0.02})
     return fig
 
@@ -283,6 +272,187 @@ def battery_figure(tracks: list[dict]):
     return fig
 
 
+# ---------------------------------------------- batch-only figures (no tracks)
+
+# Ordinal blue ramp for the "unknown failure" sweep: darker = more failures.
+SWEEP_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]
+
+
+def has_unknown_sweep(summary: pd.DataFrame) -> bool:
+    """True when the batch ran with the catch-all "unknown failure" switched off,
+    so the report can put it back at several values (mc/months.py)."""
+    return (
+        len(summary) > 0
+        and "unknown_p_run" in summary
+        and "days" in summary
+        and bool((summary["unknown_p_run"].fillna(-1) == 0.0).all())
+    )
+
+
+def sweep_figure(summary: pd.DataFrame):
+    import plotly.graph_objects as go
+
+    from boatsim.mc.months import SWEEP, sweep_table
+
+    t = sweep_table(summary.assign(month=pd.to_datetime(summary["start"]).dt.month))
+    t = t[(t["month"] != "All") & (t["voyages"] > 0)]
+    fig = go.Figure()
+    model = [
+        100 * float((g["outcome"] == Outcome.ARRIVED.value).mean())
+        for _, g in summary.groupby(pd.to_datetime(summary["start"]).dt.month)
+    ]
+    fig.add_trace(
+        go.Scatter(
+            x=list(t["month"]),
+            y=model,
+            mode="lines+markers",
+            line={"width": 2, "color": INK, "dash": "dot"},
+            marker={"size": 8},
+            name="Model alone (no unknown failures)",
+            hovertemplate="%{x}: %{y:.0f}%, model alone<extra></extra>",
+        )
+    )
+    for p, colour in zip(SWEEP, SWEEP_RAMP, strict=True):
+        fig.add_trace(
+            go.Scatter(
+                x=list(t["month"]),
+                y=list(100 * t[f"p{p:g}"]),
+                mode="lines+markers",
+                line={"width": 2, "color": colour},
+                marker={"size": 8, "line": {"width": 2, "color": SURFACE}},
+                name=f"{p:.0%} fail by day 60",
+                hovertemplate=f"%{{x}}: %{{y:.0f}}% if {p:.0%} fail by day 60<extra></extra>",
+            )
+        )
+    _layout(fig, "Chance of reaching Europe, by launch month and unknown-failure rate", 420)
+    fig.update_yaxes(range=[0, 102], ticksuffix="%")
+    fig.update_layout(legend={"orientation": "h", "y": -0.15}, hovermode="x unified")
+    return fig
+
+
+def endpoints_figure(summary: pd.DataFrame):
+    """Where each voyage ended, coloured by outcome (the batch CSVs carry no tracks)."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    groups = summary["outcome"].map(outcome_group)
+    for group, colour in OUTCOME_COLOURS.items():
+        g = summary[groups == group].dropna(subset=["end_lat", "end_lon"])
+        label = pd.to_datetime(g["start"]).dt.strftime("Launched %d %b %Y")
+        text = (
+            label
+            + ", "
+            + g.get("days", pd.Series(0, index=g.index)).round(0).astype(int).astype(str)
+            + " days"
+        )
+        fig.add_trace(
+            go.Scattergeo(
+                lat=g["end_lat"],
+                lon=g["end_lon"],
+                mode="markers",
+                marker={
+                    "size": 8,
+                    "color": colour,
+                    "opacity": 0.8,
+                    "line": {"width": 1, "color": SURFACE},
+                },
+                name=f"{OUTCOME_LABELS[group]} ({len(g)})",
+                text=text,
+                hoverinfo="text",
+            )
+        )
+    fig.add_trace(
+        go.Scattergeo(
+            lat=[36.85],
+            lon=[-75.70],
+            mode="markers",
+            marker={"size": 10, "color": INK, "symbol": "star"},
+            name="Drop point",
+            hovertext=["Drop point, east of the Chesapeake Bay mouth"],
+            hoverinfo="text",
+        )
+    )
+    _layout(fig, "Where each voyage ended", height=480)
+    _geo(fig)
+    fig.update_layout(legend={"orientation": "h", "y": -0.02})
+    return fig
+
+
+def _geo(fig) -> None:
+    fig.update_geos(
+        projection_type="natural earth",
+        lataxis_range=[20, 65],
+        lonaxis_range=[-85, 10],
+        showland=True,
+        landcolor="#f0efec",
+        showocean=True,
+        oceancolor=SURFACE,
+        coastlinecolor=AXIS,
+        countrycolor=GRID,
+        showcountries=True,
+        bgcolor=SURFACE,
+    )
+
+
+def solar_figure(summary: pd.DataFrame):
+    """Median solar energy harvested per day, by launch month."""
+    import plotly.graph_objects as go
+
+    m = pd.to_datetime(summary["start"]).dt.month
+    med = summary.groupby(m)["solar_wh_day"].median()
+    fig = go.Figure(
+        go.Bar(
+            x=[_MONTHS[i - 1] for i in med.index],
+            y=med.values,
+            marker={"color": BAR, "cornerradius": 4},
+            hovertemplate="%{x} launches: %{y:.0f} Wh a day from the panels<extra></extra>",
+        )
+    )
+    _layout(fig, "Solar energy per day at sea (median), by launch month", bargap=0.35)
+    fig.update_yaxes(ticksuffix=" Wh", rangemode="tozero")
+    return fig
+
+
+def lowest_charge_figure(summary: pd.DataFrame):
+    """Each voyage's lowest battery charge, by launch month, coloured by outcome."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    months = pd.to_datetime(summary["start"]).dt.month
+    groups = summary["outcome"].map(outcome_group)
+    offsets = {"arrived": -0.2, "at_sea": 0.0, "lost": 0.2}
+    for group, colour in OUTCOME_COLOURS.items():
+        sel = groups == group
+        g = summary[sel]
+        fig.add_trace(
+            go.Scatter(
+                x=months[sel] + offsets[group],
+                y=100 * g["min_soc"],
+                mode="markers",
+                marker={
+                    "size": 8,
+                    "color": colour,
+                    "opacity": 0.8,
+                    "line": {"width": 1, "color": SURFACE},
+                },
+                name=f"{OUTCOME_LABELS[group]} ({int(sel.sum())})",
+                text=pd.to_datetime(g["start"]).dt.strftime("Launched %d %b %Y"),
+                hovertemplate="%{text}: lowest charge %{y:.0f}%<extra></extra>",
+            )
+        )
+    fig.add_hline(
+        y=15,
+        line={"dash": "dot", "color": MUTED, "width": 1},
+    )
+    _layout(fig, "Lowest battery charge on each voyage, by launch month", height=400)
+    fig.update_xaxes(
+        tickvals=list(range(1, 13)), ticktext=_MONTHS, range=[0.5, 12.5], showgrid=False
+    )
+    fig.update_yaxes(range=[0, 102], ticksuffix="%")
+    fig.update_layout(legend={"orientation": "h", "y": -0.15})
+    return fig
+
+
 # ------------------------------------------------------------------- page
 
 _CSS = f"""
@@ -296,6 +466,8 @@ p, li {{ color: {INK_2}; }}
   padding: 20px 24px; margin: 20px 0; }}
 .hero .big {{ font-size: 48px; font-weight: 600; color: {INK}; }}
 .hero .range {{ font-size: 18px; color: {INK_2}; }}
+.banner {{ background: #fff4d6; border: 1px solid #fab219; border-radius: 8px;
+  padding: 12px 16px; margin: 16px 0; color: {INK}; }}
 .warn {{ border-left: 3px solid #fab219; padding: 8px 12px; margin: 16px 0;
   background: {SURFACE}; }}
 .warn li {{ margin: 2px 0; }}
@@ -356,11 +528,36 @@ def report_html(
     tracks: Iterable[dict] | None = None,
     title: str = "Voyage odds report",
     subtitle: str = "",
+    banner: str = "",
+    topojson: str | Path | None = None,
 ) -> str:
-    """Build the report page as a string. See module docstring for inputs."""
+    """Build the report page as a string. See module docstring for inputs.
+
+    banner: an optional highlighted note at the top, e.g. "Preliminary".
+    topojson: path to Plotly's world_110m.json (npm package sane-topojson). If
+    given, the map outlines are embedded, so the map works with no internet and
+    on hosts that block outside downloads (e.g. claude.ai artifacts).
+    """
     card = batch_card(summary)
     tracks = _pick_tracks(list(tracks or []))
+    sweep = has_unknown_sweep(summary)
+    coast_note = "" if topojson is not None else " (The coastlines load from the internet.)"
     figs: list[tuple[str, object, str]] = []
+    if sweep:
+        figs.append(
+            (
+                "The big unknown: failures we can't model",
+                sweep_figure(summary),
+                (
+                    "Real small robot boats mostly die of things nobody predicted: leaks, "
+                    "electronics, fishing gear. The model can't simulate those, so we add a "
+                    "catch-all 'unknown failure' and try several guesses for how common it is "
+                    "(the share of boats it would kill within 60 days). The dotted line is the "
+                    "model alone. Darker lines assume more unknown failures. Past small robot "
+                    "boat attempts suggest the darker lines are closer to the truth."
+                ),
+            )
+        )
     if card.months:
         figs.append(
             (
@@ -370,6 +567,11 @@ def report_html(
                     "Each bar is the share of simulated launches in that month that reached "
                     "Europe. The thin line on each bar is the 95% range: with this many runs, "
                     "the true odds are probably somewhere inside it."
+                    + (
+                        " These bars are the model alone, with no unknown failures."
+                        if sweep
+                        else ""
+                    )
                 ),
             )
         )
@@ -390,8 +592,8 @@ def report_html(
                 "Where the boats went",
                 map_figure(tracks),
                 (
-                    f"A sample of up to {MAX_TRACKS} simulated tracks. {SINGLE_TRACK_CAVEAT} "
-                    "(The coastlines load from the internet.)"
+                    f"A sample of up to {MAX_TRACKS} simulated tracks. {SINGLE_TRACK_CAVEAT}"
+                    f"{coast_note}"
                 ),
             )
         )
@@ -405,13 +607,51 @@ def report_html(
                 ),
             )
         )
+    if not tracks and {"end_lat", "end_lon"} <= set(summary.columns):
+        figs.append(
+            (
+                "Where the boats ended up",
+                endpoints_figure(summary),
+                (
+                    "One dot per voyage, where it arrived, sank or was when time ran out. "
+                    f"{SINGLE_TRACK_CAVEAT}{coast_note}"
+                ),
+            )
+        )
+    if "solar_wh_day" in summary and summary["solar_wh_day"].notna().any():
+        figs.append(
+            (
+                "Sun",
+                solar_figure(summary),
+                (
+                    "How much energy the solar panels made per day, on average over the "
+                    "voyage. The boat needs about 85 Wh a day for its electronics before "
+                    "the motors get anything."
+                ),
+            )
+        )
+    if not tracks and "min_soc" in summary and summary["min_soc"].notna().any():
+        figs.append(
+            (
+                "Battery",
+                lowest_charge_figure(summary),
+                (
+                    "Each dot is one voyage's lowest battery charge. Below 15% (the dotted "
+                    "line) the boat stops its motors and drifts until the sun recharges it."
+                ),
+            )
+        )
 
     parts = []
     for i, (heading, fig, note) in enumerate(figs):
         div = fig.to_html(
             full_html=False,
             include_plotlyjs=(i == 0),  # embed Plotly once: the file works offline
-            config={"displaylogo": False, "responsive": True},
+            config={
+                "displaylogo": False,
+                "responsive": True,
+                "modeBarButtonsToRemove": ["toImage"],
+            },
         )
         parts.append(
             f"<h2>{html.escape(heading)}</h2><p>{html.escape(note)}</p>"
@@ -435,19 +675,42 @@ def report_html(
             "<p>“Still at sea” includes boats blown out of the area we have weather "
             "data for; those runs stop there.</p>"
         )
-    return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title><style>{_CSS}</style></head>
-<body><main>
-<h1>{html.escape(title)}</h1>
-<p>{html.escape(subtitle)}</p>
-<div class="hero">
+    geo_assets = ""
+    if topojson is not None:
+        world = json.dumps(json.loads(Path(topojson).read_text(encoding="utf-8")))
+        geo_assets = (
+            "<script>window.PlotlyGeoAssets={topojson:{world_110m:"
+            + world.replace("</", "<\\/")
+            + "}};</script>"
+        )
+    banner_html = f'<div class="banner">{html.escape(banner)}</div>' if banner else ""
+    if sweep:
+        from boatsim.mc.months import SWEEP, swept_odds
+
+        lo_p, hi_p = swept_odds(summary, max(SWEEP)), swept_odds(summary, min(SWEEP))
+        hero = f"""<div class="hero">
+  <div>Chance of reaching Europe (Azores included), all launch months together</div>
+  <div class="big">{lo_p:.0%} to {hi_p:.0%}</div>
+  <div class="range">depending on how often failures we can't model happen (see below).
+    The model alone says {card.rate:.0%} ({card.arrived} of {card.runs} simulated launches
+    arrived; 95% range {card.low:.0%} to {card.high:.0%}).</div>
+</div>"""
+    else:
+        hero = f"""<div class="hero">
   <div>Chance of reaching Europe (Azores included)</div>
   <div class="big">{card.rate:.0%}</div>
   <div class="range">95% range {card.low:.0%} to {card.high:.0%} ·
     {card.arrived} of {card.runs} simulated launches arrived</div>
-</div>
+</div>"""
+    page = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)}</title><style>{_CSS}</style>{geo_assets}</head>
+<body><main>
+<h1>{html.escape(title)}</h1>
+<p>{html.escape(subtitle)}</p>
+{banner_html}
+{hero}
 {days}{airtime}{left_box}
 <div class="warn"><strong>Read with care</strong><ul>{warnings}</ul></div>
 {"".join(parts)}
@@ -457,6 +720,9 @@ def report_html(
 <details><summary>Show the table ({card.runs} rows)</summary>{_table(summary)}</details>
 </main></body></html>
 """
+    # Plotly's bundle has one raw U+FFFD inside a regex; write it as the
+    # equivalent escape so strict UTF-8 checkers (e.g. artifact hosts) accept it.
+    return page.replace("\ufffd", "\\uFFFD")
 
 
 def write_report(
@@ -465,11 +731,15 @@ def write_report(
     tracks: Iterable[dict] | None = None,
     title: str = "Voyage odds report",
     subtitle: str = "",
+    banner: str = "",
+    topojson: str | Path | None = None,
 ) -> Path:
     """Write the self-contained HTML report and return its path."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(report_html(summary, tracks, title, subtitle), encoding="utf-8")
+    path.write_text(
+        report_html(summary, tracks, title, subtitle, banner, topojson), encoding="utf-8"
+    )
     return path
 
 
@@ -481,9 +751,18 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", default="runs/report.html")
     ap.add_argument("--title", default="Voyage odds report")
     ap.add_argument("--subtitle", default="")
+    ap.add_argument("--banner", default="", help="highlighted note at the top")
+    ap.add_argument("--topojson", default=None, help="embed this world_110m.json map outline")
     args = ap.parse_args(argv)
     df = pd.concat([pd.read_csv(f, parse_dates=["start"]) for f in args.csv], ignore_index=True)
-    out = write_report(args.out, df, title=args.title, subtitle=args.subtitle)
+    out = write_report(
+        args.out,
+        df,
+        title=args.title,
+        subtitle=args.subtitle,
+        banner=args.banner,
+        topojson=args.topojson,
+    )
     print(f"wrote {out} ({len(df)} voyages)")
 
 
