@@ -36,6 +36,24 @@ We don't share anything secret or personal: no API keys or account details,
 no personal names, emails or jobs beyond what someone already shows publicly
 on GitHub, and no files we don't have the right to share.
 
+## Dividing up shared work
+
+Some work helps both teams equally, so it makes sense for each side to take
+the parts it's already set up for. This is a starting offer. Change it as
+you like.
+
+| Work | Who | Why them | What the other team gets |
+| --- | --- | --- | --- |
+| **Drift check against real buoys.** Run our NOAA drifter check on buoys from the Nova Scotia / Newfoundland to Ireland corridor as well as off the US coast. | boat-sim | We've already built it and it runs in our CI | A score for how well the reanalysis currents move things along your route, which tells you whether your current data is good enough there too |
+| **Current data side by side.** Compare GLORYS (ours) and Open-Meteo / SMOC (yours) at the same points and times along both routes. | boat-sim | We have both feeds working | A short table of how far the two sources disagree, and where |
+| **Failure rates with sources.** One shared table of hazard rates per day (leaks, steering, fishing line and weed, capture near land, electronics, software hangs, fouling), each with a source or marked as a guess. | Randolph team, we'll review | Your `failures.py` already covers more hazards than ours | We fill a known gap in our model; you get a second pair of eyes on the rates |
+| **Crossing history.** The record of past small-robot Atlantic crossings (Microtransat and others): who tried, what boat, how far they got, and what ended each attempt. | Randolph team, we'll add what we find | You've already gathered the start of it | A base rate both teams can check their odds against |
+| **Comparison runs.** Both simulators fed the same start point, date and a "dead boat" drifting with no power, to see where the physics disagree. | Both, each runs its own | Each team knows its own code | A sanity check neither team can do alone |
+
+Results go in a `collab` issue here, or in a file in whichever repo makes
+sense, linked from the standing thread. Nobody has to buy anything for any of
+this: it all uses free public data and free CI.
+
 ## How often
 
 We post when there's something useful, not on a schedule, so no status spam.
