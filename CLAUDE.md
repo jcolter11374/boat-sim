@@ -8,3 +8,5 @@
   (ARCO-ERA5 public Zarr, Copernicus Marine subsetting) rather than bulk downloads.
 - One boat only (the v4 kayak in configs/v4_kayak.yaml). No rescue after the drop.
 - Explain nautical terms plainly in anything John reads; he isn't a sailor.
+- Never ask John for money or a budget without an itemised plan; never hunt for reasons
+  to spend. Costs like satellite airtime are outputs to minimise (CONTRIBUTING.md rule 9).

@@ -14,3 +14,7 @@
 7. **Before pushing:** `ruff check . && ruff format --check . && pytest`. CI runs
    the same plus a smoke run.
 8. **Accuracy over looks.** This is a test bench for a real boat, not a game.
+9. **Cheap is a goal, not a constraint to negotiate.** Never ask John for money
+   or a budget without an itemised plan of what it buys and why it's the cheapest
+   way to get it. Never go looking for reasons to spend. Running costs (airtime,
+   subscriptions, cloud) are simulator *outputs* to minimise, not allowances to fill.
