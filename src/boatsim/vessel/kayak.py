@@ -1,0 +1,250 @@
+"""KayakVessel: the v4 solar-electric kayak, replacing the M0 KinematicVessel.
+
+Each 10-minute step:
+
+1. Work out drive power: what the autopilot asked for, limited by the
+   thrusters that still work and by what the battery can deliver.
+2. Find the speed through the water where thrust plus the push of the wind
+   balances drag (calm-water drag x fouling x rough water). The kayak reaches
+   steady speed in well under a minute, so a steady balance per step is fine.
+3. Find the sideways slip (leeway) where the wind's side force balances the
+   keel and hull.
+4. Add the ocean current and the waves' Stokes drift, and move the boat.
+
+With no drive power the boat can't steer and lies beam-on to the wind (GUESS),
+so it drifts with wind and current: the M1 drifter comparison case.
+
+Not here yet: knockdowns, damage and ship strikes (issue #7).
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
+
+import numpy as np
+
+from boatsim.config import Design
+from boatsim.geo import move
+from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
+from boatsim.vessel import hull as H
+from boatsim.vessel.power import BatteryParams, SolarParams, energy_step, solar_power_w
+from boatsim.vessel.propulsion import ThrusterParams, total_thrust
+
+THRUSTER_PARTS = ("thruster_port", "thruster_starboard")
+
+
+@dataclass
+class KayakState(BoatState):
+    """BoatState plus what the kayak model needs to remember or wants logged.
+
+    Subclassing keeps the shared BoatState contract untouched; the runner just
+    hands this back to step() each time.
+    """
+
+    t_launch: datetime | None = None
+    speed_over_ground: float = 0.0  # m/s
+    course_over_ground: float = 0.0  # deg, compass
+    leeway_deg: float = 0.0  # angle between heading and track through the water
+    solar_w: float = 0.0
+    drive_w: float = 0.0
+    hotel_w: float = 0.0
+    fouling_frac: float = 0.0
+    electronics_on: bool = True
+
+
+@dataclass(frozen=True)
+class SpeedSolution:
+    surge: float  # m/s through the water along the heading
+    sway: float  # m/s through the water to starboard
+    thrust_n: float
+    drag_n: float
+    wave_frac: float
+
+
+def _boat_axes(heading_deg: float, east: float, north: float) -> tuple[float, float]:
+    """World (east, north) -> boat (forward, starboard)."""
+    h = math.radians(heading_deg)
+    s, c = math.sin(h), math.cos(h)
+    return east * s + north * c, east * c - north * s
+
+
+def _world_axes(heading_deg: float, fwd: float, stbd: float) -> tuple[float, float]:
+    """Boat (forward, starboard) -> world (east, north)."""
+    h = math.radians(heading_deg)
+    s, c = math.sin(h), math.cos(h)
+    return fwd * s + stbd * c, fwd * c - stbd * s
+
+
+def solve_speed(
+    hp: H.HullParams,
+    tp: ThrusterParams,
+    heading_deg: float,
+    drive_w: float,
+    working_thrusters: int,
+    env: EnvState,
+    fouling: float,
+    current_e: float,
+    current_n: float,
+) -> SpeedSolution:
+    """Steady speed through the water for a given heading and drive power."""
+    # Wind relative to the water, in boat axes. (The boat's own speed is
+    # subtracted inside the balances, which is what makes them self-consistent.)
+    wx, wy = _boat_axes(heading_deg, env.wind_u - current_e, env.wind_v - current_n)
+    wave_rel = (env.wave_dir - heading_deg) % 360.0
+    f_wave = H.wave_drag_frac(hp, env.hs, wave_rel)
+    mult = (1.0 + fouling) * (1.0 + f_wave)
+
+    def surplus(u: float) -> float:
+        thrust = total_thrust(tp, drive_w, u, working_thrusters)
+        fx, _ = H.air_force(hp, wx - u, 0.0)
+        return thrust + fx - H.calm_drag(hp, u) * mult
+
+    # surplus() falls as u rises (more drag, less thrust, less tailwind), so a
+    # bracketed root-finder is safe. Illinois variant of regula falsi.
+    lo, hi = -3.0, 4.0
+    f_lo, f_hi = surplus(lo), surplus(hi)
+    while f_hi > 0.0 and hi < 64.0:  # storm tailwind: widen the bracket
+        hi *= 2.0
+        f_hi = surplus(hi)
+    u = 0.0
+    side = 0
+    for _ in range(60):
+        u = (lo * f_hi - hi * f_lo) / (f_hi - f_lo)
+        f = surplus(u)
+        if abs(f) < 1e-6 or hi - lo < 1e-6:
+            break
+        if f > 0:
+            lo, f_lo = u, f
+            if side == 1:
+                f_hi *= 0.5
+            side = 1
+        else:
+            hi, f_hi = u, f
+            if side == -1:
+                f_lo *= 0.5
+            side = -1
+
+    v = H.lateral_speed(hp, wy, u)
+    thrust = total_thrust(tp, drive_w, u, working_thrusters)
+    return SpeedSolution(u, v, thrust, H.calm_drag(hp, u) * mult, f_wave)
+
+
+class KayakVessel:
+    """Physics for the v4 kayak. Drop-in for the Vessel protocol."""
+
+    def __init__(self, design: Design):
+        self.hull = H.HullParams.from_config(design.hull)
+        self.thrusters = ThrusterParams.from_config(design.propulsion)
+        self.solar = SolarParams.from_config(design.power)
+        self.battery = BatteryParams.from_config(design.power)
+        e = design.electronics
+        self.nav_light_w = float(e.get("nav_light_w", 0.5))
+        dark_hours = float(e.get("nav_light_hours_per_day", 8.0))
+        hotel_wh = float(e.get("hotel_load_wh_per_day", 85.0))
+        # Everything except the light runs all day; the light runs when it's dark.
+        self.base_hotel_w = (hotel_wh - self.nav_light_w * dark_hours) / 24.0
+        self.dark_ghi = float(e.get("nav_light_on_below_ghi", 5.0))
+        self.min_steer_w = float(design.propulsion.get("min_steer_w", 1.0))  # GUESS
+
+    def initial_state(self, t, lat: float, lon: float) -> KayakState:
+        cap = self.battery.capacity_wh
+        return KayakState(
+            t=t, lat=lat, lon=lon, battery_wh=cap, battery_capacity_wh=cap, t_launch=t
+        )
+
+    def working_thrusters(self, state: BoatState) -> int:
+        failed = sum(1 for k in THRUSTER_PARTS if state.damage.get(k, False))
+        return max(0, self.thrusters.count - failed)
+
+    def step(
+        self,
+        state: BoatState,
+        cmd: Command,
+        env: EnvState,
+        dt: timedelta,
+        rng: np.random.Generator,
+    ) -> tuple[KayakState, list[Event]]:
+        events: list[Event] = []
+        hours = dt.total_seconds() / 3600.0
+        t_launch = getattr(state, "t_launch", None) or state.t
+        days = (state.t - t_launch).total_seconds() / 86400.0
+        was_on = getattr(state, "electronics_on", True)
+        cap = state.battery_capacity_wh
+
+        # --- Energy -----------------------------------------------------------
+        on = was_on or (cap > 0 and state.battery_wh / cap >= self.battery.restart_soc)
+        working = self.working_thrusters(state)
+        frac = min(max(cmd.thrust_fraction, 0.0), 1.0)
+        drive_req = frac * self.thrusters.max_power_each_w * working if on else 0.0
+        hotel_req = 0.0
+        if on:
+            hotel_req = self.base_hotel_w + (self.nav_light_w if env.ghi < self.dark_ghi else 0.0)
+        solar = solar_power_w(self.solar, env.ghi, env.hs, env.air_temp)
+        es = energy_step(
+            self.battery, state.battery_wh, solar, drive_req, hotel_req, hours, env.air_temp
+        )
+        if es.battery_wh <= 0.0 and state.battery_wh > 0.0:
+            events.append(Event(state.t + dt, EventKind.BATTERY_EMPTY))
+        on_next = on and es.battery_wh > 0.0
+
+        # --- Motion -----------------------------------------------------------
+        cur_e, cur_n = env.current_u, env.current_v
+        if self.hull.stokes_drift:
+            se, sn = H.stokes_drift(env.hs, env.tp, env.wave_dir)
+            cur_e, cur_n = cur_e + se, cur_n + sn
+
+        steering = es.drive_w >= self.min_steer_w and working > 0
+        if steering:
+            heading = cmd.heading
+        else:
+            # Can't steer: lie beam-on to the wind relative to the water.
+            we, wn = env.wind_u - cur_e, env.wind_v - cur_n
+            if we == 0.0 and wn == 0.0:
+                heading = state.heading
+            else:
+                wind_to = math.degrees(math.atan2(we, wn))
+                heading = (wind_to + self.hull.drift_heading_offset_deg) % 360.0
+
+        foul = H.fouling_frac(self.hull, days)
+        sol = solve_speed(
+            self.hull, self.thrusters, heading, es.drive_w, working, env, foul, cur_e, cur_n
+        )
+        ve, vn = _world_axes(heading, sol.surge, sol.sway)
+        ge, gn = ve + cur_e, vn + cur_n
+        secs = dt.total_seconds()
+        lat, lon = move(state.lat, state.lon, ge * secs, gn * secs)
+
+        new = KayakState(
+            t=state.t + dt,
+            lat=lat,
+            lon=lon,
+            heading=heading,
+            speed_through_water=math.hypot(sol.surge, sol.sway),
+            battery_wh=es.battery_wh,
+            battery_capacity_wh=cap,
+            alive=state.alive,
+            damage=dict(state.damage),
+            t_launch=t_launch,
+            speed_over_ground=math.hypot(ge, gn),
+            course_over_ground=math.degrees(math.atan2(ge, gn)) % 360.0,
+            leeway_deg=math.degrees(math.atan2(sol.sway, max(abs(sol.surge), 1e-9))),
+            solar_w=es.solar_w,
+            drive_w=es.drive_w,
+            hotel_w=es.hotel_w,
+            fouling_frac=foul,
+            electronics_on=on_next,
+        )
+        return new, events
+
+    def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
+        # Truth for now; GPS and compass noise belong with the sensor-failure work.
+        return Sensors(
+            t=state.t, lat=state.lat, lon=state.lon, heading=state.heading, soc=state.soc
+        )
+
+
+def with_damage(state: KayakState, part: str) -> KayakState:
+    """Copy of `state` with one part marked failed (helper for tests and hazards)."""
+    return replace(state, damage={**state.damage, part: True})
