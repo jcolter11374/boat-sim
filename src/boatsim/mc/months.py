@@ -378,8 +378,7 @@ def main(argv: list[str] | None = None) -> None:
             first = datetime(a.year, min(a.months or [1]), 1)
             last = datetime(a.year, max(a.months or [12]), 28) + timedelta(days=a.max_days + 4)
             era5.fetch_days(era5.days_between(first.date(), last.date()), workers=a.workers)
-        job = MonthlyVoyage(design_path=a.design, currents=not a.no_currents, max_days=a.max_days)
-        df = run_year(a.year, job, a.workers, a.months)
+        df = run_year(a.year, job_from_args(a), a.workers, a.months)
         out = Path(a.out)
         out.mkdir(parents=True, exist_ok=True)
         df.to_csv(out / f"voyages_{a.year}.csv", index=False)
@@ -393,6 +392,16 @@ def main(argv: list[str] | None = None) -> None:
         md = report_markdown(df)
         (out / "odds_report.md").write_text(md)
         print(md)
+
+
+def job_from_args(a) -> MonthlyVoyage:
+    """The batch job the `run` command builds from its options."""
+    return MonthlyVoyage(
+        design_path=a.design,
+        currents=not a.no_currents,
+        max_days=a.max_days,
+        unknown_p_by_60_days=a.unknown_p,
+    )
 
 
 if __name__ == "__main__":

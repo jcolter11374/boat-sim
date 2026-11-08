@@ -120,3 +120,16 @@ def test_sweep_weights_arrivals_by_survival():
     md = M.report_markdown(df)
     assert "Odds as a range" in md
     assert "| All | 2 | 48% | 45% | 38% | 25% | 8% |" in md
+
+
+def test_run_command_passes_unknown_p_to_the_job(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run_year(year, job, workers, months):
+        seen["job"] = job
+        return pd.DataFrame({"start": [], "outcome": []})
+
+    monkeypatch.setattr(M, "run_year", fake_run_year)
+    M.main(["run", "2015", "--unknown-p", "0", "--no-currents", "--out", str(tmp_path)])
+    assert seen["job"].unknown_p_by_60_days == 0.0
+    assert seen["job"].currents is False
