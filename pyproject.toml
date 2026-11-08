@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "boatsim"
+version = "0.0.1"
+description = "Engineering simulator for an autonomous solar-electric kayak crossing from the Chesapeake Bay to Europe"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "pandas>=2.1", "pyyaml>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+data = ["xarray>=2024.1", "netCDF4>=1.6", "cdsapi>=0.7", "copernicusmarine>=1.0"]
+reports = ["plotly>=5", "folium>=0.16"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

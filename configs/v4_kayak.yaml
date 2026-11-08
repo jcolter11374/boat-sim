@@ -1,0 +1,39 @@
+# v4 design, from the design doc: https://claude.ai/artifact/SUbeMhqMATokuTdqpmWhj6
+# Mark any value that is not from a datasheet or a measurement with "# GUESS".
+name: v4 kayak (option C)
+
+hull:
+  model: Lifetime Tamarack Angler 100 (10 ft sit-on-top), foam-filled
+  length_m: 3.05
+  beam_m: 0.79           # GUESS until measured
+  mass_kg: 123           # design doc total
+  self_righting_dome: true
+  keel_bulb_kg: 50
+  keel_bulb_depth_m: 0.9
+
+power:
+  solar_wp: 250
+  solar_system_derate: 0.6   # GUESS: heel, salt, shading, MPPT, temperature
+  battery_wh: 1280           # 2 x 12.8 V 50 Ah LiFePO4
+  mppt: 2 x Victron 75/15
+
+propulsion:
+  thrusters: 2 x Blue Robotics T200
+  cruise_speed_kt: 1.7       # design doc estimate
+  max_drive_w: 120           # GUESS: drive power at cruise speed
+
+electronics:
+  autopilot: Pixhawk 6C Mini, ArduPilot Rover
+  hotel_load_wh_per_day: 85  # design doc
+
+comms:
+  two_way: RockBLOCK 9603 (Iridium SBD)
+  one_way: Globalstar SmartOne Solar
+  ais: Class B
+
+voyage:
+  drop_lat: 36.85            # ~15 nm east of the Chesapeake Bay Bridge-Tunnel
+  drop_lon: -75.70
+  arrival: any landfall in Europe, Azores included
+
+hazards: {}                  # Theo and Ravi fill in failure rates
