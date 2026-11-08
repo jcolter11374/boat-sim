@@ -55,6 +55,17 @@ or send fixes back.
   data you have the right to share under it.
 - Bug reports and questions go in GitHub Issues.
 
+## Talk to us
+
+- **[Discussions](https://github.com/jcolter11374/boat-sim/discussions)** is the
+  place to swap ideas, data sources, test results and lessons learned, including
+  with other teams building ocean drones. Start a thread in Q&A, Ideas or
+  Show and tell.
+- **[Issues](https://github.com/jcolter11374/boat-sim/issues)** are for concrete
+  bugs and work items in this code.
+- Please don't post files you don't have the right to share, and check that
+  anything you attach can be shared under the MIT License.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
