@@ -5,12 +5,15 @@ Real data, fetched on demand and cached under data/ (see README.md here):
     GlorysSource     surface currents (Copernicus Marine GLORYS12, free login)
     ReanalysisEnvironment  both together, behind the Environment interface
 
-Still to come: IBTrACS storm check and ship density (#13), forecast error (#12),
+    ErrorForecast    what the base station sees: truth plus error growing with lead time
+
+Still to come: IBTrACS storm check and ship density (#13),
 NDBC buoy check (#10), real coastline (#11).
 """
 
 from boatsim.oceandata.base import ConstantEnvironment, Environment, Forecast, PerfectForecast
 from boatsim.oceandata.era5 import ERA5Source
+from boatsim.oceandata.forecast import ErrorForecast, ErrorModel
 from boatsim.oceandata.glorys import GlorysSource
 from boatsim.oceandata.grid import ROUTE_BOX, Box, OutsideCoverage
 from boatsim.oceandata.reanalysis import ReanalysisEnvironment
@@ -21,6 +24,8 @@ __all__ = [
     "ConstantEnvironment",
     "ERA5Source",
     "Environment",
+    "ErrorForecast",
+    "ErrorModel",
     "Forecast",
     "GlorysSource",
     "OutsideCoverage",
