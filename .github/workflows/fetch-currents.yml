@@ -1,0 +1,47 @@
+# Downloads GLORYS12 surface currents (Copernicus Marine) for the route box.
+# Run it by hand: Actions tab -> "Fetch ocean currents" -> Run workflow.
+# The login comes from the repo secrets COPERNICUSMARINE_SERVICE_USERNAME and
+# COPERNICUSMARINE_SERVICE_PASSWORD. GitHub masks them in logs; no one, including
+# Claude threads, ever needs to see them.
+name: Fetch ocean currents
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First month (YYYY-MM)"
+        default: "2020-10"
+      end:
+        description: "Last month (YYYY-MM)"
+        default: "2020-12"
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      START: ${{ inputs.start }}
+      END: ${{ inputs.end }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Check the login secrets exist
+        run: |
+          if [ -z "$COPERNICUSMARINE_SERVICE_USERNAME" ] || [ -z "$COPERNICUSMARINE_SERVICE_PASSWORD" ]; then
+            echo "::error::Add the repo secrets COPERNICUSMARINE_SERVICE_USERNAME and COPERNICUSMARINE_SERVICE_PASSWORD first."
+            exit 1
+          fi
+      - name: Fetch currents
+        run: python -m boatsim.oceandata fetch-glorys "$START" "$END"
+      - name: Sanity check (Gulf Stream should run roughly 1 to 2 m/s north-east)
+        run: python -m boatsim.oceandata check-glorys "$START"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glorys-${{ inputs.start }}-to-${{ inputs.end }}
+          path: data/glorys/
+          retention-days: 90
