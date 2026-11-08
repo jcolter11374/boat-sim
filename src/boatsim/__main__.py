@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timedelta
 
 from boatsim.autonomy import SafeModeAutopilot
-from boatsim.basestation import HoldCoursePolicy
+from boatsim.basestation import ForecastReplanPolicy
 from boatsim.comms import GlobalstarPinger, IridiumSBDLink
 from boatsim.config import load_design
 from boatsim.mc import run_batch
@@ -30,7 +30,7 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
         autopilot=SafeModeAutopilot(cruise_fraction=cruise_fraction),
         link=IridiumSBDLink(),
         pinger=GlobalstarPinger(),
-        base=HoldCoursePolicy(),
+        base=ForecastReplanPolicy(route=default_mission().waypoints),
     )
     lat, lon = design.voyage["drop_lat"], design.voyage["drop_lon"]
 

@@ -96,8 +96,18 @@ class WaypointAutopilot:
     # ------------------------------------------------------------------ helpers
 
     def _sync_mission(self, sensors: Sensors, mission: Mission) -> None:
-        """A new mission (or a new version from base) starts its first leg from here."""
+        """A new mission (or a new version from base) starts its first leg from here.
+
+        A resent copy of the same route (base's daily "all well" ack) is not a
+        new route: keep the place on it and the current track line.
+        """
         if mission is not self._mission or mission.version != self._mission_version:
+            old = self._mission
+            if old is not None and old.waypoints == mission.waypoints and self._origin:
+                mission.active_index = max(mission.active_index, old.active_index)
+                self._mission = mission
+                self._mission_version = mission.version
+                return
             self._mission = mission
             self._mission_version = mission.version
             if mission.active_index > 0:
