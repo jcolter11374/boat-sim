@@ -182,12 +182,13 @@ class GlorysSource:
         box: Box = ROUTE_BOX,
         fetch: bool = True,
         opener=_copernicus_open,
+        max_tiles: int = 2,  # month-tiles kept in memory
     ):
         self.cache_dir = Path(cache_dir)
         self.box = box
         self.fetch = fetch
         self.opener = opener
-        self._tiles = TileCache(self._load_month, max_tiles=2)
+        self._tiles = TileCache(self._load_month, max_tiles=max_tiles)
 
     def _load_month(self, key: tuple[int, int]) -> GridSeries:
         path = tile_path(*key, self.cache_dir)
