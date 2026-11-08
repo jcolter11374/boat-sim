@@ -117,3 +117,118 @@ def test_ship_strike_can_end_the_voyage():
     )
     assert not st.alive
     assert any(e.kind == EventKind.SHIP_STRIKE for e in events)
+
+
+# --- Wear, water and people (sample_failures) ---------------------------------
+
+OPEN_OCEAN = (40.0, -45.0)
+
+
+def _draw(p, env, damage, hours, lat, lon, days=30.0, seed=0, steps=1):
+    rng = np.random.default_rng(seed)
+    outs = []
+    for _ in range(steps):
+        outs.append(Z.sample_failures(p, env, hours, damage, T0, lat, lon, days, rng))
+    return outs
+
+
+def test_coast_stub_knows_near_from_far():
+    from boatsim.vessel.coast import distance_to_land_km
+
+    assert distance_to_land_km(36.85, -75.7) < 50  # drop point, ~15 nm off Virginia
+    assert distance_to_land_km(*OPEN_OCEAN) > 800
+    assert distance_to_land_km(38.6, -28.6) < 50  # among the Azores
+
+
+def test_failures_can_be_switched_off():
+    off = replace(P, failures_enabled=False)
+    (out,) = _draw(off, EnvState(hs=6.0), {}, 1000.0, 36.85, -75.7)
+    assert out.events == [] and not out.lost
+
+
+def test_capture_only_near_land():
+    p = replace(P, capture_per_day=1000.0, unknown_p_by_60_days=0.0)
+    (near,) = _draw(p, EnvState(), {}, 1.0, 36.85, -75.7)
+    (far,) = _draw(p, EnvState(), {}, 1.0, *OPEN_OCEAN)
+    assert near.lost and not far.lost
+
+
+def test_water_in_a_tub_makes_its_electronics_box_fail_sooner():
+    p = replace(P, leak_per_day=0.0, software_hang_per_day=0.0, unknown_p_by_60_days=0.0)
+    hours = 24.0 * 30
+
+    def failures(damage):
+        n = 0
+        for seed in range(400):
+            (out,) = _draw(p, EnvState(), dict(damage), hours, *OPEN_OCEAN, seed=seed)
+            n += "electronics_main" in out.failed_parts
+        return n
+
+    dry, wet = failures({}), failures({"leak_main_tub": True})
+    assert wet > 3 * dry > 0
+
+
+def test_both_electronics_boxes_dead_loses_the_boat():
+    p = replace(P, unknown_p_by_60_days=0.0)
+    (out,) = _draw(
+        p, EnvState(), {"electronics_main": True, "electronics_safe": True}, 0.1, 40, -45
+    )
+    assert out.lost
+    (ok,) = _draw(p, EnvState(), {"electronics_main": True}, 0.1, *OPEN_OCEAN)
+    assert not ok.lost  # safe mode carries on alone
+
+
+def test_steering_failure_jams_or_goes_limp():
+    p = replace(P, steering_per_day=1e6, steering_jam_share=1.0, unknown_p_by_60_days=0.0)
+    (out,) = _draw(p, EnvState(), {}, 1.0, *OPEN_OCEAN)
+    assert "rudder" in out.failed_parts and "rudder_jammed" in out.failed_parts
+    p = replace(p, steering_jam_share=0.0)
+    (out,) = _draw(p, EnvState(), {}, 1.0, *OPEN_OCEAN)
+    assert "rudder" in out.failed_parts and "rudder_jammed" not in out.failed_parts
+
+
+def test_entanglement_hotspots_and_clearing():
+    rate = Z.entangle_rate_per_day
+    assert rate(P, *OPEN_OCEAN, 1000.0) == P.entangle_per_day
+    assert rate(P, 37.0, -70.0, 1000.0) == pytest.approx(P.entangle_per_day * 2.0)  # Gulf Stream
+    assert rate(P, 30.0, -60.0, 1000.0) == pytest.approx(P.entangle_per_day * 2.0)  # Sargasso
+    assert rate(P, 36.85, -75.7, 20.0) > rate(P, *OPEN_OCEAN, 1000.0)  # near land
+    p = replace(P, entangle_clear_per_day=1e6, unknown_p_by_60_days=0.0)
+    (out,) = _draw(p, EnvState(), {"entangled": True}, 1.0, *OPEN_OCEAN)
+    assert out.cleared_parts == ["entangled"]
+
+
+def test_entanglement_slows_the_boat():
+    v = KayakVessel(replace(DESIGN, hazards={"enabled": False}))
+    st = v.initial_state(T0, *OPEN_OCEAN)
+    env, dt, rng = EnvState(ghi=500.0), timedelta(minutes=10), np.random.default_rng(0)
+    clean, _ = v.step(st, Command(90.0, 0.3), env, dt, rng)
+    caught, _ = v.step(with_damage(st, "entangled"), Command(90.0, 0.3), env, dt, rng)
+    # 4x the drag at the same power: speed falls to about 4^(-1/3) ~ 0.63 at best,
+    # and a bit lower because a heavily loaded propeller is less efficient
+    assert 0.45 < caught.speed_through_water / clean.speed_through_water < 0.63
+
+
+def test_early_life_risk_is_front_loaded_and_sized_to_the_fmea():
+    h = Z.unknown_hazard_per_day
+    assert h(P, 1.0) > h(P, 10.0) > h(P, 50.0)
+    # integrate the hazard to day 60: should give the configured 3 %
+    days = np.linspace(1e-4, 60.0, 200_001)
+    cum = np.trapezoid([h(P, d) for d in days[::100]], days[::100])
+    assert 1.0 - math.exp(-cum) == pytest.approx(P.unknown_p_by_60_days, rel=0.05)
+    assert h(replace(P, unknown_p_by_60_days=0.0), 5.0) == 0.0
+
+
+def test_main_box_failure_switches_off_ais():
+    # AIS always works -> never hit; no AIS -> always hit. Only the dead box differs.
+    p = replace(
+        P,
+        knockdown_scale=0.0,
+        p_avoid_with_ais=1.0,
+        p_avoid_without_ais=0.0,
+        p_lost_given_strike=1.0,
+    )
+    env = EnvState(ship_density=50.0)
+    rng = np.random.default_rng(0)
+    assert not Z.sample_hazards(p, env, 1.0, {}, T0, rng).lost
+    assert Z.sample_hazards(p, env, 1.0, {"electronics_main": True}, T0, rng).lost

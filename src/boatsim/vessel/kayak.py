@@ -15,7 +15,8 @@ With no drive power the boat can't steer and lies beam-on to the wind (GUESS),
 so it drifts with wind and current: the M1 drifter comparison case.
 
 5. Draw hazards (vessel/hazards.py): knockdowns from breaking waves, the
-   parts they break, and ship strikes. Broken panels cut solar; a broken
+   parts they break, ship strikes, then leaks, electronics, steering,
+   entanglement, capture and early-life failures. Broken panels cut solar; a broken
    rudder leaves steering to differential thrust, which needs both thrusters.
 """
 
@@ -31,7 +32,12 @@ from boatsim.config import Design
 from boatsim.geo import move
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
-from boatsim.vessel.hazards import DEFAULT_PANELS_W, HazardParams, sample_hazards
+from boatsim.vessel.hazards import (
+    DEFAULT_PANELS_W,
+    HazardParams,
+    sample_failures,
+    sample_hazards,
+)
 from boatsim.vessel.power import BatteryParams, SolarParams, energy_step, solar_power_w
 from boatsim.vessel.propulsion import ThrusterParams, total_thrust
 
@@ -91,6 +97,7 @@ def solve_speed(
     fouling: float,
     current_e: float,
     current_n: float,
+    extra_drag_mult: float = 1.0,
 ) -> SpeedSolution:
     """Steady speed through the water for a given heading and drive power."""
     # Wind relative to the water, in boat axes. (The boat's own speed is
@@ -98,7 +105,7 @@ def solve_speed(
     wx, wy = _boat_axes(heading_deg, env.wind_u - current_e, env.wind_v - current_n)
     wave_rel = (env.wave_dir - heading_deg) % 360.0
     f_wave = H.wave_drag_frac(hp, env.hs, wave_rel)
-    mult = (1.0 + fouling) * (1.0 + f_wave)
+    mult = (1.0 + fouling) * (1.0 + f_wave) * extra_drag_mult
 
     def surplus(u: float) -> float:
         thrust = total_thrust(tp, drive_w, u, working_thrusters)
@@ -160,6 +167,15 @@ class KayakVessel:
         return KayakState(
             t=t, lat=lat, lon=lon, battery_wh=cap, battery_capacity_wh=cap, t_launch=t
         )
+
+    def extra_drag_mult(self, state: BoatState) -> float:
+        """Drag from damage: line or weed caught on the boat, a rudder jammed over."""
+        m = 1.0
+        if state.damage.get("entangled"):
+            m *= 1.0 + self.hazards.entangle_extra_drag
+        if state.damage.get("rudder_jammed"):
+            m *= self.hazards.rudder_jam_drag_mult
+        return m
 
     def panel_fraction(self, state: BoatState) -> float:
         """Share of rated solar still on deck after damage."""
@@ -227,7 +243,16 @@ class KayakVessel:
         # autopilot cuts it) but it makes no headway, so it drifts.
         push_w = es.drive_w if steering else 0.0
         sol = solve_speed(
-            self.hull, self.thrusters, heading, push_w, working, env, foul, cur_e, cur_n
+            self.hull,
+            self.thrusters,
+            heading,
+            push_w,
+            working,
+            env,
+            foul,
+            cur_e,
+            cur_n,
+            extra_drag_mult=self.extra_drag_mult(state),
         )
         ve, vn = _world_axes(heading, sol.surge, sol.sway)
         ge, gn = ve + cur_e, vn + cur_n
@@ -259,7 +284,15 @@ class KayakVessel:
         new.knockdowns = getattr(state, "knockdowns", 0) + hz.knockdowns
         for part in hz.failed_parts:
             new.damage[part] = True
-        if hz.lost:
+        fl = sample_failures(
+            self.hazards, env, hours, new.damage, new.t, new.lat, new.lon, days + hours / 48.0, rng
+        )
+        events += fl.events
+        for part in fl.failed_parts:
+            new.damage[part] = True
+        for part in fl.cleared_parts:
+            new.damage.pop(part, None)
+        if hz.lost or fl.lost:
             new.alive = False
         return new, events
 

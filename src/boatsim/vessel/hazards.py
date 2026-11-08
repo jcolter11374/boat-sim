@@ -34,6 +34,30 @@ Ship strikes
     It depends on the AIS transponder working (the design doc says losing AIS
     roughly doubles collision risk). Ship density comes from oceandata as
     ships per km^2 at any instant.
+
+Wear, water and people (sample_failures)
+    Leaks, steering failure, entanglement in fishing line or weed, being picked
+    up near land, electronics failure (much likelier once water is inside), a
+    software hang the watchdog can't clear, and early-life defects. No
+    datasheet gives these rates for a boat like ours, so the per-day rates are
+    GUESSES. The starting point is the Randolph team's drone-boat simulator
+    (https://github.com/sheltonr2/drone-boat, simulator/drone_sim/failures.py,
+    MIT licence, see THIRD_PARTY_NOTICES.md). Their rates are themselves
+    engineering guesses informed by small autonomous sailboat history. Changes
+    for this design are noted line by line. Real-world anchors for the totals:
+
+    * Microtransat Challenge: more than 30 autonomous-boat attempts since 2010,
+      and only one documented finish, the 2 m Sailbuoy "SB Met" (79 days, 2018;
+      Wikipedia "The Microtransat Challenge"). Recorded failure types include
+      "picked up by fishing vessel" and "position report failure" (Peruagus
+      team paper, CEUR-WS Vol-2331 paper 2, Table 1).
+    * Scout (2013): a 3.9 m solar-electric drone, the closest precedent to ours.
+      It lost communications about a month out from Rhode Island, after
+      roughly 1,300 to 2,000 miles. The team's best guess was "some sort of
+      electrical or software failure ... with the Arduino processors" (Make:;
+      Sail-World, 16 Oct 2013).
+    * Design doc FMEA (v4): entanglement 2.0 %, early-life defect or unknown 3.0 %,
+      taken aboard 1.0 %, water in electronics 0.5 %, steering 0.4 % residual.
 """
 
 from __future__ import annotations
@@ -45,6 +69,7 @@ from datetime import datetime
 import numpy as np
 
 from boatsim.types import EnvState, Event, EventKind
+from boatsim.vessel.coast import distance_to_land_km
 from boatsim.vessel.hull import G
 
 # Parts a knockdown can break, with their share of per-knockdown damage odds.
@@ -78,6 +103,51 @@ class HazardParams:
     p_avoid_with_ais: float = 0.975  # GUESS: tuned to design doc FMEA (~1 % per voyage)
     p_avoid_without_ais: float = 0.95  # design doc: losing AIS ~doubles collision risk
     p_lost_given_strike: float = 0.8  # GUESS: foam-filled hull may survive a glancing hit
+    p_leak_given_strike: float = 1.0  # Randolph: a survived collision leaves the hull leaking
+
+    # --- Wear, water and people. Rates per day; "Randolph" = drone-boat defaults. ---
+    failures_enabled: bool = True
+    # Leak into one of the two equipment tubs, x (1 + (Hs/3)^2). Randolph: 0.0025.
+    # The hull is foam-filled, so a leak can't sink it (design doc). Water wets the
+    # electronics box in that tub.
+    leak_per_day: float = 0.0025
+    # Electronics: two independent IP68 boxes (design doc). "main" holds the Pixhawk,
+    # Iridium and AIS; "safe" holds the STM32 safe-mode controller. Randolph: 0.0012/day,
+    # x6 once water is inside. Losing main leaves safe mode steering 070 deg on
+    # Globalstar position reports. Losing both leaves the boat silent and uncontrolled.
+    electronics_per_day: float = 0.0012
+    electronics_wet_multiplier: float = 6.0
+    # Software hang, Randolph: 0.02/day, watchdog clears 95 %. A hang that isn't
+    # cleared takes out the main box (Scout's suspected failure, 2013).
+    software_hang_per_day: float = 0.02
+    watchdog_recovers: float = 0.95
+    # Steering: rudder servo fails, x (1 + Hs/4). Randolph: 0.002/day, 60 % jammed.
+    # Ours has a centring spring, so "limp" centres the rudder. A jammed rudder
+    # also costs extra drag.
+    steering_per_day: float = 0.002
+    steering_jam_share: float = 0.6
+    rudder_jam_drag_mult: float = 1.25  # GUESS
+    # Entanglement in fishing line or weed. Randolph: 0.003/day, x3 within 100 km of
+    # land, x2 in the Sargasso; adds 3x clean drag until it clears (0.15/day).
+    # Ours: x2 in the Gulf Stream longline grounds (design doc FMEA row 1). Clears
+    # faster (GUESS 0.5/day) because reverse-thrust cycles shed lines. Can wrap a
+    # thruster (GUESS 10 %).
+    entangle_per_day: float = 0.003
+    entangle_near_land_km: float = 100.0
+    entangle_near_land_mult: float = 3.0
+    entangle_sargasso_mult: float = 2.0
+    entangle_gulf_stream_mult: float = 2.0
+    entangle_extra_drag: float = 3.0
+    entangle_clear_per_day: float = 0.5
+    p_thruster_wrap: float = 0.1
+    # Capture: picked up by a fishing boat or a passer-by. Randolph: 0.002/day, only
+    # within 50 km of land.
+    capture_per_day: float = 0.002
+    capture_near_land_km: float = 50.0
+    # Early-life defects and unknowns (design doc FMEA row 2: 3 % residual), as a
+    # Weibull with shape < 1, so most of the risk is in the first weeks.
+    unknown_shape: float = 0.5
+    unknown_p_by_60_days: float = 0.03
 
     @classmethod
     def from_config(cls, hazards: dict) -> HazardParams:
@@ -125,6 +195,7 @@ class HazardOutcome:
     failed_parts: list[str]
     lost: bool
     knockdowns: int
+    cleared_parts: list[str] = field(default_factory=list)
 
 
 def sample_hazards(
@@ -158,7 +229,8 @@ def sample_hazards(
                     failed.append(part)
                     events.append(Event(t, EventKind.PART_FAILED, f"{part} (knockdown)"))
 
-    ais_ok = not (damage.get("ais_whip") or "ais_whip" in failed)
+    # AIS needs its antenna and the main electronics box it lives in.
+    ais_ok = not any(damage.get(k) or k in failed for k in ("ais_whip", "electronics_main"))
     lam = ship_strike_rate_per_hour(p, env.ship_density, ais_ok)
     if not lost and lam > 0.0 and rng.random() < 1.0 - math.exp(-lam * hours):
         survived = rng.random() >= p.p_lost_given_strike
@@ -166,10 +238,130 @@ def sample_hazards(
             Event(t, EventKind.SHIP_STRIKE, "survived, damaged" if survived else "sunk or wrecked")
         )
         if survived:
-            for part in ("panel_100w_a", "rudder"):
+            hit = ("panel_100w_a", "rudder", "leak_main_tub")
+            for part in hit if rng.random() < p.p_leak_given_strike else hit[:2]:
                 if not damage.get(part) and part not in failed:
                     failed.append(part)
         else:
             lost = True
 
     return HazardOutcome(events, failed, lost, n)
+
+
+ELECTRONICS = ("electronics_main", "electronics_safe")
+TUB_FOR_BOX = {"electronics_main": "leak_main_tub", "electronics_safe": "leak_safe_tub"}
+
+_SARGASSO = (20.0, 35.0, -70.0, -40.0)  # Randolph's box
+_GULF_STREAM = (34.0, 42.0, -75.0, -50.0)  # GUESS: longline grounds on the route
+
+
+def _in_box(lat: float, lon: float, box: tuple[float, float, float, float]) -> bool:
+    return box[0] <= lat <= box[1] and box[2] <= lon <= box[3]
+
+
+def _p(rate_per_day: float, hours: float) -> float:
+    return 1.0 - math.exp(-max(rate_per_day, 0.0) * hours / 24.0)
+
+
+def unknown_hazard_per_day(p: HazardParams, days: float) -> float:
+    """Weibull hazard h(t) = (k/eta)(t/eta)^(k-1), sized so P(fail by day 60) is
+    unknown_p_by_60_days."""
+    if p.unknown_p_by_60_days <= 0.0:
+        return 0.0
+    k = p.unknown_shape
+    eta = 60.0 / (-math.log(1.0 - p.unknown_p_by_60_days)) ** (1.0 / k)
+    t = max(days, 1e-3)
+    return (k / eta) * (t / eta) ** (k - 1.0)
+
+
+def entangle_rate_per_day(p: HazardParams, lat: float, lon: float, land_km: float) -> float:
+    m = p.entangle_near_land_mult if land_km < p.entangle_near_land_km else 1.0
+    if _in_box(lat, lon, _SARGASSO):
+        m *= p.entangle_sargasso_mult
+    if _in_box(lat, lon, _GULF_STREAM):
+        m *= p.entangle_gulf_stream_mult
+    return p.entangle_per_day * m
+
+
+def sample_failures(
+    p: HazardParams,
+    env: EnvState,
+    hours: float,
+    damage: dict[str, bool],
+    t: datetime,
+    lat: float,
+    lon: float,
+    days_at_sea: float,
+    rng: np.random.Generator,
+) -> HazardOutcome:
+    """Draw the non-wave failures for one step: leaks, electronics, software,
+    steering, entanglement, capture and early-life defects."""
+    out = HazardOutcome([], [], False, 0)
+    if not (p.enabled and p.failures_enabled):
+        return out
+
+    def broken(part: str) -> bool:
+        return bool(damage.get(part)) or part in out.failed_parts
+
+    def fail(part: str, why: str) -> None:
+        out.failed_parts.append(part)
+        out.events.append(Event(t, EventKind.PART_FAILED, f"{part} ({why})"))
+
+    def lose(why: str) -> None:
+        out.lost = True
+        out.events.append(Event(t, EventKind.LOST, why))
+
+    hs = max(env.hs, 0.0)
+    land_km = distance_to_land_km(lat, lon)
+
+    # Leak into one of the two tubs
+    if rng.random() < _p(p.leak_per_day * (1.0 + (hs / 3.0) ** 2), hours):
+        tub = "leak_main_tub" if rng.random() < 0.5 else "leak_safe_tub"
+        if not broken(tub):
+            fail(tub, "water getting into the hull")
+
+    # Electronics boxes, likelier once their tub is wet; software hang on main
+    for box in ELECTRONICS:
+        if broken(box):
+            continue
+        rate = p.electronics_per_day
+        if broken(TUB_FOR_BOX[box]):
+            rate *= p.electronics_wet_multiplier
+        if box == "electronics_main":
+            rate += p.software_hang_per_day * (1.0 - p.watchdog_recovers)
+        if rng.random() < _p(rate, hours):
+            fail(box, "electronics or software failure")
+    if all(broken(b) for b in ELECTRONICS):
+        lose("both electronics boxes dead: silent and uncontrolled")
+        return out
+
+    # Steering
+    if not broken("rudder") and rng.random() < _p(p.steering_per_day * (1.0 + hs / 4.0), hours):
+        if rng.random() < p.steering_jam_share:
+            fail("rudder", "servo jammed")
+            out.failed_parts.append("rudder_jammed")
+        else:
+            fail("rudder", "servo failed limp, spring centres it")
+
+    # Entanglement: comes and goes
+    if broken("entangled"):
+        if rng.random() < _p(p.entangle_clear_per_day, hours):
+            out.cleared_parts.append("entangled")  # no event: EventKind has no "recovered"
+    elif rng.random() < _p(entangle_rate_per_day(p, lat, lon, land_km), hours):
+        fail("entangled", "fishing line or weed")
+        if rng.random() < p.p_thruster_wrap:
+            for th in ("thruster_port", "thruster_starboard"):
+                if not broken(th):
+                    fail(th, "line wrapped round it")
+                    break
+
+    # Picked up near land
+    if land_km < p.capture_near_land_km and rng.random() < _p(p.capture_per_day, hours):
+        lose("picked up by a fishing boat or passer-by")
+        return out
+
+    # Early-life defect or unknown
+    if rng.random() < _p(unknown_hazard_per_day(p, days_at_sea), hours):
+        lose("early-life defect or unknown failure")
+
+    return out

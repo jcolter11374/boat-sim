@@ -91,3 +91,23 @@ hazards:
   p_avoid_with_ais: 0.975    # GUESS: ~1 % strike odds per crossing (FMEA row 3)
   p_avoid_without_ais: 0.95  # design doc: losing AIS roughly doubles collision risk
   p_lost_given_strike: 0.8   # GUESS
+  p_leak_given_strike: 1.0   # Randolph drone-boat default: a survived hit leaves a leak
+  # Wear, water and people (rates per day). Starting point: the Randolph team's
+  # drone-boat defaults (MIT, see THIRD_PARTY_NOTICES.md), changed where our design
+  # differs. All GUESS: see vessel/hazards.py for the reasoning and real-world anchors.
+  failures_enabled: true
+  leak_per_day: 0.0025               # GUESS (Randolph), x (1 + (Hs/3)^2)
+  electronics_per_day: 0.0012        # GUESS (Randolph), per box, two boxes
+  electronics_wet_multiplier: 6      # GUESS (Randolph)
+  software_hang_per_day: 0.02        # GUESS (Randolph)
+  watchdog_recovers: 0.95            # GUESS (Randolph)
+  steering_per_day: 0.002            # GUESS (Randolph), x (1 + Hs/4)
+  steering_jam_share: 0.6            # GUESS (Randolph)
+  rudder_jam_drag_mult: 1.25         # GUESS
+  entangle_per_day: 0.003            # GUESS (Randolph); x3 near land, x2 Sargasso, x2 Gulf Stream
+  entangle_extra_drag: 3.0           # GUESS (Randolph): drag x4 while caught
+  entangle_clear_per_day: 0.5        # GUESS: reverse-thrust cycles (Randolph 0.15, no reverse)
+  p_thruster_wrap: 0.1               # GUESS
+  capture_per_day: 0.002             # GUESS (Randolph), within 50 km of land only
+  unknown_p_by_60_days: 0.03         # design doc FMEA row 2: early-life defect or unknown
+  unknown_shape: 0.5                 # GUESS: front-loaded (infant mortality)
