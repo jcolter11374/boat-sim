@@ -77,3 +77,46 @@ def test_report_counts_causes():
     md = M.report_markdown(df)
     assert "| stuck inverted or keel lost | 1 |" in md
     assert "arrived 33%" in md
+
+
+def test_unknown_survival_matches_the_hazard_model():
+    from dataclasses import replace
+
+    from boatsim.vessel.hazards import HazardParams, unknown_hazard_per_day
+
+    p = replace(HazardParams(), unknown_p_by_60_days=0.3, unknown_shape=0.5)
+    # Integrate the hazard numerically to day 60 and day 120.
+    import numpy as np
+
+    t = np.linspace(1e-6, 120, 200_001)
+    h = np.array([unknown_hazard_per_day(p, x) for x in t])
+    cum = np.concatenate([[0.0], np.cumsum((h[1:] + h[:-1]) / 2 * np.diff(t))])
+    for day in (60, 120):
+        i = int(np.searchsorted(t, day))
+        assert M.unknown_survival([day], 0.3, 0.5)[0] == pytest.approx(np.exp(-cum[i]), abs=0.01)
+    assert M.unknown_survival([60], 0.3, 0.5)[0] == pytest.approx(0.7)
+
+
+def test_monthly_voyage_can_switch_the_unknown_hazard_off():
+    job = M.MonthlyVoyage(weather="constant", max_days=1, unknown_p_by_60_days=0.0)
+    row = M.summarise(job(datetime(2015, 6, 1, 12), seed=1))
+    assert row["unknown_p_run"] == 0.0
+    assert row["unknown_shape"] > 0
+
+
+def test_sweep_weights_arrivals_by_survival():
+    df = pd.DataFrame(
+        {
+            "month": [1, 1],
+            "year": [2015, 2015],
+            "outcome": ["arrived", "lost"],
+            "ending": ["arrived", "lost"],
+            "days": [60.0, 30.0],
+            "unknown_p_run": [0.0, 0.0],
+            "unknown_shape": [1.0, 1.0],
+        }
+    )
+    assert M.swept_odds(df, 0.5) == pytest.approx(0.25)
+    md = M.report_markdown(df)
+    assert "Odds as a range" in md
+    assert "| All | 2 | 48% | 45% | 38% | 25% | 8% |" in md

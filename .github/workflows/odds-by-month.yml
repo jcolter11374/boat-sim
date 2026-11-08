@@ -55,7 +55,7 @@ jobs:
       - name: Fetch weather (ERA5) for the same span
         run: python -m boatsim.oceandata fetch-era5 "$YEAR-01-01" "$((YEAR + 1))-05-20" --workers 4
       - name: Run every launch of the year
-        run: python -m boatsim.mc.months run "$YEAR" --max-days "$MAX_DAYS" --workers 4 --out runs/months
+        run: python -m boatsim.mc.months run "$YEAR" --max-days "$MAX_DAYS" --workers 4 --unknown-p 0 --out runs/months
       - uses: actions/upload-artifact@v4
         with:
           name: voyages-${{ matrix.year }}

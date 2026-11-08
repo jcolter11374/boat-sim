@@ -16,6 +16,9 @@ What is in the first batch, and what isn't yet:
   course corrections here is optimistic.
 * Hazards: knockdowns, part damage and ship strikes drawn per voyage (seeded).
   Ship density is still 0 (issue #13), so ship strikes can't happen yet.
+* Unknown failures: the batch runs with the design's catch-all "unknown
+  failure" hazard switched off (--unknown-p 0) and the report puts it back
+  exactly at several values (unknown_survival), so odds come out as a range.
 * Not yet: spread on drag, solar derate and fouling (the parameter spread half
   of #20). Every voyage uses the design numbers.
 
@@ -127,6 +130,8 @@ def summarise(log) -> dict:
             "solar_wh_day": m.get("solar_wh", 0.0) / days,
             "drive_w_avg": m.get("drive_wh", 0.0) / hours,
             "hotel_wh_day": m.get("hotel_wh", 0.0) / days,
+            "unknown_p_run": getattr(log, "unknown", (math.nan, math.nan))[0],
+            "unknown_shape": getattr(log, "unknown", (math.nan, math.nan))[1],
         }
     )
     return out
@@ -138,9 +143,17 @@ class MonthlyVoyage(StandardVoyage):
     drifts out of the weather box."""
 
     max_days: float = MAX_DAYS
+    # None keeps the design's value. 0 switches the "unknown failure" hazard off
+    # so the report can sweep it exactly afterwards (see unknown_survival).
+    unknown_p_by_60_days: float | None = None
 
     def components(self):
+        from dataclasses import replace
+
         c = super().components()
+        if self.unknown_p_by_60_days is not None:
+            v = c.vessel
+            v.hazards = replace(v.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days)
         c.vessel = MeteredVessel(c.vessel)
         return c
 
@@ -171,6 +184,8 @@ class MonthlyVoyage(StandardVoyage):
         }
         log.drop = drop
         log.link = c.link  # for the card's airtime cost; stays in the worker
+        hz = c.vessel.hazards
+        log.unknown = (hz.unknown_p_by_60_days, hz.unknown_shape)
         return log
 
 
@@ -226,6 +241,44 @@ def by_month(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+SWEEP = (0.03, 0.10, 0.25, 0.50, 0.84)  # unknown_p_by_60_days values to report
+
+
+def unknown_survival(days, p: float, shape: float):
+    """Chance of no "unknown failure" over `days` at sea.
+
+    The hazard is Weibull (vessel/hazards.py unknown_hazard_per_day), sized so
+    P(fail by day 60) = p, so survival to day D is (1 - p) ** ((D / 60) ** shape).
+    That failure ends the voyage and nothing else depends on it, so a batch run
+    with it switched off gives the exact expected odds for any p by weighting
+    each arrival with this survival. No re-runs needed for the sweep.
+    """
+    import numpy as np
+
+    d = np.maximum(np.asarray(days, dtype=float), 0.0)
+    return (1.0 - p) ** ((d / 60.0) ** shape)
+
+
+def swept_odds(df: pd.DataFrame, p: float) -> float:
+    """Expected arrival odds if unknown_p_by_60_days were p (needs a run with it off)."""
+    arrived = (df["outcome"] == "arrived").to_numpy(dtype=float)
+    if len(arrived) == 0:
+        return math.nan
+    shape = float(df["unknown_shape"].dropna().iloc[0]) if "unknown_shape" in df else 0.5
+    return float((arrived * unknown_survival(df["days"], p, shape)).mean())
+
+
+def sweep_table(df: pd.DataFrame, values=SWEEP) -> pd.DataFrame:
+    rows = []
+    for m in [None, *range(1, 13)]:
+        g = df if m is None else df[df["month"] == m]
+        row = {"month": "All" if m is None else MONTHS[m - 1], "voyages": len(g)}
+        for p in values:
+            row[f"p{p:g}"] = swept_odds(g, p) if len(g) else math.nan
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def report_markdown(df: pd.DataFrame) -> str:
     t = by_month(df)
     years = sorted(df["year"].unique())
@@ -242,6 +295,12 @@ def report_markdown(df: pd.DataFrame) -> str:
         (
             "Base station sees a perfect forecast until #12 lands, and design numbers "
             "have no spread yet, so treat these odds as optimistic."
+            + (
+                " This table also leaves out the 'unknown failure' hazard: see the "
+                "range below for odds with it put back."
+                if "unknown_p_run" in df and (df["unknown_p_run"] == 0.0).all()
+                else ""
+            )
         ),
         "",
         (
@@ -259,6 +318,30 @@ def report_markdown(df: pd.DataFrame) -> str:
             f"{r.high95:.0%}) | {r.median_days_if_arrived:.0f} | {r.sun_kwh_m2_day:.2f} "
             f"| {r.solar_wh_day:.0f} | {r.drive_w_avg:.1f} | {r.min_soc:.0%} |"
         )
+    run_p = df["unknown_p_run"].dropna().unique() if "unknown_p_run" in df else []
+    if len(run_p) == 1 and float(run_p[0]) == 0.0:
+        sw = sweep_table(df)
+        lines += [
+            "",
+            "## Odds as a range: the 'unknown failure' guess",
+            "",
+            (
+                "The odds above have the catch-all hazard for failures we haven't "
+                "modelled (unknown_p_by_60_days) switched off. This table puts it back "
+                "at several values, from the design doc's 3% up to 84%, which on "
+                "synthetic weather brings the odds down to about 15%, inside the 3-20% "
+                "of the Microtransat record and the Randolph team's own estimate. Each arrival is weighted by its chance of "
+                "surviving that hazard for as long as it took."
+            ),
+            "",
+            "| Launch month | Voyages | "
+            + " | ".join(f"unknown {p:.0%} by day 60" for p in SWEEP)
+            + " |",
+            "|---" * (2 + len(SWEEP)) + "|",
+        ]
+        for _, r in sw.iterrows():
+            vals = " | ".join("" if r["voyages"] == 0 else f"{r[f'p{p:g}']:.0%}" for p in SWEEP)
+            lines.append(f"| {r['month']} | {r['voyages']} | {vals} |")
     lines += ["", "How voyages ended:", "", "| Ending | Voyages |", "|---|---|"]
     for cause, n in df["ending"].value_counts().items():
         lines.append(f"| {cause} | {n} |")
@@ -275,6 +358,12 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--workers", type=int, default=4)
     r.add_argument("--max-days", type=float, default=MAX_DAYS)
     r.add_argument("--months", type=int, nargs="*", help="only these launch months (1-12)")
+    r.add_argument(
+        "--unknown-p",
+        type=float,
+        default=None,
+        help="override unknown_p_by_60_days (0 = off, so the report can sweep it)",
+    )
     r.add_argument("--no-currents", action="store_true", help="try-out only: zero current")
     r.add_argument("--prefetch", action="store_true", help="fetch the ERA5 days first")
     s = sub.add_parser("report", help="combine per-year CSVs into the by-month report")
