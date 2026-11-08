@@ -1,0 +1,41 @@
+# Temporary: finds which ship-traffic and storm-track sources GitHub's runners
+# can reach, and what is inside them (thread sandboxes can't reach these hosts).
+# Removed again once #13's loader is written.
+name: Probe traffic sources
+on:
+  pull_request:
+    paths: [".github/workflows/probe-traffic.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Reachability and headers
+        run: |
+          for u in \
+            "https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&REQUEST=GetCapabilities&VERSION=2.0.1" \
+            "https://ows.emodnet-humanactivities.eu/wfs?SERVICE=WFS&REQUEST=GetCapabilities" \
+            "https://ows.emodnet-humanactivities.eu/wms?SERVICE=WMS&REQUEST=GetCapabilities" \
+            "https://marinecadastre.gov/downloads/data/ais/" \
+            "https://coast.noaa.gov/htdata/CMSP/AISDataHandler/" \
+            "https://datacatalogfiles.worldbank.org/ddh-published/0037580/DR0045406/shipdensity_global.zip" \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" ; do
+            echo "== $u"
+            curl -sSIL --max-time 60 "$u" | grep -iE "^HTTP|content-length|content-type|location" || echo "FAILED"
+          done
+      - name: EMODnet coverage list (vessel density layers)
+        run: |
+          curl -sSL --max-time 120 "https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&REQUEST=GetCapabilities&VERSION=2.0.1" -o wcs.xml || true
+          grep -oE "<wcs:CoverageId>[^<]*</wcs:CoverageId>" wcs.xml | grep -iE "vessel|density|vd" | head -80 || true
+          curl -sSL --max-time 120 "https://ows.emodnet-humanactivities.eu/wms?SERVICE=WMS&REQUEST=GetCapabilities" -o wms.xml || true
+          grep -oE "<Name>[^<]*</Name>" wms.xml | grep -iE "vessel|density|vd" | head -80 || true
+      - name: NOAA AIS listings
+        run: |
+          curl -sSL --max-time 60 "https://marinecadastre.gov/downloads/data/ais/" | grep -oE 'href="[^"]+"' | head -60 || true
+          curl -sSL --max-time 60 "https://coast.noaa.gov/htdata/CMSP/AISDataHandler/" | grep -oE 'href="[^"]+"' | head -60 || true
+      - name: IBTrACS North Atlantic header
+        run: |
+          curl -sSL --max-time 300 "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" -o na.csv && ls -la na.csv && head -c 1500 na.csv && wc -l na.csv || true
