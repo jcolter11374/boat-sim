@@ -3,7 +3,9 @@
 - Read CONTRIBUTING.md first; it is the team's rulebook.
 - The plan doc (architecture, interfaces, milestones, your brief) is
   https://claude.ai/artifact/4mgi1LeuFF2wfQGRBnXRDR
-- Arrival rule: any landfall in Europe counts, Azores included. Test all launch months.
+- Arrival rule: any landfall in Europe counts, Azores included. Test all launch months,
+  but the target launch window is April to June (John, Nov 2026): tune and headline
+  on Apr-Jun, report every month for context.
 - Runs in the cloud only (thread sandboxes, GitHub Actions). Stream or subset data
   (ARCO-ERA5 public Zarr, Copernicus Marine subsetting) rather than bulk downloads.
 - One boat only (the v4 kayak in configs/v4_kayak.yaml). No rescue after the drop.
