@@ -172,3 +172,11 @@ def test_runs_inside_the_voyage_runner():
     assert log.outcome == Outcome.ARRIVED
     # ~2,300 nm at full 100 W burst in a flat calm, ~3.3 kt falling with fouling
     assert 25 < log.days < 45
+
+
+def test_sense_reports_working_thrusters():
+    v = KayakVessel(DESIGN)
+    s = v.initial_state(datetime(2020, 10, 1), 36.85, -75.7)
+    rng = np.random.default_rng(0)
+    assert v.sense(s, rng).thrusters_ok == 2
+    assert v.sense(with_damage(s, "thruster_port"), rng).thrusters_ok == 1

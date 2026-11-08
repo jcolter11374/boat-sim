@@ -73,6 +73,9 @@ class Sensors:
     heading: float
     soc: float
     gps_ok: bool = True
+    thrusters_ok: int | None = (
+        None  # working thrusters, from motor-controller current; None = unknown
+    )
 
 
 @dataclass(frozen=True)
