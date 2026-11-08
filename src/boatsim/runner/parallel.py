@@ -1,8 +1,9 @@
 """Run many voyages at once, one per CPU core (issue #24).
 
 Why processes and not NumPy vectorisation: one 50-day voyage takes about half
-a second (measured 0.53 s with KayakVessel, safe mode, Iridium and the replan
-policy). 2,000 voyages are therefore ~17 CPU-minutes, about 4 to 5 minutes on a
+a second on constant (stub) weather (measured 0.53 s with KayakVessel, safe
+mode, Iridium and the replan policy). Real ERA5 weather adds tile reads; see
+_environment for the cache sizing that keeps those cheap. 2,000 voyages are therefore ~17 CPU-minutes, about 4 to 5 minutes on a
 4-core GitHub Actions runner. Vectorising would mean rewriting every package's
 step logic around arrays for a gain we don't need yet. If a future batch is too
 slow, profile first: the hot spots today are solve_speed and the great-circle
@@ -87,19 +88,27 @@ def run_many(
         return list(pool.map(_call, tasks, chunksize=max(1, len(tasks) // (workers * 8))))
 
 
-@lru_cache(maxsize=4)
-def _environment(weather: str, currents: bool):
-    """One environment per worker process, so its in-memory tile cache is reused."""
-    from boatsim.oceandata import ConstantEnvironment, ReanalysisEnvironment
+@lru_cache(maxsize=8)
+def _environment(weather: str, currents: bool, for_forecast: bool = False):
+    """One environment per worker process and role, so in-memory tile caches are reused.
+
+    The base station's forecast gets its own environment with a bigger cache: it
+    looks 3+ days ahead of the boat each day, and sharing the boat's 3-day cache
+    made the two evict each other's tiles (Ravi measured 113 tile loads, 18 of
+    18.6 s, in a 4-day voyage).
+    """
+    from boatsim.oceandata import ConstantEnvironment, ERA5Source, ReanalysisEnvironment
 
     if weather == "constant":
         return ConstantEnvironment()
     if weather == "reanalysis":
+        era5 = ERA5Source(max_tiles=6 if for_forecast else 3)
         if currents:
             from boatsim.oceandata import GlorysSource
 
-            return ReanalysisEnvironment(currents=GlorysSource())
-        return ReanalysisEnvironment(currents=None)
+            glorys = GlorysSource(max_tiles=3 if for_forecast else 2)
+            return ReanalysisEnvironment(era5=era5, currents=glorys)
+        return ReanalysisEnvironment(era5=era5, currents=None)
     raise ValueError(f"unknown weather {weather!r}: use 'reanalysis' or 'constant'")
 
 
@@ -128,9 +137,10 @@ class StandardVoyage:
         design = load_design(self.design_path)
         prop = design.propulsion
         env = _environment(self.weather, self.currents)
+        forecast_env = _environment(self.weather, self.currents, for_forecast=True)
         return Components(
             env=env,
-            forecast=PerfectForecast(env),  # TODO(#12): forecast with error
+            forecast=PerfectForecast(forecast_env),  # TODO(#12): forecast with error
             vessel=KayakVessel(design),
             autopilot=SafeModeAutopilot(
                 cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"]

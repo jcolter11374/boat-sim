@@ -198,12 +198,13 @@ class ERA5Source:
         box: Box = ROUTE_BOX,
         fetch: bool = True,
         url: str = ARCO_ERA5_URL,
+        max_tiles: int = 3,  # day-tiles kept in memory; a forecast looking days ahead needs more
     ):
         self.cache_dir = Path(cache_dir)
         self.box = box
         self.fetch = fetch
         self.url = url
-        self._tiles = TileCache(self._load_day, max_tiles=3)
+        self._tiles = TileCache(self._load_day, max_tiles=max_tiles)
 
     def _load_day(self, day: date) -> GridSeries:
         path = tile_path(day, self.cache_dir)
