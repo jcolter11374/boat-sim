@@ -25,6 +25,7 @@ class Components:
     autopilot: Autopilot
     link: Link
     base: BasePolicy
+    pinger: object | None = None  # e.g. comms.GlobalstarPinger; one-way position beacon
 
 
 @dataclass
@@ -56,6 +57,11 @@ def _report(state) -> dict:
     }
 
 
+def mission_size_bytes(mission: Mission) -> int:
+    """Uplinked route size: 8-byte header plus lat/lon as two int32 per waypoint."""
+    return 8 + 8 * len(mission.waypoints)
+
+
 def simulate(
     c: Components,
     start: datetime,
@@ -76,6 +82,9 @@ def simulate(
     state = c.vessel.initial_state(start, start_lat, start_lon)
     log = VoyageLog(start=start, seed=seed)
     next_report = start + report_every
+    next_ping = start
+    pending_up: list[tuple[datetime, dict]] = []
+    pending_down: list[tuple[datetime, Mission]] = []
     n_steps = int(timedelta(days=max_days) / dt)
 
     for i in range(n_steps):
@@ -85,17 +94,45 @@ def simulate(
         state, events = c.vessel.step(state, cmd, env, dt, rng)
         log.events.extend(events)
 
+        # Satellite traffic. Reports and routes take effect when they are
+        # delivered, not when they are sent: an uplink may need retries, and a
+        # route from base waits in the Iridium mailbox until the boat checks it.
         if state.t >= next_report:
             next_report += report_every
             report = _report(state)
             msg = Message(state.t, "up", report, size_bytes=len(str(report)))
-            if c.link.send(msg, env, rng) is not None:
+            t_up = c.link.send(msg, env, rng)
+            if t_up is not None:
                 log.events.append(Event(state.t, EventKind.MESSAGE_SENT))
-                new = c.base.on_report(report, c.forecast.issue(state.t))
-                if new is not None:
-                    new.version = mission.version + 1
-                    mission = new
-                    log.events.append(Event(state.t, EventKind.MISSION_UPDATED))
+                pending_up.append((t_up, report))
+
+        for item in [x for x in pending_up if x[0] <= state.t]:
+            pending_up.remove(item)
+            t_up, report = item
+            log.events.append(Event(t_up, EventKind.MESSAGE_RECEIVED, "report at base"))
+            new = c.base.on_report(report, c.forecast.issue(t_up))
+            if new is not None:
+                down = Message(
+                    t_up,
+                    "down",
+                    {"waypoints": len(new.waypoints)},
+                    size_bytes=mission_size_bytes(new),
+                )
+                t_down = c.link.send(down, env, rng)
+                if t_down is not None:
+                    pending_down.append((t_down, new))
+
+        for item in [x for x in pending_down if x[0] <= state.t]:
+            pending_down.remove(item)
+            new = item[1]
+            new.version = mission.version + 1
+            mission = new
+            log.events.append(Event(state.t, EventKind.MISSION_UPDATED))
+
+        if c.pinger is not None and state.t >= next_ping:
+            next_ping += c.pinger.every
+            if c.pinger.ping(state.t, state.lat, state.lon, env, rng) is not None:
+                log.events.append(Event(state.t, EventKind.MESSAGE_RECEIVED, "globalstar ping"))
 
         if i % log_every == 0:
             log.rows.append(
