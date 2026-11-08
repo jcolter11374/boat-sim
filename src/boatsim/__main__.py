@@ -13,18 +13,21 @@ from boatsim.mc import run_batch
 from boatsim.oceandata import ConstantEnvironment, PerfectForecast
 from boatsim.runner import Components, simulate
 from boatsim.runner.simulate import default_mission
-from boatsim.vessel import KinematicVessel
+from boatsim.vessel import KayakVessel
 from boatsim.viz import text_summary
 
 
 def main(path: str = "configs/v4_kayak.yaml") -> None:
     design = load_design(path)
     env = ConstantEnvironment()
+    prop = design.propulsion
+    # Cruise at the design power until Sam's battery-aware throttle (#15) lands.
+    cruise_fraction = prop["cruise_drive_w"] / prop["max_drive_w"]
     c = Components(
         env=env,
         forecast=PerfectForecast(env),
-        vessel=KinematicVessel(design),
-        autopilot=WaypointAutopilot(),
+        vessel=KayakVessel(design),
+        autopilot=WaypointAutopilot(thrust_fraction=cruise_fraction),
         link=PerfectLink(),
         base=HoldCoursePolicy(),
     )
@@ -34,7 +37,9 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
         return simulate(c, start, lat, lon, default_mission(), seed=seed)
 
     starts = [datetime(2020, 10, 1) + timedelta(days=7 * i) for i in range(4)]
-    print(f"{design.name}: {text_summary(run_batch(run_one, starts))}  [STUB PHYSICS]")
+    print(
+        f"{design.name}: {text_summary(run_batch(run_one, starts))}  [real hull model; stub weather and autopilot]"
+    )
 
 
 if __name__ == "__main__":
