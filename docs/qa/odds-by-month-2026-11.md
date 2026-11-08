@@ -7,6 +7,14 @@ currents (GLORYS12), with safe mode, Iridium, base-station course corrections,
 and Theo's hazards from #52. The HTML report (Iris's `viz.html`) is the
 `odds-by-month` artifact on the run page.
 
+## Chosen launch window: April to June
+
+John picked an April to June launch (8 Nov 2026). **Those launches arrived 58
+of 60 times (97%, 95% range 89 to 99%)** with the "unknown failure" catch-all
+off. With it put back: about 93% at 3%, 85% at 10%, 69% at 25%, 43% at 50%
+and 12% at 84% (averages of the April, May and June rows below). Still
+optimistic for the reasons further down.
+
 ## Ravi's read
 
 - **Launch month matters more than anything else we've tested.** April to July

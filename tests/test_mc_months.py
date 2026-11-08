@@ -120,6 +120,7 @@ def test_sweep_weights_arrivals_by_survival():
     md = M.report_markdown(df)
     assert "Odds as a range" in md
     assert "| All | 2 | 48% | 45% | 38% | 25% | 8% |" in md
+    assert "Chosen launch window" not in md  # no Apr-Jun launches here
 
 
 def test_run_command_passes_unknown_p_to_the_job(monkeypatch, tmp_path):
@@ -171,3 +172,22 @@ def test_run_command_passes_spread(monkeypatch, tmp_path):
     )
     M.main(["run", "2015", "--spread", "--no-currents", "--out", str(tmp_path)])
     assert seen["job"].spread is True
+
+
+def test_report_leads_with_the_april_to_june_window():
+    df = pd.DataFrame(
+        {
+            "month": [4, 5, 6, 10],
+            "year": [2015] * 4,
+            "outcome": ["arrived", "arrived", "lost", "arrived"],
+            "ending": ["arrived", "arrived", "lost", "arrived"],
+            "days": [60.0, 60.0, 30.0, 60.0],
+            "unknown_p_run": [0.0] * 4,
+            "unknown_shape": [1.0] * 4,
+        }
+    )
+    md = M.report_markdown(df)
+    head = md.split("Every launch month")[0]
+    assert "## Chosen launch window (Apr to Jun)" in head
+    assert "**2 of 3 arrived: 67%" in head
+    assert "33% at 50%" in head  # 2/3 arrivals x 0.5 survival
