@@ -2,5 +2,6 @@
 one-way position pings. Owner: Sam (thread 3)."""
 
 from boatsim.comms.base import Link, PerfectLink
+from boatsim.comms.iridium import GlobalstarPinger, IridiumSBDLink
 
-__all__ = ["Link", "PerfectLink"]
+__all__ = ["GlobalstarPinger", "IridiumSBDLink", "Link", "PerfectLink"]
