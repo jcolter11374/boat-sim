@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timedelta
 
-from boatsim.autonomy import WaypointAutopilot
+from boatsim.autonomy import SafeModeAutopilot
 from boatsim.basestation import HoldCoursePolicy
 from boatsim.comms import GlobalstarPinger, IridiumSBDLink
 from boatsim.config import load_design
@@ -21,13 +21,13 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
     design = load_design(path)
     env = ConstantEnvironment()
     prop = design.propulsion
-    # Cruise at the design power until Sam's battery-aware throttle (#15) lands.
+    # Cruise at the design power; safe mode throttles back on low charge (#15).
     cruise_fraction = prop["cruise_drive_w"] / prop["max_drive_w"]
     c = Components(
         env=env,
         forecast=PerfectForecast(env),
         vessel=KayakVessel(design),
-        autopilot=WaypointAutopilot(thrust_fraction=cruise_fraction),
+        autopilot=SafeModeAutopilot(cruise_fraction=cruise_fraction),
         link=IridiumSBDLink(),
         pinger=GlobalstarPinger(),
         base=HoldCoursePolicy(),
