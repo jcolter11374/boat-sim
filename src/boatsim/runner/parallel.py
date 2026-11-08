@@ -125,13 +125,14 @@ class StandardVoyage:
     weather: str = "reanalysis"  # or "constant" for tests and quick looks
     currents: bool = True
     max_days: float = 120.0
+    forecast_error: float = 1.0  # 0 = base sees the future perfectly; 2 = twice the error
 
-    def components(self) -> Components:
+    def components(self, seed: int = 0) -> Components:
         from boatsim.autonomy import SafeModeAutopilot
         from boatsim.basestation import ForecastReplanPolicy
         from boatsim.comms import GlobalstarPinger, IridiumSBDLink
         from boatsim.config import load_design
-        from boatsim.oceandata import PerfectForecast
+        from boatsim.oceandata import ErrorForecast
         from boatsim.vessel import KayakVessel
 
         design = load_design(self.design_path)
@@ -140,7 +141,7 @@ class StandardVoyage:
         forecast_env = _environment(self.weather, self.currents, for_forecast=True)
         return Components(
             env=env,
-            forecast=PerfectForecast(forecast_env),  # TODO(#12): forecast with error
+            forecast=ErrorForecast(forecast_env, seed=seed, scale=self.forecast_error),
             vessel=KayakVessel(design),
             autopilot=SafeModeAutopilot(
                 cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"]
@@ -155,7 +156,7 @@ class StandardVoyage:
 
         voyage = load_design(self.design_path).voyage
         return simulate(
-            self.components(),
+            self.components(seed),
             start,
             voyage["drop_lat"],
             voyage["drop_lon"],
