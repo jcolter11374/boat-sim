@@ -12,16 +12,30 @@ How the real hardware behaves, in plain terms:
 * **Messages to the boat wait in a mailbox** at the Iridium gateway until the
   boat next "checks its mailbox" (opens a session). So course corrections from
   base arrive at the boat's next scheduled check, not instantly.
-* **Cost.** RockBLOCK bills in credits: one credit per 50 bytes or part of it,
-  charged only when a message goes through, plus a monthly line rental. The
-  link refuses a message that would push this month's spend over budget, the
-  way the real base-station software should.
+* **Cost.** RockBLOCK bills in credits: one credit per 50 bytes or part of it
+  for each message sent or received, one credit for a mailbox check that finds
+  nothing waiting, plus a monthly line rental [1]. Iridium charges only for
+  messages that go through. By default the link has **no spending cap**: it
+  records what every message costs so the simulator can find the cheapest
+  message schedule that still gets the boat across. A cap
+  (`monthly_budget_usd`) exists only to test what a limit would do.
+
+  The cheapest default schedule: one check of the mailbox a day. Every extra
+  daily check costs a credit whenever base has nothing to send.
 * **Globalstar SmartOne** is a separate one-way beacon: it only transmits a
   position, a few times over in case one copy is lost, and needs no power from
   the main battery. It's the "where is it" backup if Iridium dies.
 
-Every number not from a datasheet is marked GUESS. Prices change: check the
-current Ground Control price list before trusting the dollar figures.
+Every number not from a datasheet or price list is marked GUESS.
+
+Sources (checked 2026-11-08):
+[1] Ground Control, "Iridium contract costs":
+    https://docs.groundcontrol.com/iot/rockblock/web-services/iridium-contract-costs
+[2] Ground Control, "Short Burst Data service plans" (USD ex. tax): prepaid line
+    rental $17.00/month for all RockBLOCKs, billed in one-month blocks; the
+    cheapest 12-month contract is $15.75/month with 5,000 bytes included.
+    Prepaid credit bundle prices are not published there (quote on request).
+    https://www.groundcontrol.com/products/iridium/short-burst-data-range/short-burst-data-service-plans/
 
 Owner: Sam.
 """
@@ -83,12 +97,14 @@ class IridiumSBDLink:
     max_tries: int = 8  # GUESS: then give up and let the next report supersede it
     session_s: float = 40.0  # GUESS: typical SBD session length incl. satellite acquisition
     # Boat checks the mailbox for base messages this often, aligned to 00:00 UTC.
-    mailbox_every: timedelta = timedelta(hours=6)  # GUESS: firmware setting we choose
+    # Firmware setting we choose; once a day is the cheapest that still lets base
+    # correct the course daily. Each empty check costs a credit [1].
+    mailbox_every: timedelta = timedelta(hours=24)
     # Billing (RockBLOCK / Ground Control).
-    credit_bytes: int = 50  # Ground Control: 1 credit per 50 bytes or part
-    credit_usd: float = 0.12  # GUESS: depends on bundle size; check price list
-    line_rental_usd_month: float = 15.0  # GUESS: check price list
-    monthly_budget_usd: float = 40.0  # GUESS: proposed default, John to set
+    credit_bytes: int = 50  # [1]: 1 credit per 50 bytes or part
+    credit_usd: float = 0.12  # GUESS: bundle prices not published [2]; get a quote
+    line_rental_usd_month: float = 17.0  # [2]: prepaid, all RockBLOCKs
+    monthly_budget_usd: float | None = None  # no cap: measure cost, don't limit it
     ledger: list[LedgerEntry] = field(default_factory=list)
 
     # ------------------------------------------------------------ accounting
@@ -122,6 +138,34 @@ class IridiumSBDLink:
             s["usd"] = round(s["usd"] + self.line_rental_usd_month, 2)
         return out
 
+    def voyage_cost_usd(self, start: datetime, end: datetime) -> dict[str, float]:
+        """Itemised airtime cost of a voyage from start to end.
+
+        Line rental for every calendar month touched, credits for delivered
+        messages, and a credit for each scheduled mailbox check that found
+        nothing (checks that collected a base message are paid by that message).
+        """
+        months = set()
+        t = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        while t <= end:
+            months.add(_month(t))
+            t = (t + timedelta(days=32)).replace(day=1)
+        rental = len(months) * self.line_rental_usd_month
+        msgs = sum(e.cost_usd for e in self.ledger if e.status == "delivered")
+        checks = 0
+        t = self.next_mailbox_check(start)
+        while t <= end:
+            checks += 1
+            t += self.mailbox_every
+        down = sum(1 for e in self.ledger if e.status == "delivered" and e.direction == "down")
+        empty = max(0, checks - down) * self.credit_usd
+        return {
+            "line_rental": round(rental, 2),
+            "messages": round(msgs, 2),
+            "empty_mailbox_checks": round(empty, 2),
+            "total": round(rental + msgs + empty, 2),
+        }
+
     # ---------------------------------------------------------------- timing
 
     def next_mailbox_check(self, t: datetime) -> datetime:
@@ -149,8 +193,9 @@ class IridiumSBDLink:
         credits = self.credits_for(msg.size_bytes)
         cost = credits * self.credit_usd
         month = _month(msg.t_sent)
-        budget_left = self.monthly_budget_usd - self.line_rental_usd_month - self.spent_usd(month)
-        if cost > budget_left + 1e-9:
+        if self.monthly_budget_usd is not None and cost > (
+            self.monthly_budget_usd - self.line_rental_usd_month - self.spent_usd(month) + 1e-9
+        ):
             self.ledger.append(
                 LedgerEntry(
                     msg.t_sent, msg.direction, msg.size_bytes, 0, 0.0, 0, None, "over_budget"

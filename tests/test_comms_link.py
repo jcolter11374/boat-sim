@@ -47,16 +47,16 @@ def test_credits_are_per_50_bytes_or_part():
 
 
 def test_calm_seas_almost_always_get_through_quickly():
-    link = IridiumSBDLink(monthly_budget_usd=1e9)
+    link = IridiumSBDLink()
     assert _delivery_rate(link, CALM) > 0.999  # 8 tries at 85%
     delays = [e.t_delivered - e.t_sent for e in link.ledger if e.t_delivered]
     assert np.median(delays) < timedelta(minutes=1)
 
 
 def test_rough_seas_lose_more_messages():
-    calm = _delivery_rate(IridiumSBDLink(monthly_budget_usd=1e9), CALM)
-    mid = _delivery_rate(IridiumSBDLink(monthly_budget_usd=1e9), EnvState(hs=4.0))
-    rough_link = IridiumSBDLink(monthly_budget_usd=1e9)
+    calm = _delivery_rate(IridiumSBDLink(), CALM)
+    mid = _delivery_rate(IridiumSBDLink(), EnvState(hs=4.0))
+    rough_link = IridiumSBDLink()
     rough = _delivery_rate(rough_link, ROUGH)
     assert calm > mid > rough
     # 8 tries at 0.85 x 0.3 = 25.5% each: ~90% eventually delivered, with real delays.
@@ -73,15 +73,43 @@ def test_failed_tries_are_not_billed():
 
 
 def test_downlink_waits_for_the_next_mailbox_check():
-    link = IridiumSBDLink(p_try_calm=1.0)
+    link = IridiumSBDLink(p_try_calm=1.0, mailbox_every=timedelta(hours=6))
     t = datetime(2020, 10, 1, 7, 30, tzinfo=UTC)  # next 6-hourly check is 12:00
     done = link.send(_msg(t, "down", 60), CALM, np.random.default_rng(0))
     assert done == datetime(2020, 10, 1, 12, 0, 40, tzinfo=UTC)
+    daily = IridiumSBDLink(p_try_calm=1.0)  # default: once a day at 00:00 UTC
+    done = daily.send(_msg(t, "down", 60), CALM, np.random.default_rng(0))
+    assert done == datetime(2020, 10, 2, 0, 0, 40, tzinfo=UTC)
 
 
-def test_budget_refuses_then_resets_next_month():
-    # $40 budget - $15 rental = $25 = 208 one-credit messages at $0.12.
+def test_no_spending_cap_by_default():
     link = IridiumSBDLink(p_try_calm=1.0)
+    rng = np.random.default_rng(0)
+    sent = [link.send(_msg(T0 + timedelta(minutes=i), size=40), CALM, rng) for i in range(500)]
+    assert all(s is not None for s in sent)
+    assert link.monthly_summary()["2020-10"]["usd"] == round(17.0 + 500 * 0.12, 2)
+
+
+def test_voyage_cost_is_itemised():
+    link = IridiumSBDLink(p_try_calm=1.0)
+    rng = np.random.default_rng(0)
+    start = datetime(2020, 10, 15, 12, tzinfo=UTC)
+    end = datetime(2020, 12, 3, 12, tzinfo=UTC)  # touches Oct, Nov, Dec
+    for d in range(49):
+        link.send(_msg(start + timedelta(days=d), size=90), CALM, rng)  # 2 credits each
+    link.send(_msg(start, "down", 40), CALM, rng)  # one route from base
+    cost = link.voyage_cost_usd(start, end)
+    assert cost["line_rental"] == 3 * 17.0
+    assert cost["messages"] == round(49 * 2 * 0.12 + 0.12, 2)
+    assert cost["empty_mailbox_checks"] == round((49 - 1) * 0.12, 2)  # 49 daily checks
+    assert cost["total"] == round(
+        cost["line_rental"] + cost["messages"] + cost["empty_mailbox_checks"], 2
+    )
+
+
+def test_optional_cap_refuses_then_resets_next_month():
+    # $42 cap - $17 rental = $25 = 208 one-credit messages at $0.12.
+    link = IridiumSBDLink(p_try_calm=1.0, monthly_budget_usd=42.0)
     rng = np.random.default_rng(0)
     sent = [link.send(_msg(T0 + timedelta(minutes=i), size=40), CALM, rng) for i in range(250)]
     assert sum(s is not None for s in sent) == 208
@@ -89,7 +117,7 @@ def test_budget_refuses_then_resets_next_month():
     assert link.spent_usd("2020-10") <= 25.0
     assert link.send(_msg(datetime(2020, 11, 1, tzinfo=UTC), size=40), CALM, rng) is not None
     oct_ = link.monthly_summary()["2020-10"]
-    assert oct_["up"] == 208 and oct_["over_budget"] == 42 and oct_["usd"] <= 40.0
+    assert oct_["up"] == 208 and oct_["over_budget"] == 42 and oct_["usd"] <= 42.0
 
 
 def test_globalstar_redundant_copies_help_and_rough_seas_hurt():
@@ -109,7 +137,7 @@ def test_globalstar_redundant_copies_help_and_rough_seas_hurt():
     }
 
 
-def test_full_voyage_daily_reports_stay_inside_budget():
+def test_full_voyage_daily_reports_get_through_and_are_costed():
     design = load_design("configs/v4_kayak.yaml")
     env = ConstantEnvironment(EnvState(ghi=1000.0, hs=2.0))
     link = IridiumSBDLink()
@@ -124,6 +152,6 @@ def test_full_voyage_daily_reports_stay_inside_budget():
     log = simulate(c, T0, 36.85, -75.7, default_mission(), seed=4)
     sent = sum(e.kind == EventKind.MESSAGE_SENT for e in log.events)
     assert sent >= 0.95 * int(log.days)
-    for month in link.monthly_summary().values():
-        assert month["usd"] <= link.monthly_budget_usd
-        assert month["over_budget"] == 0
+    cost = link.voyage_cost_usd(log.start, log.end)
+    # ~2 months of rental plus a few dollars of credits for daily reports.
+    assert 30.0 < cost["total"] < 75.0
