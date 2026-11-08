@@ -1,0 +1,51 @@
+# Drift check (issue #19): races our simulated ocean against real NOAA drifters
+# that started off Cape Hatteras and the Bay mouth. Needs real currents, so it
+# runs here (thread sandboxes can't reach Copernicus Marine).
+# Run it by hand: Actions tab -> "Drifter check" -> Run workflow. It also runs on
+# pull requests that change the check itself.
+# Reads the Copernicus login from the repo secrets; GitHub masks them in logs.
+name: Drifter check
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Days to drift"
+        default: "10"
+  pull_request:
+    paths:
+      - src/boatsim/mc/drifters.py
+      - .github/workflows/drifter-check.yml
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      DAYS: ${{ inputs.days || '10' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Check the login secrets exist
+        run: |
+          if [ -z "$COPERNICUSMARINE_SERVICE_USERNAME" ] || [ -z "$COPERNICUSMARINE_SERVICE_PASSWORD" ]; then
+            echo "::error::Add the repo secrets COPERNICUSMARINE_SERVICE_USERNAME and COPERNICUSMARINE_SERVICE_PASSWORD first."
+            exit 1
+          fi
+      - name: Drift the models alongside real drifters
+        run: python -m boatsim.mc.drifters --days "$DAYS" --out runs/drifters
+      - name: Show the report on the run page
+        if: always()
+        run: |
+          if [ -f runs/drifters/drift_report.md ]; then cat runs/drifters/drift_report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drifter-check
+          path: runs/drifters/
+          retention-days: 90
