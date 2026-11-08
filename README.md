@@ -54,6 +54,7 @@ or send fixes back.
 - Contributions are accepted under the MIT License (below). Only send code and
   data you have the right to share under it.
 - Bug reports and questions go in GitHub Issues.
+- Other drone teams: see [COLLABORATION.md](COLLABORATION.md) for how we keep in touch.
 
 ## Talk to us
 
