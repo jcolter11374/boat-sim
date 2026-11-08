@@ -16,40 +16,58 @@ T0 = datetime(2021, 5, 1)
 DESIGN = load_design("configs/v4_kayak.yaml")
 
 
-def _summer_crossing(n_hours=1200, seed=1):
-    """Synthetic sea states for a 50-day summer crossing: Hs lognormal around
-    1.8 m (typical North Atlantic summer), Tp from a mid-steepness wind sea."""
+def _summer_crossing(n_hours=1400, seed=1):
+    """Synthetic sea for a ~58-day summer crossing: Hs a slow lognormal AR(1)
+    around 1.8 m (typical North Atlantic summer), Tp from a mid-steepness sea,
+    wind growing with Hs. Same recipe as the 400-voyage reality check in #52."""
     rng = np.random.default_rng(seed)
-    hs = rng.lognormal(math.log(1.8), 0.45, n_hours)
-    tp = np.maximum(4.0, 5.0 * np.sqrt(hs))
-    return hs, tp
+    x, hs = 0.0, []
+    for _ in range(n_hours):
+        x = 0.97 * x + math.sqrt(1 - 0.97**2) * rng.normal()
+        hs.append(1.8 * math.exp(0.45 * x))
+    hs = np.array(hs)
+    return hs, np.maximum(4.0, 5.0 * np.sqrt(hs)), 3.0 + 3.5 * hs
 
 
-def test_breaking_probability_matches_banner_threshold():
-    # eps = Hs kp / 2 below 0.055 -> no breaking
-    assert Z.breaking_probability(0.5, 8.0) == 0.0
-    # steep sea: Hs 3 m, Tp 6 s -> eps ~ 0.17 -> ~26 % of dominant waves break
-    assert 0.2 < Z.breaking_probability(3.0, 6.0) < 0.35
+def _pm_wind(hs):
+    """Fully developed sea (Pierson-Moskowitz): Hs = 0.21 U^2 / g."""
+    return math.sqrt(hs * 9.81 / 0.21)
 
 
-def test_knockdowns_need_big_steep_waves():
-    assert Z.knockdown_rate_per_hour(P, 0.0, 0.0) == 0.0
-    assert Z.knockdown_rate_per_hour(P, 0.5, 4.0) < 1e-3
-    calm, normal, gale = (Z.knockdown_rate_per_hour(P, h, 5 * math.sqrt(h)) for h in (1, 2, 4))
-    assert calm < normal <= gale
-    # Steeper sea of the same height is worse
-    assert Z.knockdown_rate_per_hour(P, 3.0, 6.0) > Z.knockdown_rate_per_hour(P, 3.0, 10.0)
+def test_whitecap_coverage_matches_monahan():
+    assert Z.whitecap_fraction(10.0) == pytest.approx(3.84e-6 * 10.0**3.41)
+    assert Z.whitecap_fraction(0.0) == 0.0
+    assert Z.whitecap_fraction(60.0) == 0.3  # capped
+
+
+def test_knockdowns_are_rare_below_about_three_metres():
+    """Maya's spec (#52): rare below ~2.5 m. Ravi's 2020 batch saw 34-352 per
+    voyage, mostly in 1-1.5 m seas, from the old Banner-based model."""
+    rate = Z.knockdown_rate_per_hour
+    assert rate(P, 0.0, 0.0, 0.0) == 0.0
+    for hs in (1.0, 1.5, 2.0, 2.5):
+        for tp in (4.0, 6.0, 9.0):  # including steep short wind seas
+            assert (
+                rate(P, hs, tp, 2 * _pm_wind(hs)) * 24 * 60 < 0.05
+            )  # < 1 per 20 two-month voyages
+    gale = rate(P, 4.0, 9.0, _pm_wind(4.0)) * 24
+    storm = rate(P, 6.0, 11.0, _pm_wind(6.0)) * 24
+    assert 0.1 < gale < 3.0 and storm > gale  # per day
 
 
 def test_summer_crossing_reproduces_design_doc_fmea():
-    """Calibration check: expected losses over a typical crossing land near the
-    design doc's FMEA residuals (capsized-and-stuck 0.7 %, collision 1.0 %)."""
-    hs, tp = _summer_crossing()
-    rates = np.array([Z.knockdown_rate_per_hour(P, h, t) for h, t in zip(hs, tp, strict=True)])
-    knockdowns = rates.sum()
-    assert 30 < knockdowns < 200  # a few a day on average
-    p_stuck = sum(r * P.p_inverted_stuck * Z.damage_scale(P, h) for r, h in zip(rates, hs))
-    assert p_stuck == pytest.approx(0.007, rel=0.5)
+    """Calibration check: knockdowns per voyage and the expected losses over a
+    typical crossing land near the design doc's FMEA residuals (capsized-and-
+    stuck 0.7 %, collision 1.0 %). Averaged over many synthetic crossings,
+    because knockdowns come almost all from the odd gale."""
+    counts, stuck = [], []
+    for seed in range(100):
+        hs, tp, wind = _summer_crossing(seed=seed)
+        r = np.array([Z.knockdown_rate_per_hour(P, *x) for x in zip(hs, tp, wind, strict=True)])
+        counts.append(r.sum())
+        stuck.append(sum(r * P.p_inverted_stuck * np.array([Z.damage_scale(P, h) for h in hs])))
+    assert 5 < np.median(counts) < 40  # median voyage: a handful to a few dozen
+    assert np.mean(stuck) == pytest.approx(0.007, rel=0.3)
     # Ships: ~100 h near the coasts at 3e-3 ships/km^2, the rest open ocean at 2e-4
     hits = 100 * Z.ship_strike_rate_per_hour(P, 3e-3, True) + 1100 * Z.ship_strike_rate_per_hour(
         P, 2e-4, True
@@ -74,7 +92,7 @@ def test_disabled_hazards_do_nothing():
 def test_storm_sampling_knocks_down_and_breaks_things():
     # Exaggerate damage odds so the test sees every branch quickly.
     p = replace(P, p_part={k: 0.05 for k in P.p_part}, p_inverted_stuck=0.0)
-    env = EnvState(hs=5.0, tp=8.0)
+    env = EnvState(hs=6.0, tp=11.0, wind_u=17.0)  # storm
     rng = np.random.default_rng(3)
     damage: dict[str, bool] = {}
     total = 0

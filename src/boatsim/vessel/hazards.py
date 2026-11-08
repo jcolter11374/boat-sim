@@ -8,23 +8,33 @@ knobs in Monte Carlo; real numbers come from the pool test, the Bay trial and
 the literature as we find it.
 
 Knockdowns
-    A small boat is rolled over when a breaking wave about a third of its
-    length high hits it beam-on (Wolfson Unit / Fastnet 1979 capsize studies:
-    breaking waves of ~35 % of hull length capsize yachts beam-on). The rate is
+    Adapted from the Randolph team's drone-boat simulator (failures.py,
+    breaking_knockdown_rate; MIT, see THIRD_PARTY_NOTICES.md):
 
-        waves per hour x fraction that break x fraction tall enough x scale
+        knockdowns per hour = breaking events at a point per hour
+                              x share of breakers tall enough x share hitting beam-on
 
-    * waves per hour = 3600 / Tp
-    * fraction that break: Banner, Babanin & Young (2000), breaking probability
-      of dominant waves P = 22 (eps - 0.055)^2.01 with eps = Hs kp / 2
-    * fraction taller than the critical height: Rayleigh, exp(-2 (Hc/Hs)^2)
-    * scale (GUESS): most breakers are spilling whitecaps, not plunging crests,
-      and the boat isn't always beam-on. Set so a summer crossing sees a few
-      knockdowns a day in normal seas and dozens in a gale.
+    * breaking events: whitecap coverage W = 3.84e-6 U10^3.41 (Monahan and
+      O'Muircheartaigh 1980) is the fraction of time a point on the sea sits in
+      a breaker. Each breaker lasts about half a wave period, so events per
+      hour = W x 3600 / (0.5 Tp).
+    * tall enough: a breaking crest about 55 % of hull length high capsizes a
+      small boat beam-on (Wolfson Unit / 1979 Fastnet capsize work); 1.2 x beam
+      is a floor for very short hulls. Breaker heights are Rayleigh with scale
+      0.25 Hs (Randolph: GUESS), so the share is exp(-2 (Hc / 0.25 Hs)^2).
+    * beam-on share 0.25 (Randolph: GUESS).
+
+    For our 3.05 m hull, in a fully developed sea, this gives essentially no
+    knockdowns below Hs 3 m, about 0.5 a day at Hs 4 m (27 kt of wind), 4 a
+    day at Hs 5 m and 16 a day at Hs 6 m. An
+    earlier version (#34) used Banner et al. (2000) breaking odds with the
+    full wave height against 35 % of length. That made 1 to 1.5 m steep wind
+    seas roll the boat several times a day, and Ravi's real-weather batch saw
+    34 to 352 knockdowns per voyage (#52).
 
     The dome makes the boat self-righting (positive righting arm to 180 deg),
-    so a knockdown is not a loss by itself. Each one has a small chance of
-    breaking something, which grows with wave height.
+    so a knockdown is not a loss by itself. Each one has a chance of breaking
+    something, which grows with wave height.
 
 Ship strikes
     Random-encounter ("gas") model: a ship hits the kayak if it passes within
@@ -70,7 +80,6 @@ import numpy as np
 
 from boatsim.types import EnvState, Event, EventKind
 from boatsim.vessel.coast import distance_to_land_km
-from boatsim.vessel.hull import G
 
 # Parts a knockdown can break, with their share of per-knockdown damage odds.
 # Panel names match the deck layout in the design doc (2 x 100 W + 1 x 50 W).
@@ -82,18 +91,21 @@ class HazardParams:
     enabled: bool = True
     hull_length_m: float = 3.05  # design doc
     hull_beam_m: float = 0.79  # design doc
-    critical_wave_frac_of_length: float = 0.35  # Wolfson / Fastnet capsize studies
-    knockdown_scale: float = 0.02  # GUESS, see module docstring and calibration test
+    critical_wave_frac_of_length: float = 0.55  # Wolfson / Fastnet: breaker 55 % of length
+    critical_wave_frac_of_beam: float = 1.2  # Randolph: floor for short hulls
+    breaker_height_frac_of_hs: float = 0.25  # Randolph GUESS: Rayleigh scale of breakers
+    beam_on_share: float = 0.25  # Randolph GUESS
+    knockdown_scale: float = 1.0  # multiplier for Monte Carlo spread (Randolph: wave_capsize)
     # Per-knockdown odds, at the reference wave height; scale with (Hs/ref)^2.
     damage_ref_hs_m: float = 3.0
-    p_inverted_stuck: float = 1.5e-4  # GUESS: dome damaged or keel lost; FMEA 0.7 %/voyage
+    p_inverted_stuck: float = 4.0e-5  # GUESS: dome damaged or keel lost; FMEA 0.7 %/voyage
     p_part: dict[str, float] = field(
         default_factory=lambda: {
-            "panel_100w_a": 1.5e-4,  # GUESS: delamination or torn off, ~0.7 %/voyage
-            "panel_100w_b": 1.5e-4,  # GUESS
-            "panel_50w": 1.5e-4,  # GUESS
-            "ais_whip": 1.0e-4,  # GUESS: the only external antenna, ~0.5 %/voyage
-            "rudder": 5.0e-5,  # GUESS: spade rudder stock bent
+            "panel_100w_a": 4.0e-5,  # GUESS: delamination or torn off, ~0.7 %/voyage
+            "panel_100w_b": 4.0e-5,  # GUESS
+            "panel_50w": 4.0e-5,  # GUESS
+            "ais_whip": 2.5e-5,  # GUESS: the only external antenna, ~0.5 %/voyage
+            "rudder": 1.5e-5,  # GUESS: spade rudder stock bent
         }
     )
     max_damage_p: float = 0.05  # cap on any per-knockdown odds in extreme seas
@@ -157,23 +169,21 @@ class HazardParams:
         return cls(**kw)
 
 
-def breaking_probability(hs: float, tp: float) -> float:
-    """Banner et al. (2000): chance a dominant wave breaks, from its steepness."""
-    if hs <= 0.0 or tp <= 0.0:
-        return 0.0
-    kp = (2.0 * math.pi / tp) ** 2 / G  # deep-water wavenumber at the peak
-    eps = hs * kp / 2.0
-    if eps <= 0.055:
-        return 0.0
-    return min(22.0 * (eps - 0.055) ** 2.01, 1.0)
+def whitecap_fraction(wind_speed: float) -> float:
+    """Monahan and O'Muircheartaigh (1980): W = 3.84e-6 U10^3.41, capped at 0.3."""
+    return min(3.84e-6 * max(wind_speed, 0.0) ** 3.41, 0.3)
 
 
-def knockdown_rate_per_hour(p: HazardParams, hs: float, tp: float) -> float:
-    if not p.enabled or hs <= 0.0 or tp <= 0.0:
+def knockdown_rate_per_hour(p: HazardParams, hs: float, tp: float, wind_speed: float) -> float:
+    if not p.enabled or hs <= 0.05 or tp <= 0.0:
         return 0.0
-    hc = p.critical_wave_frac_of_length * p.hull_length_m
-    tall = math.exp(-2.0 * (hc / hs) ** 2)
-    return (3600.0 / tp) * breaking_probability(hs, tp) * tall * p.knockdown_scale
+    events_per_hour = whitecap_fraction(wind_speed) * 3600.0 / (0.5 * max(tp, 1.0))
+    hc = max(
+        p.critical_wave_frac_of_length * p.hull_length_m,
+        p.critical_wave_frac_of_beam * p.hull_beam_m,
+    )
+    tall = math.exp(-2.0 * (hc / (p.breaker_height_frac_of_hs * hs)) ** 2)
+    return events_per_hour * tall * p.beam_on_share * p.knockdown_scale
 
 
 def damage_scale(p: HazardParams, hs: float) -> float:
@@ -213,7 +223,8 @@ def sample_hazards(
     if not p.enabled:
         return HazardOutcome(events, failed, lost, 0)
 
-    n = int(rng.poisson(knockdown_rate_per_hour(p, env.hs, env.tp) * hours))
+    wind = math.hypot(env.wind_u, env.wind_v)
+    n = int(rng.poisson(knockdown_rate_per_hour(p, env.hs, env.tp, wind) * hours))
     if n:
         scale = damage_scale(p, env.hs)
         events.append(Event(t, EventKind.CAPSIZE, f"{n} knockdown(s), Hs {env.hs:.1f} m"))
