@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# Downloaded weather/ocean data and run outputs never go in git
+data/
+runs/
+*.nc
+*.zarr/
+*.parquet
