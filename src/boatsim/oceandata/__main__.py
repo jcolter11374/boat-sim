@@ -25,6 +25,29 @@ def _months(a: str, b: str) -> list[tuple[int, int]]:
     return out
 
 
+def check_glorys(month: str) -> None:
+    """Report file size and the fastest surface current off Cape Hatteras.
+
+    The Gulf Stream there typically runs at roughly 1 to 2 m/s; a value far
+    outside that means a units, depth or grid problem, not a fast ocean."""
+    import numpy as np
+    import xarray as xr
+
+    y, m = map(int, month.split("-"))
+    path = glorys.tile_path(y, m)
+    with xr.open_dataset(path) as ds:
+        days = ds.sizes["time"]
+        box = ds.sel(lat=slice(33, 40), lon=slice(-77, -65))
+        speed = np.hypot(box.current_u, box.current_v).max("time")
+        i = np.unravel_index(int(np.nanargmax(speed.values)), speed.shape)
+        lat, lon = float(box.lat[i[0]]), float(box.lon[i[1]])
+        print(f"{path}: {path.stat().st_size / 1e6:.1f} MB for {days} days")
+        print(
+            f"fastest current off Hatteras: {float(speed.values[i]):.2f} m/s at {lat:.2f}N {lon:.2f}E"
+        )
+        print(f"ocean grid points with data: {int(np.isfinite(ds.current_u[0]).sum())}")
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m boatsim.oceandata")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -36,6 +59,8 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("fetch-glorys", help="cache GLORYS12 surface-current months")
     g.add_argument("start", help="YYYY-MM")
     g.add_argument("end", help="YYYY-MM")
+    c = sub.add_parser("check-glorys", help="print size and Gulf Stream speed for a cached month")
+    c.add_argument("month", help="YYYY-MM")
     s = sub.add_parser("sample", help="print the environment at one point")
     s.add_argument("t", type=datetime.fromisoformat)
     s.add_argument("lat", type=float)
@@ -56,6 +81,8 @@ def main(argv: list[str] | None = None) -> None:
         for y, m in _months(a.start, a.end):
             path = glorys.fetch_month(y, m)
             print(f"{path} {path.stat().st_size / 1e6:.1f} MB")
+    elif a.cmd == "check-glorys":
+        check_glorys(a.month)
     elif a.cmd == "sample":
         env = ReanalysisEnvironment(currents=None if a.no_currents else glorys.GlorysSource())
         print(env.sample(a.t, a.lat, a.lon))
