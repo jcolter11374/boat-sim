@@ -78,3 +78,28 @@ def test_globalstar_pings_on_schedule():
     _run(PerfectLink(), OneShotBase(), pinger=pinger, days=2)
     assert len(pinger.pings) == 9  # at launch, then every 6 h through hour 48
     assert all(ok for _, ok in pinger.pings)
+
+
+class ContactRecorder(WaypointAutopilot):
+    def __init__(self):
+        super().__init__()
+        self.contacts = []
+
+    def on_message_received(self, t):
+        self.contacts.append(t)
+
+
+def test_delivered_route_counts_as_contact_for_safe_mode():
+    design = load_design("configs/v4_kayak.yaml")
+    env = ConstantEnvironment(EnvState(ghi=1000.0))
+    ap = ContactRecorder()
+    c = Components(
+        env=env,
+        forecast=PerfectForecast(env),
+        vessel=KinematicVessel(design),
+        autopilot=ap,
+        link=DelayedDownLink(timedelta(hours=6)),
+        base=OneShotBase(),
+    )
+    log = simulate(c, datetime(2020, 10, 1), 36.85, -75.7, default_mission(), max_days=3)
+    assert ap.contacts == [_first(log, EventKind.MISSION_UPDATED)]

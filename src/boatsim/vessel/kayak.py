@@ -266,7 +266,12 @@ class KayakVessel:
     def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
         # Truth for now; GPS and compass noise belong with the sensor-failure work.
         return Sensors(
-            t=state.t, lat=state.lat, lon=state.lon, heading=state.heading, soc=state.soc
+            t=state.t,
+            lat=state.lat,
+            lon=state.lon,
+            heading=state.heading,
+            soc=state.soc,
+            thrusters_ok=self.working_thrusters(state),
         )
 
 

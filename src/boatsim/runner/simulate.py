@@ -128,6 +128,10 @@ def simulate(
             new.version = mission.version + 1
             mission = new
             log.events.append(Event(state.t, EventKind.MISSION_UPDATED))
+            # Any delivered base message proves the link works (safe mode's lost-comms clock).
+            notify = getattr(c.autopilot, "on_message_received", None)
+            if notify is not None:
+                notify(state.t)
 
         if c.pinger is not None and state.t >= next_ping:
             next_ping += c.pinger.every
