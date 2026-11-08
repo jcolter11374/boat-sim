@@ -14,7 +14,9 @@ Each 10-minute step:
 With no drive power the boat can't steer and lies beam-on to the wind (GUESS),
 so it drifts with wind and current: the M1 drifter comparison case.
 
-Not here yet: knockdowns, damage and ship strikes (issue #7).
+5. Draw hazards (vessel/hazards.py): knockdowns from breaking waves, the
+   parts they break, and ship strikes. Broken panels cut solar; a broken
+   rudder leaves steering to differential thrust, which needs both thrusters.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from boatsim.config import Design
 from boatsim.geo import move
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
+from boatsim.vessel.hazards import DEFAULT_PANELS_W, HazardParams, sample_hazards
 from boatsim.vessel.power import BatteryParams, SolarParams, energy_step, solar_power_w
 from boatsim.vessel.propulsion import ThrusterParams, total_thrust
 
@@ -52,6 +55,7 @@ class KayakState(BoatState):
     hotel_w: float = 0.0
     fouling_frac: float = 0.0
     electronics_on: bool = True
+    knockdowns: int = 0  # total so far this voyage
 
 
 @dataclass(frozen=True)
@@ -147,12 +151,20 @@ class KayakVessel:
         self.base_hotel_w = (hotel_wh - self.nav_light_w * dark_hours) / 24.0
         self.dark_ghi = float(e.get("nav_light_on_below_ghi", 5.0))
         self.min_steer_w = float(design.propulsion.get("min_steer_w", 1.0))  # GUESS
+        self.hazards = HazardParams.from_config(design.hazards)
+        self.panels_w = dict(design.power.get("panels_w", DEFAULT_PANELS_W))
+        self._panels_total_w = sum(self.panels_w.values()) or 1.0
 
     def initial_state(self, t, lat: float, lon: float) -> KayakState:
         cap = self.battery.capacity_wh
         return KayakState(
             t=t, lat=lat, lon=lon, battery_wh=cap, battery_capacity_wh=cap, t_launch=t
         )
+
+    def panel_fraction(self, state: BoatState) -> float:
+        """Share of rated solar still on deck after damage."""
+        left = sum(w for k, w in self.panels_w.items() if not state.damage.get(k, False))
+        return left / self._panels_total_w
 
     def working_thrusters(self, state: BoatState) -> int:
         failed = sum(1 for k in THRUSTER_PARTS if state.damage.get(k, False))
@@ -182,6 +194,7 @@ class KayakVessel:
         if on:
             hotel_req = self.base_hotel_w + (self.nav_light_w if env.ghi < self.dark_ghi else 0.0)
         solar = solar_power_w(self.solar, env.ghi, env.hs, env.air_temp)
+        solar *= self.panel_fraction(state)
         es = energy_step(
             self.battery, state.battery_wh, solar, drive_req, hotel_req, hours, env.air_temp
         )
@@ -195,7 +208,9 @@ class KayakVessel:
             se, sn = H.stokes_drift(env.hs, env.tp, env.wave_dir)
             cur_e, cur_n = cur_e + se, cur_n + sn
 
-        steering = es.drive_w >= self.min_steer_w and working > 0
+        # Rudder gone: differential thrust can still steer, but only with both thrusters.
+        can_steer = working >= (2 if state.damage.get("rudder") else 1)
+        steering = es.drive_w >= self.min_steer_w and can_steer
         if steering:
             heading = cmd.heading
         else:
@@ -208,8 +223,11 @@ class KayakVessel:
                 heading = (wind_to + self.hull.drift_heading_offset_deg) % 360.0
 
         foul = H.fouling_frac(self.hull, days)
+        # A boat that can't steer just turns circles: the power is spent (until the
+        # autopilot cuts it) but it makes no headway, so it drifts.
+        push_w = es.drive_w if steering else 0.0
         sol = solve_speed(
-            self.hull, self.thrusters, heading, es.drive_w, working, env, foul, cur_e, cur_n
+            self.hull, self.thrusters, heading, push_w, working, env, foul, cur_e, cur_n
         )
         ve, vn = _world_axes(heading, sol.surge, sol.sway)
         ge, gn = ve + cur_e, vn + cur_n
@@ -236,6 +254,13 @@ class KayakVessel:
             fouling_frac=foul,
             electronics_on=on_next,
         )
+        hz = sample_hazards(self.hazards, env, hours, state.damage, new.t, rng)
+        events += hz.events
+        new.knockdowns = getattr(state, "knockdowns", 0) + hz.knockdowns
+        for part in hz.failed_parts:
+            new.damage[part] = True
+        if hz.lost:
+            new.alive = False
         return new, events
 
     def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
