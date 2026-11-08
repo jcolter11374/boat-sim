@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from boatsim.autonomy import WaypointAutopilot
 from boatsim.basestation import HoldCoursePolicy
-from boatsim.comms import PerfectLink
+from boatsim.comms import GlobalstarPinger, IridiumSBDLink
 from boatsim.config import load_design
 from boatsim.mc import run_batch
 from boatsim.oceandata import ConstantEnvironment, PerfectForecast
@@ -28,7 +28,8 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
         forecast=PerfectForecast(env),
         vessel=KayakVessel(design),
         autopilot=WaypointAutopilot(thrust_fraction=cruise_fraction),
-        link=PerfectLink(),
+        link=IridiumSBDLink(),
+        pinger=GlobalstarPinger(),
         base=HoldCoursePolicy(),
     )
     lat, lon = design.voyage["drop_lat"], design.voyage["drop_lon"]
@@ -38,7 +39,7 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
 
     starts = [datetime(2020, 10, 1) + timedelta(days=7 * i) for i in range(4)]
     print(
-        f"{design.name}: {text_summary(run_batch(run_one, starts))}  [real hull model; stub weather and autopilot]"
+        f"{design.name}: {text_summary(run_batch(run_one, starts))}  [real hull and satellite link; stub weather]"
     )
 
 
