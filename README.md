@@ -7,6 +7,7 @@ launch month, and what kills the boat when it fails.
 
 Plan, architecture and milestones: [Voyage Simulator Plan](https://claude.ai/artifact/4mgi1LeuFF2wfQGRBnXRDR).
 Boat design: [design doc](https://claude.ai/artifact/SUbeMhqMATokuTdqpmWhj6).
+(Both links are private team docs; the code and issues here stand on their own.)
 
 ## Status
 
@@ -40,3 +41,20 @@ nothing needs a local machine except a browser to read reports.
 | `configs/` | One YAML per boat design | everyone, via PR |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the team rules.
+
+## Contributing from outside the team
+
+Outside contributions are welcome, including from other teams building their own
+ocean drones. Use the code for your own boat, borrow the physics or data loaders,
+or send fixes back.
+
+- Fork the repo and open a pull request against `main`. CI must be green.
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md): SI units inside the code, mark any
+  unsourced number `# GUESS`, and keep downloaded data out of git.
+- Contributions are accepted under the MIT License (below). Only send code and
+  data you have the right to share under it.
+- Bug reports and questions go in GitHub Issues.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
