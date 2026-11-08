@@ -19,8 +19,8 @@ What is in the first batch, and what isn't yet:
 * Unknown failures: the batch runs with the design's catch-all "unknown
   failure" hazard switched off (--unknown-p 0) and the report puts it back
   exactly at several values (unknown_survival), so odds come out as a range.
-* Not yet: spread on drag, solar derate and fouling (the parameter spread half
-  of #20). Every voyage uses the design numbers.
+* Spread (--spread): each boat gets its own drag, solar-loss and fouling
+  multipliers (SPREAD), recorded in the spread_* columns. Off by default.
 
 Outcomes: arrived (any landfall in Europe, Azores included, per the runner's
 arrival rule), lost (sunk, stuck upside down, wrecked), timeout (still at sea
@@ -132,6 +132,7 @@ def summarise(log) -> dict:
             "hotel_wh_day": m.get("hotel_wh", 0.0) / days,
             "unknown_p_run": getattr(log, "unknown", (math.nan, math.nan))[0],
             "unknown_shape": getattr(log, "unknown", (math.nan, math.nan))[1],
+            **{f"spread_{k}": v for k, v in getattr(log, "spread", {}).items()},
         }
     )
     return out
@@ -146,6 +147,8 @@ class MonthlyVoyage(StandardVoyage):
     # None keeps the design's value. 0 switches the "unknown failure" hazard off
     # so the report can sweep it exactly afterwards (see unknown_survival).
     unknown_p_by_60_days: float | None = None
+    # Build every boat slightly differently (see SPREAD and apply_spread).
+    spread: bool = False
 
     def components(self):
         from dataclasses import replace
@@ -167,6 +170,7 @@ class MonthlyVoyage(StandardVoyage):
         voyage = load_design(self.design_path).voyage
         drop = (voyage["drop_lat"], voyage["drop_lon"])
         c = self.components()
+        mult = apply_spread(c.vessel.inner, seed) if self.spread else {}
         try:
             log = simulate(c, start, *drop, default_mission(), seed=seed, max_days=self.max_days)
         except OutsideCoverage:
@@ -186,7 +190,44 @@ class MonthlyVoyage(StandardVoyage):
         log.link = c.link  # for the card's airtime cost; stays in the worker
         hz = c.vessel.hazards
         log.unknown = (hz.unknown_p_by_60_days, hz.unknown_shape)
+        log.spread = mult
         return log
+
+
+# Spread on the design numbers we least trust, as log-normal multipliers
+# (median 1, sigma below). All three widths are GUESSES: they say "we could
+# easily be this far off", not measured scatter. The Bay trial (tow test)
+# should shrink the drag and solar ones.
+SPREAD = {
+    "drag": 0.15,  # hull form factor: calm-water drag about +-15 % (1 sigma)
+    "solar": 0.12,  # panel mounting/shading loss: about +-12 % of solar output
+    "fouling": 0.5,  # weed and barnacle growth rate: a factor of ~1.6 either way
+}
+
+
+def spread_multipliers(seed: int) -> dict[str, float]:
+    """Per-voyage multipliers, from their own random stream so the voyage's
+    weather-and-hazard dice are unchanged by switching spread on."""
+    import numpy as np
+
+    rng = np.random.default_rng([seed, 20])
+    return {k: float(np.exp(rng.normal(0.0, sd))) for k, sd in SPREAD.items()}
+
+
+def apply_spread(vessel, seed: int) -> dict[str, float]:
+    """Scale a KayakVessel's drag, solar loss and fouling rate in place."""
+    from dataclasses import replace
+
+    m = spread_multipliers(seed)
+    h, s = vessel.hull, vessel.solar
+    vessel.hull = replace(
+        h,
+        form_factor=h.form_factor * m["drag"],
+        fouling_frac_per_day=h.fouling_frac_per_day * m["fouling"],
+    )
+    # mounting_mismatch is a loss factor, so keep it at or below 1.
+    vessel.solar = replace(s, mounting_mismatch=min(1.0, s.mounting_mismatch * m["solar"]))
+    return m
 
 
 def run_year(
@@ -293,8 +334,14 @@ def report_markdown(df: pd.DataFrame) -> str:
         ),
         "",
         (
-            "Base station sees a perfect forecast until #12 lands, and design numbers "
-            "have no spread yet, so treat these odds as optimistic."
+            "Base station sees a perfect forecast until #12 lands, so treat these odds "
+            "as optimistic."
+            + (
+                " Each boat was built slightly differently: drag, solar loss and fouling "
+                "rate were varied per voyage (spread_* columns)."
+                if "spread_drag" in df
+                else " Every boat uses the design numbers exactly (no spread)."
+            )
             + (
                 " This table also leaves out the 'unknown failure' hazard: see the "
                 "range below for odds with it put back."
@@ -364,6 +411,7 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="override unknown_p_by_60_days (0 = off, so the report can sweep it)",
     )
+    r.add_argument("--spread", action="store_true", help="vary drag, solar and fouling per boat")
     r.add_argument("--no-currents", action="store_true", help="try-out only: zero current")
     r.add_argument("--prefetch", action="store_true", help="fetch the ERA5 days first")
     s = sub.add_parser("report", help="combine per-year CSVs into the by-month report")
@@ -401,6 +449,7 @@ def job_from_args(a) -> MonthlyVoyage:
         currents=not a.no_currents,
         max_days=a.max_days,
         unknown_p_by_60_days=a.unknown_p,
+        spread=a.spread,
     )
 
 
