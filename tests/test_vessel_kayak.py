@@ -1,6 +1,7 @@
 """KayakVessel end to end: the issue #2, #3, #4 and #6 acceptance checks."""
 
 import math
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -20,7 +21,8 @@ from boatsim.vessel import KayakVessel
 from boatsim.vessel import hull as H
 from boatsim.vessel.kayak import solve_speed, with_damage
 
-DESIGN = load_design("configs/v4_kayak.yaml")
+# Physics checks run with hazards off so a random knockdown can't change them.
+DESIGN = replace(load_design("configs/v4_kayak.yaml"), hazards={"enabled": False})
 DT = timedelta(minutes=10)
 T0 = datetime(2021, 5, 1)
 
