@@ -1,0 +1,89 @@
+# Odds by launch month (issue #20): launches the v4 kayak on the 1st and 15th of
+# every month, one GitHub Actions job per year, through that year's real weather
+# (ERA5) and currents (GLORYS12), then combines the years into one report.
+# Run it by hand: Actions tab -> "Odds by launch month" -> Run workflow.
+# Uses the Copernicus secrets for currents; GitHub masks them in logs.
+name: Odds by launch month
+on:
+  workflow_dispatch:
+    inputs:
+      first_year:
+        description: "First launch year"
+        default: "2012"
+      last_year:
+        description: "Last launch year"
+        default: "2021"
+      max_days:
+        description: "Give up after this many days at sea"
+        default: "150"
+  # On a PR that changes the batch itself: a one-year check (2020) of the whole pipeline.
+  pull_request:
+    paths:
+      - src/boatsim/mc/months.py
+      - .github/workflows/odds-by-month.yml
+permissions:
+  contents: read
+jobs:
+  years:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.y.outputs.list }}
+    steps:
+      - id: y
+        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2020' }}, ${{ inputs.last_year || '2020' }}+1))))")" >> "$GITHUB_OUTPUT"
+  run:
+    needs: years
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJson(needs.years.outputs.list) }}
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      YEAR: ${{ matrix.year }}
+      MAX_DAYS: ${{ inputs.max_days || '150' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Fetch currents for the year and the months after it
+        run: python -m boatsim.oceandata fetch-glorys "$YEAR-01" "$((YEAR + 1))-06"
+      - name: Fetch weather (ERA5) for the same span
+        run: python -m boatsim.oceandata fetch-era5 "$YEAR-01-01" "$((YEAR + 1))-05-20" --workers 4
+      - name: Run every launch of the year
+        run: python -m boatsim.mc.months run "$YEAR" --max-days "$MAX_DAYS" --workers 4 --unknown-p 0 --out runs/months
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voyages-${{ matrix.year }}
+          path: runs/months/voyages_${{ matrix.year }}.csv
+          retention-days: 90
+  report:
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[reports]'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: voyages-*
+          path: runs/in
+          merge-multiple: true
+      - name: Combine the years
+        run: python -m boatsim.mc.months report runs/in/voyages_*.csv --out runs/months
+      - name: Show the report on the run page
+        run: cat runs/months/odds_report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Build the HTML report (Iris's viz.html)
+        run: python -m boatsim.viz.html runs/in/voyages_*.csv --out runs/months/report.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: odds-by-month
+          path: runs/months/
+          retention-days: 90
