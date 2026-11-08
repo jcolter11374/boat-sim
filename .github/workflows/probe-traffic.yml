@@ -11,31 +11,58 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
-      - name: Reachability and headers
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install rasterio numpy
+      - name: EMODnet vessel density metadata
         run: |
-          for u in \
-            "https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&REQUEST=GetCapabilities&VERSION=2.0.1" \
-            "https://ows.emodnet-humanactivities.eu/wfs?SERVICE=WFS&REQUEST=GetCapabilities" \
-            "https://ows.emodnet-humanactivities.eu/wms?SERVICE=WMS&REQUEST=GetCapabilities" \
-            "https://marinecadastre.gov/downloads/data/ais/" \
-            "https://coast.noaa.gov/htdata/CMSP/AISDataHandler/" \
-            "https://datacatalogfiles.worldbank.org/ddh-published/0037580/DR0045406/shipdensity_global.zip" \
-            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" ; do
-            echo "== $u"
-            curl -sSIL --max-time 60 "$u" | grep -iE "^HTTP|content-length|content-type|location" || echo "FAILED"
+          W="https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&VERSION=2.0.1"
+          for c in emodnet__vesseldensity_allavg emodnet__vesseldensity_all emodnet__vesseldensity_09avg; do
+            echo "=== $c"
+            curl -sSL --max-time 120 "$W&REQUEST=DescribeCoverage&COVERAGEID=$c" | head -c 4000; echo
           done
-      - name: EMODnet coverage list (vessel density layers)
+          curl -sSL --max-time 120 "https://ows.emodnet-humanactivities.eu/wms?SERVICE=WMS&REQUEST=GetCapabilities" -o wms.xml
+          python - <<'PY'
+          import re
+          s = open("wms.xml").read()
+          for m in re.finditer(r"<Layer[^>]*>\s*<Name>(vesseldensity_allavg|vesseldensity_00avg|vesseldensity_all)</Name>(.{0,2500})", s, re.S):
+              print("---", m.group(1)); print(re.sub(r"\s+", " ", m.group(2))[:2500])
+          PY
+      - name: EMODnet sample (approaches to Lisbon and the Azores)
         run: |
-          curl -sSL --max-time 120 "https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&REQUEST=GetCapabilities&VERSION=2.0.1" -o wcs.xml || true
-          grep -oE "<wcs:CoverageId>[^<]*</wcs:CoverageId>" wcs.xml | grep -iE "vessel|density|vd" | head -80 || true
-          curl -sSL --max-time 120 "https://ows.emodnet-humanactivities.eu/wms?SERVICE=WMS&REQUEST=GetCapabilities" -o wms.xml || true
-          grep -oE "<Name>[^<]*</Name>" wms.xml | grep -iE "vessel|density|vd" | head -80 || true
-      - name: NOAA AIS listings
+          W="https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&FORMAT=image/tiff"
+          for box in "Lat(37,40)&SUBSET=Long(-11,-8)" "Lat(36.5,40)&SUBSET=Long(-32,-24)"; do
+            curl -sSL --max-time 300 "$W&COVERAGEID=emodnet__vesseldensity_allavg&SUBSET=$box" -o s.tif
+            ls -la s.tif; file s.tif
+            python - <<'PY'
+          import rasterio, numpy as np
+          try:
+              with rasterio.open("s.tif") as r:
+                  print(r.crs, r.res, r.bounds, r.dtypes, r.nodata, r.tags())
+                  a = r.read(1).astype(float)
+                  if r.nodata is not None: a[a == r.nodata] = np.nan
+                  print("cells", a.size, "nan", int(np.isnan(a).sum()), "pcts", np.nanpercentile(a, [50, 90, 99, 100]))
+          except Exception as e:
+              print("read failed", e); print(open("s.tif","rb").read(600))
+          PY
+          done
+      - name: World Bank / IMF global ship density
         run: |
-          curl -sSL --max-time 60 "https://marinecadastre.gov/downloads/data/ais/" | grep -oE 'href="[^"]+"' | head -60 || true
-          curl -sSL --max-time 60 "https://coast.noaa.gov/htdata/CMSP/AISDataHandler/" | grep -oE 'href="[^"]+"' | head -60 || true
-      - name: IBTrACS North Atlantic header
-        run: |
-          curl -sSL --max-time 300 "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" -o na.csv && ls -la na.csv && head -c 1500 na.csv && wc -l na.csv || true
+          curl -sSL --max-time 900 "https://datacatalogfiles.worldbank.org/ddh-published/0037580/DR0045406/shipdensity_global.zip" -o g.zip
+          ls -la g.zip; unzip -l g.zip
+          unzip -o g.zip -d g >/dev/null; ls -laR g | head -30
+          python - <<'PY'
+          import glob, rasterio, numpy as np
+          from rasterio.windows import from_bounds
+          f = sorted(glob.glob("g/**/*.tif", recursive=True))[0]
+          with rasterio.open(f) as r:
+              print(f, r.crs, r.res, r.bounds, r.dtypes, r.nodata, r.tags(), r.block_shapes, r.compression)
+              for name, b in {"lisbon": (-11, 37, -8, 40), "azores": (-32, 36.5, -24, 40),
+                              "midocean": (-50, 38, -40, 44), "baymouth": (-76, 36.5, -74.5, 37.5)}.items():
+                  a = r.read(1, window=from_bounds(*b, r.transform)).astype(float)
+                  if r.nodata is not None: a[a == r.nodata] = np.nan
+                  print(name, a.shape, "sum", np.nansum(a), "mean", np.nanmean(a), "pcts", np.nanpercentile(a, [50, 90, 99, 100]))
+          PY
