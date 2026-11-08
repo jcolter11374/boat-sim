@@ -11,9 +11,8 @@ What is in the first batch, and what isn't yet:
 * Autopilot: SafeModeAutopilot(cruise_fraction=design cruise / max drive,
   0.15 for v4), so the boat throttles back on low battery instead of running a
   fixed 15 W.
-* Base station: ForecastReplanPolicy with PerfectForecast. Until Priya's #12
-  (forecast error) lands, base sees the future perfectly, so any benefit of
-  course corrections here is optimistic.
+* Base station: ForecastReplanPolicy reading ErrorForecast (#12): the truth
+  plus error that grows with lead time, seeded per voyage.
 * Hazards: knockdowns, part damage and ship strikes drawn per voyage (seeded).
   Ship density is still 0 (issue #13), so ship strikes can't happen yet.
 * Unknown failures: the batch runs with the design's catch-all "unknown
@@ -150,10 +149,10 @@ class MonthlyVoyage(StandardVoyage):
     # Build every boat slightly differently (see SPREAD and apply_spread).
     spread: bool = False
 
-    def components(self):
+    def components(self, seed: int = 0):
         from dataclasses import replace
 
-        c = super().components()
+        c = super().components(seed)
         if self.unknown_p_by_60_days is not None:
             v = c.vessel
             v.hazards = replace(v.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days)
@@ -169,7 +168,7 @@ class MonthlyVoyage(StandardVoyage):
 
         voyage = load_design(self.design_path).voyage
         drop = (voyage["drop_lat"], voyage["drop_lon"])
-        c = self.components()
+        c = self.components(seed)
         mult = apply_spread(c.vessel.inner, seed) if self.spread else {}
         try:
             log = simulate(c, start, *drop, default_mission(), seed=seed, max_days=self.max_days)

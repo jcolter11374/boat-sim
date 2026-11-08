@@ -41,6 +41,7 @@ from boatsim.viz.card import (
     SINGLE_TRACK_CAVEAT,
     batch_card,
     render_batch,
+    wilson,
 )
 
 # Outcome colours: the first three slots of the validated categorical palette
@@ -67,6 +68,9 @@ INK, INK_2, MUTED, GRID, AXIS, SURFACE = (
     "#c3c2b7",
     "#fcfcfb",
 )
+BAR_OUTSIDE = "#b7d3f6"  # lighter step of the same blue: months outside the launch window
+# John's target launch window (CLAUDE.md, Nov 2026): headline these months, show all.
+TARGET_WINDOW = (4, 6)  # April to June, inclusive
 MAX_TRACKS = 150  # keeps the file small; tracks are illustrations, not the odds
 _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -127,7 +131,47 @@ def _layout(fig, title: str, height: int = 360, **kw) -> None:
     fig.update_yaxes(gridcolor=GRID, linecolor=AXIS, tickfont={"color": MUTED})
 
 
-def month_figure(card):
+# Leave headroom for the "launch window" label without a 120% tick.
+_PCT_TICKS = {
+    "tickvals": [0, 20, 40, 60, 80, 100],
+    "ticktext": [f"{v}%" for v in range(0, 101, 20)],
+}
+
+
+def _in_window(month: int, window: tuple[int, int] | None) -> bool:
+    return window is not None and window[0] <= month <= window[1]
+
+
+def window_label(window: tuple[int, int]) -> str:
+    """'April to June' style label."""
+    full = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ]  # fmt: skip
+    a, b = window
+    return full[a - 1] if a == b else f"{full[a - 1]} to {full[b - 1]}"
+
+
+def _shade_window(fig, window: tuple[int, int] | None, months: list[str]) -> None:
+    """Pale band behind the launch-window months on a month-category axis."""
+    if window is None:
+        return
+    idx = [i for i, m in enumerate(months) if _in_window(_MONTHS.index(m) + 1, window)]
+    if idx:
+        fig.add_vrect(
+            x0=min(idx) - 0.5,
+            x1=max(idx) + 0.5,
+            fillcolor="#e1e0d9",
+            opacity=0.45,
+            line_width=0,
+            layer="below",
+            annotation_text="launch window",
+            annotation_position="top left",
+            annotation_font_color=INK_2,
+        )
+
+
+def month_figure(card, window: tuple[int, int] | None = None):
     import plotly.graph_objects as go
 
     months = [_MONTHS[m.month - 1] for m in card.months]
@@ -136,7 +180,13 @@ def month_figure(card):
         go.Bar(
             x=months,
             y=rate,
-            marker={"color": BAR, "cornerradius": 4},
+            marker={
+                "color": [
+                    BAR if window is None or _in_window(m.month, window) else BAR_OUTSIDE
+                    for m in card.months
+                ],
+                "cornerradius": 4,
+            },
             error_y={
                 "type": "data",
                 "symmetric": False,
@@ -155,7 +205,8 @@ def month_figure(card):
         )
     )
     _layout(fig, "Chance of reaching Europe, by launch month", bargap=0.35)
-    fig.update_yaxes(range=[0, 100], ticksuffix="%", title="")
+    fig.update_yaxes(range=[0, 108], title="", **_PCT_TICKS)
+    _shade_window(fig, window, months)
     return fig
 
 
@@ -289,7 +340,7 @@ def has_unknown_sweep(summary: pd.DataFrame) -> bool:
     )
 
 
-def sweep_figure(summary: pd.DataFrame):
+def sweep_figure(summary: pd.DataFrame, window: tuple[int, int] | None = None):
     import plotly.graph_objects as go
 
     from boatsim.mc.months import SWEEP, sweep_table
@@ -327,6 +378,8 @@ def sweep_figure(summary: pd.DataFrame):
     _layout(fig, "Chance of reaching Europe, by launch month and unknown-failure rate", 420)
     fig.update_yaxes(range=[0, 102], ticksuffix="%")
     fig.update_layout(legend={"orientation": "h", "y": -0.15}, hovermode="x unified")
+    fig.update_yaxes(range=[0, 108], **_PCT_TICKS)
+    _shade_window(fig, window, list(t["month"]))
     return fig
 
 
@@ -468,6 +521,7 @@ p, li {{ color: {INK_2}; }}
 .hero .range {{ font-size: 18px; color: {INK_2}; }}
 .banner {{ background: #fff4d6; border: 1px solid #fab219; border-radius: 8px;
   padding: 12px 16px; margin: 16px 0; color: {INK}; }}
+.also {{ margin: -8px 0 16px; padding: 0 24px; }}
 .warn {{ border-left: 3px solid #fab219; padding: 8px 12px; margin: 16px 0;
   background: {SURFACE}; }}
 .warn li {{ margin: 2px 0; }}
@@ -523,6 +577,48 @@ def _table(summary: pd.DataFrame) -> str:
     return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
+def _odds(df: pd.DataFrame, sweep: bool) -> dict:
+    n = len(df)
+    k = int((df["outcome"] == Outcome.ARRIVED.value).sum())
+    rate, lo, hi = wilson(k, n)
+    out = {"n": n, "k": k, "rate": rate, "lo": lo, "hi": hi}
+    if sweep:
+        from boatsim.mc.months import SWEEP, swept_odds
+
+        out["low_p"] = swept_odds(df, max(SWEEP))
+        out["high_p"] = swept_odds(df, min(SWEEP))
+    return out
+
+
+def _hero(df: pd.DataFrame, label: str, sweep: bool) -> str:
+    o = _odds(df, sweep)
+    model = (
+        f"{o['k']} of {o['n']} simulated launches arrived; 95% range {o['lo']:.0%} to {o['hi']:.0%}"
+    )
+    if sweep:
+        big = f"{o['low_p']:.0%} to {o['high_p']:.0%}"
+        detail = (
+            "depending on how often failures we can't model happen (see below). "
+            f"The model alone says {o['rate']:.0%} ({model})."
+        )
+    else:
+        big, detail = f"{o['rate']:.0%}", model
+    return f"""<div class="hero">
+  <div>Chance of reaching Europe (Azores included): {html.escape(label)}</div>
+  <div class="big">{big}</div>
+  <div class="range">{detail}</div>
+</div>"""
+
+
+def _hero_line(df: pd.DataFrame, label: str, sweep: bool) -> str:
+    o = _odds(df, sweep)
+    rng = f"{o['low_p']:.0%} to {o['high_p']:.0%}, " if sweep else ""
+    return (
+        f'<p class="also"><strong>{html.escape(label)}:</strong> {rng}'
+        f"model alone {o['rate']:.0%} ({o['k']} of {o['n']} launches).</p>"
+    )
+
+
 def report_html(
     summary: pd.DataFrame,
     tracks: Iterable[dict] | None = None,
@@ -530,6 +626,7 @@ def report_html(
     subtitle: str = "",
     banner: str = "",
     topojson: str | Path | None = None,
+    window: tuple[int, int] | None = TARGET_WINDOW,
 ) -> str:
     """Build the report page as a string. See module docstring for inputs.
 
@@ -537,6 +634,8 @@ def report_html(
     topojson: path to Plotly's world_110m.json (npm package sane-topojson). If
     given, the map outlines are embedded, so the map works with no internet and
     on hosts that block outside downloads (e.g. claude.ai artifacts).
+    window: (first, last) launch month to headline, inclusive; None for all months.
+    The page leads with that window's odds and still charts every month.
     """
     card = batch_card(summary)
     tracks = _pick_tracks(list(tracks or []))
@@ -547,7 +646,7 @@ def report_html(
         figs.append(
             (
                 "The big unknown: failures we can't model",
-                sweep_figure(summary),
+                sweep_figure(summary, window),
                 (
                     "Real small robot boats mostly die of things nobody predicted: leaks, "
                     "electronics, fishing gear. The model can't simulate those, so we add a "
@@ -562,7 +661,7 @@ def report_html(
         figs.append(
             (
                 "Odds by launch month",
-                month_figure(card),
+                month_figure(card, window),
                 (
                     "Each bar is the share of simulated launches in that month that reached "
                     "Europe. The thin line on each bar is the 95% range: with this many runs, "
@@ -663,7 +762,7 @@ def report_html(
     if card.days_median is not None:
         a, b = card.days_range
         days = (
-            f"<p>Boats that made it took a median of {card.days_median:.0f} days "
+            f"<p>Across all months, boats that made it took a median of {card.days_median:.0f} days "
             f"(from {a:.0f} to {b:.0f}).</p>"
         )
     airtime = ""
@@ -684,24 +783,17 @@ def report_html(
             + "}};</script>"
         )
     banner_html = f'<div class="banner">{html.escape(banner)}</div>' if banner else ""
-    if sweep:
-        from boatsim.mc.months import SWEEP, swept_odds
-
-        lo_p, hi_p = swept_odds(summary, max(SWEEP)), swept_odds(summary, min(SWEEP))
-        hero = f"""<div class="hero">
-  <div>Chance of reaching Europe (Azores included), all launch months together</div>
-  <div class="big">{lo_p:.0%} to {hi_p:.0%}</div>
-  <div class="range">depending on how often failures we can't model happen (see below).
-    The model alone says {card.rate:.0%} ({card.arrived} of {card.runs} simulated launches
-    arrived; 95% range {card.low:.0%} to {card.high:.0%}).</div>
-</div>"""
+    launch_month = pd.to_datetime(summary["start"]).dt.month if len(summary) else None
+    in_window = (
+        summary[launch_month.between(*window)]
+        if window is not None and len(summary)
+        else summary.iloc[0:0]
+    )
+    if len(in_window):
+        hero = _hero(in_window, f"{window_label(window)} launches (the target window)", sweep)
+        hero += _hero_line(summary, "All launch months together", sweep)
     else:
-        hero = f"""<div class="hero">
-  <div>Chance of reaching Europe (Azores included)</div>
-  <div class="big">{card.rate:.0%}</div>
-  <div class="range">95% range {card.low:.0%} to {card.high:.0%} ·
-    {card.arrived} of {card.runs} simulated launches arrived</div>
-</div>"""
+        hero = _hero(summary, "All launch months together", sweep)
     page = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -733,12 +825,13 @@ def write_report(
     subtitle: str = "",
     banner: str = "",
     topojson: str | Path | None = None,
+    window: tuple[int, int] | None = TARGET_WINDOW,
 ) -> Path:
     """Write the self-contained HTML report and return its path."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        report_html(summary, tracks, title, subtitle, banner, topojson), encoding="utf-8"
+        report_html(summary, tracks, title, subtitle, banner, topojson, window), encoding="utf-8"
     )
     return path
 
@@ -753,6 +846,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--subtitle", default="")
     ap.add_argument("--banner", default="", help="highlighted note at the top")
     ap.add_argument("--topojson", default=None, help="embed this world_110m.json map outline")
+    ap.add_argument(
+        "--window",
+        default=f"{TARGET_WINDOW[0]}-{TARGET_WINDOW[1]}",
+        help="launch months to headline, e.g. 4-6; 'all' for none",
+    )
     args = ap.parse_args(argv)
     df = pd.concat([pd.read_csv(f, parse_dates=["start"]) for f in args.csv], ignore_index=True)
     out = write_report(
@@ -762,6 +860,7 @@ def main(argv: list[str] | None = None) -> None:
         subtitle=args.subtitle,
         banner=args.banner,
         topojson=args.topojson,
+        window=None if args.window == "all" else tuple(int(x) for x in args.window.split("-")),  # type: ignore[arg-type]
     )
     print(f"wrote {out} ({len(df)} voyages)")
 

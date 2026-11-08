@@ -102,7 +102,11 @@ def test_unknown_failure_sweep_turns_the_headline_into_a_range(tmp_path):
     df = _batch_with_sweep()
     page = report_html(df, banner="PRELIMINARY test")
     assert "The big unknown" in page and "fail by day 60" in page
-    assert "The model alone says 25%" in page  # 6 of 24 arrived in _summary
+    # Leads with the April-June window (2 of its 6 launches arrived), then all months (6 of 24).
+    assert "April to June launches (the target window)" in page
+    assert "The model alone says 33% (2 of 6 simulated launches" in page
+    assert "All launch months together:</strong>" in page and "model alone 25% (6 of 24" in page
+    assert page.index("April to June launches") < page.index("All launch months together")
     assert "PRELIMINARY test" in page
     for heading in ["Where the boats ended up", "Sun", "Lowest battery charge"]:
         assert heading in page
@@ -116,3 +120,10 @@ def test_map_outline_can_be_embedded(tmp_path):
     assert "window.PlotlyGeoAssets={topojson:{world_110m:" in page
     assert '"note": "<\\/script>"' in page  # can't close the script tag early
     assert "coastlines load from the internet" not in page
+
+
+def test_window_can_be_switched_off():
+    page = report_html(_batch_with_sweep(), window=None)
+    assert "target window" not in page and "launch window" not in page
+    assert "All launch months together</div>" in page
+    assert "The model alone says 25%" in page
