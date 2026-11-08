@@ -10,6 +10,7 @@ from boatsim.viz.card import (
     render_voyage,
     voyage_card,
 )
+from boatsim.viz.html import track_rows, write_report
 from boatsim.viz.report import text_summary
 
 __all__ = [
@@ -21,5 +22,7 @@ __all__ = [
     "render_batch",
     "render_voyage",
     "text_summary",
+    "track_rows",
     "voyage_card",
+    "write_report",
 ]
