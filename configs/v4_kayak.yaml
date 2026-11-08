@@ -10,21 +10,56 @@ hull:
   self_righting_dome: true
   keel_bulb_kg: 50
   keel_bulb_depth_m: 0.9
+  # Drag and drift model (vessel/hull.py). Values from the design doc's speed model
+  # unless marked GUESS.
+  waterline_length_m: 2.9
+  wetted_area_m2: 1.9        # hull plus keel, bulb and rudder
+  form_factor: 1.3
+  wave_making_frac: 0.15
+  air_side_area_m2: 0.9      # GUESS until measured: topsides plus dome, side-on
+  air_front_area_m2: 0.25    # GUESS until measured
+  air_cd_side: 0.9           # GUESS
+  air_cd_front: 0.7          # GUESS
+  lateral_cd_area_m2: 0.6    # GUESS: broadside water drag x area, hull + keel + rudder
+  keel_lift_slope_area_m2: 0.75  # GUESS: keel lift slope (~3.5 per radian) x area
+  wave_drag_frac_per_m2: 0.16    # GUESS: tuned to the design doc's +60 % in rough water
+  wave_drag_beam_factor: 0.65    # GUESS
+  wave_drag_following_factor: 0.3  # GUESS
+  fouling_onset_days: 0      # GUESS
+  fouling_frac_per_day: 0.006  # GUESS: +30 % drag by day 50, design doc allowance
+  drift_heading_offset_deg: 90  # GUESS: with no thrust it lies beam-on to the wind
+  stokes_drift: true
 
 power:
   solar_wp: 250
-  solar_system_derate: 0.6   # GUESS: heel, salt, shading, MPPT, temperature
+  solar_system_derate: 0.6   # GUESS: used only by the M0 KinematicVessel stub
+  # KayakVessel splits the derate (vessel/power.py); heel and heat are computed.
+  soiling_salt: 0.93         # GUESS
+  mounting_mismatch: 0.80    # GUESS: curved dome, side-deck shading, mixed panels
+  mppt_eff: 0.96             # GUESS: Victron peak is 98 %, less at part load
+  wiring_eff: 0.98           # GUESS
+  temp_coeff_per_c: -0.0037  # GUESS: typical mono panel; panel model not chosen
+  noct_c: 55                 # GUESS: flush-mounted on foam runs hot
+  charge_eff: 0.975          # GUESS: ~95 % round trip
+  discharge_eff: 0.975       # GUESS
+  min_charge_temp_c: 0       # LiFePO4 low-temperature charge cutoff
   battery_wh: 1280           # 2 x 12.8 V 50 Ah LiFePO4
   mppt: 2 x Victron 75/15
 
 propulsion:
   thrusters: 2 x Blue Robotics T200
   cruise_speed_kt: 1.7       # design doc estimate
-  max_drive_w: 120           # GUESS: drive power at cruise speed
+  thruster_count: 2
+  max_drive_w: 100           # design doc: 100 W burst for the pair (thrust_fraction 1.0)
+  # thruster_efficiency: 0.351 is fitted to the T200 12 V full-throttle datasheet point;
+  # using it at low power is a GUESS (vessel/propulsion.py).
+  min_steer_w: 1.0           # GUESS: below this the boat can't hold a heading
 
 electronics:
   autopilot: Pixhawk 6C Mini, ArduPilot Rover
   hotel_load_wh_per_day: 85  # design doc
+  nav_light_w: 0.5           # design doc, on in darkness only
+  nav_light_hours_per_day: 8 # design doc
 
 comms:
   two_way: RockBLOCK 9603 (Iridium SBD)
