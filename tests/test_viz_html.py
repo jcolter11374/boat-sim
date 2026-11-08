@@ -89,3 +89,30 @@ def test_command_line_reads_batch_csvs(tmp_path, capsys):
     )
     assert "24 voyages" in capsys.readouterr().out
     assert "Odds by launch month" in out.read_text()
+
+
+def _batch_with_sweep():
+    df = _summary()
+    df["end_lat"], df["end_lon"] = 38.0, -40.0
+    df["solar_wh_day"], df["unknown_p_run"], df["unknown_shape"] = 500.0, 0.0, 0.5
+    return df
+
+
+def test_unknown_failure_sweep_turns_the_headline_into_a_range(tmp_path):
+    df = _batch_with_sweep()
+    page = report_html(df, banner="PRELIMINARY test")
+    assert "The big unknown" in page and "fail by day 60" in page
+    assert "The model alone says 25%" in page  # 6 of 24 arrived in _summary
+    assert "PRELIMINARY test" in page
+    for heading in ["Where the boats ended up", "Sun", "Lowest battery charge"]:
+        assert heading in page
+    assert "�" not in page  # strict UTF-8 hosts reject Plotly's raw U+FFFD
+
+
+def test_map_outline_can_be_embedded(tmp_path):
+    topo = tmp_path / "world_110m.json"
+    topo.write_text('{"type": "Topology", "objects": {}, "note": "</script>"}')
+    page = report_html(_batch_with_sweep(), topojson=topo)
+    assert "window.PlotlyGeoAssets={topojson:{world_110m:" in page
+    assert '"note": "<\\/script>"' in page  # can't close the script tag early
+    assert "coastlines load from the internet" not in page
