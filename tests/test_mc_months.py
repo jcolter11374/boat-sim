@@ -133,3 +133,41 @@ def test_run_command_passes_unknown_p_to_the_job(monkeypatch, tmp_path):
     M.main(["run", "2015", "--unknown-p", "0", "--no-currents", "--out", str(tmp_path)])
     assert seen["job"].unknown_p_by_60_days == 0.0
     assert seen["job"].currents is False
+
+
+def test_spread_is_per_seed_and_recorded():
+    a, b = M.spread_multipliers(1), M.spread_multipliers(2)
+    assert a == M.spread_multipliers(1) and a != b
+    assert set(a) == {"drag", "solar", "fouling"}
+    job = M.MonthlyVoyage(weather="constant", max_days=1, spread=True)
+    row = M.summarise(job(datetime(2015, 6, 1, 12), seed=1))
+    assert row["spread_drag"] == pytest.approx(a["drag"])
+
+
+def test_apply_spread_scales_the_vessel():
+    from boatsim.config import load_design
+    from boatsim.vessel import KayakVessel
+
+    v = KayakVessel(load_design("configs/v4_kayak.yaml"))
+    ff, foul, mm = v.hull.form_factor, v.hull.fouling_frac_per_day, v.solar.mounting_mismatch
+    m = M.apply_spread(v, 3)
+    assert v.hull.form_factor == pytest.approx(ff * m["drag"])
+    assert v.hull.fouling_frac_per_day == pytest.approx(foul * m["fouling"])
+    assert v.solar.mounting_mismatch == pytest.approx(min(1.0, mm * m["solar"]))
+
+
+def test_spread_spans_a_sensible_range():
+    import numpy as np
+
+    d = np.array([M.spread_multipliers(i)["drag"] for i in range(2000)])
+    assert np.median(d) == pytest.approx(1.0, abs=0.02)
+    assert 0.6 < d.min() and d.max() < 1.8
+
+
+def test_run_command_passes_spread(monkeypatch, tmp_path):
+    seen = {}
+    monkeypatch.setattr(
+        M, "run_year", lambda y, job, w, m: seen.setdefault("job", job) and pd.DataFrame()
+    )
+    M.main(["run", "2015", "--spread", "--no-currents", "--out", str(tmp_path)])
+    assert seen["job"].spread is True
