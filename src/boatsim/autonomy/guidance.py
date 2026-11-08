@@ -65,6 +65,11 @@ class WaypointAutopilot:
         self.min_ground_speed = min_ground_speed
         self.max_fix_gap_s = max_fix_gap_s
 
+        # Set by safe mode when the motors were off last step. While the boat
+        # is drifting, the course it made good says nothing about the current
+        # we'd need to crab into, so the estimate is frozen (no windup).
+        self.hold_crab = False
+
         # Internal state, also handy for logging.
         self.crab_deg = 0.0
         self.cross_track_m = 0.0
@@ -75,6 +80,18 @@ class WaypointAutopilot:
         self._last_fix: tuple[datetime, float, float] | None = None
         self._last_heading: float | None = None
         self._last_desired: float | None = None
+
+    def reset(self) -> None:
+        """Forget the crab estimate and track state (start of a new voyage)."""
+        self.crab_deg = 0.0
+        self.cross_track_m = 0.0
+        self.hold_crab = False
+        self._mission = None
+        self._mission_version = None
+        self._origin = None
+        self._last_fix = None
+        self._last_heading = None
+        self._last_desired = None
 
     # ------------------------------------------------------------------ helpers
 
@@ -104,6 +121,11 @@ class WaypointAutopilot:
 
     def _update_crab(self, sensors: Sensors) -> None:
         """Compare the course made good since the last fix with the course we wanted."""
+        if self.hold_crab or self.thrust_fraction <= 0 or sensors.soc <= 0.0:
+            # Not under power: freeze the crab and drop the baseline fix, so the
+            # first fix after power returns isn't compared with a drifting one.
+            self._last_fix = None
+            return
         if self._last_fix is not None and self._last_desired is not None:
             t0, lat0, lon0 = self._last_fix
             dt = (sensors.t - t0).total_seconds()
