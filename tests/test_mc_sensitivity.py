@@ -209,3 +209,17 @@ def test_record_bound_variants():
     assert x30.rate_set == "historical" and x30.p_inverted_stuck == pytest.approx(
         30 * hz("baseline").p_inverted_stuck
     )
+
+
+def test_drop_is_100km_out_and_variants_move_it():
+    from boatsim.config import load_design
+    from boatsim.mc.deadboat import start_point
+    from boatsim.runner.simulate import DROP_POINT, default_mission
+
+    v = load_design("configs/v4_kayak.yaml").voyage
+    assert (v["drop_lat"], v["drop_lon"]) == DROP_POINT
+    assert DROP_POINT == pytest.approx(start_point("100km"), abs=0.01)
+    assert (default_mission().waypoints[0].lat, default_mission().waypoints[0].lon) == DROP_POINT
+    assert S.SensitivityVoyage(variant="drop_29km").drop_point() == (36.85, -75.70)
+    assert S.SensitivityVoyage().drop_point() == DROP_POINT
+    assert (36.79, -75.48) == pytest.approx(start_point("50km"), abs=0.01)

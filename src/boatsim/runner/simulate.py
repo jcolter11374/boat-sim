@@ -228,8 +228,13 @@ def simulate(
     return log
 
 
+# Where the support boat drops the kayak: 100 km ESE of Cape Henry (9 Nov 2026),
+# the same point as configs/v4_kayak.yaml voyage.drop_lat/drop_lon.
+DROP_POINT = (36.65, -74.94)
+
+
 def default_mission() -> Mission:
-    """Launch route: Bay mouth, then straight (great circle) to the finish target.
+    """Launch route: the drop point, then straight (great circle) to the finish target.
 
     The great circle peaks near 42.6N and passes about 250 km north of Flores and
     Corvo, so it clears the Azores. It replaced a dog-leg south of the Azores via
@@ -240,7 +245,7 @@ def default_mission() -> Mission:
     """
     return Mission(
         waypoints=[
-            Waypoint(36.9, -75.5),
+            Waypoint(*DROP_POINT),
             Waypoint(39.5, -13.5),  # the finish target (runner/arrival.py)
         ]
     )
