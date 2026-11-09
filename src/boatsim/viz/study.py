@@ -186,15 +186,21 @@ def rule_figure(t: pd.DataFrame):
     )
 
 
+PLAN_TARGET = "target_39_5n"  # our chosen target (CLAUDE.md); the straight route since #98
+
+
 def target_figure(
     t: pd.DataFrame,
     headline: str = "baseline",
     baseline_label: str = "The design as it stands",
 ):
     """Finishing odds for each finish target, north to south, plus the baseline
-    (and the old dog-leg south of the Azores, if the run has it). The headline
-    row is strong blue, the rest pale."""
-    rows = []
+    (and the old dog-leg south of the Azores, if the run has it).
+
+    One bar is strong blue: the headline row if it is in the chart, else the
+    baseline, else our planned target. baseline_label "" leaves the baseline
+    bar out (for runs where it is the same voyages as the planned target)."""
+    named = []
     for name in TARGETS:
         r = _row(t, name)
         if r is not None:
@@ -203,14 +209,18 @@ def target_figure(
                 .replace("Finish target at ", "")
                 .replace(", straight route there", "")
             )
-            rows.append((f"{label}, straight", r, BAR if name == headline else BAR_OUTSIDE))
+            named.append((name, f"{label}, straight", r))
     b = _row(t, "baseline")
-    if not rows or b is None:
+    if not named or b is None:
         return None
-    rows.append((baseline_label, b, BAR if headline == "baseline" else BAR_OUTSIDE))
+    if baseline_label:
+        named.append(("baseline", baseline_label, b))
     dog = _row(t, "dogleg_azores")
     if dog is not None:
-        rows.append(("Old plan: 39.5N 13.5W via south of the Azores", dog, BAR_OUTSIDE))
+        named.append(("dogleg_azores", "Old plan: 39.5N 13.5W via south of the Azores", dog))
+    shown = [n for n, _, _ in named]
+    strong = next((n for n in (headline, "baseline", PLAN_TARGET) if n in shown), None)
+    rows = [(lab, r, BAR if n == strong else BAR_OUTSIDE) for n, lab, r in named]
     return _odds_bars(rows, "Chance of finishing for each finish target (north to south)")
 
 
@@ -370,9 +380,8 @@ def study_html(
                 targets,
                 "We pick our 25 km target circle before launch, anywhere on the race's "
                 "eastern line. Each 'straight' bar sails straight to a different target "
-                "(that route passes north of the Azores). The strong bar is the one the "
-                "headline uses. The thin line on each bar is its 95% range. "
-                + notes.get("targets", ""),
+                "(that route passes north of the Azores). The strong bar is the plan. "
+                "The thin line on each bar is its 95% range. " + notes.get("targets", ""),
             )
         )
     others = compare[~compare["variant"].isin(SHOWN_ELSEWHERE)]
