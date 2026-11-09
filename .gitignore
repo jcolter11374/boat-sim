@@ -14,3 +14,8 @@ runs/
 !data/traffic/
 data/traffic/*
 !data/traffic/ship_density_v1.nc
+# And the land mask (#70): small, built from Natural Earth (public domain).
+# Rebuild with the "Build land mask" workflow.
+!data/land/
+data/land/*
+!data/land/land_mask_v1.npz

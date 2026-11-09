@@ -43,6 +43,7 @@ jobs:
       matrix:
         year: ${{ fromJson(needs.years.outputs.list) }}
     env:
+      BOATSIM_REQUIRE_LAND: "1"  # fail, not warn, if the land mask is missing (#70)
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       YEAR: ${{ matrix.year }}

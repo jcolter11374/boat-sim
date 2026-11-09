@@ -95,6 +95,7 @@ class Mission:
 
 class EventKind(str, Enum):
     ARRIVED = "arrived"
+    AGROUND = "aground"
     BATTERY_EMPTY = "battery_empty"
     CAPSIZE = "capsize"
     PART_FAILED = "part_failed"
@@ -127,4 +128,5 @@ class Message:
 class Outcome(str, Enum):
     ARRIVED = "arrived"
     LOST = "lost"
+    AGROUND = "aground"  # ran onto land outside Europe (#70)
     TIMEOUT = "timeout"

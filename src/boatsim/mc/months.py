@@ -94,6 +94,8 @@ def cause_of_end(log) -> str:
         return "arrived"
     if log.outcome.value == "timeout":
         return "still at sea"
+    if log.outcome.value == "aground":
+        return "ran aground outside Europe"
     for e in reversed(log.events):
         if e.kind == EventKind.SHIP_STRIKE:
             return "ship strike"

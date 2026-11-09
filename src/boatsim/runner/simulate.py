@@ -12,6 +12,7 @@ from boatsim.comms.base import Link
 from boatsim.comms.packing import pack_report
 from boatsim.oceandata.base import Environment, Forecast
 from boatsim.runner.arrival import in_europe
+from boatsim.runner.land import is_european_land
 from boatsim.types import Event, EventKind, Message, Mission, Outcome, Waypoint
 from boatsim.vessel.base import Vessel
 
@@ -27,6 +28,7 @@ class Components:
     link: Link
     base: BasePolicy
     pinger: object | None = None  # e.g. comms.GlobalstarPinger; one-way position beacon
+    land: object | None = None  # runner.land.LandMask; None = no aground check (#70)
 
 
 @dataclass
@@ -181,6 +183,17 @@ def simulate(
         if in_europe(state.lat, state.lon):
             log.outcome, log.end = Outcome.ARRIVED, state.t
             log.events.append(Event(state.t, EventKind.ARRIVED))
+            break
+        if c.land is not None and c.land.on_land(state.lat, state.lon):
+            # Landfall anywhere in Europe counts (John's rule); anywhere else the
+            # boat is ashore and the voyage is over.
+            if is_european_land(state.lat, state.lon):
+                log.outcome, log.end = Outcome.ARRIVED, state.t
+                log.events.append(Event(state.t, EventKind.ARRIVED, "landfall"))
+            else:
+                log.outcome, log.end = Outcome.AGROUND, state.t
+                where = f"{state.lat:.2f}N {abs(state.lon):.2f}W"
+                log.events.append(Event(state.t, EventKind.AGROUND, where))
             break
     else:
         log.end = state.t

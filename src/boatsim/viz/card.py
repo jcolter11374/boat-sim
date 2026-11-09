@@ -41,6 +41,7 @@ CAUSES: dict[str, str] = {
     "capsize": "Rolled over by a wave and didn't come back up",
     "part_failed": "A part broke and the boat was lost",
     "lost_other": "Lost at sea (other)",
+    "aground": "Ran aground outside Europe (drifted ashore)",
     "battery_empty": "Battery ran flat; drifted until time ran out",
     "off_course_timeout": "Still at sea when time ran out (too slow or blown off course)",
     "left_data_box": "Blown far off course, out of the weather-data area",
@@ -85,6 +86,8 @@ def classify_cause(log: VoyageLog) -> str:
     """Pick the single cause that ended (or ruined) this voyage."""
     if log.outcome == Outcome.ARRIVED:
         return "arrived"
+    if log.outcome == Outcome.AGROUND:
+        return "aground"
     if log.outcome == Outcome.LOST:
         # The last damaging event before the end is what sank it.
         for e in reversed(log.events):
@@ -123,6 +126,7 @@ def first_trouble(log: VoyageLog) -> Trouble | None:
         EventKind.SHIP_STRIKE: "hit by a ship",
         EventKind.BATTERY_EMPTY: "battery ran flat",
         EventKind.LOST: "lost",
+        EventKind.AGROUND: "ran aground",
     }
     for e in log.events:
         if e.kind in labels:
