@@ -5,7 +5,14 @@ import pytest
 
 from boatsim.autonomy import SafeModeAutopilot
 from boatsim.oceandata.base import ConstantEnvironment
-from boatsim.runner.land import DEFAULT_PATH, SPOT_CHECKS, LandMask, is_european_land
+from boatsim.runner.land import (
+    DEFAULT_PATH,
+    ISLAND_CHECKS,
+    SPOT_CHECKS,
+    LandMask,
+    is_european_land,
+    land_cells,
+)
 from boatsim.runner.parallel import StandardVoyage
 from boatsim.runner.simulate import simulate
 from boatsim.types import EnvState, EventKind, Mission, Outcome, Waypoint
@@ -80,3 +87,9 @@ def test_build_keeps_small_islands(tmp_path):
     m = build(src, tmp_path / "mask.npz")
     assert m.on_land(32.315, -64.775)
     assert not m.on_land(32.4, -64.6)
+
+
+@pytest.mark.skipif(not DEFAULT_PATH.exists(), reason="land mask not built yet")
+@pytest.mark.parametrize(("bbox", "name"), ISLAND_CHECKS)
+def test_committed_mask_has_small_islands(bbox, name):
+    assert land_cells(LandMask.load(DEFAULT_PATH), bbox) > 0, name

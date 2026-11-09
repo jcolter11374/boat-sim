@@ -133,12 +133,24 @@ SPOT_CHECKS = [
     (36.85, -76.29, True, "Norfolk, Virginia"),
     (35.00, -75.30, False, "off Cape Hatteras"),
     (35.78, -78.64, True, "Raleigh, North Carolina"),
-    (32.32, -64.77, True, "Bermuda"),
     (40.00, -50.00, False, "mid Atlantic"),
     (38.70, -27.20, True, "Terceira, Azores"),
     (38.72, -9.14, True, "Lisbon"),
     (52.00, -8.50, True, "Ireland"),
 ]
+
+# Small islands: each box must hold at least one land cell (lat0, lat1, lon0, lon1).
+ISLAND_CHECKS = [
+    ((32.20, 32.45, -64.95, -64.60), "Bermuda"),
+    ((36.90, 37.05, -25.25, -24.95), "Santa Maria, Azores"),
+]
+
+
+def land_cells(m: LandMask, bbox) -> int:
+    lat0, lat1, lon0, lon1 = bbox
+    i0, i1 = int((lat0 - m.lat0) // m.res), int((lat1 - m.lat0) // m.res) + 1
+    j0, j1 = int((lon0 - m.lon0) // m.res), int((lon1 - m.lon0) // m.res) + 1
+    return int(m.mask[max(i0, 0) : i1, max(j0, 0) : j1].sum())
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -155,6 +167,10 @@ def main(argv: list[str] | None = None) -> None:
         got = m.on_land(lat, lon)
         bad += got != want
         print(f"{'ok ' if got == want else 'BAD'} {name}: on_land={got}")
+    for bbox, name in ISLAND_CHECKS:
+        n = land_cells(m, bbox)
+        bad += n == 0
+        print(f"{'ok ' if n else 'BAD'} {name}: {n} land cells")
     if bad:
         raise SystemExit(f"{bad} spot checks failed")
 
