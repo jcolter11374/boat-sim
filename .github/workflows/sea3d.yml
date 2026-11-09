@@ -52,7 +52,9 @@ jobs:
           python-version: "3.11"
       - name: Build the kayak with Blender
         if: steps.kayak-cache.outputs.cache-hit != 'true'
+        continue-on-error: true # the page falls back to the drawn-in-code kayak
         run: |
+          sudo apt-get update -qq
           sudo apt-get install -y -qq libxrender1 libxi6 libxkbcommon0 libsm6 libgl1 > /dev/null
           pip install -q bpy==4.2.0 pillow numpy
           python blender/build_kayak.py public/models/kayak.glb

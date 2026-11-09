@@ -24,14 +24,18 @@ it: the page adds them in code so they can spin.
 from __future__ import annotations
 
 import math
+import os
 import sys
 from pathlib import Path
 
-import bpy  # first: bmesh only exists once bpy is loaded
-import bmesh
+import bpy
 import numpy as np
 
-OUT = Path(sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else (sys.argv[1] if len(sys.argv) > 1 else "kayak.glb"))
+OUT = Path(
+    sys.argv[sys.argv.index("--") + 1]
+    if "--" in sys.argv
+    else (sys.argv[1] if len(sys.argv) > 1 else "kayak.glb")
+)
 BAKE_SAMPLES = 48
 
 # ---------------------------------------------------------------- shape ----
@@ -70,7 +74,7 @@ def deck_y(x: float, z: float) -> float:
     return dz(s) + CROWN * (1 - min((z / b) ** 2, 1)) if b > 1e-6 else dz(s)
 
 
-DOME = dict(x0=0.35, x1=2.55, w=0.23, h=0.2, p=2.6)
+DOME = {"x0": 0.35, "x1": 2.55, "w": 0.23, "h": 0.2, "p": 2.6}
 
 
 def dome_prof(x: float) -> float:
@@ -131,8 +135,15 @@ def get_pixels(img: bpy.types.Image) -> np.ndarray:
     return px.reshape(h, w, 4)[..., :3]
 
 
-def material(name: str, base=(0.8, 0.8, 0.8), rough=0.5, metal=0.0, image: bpy.types.Image | None = None,
-             coat=0.0, emit: tuple | None = None) -> bpy.types.Material:
+def material(
+    name: str,
+    base=(0.8, 0.8, 0.8),
+    rough=0.5,
+    metal=0.0,
+    image: bpy.types.Image | None = None,
+    coat=0.0,
+    emit: tuple | None = None,
+) -> bpy.types.Material:
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -152,8 +163,12 @@ def material(name: str, base=(0.8, 0.8, 0.8), rough=0.5, metal=0.0, image: bpy.t
     return m
 
 
-def mesh_object(name: str, verts, faces, uvs=None, mat=None, smooth=True, sharp_edges=()) -> bpy.types.Object:
+def mesh_object(
+    name: str, verts, faces, uvs=None, mat=None, smooth=True, sharp_edges=()
+) -> bpy.types.Object:
     """verts in builder frame; faces as vertex index tuples; uvs per face corner."""
+    import bmesh  # only importable once bpy is loaded
+
     me = bpy.data.meshes.new(name)
     me.from_pydata([P(*v) for v in verts], [], faces)
     if uvs is not None:
@@ -206,7 +221,17 @@ def naca(t: float, n: int = 40):
     pts = []
     for k in range(n + 1):
         xc = (1 - math.cos(math.pi * k / n)) / 2
-        yt = 5 * t * (0.2969 * math.sqrt(xc) - 0.126 * xc - 0.3516 * xc * xc + 0.2843 * xc**3 - 0.1036 * xc**4)
+        yt = (
+            5
+            * t
+            * (
+                0.2969 * math.sqrt(xc)
+                - 0.126 * xc
+                - 0.3516 * xc * xc
+                + 0.2843 * xc**3
+                - 0.1036 * xc**4
+            )
+        )
         pts.append((xc, yt))
     out = pts[::-1]
     out += [(x, -y) for x, y in pts[1:-1]]
@@ -332,7 +357,11 @@ def hull_texture(W: int, H: int, NT: int, ND: int) -> np.ndarray:
         from PIL import Image, ImageDraw, ImageFont
 
         font = None
-        for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "DejaVuSans-Bold.ttf", "Arial Bold.ttf"):
+        for f in (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "DejaVuSans-Bold.ttf",
+            "Arial Bold.ttf",
+        ):
             try:
                 font = ImageFont.truetype(f, 200)
                 break
@@ -430,10 +459,16 @@ def build() -> None:
     set_pixels(hull_img, hull_rgb)
     hull_mat = material("hull", image=hull_img, rough=0.32, coat=0.5)
     transom_mat = material("transom", base=hexcol(0xE8641C), rough=0.35, coat=0.5)
-    hull = mesh_object("hull", verts, faces + transom_faces,
-                       uvs=uvs + [[(0.999, 0.5)] * 3 for _ in transom_faces], mat=hull_mat, sharp_edges=sharp)
+    hull = mesh_object(
+        "hull",
+        verts,
+        faces + transom_faces,
+        uvs=uvs + [[(0.999, 0.5)] * 3 for _ in transom_faces],
+        mat=hull_mat,
+        sharp_edges=sharp,
+    )
     hull.data.materials.append(transom_mat)
-    for poly in hull.data.polygons[len(faces):]:
+    for poly in hull.data.polygons[len(faces) :]:
         poly.material_index = 1
 
     # Rubbing strake along the sheer, both sides, and round the stern.
@@ -444,7 +479,12 @@ def build() -> None:
             s = i / NX
             pts.append((s * L, dz(s) - 0.004, side * (max(hb(s), 0.0005) + 0.004)))
         tube(f"strake_{'stbd' if side > 0 else 'port'}", pts, 0.011, rub)
-    tube("strake_stern", [(L + 0.004, dz(1) - 0.004, z) for z in np.linspace(-hb(1) - 0.004, hb(1) + 0.004, 12)], 0.011, rub)
+    tube(
+        "strake_stern",
+        [(L + 0.004, dz(1) - 0.004, z) for z in np.linspace(-hb(1) - 0.004, hb(1) + 0.004, 12)],
+        0.011,
+        rub,
+    )
 
     # Self-righting dome (foam, gelcoated), with UVs for its baked shadows.
     nx, na = 120, 48
@@ -465,15 +505,27 @@ def build() -> None:
             a = i * (na + 1) + j
             bb = a + na + 1
             df.append((a, a + 1, bb + 1, bb))
-            duv.append([(i / nx, j / na), (i / nx, (j + 1) / na), ((i + 1) / nx, (j + 1) / na), ((i + 1) / nx, j / na)])
+            duv.append(
+                [
+                    (i / nx, j / na),
+                    (i / nx, (j + 1) / na),
+                    ((i + 1) / nx, (j + 1) / na),
+                    ((i + 1) / nx, j / na),
+                ]
+            )
     dome_img = new_image("dome_paint", 1024, 512)
     dome_rgb = np.ones((512, 1024, 3), np.float32) * hexcol(0xFF7B2B)
     set_pixels(dome_img, dome_rgb)
-    dome = mesh_object("dome", dv, df, uvs=duv, mat=material("dome", image=dome_img, rough=0.3, coat=0.6))
+    dome = mesh_object(
+        "dome", dv, df, uvs=duv, mat=material("dome", image=dome_img, rough=0.3, coat=0.6)
+    )
 
     # Solar panels draped over the dome and aft deck: 100 W, 100 W, 50 W.
-    for name, x0, x1, w, cols, rows in (("panel_fwd", 0.55, 1.53, 0.54, 6, 3), ("panel_mid", 1.59, 2.5, 0.54, 6, 3),
-                                        ("panel_aft", 2.56, 2.92, 0.34, 3, 3)):
+    for name, x0, x1, w, cols, rows in (
+        ("panel_fwd", 0.55, 1.53, 0.54, 6, 3),
+        ("panel_mid", 1.59, 2.5, 0.54, 6, 3),
+        ("panel_aft", 2.56, 2.92, 0.34, 3, 3),
+    ):
         pnx, pnz = 48, 24
         pv, pf, puv = [], [], []
         for i in range(pnx + 1):
@@ -486,10 +538,19 @@ def build() -> None:
                 a = i * (pnz + 1) + j
                 bb = a + pnz + 1
                 pf.append((a, bb, bb + 1, a + 1))
-                puv.append([(i / pnx, j / pnz), ((i + 1) / pnx, j / pnz), ((i + 1) / pnx, (j + 1) / pnz), (i / pnx, (j + 1) / pnz)])
+                puv.append(
+                    [
+                        (i / pnx, j / pnz),
+                        ((i + 1) / pnx, j / pnz),
+                        ((i + 1) / pnx, (j + 1) / pnz),
+                        (i / pnx, (j + 1) / pnz),
+                    ]
+                )
         img = new_image(f"{name}_cells", cols * 64, rows * 64)
         set_pixels(img, cell_texture(cols, rows))
-        ob = mesh_object(name, pv, pf, uvs=puv, mat=material(name, image=img, rough=0.12, metal=0.1, coat=0.8))
+        ob = mesh_object(
+            name, pv, pf, uvs=puv, mat=material(name, image=img, rough=0.12, metal=0.1, coat=0.8)
+        )
         sol = ob.modifiers.new("thickness", "SOLIDIFY")
         sol.thickness = 0.008
         sol.offset = -1
@@ -504,7 +565,11 @@ def build() -> None:
     prof = []
     for kk in range(61):
         u = kk / 60
-        r = R * math.sqrt(max(1 - ((at - u) / at) ** 2, 0)) if u <= at else R * max(1 - ((u - at) / (1 - at)) ** 2, 0) ** 0.75
+        r = (
+            R * math.sqrt(max(1 - ((at - u) / at) ** 2, 0))
+            if u <= at
+            else R * max(1 - ((u - at) / (1 - at)) ** 2, 0) ** 0.75
+        )
         prof.append((u * blen, max(r, 0.0004)))
     lathe("bulb", prof, 48, lead, (1.4, bulb_y, 0))
     foil("rudder", 0.2, 0.17, 2.86, 2.9, 0.06, -0.3, 0.12, g10)
@@ -520,10 +585,36 @@ def build() -> None:
     cylinder("light_post", 0.008, 3.0, aft, aft + 0.2, -0.11, black, segs=16)
     cylinder("light", 0.022, 3.0, aft + 0.2, aft + 0.25, -0.11, lamp)
     gs = deck_y(0.3, 0)
-    rounded_box("beacon", 0.255, 0.345, gs, gs + 0.028, -0.035, 0.035, material("beacon", base=hexcol(0xF2C200), rough=0.4), 0.006)
-    rounded_box("beacon_top", 0.265, 0.335, gs + 0.026, gs + 0.031, -0.028, 0.028, material("beacon_top", base=hexcol(0x24324A), rough=0.25, metal=0.3), 0.002)
-    bpy.ops.mesh.primitive_torus_add(major_radius=0.03, minor_radius=0.007, major_segments=32, minor_segments=12,
-                                     location=P(0.03, 0.31, 0), rotation=(0, 0, 0))
+    rounded_box(
+        "beacon",
+        0.255,
+        0.345,
+        gs,
+        gs + 0.028,
+        -0.035,
+        0.035,
+        material("beacon", base=hexcol(0xF2C200), rough=0.4),
+        0.006,
+    )
+    rounded_box(
+        "beacon_top",
+        0.265,
+        0.335,
+        gs + 0.026,
+        gs + 0.031,
+        -0.028,
+        0.028,
+        material("beacon_top", base=hexcol(0x24324A), rough=0.25, metal=0.3),
+        0.002,
+    )
+    bpy.ops.mesh.primitive_torus_add(
+        major_radius=0.03,
+        minor_radius=0.007,
+        major_segments=32,
+        minor_segments=12,
+        location=P(0.03, 0.31, 0),
+        rotation=(0, 0, 0),
+    )
     eye = bpy.context.active_object
     eye.name = "tow_eye"
     eye.rotation_euler = (math.pi / 2, 0, 0)
@@ -536,7 +627,9 @@ def build() -> None:
     scene.cycles.samples = BAKE_SAMPLES
     scene.world = bpy.data.worlds.new("w")
     for ob, img, rgb in ((hull, hull_img, hull_rgb), (dome, dome_img, dome_rgb)):
-        ao = bpy.data.images.new(f"{ob.name}_ao", img.size[0], img.size[1], alpha=False, float_buffer=True)
+        ao = bpy.data.images.new(
+            f"{ob.name}_ao", img.size[0], img.size[1], alpha=False, float_buffer=True
+        )
         ao.colorspace_settings.name = "Non-Color"
         nodes = []
         for m in ob.data.materials:
@@ -576,3 +669,7 @@ def build() -> None:
 
 
 build()
+# bpy can crash while shutting down after a successful export (seen on CI):
+# leave straight away with the right exit code.
+sys.stdout.flush()
+os._exit(0)
