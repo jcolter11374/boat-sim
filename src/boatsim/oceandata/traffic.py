@@ -22,10 +22,10 @@ thread sandboxes):
    two corrections:
      a. The file contains isolated spurious cells of ~1.7 million and ~25
         million whose values drift steadily with row number (seen in the
-        #13 probe, PR #62), each surrounded by counts of 0 to 5. A cell far
-        above all eight of its neighbours is treated as no data (_spikes).
-        A plain threshold does not work: real lane and port cells near the
-        Bay mouth also pass 100,000.
+        #13 probe, PR #62). Real counts stop near 100, then almost nothing
+        until 100,000. Pixels at or above BAD_COUNT are treated as no data.
+        They are commoner in busy water, so the build log also reports how
+        their share relates to EMODnet traffic.
      b. Position counts are not ships per km^2: they depend on how often
         AIS was received. We calibrate them against EMODnet where both
         exist (see calibrate()), and record the factor and its spread.
@@ -48,9 +48,7 @@ from boatsim.oceandata.grid import ROUTE_BOX, Box, GridSeries
 DEFAULT_PATH = Path(os.environ.get("BOATSIM_DATA", "data")) / "traffic" / "ship_density_v1.nc"
 HOURS_PER_MONTH = 730.5
 RES = 0.1  # degrees
-BAD_COUNT = 100_000  # only for the log: how many real cells are this busy
-SPIKE_MIN = 10_000  # GUESS: below this a lone high cell could be a real anchored ship
-SPIKE_FACTOR = 1000.0  # GUESS: spikes are 10^5 to 10^7 times their neighbours' median
+BAD_COUNT = 1_000  # counts at or above this are corrupt (see module doc)
 EMODNET_WCS = "https://ows.emodnet-humanactivities.eu/wcs"
 EMODNET_YEARS = (2022, 2023)  # 2020 had COVID-era traffic; 2024 lost satellite AIS from June
 WORLD_BANK_ZIP = (
@@ -149,29 +147,9 @@ def emodnet_grid(box: Box = ROUTE_BOX, res: float = RES, tile_deg: float = 5.0, 
 # -------------------------------------------------------------- World Bank
 
 
-def _spikes(a: np.ndarray, factor: float = SPIKE_FACTOR) -> np.ndarray:
-    """Cells far above the typical (median) of their 8 neighbours: the file's
-    spurious values.
-
-    The bad cells (~1.7 million or ~25 million, drifting with row number) sit
-    in water whose counts are 0 to 5, sometimes two of them side by side, so
-    the median of the neighbours stays small. A shipping lane or port is high
-    too, but traffic spreads over several cells, so its neighbours' median is
-    high and it survives. (A max-of-neighbours test failed: build 2 of PR #62
-    kept 7 million bad cells because bad cells touch each other.)
-    """
-    z = np.where(np.isfinite(a), a, 0.0).astype(np.float32)
-    p = np.pad(z, 1, mode="edge")  # edges: no fake empty water beyond the strip
-    h, w = z.shape
-    nb = np.stack(
-        [p[di : di + h, dj : dj + w] for di in (0, 1, 2) for dj in (0, 1, 2) if (di, dj) != (1, 1)]
-    )
-    med = np.median(nb, axis=0)
-    return np.isfinite(a) & (a >= SPIKE_MIN) & (a > factor * (med + 1.0))
-
-
 def world_bank_grid(tif: str | Path, box: Box = ROUTE_BOX, res: float = RES, log=print):
-    """AIS positions per km^2 per year per 0.1 degree cell, plus ocean fraction.
+    """AIS positions per km^2 per year per 0.1 degree cell (corrupt pixels left
+    out), and the share of the cell's sea pixels that are corrupt.
 
     Reads the route box in strips so memory stays small.
     """
@@ -183,36 +161,32 @@ def world_bank_grid(tif: str | Path, box: Box = ROUTE_BOX, res: float = RES, log
     pos = np.zeros(shape)
     n_ok = np.zeros(shape)
     n_all = np.zeros(shape)
-    n_bad = n_big = 0
+    n_junk = np.zeros(shape)
     with rasterio.open(tif) as r:
         step = 1.0  # degree strips of latitude
         for s in np.arange(box.lat_min, box.lat_max, step):
             win = from_bounds(box.lon_min, s, box.lon_max, s + step, r.transform).round_offsets()
             a = r.read(1, window=win).astype(np.float64)
             a[a == r.nodata] = np.nan
-            bad = _spikes(a)
-            n_bad += int(bad.sum())
-            a[bad] = np.nan
-            n_big += int((a >= BAD_COUNT).sum())
+            junk = a >= BAD_COUNT
             t = r.window_transform(win)
             rows, cols = np.indices(a.shape)
             lo = t.c + (cols + 0.5) * t.a
             la = t.f + (rows + 0.5) * t.e
-            t_, v_, a_ = _bin(la.ravel(), lo.ravel(), a.ravel(), box, res, shape)
+            la, lo = la.ravel(), lo.ravel()
+            t_, v_, a_ = _bin(la, lo, np.where(junk, np.nan, a).ravel(), box, res, shape)
             pos += t_
             n_ok += v_
             n_all += a_
-    log(
-        f"World Bank: {n_bad} isolated spikes dropped in the route box; "
-        f"{n_big} real cells of {BAD_COUNT} or more kept (busy lanes and ports)"
-    )
+            n_junk += _bin(la, lo, np.where(junk, 1.0, np.nan).ravel(), box, res, shape)[1]
+    log(f"World Bank: {int(n_junk.sum())} corrupt pixels (>= {BAD_COUNT}) in the route box")
     # Cell area of one 0.005 degree pixel at the cell's latitude.
     km_per_deg = 111.32
     px_km2 = (0.005 * km_per_deg) ** 2 * np.cos(np.deg2rad(lats))[:, None]
     with np.errstate(invalid="ignore", divide="ignore"):
         per_km2_year = np.where(n_ok > 0, pos / (n_ok * px_km2) / WB_YEARS, np.nan)
-        frac = np.where(n_all > 0, n_ok / n_all, 0.0)
-    return per_km2_year, frac
+        junk_frac = np.where(n_ok + n_junk > 0, n_junk / (n_ok + n_junk), np.nan)
+    return per_km2_year, junk_frac
 
 
 # ------------------------------------------------------------- calibration
@@ -264,8 +238,21 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
 
     lats, lons = grid_axes()
     emod, emod_frac = emodnet_grid(log=log)
-    wb, _ = world_bank_grid(wb_tif, log=log)
+    wb, junk = world_bank_grid(wb_tif, log=log)
     k, _ = calibrate(emod, emod_frac, wb, lats, lons, log=log)
+    # Corrupt pixels are far commoner in busy water (about 43% off Lisbon, 5%
+    # mid-ocean in the probe), so their share may itself track traffic.
+    both = (emod_frac >= 0.5) & np.isfinite(emod) & np.isfinite(junk)
+    log("EMODnet ships/km2 by share of corrupt World Bank pixels (overlap cells):")
+    for lo_, hi_ in [(0, 0.02), (0.02, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 0.4), (0.4, 1.01)]:
+        m = both & (junk >= lo_) & (junk < hi_)
+        if m.any():
+            q = np.nanpercentile(emod[m], [25, 50, 75])
+            w = np.nanmedian(wb[m])
+            log(
+                f"  corrupt {lo_:4.0%}-{hi_:4.0%}: cells {int(m.sum()):6d}  EMODnet p25/p50/p75"
+                f" {q[0]:.1e} {q[1]:.1e} {q[2]:.1e}  WB median {w:.3g}"
+            )
     use_emod = (emod_frac >= 0.5) & np.isfinite(emod)
     ships = np.where(use_emod, emod, k * wb)
     ships = np.where(np.isfinite(ships), ships, 0.0)  # land or no data from either source
@@ -274,6 +261,7 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
         {
             "ship_density": (("lat", "lon"), ships.astype(np.float32)),
             "source": (("lat", "lon"), source),
+            "wb_corrupt_share": (("lat", "lon"), junk.astype(np.float32)),
         },
         coords={"lat": lats, "lon": lons},
         attrs={
@@ -297,7 +285,7 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
         j = int(np.argmin(abs(lons - lo)))
         log(
             f"  {name:24s} {ships[i, j]:.2e} ships/km2 (source {source[i, j]}; "
-            f"World Bank {wb[i, j]:.3g} positions/km2/yr)"
+            f"World Bank {wb[i, j]:.3g} positions/km2/yr, {junk[i, j]:.0%} corrupt)"
         )
     return out
 
