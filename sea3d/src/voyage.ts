@@ -62,8 +62,8 @@ const atmos = new Atmosphere(renderer, scene, camera);
 type BoatKey = BoatSpec["key"];
 const SPEC: Record<BoatKey, BoatSpec> = { kayak: KAYAK, randolph: RANDOLPH };
 const HULL: Record<BoatKey, HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB };
-const LABEL: Record<BoatKey, string> = { kayak: "Our kayak", randolph: "Our model of the Randolph boat" };
-const SHORT: Record<BoatKey, string> = { kayak: "Our kayak", randolph: "Randolph boat" };
+const LABEL: Record<BoatKey, string> = { kayak: "Our kayak", randolph: "Our model of the Randolph boat (not their own simulator)" };
+const SHORT: Record<BoatKey, string> = { kayak: "Our kayak", randolph: "Randolph (our model)" };
 /** Which 3D model a replay's boat name gets. Anything not Randolph is ours. */
 const keyOf = (boat: string | undefined): BoatKey => (/randolph/i.test(boat ?? "") ? "randolph" : "kayak");
 let boatKey: BoatKey = "kayak";
@@ -271,11 +271,14 @@ async function load(files: string[], pick = files[0]): Promise<void> {
     fillVoyages(mode);
     $<HTMLSelectElement>("voyage").value = pick;
     $("focus").hidden = lanes.length < 2;
+    const race = lanes.length > 1;
+    $("lg-ours").textContent = race ? "our kayak" : "track";
+    $("lg-theirs").hidden = !race;
     $("sub").textContent =
       lanes.length > 1
-        ? "Both boats launched the same day into the same weather. Orange is our kayak, teal is our model of the Randolph boat. Pick which one the close-up follows."
+        ? "Both boats launched the same day into the same weather. Orange is our kayak; teal is our own model of the Randolph boat, not their own simulator, so their real odds may differ. Pick which one the close-up follows."
         : lanes[0].key === "randolph"
-          ? "Our model of the Randolph boat sailing one simulated voyage: real weather and currents for that year. Our model, not their numbers."
+          ? "Our own model of the Randolph boat (built from their published design), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ."
           : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
     setFocus(0, true);
     ticks();
@@ -400,7 +403,7 @@ function fillVoyages(mode: string): void {
     for (const d of raceDates()) {
       const a = byKey.kayak.get(d)!;
       const b = byKey.randolph.get(d)!;
-      sel.add(new Option(`Launch ${fmtDay(a.start)}: kayak ${OUT[a.outcome] ?? a.outcome}, Randolph ${OUT[b.outcome] ?? b.outcome}`, `race:${d}`));
+      sel.add(new Option(`Launch ${fmtDay(a.start)}: kayak ${OUT[a.outcome] ?? a.outcome}, Randolph (our model) ${OUT[b.outcome] ?? b.outcome}`, `race:${d}`));
     }
     return;
   }
@@ -428,8 +431,8 @@ controls.target.set(0, 0.2, 0);
     for (const v of index) byKey[keyOf(v.boat)].set(v.start.slice(0, 10), v);
     const boatSel = $<HTMLSelectElement>("boat");
     const modes: [string, string][] = [["kayak", "Our kayak"]];
-    if (byKey.randolph.size) modes.push(["randolph", "Our model of the Randolph boat"]);
-    if (raceDates().length) modes.push(["race", "Race: both boats, same day"]);
+    if (byKey.randolph.size) modes.push(["randolph", "Randolph boat (our model, not their simulator)"]);
+    if (raceDates().length) modes.push(["race", "Race: our kayak vs our model of Randolph"]);
     for (const [value, text] of modes) boatSel.add(new Option(text, value));
     boatSel.disabled = modes.length < 2;
     const wantRace = params.get("race");

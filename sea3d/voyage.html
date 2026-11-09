@@ -81,7 +81,7 @@
   <div id="focus" role="group" aria-label="Close-up follows" hidden>
     <span>Close-up:</span>
     <button data-lane="0" aria-pressed="true">Our kayak</button>
-    <button data-lane="1" aria-pressed="false">Randolph boat</button>
+    <button data-lane="1" aria-pressed="false">Randolph (our model)</button>
   </div>
   <div class="row">
     <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option></select></label>
@@ -100,7 +100,7 @@
 <div id="chartbox" class="glass" title="Click to enlarge">
   <canvas id="chart"></canvas>
   <div class="lbl">NORTH ATLANTIC</div>
-  <div id="legend"><i style="background:var(--orange)"></i>track<i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss</div>
+  <div id="legend"><i style="background:var(--orange)"></i><span id="lg-ours">track</span><span id="lg-theirs" hidden><i style="background:#2ec4b6"></i>Randolph (our model)</span><i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss</div>
 </div>
 <div id="transport" class="glass">
   <button id="play" aria-label="Play or pause">&#9654;</button>
