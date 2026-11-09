@@ -3,30 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>boat-sim 3D: open sea</title>
+<title>boat-sim 3D: both boats on a live sea</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc3dc;
     font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #17212b; }
   #app { position: fixed; inset: 0; }
-  #panel { position: fixed; top: 12px; left: 12px; background: rgba(255,255,255,.88);
-    border-radius: 10px; padding: 10px 14px; max-width: 320px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  #panel { position: fixed; top: 12px; left: 12px; background: rgba(255,255,255,.9);
+    border-radius: 10px; padding: 10px 14px 12px; width: 300px; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
   #panel h1 { font-size: 16px; margin: 0 0 4px; }
   #panel p { margin: 4px 0; }
-  #panel label { display: block; margin-top: 6px; }
-  #panel select, #panel input { font: inherit; }
+  #panel label { display: block; margin-top: 7px; }
+  #panel select { font: inherit; width: 100%; margin-top: 2px; }
+  #panel .row { display: flex; gap: 14px; margin-top: 8px; }
+  #panel .row label { margin: 0; }
   .muted { color: #5b6875; font-size: 12px; }
+  .warn { color: #8a5300; font-size: 12px; background: #fff4d6; border-radius: 6px; padding: 4px 7px; margin-top: 8px; }
+  #shots { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex;
+    background: rgba(255,255,255,.9); border-radius: 9px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+  #shots button { font: 500 13px system-ui, sans-serif; border: 0; background: transparent; padding: 8px 13px;
+    cursor: pointer; color: #17212b; border-right: 1px solid #d8dee4; }
+  #shots button:last-child { border-right: 0; }
+  #shots button[aria-pressed="true"] { background: #17212b; color: #fff; }
+  #tags { position: fixed; inset: 0; pointer-events: none; }
+  .tag { position: absolute; left: 0; top: 0; background: rgba(255,255,255,.94); border-radius: 6px;
+    padding: 3px 8px 4px; border-left: 4px solid var(--c); white-space: nowrap; font-size: 12.5px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+  .tag b { display: block; font-weight: 600; }
+  .tag span { color: #4d5965; font-size: 11.5px; }
+  .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="tags"></div>
 <div id="panel">
-  <h1>Open sea (Phase 0)</h1>
-  <p class="muted">An empty sea to prove the page builds and runs. The two boats arrive in Phase 1.</p>
+  <h1>Both boats on a live sea</h1>
+  <p class="muted"><span class="key" style="background:#e8590c"></span>Our 3 m solar kayak and
+    <span class="key" style="background:#0f8a8a"></span>the Randolph team's 1.5 m wing-sail drone,
+    drawn to scale from their real measurements, side by side on the same waves.</p>
   <label>Sea state
     <select id="sea">
       <option value="calm">Calm (0.5 m waves)</option>
       <option value="moderate" selected>Moderate (1.5 m)</option>
       <option value="gale">Gale (5 m)</option>
+    </select>
+  </label>
+  <label>Boats pointing
+    <select id="heading">
+      <option value="180">Into the waves</option>
+      <option value="135" selected>At an angle to the waves</option>
+      <option value="90">Across the waves (most rolling)</option>
+      <option value="0">With the waves</option>
     </select>
   </label>
   <label>Quality
@@ -35,7 +62,20 @@
       <option value="high" selected>High</option>
     </select>
   </label>
-  <p class="muted">Drag to look around, scroll to zoom.</p>
+  <div class="row">
+    <label><input type="checkbox" id="under"> See under the water</label>
+    <label><input type="checkbox" id="tour"> Slow tour</label>
+  </div>
+  <p class="warn" id="motion-label"></p>
+  <p class="muted">Drag to look around, scroll to zoom, right-drag to slide. The boats hold
+    station side by side; the foam trails show the water going past at each boat's speed.</p>
+</div>
+<div id="shots" role="group" aria-label="Camera">
+  <button data-shot="side" aria-pressed="true">Side by side</button>
+  <button data-shot="kayak">Our kayak</button>
+  <button data-shot="randolph">Randolph drone</button>
+  <button data-shot="low">Low over the water</button>
+  <button data-shot="high">From above</button>
 </div>
 <script type="module" src="./src/main.ts"></script>
 </body>

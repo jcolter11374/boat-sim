@@ -1,6 +1,8 @@
-// Smoke test: serve the built page, load it in a headless browser, check that
-// it animates, that the sea's wave height matches the chosen sea state, and
-// that the picture isn't blank. Saves a screenshot to test-output/.
+// Smoke test: serve the built page, load it in a headless browser and check
+// that the sea animates at the chosen wave height, that both boats are there
+// and ride the waves (sensible, finite motion), that the quality switch
+// rebuilds the sea, and that the picture isn't blank. Saves screenshots of
+// calm, moderate and gale to test-output/.
 //
 // Run after `npm run build`. Needs the `playwright` package and Chromium.
 import { spawn } from "node:child_process";
@@ -8,8 +10,10 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright";
 
 const URL = "http://localhost:4173/";
-const server = spawn("npx", ["vite", "preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
+// Run vite directly (not via npx) so server.kill() stops the server itself.
+const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
 const fail = (msg) => { console.error("FAIL:", msg); server.kill(); process.exit(1); };
+const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
   for (let i = 0; i < 50; i++) {
@@ -22,23 +26,49 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(URL);
   await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 10, null, { timeout: 30000 });
-
-  const hs = await page.evaluate(() => window.__sea3d.hs);
-  if (Math.abs(hs - 1.5) > 1e-6) fail(`moderate sea should have Hs 1.5 m, got ${hs}`);
-
-  await page.selectOption("#sea", "gale");
-  await page.waitForTimeout(300);
-  const hsGale = await page.evaluate(() => window.__sea3d.hs);
-  if (Math.abs(hsGale - 5.0) > 1e-6) fail(`gale should have Hs 5 m, got ${hsGale}`);
-
   mkdirSync("test-output", { recursive: true });
-  const png = await page.screenshot({ path: "test-output/sea-gale.png" });
-  // A blank canvas compresses to almost nothing; a rendered sea doesn't.
-  if (png.length < 20000) fail(`screenshot looks blank (${png.length} bytes)`);
+  const log = [];
+
+  for (const sea of ["calm", "moderate", "gale"]) {
+    await page.selectOption("#sea", sea);
+    const f0 = await page.evaluate(() => window.__sea3d.frames);
+    await page.waitForFunction((n) => window.__sea3d.frames > n + 20, f0, { timeout: 30000 });
+    const s = await page.evaluate(() => window.__sea3d);
+    if (Math.abs(s.hs - HS[sea]) > 1e-6) fail(`${sea} should have Hs ${HS[sea]} m, got ${s.hs}`);
+    const keys = s.boats.map((b) => b.key).sort().join(",");
+    if (keys !== "kayak,randolph") fail(`expected both boats, got ${keys}`);
+    for (const b of s.boats) {
+      for (const k of ["heave", "pitch", "roll", "surface"]) {
+        if (!Number.isFinite(b[k])) fail(`${b.key} ${k} is not finite in ${sea}`);
+      }
+      // A floating boat stays near the water: heave within the local wave height.
+      if (Math.abs(b.heave - b.surface) > Math.max(0.5, s.hs)) {
+        fail(`${b.key} heave ${b.heave.toFixed(2)} m is far from the surface ${b.surface.toFixed(2)} m in ${sea}`);
+      }
+      if (Math.abs(b.pitch) > 1.2 || Math.abs(b.roll) > 1.2) fail(`${b.key} capsized-looking pose in ${sea}`);
+    }
+    const png = await page.screenshot({ path: `test-output/sea-${sea}.png` });
+    // A blank canvas compresses to almost nothing; a rendered sea doesn't.
+    if (png.length < 20000) fail(`${sea} screenshot looks blank (${png.length} bytes)`);
+    log.push(`${sea} Hs ${s.hs} m`);
+  }
+
+  // Quality switch rebuilds the sea mesh with a different resolution.
+  const vHigh = await page.evaluate(() => window.__sea3d.seaVertices);
+  await page.selectOption("#quality", "low");
+  await page.waitForTimeout(500);
+  const vLow = await page.evaluate(() => window.__sea3d.seaVertices);
+  if (!(vLow > 0 && vLow < vHigh)) fail(`low quality should use fewer sea vertices (high ${vHigh}, low ${vLow})`);
+  const pngLow = await page.screenshot({ path: "test-output/sea-gale-low.png" });
+  if (pngLow.length < 20000) fail(`low-quality screenshot looks blank (${pngLow.length} bytes)`);
+
+  // Every camera button works.
+  for (const shot of ["kayak", "randolph", "low", "high", "side"]) await page.click(`#shots button[data-shot="${shot}"]`);
+  await page.waitForTimeout(300);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();
-  console.log(`OK: animates, Hs moderate ${hs} m, gale ${hsGale} m, screenshot ${png.length} bytes`);
+  console.log(`OK: ${log.join(", ")}; both boats afloat; sea vertices high ${vHigh}, low ${vLow}`);
 } catch (e) {
   fail(String(e));
 }
