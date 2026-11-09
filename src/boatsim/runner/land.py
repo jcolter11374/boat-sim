@@ -8,8 +8,9 @@ arrived (John's rule, Azores included).
 The land map is a bit mask on a 0.02 degree grid (about 2 km) over the route
 box, 25-62N, 82W-5E, built from Natural Earth 1:10m land (public domain) by
 the "Build land mask" workflow and kept in git at data/land/land_mask_v1.npz.
-A grid cell counts as land when its centre is on land, so a coast is placed to
-within about 1 km. Points outside the box count as water.
+A grid cell counts as land when its centre is on land or it holds a piece of
+coastline, so a coast is placed up to one cell (2 km) seaward and small
+islands such as Bermuda aren't missed. Points outside the box count as water.
 
 Owner: Maya (runner). Priya's real coastline for the arrival rule (#11) is a
 separate piece.
@@ -111,6 +112,15 @@ def build(geojson: str | Path, out: str | Path = DEFAULT_PATH) -> LandMask:
     for i in range(nlat):
         lat = lat_min + (i + 0.5) * RES_DEG
         mask[i] = shapely.contains_xy(land, lons, np.full(nlon, lat))
+    # Small islands (Bermuda is ~1 km wide) can miss every cell centre, so also
+    # mark each cell that holds a coastline vertex. Natural Earth 1:10m has a
+    # vertex every few hundred metres, so this puts coasts up to one cell (2 km)
+    # seaward: a boat counts as aground slightly early, reefs included.
+    xy = shapely.get_coordinates(shapely.boundary(land))
+    i = ((xy[:, 1] - lat_min) // RES_DEG).astype(int)
+    j = ((xy[:, 0] - lon_min) // RES_DEG).astype(int)
+    ok = (i >= 0) & (i < nlat) & (j >= 0) & (j < nlon)
+    mask[i[ok], j[ok]] = True
     m = LandMask(mask, lat_min, lon_min, RES_DEG)
     m.save(out)
     return m

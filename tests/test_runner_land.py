@@ -66,3 +66,17 @@ def test_dead_boat_drifting_onshore_ends_aground():
 def test_committed_mask_spot_checks(lat, lon, want, name):
     m = LandMask.load(DEFAULT_PATH)
     assert m.on_land(lat, lon) == want, name
+
+
+def test_build_keeps_small_islands(tmp_path):
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    import json
+
+    from boatsim.runner.land import build
+
+    island = shapely_geometry.box(-64.78, 32.31, -64.77, 32.32)  # ~1 km, like Bermuda
+    src = tmp_path / "land.geojson"
+    src.write_text(json.dumps({"features": [{"geometry": shapely_geometry.mapping(island)}]}))
+    m = build(src, tmp_path / "mask.npz")
+    assert m.on_land(32.315, -64.775)
+    assert not m.on_land(32.4, -64.6)
