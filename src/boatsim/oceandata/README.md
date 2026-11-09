@@ -120,3 +120,32 @@ about half of a major hurricane's (worst case: Dorian, 1 Sep 2019, 82 m/s in
 the best track, 25 m/s in ERA5). Wave heights will be understated near storm
 cores too. Voyages that meet a hurricane are therefore safer in the simulator
 than at sea. Not corrected yet: see PR #62 for the options.
+
+## Our currents against the Randolph team's (currents_check.py, issue #73)
+
+"Compare currents with SMOC" puts GLORYS12 (ours) beside SMOC on 36-42N,
+75-50W, the Gulf Stream stretch both teams' routes cross. SMOC is Mercator's
+hourly current and is what Open-Meteo serves to the Randolph team: at 5
+points, Open-Meteo's daily mean matched SMOC's total current to within
+0.14 m/s. Both are daily means on a 0.25 degree grid, averaged over 6 dates
+in 2023 (run of 9 Nov 2026):
+
+| Band | Mean speed GLORYS / SMOC | Mean eastward GLORYS / SMOC | RMS vector difference | Speed correlation | Direction difference (median, where > 0.2 m/s) |
+|---|---|---|---|---|---|
+| 75-70W | 0.38 / 0.37 | 0.10 / 0.09 | 0.38 | 0.74 | 16° |
+| 70-65W | 0.39 / 0.41 | 0.13 / 0.12 | 0.40 | 0.74 | 20° |
+| 65-60W | 0.46 / 0.48 | 0.16 / 0.15 | 0.47 | 0.67 | 25° |
+| 60-55W | 0.46 / 0.48 | 0.16 / 0.15 | 0.46 | 0.63 | 26° |
+| 55-50W | 0.43 / 0.45 | 0.13 / 0.13 | 0.41 | 0.63 | 24° |
+| all | 0.43 / 0.44 | 0.135 / 0.132 | 0.43 | 0.69 | 22° |
+
+All in m/s, comparing ocean-model currents only (SMOC `uo/vo`). With SMOC's
+tides and Stokes drift added (`utotal/vtotal`, daily mean), SMOC runs about
+0.05 m/s faster, and its mean eastward current is 0.140 m/s.
+
+What it means: on average both sources push a boat east by the same amount,
+so neither should make crossings systematically faster. Point by point,
+though, they differ by about as much as the current itself, because each
+model puts its eddies and Gulf Stream meanders in different places. The
+agreement gets worse going east. So one voyage can differ a lot between the
+two simulators, while averages over many launches should agree.
