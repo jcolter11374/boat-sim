@@ -206,23 +206,39 @@ export class Chart {
     g.lineCap = "round";
     g.shadowColor = "rgba(255,140,40,0.9)";
     g.shadowBlur = 8;
-    g.strokeStyle = "#ff8a2a";
     g.lineWidth = 2;
-    g.beginPath();
-    let started = false;
-    for (let k = 0; k <= i; k++) {
-      const la = rep.lat[k];
-      const lo = rep.lon[k];
+    // Segments coloured by comms when the file has it: orange = reporting home,
+    // pale blue = only the backup beacon, grey = silent.
+    const colourOf = (k: number) => {
+      const ir = rep.iridium_ok?.[k];
+      if (ir == null || ir) return "#ff8a2a";
+      return rep.beacon_ok?.[k] ? "#9cc8ff" : "#8a94a3";
+    };
+    let prev: [number, number] | null = null;
+    let colour = "";
+    for (let k = 0; k <= i + 1; k++) {
+      const atEnd = k === i + 1;
+      if (atEnd && !Number.isFinite(here[0])) break;
+      const la = atEnd ? here[0] : rep.lat[k];
+      const lo = atEnd ? here[1] : rep.lon[k];
       if (la == null || lo == null) continue;
-      const [x, y] = this.xy(la, lo);
-      if (started) g.lineTo(x, y);
-      else {
-        g.moveTo(x, y);
-        started = true;
+      const p = this.xy(la, lo);
+      const c = colourOf(Math.min(k, i));
+      if (prev) {
+        if (c !== colour) {
+          if (colour) g.stroke();
+          colour = c;
+          g.strokeStyle = c;
+          g.shadowColor = c === "#ff8a2a" ? "rgba(255,140,40,0.9)" : "rgba(150,180,220,0.5)";
+          g.setLineDash(c === "#8a94a3" ? [3, 3] : []);
+          g.beginPath();
+          g.moveTo(prev[0], prev[1]);
+        }
+        g.lineTo(p[0], p[1]);
       }
+      prev = p;
     }
-    if (started && Number.isFinite(here[0])) g.lineTo(...this.xy(here[0], here[1]));
-    g.stroke();
+    if (colour) g.stroke();
     g.restore();
 
     // Event markers up to now.
