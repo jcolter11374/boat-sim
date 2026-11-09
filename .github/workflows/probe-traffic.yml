@@ -19,30 +19,32 @@ jobs:
       - run: pip install rasterio numpy pyproj
       - name: EMODnet samples (2023 annual average, all ship types)
         run: |
+          pip install requests
           python - <<'PY'
-          import subprocess, numpy as np, rasterio
+          import numpy as np, rasterio, requests
           from pyproj import Transformer
           tr = Transformer.from_crs(4326, 3857, always_xy=True)
-          W = ("https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage"
-               "&FORMAT=image/tiff&COVERAGEID=emodnet__vesseldensity_allavg&SUBSET=time(\"2023-01-01T00:00:00.000Z\")")
           boxes = {"lisbon": (-11, 37, -8, 40), "azores": (-32, 36.5, -24, 40), "midocean_45W": (-50, 38, -40, 44),
-                   "ireland_SW": (-14, 49, -9, 52), "channel_W": (-7, 48, -4, 50), "baymouth": (-76, 36.5, -74.5, 37.5),
+                   "ireland_SW": (-14, 49, -9, 52), "baymouth": (-76, 36.5, -74.5, 37.5),
                    "between_25W_15W": (-25, 40, -15, 46)}
           for name, (w, s, e, n) in boxes.items():
               x0, y0 = tr.transform(w, s); x1, y1 = tr.transform(e, n)
-              url = W + f"&SUBSET=X({x0},{x1})&SUBSET=Y({y0},{y1})"
-              subprocess.run(["curl", "-sSL", "--max-time", "300", url, "-o", "s.tif"], check=False)
+              params = [("SERVICE", "WCS"), ("VERSION", "2.0.1"), ("REQUEST", "GetCoverage"),
+                        ("COVERAGEID", "emodnet__vesseldensity_allavg"), ("FORMAT", "image/tiff"),
+                        ("SUBSET", f"X({x0},{x1})"), ("SUBSET", f"Y({y0},{y1})"),
+                        ("SUBSET", 'time("2023-01-01T00:00:00.000Z")')]
+              r = requests.get("https://ows.emodnet-humanactivities.eu/wcs", params=params, timeout=300)
+              open("s.tif", "wb").write(r.content)
               try:
-                  with rasterio.open("s.tif") as r:
-                      a = r.read(1).astype(float)
-                      nd = r.nodata
-                      if nd is not None: a[a == nd] = np.nan
-                      ships = a / 730.5  # hours per km2 per month -> ships per km2 at any moment
-                      print(name, r.res, r.dtypes, "nodata", nd, "cells", a.size, "nan%", round(100*np.isnan(a).mean(), 1),
-                            "h/km2/mo pcts50,90,99,max", np.round(np.nanpercentile(a, [50, 90, 99, 100]), 3) if np.isfinite(a).any() else "all nan",
-                            "mean ships/km2", np.nanmean(ships) if np.isfinite(a).any() else None)
+                  with rasterio.open("s.tif") as t:
+                      a = t.read(1).astype(float)
+                      if t.nodata is not None: a[a == t.nodata] = np.nan
+                      ok = np.isfinite(a)
+                      print(name, t.res, t.dtypes, "nodata", t.nodata, "cells", a.size, "nan%", round(100 * (~ok).mean(), 1),
+                            "h/km2/mo p50,90,99,max", np.round(np.nanpercentile(a, [50, 90, 99, 100]), 3) if ok.any() else "all nan",
+                            "mean ships/km2", float(np.nanmean(a)) / 730.5 if ok.any() else None)
               except Exception as ex:
-                  print(name, "FAILED", ex, open("s.tif", "rb").read(400))
+                  print(name, "FAILED", r.status_code, r.text[:600])
           PY
       - name: World Bank global density, metadata and plausibility
         run: |
@@ -53,8 +55,9 @@ jobs:
           import rasterio, numpy as np
           from rasterio.windows import from_bounds
           with rasterio.open("g/shipdensity_global.tif") as r:
-              for name, b in {"lisbon": (-11, 37, -8, 40), "midocean_45W": (-50, 38, -40, 44)}.items():
-                  a = r.read(1, window=from_bounds(*b, r.transform)).astype(float)
+              for name, b in {"midocean_45W": (-45, 41, -44.9, 41.1)}.items():
+                  a = r.read(1, window=from_bounds(*b, r.transform)).astype(np.int64)
+                  print(name, "raw 20x20 patch:"); print(a[:20, :20]); continue
                   a[a == r.nodata] = np.nan
                   v = a[np.isfinite(a)]
                   edges = [0, 1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8]
