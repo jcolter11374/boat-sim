@@ -57,6 +57,11 @@ jobs:
       - run: pip install -e '.[data]'
       - name: Fetch currents for the year and the months after it
         run: python -m boatsim.oceandata fetch-glorys "$YEAR-01" "$((YEAR + 1))-06"
+      - name: Download hurricane tracks (IBTrACS, about 58 MB) for the storm-encounter columns
+        run: |
+          mkdir -p data/storms
+          curl -sSL --retry 3 --max-time 600 -o data/storms/ibtracs.NA.list.v04r01.csv \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv"
       - name: Fetch weather (ERA5) for the same span
         run: python -m boatsim.oceandata fetch-era5 "$YEAR-01-01" "$((YEAR + 1))-05-20" --workers 4
       - name: Run every launch of the year

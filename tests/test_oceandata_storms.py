@@ -69,3 +69,22 @@ def test_compare_and_summarise():
     rows = S.summarise(res, log=lambda *_: None)
     assert rows[0]["class"].startswith("major hurricane")
     assert rows[0]["points"] == 1
+
+
+def test_encounter_finds_the_closest_hurricane(tmp_path):
+    from datetime import datetime, timedelta
+
+    p = tmp_path / "ib.csv"
+    p.write_text(CSV)
+    tracks = S.HurricaneTracks(p, 2012, 2021)
+    t0 = datetime(2015, 9, 1, 10)
+    # Hourly rows 1 degree of latitude north of ALPHA (cat 3 at 12Z, 35N 60W).
+    rows = [{"t": t0 + timedelta(hours=h), "lat": 36.0, "lon": -60.0} for h in range(5)]
+    e = S.encounter(rows, tracks)
+    assert e["hurricane_min_km"] == pytest.approx(111.0, abs=0.5)
+    assert e["hurricane_name"] == "ALPHA"
+    assert e["hurricane_hours_near"] == pytest.approx(4.0)  # 09Z-15Z slot covers all rows
+    far = [{"t": t0, "lat": 50.0, "lon": -20.0}]
+    assert S.encounter(far, tracks)["hurricane_min_km"] > 3000
+    none = [{"t": datetime(2016, 1, 1), "lat": 36.0, "lon": -60.0}]
+    assert S.encounter(none, tracks)["hurricane_min_km"] == float("inf")
