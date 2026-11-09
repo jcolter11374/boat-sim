@@ -170,7 +170,7 @@ def run(year: int, stations=STATIONS, workers: int = 4, log=print):
     pos = parse_station_table(fetch_text(STATION_TABLE_URL))
     log(f"Fetching ERA5 for {year} ...")
     E.fetch_days(E.days_between(date(year, 1, 1), date(year, 12, 31)), workers=workers)
-    src = E.ERA5Source(fetch=False, max_tiles=3)
+    src = E.ERA5Source(max_tiles=3)  # fetches the odd day outside the year (23:50 Dec 31 -> Jan 1)
     pairs, rows, bands = [], [], []
     for sid, name in stations.items():
         if sid not in pos:
