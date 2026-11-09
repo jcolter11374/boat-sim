@@ -506,6 +506,89 @@ def lowest_charge_figure(summary: pd.DataFrame):
     return fig
 
 
+# ------------------------------------------------- sensitivity (#21, Ravi's study)
+
+
+def sensitivity_rows(tables: Iterable[pd.DataFrame]) -> pd.DataFrame:
+    """Join mc.sensitivity.compare tables (one per run) into one row per change.
+
+    Each change is measured against the baseline of its own run, because runs on
+    different code have different baselines (e.g. thruster wear-out).
+    """
+    rows = []
+    for t in tables:
+        base = t[t["variant"] == "baseline"]
+        if base.empty:
+            continue
+        b = base.iloc[0]
+        for _, r in t[t["variant"] != "baseline"].iterrows():
+            rows.append(
+                {
+                    "label": r["label"],
+                    "delta_pts": 100 * (r["odds"] - b["odds"]),
+                    "odds": r["odds"],
+                    "base_odds": b["odds"],
+                    "gained": int(r["gained"]),
+                    "lost": int(r["lost"]),
+                    "sign_p": float(r["sign_p"]),
+                    "days": r.get("median_days"),
+                    "base_days": b.get("median_days"),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+SIGNIFICANT_P = 0.05  # sign-test chance below which a difference counts as real
+
+
+def sensitivity_figure(rows: pd.DataFrame):
+    """One bar per change: points of arrival odds gained or lost against the
+    design as it stands. Strong blue = unlikely to be luck; pale = within noise."""
+    import plotly.graph_objects as go
+
+    rows = rows.sort_values("delta_pts", ascending=False)
+    real = rows["sign_p"] < SIGNIFICANT_P
+    text = []
+    for r, ok in zip(rows.itertuples(), real, strict=True):
+        t = "no change" if round(r.delta_pts) == 0 else f"{r.delta_pts:+.0f} pts"
+        t += " · real effect" if ok else " · within noise"
+        if pd.notna(r.days) and pd.notna(r.base_days) and abs(r.days - r.base_days) >= 5:
+            dd = r.days - r.base_days
+            t += f" · {abs(dd):.0f} days {'slower' if dd > 0 else 'sooner'}"
+        text.append(t)
+    hover = [
+        f"{r.label}<br>{100 * r.odds:.0f}% arrived vs {100 * r.base_odds:.0f}% for the design"
+        f"<br>{r.gained} voyages gained, {r.lost} lost"
+        + (f"<br>median {r.days:.0f} days at sea vs {r.base_days:.0f}" if pd.notna(r.days) else "")
+        for r in rows.itertuples()
+    ]
+    fig = go.Figure(
+        go.Bar(
+            y=list(rows["label"]),
+            x=list(rows["delta_pts"]),
+            orientation="h",
+            marker={"color": [BAR if ok else BAR_OUTSIDE for ok in real], "cornerradius": 4},
+            text=text,
+            textposition="outside",
+            textfont={"color": INK_2},
+            cliponaxis=False,
+            hovertext=hover,
+            hoverinfo="text",
+        )
+    )
+    lo = min(-20.0, float(rows["delta_pts"].min()) - 22)  # room for labels left of a bar
+    _layout(
+        fig,
+        "Change in chance of reaching Europe vs the design as it stands (April to June)",
+        height=90 + 38 * len(rows),
+        bargap=0.35,
+    )
+    fig.update_xaxes(range=[lo, 30], ticksuffix=" pts", zeroline=True, zerolinecolor=AXIS)
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(margin={"l": 440, "r": 30, "t": 50, "b": 40})
+    return fig
+
+
 # ------------------------------------------------------------------- page
 
 _CSS = f"""
@@ -627,6 +710,8 @@ def report_html(
     banner: str = "",
     topojson: str | Path | None = None,
     window: tuple[int, int] | None = TARGET_WINDOW,
+    sensitivity: Iterable[pd.DataFrame] | None = None,
+    sensitivity_note: str = "",
 ) -> str:
     """Build the report page as a string. See module docstring for inputs.
 
@@ -636,6 +721,8 @@ def report_html(
     on hosts that block outside downloads (e.g. claude.ai artifacts).
     window: (first, last) launch month to headline, inclusive; None for all months.
     The page leads with that window's odds and still charts every month.
+    sensitivity: mc.sensitivity.compare tables (one per run) for a "what
+    changes the odds" chart; sensitivity_note is shown above it.
     """
     card = batch_card(summary)
     tracks = _pick_tracks(list(tracks or []))
@@ -655,6 +742,21 @@ def report_html(
                     "model alone. Darker lines assume more unknown failures. Past small robot "
                     "boat attempts suggest the darker lines are closer to the truth."
                 ),
+            )
+        )
+    sens = sensitivity_rows(sensitivity) if sensitivity is not None else pd.DataFrame()
+    if len(sens):
+        figs.append(
+            (
+                "What changes the odds",
+                sensitivity_figure(sens),
+                (
+                    "Each bar is one change to the boat or its settings, tried on the same "
+                    "April to June launches with the same luck, so only the change differs. "
+                    "Strong blue bars are differences too big to be luck; pale bars are "
+                    "within noise. Hover a bar for days at sea. "
+                )
+                + sensitivity_note,
             )
         )
     if card.months:
@@ -826,14 +928,34 @@ def write_report(
     banner: str = "",
     topojson: str | Path | None = None,
     window: tuple[int, int] | None = TARGET_WINDOW,
+    sensitivity: Iterable[pd.DataFrame] | None = None,
+    sensitivity_note: str = "",
 ) -> Path:
     """Write the self-contained HTML report and return its path."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        report_html(summary, tracks, title, subtitle, banner, topojson, window), encoding="utf-8"
+        report_html(
+            summary,
+            tracks,
+            title,
+            subtitle,
+            banner,
+            topojson,
+            window,
+            sensitivity,
+            sensitivity_note,
+        ),
+        encoding="utf-8",
     )
     return path
+
+
+def _parse_window(text: str) -> tuple[int, int] | None:
+    if text == "all":
+        return None
+    a, b = (int(x) for x in text.split("-"))
+    return a, b
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -851,6 +973,13 @@ def main(argv: list[str] | None = None) -> None:
         default=f"{TARGET_WINDOW[0]}-{TARGET_WINDOW[1]}",
         help="launch months to headline, e.g. 4-6; 'all' for none",
     )
+    ap.add_argument(
+        "--sensitivity",
+        action="append",
+        default=[],
+        help="sensitivity_compare.csv from mc.sensitivity (repeat for several runs)",
+    )
+    ap.add_argument("--sensitivity-note", default="", help="text shown above that chart")
     args = ap.parse_args(argv)
     df = pd.concat([pd.read_csv(f, parse_dates=["start"]) for f in args.csv], ignore_index=True)
     out = write_report(
@@ -860,7 +989,9 @@ def main(argv: list[str] | None = None) -> None:
         subtitle=args.subtitle,
         banner=args.banner,
         topojson=args.topojson,
-        window=None if args.window == "all" else tuple(int(x) for x in args.window.split("-")),  # type: ignore[arg-type]
+        window=_parse_window(args.window),
+        sensitivity=[pd.read_csv(f) for f in args.sensitivity] or None,
+        sensitivity_note=args.sensitivity_note,
     )
     print(f"wrote {out} ({len(df)} voyages)")
 

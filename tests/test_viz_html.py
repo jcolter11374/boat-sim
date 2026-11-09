@@ -5,7 +5,15 @@ import pytest
 
 from boatsim.runner.simulate import VoyageLog
 from boatsim.types import Outcome
-from boatsim.viz.html import MAX_TRACKS, main, report_html, track_rows, write_report
+from boatsim.viz.html import (
+    MAX_TRACKS,
+    main,
+    report_html,
+    sensitivity_figure,
+    sensitivity_rows,
+    track_rows,
+    write_report,
+)
 
 pytest.importorskip("plotly")
 
@@ -127,3 +135,36 @@ def test_window_can_be_switched_off():
     assert "target window" not in page and "launch window" not in page
     assert "All launch months together</div>" in page
     assert "The model alone says 25%" in page
+
+
+def test_sensitivity_chart_compares_each_change_with_its_own_baseline():
+    main_run = pd.DataFrame(
+        {
+            "variant": ["baseline", "cruise_10w", "cruise_25w"],
+            "label": ["The design", "Slower", "Faster"],
+            "odds": [0.97, 0.88, 0.97],
+            "gained": [0, 3, 3],
+            "lost": [0, 12, 3],
+            "sign_p": [1.0, 0.04, 1.0],
+            "median_days": [79, 98, 68],
+        }
+    )
+    thruster_run = pd.DataFrame(
+        {
+            "variant": ["baseline", "one_thruster"],
+            "label": ["The design", "One motor"],
+            "odds": [0.93, 0.75],
+            "gained": [0, 4],
+            "lost": [0, 22],
+            "sign_p": [1.0, 0.001],
+            "median_days": [78, 82],
+        }
+    )
+    page = report_html(
+        _batch_with_sweep(), sensitivity=[main_run, thruster_run], sensitivity_note="No ships."
+    )
+    assert "What changes the odds" in page and "No ships." in page
+    text = list(sensitivity_figure(sensitivity_rows([main_run, thruster_run])).data[0].text)
+    assert "-18 pts · real effect" in text  # 75% against its own 93% baseline
+    assert "-9 pts · real effect · 19 days slower" in text
+    assert "no change · within noise · 11 days sooner" in text
