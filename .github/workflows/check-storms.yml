@@ -1,0 +1,44 @@
+# How strong does ERA5 make hurricanes on our route? Compares ERA5's peak
+# winds near each storm centre with NOAA's best tracks (IBTrACS), issue #13.
+# Run it by hand: Actions tab -> "Check storms against IBTrACS" -> Run workflow.
+name: Check storms against IBTrACS
+on:
+  workflow_dispatch:
+    inputs:
+      first_year:
+        description: "First storm season"
+        default: "2012"
+      last_year:
+        description: "Last storm season"
+        default: "2021"
+  pull_request:
+    paths:
+      - ".github/workflows/check-storms.yml"
+      - "src/boatsim/oceandata/storms.py"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      FIRST: ${{ inputs.first_year || '2012' }}
+      LAST: ${{ inputs.last_year || '2021' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Download IBTrACS North Atlantic (about 58 MB)
+        run: |
+          curl -sSL --retry 3 --max-time 600 \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" -o ibtracs.csv
+          ls -l ibtracs.csv
+      - name: Compare (fetches the ERA5 days with a storm in the route box)
+        run: python -m boatsim.oceandata check-storms ibtracs.csv "$FIRST" "$LAST" --workers 4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: era5-vs-ibtracs
+          path: runs/storms/
+          retention-days: 90

@@ -3,6 +3,7 @@
 python -m boatsim.oceandata fetch-era5 2020-10-01 2020-12-31 [--workers 4]
 python -m boatsim.oceandata fetch-glorys 2020-10 2020-12      (needs Copernicus login)
 python -m boatsim.oceandata sample 2020-10-15T12:00 37.0 -70.0 [--no-currents]
+python -m boatsim.oceandata check-storms ibtracs.NA.list.v04r01.csv 2012 2021  (Actions)
 python -m boatsim.oceandata build-ships shipdensity_global.tif   (GitHub Actions; see traffic.py)
 """
 
@@ -70,6 +71,12 @@ def main(argv: list[str] | None = None) -> None:
     b = sub.add_parser("build-ships", help="build the ship-density grid (needs EMODnet access)")
     b.add_argument("world_bank_tif", help="shipdensity_global.tif from the World Bank zip")
     b.add_argument("--out", default=None)
+    h = sub.add_parser("check-storms", help="compare ERA5 storm winds with IBTrACS")
+    h.add_argument("ibtracs_csv")
+    h.add_argument("first_year", type=int)
+    h.add_argument("last_year", type=int)
+    h.add_argument("--workers", type=int, default=4)
+    h.add_argument("--out", default="runs/storms/era5_vs_ibtracs.csv")
     a = p.parse_args(argv)
 
     if a.cmd == "fetch-era5":
@@ -87,6 +94,15 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{path} {path.stat().st_size / 1e6:.1f} MB")
     elif a.cmd == "check-glorys":
         check_glorys(a.month)
+    elif a.cmd == "check-storms":
+        from pathlib import Path
+
+        from boatsim.oceandata import storms
+
+        res, _ = storms.run(a.ibtracs_csv, a.first_year, a.last_year, a.workers)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        res.to_csv(a.out, index=False)
+        print(f"wrote {a.out}")
     elif a.cmd == "build-ships":
         from pathlib import Path
 
