@@ -112,6 +112,7 @@ hazards:
   entangle_extra_drag: 3.0           # GUESS (Randolph): drag x4 while caught
   entangle_clear_per_day: 0.5        # GUESS: reverse-thrust cycles (Randolph 0.15, no reverse)
   p_thruster_wrap: 0.1               # GUESS
+  thruster_per_day: 0.0007           # GUESS: design doc, one thruster = 4 % single point of failure
   capture_per_day: 0.002             # GUESS (Randolph), within 50 km of land only
   unknown_p_by_60_days: 0.03         # design doc FMEA row 2: early-life defect or unknown
   unknown_shape: 0.5                 # GUESS: front-loaded (infant mortality)

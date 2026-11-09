@@ -250,3 +250,60 @@ def test_main_box_failure_switches_off_ais():
     rng = np.random.default_rng(0)
     assert not Z.sample_hazards(p, env, 1.0, {}, T0, rng).lost
     assert Z.sample_hazards(p, env, 1.0, {"electronics_main": True}, T0, rng).lost
+
+
+# --- Thruster count (#21 one-thruster variant) ---------------------------------
+
+
+def _one_thruster_design(**hazards):
+    prop = {**DESIGN.propulsion, "thruster_count": 1, "max_drive_w": 50}
+    return replace(DESIGN, propulsion=prop, hazards={**DESIGN.hazards, **hazards})
+
+
+def test_thruster_names_follow_the_count():
+    from boatsim.vessel.kayak import thruster_parts
+
+    assert thruster_parts(1) == ("thruster_centre",)
+    assert thruster_parts(2) == ("thruster_port", "thruster_starboard")
+    assert thruster_parts(3) == ("thruster_1", "thruster_2", "thruster_3")
+    v = KayakVessel(_one_thruster_design())
+    assert v.thruster_parts == ("thruster_centre",)
+    assert v.thrusters.max_power_each_w == 50.0
+    st = v.initial_state(T0, *OPEN_OCEAN)
+    assert v.working_thrusters(st) == 1
+    assert v.working_thrusters(with_damage(st, "thruster_centre")) == 0
+    assert v.working_thrusters(with_damage(st, "thruster_port")) == 1  # not fitted
+
+
+def test_one_thruster_boat_only_rolls_dice_for_its_one_thruster():
+    p = replace(P, thruster_per_day=1e6, unknown_p_by_60_days=0.0)
+    (out,) = _draw_thrusters(p, ("thruster_centre",))
+    assert [x for x in out.failed_parts if x.startswith("thruster")] == ["thruster_centre"]
+    (out,) = _draw_thrusters(p, ("thruster_port", "thruster_starboard"))
+    assert sorted(x for x in out.failed_parts if x.startswith("thruster")) == [
+        "thruster_port",
+        "thruster_starboard",
+    ]
+    # Line wraps also pick only from fitted thrusters
+    p = replace(P, entangle_per_day=1e6, p_thruster_wrap=1.0, unknown_p_by_60_days=0.0)
+    (out,) = _draw_thrusters(p, ("thruster_centre",))
+    assert "thruster_centre" in out.failed_parts and "thruster_port" not in out.failed_parts
+
+
+def _draw_thrusters(p, thrusters):
+    rng = np.random.default_rng(0)
+    return [Z.sample_failures(p, EnvState(), 1.0, {}, T0, *OPEN_OCEAN, 30.0, rng, thrusters)]
+
+
+def test_thruster_wear_matches_design_doc_single_point_of_failure():
+    # One thruster over a 60-day crossing: ~4 % (design doc option A)
+    assert 1.0 - math.exp(-P.thruster_per_day * 60) == pytest.approx(0.04, rel=0.1)
+
+
+def test_one_thruster_boat_cannot_steer_without_its_rudder():
+    v = KayakVessel(_one_thruster_design(enabled=False))
+    st = with_damage(v.initial_state(T0, *OPEN_OCEAN), "rudder")
+    env, dt, rng = EnvState(ghi=500.0), timedelta(minutes=10), np.random.default_rng(0)
+    s, _ = v.step(st, Command(90.0, 0.6), env, dt, rng)
+    assert s.speed_through_water < 0.05  # turns circles, drifts
+    assert v.sense(s, rng).thrusters_ok == 1
