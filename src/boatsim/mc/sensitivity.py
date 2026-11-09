@@ -189,6 +189,28 @@ VARIANTS: dict[str, Variant] = {
         "Kit wears out fast at sea (top of the record's range)",
         (("hazards", "wearout_k", 2.24), ("hazards", "wearout_t_ref_days", 48.6)),
     ),
+    # Record-check bounds (#118, Theo): how much one shared electronics fault
+    # and worse knockdowns would cost, on the historical set.
+    "historical_common_0_1": Variant(
+        "hazards",
+        "Record failure rates, electronics boxes rarely fail together (10%)",
+        (("hazards", "rate_set", "historical"), ("hazards", "electronics_common_cause", 0.1)),
+    ),
+    "historical_common_1_0": Variant(
+        "hazards",
+        "Record failure rates, one electronics fault kills both boxes (like most record boats)",
+        (("hazards", "rate_set", "historical"), ("hazards", "electronics_common_cause", 1.0)),
+    ),
+    "historical_inverted_x10": Variant(
+        "hazards",
+        "Record failure rates, a capsize leaves the boat stuck upside down 10x as often",
+        (("hazards", "rate_set", "historical"), ("hazards", "p_inverted_stuck", 4e-4)),
+    ),
+    "historical_inverted_x30": Variant(
+        "hazards",
+        "Record failure rates, a capsize leaves the boat stuck upside down 30x as often",
+        (("hazards", "rate_set", "historical"), ("hazards", "p_inverted_stuck", 1.2e-3)),
+    ),
     "historical_wearout_high": Variant(
         "hazards",
         "Record failure rates plus fast wear-out",

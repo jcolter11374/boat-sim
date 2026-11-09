@@ -195,3 +195,17 @@ def test_wearout_variants_set_the_knob():
     hz = S.SensitivityVoyage(variant="historical_wearout_high", weather="constant").components(1)
     h = hz.vessel.inner.hazards
     assert h.rate_set == "historical" and h.wearout_k == 2.24 and h.wearout_t_ref_days == 48.6
+
+
+def test_record_bound_variants():
+    def hz(name):
+        return (
+            S.SensitivityVoyage(variant=name, weather="constant").components(1).vessel.inner.hazards
+        )
+
+    assert hz("historical_common_1_0").electronics_common_cause == 1.0
+    assert hz("historical_common_0_1").electronics_common_cause == 0.1
+    x30 = hz("historical_inverted_x30")
+    assert x30.rate_set == "historical" and x30.p_inverted_stuck == pytest.approx(
+        30 * hz("baseline").p_inverted_stuck
+    )
