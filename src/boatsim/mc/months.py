@@ -193,9 +193,14 @@ class MonthlyVoyage(StandardVoyage):
 
     def mission(self):
         """The route the boat is launched with (variants may change it)."""
+        from boatsim.config import load_design
         from boatsim.runner.simulate import default_mission
 
-        return default_mission()
+        # Starts at the design's own drop (another boat's, e.g. Randolph Rev B);
+        # for our kayak that is DROP_POINT, as before. Variants that move the drop
+        # keep this route, so their results are unchanged.
+        v = load_design(self.design_path).voyage
+        return default_mission((v["drop_lat"], v["drop_lon"]))
 
     def drop_point(self) -> tuple[float, float]:
         """Where the voyage starts (variants may move it)."""

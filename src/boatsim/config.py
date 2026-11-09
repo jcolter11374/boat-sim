@@ -22,6 +22,7 @@ class Design:
     comms: dict = field(default_factory=dict)
     voyage: dict = field(default_factory=dict)
     hazards: dict = field(default_factory=dict)
+    sail: dict = field(default_factory=dict)  # sailing designs only (vessel/sail.py)
 
 
 def load_design(path: str | Path) -> Design:
