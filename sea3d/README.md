@@ -17,6 +17,7 @@ npm ci
 npm run dev        # live page at http://localhost:5173
 npm run build      # static files in dist/
 npm test           # after build: headless smoke test, screenshot in test-output/
+npm run test:unit  # wave-motion gate: roll periods, righting curves, self-righting
 ```
 
 `npm test` needs the `playwright` package and Chromium
@@ -27,5 +28,10 @@ npm test           # after build: headless smoke test, screenshot in test-output
 - `src/waves.ts`: the sea surface (sum of wave trains, sized so the
   significant wave height matches the sea state). Phase 1 floats the boats on
   this same function.
+- `src/motion.ts`: heave, pitch and roll of each boat on that sea (display
+  physics only; it never feeds the odds). Each boat's roll uses its full
+  righting-arm curve, so knockdowns and self-righting look the way the
+  stability numbers say they should.
 - `src/main.ts`: scene, camera, controls, sea mesh.
 - `tests/smoke.mjs`: the CI check.
+- `tests/motion.test.ts`: the wave-motion gate.

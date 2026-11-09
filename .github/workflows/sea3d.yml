@@ -39,6 +39,8 @@ jobs:
       - run: npm ci
       - name: Type-check and build
         run: npm run build
+      - name: Wave-motion gate (roll period, righting curves, self-righting)
+        run: npm run test:unit
       - name: Install headless browser for the smoke test
         run: |
           npm install --no-save playwright@1
