@@ -1,0 +1,92 @@
+# Sensitivity study (issue #21): every variant in boatsim.mc.sensitivity sails
+# the same April to June launches through real weather (ERA5) and currents
+# (GLORYS12), one GitHub Actions job per year, then one combined report.
+# Run it by hand: Actions tab -> "Sensitivity study" -> Run workflow.
+# Uses the Copernicus secrets for currents; GitHub masks them in logs.
+name: Sensitivity study
+on:
+  workflow_dispatch:
+    inputs:
+      first_year:
+        description: "First launch year"
+        default: "2012"
+      last_year:
+        description: "Last launch year"
+        default: "2021"
+      every_days:
+        description: "Launch every N days from April 1 to June 30"
+        default: "10"
+      variants:
+        description: "Variants to run (space separated; empty = all). Baseline is always added."
+        default: ""
+  # On a PR that changes the study: a quick 2020 check of two variants.
+  pull_request:
+    paths:
+      - src/boatsim/mc/sensitivity.py
+      - .github/workflows/sensitivity.yml
+permissions:
+  contents: read
+jobs:
+  years:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.y.outputs.list }}
+    steps:
+      - id: y
+        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2020' }}, ${{ inputs.last_year || '2020' }}+1))))")" >> "$GITHUB_OUTPUT"
+  run:
+    needs: years
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJson(needs.years.outputs.list) }}
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      YEAR: ${{ matrix.year }}
+      EVERY_DAYS: ${{ inputs.every_days || '30' }}
+      VARIANTS: ${{ github.event_name == 'pull_request' && 'no_corrections' || inputs.variants }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      # Launches run April 1 to June 30; 150 days at sea reaches late November.
+      - name: Fetch currents for April to December
+        run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-12"
+      - name: Fetch weather (ERA5) for the same span
+        run: python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$YEAR-12-05" --workers 4
+      - name: Run every variant over the year's April to June launches
+        run: python -m boatsim.mc.sensitivity run "$YEAR" --every-days "$EVERY_DAYS" --workers 4 --unknown-p 0 ${VARIANTS:+--variants $VARIANTS} --out runs/sensitivity
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensitivity-${{ matrix.year }}
+          path: runs/sensitivity/sensitivity_${{ matrix.year }}.csv
+          retention-days: 90
+  report:
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sensitivity-*
+          path: runs/in
+          merge-multiple: true
+      - name: Combine the years
+        run: python -m boatsim.mc.sensitivity report runs/in/sensitivity_*.csv --out runs/sensitivity
+      - name: Show the report on the run page
+        run: cat runs/sensitivity/sensitivity_report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensitivity
+          path: runs/sensitivity/
+          retention-days: 90
