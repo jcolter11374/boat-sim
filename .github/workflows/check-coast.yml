@@ -20,15 +20,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e . shapely pyshp
-      - name: Download Natural Earth 1:10m land and GSHHG 2.3.7
+      - name: Download Natural Earth 1:10m land and GSHHG
         run: |
           curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
             "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
+          base=https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg
+          latest=$(curl -fsSL --max-time 60 "$base/latest/" | grep -o 'gshhg-shp-[0-9.]*zip' | head -1 || true)
+          echo "latest listing: ${latest:-none}"
           for u in \
-            https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip \
-            https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhs/latest/gshhg-shp-2.3.7.zip \
-            https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip \
-            http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip; do
+            ${latest:+$base/latest/$latest} \
+            $base/oldversions/version2.3.7/gshhg-shp-2.3.7.zip \
+            $base/oldversions/version2.3.6/gshhg-shp-2.3.6.zip; do
             echo "trying $u"
             curl -fsSL --retry 3 --max-time 600 -o gshhg.zip "$u" && unzip -tq gshhg.zip && break
             rm -f gshhg.zip
