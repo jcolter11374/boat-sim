@@ -188,8 +188,15 @@ VARIANTS: dict[str, Variant] = {
     "cruise_10w": Variant(
         "cruise", "Slower cruise (10 W motor power)", (("propulsion", "cruise_drive_w", 10),)
     ),
-    "cruise_25w": Variant(
-        "cruise", "Faster cruise (25 W motor power)", (("propulsion", "cruise_drive_w", 25),)
+    # The default cruise is 25 W since #113 (it was 15 W). These rows bracket it.
+    "cruise_15w": Variant(
+        "cruise", "Old cruise (15 W motor power)", (("propulsion", "cruise_drive_w", 15),)
+    ),
+    "cruise_20w": Variant(
+        "cruise", "Slower cruise (20 W motor power)", (("propulsion", "cruise_drive_w", 20),)
+    ),
+    "cruise_30w": Variant(
+        "cruise", "Faster cruise (30 W motor power)", (("propulsion", "cruise_drive_w", 30),)
     ),
     "one_thruster": Variant(
         "thrusters",

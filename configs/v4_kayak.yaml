@@ -50,7 +50,8 @@ propulsion:
   thrusters: 2 x Blue Robotics T200
   cruise_speed_kt: 1.7       # design doc estimate
   thruster_count: 2
-  cruise_drive_w: 15         # operating setting: ~1.7 kt per vessel/hull.py, the design doc cruise speed
+  cruise_drive_w: 25         # operating setting (was 15 W, ~1.7 kt). 25 W finished 78 vs 69 of 100,
+                             # 9 gained / 0 lost, ~15 days faster (paired study, docs/qa, #113)
   max_drive_w: 100           # design doc: 100 W burst for the pair (thrust_fraction 1.0)
   # thruster_efficiency: 0.351 is fitted to the T200 12 V full-throttle datasheet point;
   # using it at low power is a GUESS (vessel/propulsion.py).

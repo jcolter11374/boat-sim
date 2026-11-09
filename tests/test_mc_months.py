@@ -29,13 +29,13 @@ def test_monthly_voyage_meters_energy_and_summarises():
     log = job(datetime(2015, 6, 1, 12), seed=1)
     assert log.meter["hours"] == pytest.approx(72.0)
     # Constant weather: cruise power the whole way, flat 250 W/m^2 sun.
-    assert log.meter["drive_wh"] / log.meter["hours"] == pytest.approx(15.0, rel=0.01)
+    assert log.meter["drive_wh"] / log.meter["hours"] == pytest.approx(25.0, rel=0.01)
     row = M.summarise(log)
     assert row["month"] == 6 and row["year"] == 2015
     assert row["outcome"] == "timeout" and row["ending"] == "still at sea"
     assert "airtime_usd" in row and "km_to_go" in row
     assert row["sun_kwh_m2_day"] == pytest.approx(6.0, rel=0.01)
-    assert row["drive_w_avg"] == pytest.approx(15.0, rel=0.01)
+    assert row["drive_w_avg"] == pytest.approx(25.0, rel=0.01)
     assert row["km_from_drop"] > 100
 
 
