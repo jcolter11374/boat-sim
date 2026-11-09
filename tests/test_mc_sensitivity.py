@@ -132,3 +132,16 @@ def test_cli_run_and_report(tmp_path):
     assert (df["unknown_p_run"] == 0.0).all()
     S.main(["report", str(tmp_path / "sensitivity_2020.csv"), "--out", str(tmp_path)])
     assert "Base sends nothing" in (tmp_path / "sensitivity_report.md").read_text()
+
+
+def test_rows_record_whether_ship_traffic_was_on():
+    df = S.run_year(
+        2020,
+        ("baseline",),
+        every_days=90,
+        workers=1,
+        weather="constant",
+        max_days=1,
+        unknown_p_by_60_days=0.0,
+    )
+    assert not df["ships"].any()  # constant weather has no ship map
