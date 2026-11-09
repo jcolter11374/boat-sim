@@ -1,0 +1,82 @@
+# Simulates sample voyages and saves them as replay files for the 3D sea page
+# (sea3d Phase 2). Each launch runs through that year's real weather (ERA5) and
+# currents (GLORYS12), exactly as in the odds batch (same seeds), and is written
+# by boatsim.runner.replay to sea3d/public/voyages/.
+#
+# Run it by hand: Actions tab -> "Voyage replays" -> Run workflow, with "commit"
+# ticked to add the files to the chosen branch (main redeploys the page).
+# On a pull request that changes the exporter it replays May of 2020 and
+# commits the result to the PR branch, so the page always has sample voyages.
+# Replay files are the one kind of run output kept in git: a few small JSON
+# files the page needs at build time (Maya, Lead call; CONTRIBUTING rule 6).
+name: Voyage replays
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Launch year"
+        default: "2020"
+      months:
+        description: "Launch months (space-separated)"
+        default: "4 5 6"
+      commit:
+        description: "Commit the replays to this branch"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/voyage-replays.yml"
+      - "src/boatsim/runner/replay.py"
+permissions:
+  contents: read
+concurrency:
+  group: voyage-replays-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write  # only for the commit step
+    env:
+      BOATSIM_REQUIRE_LAND: "1"
+      BOATSIM_REQUIRE_SHIPS: "1"
+      BOATSIM_NO_FETCH: "1"  # data is pre-fetched below
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      YEAR: ${{ inputs.year || '2020' }}
+      MONTHS: ${{ inputs.months || '5' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Fetch currents and weather from the first launch month to 150 days on
+        run: |
+          first=$(echo $MONTHS | tr ' ' '\n' | sort -n | head -1)
+          last=$(echo $MONTHS | tr ' ' '\n' | sort -n | tail -1)
+          end=$(date -u -d "$YEAR-$(printf %02d $last)-15 + 160 days" +%Y-%m-%d)
+          python -m boatsim.oceandata fetch-glorys "$YEAR-$(printf %02d $first)" "${end:0:7}"
+          python -m boatsim.oceandata fetch-era5 "$YEAR-$(printf %02d $first)-01" "$end" --workers 4
+      - name: Simulate the launches and write the replays
+        run: python -m boatsim.runner.replay run "$YEAR" --months $MONTHS --workers 4 --out sea3d/public/voyages
+      - run: ls -l sea3d/public/voyages && cat sea3d/public/voyages/index.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voyage-replays-${{ env.YEAR }}
+          path: sea3d/public/voyages/
+          retention-days: 90
+      - name: Commit the replays
+        if: >-
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'workflow_dispatch' && inputs.commit)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sea3d/public/voyages
+          git commit -m "Voyage replays $YEAR months $MONTHS (run ${{ github.run_id }})" || { echo "replays unchanged"; exit 0; }
+          git push

@@ -197,6 +197,10 @@ def simulate(
                     "wind_u": env.wind_u,
                     "wind_v": env.wind_v,
                     "hs": env.hs,
+                    "tp": env.tp,
+                    "wave_dir": env.wave_dir,
+                    "current_u": env.current_u,
+                    "current_v": env.current_v,
                     "ghi": env.ghi,
                 }
             )
