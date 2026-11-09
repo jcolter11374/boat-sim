@@ -159,7 +159,9 @@ def test_finish_variants_set_route_target_and_rule():
     assert old.finish.reached(38.5, -27.0)  # Azores counted under the old rule
     assert not old.finish.reached(39.5, -13.5)  # the new target is open ocean
     base = S.SensitivityVoyage(weather="constant")
-    assert base.mission().waypoints[1].lat == 36.0  # default route, south of the Azores
+    assert [(w.lat, w.lon) for w in base.mission().waypoints] == [S.BAY_MOUTH, (39.5, -13.5)]
+    dog = S.SensitivityVoyage(variant="dogleg_azores", weather="constant")
+    assert dog.mission().waypoints[1].lat == 36.0  # old route, south of the Azores
 
 
 def test_every_target_is_on_the_eastern_line():
