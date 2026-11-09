@@ -90,21 +90,44 @@ def test_it_cannot_point_into_the_wind_and_tacks_with_hysteresis():
     assert feather and abs(abs(S.wrap180(h - 270.0)) - 140.0) < 1e-9
 
 
-def test_step_sails_without_drive_power_and_drifts_once_the_rudder_is_gone():
+def test_step_sails_without_drive_power_and_reaches_on_once_the_rudder_is_gone():
     v = _vessel()
     t = datetime(2020, 5, 1)
     s0 = v.initial_state(t, 38.02, -74.01)
-    env = EnvState(wind_u=7.0, hs=1.0, tp=6.0, wave_dir=270.0, ghi=300.0)
+    env = EnvState(wind_u=7.0, hs=1.0, tp=6.0, wave_dir=270.0, ghi=300.0)  # westerly
     rng = np.random.default_rng(0)
-    s1, _ = v.step(s0, Command(heading=90.0, thrust_fraction=0.0), env, timedelta(minutes=10), rng)
+    step = timedelta(minutes=10)
+    s1, _ = v.step(s0, Command(heading=90.0, thrust_fraction=0.0), env, step, rng)
     assert s1.drive_w == 0.0
     assert s1.speed_through_water > 0.5 * KN and s1.lon > s0.lon
+    # Rudder gone, wing still trimmed: it weathervanes onto a reach ~110 deg off
+    # the wind on the side it was on, and keeps sailing (their simulator does too).
     broken = v.initial_state(t, 38.02, -74.01)
+    broken.heading = 100.0
     broken.damage["rudder"] = True
-    s2, _ = v.step(
-        broken, Command(heading=90.0, thrust_fraction=0.0), env, timedelta(minutes=10), rng
+    s2, _ = v.step(broken, Command(heading=90.0, thrust_fraction=0.0), env, step, rng)
+    assert abs(S.wrap180(s2.heading - (270.0 - 110.0))) < 1e-9  # 100 deg is on the minus side
+    assert s2.speed_through_water > 0.5 * KN
+    # Rudder and wing both gone: it drifts at a few percent of the wind.
+    broken.damage["sail"] = True
+    s3, _ = v.step(broken, Command(heading=90.0, thrust_fraction=0.0), env, step, rng)
+    assert s3.speed_through_water < 0.045 * 7.0
+
+
+def test_rev_b_has_one_electronics_box():
+    from boatsim.vessel.hazards import K_DICE, SLOT, sample_failures
+
+    hz = _vessel().hazards
+    assert hz.electronics_boxes == 1
+    dice = np.ones(K_DICE)
+    dice[SLOT["electronics_common"]] = 0.0  # this step's electronics die comes up
+    out = sample_failures(
+        hz, EnvState(), 1.0, {}, datetime(2020, 5, 1), 38.0, -60.0, 30.0, dice, thrusters=()
     )
-    assert s2.speed_through_water < 0.045 * 7.0
+    assert out.lost
+    names = [e.detail for e in out.events]
+    assert any("one electronics box" in n for n in names)
+    assert not any("electronics_safe" in n or "both" in n for n in names)
 
 
 def test_route_starts_at_the_designs_own_drop_point():

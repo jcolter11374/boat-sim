@@ -58,6 +58,7 @@ sail:
   min_upwind_twa_deg: 50     # design.py autopilot
   min_downwind_twa_deg: 165  # design.py autopilot
   tack_hysteresis_deg: 20    # design.py autopilot
+  unsteered_twa_deg: 110     # their sim.py: a limp rudder leaves it reaching ~110 deg off the wind
 
 power:
   solar_wp: 40               # design.py
@@ -141,7 +142,7 @@ hazards:
   failures_enabled: true
   near_land_km: 150
   electronics_wet_multiplier: 6      # failures.py
-  electronics_common_cause: 1.0      # one sealed box: an electronics failure is a loss
+  electronics_boxes: 1               # one sealed box (autopilot + radio): an electronics failure is a loss
   software_hang_per_day: 0.02        # failures.py
   watchdog_recovers: 0.95            # failures.py
   steering_per_day: 0.004            # failures.py: rudder servo 0.002 + tail (wing) servo 0.002, x (1 + Hs/4); either stops it sailing a course
