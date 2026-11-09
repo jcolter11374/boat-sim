@@ -55,7 +55,7 @@ def test_hazard_knob_applies_only_offshore():
     assert H.wearout_mult(p, 90.0) == pytest.approx((90 / 48.6) ** 1.24)
     # Same dice, open ocean: more wear means at least as many failures
     rng = np.random.default_rng(0)
-    t = datetime(2020, 5, 1)  # noqa: DTZ001 (the sim runs on naive UTC)
+    t = datetime(2020, 5, 1)
     n_off = n_on = 0
     for _ in range(3000):
         d = H.draw_dice(rng)
