@@ -412,7 +412,7 @@ def batch_card(summary: pd.DataFrame) -> BatchCard:
         warnings.append("This batch didn't record causes of loss (add card_row to run_batch).")
     warnings.append(
         "Odds are only as good as the model: ocean currents checked against real "
-        "drifters (#19); weather forecast error not modelled yet (#12)."
+        "drifters (#19); ship traffic not modelled yet (#13), so collisions are missing."
     )
 
     return BatchCard(
