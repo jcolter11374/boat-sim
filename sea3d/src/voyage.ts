@@ -329,7 +329,9 @@ controls.target.set(0, 0.2, 0);
     });
     if (!index.length) throw new Error("the voyage list is empty");
     const want = params.get("voyage");
-    await selectVoyage(index.find((v) => v.file === want)?.file ?? index[0].file);
+    // Default: the longest voyage, which has the most to watch.
+    const longest = index.reduce((m, v) => (v.days > m.days ? v : m), index[0]);
+    await selectVoyage(index.find((v) => v.file === want)?.file ?? longest.file);
   } catch (e) {
     fail(String(e instanceof Error ? e.message : e));
   }
