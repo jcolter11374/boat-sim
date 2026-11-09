@@ -46,3 +46,4 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
 - `tests/smoke.mjs`: the CI check (both boats afloat with finite poses,
   wave heights per sea state, quality switch, screenshots).
 - `tests/motion.test.ts`: the wave-motion gate.
+- `tests/waves.test.ts`: the sea: exact Hs, spectrum and spread, no jumps.
