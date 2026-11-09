@@ -12,7 +12,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { BUILDERS, type BoatModel } from "./boats/model";
+import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
@@ -163,6 +163,8 @@ const status = {
   race: (date: string) => selectRace(date),
   /** Boat names of the voyages on screen, and which one the close-up follows. */
   boats: [] as string[],
+  /** True once the detailed Blender kayak is in use. */
+  detailed: false,
   focus: 0,
   setFocus: (i: number) => setFocus(i),
   /** positionAt for any lane (0 = first boat, 1 = second in a race). */
@@ -413,6 +415,11 @@ function fillVoyages(mode: string): void {
 
 // ---------- start ----------
 setQuality(quality);
+// The detailed (Blender) kayak, when the build has it: swap it in once loaded.
+loadDetailedModels().then((ok) => {
+  status.detailed = ok;
+  if (ok) buildBoat(quality);
+});
 camera.position.set(-5.6, 2.0, 4.6);
 controls.target.set(0, 0.2, 0);
 (async () => {

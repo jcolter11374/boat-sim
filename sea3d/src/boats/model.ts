@@ -8,6 +8,7 @@
 // moves the boat.
 
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
 
@@ -35,6 +36,22 @@ function frame(spec: BoatSpec): { root: THREE.Group; inner: THREE.Group } {
   return { root, inner };
 }
 
+// Detailed model built in Blender from the same numbers (blender/build_kayak.py),
+// loaded once if the page has it; otherwise the kayak is drawn in code below.
+let kayakDetailed: THREE.Group | null = null;
+/** Load models/kayak.glb if present. Resolves true when the detailed kayak is ready. */
+export async function loadDetailedModels(base = "./models"): Promise<boolean> {
+  if (new URLSearchParams(location.search).get("models") === "simple") return false;
+  try {
+    const gltf = await new GLTFLoader().loadAsync(`${base}/kayak.glb`);
+    kayakDetailed = gltf.scene;
+    return true;
+  } catch {
+    return false; // not built: keep the drawn-in-code model
+  }
+}
+export const hasDetailedKayak = () => kayakDetailed !== null;
+
 // =====================================================================
 // OUR BOAT: v4 kayak. Metres. Bow at x = 0 in the builder frame.
 // =====================================================================
@@ -53,77 +70,96 @@ export function buildKayak(quality: Quality): BoatModel {
     dz: (s) => 0.34 + 0.06 * Math.max(1 - s / 0.25, 0) ** 2,
   };
   const { root, inner: g } = frame(KAYAK);
-  const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
-  kit.mesh(kit.hull(K, { top: 0xf26a1b, deck: 0xe0601a, bottom: 0x3b4248, boot: 0xffffff }), hullMat, g);
-  const deckY = (x: number, z: number) => {
-    const s = x / K.L;
-    const b = K.hb(s);
-    return K.dz(s) + K.crown * (1 - Math.min((z / b) ** 2, 1));
-  };
-
-  // Self-righting foam dome, 2.2 m x 0.46 m x 0.20 m on the deck centreline.
-  const DOME = { x0: 0.35, x1: 2.55, w: 0.23, h: 0.2, p: 2.6 };
-  const domeProf = (x: number) => {
-    const u = (x - DOME.x0) / (DOME.x1 - DOME.x0);
-    if (u <= 0 || u >= 1) return 0;
-    return Math.sqrt(Math.max(1 - Math.abs(2 * u - 1) ** 4, 0));
-  };
-  const domeH = (x: number, z: number) => {
-    const f = domeProf(x);
-    const w = DOME.w * f;
-    const h = DOME.h * f;
-    if (w <= 0 || Math.abs(z) >= w) return 0;
-    return h * Math.pow(1 - Math.pow(Math.abs(z) / w, DOME.p), 1 / DOME.p);
-  };
-  {
-    const nx = quality === "high" ? 60 : 30;
-    const na = quality === "high" ? 28 : 14;
-    const pos: number[] = [];
-    const idx: number[] = [];
-    for (let i = 0; i <= nx; i++) {
-      const x = DOME.x0 + ((DOME.x1 - DOME.x0) * i) / nx;
-      const f = domeProf(x);
-      const w = Math.max(DOME.w * f, 0.0005);
-      const h = Math.max(DOME.h * f, 0.0005);
-      for (let j = 0; j <= na; j++) {
-        const th = (Math.PI * j) / na;
-        const c = Math.cos(th);
-        const s = Math.sin(th);
-        const z = w * Math.sign(c) * Math.pow(Math.abs(c), 2 / DOME.p);
-        const y = h * Math.pow(s, 2 / DOME.p);
-        pos.push(x, deckY(x, z) - 0.01 + y, z);
-      }
-    }
-    for (let i = 0; i < nx; i++) {
-      for (let j = 0; j < na; j++) {
-        const a = i * (na + 1) + j;
-        const b = a + na + 1;
-        idx.push(a, b, a + 1, a + 1, b, b + 1);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    geo.setIndex(idx);
-    geo.computeVertexNormals();
-    kit.mesh(geo, kit.std(0xff7b2b), g);
-  }
-  const kTop = (x: number, z: number) => deckY(x, z) + domeH(x, z);
-  kit.panel(g, 0.55, 1.53, 0.54, kTop, 6, 3); // 100 W
-  kit.panel(g, 1.59, 2.5, 0.54, kTop, 6, 3); // 100 W
-  kit.panel(g, 2.56, 2.92, 0.34, kTop, 3, 3); // 50 W (≈ position)
-
-  // Keel: swept fin and 50 kg lead bulb, bulb centre 0.90 m below the waterline.
-  const lead = kit.std(0x6d7378, { roughness: 0.4, metalness: 0.5 });
   const g10 = kit.std(0x2b2f33);
-  const bulbY = K.wl - KAYAK.ballastDepth;
-  kit.mesh(kit.foil(0.25, 0.25, 1.32, 1.32 + (0.05 - (bulbY + 0.03)) * Math.tan((20 * Math.PI) / 180), 0.05, bulbY + 0.03, 0.1), g10, g);
-  kit.bulb(g, lead, 0.55, 0.125, 0.4, 1.4, bulbY, 0);
+  const guard = kit.std(0xc9ced3, { metalness: 0.8, roughness: 0.3 });
+  if (kayakDetailed) {
+    g.add(kayakDetailed.clone(true)); // hull, dome, panels, keel, rudder, deck kit
+  } else {
+    const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
+    kit.mesh(kit.hull(K, { top: 0xf26a1b, deck: 0xe0601a, bottom: 0x3b4248, boot: 0xffffff }), hullMat, g);
+    const deckY = (x: number, z: number) => {
+      const s = x / K.L;
+      const b = K.hb(s);
+      return K.dz(s) + K.crown * (1 - Math.min((z / b) ** 2, 1));
+    };
+
+    // Self-righting foam dome, 2.2 m x 0.46 m x 0.20 m on the deck centreline.
+    const DOME = { x0: 0.35, x1: 2.55, w: 0.23, h: 0.2, p: 2.6 };
+    const domeProf = (x: number) => {
+      const u = (x - DOME.x0) / (DOME.x1 - DOME.x0);
+      if (u <= 0 || u >= 1) return 0;
+      return Math.sqrt(Math.max(1 - Math.abs(2 * u - 1) ** 4, 0));
+    };
+    const domeH = (x: number, z: number) => {
+      const f = domeProf(x);
+      const w = DOME.w * f;
+      const h = DOME.h * f;
+      if (w <= 0 || Math.abs(z) >= w) return 0;
+      return h * Math.pow(1 - Math.pow(Math.abs(z) / w, DOME.p), 1 / DOME.p);
+    };
+    {
+      const nx = quality === "high" ? 60 : 30;
+      const na = quality === "high" ? 28 : 14;
+      const pos: number[] = [];
+      const idx: number[] = [];
+      for (let i = 0; i <= nx; i++) {
+        const x = DOME.x0 + ((DOME.x1 - DOME.x0) * i) / nx;
+        const f = domeProf(x);
+        const w = Math.max(DOME.w * f, 0.0005);
+        const h = Math.max(DOME.h * f, 0.0005);
+        for (let j = 0; j <= na; j++) {
+          const th = (Math.PI * j) / na;
+          const c = Math.cos(th);
+          const s = Math.sin(th);
+          const z = w * Math.sign(c) * Math.pow(Math.abs(c), 2 / DOME.p);
+          const y = h * Math.pow(s, 2 / DOME.p);
+          pos.push(x, deckY(x, z) - 0.01 + y, z);
+        }
+      }
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < na; j++) {
+          const a = i * (na + 1) + j;
+          const b = a + na + 1;
+          idx.push(a, b, a + 1, a + 1, b, b + 1);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      kit.mesh(geo, kit.std(0xff7b2b), g);
+    }
+    const kTop = (x: number, z: number) => deckY(x, z) + domeH(x, z);
+    kit.panel(g, 0.55, 1.53, 0.54, kTop, 6, 3); // 100 W
+    kit.panel(g, 1.59, 2.5, 0.54, kTop, 6, 3); // 100 W
+    kit.panel(g, 2.56, 2.92, 0.34, kTop, 3, 3); // 50 W (≈ position)
+
+    // Keel: swept fin and 50 kg lead bulb, bulb centre 0.90 m below the waterline.
+    const lead = kit.std(0x6d7378, { roughness: 0.4, metalness: 0.5 });
+      const bulbY = K.wl - KAYAK.ballastDepth;
+    kit.mesh(kit.foil(0.25, 0.25, 1.32, 1.32 + (0.05 - (bulbY + 0.03)) * Math.tan((20 * Math.PI) / 180), 0.05, bulbY + 0.03, 0.1), g10, g);
+    kit.bulb(g, lead, 0.55, 0.125, 0.4, 1.4, bulbY, 0);
+
+    kit.mesh(kit.foil(0.2, 0.17, 2.86, 2.9, 0.06, -0.3, 0.12), kit.std(0x2b2f33), g);
+    // Deck kit: AIS whip, all-round light, Globalstar beacon, tow eye.
+    const white = kit.std(0xf4f4f0);
+    const black = kit.std(0x222426);
+    const aftDeck = deckY(3.0, 0.11);
+    kit.cyl(g, black, 0.012, 3.0, aftDeck, aftDeck + 0.06, 0.11);
+    kit.cyl(g, white, 0.005, 3.0, aftDeck + 0.06, aftDeck + 0.95, 0.11);
+    kit.cyl(g, black, 0.008, 3.0, aftDeck, aftDeck + 0.2, -0.11);
+    kit.cyl(g, kit.std(0xffffff, { emissive: 0xfff3c4, emissiveIntensity: 0.6 }), 0.022, 3.0, aftDeck + 0.2, aftDeck + 0.25, -0.11);
+    const gsY = deckY(0.3, 0);
+    kit.box(g, kit.std(0xf2c200), 0.255, 0.345, gsY, gsY + 0.028, -0.035, 0.035);
+    kit.box(g, kit.std(0x24324a, { metalness: 0.3 }), 0.265, 0.335, gsY + 0.028, gsY + 0.03, -0.028, 0.028);
+    const eye = kit.mesh(new THREE.TorusGeometry(0.03, 0.007, 8, kit.detail.round), guard, g);
+    eye.position.set(0.03, 0.31, 0);
+
+  }
 
   // Rudder (≈) and two T200 thrusters 0.40 m apart either side of it (≈ position).
-  kit.mesh(kit.foil(0.2, 0.17, 2.86, 2.9, 0.06, -0.3, 0.12), kit.std(0x2b2f33), g);
   const props: THREE.Group[] = [];
   const t200 = kit.std(0x1d1f22, { roughness: 0.4 });
-  const guard = kit.std(0xc9ced3, { metalness: 0.8, roughness: 0.3 });
   const blade = kit.std(0x2a6fdb);
   for (const z of [0.2, -0.2]) {
     const th = new THREE.Group();
@@ -152,20 +188,6 @@ export function buildKayak(quality: Quality): BoatModel {
     const sy = K.kz(2.8 / K.L) + 0.13;
     kit.rod(th, g10, 0.008, [0, 0.03, 0], [0, sy + 0.07, -z * 0.35]);
   }
-
-  // Deck kit: AIS whip, all-round light, Globalstar beacon, tow eye.
-  const white = kit.std(0xf4f4f0);
-  const black = kit.std(0x222426);
-  const aftDeck = deckY(3.0, 0.11);
-  kit.cyl(g, black, 0.012, 3.0, aftDeck, aftDeck + 0.06, 0.11);
-  kit.cyl(g, white, 0.005, 3.0, aftDeck + 0.06, aftDeck + 0.95, 0.11);
-  kit.cyl(g, black, 0.008, 3.0, aftDeck, aftDeck + 0.2, -0.11);
-  kit.cyl(g, kit.std(0xffffff, { emissive: 0xfff3c4, emissiveIntensity: 0.6 }), 0.022, 3.0, aftDeck + 0.2, aftDeck + 0.25, -0.11);
-  const gsY = deckY(0.3, 0);
-  kit.box(g, kit.std(0xf2c200), 0.255, 0.345, gsY, gsY + 0.028, -0.035, 0.035);
-  kit.box(g, kit.std(0x24324a, { metalness: 0.3 }), 0.265, 0.335, gsY + 0.028, gsY + 0.03, -0.028, 0.028);
-  const eye = kit.mesh(new THREE.TorusGeometry(0.03, 0.007, 8, kit.detail.round), guard, g);
-  eye.position.set(0.03, 0.31, 0);
 
   return {
     spec: KAYAK,

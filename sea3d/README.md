@@ -40,6 +40,15 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
   the glow round bright things (high quality). The voyage page puts the sun
   where it really was for the logged time and place, so replays have
   sunrises, sunsets and nights.
+- `blender/build_kayak.py`: builds the detailed kayak (`public/models/kayak.glb`)
+  with Blender, headless, from the same numbers as `src/boats/model.ts`:
+  smooth dense hull, rubbing strake, painted hull (gelcoat, boot stripe,
+  antifouling, "V4"), solar cells, rounded fittings, and soft baked shadows
+  (ambient occlusion, rendered once with Cycles). CI builds it (cached on the
+  script's hash); it is not kept in git. Locally:
+  `pip install bpy==4.2.0 pillow numpy` (Python 3.11), then
+  `python blender/build_kayak.py public/models/kayak.glb`. Without the file
+  the pages draw the kayak in code as before; `?models=simple` forces that.
 - `src/boats/specs.ts`: each boat's real measurements (length, beam, mass,
   ballast, centre of gravity, cruising speed). No graphics code.
 - `src/boats/parts.ts`, `src/boats/model.ts`: the 3D models built from those

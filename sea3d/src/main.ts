@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { BUILDERS, type BoatModel } from "./boats/model";
+import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BOATS, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
@@ -204,6 +204,10 @@ window.addEventListener("resize", () => {
 });
 
 setQuality(quality);
+// The detailed (Blender) kayak, when the build has it: swap it in once loaded.
+loadDetailedModels().then((ok) => {
+  if (ok) buildBoats(quality);
+});
 setSea(seaKey);
 placeBoats();
 goTo("side", true);
