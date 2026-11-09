@@ -38,6 +38,9 @@ export class Wake {
   private readonly born: Float32Array; // birth time, -1 = unused
   private readonly side: Float32Array; // lateral offset at birth, m
   private readonly spread: Float32Array; // lateral drift, m/s
+  private readonly bornOdo: Float32Array; // water distance run at birth, m
+  private odo = 0; // water distance the boat has run, m
+  private lastT = -1;
   private next = 0;
   private lastSpawn = 0;
 
@@ -56,6 +59,7 @@ export class Wake {
     this.born = new Float32Array(this.n).fill(-1);
     this.side = new Float32Array(this.n);
     this.spread = new Float32Array(this.n);
+    this.bornOdo = new Float32Array(this.n);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.n * 3), 3));
     geo.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(this.n), 1));
@@ -75,7 +79,10 @@ export class Wake {
     this.born.fill(-1);
   }
 
-  update(comps: WaveComponent[], t: number, place: Placement): void {
+  /** speed: water going past now, m/s (defaults to the constructor's). */
+  update(comps: WaveComponent[], t: number, place: Placement, speed = this.speed): void {
+    if (this.lastT >= 0 && t > this.lastT) this.odo += speed * (t - this.lastT);
+    this.lastT = t;
     const rate = this.n / LIFE; // particles per second, keeps the pool full
     if (t < this.lastSpawn) this.lastSpawn = t; // clock restarted
     while (this.lastSpawn + 1 / rate <= t) {
@@ -83,6 +90,7 @@ export class Wake {
       const i = this.next;
       this.next = (this.next + 1) % this.n;
       this.born[i] = this.lastSpawn;
+      this.bornOdo[i] = this.odo - speed * (t - this.lastSpawn);
       this.side[i] = (Math.random() - 0.5) * this.beam * 0.9;
       this.spread[i] = (this.side[i] >= 0 ? 1 : -1) * (0.05 + Math.random() * 0.12);
     }
@@ -95,7 +103,7 @@ export class Wake {
         alpha[i] = 0;
         continue;
       }
-      const bx = this.sternX - this.speed * age;
+      const bx = this.sternX - (this.odo - this.bornOdo[i]);
       const bz = this.side[i] + this.spread[i] * age;
       const [x, z] = toWorld(bx, bz, place);
       const y = this.exact ? heightAt(comps, x, z, t) : displace(comps, x, z, t)[1];
