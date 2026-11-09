@@ -149,3 +149,38 @@ though, they differ by about as much as the current itself, because each
 model puts its eddies and Gulf Stream meanders in different places. The
 agreement gets worse going east. So one voyage can differ a lot between the
 two simulators, while averages over many launches should agree.
+
+## Waves and wind against NOAA buoys (buoys.py, issue #10)
+
+"Check ERA5 against buoys" compares ERA5 with 9 moored NOAA (NDBC) buoys from
+Delaware Bay to south of Bermuda, for every hour of 2020 and of 2023 (about
+64,000 matched hours each year). "Wave height" here is significant wave
+height: roughly the average height of the biggest third of the waves, which
+is what a sailor would call "the sea is 2 m". Buoy wind is measured about
+4 m above the water and is scaled up to ERA5's 10 m height (about +10%).
+Bias = ERA5 minus buoy (run of 9 Nov 2026):
+
+| | Year | Buoy mean | Bias | RMS error | Correlation | ERA5 / buoy, top 1% |
+|---|---|---|---|---|---|---|
+| Wave height (m) | 2020 | 1.66 | +0.01 | 0.27 | 0.96 | 0.97 |
+| Wave height (m) | 2023 | 1.71 | 0.00 | 0.27 | 0.96 | 0.94 |
+| Wind at 10 m (m/s) | 2020 | 7.18 | -0.16 | 1.49 | 0.91 | 0.95 |
+| Wind at 10 m (m/s) | 2023 | 6.95 | -0.24 | 1.43 | 0.92 | 0.95 |
+
+ERA5 wave height as a fraction of the buoy's, by how big the seas were:
+
+| Buoy wave height | 1-2 m | 2-3 m | 3-4 m | 4-6 m | over 6 m |
+|---|---|---|---|---|---|
+| 2020 | 1.02 | 0.97 | 0.95 | 0.95 | 0.95 |
+| 2023 | 1.02 | 0.97 | 0.95 | 0.93 | 0.90 |
+
+What it means: in ordinary weather ERA5's waves and wind are as good as we
+could ask for. Every buoy has a wave bias under 0.1 m. In big seas ERA5 runs
+5-10% low (a 7 m sea comes out at about 6.3-6.6 m), and its strongest winds
+about 5% low. The worst wind buoy is Diamond Shoals off Cape Hatteras, where
+ERA5 is about 0.9 m/s low (it sits near the coast and the grid cell is
+partly land). Out at sea (41001, 41048, 41049) the wind bias is 0.2-0.4 m/s.
+No correction applied: the errors are small next to the
+other unknowns, and slightly low big seas make the simulator a little
+optimistic in storms, which the storm check above already flags. NDBC data
+is US government work, public domain.
