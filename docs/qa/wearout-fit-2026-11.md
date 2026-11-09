@@ -85,6 +85,13 @@ All fits are by maximum likelihood, with the two censored boats counted as survi
   - Plus `electronics_common_cause` at 0.1, 0.3 and 1.0 (1.0 is the record-like bound for (c), not our expected value), and knockdown damage x10 and x30 as a bound for the rig and weather share.
 - Wear-out variants are reported as sensitivity only, since the range for k includes 1.
 
+## Result of the endpoint batch (run 42623431597)
+
+- **On the record's yardstick, the historical set matches the record offshore.** Counting the end as the last Iridium report, it loses 1.1% a day from day 7 to day 30, and 0.8% from day 30 to day 60. The record loses 1.3%, or 0.8% without its rig failures. Theo's estimate was right.
+- **Wear-out variants raise finishes rather than lower them:** 79 and 86, against 78. They keep the record's average rate but push failures past day 45, after many boats have already arrived. Treat them as sensitivity only.
+- **One fault killing both boxes (common cause 1.0)** drops finishes from 69 to 51. Capsizes that leave the boat stuck upside down cost 3 finishes at 10x and 5 at 30x.
+- Details are in [survival-vs-record-2026-11.md](survival-vs-record-2026-11.md).
+
 ## Caveats
 
 - Ten boats is very few. Treat every number here as rough.
