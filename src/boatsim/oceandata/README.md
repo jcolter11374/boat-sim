@@ -92,3 +92,20 @@ vessel's ship-strike odds use it directly (vessel/hazards.py).
 each storm centre with NOAA's best-track maximum wind, for every 6-hourly
 point inside the route box. ERA5's 25 km grid is known to understate
 hurricane cores; this measures by how much on our route.
+
+Result, 2012 to 2021 (121 storms, 2,607 best-track points in the route box,
+run on 9 Nov 2026; 637 ERA5 days, 11 minutes in Actions). Ratio is ERA5's
+peak within 200 km ÷ best-track 1-minute wind; 0.93 would be perfect:
+
+| Storm class | Points | Best track (median) | ERA5 peak (median) | Ratio p25 / median / p75 |
+|---|---|---|---|---|
+| Below storm strength or post-tropical | 1354 | 18.0 m/s | 13.8 m/s | 0.70 / 0.78 / 0.85 |
+| Tropical storm (34-63 kt) | 713 | 23.1 m/s | 16.2 m/s | 0.61 / 0.70 / 0.78 |
+| Hurricane, category 1-2 | 455 | 38.6 m/s | 24.1 m/s | 0.53 / 0.64 / 0.71 |
+| Major hurricane, category 3-5 | 85 | 56.6 m/s | 27.6 m/s | 0.41 / 0.48 / 0.54 |
+
+So ERA5 gives about three quarters of a tropical storm's true peak wind and
+about half of a major hurricane's (worst case: Dorian, 1 Sep 2019, 82 m/s in
+the best track, 25 m/s in ERA5). Wave heights will be understated near storm
+cores too. Voyages that meet a hurricane are therefore safer in the simulator
+than at sea. Not corrected yet: see PR #62 for the options.

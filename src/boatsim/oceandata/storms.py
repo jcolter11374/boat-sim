@@ -9,8 +9,9 @@ Reference: IBTrACS v04r01 North Atlantic (Knapp et al. 2010,
 doi:10.1175/2009BAMS2755.1; https://www.ncei.noaa.gov/products/international-best-track-archive),
 free, no account; reachable from GitHub Actions, not from thread sandboxes.
 We use the US National Hurricane Center's columns: USA_WIND (maximum 1-minute
-sustained wind at 10 m, knots) and USA_SSHS (Saffir-Simpson category: -1
-tropical depression, 0 tropical storm, 1 to 5 hurricane categories).
+sustained wind at 10 m, knots) and USA_SSHS (Saffir-Simpson category: 0 tropical storm, 1 to 5 hurricane
+categories; negative codes are tropical depressions, subtropical and
+post-tropical systems and disturbances).
 
 Method, for every 6-hourly best-track point inside the route box:
     ERA5 peak = the highest hourly 10 m wind speed on ERA5 grid points within
@@ -112,7 +113,7 @@ def compare(df, era5_source) -> object:
 
 
 CLASSES = [
-    ("tropical depression (under 34 kt)", -99, -1),
+    ("below storm strength or post-tropical", -99, -1),
     ("tropical storm (34-63 kt)", 0, 0),
     ("hurricane cat 1-2 (64-95 kt)", 1, 2),
     ("major hurricane cat 3-5 (96+ kt)", 3, 5),

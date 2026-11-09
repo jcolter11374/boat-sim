@@ -50,7 +50,7 @@ HOURS_PER_MONTH = 730.5
 RES = 0.1  # degrees
 BAD_COUNT = 100_000  # only for the log: how many real cells are this busy
 SPIKE_MIN = 10_000  # GUESS: below this a lone high cell could be a real anchored ship
-SPIKE_FACTOR = 100.0  # GUESS: spikes are 10^5 to 10^7 times their neighbours
+SPIKE_FACTOR = 1000.0  # GUESS: spikes are 10^5 to 10^7 times their neighbours' median
 EMODNET_WCS = "https://ows.emodnet-humanactivities.eu/wcs"
 EMODNET_YEARS = (2022, 2023)  # 2020 had COVID-era traffic; 2024 lost satellite AIS from June
 WORLD_BANK_ZIP = (
@@ -150,22 +150,24 @@ def emodnet_grid(box: Box = ROUTE_BOX, res: float = RES, tile_deg: float = 5.0, 
 
 
 def _spikes(a: np.ndarray, factor: float = SPIKE_FACTOR) -> np.ndarray:
-    """Cells far above all 8 neighbours: the file's spurious values.
+    """Cells far above the typical (median) of their 8 neighbours: the file's
+    spurious values.
 
-    The bad cells are single pixels (~1.7 million or ~25 million, drifting
-    with row number) surrounded by counts of 0 to 5. A shipping lane or port
-    is high too, but so are its neighbours along the lane, so it survives.
+    The bad cells (~1.7 million or ~25 million, drifting with row number) sit
+    in water whose counts are 0 to 5, sometimes two of them side by side, so
+    the median of the neighbours stays small. A shipping lane or port is high
+    too, but traffic spreads over several cells, so its neighbours' median is
+    high and it survives. (A max-of-neighbours test failed: build 2 of PR #62
+    kept 7 million bad cells because bad cells touch each other.)
     """
-    z = np.where(np.isfinite(a), a, 0.0)
+    z = np.where(np.isfinite(a), a, 0.0).astype(np.float32)
     p = np.pad(z, 1)
     h, w = z.shape
-    nb = np.zeros_like(z)
-    for di in (0, 1, 2):
-        for dj in (0, 1, 2):
-            if di == 1 and dj == 1:
-                continue
-            nb = np.maximum(nb, p[di : di + h, dj : dj + w])
-    return np.isfinite(a) & (a >= SPIKE_MIN) & (a > factor * (nb + 1.0))
+    nb = np.stack(
+        [p[di : di + h, dj : dj + w] for di in (0, 1, 2) for dj in (0, 1, 2) if (di, dj) != (1, 1)]
+    )
+    med = np.median(nb, axis=0)
+    return np.isfinite(a) & (a >= SPIKE_MIN) & (a > factor * (med + 1.0))
 
 
 def world_bank_grid(tif: str | Path, box: Box = ROUTE_BOX, res: float = RES, log=print):
@@ -293,7 +295,10 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
     }.items():
         i = int(np.argmin(abs(lats - la)))
         j = int(np.argmin(abs(lons - lo)))
-        log(f"  {name:24s} {ships[i, j]:.2e} ships/km2 (source {source[i, j]})")
+        log(
+            f"  {name:24s} {ships[i, j]:.2e} ships/km2 (source {source[i, j]}; "
+            f"World Bank {wb[i, j]:.3g} positions/km2/yr)"
+        )
     return out
 
 
