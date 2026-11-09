@@ -18,10 +18,12 @@ What a person at base would do each morning, written down as a rule:
    If the best leg beats "carry on as planned" by at least `min_gain_h`, send
    it as a new route.
 5. Never send more than one new route per `min_interval` (a day by default).
-6. Otherwise, once a day, send a tiny "all well, carry on" message: the same
-   route again. The boat checks its mailbox daily anyway, and an empty check
-   costs one credit, so this ack costs nothing extra. It tells safe mode that
-   base is alive, so it doesn't drop into lost-comms mode on a quiet voyage.
+6. Otherwise, every `ack_every` (2 days by default), send a tiny "all well,
+   carry on" message: the same route again. It tells safe mode that base is
+   alive, so the boat doesn't drop into lost-comms mode (after 5 silent days)
+   on a quiet voyage. Every 2 days rather than daily because each ack costs a
+   credit now that the boat collects messages only with its report (#72);
+   2 days still leaves room for one lost ack inside the 5-day limit.
 
 The forecast it reads already contains realistic error (oceandata's Forecast),
 so it can't cheat by seeing the future.
@@ -69,6 +71,7 @@ class ForecastReplanPolicy:
     offsets_deg: tuple[float, ...] = (-60, -45, -30, -15, 0, 15, 30, 45, 60)
     min_gain_h: float = 6.0  # GUESS: below this a correction isn't worth a route change
     daily_ack: bool = True  # resend the current route as an "all well" ack
+    ack_every: timedelta = timedelta(days=2)  # GUESS: one lost ack still < 5-day limit
     min_interval: timedelta = timedelta(hours=24)
     east_margin_deg: float = 0.05  # waypoints this far west of the boat are behind it
     low_soc: float = 0.5  # below this, safe mode throttles back; assume slower
@@ -168,7 +171,9 @@ class ForecastReplanPolicy:
             mission = Mission(list(self._current))
             self.sent.append((t, mission))
             return mission
-        if self.daily_ack:
+        last_contact = max([s[0] for s in self.sent] + self.acks, default=None)
+        due = last_contact is None or t - last_contact >= self.ack_every - timedelta(hours=1)
+        if self.daily_ack and due:
             # Same waypoints as the boat already has: the autopilot keeps its
             # place on the route and safe mode logs contact with base.
             self._current = current

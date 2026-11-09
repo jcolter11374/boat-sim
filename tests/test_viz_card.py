@@ -83,7 +83,7 @@ def test_voyage_card_reads_plainly_and_carries_the_caveat():
 
 
 def test_airtime_bill_comes_from_the_iridium_link():
-    card = voyage_card(_log(Outcome.TIMEOUT), link=IridiumSBDLink())
+    card = voyage_card(_log(Outcome.TIMEOUT), link=IridiumSBDLink(mailbox="scheduled"))
     assert card.airtime_usd["line_rental"] == 17.0  # 10 days inside May
     assert card.airtime_usd["total"] > 17.0  # plus daily empty mailbox checks
     assert "Satellite bill" in render_voyage(card)
