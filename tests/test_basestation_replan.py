@@ -196,3 +196,13 @@ def test_land_detour_is_sent_even_without_time_gain():
     assert m is not None and p.sent
     a = m.waypoints[0]
     assert not p.crosses_keep_out(38.5, -31.0, a.lat, a.lon)
+
+
+def test_uses_the_shared_land_map_not_just_the_azores():
+    """The #75 land map keeps legs off Bermuda too; the Azores circles are only a fallback."""
+    p = ForecastReplanPolicy(route=[GOAL])
+    assert p.crosses_keep_out(32.3, -66.0, 32.3, -63.5)  # straight over Bermuda
+    assert not p.crosses_keep_out(31.5, -66.0, 31.5, -63.5)  # ~90 km south of it
+    fallback = ForecastReplanPolicy(route=[GOAL], land=None)
+    assert not fallback.crosses_keep_out(32.3, -66.0, 32.3, -63.5)
+    assert fallback.crosses_keep_out(38.5, -35.0, 38.5, -20.0)

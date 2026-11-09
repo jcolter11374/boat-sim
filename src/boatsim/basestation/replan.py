@@ -26,10 +26,16 @@ What a person at base would do each morning, written down as a rule:
    2 days still leaves room for one lost ack inside the 5-day limit.
 
 7. **Keep clear of land.** Under the Microtransat rules (#80) running ashore
-   ends the voyage, and the Azores sit right on the route. Any leg whose
-   predicted track, or whose line on to the rest of the route, passes inside a
-   keep-out circle around an island group is thrown out. If the boat's current
-   leg would cross one, base sends a detour even when it gains no time.
+   ends the voyage, and the Azores sit right on the route. Base checks every
+   leg against the shared 2 km land mask (runner/land.py, #75) with a
+   `land_margin_m` buffer (20 km): any leg whose predicted track, or whose
+   line on to the rest of the route, comes that close to land is thrown out.
+   That covers every coast and island in the route box (Outer Banks, Bermuda,
+   the Azores, Madeira), not just the Azores. If the boat's current leg would
+   cross land, base sends a detour even when it gains no time. If the boat is
+   already inside the buffer (just after the drop, say), only actual land
+   counts until it is clear. Without the mask file it falls back to circles
+   round the Azores island groups.
 
 The forecast it reads already contains realistic error (oceandata's Forecast),
 so it can't cheat by seeing the future.
@@ -49,11 +55,10 @@ from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.oceandata.base import Environment
 from boatsim.types import Mission, Waypoint
 
-# Keep-out circles around the Azores island groups: (lat, lon, radius_m).
-# Centres and island extents from standard charts/gazetteer positions (rounded);
-# each radius is the island group's half-extent plus a 20 km margin for GPS,
-# drift between daily reports and the autopilot's 5 km waypoint radius (GUESS).
-# Replace with the land mask from #75 once it is shared.
+# Fallback when the land mask is missing: keep-out circles around the Azores
+# island groups, (lat, lon, radius_m). Centres and extents from standard
+# chart/gazetteer positions (rounded); each radius is the group's half-extent
+# plus the 20 km margin.
 AZORES_KEEP_OUT: tuple[tuple[float, float, float], ...] = (
     (39.55, -31.15, 35_000.0),  # Flores and Corvo
     (38.50, -28.40, 50_000.0),  # Faial and Pico
@@ -97,7 +102,11 @@ class ForecastReplanPolicy:
     min_interval: timedelta = timedelta(hours=24)
     east_margin_deg: float = 0.05  # waypoints this far west of the boat are behind it
     low_soc: float = 0.5  # below this, safe mode throttles back; assume slower
-    keep_out: tuple[tuple[float, float, float], ...] = AZORES_KEEP_OUT
+    keep_out: tuple[tuple[float, float, float], ...] = AZORES_KEEP_OUT  # fallback only
+    # GUESS: margin for GPS, drift between daily reports and the autopilot's
+    # 5 km waypoint radius.
+    land_margin_m: float = 20_000.0
+    land: object = "default"  # a runner.land.LandMask, "default" (the committed one) or None
     sent: list[tuple[datetime, Mission]] = field(default_factory=list)  # route changes
     acks: list[datetime] = field(default_factory=list)
     _current: list[Waypoint] | None = None
@@ -113,15 +122,42 @@ class ForecastReplanPolicy:
         # speed goes roughly with the cube root of power. GUESS.
         return self.boat_speed * (0.6 ** (1 / 3) if soc < self.low_soc else 1.0)
 
-    def _inside(self, lat: float, lon: float) -> bool:
-        return any(distance_m(lat, lon, a, b) < r for a, b, r in self.keep_out)
+    def _mask(self):
+        if self.land == "default":
+            from boatsim.runner.land import default_land  # lazy: avoids an import cycle
 
-    def crosses_keep_out(self, lat1: float, lon1: float, lat2: float, lon2: float) -> bool:
-        """Does the great-circle line between two points pass through a keep-out circle?"""
+            self.land = default_land()
+        return self.land
+
+    def _inside(self, lat: float, lon: float, margin: float | None = None) -> bool:
+        """Is this point on land, or within `margin` metres of it?"""
+        margin = self.land_margin_m if margin is None else margin
+        mask = self._mask()
+        if mask is None:
+            extra = margin - self.land_margin_m  # circles already include the default margin
+            return any(distance_m(lat, lon, a, b) < r + extra for a, b, r in self.keep_out)
+        if mask.on_land(lat, lon):
+            return True
+        if margin <= 0:
+            return False
+        # Probe two rings (full and half margin) at 8 bearings: with a 2 km
+        # grid this finds any island wider than ~2 km inside the margin.
+        for dist in (margin, margin / 2):
+            for brg in range(0, 360, 45):
+                if mask.on_land(*destination(lat, lon, float(brg), dist)):
+                    return True
+        return False
+
+    def crosses_keep_out(
+        self, lat1: float, lon1: float, lat2: float, lon2: float, margin: float | None = None
+    ) -> bool:
+        """Does the great-circle line between two points come within the margin of land?"""
         d = distance_m(lat1, lon1, lat2, lon2)
         brg = bearing_deg(lat1, lon1, lat2, lon2)
         n = max(1, math.ceil(d / 5_000.0))
-        return any(self._inside(*destination(lat1, lon1, brg, d * k / n)) for k in range(n + 1))
+        return any(
+            self._inside(*destination(lat1, lon1, brg, d * k / n), margin) for k in range(n + 1)
+        )
 
     def _route_after(self, lat: float, lon: float) -> tuple[float, Waypoint]:
         """Distance from a point to the goal along the planned route, and the first
@@ -182,16 +218,18 @@ class ForecastReplanPolicy:
     ) -> float:
         """Seconds to the goal: follow wp for the horizon, then the planned route.
 
-        Infinite if the leg runs through a keep-out circle, or if the line from
-        wp on to the rest of the route would.
+        Infinite if the leg comes within the land margin, or if the line from
+        wp on to the rest of the route would. A boat already inside the margin
+        is only kept off actual land until it is clear.
         """
+        margin = 0.0 if self._inside(lat, lon) else None
         path = self.predict_path(forecast, t0, lat, lon, wp, speed)
-        if any(self._inside(a, b) for a, b in path) or self.crosses_keep_out(
-            lat, lon, wp.lat, wp.lon
+        if any(self._inside(a, b, margin) for a, b in path) or self.crosses_keep_out(
+            lat, lon, wp.lat, wp.lon, margin
         ):
             return math.inf
         _, rejoin = self._route_after(wp.lat, wp.lon)
-        if rejoin != wp and self.crosses_keep_out(wp.lat, wp.lon, rejoin.lat, rejoin.lon):
+        if rejoin != wp and self.crosses_keep_out(wp.lat, wp.lon, rejoin.lat, rejoin.lon, margin):
             return math.inf
         plat, plon = path[-1]
         left, nxt = self._route_after(plat, plon)
