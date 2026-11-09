@@ -73,18 +73,27 @@ vessel's ship-strike odds use it directly (vessel/hazards.py).
   Hours per km² per month ÷ 730.5 hours in an average month = ships per km²
   at any moment. This is an exact identity, no assumption.
 * **World Bank / IMF global AIS counts** (everywhere else, including the US
-  side and open ocean): AIS position reports per cell, Jan 2015 to Feb 2021.
-  Spurious cells of ~1.7 million and ~25 million (no real cell on our route
-  is above ~100) are dropped. Counts are turned into ships per km² with one
-  factor k, fitted where EMODnet and the World Bank map overlap. The build
-  log prints k by region and by traffic level, so you can see how well one
-  factor fits.
+  side and open ocean): AIS position reports per 0.005 degree pixel, Jan
+  2015 to Feb 2021. About 7.5% of the pixels in our box are corrupt (values
+  of ~1.7 million or ~25 million where real counts stop near 100); they are
+  masked. The corrupt pixels are mostly the busiest ones: the share of
+  corrupt pixels in a 0.1 degree cell rises steadily with EMODnet's traffic
+  (2.7e-6 ships/km² under 2% corrupt, 7.7e-4 over 40%). So outside EMODnet
+  we look up the EMODnet median for the cell's (corrupt share, remaining
+  count) band, from a table fitted where both maps exist. Holdout test
+  (fit on alternate 1 degree columns, test on the rest): typically within a
+  factor of 1.6 of EMODnet, 90% within a factor of 3.9 (one plain scale
+  factor: 1.6 and 5.5).
 * Built once in GitHub Actions ("Build ship density" workflow) into a 0.1
   degree map, `data/traffic/ship_density_v1.nc` (artifact `ship-density`).
   The runner uses it when that file is present and warns, with no ship
   traffic, when it is not.
+* Spot values (build of 9 Nov 2026), ships per km²: drop point off the Bay
+  mouth 1.2e-3, Gulf Stream at 38N 70W 1.2e-5, mid-ocean at 40N 45W 2.0e-5,
+  Azores 2.7e-4, off Lisbon 2.4e-3.
 * Limits: one average map, no seasons; ships that don't carry AIS (many
-  fishing boats and yachts) are missing from both sources.
+  fishing boats and yachts) are missing from both sources; the table is
+  fitted on European water and applied to American water.
 
 ## Storm check (storms.py, issue #13)
 
