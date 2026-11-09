@@ -145,3 +145,13 @@ def test_batch_card_works_on_plain_run_batch_output():
     assert card.rate == 1.0 and card.causes == {}
     assert any("didn't record causes" in w for w in card.warnings)
     render_batch(card)
+
+
+def test_ship_traffic_warning_comes_from_the_batch():
+    base = {"start": datetime(2020, 5, 1), "outcome": "arrived", "days": 70.0}
+    unknown = batch_card(pd.DataFrame([base]))
+    assert any("doesn't record whether ship traffic" in w for w in unknown.warnings)
+    on = batch_card(pd.DataFrame([{**base, "ships": True}] * 2))
+    assert any("Ship traffic was on in every run" in w for w in on.warnings)
+    mixed = batch_card(pd.DataFrame([{**base, "ships": True}, {**base, "ships": False}]))
+    assert any("off in 1 of 2 runs" in w for w in mixed.warnings)
