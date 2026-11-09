@@ -80,6 +80,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser(
         "compare-currents", help="GLORYS vs SMOC on the shared Gulf Stream stretch (#73)"
     )
+    bq = sub.add_parser("check-buoys", help="ERA5 waves and wind vs NDBC buoys for a year (#10)")
+    bq.add_argument("year", type=int)
+    bq.add_argument("--workers", type=int, default=4)
     a = p.parse_args(argv)
 
     if a.cmd == "fetch-era5":
@@ -110,6 +113,18 @@ def main(argv: list[str] | None = None) -> None:
         cc.summarise(rows)
         print(f"\nOpen-Meteo vs SMOC total, {cc.DATES[2]} daily means:")
         cc.open_meteo_check(cc.DATES[2])
+    elif a.cmd == "check-buoys":
+        from pathlib import Path
+
+        from boatsim.oceandata import buoys
+
+        pairs, table, bands = buoys.run(a.year, workers=a.workers)
+        out = Path("runs/buoys")
+        out.mkdir(parents=True, exist_ok=True)
+        pairs.to_csv(out / f"pairs_{a.year}.csv")
+        table.to_csv(out / f"stats_{a.year}.csv", index=False)
+        bands.to_csv(out / f"by_height_{a.year}.csv", index=False)
+        buoys.report(table, bands)
     elif a.cmd == "check-storms":
         from pathlib import Path
 

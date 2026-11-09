@@ -1,0 +1,33 @@
+# How far to trust ERA5's waves and wind: compares them with NOAA NDBC buoys
+# off Virginia and offshore along the route (issue #10). Free data, no account.
+# Run it by hand: Actions tab -> "Check ERA5 against buoys" -> Run workflow.
+name: Check ERA5 against buoys
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/check-buoys.yml"
+      - "src/boatsim/oceandata/buoys.py"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        year: [2020, 2023]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]' requests
+      - name: Compare ERA5 with the buoys for ${{ matrix.year }} (fetches a year of ERA5, ~8 min)
+        run: python -m boatsim.oceandata check-buoys ${{ matrix.year }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: era5-vs-buoys-${{ matrix.year }}
+          path: runs/buoys/
+          retention-days: 90
