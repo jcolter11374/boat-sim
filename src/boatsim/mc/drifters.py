@@ -78,6 +78,37 @@ CASES: tuple[DrifterCase, ...] = (
     DrifterCase(300234066312890, "Jul 2019, south of Hatteras, undrogued"),
 )
 
+# The stretch both we and the Randolph team cross (#73): 36-42N, 75-50W.
+# Picked from every GDP drifter whose first fix is in that box, from 1993 on,
+# with at least 12 days of track: 258 in all. Split by start longitude into
+# west (75-65W), mid (65-57W) and east (57-50W), and by drogue (drogued for
+# 12+ days, or undrogued from the start; mixed ones dropped), then 4 per group
+# spread over the years. No undrogued drifter starts in the east band.
+# All 20 have a 10-day hourly track with no gap over 1 hour.
+SHARED_CASES: tuple[DrifterCase, ...] = (
+    DrifterCase(54421, "Jan 2006, west band (36.7N 69.4W), drogued"),
+    DrifterCase(79224, "Apr 2009, west band (36.7N 70.0W), drogued"),
+    DrifterCase(114599, "Oct 2013, west band (37.0N 67.2W), drogued"),
+    DrifterCase(300534061551770, "Aug 2022, west band (40.4N 68.2W), drogued"),
+    DrifterCase(9624914, "Apr 1997, west band (41.2N 67.9W), undrogued"),
+    DrifterCase(9624972, "Jun 1999, west band (41.9N 66.7W), undrogued"),
+    DrifterCase(71096, "Aug 2007, west band (41.6N 66.6W), undrogued"),
+    DrifterCase(300234066313020, "May 2019, west band (38.8N 70.6W), undrogued"),
+    DrifterCase(63129, "Nov 2006, mid band (38.1N 61.9W), drogued"),
+    DrifterCase(79326, "Apr 2009, mid band (36.5N 64.2W), drogued"),
+    DrifterCase(114896, "Jul 2013, mid band (41.1N 61.5W), drogued"),
+    DrifterCase(300234068347620, "Oct 2020, mid band (36.5N 60.4W), drogued"),
+    DrifterCase(72112, "Feb 2007, mid band (37.9N 63.9W), undrogued"),
+    DrifterCase(70825, "Apr 2007, mid band (37.3N 60.0W), undrogued"),
+    DrifterCase(300234068346830, "Oct 2020, mid band (36.5N 60.4W), undrogued"),
+    DrifterCase(300234066315370, "Oct 2020, mid band (36.5N 61.1W), undrogued"),
+    DrifterCase(18388, "Apr 2001, east band (40.0N 50.0W), drogued"),
+    DrifterCase(92865, "Jun 2010, east band (40.5N 55.8W), drogued"),
+    DrifterCase(118426, "Jun 2012, east band (39.2N 54.8W), drogued"),
+    DrifterCase(300534061650930, "Apr 2022, east band (36.8N 53.9W), drogued"),
+)
+CASE_SETS = {"hatteras": CASES, "shared": SHARED_CASES}
+
 
 # --- Real tracks ------------------------------------------------------------
 
@@ -300,7 +331,7 @@ def report_markdown(table: pd.DataFrame, days: int) -> str:
         f"# Drift check against real ocean drifters ({days} days)",
         "",
         (
-            "Each row is one real NOAA drifter started off Cape Hatteras or the Bay mouth. "
+            "Each row is one real NOAA drifter. "
             "We start a model float at the same place and time and let our simulated ocean "
             "carry it. *Gap* is how far apart the model and the real drifter are. *Skill* is 1 "
             "for a perfect track and 0 when the gaps are as big as the distance the drifter "
@@ -346,6 +377,73 @@ def report_markdown(table: pd.DataFrame, days: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- Dead-boat run (#73) -----------------------------------------------------
+
+DEAD_BOAT_START = datetime(2023, 5, 15)  # agreed with the Randolph team (#73)
+
+
+def on_land(currents, t: datetime, lat: float, lon: float) -> bool:
+    """True where GLORYS has no sea point around (lat, lon): its land mask.
+
+    Stand-in until the real coastline check (aground issue). GLORYS is on a
+    1/12 degree grid (about 9 km), so narrow rivers and inlets count as land
+    and a boat within a few km of a beach may still count as at sea.
+    """
+    import math
+
+    c = currents.sample(t, lat, lon)
+    return not math.isfinite(c["current_u"])
+
+
+def dead_boat(env, currents, design, start: datetime, lat: float, lon: float, days: float = 30):
+    """Drift the kayak with no thrust or steering until `days` pass or it
+    first reaches land. Returns (hourly track, summary dict)."""
+    kayak = kayak_for_drift(design)
+    track = drift(env, start, lat, lon, days, "kayak", vessel=kayak)
+    hourly = track.iloc[::6].reset_index(drop=True)  # 10-minute steps -> hourly
+    landed = None
+    for i, r in hourly.iterrows():
+        if i > 0 and on_land(currents, r["t"].to_pydatetime(), r["lat"], r["lon"]):
+            landed = i
+            break
+    if landed is not None:
+        hourly = hourly.iloc[: landed + 1]
+    path = sum(
+        distance_m(a.lat, a.lon, b.lat, b.lon)
+        for a, b in zip(hourly.itertuples(), hourly.iloc[1:].itertuples(), strict=False)
+    )
+    end = hourly.iloc[-1]
+    summary = {
+        "start": start,
+        "lat0": lat,
+        "lon0": lon,
+        "aground": landed is not None,
+        "days": (end["t"] - hourly["t"].iloc[0]).total_seconds() / 86400.0,
+        "end_lat": float(end["lat"]),
+        "end_lon": float(end["lon"]),
+        "path_km": path / 1000.0,
+        "km_from_start": distance_m(lat, lon, end["lat"], end["lon"]) / 1000.0,
+    }
+    return hourly, summary
+
+
+def dead_boat_markdown(s: dict) -> str:
+    where = f"{s['end_lat']:.2f}N, {-s['end_lon']:.2f}W"
+    if s["aground"]:
+        ending = f"first reached land (GLORYS land mask) after {s['days']:.1f} days at {where}"
+    else:
+        ending = f"was still at sea after {s['days']:.0f} days, at {where}"
+    return (
+        f"# Dead-boat run from {s['lat0']:.2f}N, {-s['lon0']:.2f}W, {s['start']:%d %b %Y}\n\n"
+        "The v4 kayak with motors off and no steering, pushed only by current, waves "
+        "and wind (ERA5 + GLORYS12), hazards off.\n\n"
+        f"It {ending}. Path {s['path_km']:.0f} km, {s['km_from_start']:.0f} km from the "
+        "start in a straight line.\n\n"
+        "Land check: a point counts as land where GLORYS (about 9 km grid) has no sea "
+        "point around it. That's a stand-in until the coastline check lands.\n"
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     from boatsim.config import load_design
     from boatsim.oceandata import ERA5Source, GlorysSource, ReanalysisEnvironment
@@ -359,10 +457,20 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--months", action="store_true", help="print the GLORYS months the cases need, then exit"
     )
+    p.add_argument("--set", default="hatteras", choices=list(CASE_SETS), help="which drifters")
+    p.add_argument(
+        "--dead-boat",
+        action="store_true",
+        help="instead: drift the dead kayak from the drop point on 15 May 2023 (#73)",
+    )
     a = p.parse_args(argv)
 
+    if a.dead_boat:
+        _main_dead_boat(a)
+        return
+    cases = CASE_SETS[a.set]
     gdp = open_gdp()
-    starts = [load_track(c.drifter_id, gdp, days=1)["t"].iloc[0].to_pydatetime() for c in CASES]
+    starts = [load_track(c.drifter_id, gdp, days=1)["t"].iloc[0].to_pydatetime() for c in cases]
     if a.months:
         need = sorted({m for t in starts for m in glorys_months(t - timedelta(days=1), a.days + 2)})
         print(" ".join(need))
@@ -373,7 +481,7 @@ def main(argv: list[str] | None = None) -> None:
     days = sorted({(t + timedelta(days=i)).date() for t in starts for i in range(a.days + 2)})
     era5.fetch_days(days, workers=a.workers)
     env = ReanalysisEnvironment(ERA5Source(), None if a.no_currents else GlorysSource())
-    table, tracks = run_check(env, load_design(a.design), days=a.days, gdp=gdp)
+    table, tracks = run_check(env, load_design(a.design), cases, days=a.days, gdp=gdp)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     table.to_csv(out / "drift_scores.csv", index=False)
@@ -385,17 +493,46 @@ def main(argv: list[str] | None = None) -> None:
     print(md)
 
 
+def _main_dead_boat(a) -> None:
+    from boatsim.config import load_design
+    from boatsim.oceandata import ERA5Source, GlorysSource, ReanalysisEnvironment, era5
+
+    design = load_design(a.design)
+    lat, lon = design.voyage["drop_lat"], design.voyage["drop_lon"]
+    start, days = DEAD_BOAT_START, a.days
+    if a.months:
+        print(" ".join(glorys_months(start - timedelta(days=1), days + 2)))
+        return
+    era5.fetch_days(
+        [(start + timedelta(days=i)).date() for i in range(-1, days + 2)], workers=a.workers
+    )
+    currents = GlorysSource()
+    env = ReanalysisEnvironment(ERA5Source(), currents)
+    track, summary = dead_boat(env, currents, design, start, lat, lon, days)
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    track.to_csv(out / f"dead_boat_{start:%Y-%m-%d}_track.csv", index=False)
+    md = dead_boat_markdown(summary)
+    (out / "dead_boat_report.md").write_text(md)
+    print(md)
+    print(track.iloc[::24].to_string())  # daily positions, for the log
+
+
 if __name__ == "__main__":
     main()
 
 
 __all__ = [
     "CASES",
+    "CASE_SETS",
+    "SHARED_CASES",
     "DrifterCase",
+    "dead_boat",
     "drift",
     "fair_model",
     "glorys_months",
     "load_track",
+    "on_land",
     "report_markdown",
     "run_check",
     "score",
