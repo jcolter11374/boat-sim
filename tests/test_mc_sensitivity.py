@@ -104,7 +104,7 @@ def test_compare_counts_flips_against_the_baseline():
     assert t.loc["solar_350", "gained"] == 2 and t.loc["solar_350", "lost"] == 2
     assert t.loc["solar_350", "arrived"] == 8
     md = S.report_markdown(pd.DataFrame(rows))
-    assert "| Bigger panels (350 W) | 8/10 |" in md
+    assert "| Bigger panels (350 W) | 8/10 | 8 |" in md
     header, sep = [ln for ln in md.splitlines() if ln.startswith("|")][:2]
     assert header.count("|") == sep.count("|")
 
@@ -145,3 +145,24 @@ def test_rows_record_whether_ship_traffic_was_on():
         unknown_p_by_60_days=0.0,
     )
     assert not df["ships"].any()  # constant weather has no ship map
+
+
+def test_finish_variants_set_route_target_and_rule():
+    from boatsim.runner.arrival import FinishTarget
+
+    north = S.SensitivityVoyage(variant="target_51n", weather="constant")
+    c = north.components(1)
+    assert isinstance(c.finish, FinishTarget) and (c.finish.lat, c.finish.lon) == (51.0, -16.0)
+    assert [(w.lat, w.lon) for w in north.mission().waypoints] == [S.BAY_MOUTH, (51.0, -16.0)]
+    assert c.base.route[-1].lat == 51.0  # base plans toward the same target
+    old = S.SensitivityVoyage(variant="old_rule", weather="constant").components(1)
+    assert old.finish.reached(38.5, -27.0)  # Azores counted under the old rule
+    assert not old.finish.reached(39.5, -13.5)  # the new target is open ocean
+    base = S.SensitivityVoyage(weather="constant")
+    assert base.mission().waypoints[1].lat == 36.0  # default route, south of the Azores
+
+
+def test_every_target_is_on_the_eastern_line():
+    for name, v in S.VARIANTS.items():
+        if isinstance(v.finish, tuple):
+            S.SensitivityVoyage(variant=name, weather="constant").components(1)  # validates

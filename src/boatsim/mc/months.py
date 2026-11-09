@@ -171,11 +171,16 @@ class MonthlyVoyage(StandardVoyage):
         c.vessel = MeteredVessel(c.vessel)
         return c
 
+    def mission(self):
+        """The route the boat is launched with (variants may change it)."""
+        from boatsim.runner.simulate import default_mission
+
+        return default_mission()
+
     def __call__(self, start: datetime, seed: int):
         from boatsim.config import load_design
         from boatsim.oceandata.grid import OutsideCoverage
         from boatsim.runner import VoyageLog, simulate
-        from boatsim.runner.simulate import default_mission
         from boatsim.types import Outcome
 
         voyage = load_design(self.design_path).voyage
@@ -183,7 +188,7 @@ class MonthlyVoyage(StandardVoyage):
         c = self.components(seed)
         mult = apply_spread(c.vessel.inner, seed) if self.spread else {}
         try:
-            log = simulate(c, start, *drop, default_mission(), seed=seed, max_days=self.max_days)
+            log = simulate(c, start, *drop, self.mission(), seed=seed, max_days=self.max_days)
         except OutsideCoverage:
             # The runner raised mid-voyage, so its log is gone: keep what we know.
             log = VoyageLog(start=start, seed=seed, outcome=Outcome.TIMEOUT)
