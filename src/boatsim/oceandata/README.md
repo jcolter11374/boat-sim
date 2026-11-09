@@ -24,6 +24,7 @@ python -m boatsim.oceandata sample 2020-10-15T12:00 37 -70 --no-currents
 |---|---|---|---|
 | Wind at 10 m, wave height, peak period, wave direction, sunlight (GHI), cloud, air temp | ERA5 hourly reanalysis (Hersbach et al. 2020, doi:10.1002/qj.3803) via Google's public ARCO-ERA5 Zarr, `gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3` | hourly, 0.25° (waves are 0.5° model output regridded) | none |
 | Surface current (top level, 0.49 m) | Copernicus Marine GLORYS12, product GLOBAL_MULTIYEAR_PHY_001_030 (doi:10.48670/moi-00021), datasets `cmems_mod_glo_phy_my_0.083deg_P1D-m` then `..._myint_...` from mid-2021 | daily mean, 1/12° | **free login needed** |
+| Second-opinion surface current (`SmocSource`, for checks only) | Copernicus Marine SMOC, product GLOBAL_ANALYSISFORECAST_PHY_001_024 (doi:10.48670/moi-00016), dataset `cmems_mod_glo_phy_anfc_merged-uv_PT1H-i`: `kind="model"` = daily mean of uo/vo; `kind="total"` = hourly utotal/vtotal (adds tides and Stokes drift) | daily mean or hourly, 1/12°, Gulf Stream box 33-46N 78-40W, from 1 Nov 2020; about 5 MB (model) or 115 MB (total) a month | **same free login** |
 
 ERA5 coverage in the store (checked 8 Nov 2026): final data 1940 to 30 Jun 2026,
 preliminary ("ERA5T") to 2 Nov 2026. GLORYS starts 1993, so voyages that need

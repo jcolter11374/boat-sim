@@ -7,7 +7,10 @@
 rates and sea-state multipliers from
 [sheltonr2/drone-boat](https://github.com/sheltonr2/drone-boat),
 `simulator/drone_sim/failures.py` and `simulator/drone_sim/sim.py`
-(commit 5eebe9f), under this licence:
+(commit 5eebe9f). The failure rates, the near-land and open-ocean phases, the
+comms-silent mode, the early-life multiplier and the three rate sets (#89) come
+from their shared hazard table, `docs/Failure_Rates.md` (commit 25befa9). All
+of it is used under this licence:
 
 ```
 MIT License

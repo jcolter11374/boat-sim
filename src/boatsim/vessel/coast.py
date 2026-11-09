@@ -1,13 +1,22 @@
-"""Rough distance to land, for hazards that only happen near a coast.
+"""Distance to land, for hazards that depend on being near a coast.
 
-STUB until Priya's real coastline lands (issue #11). This is the distance to
-the nearest of a few dozen hand-picked coastal points, good to roughly +/-50 km.
-That's fine for "within 50 or 100 km of land" tests, and useless for anything finer.
+Inside the route box this uses the shared land mask (runner/land.py: Natural
+Earth 1:10m on a 0.02 deg grid, kept in git). The mask is coarsened to 0.1 deg
+(about 10 km) and the coastline cells are kept; the distance is to the nearest
+coastline cell, good to about +/-10 km. That's what the near-land phase
+(within 150 km) and the capture band need.
+
+Outside the box, or if the mask file is missing, it falls back to the old stub:
+the distance to the nearest of a few dozen hand-picked coastal points, good to
+roughly +/-50 km. Priya's coastline for the arrival rule (#11) is separate.
 """
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
+
+import numpy as np
 
 from boatsim.geo import distance_m
 
@@ -72,13 +81,47 @@ _COAST_POINTS = [
 ]
 
 
+EARTH_RADIUS_KM = 6371.0
+COARSE_DEG = 0.1
+
+
 def distance_to_land_km(lat: float, lon: float) -> float:
-    """Approximate distance to the nearest listed coastal point, km (cached on a
-    0.05 deg grid, ~5 km, well inside the stub's own error)."""
+    """Distance to the nearest coastline, km (cached on a 0.05 deg grid, ~5 km)."""
     return _cached(round(lat * 20.0), round(lon * 20.0))
+
+
+@lru_cache(maxsize=1)
+def _coast_cells():
+    """(lat_rad, lon_rad, cos_lat, box) of 0.1 deg coastline cells, or None."""
+    try:
+        from boatsim.runner.land import default_land
+
+        m = default_land()
+    except (OSError, ValueError):
+        m = None
+    if m is None:
+        return None
+    k = max(round(COARSE_DEG / m.res), 1)
+    ni, nj = m.nlat // k, m.nlon // k
+    land = m.mask[: ni * k, : nj * k].reshape(ni, k, nj, k).any(axis=(1, 3))
+    pad = np.pad(land, 1, constant_values=False)
+    water_next = ~(pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:])
+    ii, jj = np.nonzero(land & water_next)
+    res = m.res * k
+    lat = np.radians(m.lat0 + (ii + 0.5) * res)
+    lon = np.radians(m.lon0 + (jj + 0.5) * res)
+    box = (m.lat0, m.lat0 + m.nlat * m.res, m.lon0, m.lon0 + m.nlon * m.res)
+    return lat, lon, np.cos(lat), box
 
 
 @lru_cache(maxsize=65536)
 def _cached(lat20: int, lon20: int) -> float:
     lat, lon = lat20 / 20.0, lon20 / 20.0
+    cells = _coast_cells()
+    if cells is not None:
+        clat, clon, ccos, box = cells
+        if box[0] <= lat <= box[1] and box[2] <= lon <= box[3] and clat.size:
+            p, q = math.radians(lat), math.radians(lon)
+            h = np.sin((clat - p) / 2.0) ** 2 + math.cos(p) * ccos * np.sin((clon - q) / 2.0) ** 2
+            return float(2.0 * EARTH_RADIUS_KM * np.arcsin(np.sqrt(h.min())))
     return min(distance_m(lat, lon, a, b) for a, b in _COAST_POINTS) / 1000.0
