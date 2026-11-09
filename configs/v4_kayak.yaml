@@ -70,7 +70,11 @@ comms:
 voyage:
   drop_lat: 36.85            # ~15 nm east of the Chesapeake Bay Bridge-Tunnel
   drop_lon: -75.70
-  arrival: any landfall in Europe, Azores included
+  # Finish (John, 2026-11-09): Microtransat Challenge rules, runner/arrival.py.
+  # Reach within 25 km of a target centred on the rules' eastern line; landfall
+  # is not a finish. Our target: on the line due west of Lisbon.
+  finish_lat: 39.5
+  finish_lon: -13.5
 
 # Hazard odds (vessel/hazards.py). Sizes are GUESSES scaled so a typical summer
 # crossing matches the design doc FMEA; Ravi varies them in Monte Carlo.

@@ -96,6 +96,9 @@ class Mission:
 class EventKind(str, Enum):
     ARRIVED = "arrived"
     AGROUND = "aground"
+    START_LINE = "start_line"  # crossed the Microtransat western line
+    FINISH_LINE = "finish_line"  # crossed the eastern line (finish only inside the target)
+    DISQUALIFIED = "disqualified"
     BATTERY_EMPTY = "battery_empty"
     CAPSIZE = "capsize"
     PART_FAILED = "part_failed"
@@ -128,5 +131,6 @@ class Message:
 class Outcome(str, Enum):
     ARRIVED = "arrived"
     LOST = "lost"
-    AGROUND = "aground"  # ran onto land outside Europe (#70)
+    AGROUND = "aground"  # ran onto land before finishing (#70)
+    DISQUALIFIED = "disqualified"  # Microtransat rule: silent >10 days in a row or >15 total
     TIMEOUT = "timeout"

@@ -28,6 +28,7 @@ from datetime import datetime
 import pandas as pd
 
 from boatsim.geo import distance_m
+from boatsim.runner.arrival import FinishTarget
 from boatsim.runner.simulate import VoyageLog
 from boatsim.types import EventKind, Outcome
 
@@ -36,12 +37,13 @@ from boatsim.types import EventKind, Outcome
 # One cause per voyage. Keys are stable (Ravi's batch stores them); labels are
 # what John reads.
 CAUSES: dict[str, str] = {
-    "arrived": "Arrived in Europe",
+    "arrived": "Finished: reached the target off Portugal (Microtransat rules)",
     "ship_strike": "Hit by a ship",
     "capsize": "Rolled over by a wave and didn't come back up",
     "part_failed": "A part broke and the boat was lost",
     "lost_other": "Lost at sea (other)",
-    "aground": "Ran aground outside Europe (drifted ashore)",
+    "aground": "Ran aground before reaching the finish (drifted ashore)",
+    "disqualified": "Disqualified: silent too long (Microtransat rule: 10 days in a row, 15 total)",
     "battery_empty": "Battery ran flat; drifted until time ran out",
     "off_course_timeout": "Still at sea when time ran out (too slow or blown off course)",
     "left_data_box": "Blown far off course, out of the weather-data area",
@@ -51,14 +53,12 @@ CAUSES: dict[str, str] = {
 # weather box (the run stops there, so it can't arrive).
 LEFT_DATA_BOX = "left_data_box"
 
-# Rough targets for "how far from Europe": the Azores (centre, minus the
-# radius the arrival rule uses) and the Portuguese coast. Not a coastline;
-# good enough to say "about 1,200 km short".
-_AZORES = (38.5, -28.0, 300.0)  # lat, lon, radius km (runner/arrival.py)
-_PORTUGAL = (39.5, -9.6, 0.0)
+# "How far to go": distance to the edge of the Microtransat target circle
+# (runner/arrival.py), which is what counts as a finish.
+_TARGET = FinishTarget()
 
 SAFE_MODE_HOLD_SOC = 0.15  # safe mode stops the motors below this (autonomy/safemode.py)
-STALL_WINDOW_DAYS = 5.0  # "losing ground" = farther from Europe than 5 days earlier
+STALL_WINDOW_DAYS = 5.0  # "losing ground" = farther from the finish than 5 days earlier
 MIN_RUNS_FOR_ODDS = 30  # below this, the batch card calls the odds rough
 MIN_RUNS_PER_MONTH = 10
 
@@ -69,13 +69,13 @@ SINGLE_TRACK_CAVEAT = (
 )
 
 
-def km_to_europe(lat: float, lon: float) -> float:
-    """Rough great-circle km to the nearest arrival target (Azores or Portugal)."""
-    best = math.inf
-    for tlat, tlon, radius_km in (_AZORES, _PORTUGAL):
-        d = distance_m(lat, lon, tlat, tlon) / 1000.0 - radius_km
-        best = min(best, d)
-    return max(0.0, best)
+def km_to_finish(lat: float, lon: float, target: FinishTarget = _TARGET) -> float:
+    """Great-circle km to the edge of the finish target circle (0 inside it)."""
+    d = (distance_m(lat, lon, target.lat, target.lon) - target.radius_m) / 1000.0
+    return max(0.0, d)
+
+
+km_to_europe = km_to_finish  # old name, kept for callers
 
 
 def _days(t: datetime, start: datetime) -> float:
@@ -88,6 +88,8 @@ def classify_cause(log: VoyageLog) -> str:
         return "arrived"
     if log.outcome == Outcome.AGROUND:
         return "aground"
+    if log.outcome == Outcome.DISQUALIFIED:
+        return "disqualified"
     if log.outcome == Outcome.LOST:
         # The last damaging event before the end is what sank it.
         for e in reversed(log.events):
@@ -117,7 +119,7 @@ def first_trouble(log: VoyageLog) -> Trouble | None:
 
     Earliest of: a knockdown, a broken part, a ship strike, a flat battery,
     the charge falling to the level where safe mode stops the motors, or the
-    boat being farther from Europe than it was 5 days before (losing ground).
+    boat being farther from the finish than it was 5 days before (losing ground).
     """
     found: list[Trouble] = []
     labels = {
@@ -148,7 +150,7 @@ def first_trouble(log: VoyageLog) -> Trouble | None:
     if rows:
         # Losing ground: compare each logged point with the one ~5 days earlier.
         times = [_days(r["t"], log.start) for r in rows]
-        dist = [km_to_europe(r["lat"], r["lon"]) for r in rows]
+        dist = [km_to_finish(r["lat"], r["lon"]) for r in rows]
         j = 0
         for i in range(len(rows)):
             while times[i] - times[j] > STALL_WINDOW_DAYS:
@@ -157,7 +159,7 @@ def first_trouble(log: VoyageLog) -> Trouble | None:
                 found.append(
                     Trouble(
                         times[i],
-                        f"losing ground: {dist[i] - dist[j]:.0f} km farther from Europe "
+                        f"losing ground: {dist[i] - dist[j]:.0f} km farther from the finish "
                         f"than {STALL_WINDOW_DAYS:.0f} days earlier",
                     )
                 )
@@ -252,7 +254,7 @@ def voyage_card(
         end_lon=None if end_lon is None else float(end_lon),
         km_to_go=None
         if end_lat is None or log.outcome == Outcome.ARRIVED
-        else float(round(km_to_europe(end_lat, end_lon))),
+        else float(round(km_to_finish(end_lat, end_lon))),
         distance_sailed_km=float(round(sailed)),
         min_soc=float(min(socs)) if socs else None,
         knockdowns=knockdowns,
@@ -293,7 +295,7 @@ def render_voyage(card: VoyageCard) -> str:
     if card.end_lat is not None:
         where = _pos(card.end_lat, card.end_lon)
         if card.km_to_go:
-            where += f", about {card.km_to_go:,.0f} km short of Europe"
+            where += f", about {card.km_to_go:,.0f} km short of the finish"
         lines.append(f"Ended at         {where}")
     lines.append(f"Distance sailed  {card.distance_sailed_km:,.0f} km over the ground")
     if card.min_soc is not None:
@@ -365,11 +367,30 @@ class BatchCard:
         return asdict(self)
 
 
+def _ships_warning(summary: pd.DataFrame) -> str:
+    """Say whether ship traffic was on, from the batch's own `ships` column
+    (True when the voyage ran with the ship-density map, #13)."""
+    if "ships" not in summary or summary["ships"].isna().all():
+        return (
+            "This batch doesn't record whether ship traffic was on. Runs before the "
+            "ship-traffic map (#13) had none, so collisions with ships are missing there."
+        )
+    on = summary["ships"].fillna(False).astype(bool)
+    if on.all():
+        return "Ship traffic was on in every run (#13), so collisions with ships are included."
+    if not on.any():
+        return "Ship traffic was off in this batch, so collisions with ships are missing."
+    return (
+        f"Ship traffic was off in {int((~on).sum())} of {len(on)} runs; "
+        "collisions with ships are missing from those."
+    )
+
+
 def batch_card(summary: pd.DataFrame) -> BatchCard:
     """Build the card for a Monte Carlo batch.
 
     Needs the `start` and `outcome` columns of BatchResult.summary; uses
-    `days`, `cause` (from card_row) and `airtime_usd` when present.
+    `days`, `cause` (from card_row), `airtime_usd` and `ships` when present.
     """
     n = len(summary)
     arrived_mask = summary["outcome"] == Outcome.ARRIVED.value if n else pd.Series(dtype=bool)
@@ -414,9 +435,10 @@ def batch_card(summary: pd.DataFrame) -> BatchCard:
         )
     if "cause" not in summary:
         warnings.append("This batch didn't record causes of loss (add card_row to run_batch).")
+    warnings.append(_ships_warning(summary))
     warnings.append(
         "Odds are only as good as the model: ocean currents checked against real "
-        "drifters (#19); ship traffic not modelled yet (#13), so collisions are missing."
+        "drifters (#19); ERA5 weather understates hurricane winds."
     )
 
     return BatchCard(
@@ -448,7 +470,7 @@ def render_batch(card: BatchCard) -> str:
         f"BATCH REPORT  {card.runs} simulated voyages",
         "=" * 64,
         (
-            f"Chance of reaching Europe  {card.rate:.0%}   "
+            f"Chance of finishing        {card.rate:.0%}   "
             f"(95% range {card.low:.0%} to {card.high:.0%})"
         ),
         f"Arrived {card.arrived} of {card.runs}",

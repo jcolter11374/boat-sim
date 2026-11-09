@@ -11,8 +11,7 @@ from boatsim.basestation.base import BasePolicy
 from boatsim.comms.base import Link
 from boatsim.comms.packing import pack_report
 from boatsim.oceandata.base import Environment, Forecast
-from boatsim.runner.arrival import in_europe
-from boatsim.runner.land import is_european_land
+from boatsim.runner.arrival import EAST_LINE, WEST_LINE, FinishTarget, SilenceClock, crosses
 from boatsim.types import Event, EventKind, Message, Mission, Outcome, Waypoint
 from boatsim.vessel.base import Vessel
 
@@ -29,6 +28,7 @@ class Components:
     base: BasePolicy
     pinger: object | None = None  # e.g. comms.GlobalstarPinger; one-way position beacon
     land: object | None = None  # runner.land.LandMask; None = no aground check (#70)
+    finish: FinishTarget = field(default_factory=FinishTarget)  # Microtransat target circle
 
 
 @dataclass
@@ -39,6 +39,8 @@ class VoyageLog:
     end: datetime | None = None
     rows: list[dict] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
+    t_start_line: datetime | None = None  # crossed the western (start) line
+    t_finish_line: datetime | None = None  # crossed the eastern line, target or not
 
     @property
     def days(self) -> float:
@@ -91,13 +93,22 @@ def simulate(
     pending_down: list[tuple[datetime, Mission]] = []
     n_steps = int(timedelta(days=max_days) / dt)
     was_powered = True
+    silence = SilenceClock(start)
 
     for i in range(n_steps):
         env = c.env.sample(state.t, state.lat, state.lon)
         sensors = c.vessel.sense(state, rng)
         cmd = c.autopilot.update(sensors, mission, state.t)
+        prev_pos = (state.lat, state.lon)
         state, events = c.vessel.step(state, cmd, env, dt, rng)
         log.events.extend(events)
+        pos = (state.lat, state.lon)
+        if log.t_start_line is None and crosses(WEST_LINE, prev_pos, pos):
+            log.t_start_line = state.t
+            log.events.append(Event(state.t, EventKind.START_LINE))
+        if log.t_finish_line is None and crosses(EAST_LINE, prev_pos, pos):
+            log.t_finish_line = state.t
+            log.events.append(Event(state.t, EventKind.FINISH_LINE))
 
         # A flat battery cuts power to the Iridium modem: no reports, no mailbox
         # checks, and routes from base wait in the mailbox until it restarts.
@@ -133,6 +144,7 @@ def simulate(
             pending_up.remove(item)
             t_up, report = item
             log.events.append(Event(t_up, EventKind.MESSAGE_RECEIVED, "report at base"))
+            silence.heard(t_up)
             new = c.base.on_report(report, c.forecast.issue(t_up))
             if new is not None:
                 down = Message(
@@ -160,6 +172,7 @@ def simulate(
             next_ping += c.pinger.every
             if c.pinger.ping(state.t, state.lat, state.lon, env, rng) is not None:
                 log.events.append(Event(state.t, EventKind.MESSAGE_RECEIVED, "globalstar ping"))
+                silence.heard(state.t)
 
         if i % log_every == 0:
             log.rows.append(
@@ -180,20 +193,22 @@ def simulate(
         if not state.alive:
             log.outcome, log.end = Outcome.LOST, state.t
             break
-        if in_europe(state.lat, state.lon):
+        if c.finish.reached(state.lat, state.lon):
+            # Microtransat finish: inside the target circle, and the boat logs
+            # its position there (the GPS log counts).
             log.outcome, log.end = Outcome.ARRIVED, state.t
             log.events.append(Event(state.t, EventKind.ARRIVED))
             break
         if c.land is not None and c.land.on_land(state.lat, state.lon):
-            # Landfall anywhere in Europe counts (John's rule); anywhere else the
-            # boat is ashore and the voyage is over.
-            if is_european_land(state.lat, state.lon):
-                log.outcome, log.end = Outcome.ARRIVED, state.t
-                log.events.append(Event(state.t, EventKind.ARRIVED, "landfall"))
-            else:
-                log.outcome, log.end = Outcome.AGROUND, state.t
-                where = f"{state.lat:.2f}N {abs(state.lon):.2f}W"
-                log.events.append(Event(state.t, EventKind.AGROUND, where))
+            # Ashore before reaching the target: a kayak can't get off again.
+            log.outcome, log.end = Outcome.AGROUND, state.t
+            where = f"{state.lat:.2f}N {abs(state.lon):.2f}W"
+            log.events.append(Event(state.t, EventKind.AGROUND, where))
+            break
+        why = silence.disqualified(state.t)
+        if why is not None:
+            log.outcome, log.end = Outcome.DISQUALIFIED, state.t
+            log.events.append(Event(state.t, EventKind.DISQUALIFIED, why))
             break
     else:
         log.end = state.t
@@ -203,11 +218,11 @@ def simulate(
 
 
 def default_mission() -> Mission:
-    """Placeholder great-circle-ish route: Bay mouth to the Azores to Portugal."""
+    """Placeholder route: Bay mouth, past the Azores, to the finish target west of Lisbon."""
     return Mission(
         waypoints=[
             Waypoint(36.9, -75.5),
-            Waypoint(38.5, -28.0),
-            Waypoint(39.5, -9.6),
+            Waypoint(36.0, -26.0),  # south of the Azores, clear of Santa Maria
+            Waypoint(39.5, -13.5),  # the finish target (runner/arrival.py)
         ]
     )
