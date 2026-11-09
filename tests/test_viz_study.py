@@ -92,3 +92,13 @@ def test_shakedown_link():
     assert "How the shakedown works" not in study.hero_html(t)
     h = study.hero_html(t, shakedown_link="https://example.org/shakedown-trial.md")
     assert '<a href="https://example.org/shakedown-trial.md">How the shakedown works</a>' in h
+
+
+def test_target_chart_can_drop_the_duplicate_baseline():
+    t = compare(_voyages())
+    tf = study.target_figure(t, headline="cruise_25w", baseline_label="")
+    labels = list(tf.data[0].y)
+    assert not any("stands" in lab for lab in labels)
+    colours = list(tf.data[0].marker.color)
+    assert colours[labels.index(next(x for x in labels if x.startswith("39.5N")))] == study.BAR
+    assert colours.count(study.BAR) == 1
