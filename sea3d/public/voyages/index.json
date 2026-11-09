@@ -2,6 +2,20 @@
  "schema": 1,
  "voyages": [
   {
+   "file": "voyage_2020-04-01.json",
+   "boat": "v4 kayak",
+   "start": "2020-04-01T12:00",
+   "outcome": "lost",
+   "days": 71.69
+  },
+  {
+   "file": "voyage_2020-04-15.json",
+   "boat": "v4 kayak",
+   "start": "2020-04-15T12:00",
+   "outcome": "arrived",
+   "days": 71.4
+  },
+  {
    "file": "voyage_2020-05-01.json",
    "boat": "v4 kayak",
    "start": "2020-05-01T12:00",
@@ -14,6 +28,20 @@
    "start": "2020-05-15T12:00",
    "outcome": "disqualified",
    "days": 64.51
+  },
+  {
+   "file": "voyage_2020-06-01.json",
+   "boat": "v4 kayak",
+   "start": "2020-06-01T12:00",
+   "outcome": "arrived",
+   "days": 74.45
+  },
+  {
+   "file": "voyage_2020-06-15.json",
+   "boat": "v4 kayak",
+   "start": "2020-06-15T12:00",
+   "outcome": "arrived",
+   "days": 63.99
   }
  ]
 }
