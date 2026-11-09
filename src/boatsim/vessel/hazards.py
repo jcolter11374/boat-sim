@@ -241,7 +241,7 @@ _PLANNING = {
     "capture_per_day": 0.01,  # R2 planning (x0.5 labels, notice, offshore drop)
     "capture_near_land_km": 150.0,
     "early_life_k": 3.0,
-    "shakedown_days": 14.0,  # earned only by a 14-day unattended trial
+    "shakedown_days": 14.0,  # a 14-day unattended trial before the drop: planned (John, 9 Nov 2026)
     "unknown_p_by_60_days": 0.0,
 }
 RATE_SETS: dict[str, dict[str, float]] = {
