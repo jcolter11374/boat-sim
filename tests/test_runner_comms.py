@@ -198,3 +198,59 @@ def test_globalstar_pings_keep_a_boat_with_a_dead_modem_in_the_race():
 
     log = _run(DeadLink(), OneShotBase(), pinger=GlobalstarPinger(p_copy_calm=1.0), days=20)
     assert log.outcome != Outcome.DISQUALIFIED
+
+
+class BrokenKit(KinematicVessel):
+    """A boat whose Iridium kit and/or beacon have failed (hazards, #89)."""
+
+    def __init__(self, design, iridium_ok=True, beacon_ok=True):
+        super().__init__(design)
+        self.flags = {"iridium_ok": iridium_ok, "beacon_ok": beacon_ok}
+
+    def step(self, state, cmd, env, dt, rng):
+        s, events = super().step(state, cmd, env, dt, rng)
+        for k, v in self.flags.items():
+            setattr(s, k, v)
+        return s, events
+
+
+def _run_broken(base, pinger=None, days=3, **flags):
+    design = load_design("configs/v4_kayak.yaml")
+    env = ConstantEnvironment(EnvState(ghi=1000.0))
+    c = Components(
+        env=env,
+        forecast=PerfectForecast(env),
+        vessel=BrokenKit(design, **flags),
+        autopilot=WaypointAutopilot(),
+        link=PerfectLink(),
+        base=base,
+        pinger=pinger,
+    )
+    return simulate(c, datetime(2020, 10, 1), 36.85, -75.7, default_mission(), max_days=days)
+
+
+def test_dead_iridium_kit_sends_nothing_but_the_beacon_still_pings():
+    base = OneShotBase()
+    log = _run_broken(base, pinger=GlobalstarPinger(p_copy_calm=1.0), iridium_ok=False)
+    assert base.seen == []
+    assert not any(e.kind == EventKind.MESSAGE_SENT for e in log.events)
+    assert any(e.detail == "globalstar ping" for e in log.events)
+
+
+def test_dead_beacon_sends_no_pings():
+    log = _run_broken(OneShotBase(), pinger=GlobalstarPinger(p_copy_calm=1.0), beacon_ok=False)
+    assert not any(e.detail == "globalstar ping" for e in log.events)
+    assert any(e.kind == EventKind.MESSAGE_SENT for e in log.events)
+
+
+def test_boat_with_no_working_radio_is_disqualified():
+    from boatsim.types import Outcome
+
+    log = _run_broken(
+        OneShotBase(),
+        pinger=GlobalstarPinger(p_copy_calm=1.0),
+        days=20,
+        iridium_ok=False,
+        beacon_ok=False,
+    )
+    assert log.outcome == Outcome.DISQUALIFIED
