@@ -569,23 +569,37 @@ def sensitivity_figure(rows: pd.DataFrame):
             orientation="h",
             marker={"color": [BAR if ok else BAR_OUTSIDE for ok in real], "cornerradius": 4},
             text=text,
-            textposition="outside",
-            textfont={"color": INK_2},
-            cliponaxis=False,
+            textposition="none",  # drawn by the text trace below
             hovertext=hover,
             hoverinfo="text",
         )
     )
-    lo = min(-20.0, float(rows["delta_pts"].min()) - 22)  # room for labels left of a bar
+    # Every label sits right of the zero line (or of a gain bar), so labels never
+    # run into the change names on the left, however long a loss bar is.
+    fig.add_trace(
+        go.Scatter(
+            y=list(rows["label"]),
+            x=[max(d, 0.0) + 1 for d in rows["delta_pts"]],
+            mode="text",
+            text=text,
+            textposition="middle right",
+            textfont={"color": INK_2},
+            cliponaxis=False,
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    lo = min(-20.0, float(rows["delta_pts"].min()) - 3)
+    hi = max(0.0, float(rows["delta_pts"].max())) + 60  # room for the longest label
     _layout(
         fig,
         "Change in chance of finishing vs the design as it stands (April to June)",
         height=90 + 38 * len(rows),
         bargap=0.35,
     )
-    fig.update_xaxes(range=[lo, 30], ticksuffix=" pts", zeroline=True, zerolinecolor=AXIS)
+    fig.update_xaxes(range=[lo, hi], ticksuffix=" pts", zeroline=True, zerolinecolor=AXIS)
     fig.update_yaxes(autorange="reversed")
-    fig.update_layout(margin={"l": 440, "r": 30, "t": 50, "b": 40})
+    fig.update_layout(margin={"l": 440, "r": 30, "t": 50, "b": 40}, showlegend=False)
     return fig
 
 
