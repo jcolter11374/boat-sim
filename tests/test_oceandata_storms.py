@@ -88,3 +88,35 @@ def test_encounter_finds_the_closest_hurricane(tmp_path):
     assert S.encounter(far, tracks)["hurricane_min_km"] > 3000
     none = [{"t": datetime(2016, 1, 1), "lat": 36.0, "lon": -60.0}]
     assert S.encounter(none, tracks)["hurricane_min_km"] == float("inf")
+
+
+def test_ratio_table_by_category_and_month(tmp_path):
+    rng = np.random.default_rng(0)
+    n = 40
+    res = pd.DataFrame(
+        {
+            # 30 C1 points in September, 5 in October; 5 TS points in August.
+            "USA_SSHS": [1] * 35 + [0] * 5,
+            "time": pd.to_datetime(["2015-09-01"] * 30 + ["2015-10-01"] * 5 + ["2015-08-01"] * 5),
+            "ratio": np.r_[np.full(30, 0.6), np.full(5, 0.8), np.full(5, 0.7)]
+            + rng.normal(0, 1e-6, n),
+        }
+    )
+    t = S.ratio_table(res)
+    assert list(t.columns) == S.RATIO_COLUMNS
+    assert len(t) == 7 * 7  # TD, TS, C1-C5 x (all + Jun-Nov)
+    row = t.set_index(["category", "month"])
+    assert row.loc[("C1", "9"), "ratio_median"] == pytest.approx(0.6, abs=1e-4)
+    assert row.loc[("C1", "9"), "note"] == ""
+    oct_ = row.loc[("C1", "10")]  # 5 points: falls back to C1's all-month row
+    assert oct_["n_points"] == 5 and "all-month" in oct_["note"]
+    assert oct_["ratio_median"] == row.loc[("C1", "all"), "ratio_median"]
+    assert row.loc[("C1", "all"), "n_points"] == 35
+    assert "only 5 points" in row.loc[("TS", "all"), "note"]
+    assert np.isnan(row.loc[("C5", "all"), "ratio_median"])
+    p = tmp_path / "derived" / "ratio.csv"
+    S.write_ratio_csv(t, p, 2012, 2021)
+    text = p.read_text()
+    assert "0.93" in text and "doi:10.1175/2009BAMS2755.1" in text and "200 km" in text
+    back = pd.read_csv(p, comment="#")
+    assert len(back) == 49 and back.month.astype(str).tolist()[0] == "all"

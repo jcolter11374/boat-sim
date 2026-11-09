@@ -159,6 +159,104 @@ def summarise(res, log=print) -> list[dict]:
     return rows
 
 
+CATEGORY = {-1: "TD", 0: "TS", 1: "C1", 2: "C2", 3: "C3", 4: "C4", 5: "C5"}
+RATIO_MONTHS = list(range(6, 12))
+MIN_POINTS = 10  # fewer than this in a category-month: use the category's "all" row
+RATIO_COLUMNS = ["category", "month", "n_points", "ratio_median", "ratio_p25", "ratio_p75", "note"]
+
+
+def ratio_table(res, months=RATIO_MONTHS, min_points: int = MIN_POINTS):
+    """ERA5 / best-track wind ratio by storm category and month (issue #117).
+
+    res is compare()'s output. Rows: TD, TS, C1-C5, each for months 6-11 and
+    "all" (every month, including the odd May or December point). A category
+    and month with fewer than min_points points takes the category's "all"
+    values, with a note saying so. Subtropical, post-tropical and other
+    non-tropical points (USA_SSHS -2 to -5) are left out."""
+    import pandas as pd
+
+    ok = res[np.isfinite(res.ratio) & res.USA_SSHS.isin(list(CATEGORY))].copy()
+    ok["category"] = ok.USA_SSHS.astype(int).map(CATEGORY)
+    ok["month"] = ok.time.dt.month
+    rows = []
+    for cat in CATEGORY.values():
+        c = ok[ok.category == cat]
+
+        def q(r):
+            if not len(r):
+                return math.nan, math.nan, math.nan
+            return float(r.median()), float(r.quantile(0.25)), float(r.quantile(0.75))
+
+        all_med, all_p25, all_p75 = q(c.ratio)
+        rows.append(
+            {
+                "category": cat,
+                "month": "all",
+                "n_points": len(c),
+                "ratio_median": all_med,
+                "ratio_p25": all_p25,
+                "ratio_p75": all_p75,
+                "note": "" if len(c) >= min_points else f"only {len(c)} points",
+            }
+        )
+        for m in months:
+            r = c.ratio[c.month == m]
+            if len(r) >= min_points:
+                med, p25, p75 = q(r)
+                note = ""
+            else:
+                med, p25, p75 = all_med, all_p25, all_p75
+                note = f"{len(r)} points < {min_points}: values are this category's all-month row"
+            rows.append(
+                {
+                    "category": cat,
+                    "month": str(m),
+                    "n_points": len(r),
+                    "ratio_median": med,
+                    "ratio_p25": p25,
+                    "ratio_p75": p75,
+                    "note": note,
+                }
+            )
+    return pd.DataFrame(rows, columns=RATIO_COLUMNS)
+
+
+def write_ratio_csv(table, path, first_year: int, last_year: int) -> None:
+    """The ratio table with '#' header lines saying what the numbers mean."""
+    header = [
+        "# ERA5 peak 10 m wind / NHC best-track maximum wind, by storm category and month",
+        "# Made by boatsim.oceandata.storms (jcolter11374/boat-sim, MIT), issue #117",
+        (
+            f"# ERA5 peak: highest hourly 10 m wind on ERA5 grid points within {RADIUS_KM:.0f} km "
+            "of the best-track centre at that hour"
+        ),
+        (
+            "# Best track: USA_WIND (1-minute sustained wind, knots, converted to m/s); "
+            "category from USA_SSHS (TD = -1, TS = 0, C1-C5)"
+        ),
+        (
+            f"# Reference: {ONE_TO_TEN_MIN} = perfect agreement (WMO/TD-1555 1-minute to "
+            "10-minute factor at sea); below it ERA5 is too weak"
+        ),
+        (
+            f"# Points: 6-hourly synoptic best-track points inside the route box {ROUTE_BOX}, "
+            f"seasons {first_year}-{last_year}"
+        ),
+        (
+            "# Source: IBTrACS v04r01 North Atlantic, Knapp et al. 2010, BAMS 91, 363-376, "
+            "doi:10.1175/2009BAMS2755.1; ERA5, Hersbach et al. 2020, doi:10.1002/qj.3803"
+        ),
+        (
+            f"# Category-months with fewer than {MIN_POINTS} points use the category's all-month "
+            "values (see note)"
+        ),
+    ]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(header) + "\n")
+        table.to_csv(f, index=False, float_format="%.3f")
+
+
 def run(csv, first_year: int, last_year: int, workers: int = 4, log=print):
     from boatsim.oceandata import era5
 

@@ -42,3 +42,8 @@ jobs:
           name: era5-vs-ibtracs
           path: runs/storms/
           retention-days: 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: era5-storm-wind-ratio
+          path: data/derived/era5_storm_wind_ratio.csv
+          retention-days: 90
