@@ -12,11 +12,12 @@ What a person at base would do each morning, written down as a rule:
    speeds the boat along the line, a head current slows it, and a side current
    too strong to angle against pushes it off.
 4. Score each leg by the estimated time to the end of the route: the 3 days,
-   plus the distance still to go divided by the speed the boat would make good
-   toward the goal in the water it ends up in. That way a leg that steps out of
-   a foul current scores well even if it doesn't gain much distance at first.
-   If the best leg beats "carry on as planned" by at least `min_gain_h`, send
-   it as a new route.
+   plus the distance still to go divided by the boat's still-water speed. In
+   other words, a leg wins only if the forecast says it leaves the boat closer
+   to the finish after 3 days. Past 3 days the forecast is no better than a
+   guess, so the score doesn't pretend to know the currents there. If the
+   best leg beats "carry on as planned" by at least `min_gain_h`, send it as
+   a new route.
 5. Never send more than one new route per `min_interval` (a day by default).
 6. Otherwise, every `ack_every` (2 days by default), send a tiny "all well,
    carry on" message: the same route again. It tells safe mode that base is
@@ -232,13 +233,13 @@ class ForecastReplanPolicy:
         if rejoin != wp and self.crosses_keep_out(wp.lat, wp.lon, rejoin.lat, rejoin.lon, margin):
             return math.inf
         plat, plon = path[-1]
-        left, nxt = self._route_after(plat, plon)
-        env = forecast.sample(t0 + self.horizon, plat, plon)
-        ce = env.current_u + self.windage * env.wind_u
-        cn = env.current_v + self.windage * env.wind_v
-        ve, vn = _ground_velocity(bearing_deg(plat, plon, nxt.lat, nxt.lon), speed, ce, cn)
-        made_good = max(math.hypot(ve, vn), 0.05 * speed)  # never divide by ~0
-        return self.horizon.total_seconds() + left / made_good
+        left, _ = self._route_after(plat, plon)
+        # Beyond the horizon the forecast knows nothing useful, so the rest is
+        # costed at still-water speed. (It used to use the current at the end
+        # point, stretched over the thousands of km left: one eddy, real or a
+        # forecast error, then looked worth days, and base re-routed the boat
+        # almost daily for a net loss: QA run #105.)
+        return self.horizon.total_seconds() + left / speed
 
     def on_report(self, report: dict, forecast: Environment) -> Mission | None:
         t = datetime.fromisoformat(report["t"])

@@ -30,7 +30,7 @@ class FoulBand:
         return EnvState(ghi=800.0, current_u=-0.6 if lat > 37.5 else 0.0)
 
 
-def _voyage(env, base, days=20):
+def _voyage(env, base, days=20, start=START):
     design = load_design("configs/v4_kayak.yaml")
     c = Components(
         env,
@@ -40,7 +40,7 @@ def _voyage(env, base, days=20):
         PerfectLink(),
         base,
     )
-    return simulate(c, T0, *START, Mission([GOAL]), max_days=days)
+    return simulate(c, T0, *start, Mission([GOAL]), max_days=days)
 
 
 def _days_to_goal(log, within_m=10_000.0):
@@ -91,14 +91,18 @@ def test_without_acks_safe_mode_drops_into_lost_comms():
 
 
 def test_detours_around_a_foul_current_and_arrives_sooner():
+    """Start 22 km inside the foul band, so a detour gets out within the 3-day
+    horizon. (A band the boat can't leave within 3 days is out of base's sight
+    by design: past 3 days the forecast is no better than a guess.)"""
     env = FoulBand()
-    held = _voyage(env, HoldCoursePolicy())
+    start = (37.7, START[1])
+    held = _voyage(env, HoldCoursePolicy(), start=start)
     policy = ForecastReplanPolicy(route=[GOAL])
-    replanned = _voyage(env, policy)
+    replanned = _voyage(env, policy, start=start)
     assert policy.sent, "expected at least one correction"
     first = policy.sent[0][1].waypoints[0]
     assert first.lat < 37.5  # the new leg heads south, out of the foul band
-    assert _days_to_goal(replanned) < 0.8 * _days_to_goal(held)
+    assert _days_to_goal(replanned) < 15 and _days_to_goal(replanned) < 0.8 * _days_to_goal(held)
 
 
 def test_at_most_one_route_per_day():
