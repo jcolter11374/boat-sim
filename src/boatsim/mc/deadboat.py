@@ -53,8 +53,8 @@ def start_point(name: str) -> tuple[float, float]:
     return round(lat, 4), round(lon, 4)
 
 
-def launches(years) -> list[datetime]:
-    return [datetime(y, m, d, 12) for y in years for m in LAUNCH_MONTHS for d in LAUNCH_DAYS]
+def launches(years, hour: int = 12) -> list[datetime]:
+    return [datetime(y, m, d, hour) for y in years for m in LAUNCH_MONTHS for d in LAUNCH_DAYS]
 
 
 # --- Distance to land -------------------------------------------------------
@@ -143,9 +143,11 @@ def run_one(env, design, start: datetime, name: str, days: float = 30.0, land=No
     }
 
 
-def run_year(env, design, year: int, days: float = 30.0, land=None, log=print) -> pd.DataFrame:
+def run_year(
+    env, design, year: int, days: float = 30.0, land=None, log=print, hour: int = 12
+) -> pd.DataFrame:
     rows = []
-    for start in launches([year]):
+    for start in launches([year], hour):
         for name in STARTS_KM:
             r = run_one(env, design, start, name, days, land)
             rows.append(r)
@@ -242,6 +244,7 @@ def main(argv: list[str] | None = None) -> None:
     r = sub.add_parser("run", help="every start point and launch date of one year")
     r.add_argument("year", type=int)
     r.add_argument("--days", type=float, default=30.0)
+    r.add_argument("--hour", type=int, default=12, help="UTC launch hour (default noon)")
     r.add_argument("--design", default="configs/v4_kayak.yaml")
     r.add_argument("--out", default="runs/deadboat")
     r.add_argument("--workers", type=int, default=4, help="parallel ERA5 downloads")
@@ -268,13 +271,13 @@ def main(argv: list[str] | None = None) -> None:
             days = sorted(
                 {
                     (t + timedelta(days=i)).date()
-                    for t in launches([a.year])
+                    for t in launches([a.year], a.hour)
                     for i in range(-1, int(a.days) + 2)
                 }
             )
             era5.fetch_days(days, workers=a.workers)
             env = ReanalysisEnvironment(ERA5Source(), GlorysSource())
-        df = run_year(env, design, a.year, a.days, default_land())
+        df = run_year(env, design, a.year, a.days, default_land(), hour=a.hour)
         df.to_csv(out / f"deadboat_{a.year}.csv", index=False)
     else:
         df = pd.concat([pd.read_csv(x, parse_dates=["start"]) for x in a.csvs], ignore_index=True)

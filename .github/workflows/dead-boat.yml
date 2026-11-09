@@ -17,6 +17,9 @@ on:
       days:
         description: "Days to drift"
         default: "30"
+      hour:
+        description: "UTC launch hour"
+        default: "12"
   pull_request:
     paths:
       - src/boatsim/mc/deadboat.py
@@ -45,6 +48,7 @@ jobs:
       BOATSIM_REQUIRE_LAND: "1"  # fail, not sail through land, if the mask is missing
       YEAR: ${{ matrix.year }}
       DAYS: ${{ inputs.days || '30' }}
+      HOUR: ${{ inputs.hour || '12' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,7 +58,7 @@ jobs:
       - name: Fetch currents for April to July
         run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-07"
       - name: Drift from every start point and date
-        run: python -m boatsim.mc.deadboat run "$YEAR" --days "$DAYS" --out runs/deadboat
+        run: python -m boatsim.mc.deadboat run "$YEAR" --days "$DAYS" --hour "$HOUR" --out runs/deadboat
       - uses: actions/upload-artifact@v4
         with:
           name: deadboat-${{ matrix.year }}

@@ -88,3 +88,10 @@ def test_report_has_one_row_per_start_point():
     assert "| Shelf edge (about 120 km) | 4 | 0 (0%) |  | 4 (100%) | 6.0 |" in md
     header, sep = [ln for ln in md.splitlines() if ln.startswith("|")][:2]
     assert header.count("|") == sep.count("|")
+
+
+def test_launch_hour_is_settable():
+    from boatsim.mc import deadboat as D
+
+    assert {t.hour for t in D.launches([2023])} == {12}
+    assert {t.hour for t in D.launches([2023], 0)} == {0}
