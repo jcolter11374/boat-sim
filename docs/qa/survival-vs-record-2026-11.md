@@ -2,10 +2,55 @@
 
 Ravi (QA), 9 Nov 2026. Data: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (the fully paired sensitivity run, 100 voyages per variant, April to June launches).
 
-> **Correction (9 Nov, from Theo, #122): this compares the wrong endpoint, so the gap below is overstated, probably by most of its size.**
-> - The record ends a boat at its **last report**. Here, "still working" means not lost, aground or disqualified. A boat whose Iridium dies carries on in our sim, reporting through the beacon only, so it still counts as working.
-> - Theo's rough count for the historical set offshore gives Iridium-ending failures at about 0.0077 a day: the main box 0.0035, an uncleared software hang 0.001, and Iridium itself about 0.0032. The record, leaving out its rig failures, runs at 0.0080 a day. On the record's own yardstick, the two may roughly agree.
-> - Sensitivity runs now log `last_report_day` per voyage (#122). The next batch scores three endpoints: last Iridium report, the boat lost or completely silent, and the boat lost. Read this page's numbers as "boat lost" survival until that batch is in.
+## Results on the record's yardstick: read this first
+
+[Run 42623431597](https://github.com/jcolter11374/boat-sim/actions/runs/42623431597), main at caf3a68 (after #122). The same 100 spring launches and the same dice as every other run. Theo spotted that the first version of this page compared the wrong thing, and this section fixes it.
+
+**Short version.**
+- The record ends a boat at its **last satellite report**. Scored that way, our simulated boats fail at close to the record's pace in the first week and offshore. They still last somewhat longer than the record overall.
+- So most of the big gap in the first version came from how it was counted, not from failure rates that are far too kind. Some of the gap is real.
+- About a third of our finishers arrive with Iridium already dead, and only the beacon still reporting. That matters for #89 step 5.
+
+**Still reporting by Iridium** (the record's yardstick; finishers count as surviving):
+
+| Day | Record | Sim, historical rates | Sim, planning rates (today's design) |
+|---|---|---|---|
+| 7 | 76% | 81% | 92% |
+| 30 | 47% | 63% | 83% |
+| 60 | 29% | 49% | 69% |
+| 90 | n/a | 31% | 49% |
+
+- **Offshore loss rate**, counted as Iridium loss per day:
+  - historical set: 1.1% from day 7 to day 30, and 0.8% from day 30 to day 60;
+  - record: 1.3% offshore, or 0.8% without its rig and weather failures.
+  - So on this yardstick the historical rates sit inside the record's range. Theo's estimate of 0.0077 a day was about right.
+- **Where the historical set is still kinder than the record:** the near-land days, and boats lasting to day 60 (49% against 29%). The record's figures mix all directions and many years of hobby boats, so part of that gap may be the boats rather than our model.
+
+**Three ways of scoring the same voyages** (share surviving at day 30 / day 60):
+
+| Variant | Finished (of 100) | (a) Iridium still reporting | (b) still heard at all, by Iridium or beacon | (c) not lost | Arrived on beacon only |
+|---|---|---|---|---|---|
+| Planning rates (design as it stands) | 78 | 83% / 69% | 93% / 88% | 94% / 90% | 24 |
+| Historical rates | 69 | 63% / 49% | 89% / 82% | 89% / 83% | 38 |
+| Historical, electronics boxes rarely fail together (10%) | 69 | 61% / 46% | 92% / 81% | 92% / 82% | 40 |
+| Historical, one fault kills both boxes | **51** | 59% / 39% | 76% / 58% | 76% / 59% | 24 |
+| Historical, stuck upside down 10x as often | 66 | 60% / 46% | 86% / 79% | 86% / 80% | 38 |
+| Historical, stuck upside down 30x as often | 64 | 60% / 45% | 86% / 77% | 86% / 78% | 37 |
+| Planning, wear-out (best fit) | 79 | 86% / 72% | 95% / 90% | 96% / 92% | 23 |
+| Planning, fast wear-out | 86 | 91% / 80% | 96% / 93% | 97% / 95% | 22 |
+| Historical, fast wear-out | 76 | 85% / 68% | 94% / 88% | 94% / 89% | 30 |
+
+What it says:
+- **The two electronics boxes are worth about 18 finishes** under record rates: 69 with our design against 51 if one fault takes out both. Whether they fail together 10% or 30% of the time makes no difference.
+- **Iridium is the weak link, not the boat.** Under historical rates, 38 of the 69 finishers arrive with Iridium dead. Our boat counts as arriving because the beacon keeps reporting. The race's silence rule allows that only if beacon positions count as reports. #89 step 5 needs to settle that, and it may be John's call.
+- **Capsizes that leave the boat stuck upside down** cost 3 finishes at 10x the guessed rate, and 5 at 30x. They are a small part of the gap.
+- **Wear-out doesn't make things worse here.** The fitted curves keep the record's average rate, but move failures later. Since most of our voyages end around day 75, fewer of them meet the late failures, and the finish rate rises (79 and 86). That is an artefact of fitting the shape to the record's average. Report wear-out as a sensitivity, not as a correction.
+
+**Bottom line for the odds.** The 78% headline uses planning rates. On the record's yardstick, the historical rates now match the record offshore, so 69% is a fair "record-like" figure, with a range of about 59 to 77%. We no longer have reason to think 69% is far too kind. The open question is reporting, not survival: a third of the arrivals rely on the beacon alone.
+
+## First version (kept for the record): the "boat lost" endpoint
+
+
 
 **Short version (as first written).**
 - No. Even with the "historical" failure rates switched on, our simulated boats keep working far longer than the real boats in the Microtransat crossing record.
@@ -22,7 +67,7 @@ Ravi (QA), 9 Nov 2026. Data: [run 42597360814](https://github.com/jcolter11374/b
 
 ## How it was counted
 
-- "Still working" means the voyage has not ended in a loss, a grounding, or a disqualification for going silent. Arriving and running out of time (the 120-day cap) count as still working, because neither is a failure of the boat.
+- "Still working" means the voyage has not ended in a loss, a grounding, or a disqualification for going silent. Arriving and running out of time (hitting the voyage time limit) count as still working, because neither is a failure of the boat.
 - The figures are Kaplan-Meier estimates, the standard way to count survival when some voyages end early for other reasons. The ranges in brackets are 95% ranges.
 - The record figures are from #89: the share of past Microtransat entries still reporting their position by satellite.
 
