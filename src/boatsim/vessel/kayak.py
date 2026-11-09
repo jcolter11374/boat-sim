@@ -37,6 +37,7 @@ from boatsim.vessel.coast import distance_to_land_km
 from boatsim.vessel.hazards import (
     DEFAULT_PANELS_W,
     HazardParams,
+    draw_dice,
     phase,
     sample_failures,
     sample_hazards,
@@ -308,7 +309,10 @@ class KayakVessel:
             fouling_frac=foul,
             electronics_on=on_next,
         )
-        hz = sample_hazards(self.hazards, env, hours, state.damage, new.t, rng)
+        # One fixed block of dice per step, so the stream stays in step across
+        # runs whose paths differ (hazards.SLOT).
+        dice = draw_dice(rng)
+        hz = sample_hazards(self.hazards, env, hours, state.damage, new.t, dice)
         events += hz.events
         new.knockdowns = getattr(state, "knockdowns", 0) + hz.knockdowns
         for part in hz.failed_parts:
@@ -322,7 +326,7 @@ class KayakVessel:
             new.lat,
             new.lon,
             days + hours / 48.0,
-            rng,
+            dice,
             thrusters=self.thruster_parts,
         )
         events += fl.events
