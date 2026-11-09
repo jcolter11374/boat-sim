@@ -82,6 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     h.add_argument("last_year", type=int)
     h.add_argument("--workers", type=int, default=4)
     h.add_argument("--out", default="runs/storms/era5_vs_ibtracs.csv")
+    h.add_argument("--ratio-out", default="data/derived/era5_storm_wind_ratio.csv")
     sub.add_parser(
         "compare-currents", help="GLORYS vs SMOC on the shared Gulf Stream stretch (#73)"
     )
@@ -155,6 +156,10 @@ def main(argv: list[str] | None = None) -> None:
         res, _ = storms.run(a.ibtracs_csv, a.first_year, a.last_year, a.workers)
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         res.to_csv(a.out, index=False)
+        table = storms.ratio_table(res)
+        storms.write_ratio_csv(table, a.ratio_out, a.first_year, a.last_year)
+        print(f"\nWind ratio by category and month ({a.ratio_out}):")
+        print(Path(a.ratio_out).read_text())
         print(f"wrote {a.out}")
     elif a.cmd == "build-ships":
         from pathlib import Path
