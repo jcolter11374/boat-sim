@@ -2,6 +2,7 @@
 
 python -m boatsim.oceandata fetch-era5 2020-10-01 2020-12-31 [--workers 4]
 python -m boatsim.oceandata fetch-glorys 2020-10 2020-12      (needs Copernicus login)
+python -m boatsim.oceandata fetch-smoc 2022-04 2022-05 --kind total  (Copernicus login)
 python -m boatsim.oceandata sample 2020-10-15T12:00 37.0 -70.0 [--no-currents]
 python -m boatsim.oceandata check-storms ibtracs.NA.list.v04r01.csv 2012 2021  (Actions)
 python -m boatsim.oceandata build-ships shipdensity_global.tif   (GitHub Actions; see traffic.py)
@@ -61,6 +62,10 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("fetch-glorys", help="cache GLORYS12 surface-current months")
     g.add_argument("start", help="YYYY-MM")
     g.add_argument("end", help="YYYY-MM")
+    sm = sub.add_parser("fetch-smoc", help="cache SMOC surface-current months (#73)")
+    sm.add_argument("start", help="YYYY-MM")
+    sm.add_argument("end", help="YYYY-MM")
+    sm.add_argument("--kind", choices=["model", "total"], default="model")
     c = sub.add_parser("check-glorys", help="print size and Gulf Stream speed for a cached month")
     c.add_argument("month", help="YYYY-MM")
     s = sub.add_parser("sample", help="print the environment at one point")
@@ -80,6 +85,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser(
         "compare-currents", help="GLORYS vs SMOC on the shared Gulf Stream stretch (#73)"
     )
+    bq = sub.add_parser("check-buoys", help="ERA5 waves and wind vs NDBC buoys for a year (#10)")
+    bq.add_argument("year", type=int)
+    bq.add_argument("--workers", type=int, default=4)
     a = p.parse_args(argv)
 
     if a.cmd == "fetch-era5":
@@ -95,6 +103,23 @@ def main(argv: list[str] | None = None) -> None:
         for y, m in _months(a.start, a.end):
             path = glorys.fetch_month(y, m)
             print(f"{path} {path.stat().st_size / 1e6:.1f} MB")
+    elif a.cmd == "fetch-smoc":
+        import numpy as np
+        import xarray as xr
+
+        from boatsim.oceandata import smoc
+
+        for y, m in _months(a.start, a.end):
+            path = smoc.fetch_month(y, m, a.kind)
+            with xr.open_dataset(path) as ds:
+                speed = np.hypot(ds.current_u, ds.current_v)
+                print(
+                    f"{path} {path.stat().st_size / 1e6:.1f} MB, {ds.sizes['time']} times "
+                    f"{str(ds.time.values[0])[:16]} to {str(ds.time.values[-1])[:16]}, "
+                    f"grid {ds.sizes['lat']}x{ds.sizes['lon']}, "
+                    f"mean speed {float(speed.mean()):.2f} m/s, "
+                    f"99th percentile {float(speed.quantile(0.99)):.2f} m/s"
+                )
     elif a.cmd == "check-glorys":
         check_glorys(a.month)
     elif a.cmd == "compare-currents":
@@ -110,6 +135,18 @@ def main(argv: list[str] | None = None) -> None:
         cc.summarise(rows)
         print(f"\nOpen-Meteo vs SMOC total, {cc.DATES[2]} daily means:")
         cc.open_meteo_check(cc.DATES[2])
+    elif a.cmd == "check-buoys":
+        from pathlib import Path
+
+        from boatsim.oceandata import buoys
+
+        pairs, table, bands = buoys.run(a.year, workers=a.workers)
+        out = Path("runs/buoys")
+        out.mkdir(parents=True, exist_ok=True)
+        pairs.to_csv(out / f"pairs_{a.year}.csv")
+        table.to_csv(out / f"stats_{a.year}.csv", index=False)
+        bands.to_csv(out / f"by_height_{a.year}.csv", index=False)
+        buoys.report(table, bands)
     elif a.cmd == "check-storms":
         from pathlib import Path
 

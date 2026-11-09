@@ -112,8 +112,10 @@ def simulate(
 
         # A flat battery cuts power to the Iridium modem: no reports, no mailbox
         # checks, and routes from base wait in the mailbox until it restarts.
-        # The Globalstar beacon has its own solar cell and keeps pinging.
-        powered = getattr(state, "electronics_on", True)
+        # A dead modem, antenna or main box (hazards, #89) silences it the same
+        # way, for good. The Globalstar beacon has its own solar cell and keeps
+        # pinging unless it has failed itself.
+        powered = getattr(state, "electronics_on", True) and getattr(state, "iridium_ok", True)
         if powered != was_powered:
             note = getattr(c.link, "set_powered", None)
             if note is not None:
@@ -170,7 +172,10 @@ def simulate(
 
         if c.pinger is not None and state.t >= next_ping:
             next_ping += c.pinger.every
-            if c.pinger.ping(state.t, state.lat, state.lon, env, rng) is not None:
+            if (
+                getattr(state, "beacon_ok", True)
+                and c.pinger.ping(state.t, state.lat, state.lon, env, rng) is not None
+            ):
                 log.events.append(Event(state.t, EventKind.MESSAGE_RECEIVED, "globalstar ping"))
                 silence.heard(state.t)
 

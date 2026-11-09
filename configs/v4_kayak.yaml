@@ -100,16 +100,22 @@ hazards:
   p_avoid_without_ais: 0.95  # design doc: losing AIS roughly doubles collision risk
   p_lost_given_strike: 0.8   # GUESS
   p_leak_given_strike: 1.0   # Randolph drone-boat default: a survived hit leaves a leak
-  # Wear, water and people (rates per day). Starting point: the Randolph team's
-  # drone-boat defaults (MIT, see THIRD_PARTY_NOTICES.md), changed where our design
-  # differs. All GUESS: see vessel/hazards.py for the reasoning and real-world anchors.
+  # Wear, water and people (rates per day). The rates come from the shared hazard
+  # table the Randolph team compiled for both projects (#89; drone-boat
+  # docs/Failure_Rates.md, MIT, see THIRD_PARTY_NOTICES.md), mapped onto the kayak
+  # in vessel/hazards.py, where each line says why. All GUESS.
+  #   rate_set picks the whole set: planning (default; credits that tests must
+  #   still earn, incl. a 14-day shakedown), historical (the fit to the
+  #   Microtransat record), original (boat-sim before #89). Any rate written
+  #   below overrides the set, e.g. capture_per_day: 0.02.
+  rate_set: planning
   failures_enabled: true
-  leak_per_day: 0.0025               # GUESS (Randolph), x (1 + (Hs/3)^2)
-  electronics_per_day: 0.0012        # GUESS (Randolph), per box, two boxes
+  near_land_km: 150                  # shared table: near-land vs open-ocean phases
   electronics_wet_multiplier: 6      # GUESS (Randolph)
+  electronics_common_cause: 0.3      # GUESS: share of electronics failures that kill both boxes
   software_hang_per_day: 0.02        # GUESS (Randolph)
   watchdog_recovers: 0.95            # GUESS (Randolph)
-  steering_per_day: 0.002            # GUESS (Randolph), x (1 + Hs/4)
+  steering_per_day: 0.002            # GUESS (Randolph), x (1 + Hs/4) x early life
   steering_jam_share: 0.6            # GUESS (Randolph)
   rudder_jam_drag_mult: 1.25         # GUESS
   entangle_per_day: 0.003            # GUESS (Randolph); x3 near land, x2 Sargasso, x2 Gulf Stream
@@ -117,6 +123,5 @@ hazards:
   entangle_clear_per_day: 0.5        # GUESS: reverse-thrust cycles (Randolph 0.15, no reverse)
   p_thruster_wrap: 0.1               # GUESS
   thruster_per_day: 0.0007           # GUESS: design doc, one thruster = 4 % single point of failure
-  capture_per_day: 0.002             # GUESS (Randolph), within 50 km of land only
-  unknown_p_by_60_days: 0.03         # design doc FMEA row 2: early-life defect or unknown
-  unknown_shape: 0.5                 # GUESS: front-loaded (infant mortality)
+  early_life_tau_days: 7             # GUESS (Randolph): infant mortality fades over ~a week
+  unknown_shape: 0.5                 # GUESS: only used if unknown_p_by_60_days > 0
