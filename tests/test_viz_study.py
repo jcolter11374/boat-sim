@@ -102,3 +102,11 @@ def test_target_chart_can_drop_the_duplicate_baseline():
     colours = list(tf.data[0].marker.color)
     assert colours[labels.index(next(x for x in labels if x.startswith("39.5N")))] == study.BAR
     assert colours.count(study.BAR) == 1
+
+
+def test_caveat_sits_in_the_headline_box():
+    t = compare(_voyages())
+    assert 'class="caveat"' not in study.hero_html(t)
+    h = study.hero_html(t, caveat="These odds are an upper bound.")
+    assert '<p class="caveat">These odds are an upper bound.</p>' in h
+    assert h.index("caveat") < h.rindex("</div>")
