@@ -7,7 +7,7 @@
 // Run after `npm run build`. Needs the `playwright` package and Chromium.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { writeFixture } from "./fixture-voyage.mjs";
+import { writeFixture, writeRaceFixture } from "./fixture-voyage.mjs";
 import { chromium } from "playwright";
 
 const URL = "http://localhost:4173/";
@@ -102,6 +102,49 @@ try {
     if (pngV.length < 20000) fail(`voyage screenshot looks blank (${pngV.length} bytes)`);
     log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} hours on the log`);
   }
+  if (errors.length) fail(`page errors: ${errors.join("; ")}`);
+
+  // ---------- race mode: two boats, one clock ----------
+  // Real Randolph replays if the build has them, else a made-up race fixture.
+  const raceIdx = idx.filter((v) => /randolph/i.test(v.boat ?? ""));
+  const raceDate = raceIdx.map((v) => v.start.slice(0, 10)).find((d) => idx.some((v) => !/randolph/i.test(v.boat ?? "") && v.start.startsWith(d)));
+  const raceDir = raceDate ? dataDir : "voyages-race-fixture";
+  if (!raceDate) writeRaceFixture(`dist/${raceDir}`);
+  const date = raceDate ?? "2020-05-01";
+  await page.goto(`${URL}voyage.html?data=./${raceDir}&race=${date}`);
+  await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
+  const rerr = await page.evaluate(() => window.__replay.error);
+  if (rerr) fail(`race page: ${rerr}`);
+  const boats = await page.evaluate(() => window.__replay.boats);
+  if (boats.length !== 2 || !/randolph/i.test(boats[1])) fail(`race should show our kayak then Randolph, got ${JSON.stringify(boats)}`);
+  const rIdx = JSON.parse(readFileSync(`dist/${raceDir}/index.json`, "utf8")).voyages;
+  const rFiles = [rIdx.find((v) => !/randolph/i.test(v.boat ?? "") && v.start.startsWith(date)), rIdx.find((v) => /randolph/i.test(v.boat ?? "") && v.start.startsWith(date))];
+  let maxEnd = 0;
+  for (const [lane, v] of rFiles.entries()) {
+    const r = JSON.parse(readFileSync(`dist/${raceDir}/${v.file}`, "utf8"));
+    maxEnd = Math.max(maxEnd, r.h.at(-1));
+    const off = await page.evaluate(([r, lane]) => {
+      let n = 0;
+      for (let i = 0; i < r.h.length; i++) {
+        if (r.lat[i] == null || r.lon[i] == null) continue;
+        const [la, lo] = window.__replay.lanePositionAt(lane, r.h[i]);
+        if (la !== r.lat[i] || lo !== r.lon[i]) n++;
+      }
+      return n;
+    }, [r, lane]);
+    if (off) fail(`race lane ${lane} (${v.file}): ${off} logged hours drawn off the log`);
+  }
+  const maxHour = await page.evaluate(() => window.__replay.maxHour);
+  if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+  await page.click('#focus button[data-lane="1"]');
+  await page.waitForTimeout(800);
+  if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
+  await page.screenshot({ path: "test-output/voyage-race-randolph.png" });
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
+  await page.waitForSelector("#outcome.show", { timeout: 10000 });
+  const pngR = await page.screenshot({ path: "test-output/voyage-race-end.png" });
+  if (pngR.length < 20000) fail(`race screenshot looks blank (${pngR.length} bytes)`);
+  log.push(`${raceDate ? "" : "fixture "}race ${date}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();

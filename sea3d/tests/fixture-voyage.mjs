@@ -67,3 +67,24 @@ export function writeFixture(dir) {
   writeFileSync(`${dir}/index.json`, JSON.stringify({ schema: 1, voyages: [{ file: name, boat: rep.boat, start: rep.start, outcome: rep.outcome, days: rep.days }] }));
   return rep;
 }
+
+/** A made-up race: our kayak (40 days, finished) and a "Randolph" fixture
+ *  (30 days, lost) launched the same day, file names as boatsim.runner.replay
+ *  writes them (#140). NOT simulations. */
+export function writeRaceFixture(dir) {
+  mkdirSync(dir, { recursive: true });
+  const ours = fixtureReplay(40);
+  const theirs = fixtureReplay(30);
+  theirs.boat = "Randolph TEST FIXTURE (not a simulation)";
+  theirs.outcome = "lost";
+  theirs.lat = theirs.lat.map((v, i) => +(v - 1.5 * Math.sin((Math.PI * i) / theirs.lat.length)).toFixed(4));
+  theirs.events = [{ h: 6 * 24, kind: "start_line", detail: "" }, { h: theirs.h.at(-1), kind: "lost", detail: "fixture" }];
+  const files = [
+    ["voyage_2020-05-01.json", ours],
+    ["voyage_randolph-test-fixture_2020-05-01.json", theirs],
+  ];
+  for (const [f, r] of files) writeFileSync(`${dir}/${f}`, JSON.stringify(r));
+  const voyages = files.map(([file, r]) => ({ file, boat: r.boat, start: r.start, outcome: r.outcome, days: r.days }));
+  writeFileSync(`${dir}/index.json`, JSON.stringify({ schema: 1, voyages }));
+  return { ours, theirs };
+}
