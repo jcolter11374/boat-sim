@@ -60,18 +60,35 @@ the whole globe for that hour. That sets the transfer cost.
 | 1993 to 2025 (all launch years with currents) | about 120 GB, about 4 to 5 h |
 | 90-day voyage with a warm cache (stub boat) | 15 s |
 
-GLORYS sizes are **not measured yet** (see below). Calculated from the grid:
-421 × 1045 points × 2 fields × 2 bytes ≈ 1.8 MB/day before compression, so
-roughly 30 to 55 MB per month and 0.4 to 0.7 GB per year on disk.
+GLORYS12, measured in GitHub Actions on Oct 2020: 25 MB per month on disk
+(about 0.3 GB per year). Gulf Stream peak that month: 2.51 m/s at 37.2N 71.7W.
 
-## What still needs John
+## Ship traffic (traffic.py, issue #13)
 
-1. **Copernicus Marine login** (free): register at
-   https://data.marine.copernicus.eu/register. Then add two GitHub Actions
-   secrets on the repo, `COPERNICUSMARINE_SERVICE_USERNAME` and
-   `COPERNICUSMARINE_SERVICE_PASSWORD`. No ERA5 account is needed.
-2. **Network access for thread sandboxes**: the built-in cloud environment
-   blocks Copernicus Marine's servers (`*.marine.copernicus.eu`,
-   `s3.waw3-1.cloudferro.com`) and NOAA's (`www.ndbc.noaa.gov`,
-   `www.ncei.noaa.gov`). GitHub Actions can reach them. To fetch from a
-   thread sandbox too, add those hosts in a custom cloud environment.
+`EnvState.ship_density` is the number of ships per km² at any moment. The
+vessel's ship-strike odds use it directly (vessel/hazards.py).
+
+* **EMODnet vessel density** (Europe, Azores, part of the eastern Atlantic):
+  hours of ship presence per km² per month, 2022 and 2023 averaged.
+  Hours per km² per month ÷ 730.5 hours in an average month = ships per km²
+  at any moment. This is an exact identity, no assumption.
+* **World Bank / IMF global AIS counts** (everywhere else, including the US
+  side and open ocean): AIS position reports per cell, Jan 2015 to Feb 2021.
+  Spurious cells of ~1.7 million and ~25 million (no real cell on our route
+  is above ~100) are dropped. Counts are turned into ships per km² with one
+  factor k, fitted where EMODnet and the World Bank map overlap. The build
+  log prints k by region and by traffic level, so you can see how well one
+  factor fits.
+* Built once in GitHub Actions ("Build ship density" workflow) into a 0.1
+  degree map, `data/traffic/ship_density_v1.nc` (artifact `ship-density`).
+  The runner uses it when that file is present and warns, with no ship
+  traffic, when it is not.
+* Limits: one average map, no seasons; ships that don't carry AIS (many
+  fishing boats and yachts) are missing from both sources.
+
+## Storm check (storms.py, issue #13)
+
+"Check storms against IBTrACS" compares ERA5's highest wind within 200 km of
+each storm centre with NOAA's best-track maximum wind, for every 6-hourly
+point inside the route box. ERA5's 25 km grid is known to understate
+hurricane cores; this measures by how much on our route.
