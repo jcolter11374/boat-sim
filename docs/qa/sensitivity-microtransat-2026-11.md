@@ -1,8 +1,37 @@
 # Sensitivity study under the Microtransat rule (#21, rerun)
 
-Ravi (QA), 9 Nov 2026. Final numbers: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (3ef856e). History below starts from [run 42556820831](https://github.com/jcolter11374/boat-sim/actions/runs/42556820831) (f2d0ab1).
+Ravi (QA), 9 Nov 2026. Latest numbers (25 W default): [run 42613153956](https://github.com/jcolter11374/boat-sim/actions/runs/42613153956) (42d5799). Earlier final at 15 W: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (3ef856e). History below starts from [run 42556820831](https://github.com/jcolter11374/boat-sim/actions/runs/42556820831) (f2d0ab1).
 
-## Final results, fully paired: read this first
+## 25 W default: read this first
+
+[Run 42613153956](https://github.com/jcolter11374/boat-sim/actions/runs/42613153956), main at 42d5799. This is the first run with 25 W as the default cruise (#114). It uses the same 100 spring launches and the same shared dice as the run below.
+
+**Headline: 78 of 100 finish (95% range 69–85%), median 75 days.** That is the same number the 25 W row gave below, which is the check that the new default was wired in correctly.
+
+**Cruise power sweep** (motor power while cruising; everything else unchanged):
+
+| Cruise | Finished | Gained / lost vs 25 W | Median days | Airtime $ | Lowest charge |
+|---|---|---|---|---|---|
+| 10 W | 62 | 1 / 17 | 108 | 88 | 79% |
+| 15 W (old default) | 69 | 0 / 9 | 90 | 81 | 66% |
+| 20 W | 74 | 1 / 5 | 83 | 79 | 49% |
+| **25 W (new default)** | **78** | | **75** | **66** | **37%** |
+| 30 W | 79 | 3 / 2 | 71 | 64 | 28% |
+
+- Up to 25 W, each step up clearly helps. From 25 W to 30 W the gain is 1 voyage and could be chance (3 gained, 2 lost). The batteries also run lower, down to 28% at worst. 25 W is a sensible place to stop.
+- The 15 W row reproduces the old headline of 69 exactly.
+
+**Other rows that matter at 25 W:**
+- **One thruster instead of two: 54** (1 gained, 25 lost). This is still the biggest loss in the table, so keep two thrusters. It was 47 at 15 W.
+- **Failure rates fitted to the Microtransat record: 69** (0 gained, 9 lost). This is an upper bound until the endpoint check in #118 is in.
+- **No shakedown trial: 76** (0 / 2). Still a small effect.
+- **Old route via the Azores: 65** (1 / 14). Going straight is still clearly better.
+- **Base re-planning, mailbox, comms and safe-mode rows: 78 to 79.** None of them makes a measurable difference.
+- **Battery and panels.** Half the battery and the smaller panels both cost about 6 voyages. At 25 W they start to matter: Lowest charge falls to 19% for both, against 37% for the design. Bigger kit adds nothing.
+
+**Pairing checks pass.** The "target off Lisbon" row, "stop motors at 30%" and "never slow down" all match the baseline voyage for voyage (0 gained, 0 lost).
+
+## Final results at 15 W, fully paired
 
 [Run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814), main at 3ef856e. Everything below this section is the history of how we got here. The numbers in those sections were drawn on dice that weren't properly paired, and this section replaces them.
 
