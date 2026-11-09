@@ -1,8 +1,78 @@
 # Sensitivity study under the Microtransat rule (#21, rerun)
 
-Ravi (QA), 9 Nov 2026. [Run 42556820831](https://github.com/jcolter11374/boat-sim/actions/runs/42556820831), code f2d0ab1 (main with #87, #91 and #92 merged).
+Ravi (QA), 9 Nov 2026. Final numbers: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (3ef856e). History below starts from [run 42556820831](https://github.com/jcolter11374/boat-sim/actions/runs/42556820831) (f2d0ab1).
 
-## What was run
+## Final results, fully paired: read this first
+
+[Run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814), main at 3ef856e. Everything below this section is the history of how we got here. The numbers in those sections were drawn on dice that weren't properly paired, and this section replaces them.
+
+**Setup.**
+- All 24 rows sail the same 100 launches: every 10 days from 1 April to 30 June, 2012 to 2021.
+- Real weather and currents, with ship traffic on. Each voyage gets up to 180 days.
+- The route is the straight one to the Microtransat target off Lisbon (#98).
+- Every row assumes the 14-day shakedown trial is done before the drop. That is the plan (John, 9 Nov).
+
+**The dice are finally shared.** Since #110 and #112, every source of chance has its own random stream, and the hull uses a fixed block of draws per step. A change only alters a voyage through what it actually does. The checks pass:
+- the "target off Lisbon" row is the baseline under another name, and matches it voyage for voyage (0 gained, 0 lost);
+- the bigger battery, bigger panels and both low-charge rules also come out 0/0, because none of them changes a spring voyage.
+
+**How to read the table.**
+- "Gained / lost" counts voyages that finish with the change but not without it, and the other way round.
+- "Chance" is how likely that split would be if the change did nothing.
+
+| Change | Finished (of 100) | Gained / lost | Chance | Median days | Airtime $ |
+|---|---|---|---|---|---|
+| **The design as it stands** | **69** (95% range 59–77) | | | 90 | 81 |
+| ***Clear effects*** | | | | | |
+| Faster cruise (25 W instead of 15 W) | **78** | 9 / 0 | <1% | 75 | 66 |
+| One thruster instead of two | **47** | 4 / 26 | <1% | 94 | 86 |
+| Failure rates fitted to the real Microtransat record | **60** | 2 / 11 | 2% | 91 | 74 |
+| ***Leaning, not proven*** | | | | | |
+| Old route (bent south of the Azores) | 61 | 5 / 13 | 10% | 104 | 85 |
+| Old rule (any landfall counts, old route) | 76 | 11 / 4 | 12% | 76 | 65 |
+| Slower cruise (10 W) | 63 | 5 / 11 | 21% | 109 | 88 |
+| ***No measurable effect*** | | | | | |
+| Base never changes the route | 71 | 5 / 3 | 73% | 92 | 83 |
+| Base re-plans only for 24 h or more | 70 | 6 / 5 | 100% | 91 | 83 |
+| Base re-plans only for 72 h or more | 71 | 5 / 3 | 73% | 92 | 83 |
+| Base sends nothing at all | 71 | 5 / 3 | 73% | 92 | 78 |
+| Boat checks for base messages on a separate daily call | 73 | 6 / 2 | 29% | 88 | 86 |
+| Target 51N 16W (west of Ireland) | 66 | 7 / 10 | 63% | 79 | 71 |
+| Target 46N 11W (Bay of Biscay) | 72 | 7 / 4 | 55% | 88 | 81 |
+| Target 44.5N 13.5W (off NW Spain) | 74 | 8 / 3 | 23% | 86 | 82 |
+| Target 37N 13.5W (off SW Portugal) | 68 | 4 / 5 | 100% | 95 | 85 |
+| No 14-day shakedown | 68 | 0 / 1 | 100% | 90 | 80 |
+| Half the battery (640 Wh) | 71 | 3 / 1 | 62% | 92 | 83 |
+| Half again the battery (1920 Wh) | 69 | 0 / 0 | | 90 | 81 |
+| Smaller panels (150 W) | 66 | 1 / 4 | 38% | 89 | 82 |
+| Bigger panels (350 W) | 69 | 0 / 0 | | 90 | 81 |
+| Stop motors earlier (below 30%) | 69 | 0 / 0 | | 90 | 81 |
+| Never slow down on low battery | 69 | 0 / 0 | | 90 | 81 |
+
+### What it means
+
+- **The headline odds are 69 in 100 for an April to June launch** (95% range 59–77). That assumes our planning failure rates. With failure rates fitted to past Microtransat boats it is 60. Nearly every finisher arrives by day 150 (69 of 69), so the 180-day limit changes nothing.
+- **Cruising at 25 W is the one clear, cheap improvement.**
+  - It gains 9 voyages and loses none.
+  - Crossings are 15 days shorter (75 days against 90), and airtime is $15 cheaper.
+  - The price is a lower minimum battery charge, 37% against 66%, which still leaves a margin.
+  - Worth making 25 W the default, or testing 20 and 30 W to find the top.
+- **Keep both thrusters.** With one, the boat finishes 47 against 69. Twenty boats are still at sea at day 180, because the second thruster is the backup steering.
+- **Course changes from home make no measurable difference.**
+  - Re-planning at 6 h, 24 h or 72 h, never re-planning, and a base that sends nothing all land between 69 and 73.
+  - The earlier gaps (78 against 70, then 78 against 66) were dice, as Sam suspected.
+  - The boat's own daily report is still essential, because it keeps the boat within the silence rule. The base's replies add nothing we can measure.
+  - Keep the 6-hour setting: it costs nothing. Don't sell steering from home as a reason the boat will succeed.
+- **The straight route beats the old bent one** (69 against 61, 13 voyages lost and 5 gained on the bent route). That isn't quite past the noise line, but it points the same way as before.
+- **The finish target doesn't matter much.** The southern targets are all within a few voyages of each other, and Lisbon is fine. West of Ireland is the weakest (66). It has more fishing-gear and grounding losses near the Irish coast (9 and 7).
+- **The shakedown trial barely shows here (69 against 68).** In this model, the trial removes early failures that are already rare under the planning rates. That makes it insurance against our failure rates being too hopeful, not a proven gain.
+- **Battery and panels are fine as designed for spring.** Smaller panels lean slightly the wrong way (66, 1 gained and 4 lost). That is within the noise.
+
+## History: the first rerun and its follow-ups
+
+The sections below were run on shared, then partly shared, random streams. Their gained/lost counts mix real effects with reshuffled dice. Use the section above for decisions.
+
+### What was run
 
 - **Launches.** 100 per row: every 10 days from 1 April to 30 June, 2012 to 2021. Real weather (ERA5) and real currents (GLORYS12). Ship traffic is on.
 - **Paired comparison.** Every row sails the same launches with the same random dice. A difference between rows therefore comes from the change itself, not from luck.
@@ -12,7 +82,7 @@ Ravi (QA), 9 Nov 2026. [Run 42556820831](https://github.com/jcolter11374/boat-si
 - **Shakedown assumed.** Every row assumes the planned 14-day shakedown: two weeks of trial sailing near home before the real drop, to find early faults. The one exception is the row that drops it.
 - **Unknown-failure hazard.** It is off in the runs and added back in the two "with unknown" columns, as in #60.
 
-## Short version
+### Short version
 
 - **The route matters more than anything else.** The current default route bends south to pass below the Azores. On it, the boat finishes 56 of 100. A straight route to the same target finishes 72 of 100.
   - 27 voyages finish with the straight route but not the bent one, and 11 the other way round. The chance that this split is luck is about 1%.
@@ -29,7 +99,7 @@ Ravi (QA), 9 Nov 2026. [Run 42556820831](https://github.com/jcolter11374/boat-si
   - At 25 W: 66 of 100, about 24 days faster. Not quite past the noise line: the chance it is luck is 14%.
   - At 10 W: 35 of 100. That is clearly worse.
 
-## Results
+### Results
 
 All rows below assume the 14-day shakedown, except the one that drops it.
 
@@ -98,7 +168,7 @@ With the record's failure rates, there are more of both of these losses:
 - **Low-charge rules.** The rules for what to do at low charge make no difference.
 - **One thruster.** It loses 38 voyages for 8 gained. It also leaves 19 boats still at sea at day 180, against 9 with two thrusters. The second thruster is the boat's backup steering. Keep it.
 
-## Caveats
+### Caveats
 
 - **Only 100 launches per row.** Differences under about 10 voyages are usually noise. The gained/lost columns say which are not.
 - **Failure rates are assumptions.** Every row uses the planning rate set (#91). The row fitted to the real record shows how much that choice is worth: 18 points.
@@ -106,7 +176,7 @@ With the record's failure rates, there are more of both of these losses:
 - **Build cost isn't priced yet.** It waits for the parts catalogue (#25).
 - **Next run.** Once #98 makes the straight route the default, I'll run the baseline alone on main to confirm the 72. The message-from-base rows should also be rerun on the straight route.
 
-## Addendum: confirmed on the straight route (#98)
+### Addendum: confirmed on the straight route (#98)
 
 [Run 42567314818](https://github.com/jcolter11374/boat-sim/actions/runs/42567314818) is on main at dc5ff0d, where the straight route is now the default. It uses the same 100 launches and the same dice as the main run.
 
@@ -127,7 +197,7 @@ With the record's failure rates, there are more of both of these losses:
   - That 18-day gap is large enough to look into. It is for Sam (autopilot and comms): it may mean re-planning should switch on only for specific hazards, such as storms or land, and not every day.
 - **The boat's own daily report still matters.** In every one of these rows the boat keeps sending its daily position, including "base sends nothing", where only the base goes quiet. That report keeps the boat inside the silence rule. Only the messages sent from home to steer the boat are in question.
 
-## How often should the base re-plan? Before and after Sam's fix (#106, #107)
+### How often should the base re-plan? Before and after Sam's fix (#106, #107)
 
 In the earlier rows, daily re-planning cost about 18 days (110 against 92). Sam traced it (#107). The base scored each candidate leg by stretching the current at one spot over the thousands of km still to go. That made it re-route the boat almost every day, even with a perfect forecast.
 
@@ -182,7 +252,7 @@ So the rows share their dice only until they first diverge. That happens early f
 
 The fix is one random stream per source of chance: hazards, link, sensors, pinger. Maya and Theo own it, and Sam will do the link side. Once it lands, rerun the close calls: the comms rows, battery and panels, and the 25 W cruise.
 
-## Rerun with separate random streams (#110)
+### Rerun with separate random streams (#110)
 
 [Run 42584093445](https://github.com/jcolter11374/boat-sim/actions/runs/42584093445) was made on main at 99e2bb0. It uses the same 100 launches, 180 days, and a full set of pre-fetched data (#108). After #110, the hull, sensors, satellite link and beacon each draw from their own random stream. Sending an extra message no longer reshuffles the hull's hazard dice. Every seed therefore gets new dice, so the baseline was rerun along with the rest.
 
