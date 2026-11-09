@@ -107,17 +107,21 @@ def _environment(weather: str, currents: bool, for_forecast: bool = False):
     """
     from boatsim.oceandata import ConstantEnvironment, ERA5Source, ReanalysisEnvironment
 
+    # Batch runs pre-fetch their data. BOATSIM_NO_FETCH=1 turns any cache miss
+    # during the run into an error naming the missing file, instead of a silent
+    # live fetch that could make a voyage depend on what the worker ran before.
+    fetch = os.environ.get("BOATSIM_NO_FETCH") != "1"
     if weather == "constant":
         return ConstantEnvironment()
     if weather == "reanalysis":
         from boatsim.oceandata.traffic import default_source
 
-        era5 = ERA5Source(max_tiles=6 if for_forecast else 3)
+        era5 = ERA5Source(max_tiles=6 if for_forecast else 3, fetch=fetch)
         ships = default_source()  # data/traffic/ship_density_v1.nc if present (#13)
         if currents:
             from boatsim.oceandata import GlorysSource
 
-            glorys = GlorysSource(max_tiles=3 if for_forecast else 2)
+            glorys = GlorysSource(max_tiles=3 if for_forecast else 2, fetch=fetch)
             return ReanalysisEnvironment(era5=era5, currents=glorys, ships=ships)
         return ReanalysisEnvironment(era5=era5, currents=None, ships=ships)
     raise ValueError(f"unknown weather {weather!r}: use 'reanalysis' or 'constant'")
