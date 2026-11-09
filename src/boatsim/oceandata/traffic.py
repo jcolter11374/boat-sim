@@ -232,6 +232,79 @@ def calibrate(emod: np.ndarray, emod_frac: np.ndarray, wb: np.ndarray, lats, lon
     return k, ratio
 
 
+JUNK_EDGES = (0.0, 0.02, 0.05, 0.1, 0.2, 0.4, 1.01)
+WB_EDGES = (0.0, 0.1, 0.3, 1.0, 3.0, 10.0, np.inf)  # valid positions per km^2 per year
+MIN_CELLS = 20  # a table entry needs this many overlap cells
+
+
+def _band(x: np.ndarray, edges) -> np.ndarray:
+    """Band index per cell, -1 where x is NaN."""
+    b = np.digitize(np.where(np.isfinite(x), x, -1.0), edges) - 1
+    return np.where(np.isfinite(x), np.clip(b, 0, len(edges) - 2), -1)
+
+
+def fit_lookup(emod, emod_frac, wb, junk, use=None):
+    """Median EMODnet ships/km^2 for each (corrupt share, World Bank count) band.
+
+    The World Bank map's corrupt pixels are mostly its busiest pixels: their
+    share rises steadily with EMODnet traffic (build 4 of PR #62: 2.7e-6
+    ships/km^2 where under 2% are corrupt, 7.7e-4 where over 40% are). So
+    both the corrupt share and the count left over carry traffic, and a
+    table of EMODnet medians over the two, fitted where both maps exist,
+    beats one scale factor. Returns (table, by_junk_only); NaN = too few cells.
+    """
+    ok = (emod_frac >= 0.5) & np.isfinite(emod) & np.isfinite(junk)
+    if use is not None:
+        ok &= use
+    jb, wbb = _band(junk, JUNK_EDGES), _band(wb, WB_EDGES)
+    nj, nw = len(JUNK_EDGES) - 1, len(WB_EDGES) - 1
+    table = np.full((nj, nw), np.nan)
+    by_junk = np.full(nj, np.nan)
+    for a in range(nj):
+        m = ok & (jb == a)
+        if m.sum() >= MIN_CELLS:
+            by_junk[a] = float(np.median(emod[m]))
+        for b in range(nw):
+            mm = m & (wbb == b)
+            if mm.sum() >= MIN_CELLS:
+                table[a, b] = float(np.median(emod[mm]))
+    return table, by_junk
+
+
+def apply_lookup(table, by_junk, wb, junk) -> np.ndarray:
+    jb, wbb = _band(junk, JUNK_EDGES), _band(wb, WB_EDGES)
+    out = np.full(junk.shape, np.nan)
+    has_j = jb >= 0
+    out[has_j] = by_junk[jb[has_j]]
+    both = has_j & (wbb >= 0)
+    t = table[jb[both], wbb[both]]
+    o = out[both]
+    out[both] = np.where(np.isfinite(t), t, o)
+    return out
+
+
+def _holdout(emod, emod_frac, wb, junk, k, log=print) -> None:
+    """Fit on alternate 1 degree columns, test on the others: typical error
+    (median of |log10(estimate / EMODnet)|) for the table and for k x count."""
+    cols = (np.arange(emod.shape[1]) // 10) % 2 == 0
+    train = np.broadcast_to(cols[None, :], emod.shape)
+    table, by_junk = fit_lookup(emod, emod_frac, wb, junk, use=train)
+    test = ~train & (emod_frac >= 0.5) & np.isfinite(emod) & (emod > 0) & np.isfinite(junk)
+    for name, est in (
+        ("table", apply_lookup(table, by_junk, wb, junk)),
+        ("k x count", k * wb),
+    ):
+        m = test & np.isfinite(est) & (est > 0)
+        if not m.any():
+            log(f"  holdout {name}: no test cells")
+            continue
+        err = np.abs(np.log10(est[m] / emod[m]))
+        log(
+            f"  holdout {name:10s}: cells {int(m.sum())}, typical error x{10 ** np.median(err):.2f}"
+            f", 90% within x{10 ** np.percentile(err, 90):.1f}"
+        )
+
+
 def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print) -> Path:
     """Build the 0.1 degree ship-density grid for the route box."""
     import xarray as xr
@@ -240,23 +313,17 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
     emod, emod_frac = emodnet_grid(log=log)
     wb, junk = world_bank_grid(wb_tif, log=log)
     k, _ = calibrate(emod, emod_frac, wb, lats, lons, log=log)
-    # Corrupt pixels are far commoner in busy water (about 43% off Lisbon, 5%
-    # mid-ocean in the probe), so their share may itself track traffic.
-    both = (emod_frac >= 0.5) & np.isfinite(emod) & np.isfinite(junk)
-    log("EMODnet ships/km2 by share of corrupt World Bank pixels (overlap cells):")
-    for lo_, hi_ in [(0, 0.02), (0.02, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 0.4), (0.4, 1.01)]:
-        m = both & (junk >= lo_) & (junk < hi_)
-        if m.any():
-            q = np.nanpercentile(emod[m], [25, 50, 75])
-            w = np.nanmedian(wb[m])
-            log(
-                f"  corrupt {lo_:4.0%}-{hi_:4.0%}: cells {int(m.sum()):6d}  EMODnet p25/p50/p75"
-                f" {q[0]:.1e} {q[1]:.1e} {q[2]:.1e}  WB median {w:.3g}"
-            )
+    table, by_junk = fit_lookup(emod, emod_frac, wb, junk)
+    log("EMODnet median ships/km2 by corrupt share (rows) and World Bank count (columns):")
+    log("  corrupt      " + " ".join(f"wb>={e:<6g}" for e in WB_EDGES[:-1]) + "  row")
+    for a in range(len(JUNK_EDGES) - 1):
+        cells = " ".join(f"{v:9.1e}" if np.isfinite(v) else "        -" for v in table[a])
+        log(f"  {JUNK_EDGES[a]:4.0%}-{JUNK_EDGES[a + 1]:4.0%}  {cells}  {by_junk[a]:.1e}")
+    _holdout(emod, emod_frac, wb, junk, k, log=log)
     use_emod = (emod_frac >= 0.5) & np.isfinite(emod)
-    ships = np.where(use_emod, emod, k * wb)
+    ships = np.where(use_emod, emod, apply_lookup(table, by_junk, wb, junk))
     ships = np.where(np.isfinite(ships), ships, 0.0)  # land or no data from either source
-    source = np.where(use_emod, 1, np.where(np.isfinite(wb), 2, 0)).astype(np.int8)
+    source = np.where(use_emod, 1, np.where(np.isfinite(junk), 2, 0)).astype(np.int8)
     ds = xr.Dataset(
         {
             "ship_density": (("lat", "lon"), ships.astype(np.float32)),
@@ -266,8 +333,11 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
         coords={"lat": lats, "lon": lons},
         attrs={
             "units": "ships per km^2 at any moment",
-            "source_codes": "1 EMODnet vessel density; 2 World Bank AIS counts x k; 0 none",
+            "source_codes": "1 EMODnet vessel density; 2 World Bank AIS map via table; 0 none",
             "k_ships_per_position_km2_year": k,
+            "table_ships_km2": table.ravel().tolist(),
+            "table_rows_corrupt_share_edges": list(JUNK_EDGES),
+            "table_cols_wb_edges": [float(x) for x in WB_EDGES[:-1]],
             "emodnet_years": str(EMODNET_YEARS),
             "built": datetime.now(UTC).isoformat(timespec="seconds"),
         },

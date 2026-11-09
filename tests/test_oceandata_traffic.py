@@ -54,36 +54,48 @@ def test_calibrate_recovers_the_factor():
 def _fake_build(monkeypatch, tmp_path):
     lats, lons = T.grid_axes(BOX, T.RES)
     shape = (len(lats), len(lons))
-    wb = np.full(shape, 100.0)
-    wb[0, 0] = np.nan  # land in both
+    wb = np.full(shape, 1.5)
+    junk = np.full(shape, 0.01)
+    junk[:, 5:] = 0.5  # the eastern half is busy: half its World Bank pixels corrupt
+    wb[0, 0] = junk[0, 0] = np.nan  # land in both
     emod = np.full(shape, np.nan)
     frac = np.zeros(shape)
-    emod[5:, :] = 0.01  # EMODnet covers the northern half
-    frac[5:, :] = 1.0
-    emod[5:, :5] = 0.001  # where calibration ratio is 1e-5, elsewhere 1e-4
+    frac[5:, :] = 1.0  # EMODnet covers the northern half
+    emod[5:, :5] = 1e-5
+    emod[5:, 5:] = 1e-3
     monkeypatch.setattr(T, "grid_axes", lambda *a, **k: (lats, lons))
     monkeypatch.setattr(T, "emodnet_grid", lambda **k: (emod, frac))
-    monkeypatch.setattr(T, "world_bank_grid", lambda tif, **k: (wb, np.ones(shape)))
+    monkeypatch.setattr(T, "world_bank_grid", lambda tif, **k: (wb, junk))
     out = T.build(tmp_path / "ships.nc", "unused.tif", log=lambda *_: None)
     return out, lats, lons
 
 
-def test_build_prefers_emodnet_and_fills_with_calibrated_world_bank(monkeypatch, tmp_path):
+def test_build_prefers_emodnet_and_fills_from_the_fitted_table(monkeypatch, tmp_path):
     out, _, _ = _fake_build(monkeypatch, tmp_path)
     with xr.open_dataset(out) as ds:
         d, src = ds.ship_density.values, ds.source.values
-        k = ds.attrs["k_ships_per_position_km2_year"]
-    assert k == pytest.approx(5.5e-5)  # median of 25 cells at 1e-5 and 25 at 1e-4
-    assert src[9, 9] == 1 and d[9, 9] == pytest.approx(0.01)
-    assert src[2, 2] == 2 and d[2, 2] == pytest.approx(k * 100.0, rel=1e-5)
+    assert src[9, 9] == 1 and d[9, 9] == pytest.approx(1e-3)
+    # South half has no EMODnet: filled from the table by corrupt share.
+    assert src[2, 2] == 2 and d[2, 2] == pytest.approx(1e-5)
+    assert src[2, 7] == 2 and d[2, 7] == pytest.approx(1e-3)
     assert src[0, 0] == 0 and d[0, 0] == 0.0
+
+
+def test_lookup_falls_back_to_corrupt_share_only():
+    junk = np.array([[0.01, 0.5, 0.5]])
+    wb = np.array([[1.5, 1.5, np.nan]])  # last cell: every pixel corrupt
+    emod = np.where(junk > 0.1, 1e-3, 1e-5) * np.ones((25, 1))
+    jj, ww = junk * np.ones((25, 1)), wb * np.ones((25, 1))
+    table, by_junk = T.fit_lookup(emod, np.ones_like(emod), ww, jj)
+    est = T.apply_lookup(table, by_junk, wb, junk)
+    assert est[0].tolist() == pytest.approx([1e-5, 1e-3, 1e-3])
 
 
 def test_source_samples_and_feeds_the_environment(monkeypatch, tmp_path):
     out, _, _ = _fake_build(monkeypatch, tmp_path)
     ships = T.ShipDensitySource(out)
-    assert ships.sample(30.95, -9.05) == pytest.approx(0.01)
-    assert ships.sample(70.0, 0.0) == pytest.approx(0.01)  # clamped to the map edge
+    assert ships.sample(30.95, -9.05) == pytest.approx(1e-3)
+    assert ships.sample(70.0, 0.0) == pytest.approx(1e-3)  # clamped to the map edge
 
     class FakeERA5:
         def sample(self, t, lat, lon):
@@ -96,7 +108,7 @@ def test_source_samples_and_feeds_the_environment(monkeypatch, tmp_path):
         warnings.simplefilter("ignore")
         env = ReanalysisEnvironment(era5=FakeERA5(), ships=ships)
         s = env.sample(datetime(2020, 10, 1), 30.95, -9.05)
-        assert s.ship_density == pytest.approx(0.01)
+        assert s.ship_density == pytest.approx(1e-3)
         assert (
             ReanalysisEnvironment(era5=FakeERA5())
             .sample(datetime(2020, 10, 1), 30.95, -9.05)
