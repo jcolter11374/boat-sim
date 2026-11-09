@@ -3,8 +3,8 @@
 The study sails the same April to June launches with one change at a time, so
 it answers the questions the plain odds report can't:
 
-1. Headline: the design's chance of finishing, labelled with the shakedown
-   assumption it rests on, and the no-shakedown number beside it.
+1. Headline: the design's chance of finishing with the planned shakedown
+   (approved by John, Nov 2026), and the no-shakedown number beside it.
 2. Old finish rule vs the Microtransat rule (why the old 93% is retired).
 3. Where to aim on the Microtransat finish line (the finish-target sweep).
 4. Everything else the study tried (comms, hazards, battery, motors...).
@@ -70,19 +70,21 @@ def hero_html(
     headline: str = "baseline",
     headline_tag: str = "",
     baseline_name: str = "",
+    shakedown_link: str = "",
 ) -> str:
-    """The headline: design odds (assumes a shakedown) with no-shakedown beside it.
+    """The headline: design odds with the planned shakedown, no-shakedown beside it.
 
     headline: the variant to lead with (normally "baseline"; another row, e.g.
     "target_39_5n", when the design has moved on before a new baseline run).
     headline_tag: extra words after the shakedown label, e.g. where it came from.
+    shakedown_link: URL of the shakedown procedure, linked under the numbers.
     baseline_name: what the run's baseline was, shown with the no-shakedown
     number when that was measured on a different design than the headline.
     """
     b = _row(t, headline)
     if b is None:
         return ""
-    lead = f"assumes a {shakedown_days}-day shakedown"
+    lead = f"with the planned {shakedown_days}-day shakedown"
     if headline_tag:
         lead += f"; {headline_tag}"
     other = "with no shakedown"
@@ -106,10 +108,16 @@ def hero_html(
   95% range {_pct(r["low95"])} to {_pct(r["high95"])}</div>{extra}
 </div>"""
         )
+    link = (
+        f'<p class="range"><a href="{html.escape(shakedown_link)}">How the shakedown works</a>'
+        " (a two-week unattended trial near home before the real drop)</p>"
+        if shakedown_link
+        else ""
+    )
     return f"""<div class="hero">
   <div>Chance of finishing under Microtransat rules (within 25 km of the target off Portugal),
   April to June launches</div>
-  <div class="cells">{"".join(cells)}</div>
+  <div class="cells">{"".join(cells)}</div>{link}
 </div>"""
 
 
@@ -329,6 +337,7 @@ def study_html(
     headline_tag: str = "",
     baseline_name: str = "",
     baseline_label: str = "The design as it stands",
+    shakedown_link: str = "",
 ) -> str:
     """The results page as a string.
 
@@ -421,7 +430,7 @@ def study_html(
 <h1>{html.escape(title)}</h1>
 <p>{html.escape(subtitle)}</p>
 {banner_html}
-{hero_html(compare, shakedown_days, headline, headline_tag, baseline_name)}
+{hero_html(compare, shakedown_days, headline, headline_tag, baseline_name, shakedown_link)}
 {retired_html}
 {"".join(parts)}
 <h2>Every change tried</h2>
@@ -449,6 +458,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--headline-tag", default="", help="where the headline row came from")
     ap.add_argument("--baseline-name", default="", help="what the run's baseline was")
     ap.add_argument("--baseline-label", default="The design as it stands")
+    ap.add_argument("--shakedown-link", default="", help="URL of the shakedown procedure")
     a = ap.parse_args(argv)
     voyages = (
         pd.concat([pd.read_csv(f) for f in a.voyages], ignore_index=True) if a.voyages else None
@@ -470,6 +480,7 @@ def main(argv: list[str] | None = None) -> None:
             a.headline_tag,
             a.baseline_name,
             a.baseline_label,
+            a.shakedown_link,
         ),
         encoding="utf-8",
     )

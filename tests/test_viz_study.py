@@ -37,7 +37,7 @@ def _voyages():
 def test_hero_labels_the_shakedown_and_shows_both():
     t = compare(_voyages())
     h = study.hero_html(t)
-    assert "assumes a 14-day shakedown" in h
+    assert "with the planned 14-day shakedown" in h
     assert "with no shakedown" in h
     assert "67%" in h and "44%" in h  # 6/9 and 4/9
     assert "once failures we can" in h
@@ -79,9 +79,16 @@ def test_headline_can_lead_with_another_row():
         t, headline="target_39_5n", headline_tag="straight route", baseline_name="old dog-leg"
     )
     assert "56%" in h  # 5/9 for the straight route leads
-    assert "assumes a 14-day shakedown; straight route" in h
+    assert "with the planned 14-day shakedown; straight route" in h
     assert "with no shakedown (old dog-leg, which made 67% with one)" in h
     tf = study.target_figure(t, headline="target_39_5n", baseline_label="Old plan")
     colours = list(tf.data[0].marker.color)
     assert colours[list(tf.data[0].y).index("Old plan")] != colours[1]
     assert sum(c == study.BAR for c in colours) == 1
+
+
+def test_shakedown_link():
+    t = compare(_voyages())
+    assert "How the shakedown works" not in study.hero_html(t)
+    h = study.hero_html(t, shakedown_link="https://example.org/shakedown-trial.md")
+    assert '<a href="https://example.org/shakedown-trial.md">How the shakedown works</a>' in h
