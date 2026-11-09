@@ -46,6 +46,7 @@ jobs:
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       YEAR: ${{ matrix.year }}
+      BOATSIM_REQUIRE_SHIPS: "1"  # fail, not warn, if the ship map is missing (#13)
       EVERY_DAYS: ${{ inputs.every_days || '30' }}
       VARIANTS: ${{ github.event_name == 'pull_request' && 'no_corrections' || inputs.variants }}
     steps:
@@ -57,6 +58,11 @@ jobs:
       # Launches run April 1 to June 30; 150 days at sea reaches late November.
       - name: Fetch currents for April to December
         run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-12"
+      - name: Download hurricane tracks (IBTrACS, about 58 MB) for the storm-encounter columns
+        run: |
+          mkdir -p data/storms
+          curl -sSL --retry 3 --max-time 600 -o data/storms/ibtracs.NA.list.v04r01.csv \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv"
       - name: Fetch weather (ERA5) for the same span
         run: python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$YEAR-12-05" --workers 4
       - name: Run every variant over the year's April to June launches

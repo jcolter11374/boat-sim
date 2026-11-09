@@ -120,3 +120,9 @@ def test_source_samples_and_feeds_the_environment(monkeypatch, tmp_path):
 def test_default_source_warns_when_missing(tmp_path):
     with pytest.warns(UserWarning, match="no ship traffic"):
         assert T.default_source(tmp_path / "nope.nc") is None
+
+
+def test_default_source_fails_when_required(tmp_path, monkeypatch):
+    monkeypatch.setenv("BOATSIM_REQUIRE_SHIPS", "1")
+    with pytest.raises(FileNotFoundError, match="REQUIRE_SHIPS"):
+        T.default_source(tmp_path / "nope.nc")

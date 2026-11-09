@@ -84,10 +84,12 @@ vessel's ship-strike odds use it directly (vessel/hazards.py).
   (fit on alternate 1 degree columns, test on the rest): typically within a
   factor of 1.6 of EMODnet, 90% within a factor of 3.9 (one plain scale
   factor: 1.6 and 5.5).
-* Built once in GitHub Actions ("Build ship density" workflow) into a 0.1
-  degree map, `data/traffic/ship_density_v1.nc` (artifact `ship-density`).
-  The runner uses it when that file is present and warns, with no ship
-  traffic, when it is not.
+* Built in GitHub Actions ("Build ship density" workflow; tick "commit" to
+  commit the result) into a 0.1 degree map, `data/traffic/ship_density_v1.nc`.
+  This is the one data file kept in git; both sources are CC BY 4.0
+  (credits in THIRD_PARTY_NOTICES.md). The runner uses it when present.
+  If it's missing, the runner warns and runs with no ships, except in the
+  batch workflows, which set `BOATSIM_REQUIRE_SHIPS=1` and fail.
 * Spot values (build of 9 Nov 2026), ships per km²: drop point off the Bay
   mouth 1.2e-3, Gulf Stream at 38N 70W 1.2e-5, mid-ocean at 40N 45W 2.0e-5,
   Azores 2.7e-4, off Lisbon 2.4e-3.

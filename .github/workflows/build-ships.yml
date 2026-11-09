@@ -1,16 +1,23 @@
 # Builds the ship-traffic density grid for the route box (issue #13) and
-# uploads it as an artifact (about 1 MB). Both sources are free and need no
+# uploads it as an artifact. Run by hand with "commit" ticked to commit the
+# map to the branch you run it on (data/traffic/ship_density_v1.nc is the
+# one data file kept in git; the batch workflows need it). Both sources are free and need no
 # account; thread sandboxes can't reach them, GitHub's runners can.
 # Run it by hand: Actions tab -> "Build ship density" -> Run workflow.
 name: Build ship density
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit the built map to this branch"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - ".github/workflows/build-ships.yml"
       - "src/boatsim/oceandata/traffic.py"
 permissions:
-  contents: read
+  contents: write  # only used by the commit step, which runs only when asked
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,3 +42,11 @@ jobs:
           name: ship-density
           path: data/traffic/
           retention-days: 90
+      - name: Commit the map to this branch
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/traffic/ship_density_v1.nc
+          git commit -m "Ship-traffic map built by run ${{ github.run_id }} (#13)" || echo "map unchanged"
+          git push

@@ -32,7 +32,8 @@ thread sandboxes):
 
 Stored result: one NetCDF on a 0.1 degree grid over the route box, built by
 build() (python -m boatsim.oceandata build-ships) in GitHub Actions and
-cached under data/traffic/.
+committed as data/traffic/ship_density_v1.nc, the one data file kept in git
+(both sources are CC BY 4.0; credits in THIRD_PARTY_NOTICES.md).
 """
 
 from __future__ import annotations
@@ -328,7 +329,6 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
         {
             "ship_density": (("lat", "lon"), ships.astype(np.float32)),
             "source": (("lat", "lon"), source),
-            "wb_corrupt_share": (("lat", "lon"), junk.astype(np.float32)),
         },
         coords={"lat": lats, "lon": lons},
         attrs={
@@ -343,7 +343,8 @@ def build(out: Path = DEFAULT_PATH, wb_tif: str | Path | None = None, log=print)
         },
     )
     out.parent.mkdir(parents=True, exist_ok=True)
-    ds.to_netcdf(out)
+    enc = {"zlib": True, "complevel": 9}
+    ds.to_netcdf(out, encoding={"ship_density": enc, "source": enc})
     for name, (la, lo) in {
         "drop point": (36.85, -75.7),
         "Gulf Stream 38N 70W": (38.0, -70.0),
@@ -384,9 +385,16 @@ class ShipDensitySource:
 
 
 def default_source(path: str | Path = DEFAULT_PATH) -> ShipDensitySource | None:
-    """The built map if it is in the data folder, else None (no ship traffic) with a warning."""
+    """The map committed under data/traffic/, else None (no ship traffic) with a
+    warning. With BOATSIM_REQUIRE_SHIPS=1 (set in the batch workflows) a missing
+    map is an error instead, so a batch can't silently run without ships."""
     if Path(path).exists():
         return ShipDensitySource(path)
+    if os.environ.get("BOATSIM_REQUIRE_SHIPS") == "1":
+        raise FileNotFoundError(
+            f"{path} is missing and BOATSIM_REQUIRE_SHIPS=1: the ship-traffic map is "
+            "committed in the repo; check out the full tree or rebuild it."
+        )
     import warnings
 
     warnings.warn(

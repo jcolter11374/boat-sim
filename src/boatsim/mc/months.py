@@ -134,6 +134,12 @@ def summarise(log) -> dict:
             **{f"spread_{k}": v for k, v in getattr(log, "spread", {}).items()},
         }
     )
+    # Closest hurricane (Priya, #13 follow-up): only when IBTrACS is downloaded.
+    from boatsim.oceandata.storms import default_tracks, encounter
+
+    tracks = default_tracks()
+    if tracks is not None and log.rows:
+        out.update(encounter(log.rows, tracks))
     return out
 
 
