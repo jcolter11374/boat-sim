@@ -16,53 +16,54 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install rasterio numpy
-      - name: EMODnet vessel density metadata
+      - run: pip install rasterio numpy pyproj
+      - name: EMODnet samples (2023 annual average, all ship types)
         run: |
-          W="https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&VERSION=2.0.1"
-          for c in emodnet__vesseldensity_allavg emodnet__vesseldensity_all emodnet__vesseldensity_09avg; do
-            echo "=== $c"
-            curl -sSL --max-time 120 "$W&REQUEST=DescribeCoverage&COVERAGEID=$c" | head -c 4000; echo
-          done
-          curl -sSL --max-time 120 "https://ows.emodnet-humanactivities.eu/wms?SERVICE=WMS&REQUEST=GetCapabilities" -o wms.xml
           python - <<'PY'
-          import re
-          s = open("wms.xml").read()
-          for m in re.finditer(r"<Layer[^>]*>\s*<Name>(vesseldensity_allavg|vesseldensity_00avg|vesseldensity_all)</Name>(.{0,2500})", s, re.S):
-              print("---", m.group(1)); print(re.sub(r"\s+", " ", m.group(2))[:2500])
+          import subprocess, numpy as np, rasterio
+          from pyproj import Transformer
+          tr = Transformer.from_crs(4326, 3857, always_xy=True)
+          W = ("https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage"
+               "&FORMAT=image/tiff&COVERAGEID=emodnet__vesseldensity_allavg&SUBSET=time(\"2023-01-01T00:00:00.000Z\")")
+          boxes = {"lisbon": (-11, 37, -8, 40), "azores": (-32, 36.5, -24, 40), "midocean_45W": (-50, 38, -40, 44),
+                   "ireland_SW": (-14, 49, -9, 52), "channel_W": (-7, 48, -4, 50), "baymouth": (-76, 36.5, -74.5, 37.5),
+                   "between_25W_15W": (-25, 40, -15, 46)}
+          for name, (w, s, e, n) in boxes.items():
+              x0, y0 = tr.transform(w, s); x1, y1 = tr.transform(e, n)
+              url = W + f"&SUBSET=X({x0},{x1})&SUBSET=Y({y0},{y1})"
+              subprocess.run(["curl", "-sSL", "--max-time", "300", url, "-o", "s.tif"], check=False)
+              try:
+                  with rasterio.open("s.tif") as r:
+                      a = r.read(1).astype(float)
+                      nd = r.nodata
+                      if nd is not None: a[a == nd] = np.nan
+                      ships = a / 730.5  # hours per km2 per month -> ships per km2 at any moment
+                      print(name, r.res, r.dtypes, "nodata", nd, "cells", a.size, "nan%", round(100*np.isnan(a).mean(), 1),
+                            "h/km2/mo pcts50,90,99,max", np.round(np.nanpercentile(a, [50, 90, 99, 100]), 3) if np.isfinite(a).any() else "all nan",
+                            "mean ships/km2", np.nanmean(ships) if np.isfinite(a).any() else None)
+              except Exception as ex:
+                  print(name, "FAILED", ex, open("s.tif", "rb").read(400))
           PY
-      - name: EMODnet sample (approaches to Lisbon and the Azores)
-        run: |
-          W="https://ows.emodnet-humanactivities.eu/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&FORMAT=image/tiff"
-          for box in "Lat(37,40)&SUBSET=Long(-11,-8)" "Lat(36.5,40)&SUBSET=Long(-32,-24)"; do
-            curl -sSL --max-time 300 "$W&COVERAGEID=emodnet__vesseldensity_allavg&SUBSET=$box" -o s.tif
-            ls -la s.tif; file s.tif
-            python - <<'PY'
-          import rasterio, numpy as np
-          try:
-              with rasterio.open("s.tif") as r:
-                  print(r.crs, r.res, r.bounds, r.dtypes, r.nodata, r.tags())
-                  a = r.read(1).astype(float)
-                  if r.nodata is not None: a[a == r.nodata] = np.nan
-                  print("cells", a.size, "nan", int(np.isnan(a).sum()), "pcts", np.nanpercentile(a, [50, 90, 99, 100]))
-          except Exception as e:
-              print("read failed", e); print(open("s.tif","rb").read(600))
-          PY
-          done
-      - name: World Bank / IMF global ship density
+      - name: World Bank global density, metadata and plausibility
         run: |
           curl -sSL --max-time 900 "https://datacatalogfiles.worldbank.org/ddh-published/0037580/DR0045406/shipdensity_global.zip" -o g.zip
-          ls -la g.zip; unzip -l g.zip
-          unzip -o g.zip -d g >/dev/null; ls -laR g | head -30
+          unzip -o g.zip shipdensity_global.tif shipdensity_global.tif.aux.xml -d g >/dev/null
+          cat g/shipdensity_global.tif.aux.xml
           python - <<'PY'
-          import glob, rasterio, numpy as np
+          import rasterio, numpy as np
           from rasterio.windows import from_bounds
-          f = sorted(glob.glob("g/**/*.tif", recursive=True))[0]
-          with rasterio.open(f) as r:
-              print(f, r.crs, r.res, r.bounds, r.dtypes, r.nodata, r.tags(), r.block_shapes, r.compression)
-              for name, b in {"lisbon": (-11, 37, -8, 40), "azores": (-32, 36.5, -24, 40),
-                              "midocean": (-50, 38, -40, 44), "baymouth": (-76, 36.5, -74.5, 37.5)}.items():
+          with rasterio.open("g/shipdensity_global.tif") as r:
+              for name, b in {"lisbon": (-11, 37, -8, 40), "midocean_45W": (-50, 38, -40, 44)}.items():
                   a = r.read(1, window=from_bounds(*b, r.transform)).astype(float)
-                  if r.nodata is not None: a[a == r.nodata] = np.nan
-                  print(name, a.shape, "sum", np.nansum(a), "mean", np.nanmean(a), "pcts", np.nanpercentile(a, [50, 90, 99, 100]))
+                  a[a == r.nodata] = np.nan
+                  v = a[np.isfinite(a)]
+                  edges = [0, 1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8]
+                  h, _ = np.histogram(v, bins=edges)
+                  print(name, "hist", list(zip(edges[:-1], h.tolist())))
+                  # Is the big stuff in lines (lanes) or blobs? Print a coarse 0.5 deg map of log10 mean.
+                  k = 100
+                  ny, nx = a.shape[0] // k, a.shape[1] // k
+                  m = np.nanmean(a[: ny * k, : nx * k].reshape(ny, k, nx, k), axis=(1, 3))
+                  for row in np.log10(m + 1):
+                      print(" ".join(f"{x:4.1f}" for x in row))
           PY
