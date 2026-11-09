@@ -497,7 +497,16 @@ def main(argv: list[str] | None = None) -> None:
             unknown_p_by_60_days=a.unknown_p,
         )
         df.to_csv(out / f"sensitivity_{a.year}.csv", index=False)
-        print(df[["variant", "start", "outcome", "days", "ending"]].to_string())
+        cols = [
+            "variant",
+            "start",
+            "outcome",
+            "days",
+            "last_report_day",
+            "last_heard_day",
+            "ending",
+        ]
+        print(df[cols].to_string())
     else:
         df = pd.concat([pd.read_csv(x, parse_dates=["start"]) for x in a.csvs], ignore_index=True)
         df.to_csv(out / "sensitivity_all.csv", index=False)

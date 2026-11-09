@@ -4,7 +4,7 @@ Ravi (QA), 9 Nov 2026. Data: the Randolph team's `docs/data/crossing_attempts.cs
 
 **Short version.**
 - **The record can't tell.** Ten boats in the record reached open ocean, and eight of them failed there. Those ten are consistent with failures getting likelier with time at sea, and just as consistent with a steady rate. The best fit leans towards wear-out, but not by enough to count (p = 0.25), and the simpler steady-rate model scores better on AIC.
-- **Wear-out isn't what's wrong with our sim.** The steady rate the record gives in open ocean is about 1.3% of boats per day. Our "historical" set runs at about 0.15% to 0.3% per day offshore (from #120). Even the strongest wear-out the record allows only doubles the rate by day 90, and lowers it before day 45. The gap is in the level of the rate, five to ten times over, not in its shape.
+- **Wear-out isn't what's wrong with our sim.** The steady rate the record gives in open ocean is about 1.3% of boats per day. #120 put our "historical" set at 0.15% to 0.3%, but that was on the "boat lost" endpoint. The record's endpoint is the last report. Measured that way, Theo's rough count puts our historical set at about 0.8% a day, roughly the record's rate without rig failures. See "The level" below.
 - **What's in this PR.**
   - `wearout_multiplier()`, with a parameter table both teams can use.
   - A knob for it in our hazards, off by default. Today's results don't change.
@@ -64,13 +64,26 @@ All fits are by maximum likelihood, with the two censored boats counted as survi
 - **Variants.** `wearout_central` and `wearout_high` on the planning set, and `historical_wearout_high` on the historical set. They join the next sensitivity batch run.
 - **No change to today's results.** No new dice are drawn, so voyage-by-voyage pairing with earlier runs holds.
 
-## The bigger problem: the level
+## The level, and which endpoint
 
-- Our historical set loses about 0.15% of boats per day offshore from day 7 to day 30, and 0.3% from day 30 to day 60.
-- The record loses 1.3% per day.
-- Leave out the three rig and weather failures, which a kayak with no mast may partly avoid, and the record still loses 0.8% per day (95%: 0.26% to 1.9%). That is three to five times ours.
-- The main reason is structural. In our model the boat is only lost when both electronics boxes are dead, and the two boxes share only 30% of their failures (`electronics_common_cause` = 0.3, a guess). Most record boats had one box. The four "went silent" losses also map partly onto Iridium plus beacon failing, which we count as a silence problem rather than a loss.
-- So closing the gap needs Theo's view on how the record's causes map onto our two boxes and the beacon. A wear-out curve can't do it. The cheap first check is the historical set with `electronics_common_cause: 1.0`.
+- **First pass (#120): a level gap.** On the "boat lost" endpoint, our historical set loses about 0.15% of boats a day offshore from day 7 to day 30, and 0.3% from day 30 to day 60. The record loses 1.3%, or 0.8% without its three rig and weather failures (95%: 0.26% to 1.9%).
+- **Theo's correction: wrong endpoint.** The record ends a boat at its last report. In our sim, losing Iridium leaves the boat sailing and reporting through the beacon only, so it isn't "lost". Here is how Theo maps the record's 8 open-ocean failures onto our boat:
+  - 2 silent: the main box or Iridium. Either way, Iridium ends.
+  - 2 erratic then silent: the main box or a software hang. Iridium ends.
+  - 1 antenna fault then capture: Iridium.
+  - 3 rig or weather: no rig to map them onto. The nearest thing is knockdown damage.
+- **The rough count.** For the historical set offshore, after day 14, in 1.8 m waves:
+  - main box: 0.0035 a day;
+  - software hang that doesn't clear: 0.001 a day;
+  - Iridium: about 0.0032 a day.
+  - That is about 0.0077 a day of Iridium-ending events, against the record's 0.0080 without rig failures.
+- **So the rates may be about right, and #120 compared the wrong thing.**
+- **Next batch.** Sensitivity runs now log `last_report_day` and `last_heard_day` for each voyage. They will score three endpoints:
+  - (a) last Iridium report: the record's yardstick, compared with 0.0129 and 0.0080;
+  - (b) the boat lost, or Iridium and beacon both silent;
+  - (c) the boat lost.
+  - Plus `electronics_common_cause` at 0.1, 0.3 and 1.0 (1.0 is the record-like bound for (c), not our expected value), and knockdown damage x10 and x30 as a bound for the rig and weather share.
+- Wear-out variants are reported as sensitivity only, since the range for k includes 1.
 
 ## Caveats
 
