@@ -202,28 +202,29 @@ The fix is one random stream per source of chance: hazards, link, sensors, pinge
 | Bigger panels (350 W) | 78 | 0 / 0 | | 91 | 15 | 83 |
 | Faster cruise (25 W) | 84 | 16 / 10 | 33% | 76 | 12 | 66 |
 
-- **Course changes from home now look worth having.**
-  - With Sam's fix (#107) and real pairing, re-planning beats never re-planning by 78 to 66: 17 voyages gained, 5 lost, about a 2% chance of luck.
-  - The 72-hour row is again identical to "never", because no forecast detour ever saves 72 hours.
-  - A base that sends nothing at all also falls to 67.
-- **The gap is almost all dead electronics offshore: 15 against 22.** Now that the hull dice are shared, that difference has to come through the voyage itself.
-  - The likely path: the electronics tub leaks more in big waves, and a wet tub fails six times as often (#91). Weather routing keeps the boat out of the worst seas.
-  - I haven't checked that against the wave heights along each track. It is a hypothesis.
-- **This reverses the earlier shared-stream result, and that is worth being honest about.**
-  - On the old dice, never re-planning led 78 to 70. Pooling both dice sets, the two settings are level: re-planning 148 of 200, never 144 of 200.
-  - The new run is the better test, because its pairs are real. The old run's gaps were partly reshuffled dice.
-  - Still, one run at 2% is evidence, not proof.
+- **Course changes from home: at least as good as none, possibly better. Not yet proven.**
+  - Re-planning at 6 h beats never re-planning by 78 to 66: 17 voyages gained, 5 lost, about a 2% chance of luck.
+  - The 72-hour row is identical to "never", because no forecast detour ever saves 72 hours. A base that sends nothing at all also falls, to 67.
+  - Don't take the 12-point gap at face value yet. Sam found that the hull's random draws still drift apart on any row that moves the boat. The hazard code uses a different number of draws per step depending on where the boat is. Examples:
+    - the ship-strike draw is skipped where there are no ships;
+    - the capture draw is skipped away from land;
+    - the tub-choice draw only happens after a leak.
+  - Once two routes differ by a few grid cells, their hazard dice no longer line up. Battery and panel rows came out 0/0 only because they don't move the boat.
+  - So rows with different routes are still only partly paired.
+- **The gap is almost all dead electronics offshore: 15 against 22.** There is no clear physical reason for it.
+  - Routing never looks at waves, so it can't be steering round rough seas on purpose (Sam).
+  - The voyages are only about 4% shorter (91 against 95 days), against a 30% gap in deaths.
+  - Most of the gap is likely the hull dice drifting apart, as above.
+- **This reverses the earlier shared-stream result.** On the old dice, never re-planning led 78 to 70. Pooling both dice sets, the two are level: re-planning 148 of 200, never 144 of 200.
 - **24 hours against 6 hours** is within the noise: 75 against 78, 6 gained and 9 lost. Neither costs time (median 91 days either way) or airtime.
 - **Battery and panels don't matter in spring**, confirmed with clean pairs. Small panels lean slightly the wrong way (74), but that is within the noise.
 - **Cruising at 25 W** finishes 84 of 100 and takes 15 days fewer (76 against 91). It also costs $17 less airtime, because the voyage is shorter. That is 16 gained against 10 lost, a 33% chance of luck: promising, not proven. The cost is a lower minimum battery charge, 38% against 68%.
 
-### Recommendation on re-planning (Ravi; Sam to confirm)
+### Recommendation on re-planning (Ravi and Sam agree)
 
 **Keep the default at 6 hours.** Don't raise `min_gain_h`.
-- On the truly paired run, re-planning at 6 hours is the best of the rows tested.
-- 24 hours is no better.
-- 72 hours or more throws away the gain entirely.
+- 72 hours or more is the same as never re-planning.
+- Nothing in either dice set argues for raising it.
+- On the evidence so far, 6 h is at least as good as never, and possibly better.
 
-Two follow-ups would make this solid:
-1. Log the wave height along each track, to check the "fewer wet-tub failures" explanation.
-2. Repeat the 6-hour against never comparison on a second set of seeds.
+**Before quoting any re-planning gain:** Theo should give each hull hazard its own fixed slot of random numbers every step (a fixed block of K draws). Then rerun the comms and cruise rows. Until then, treat the gaps between rows that move the boat differently as partly dice. That covers comms, route and cruise. Battery and panels are unaffected.
