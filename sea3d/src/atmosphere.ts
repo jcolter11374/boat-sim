@@ -87,6 +87,10 @@ export class Atmosphere {
     private camera: THREE.Camera,
   ) {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const gl = renderer.getContext();
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    this.software = /swiftshader|llvmpipe|software|basic render/i.test(gpu);
     this.sky.scale.setScalar(HORIZON * 3);
     const su = this.sky.material.uniforms;
     su.rayleigh.value = 1.4;
@@ -179,9 +183,13 @@ export class Atmosphere {
     }
   }
 
-  /** Glow around the sun and bright glints (high quality only). */
+  /** True when the browser draws without a graphics card (software GL, as on
+   *  CI or some office PCs): the glow is skipped there, it costs too much. */
+  readonly software: boolean;
+
+  /** Glow around the sun and bright glints (high quality, real graphics card only). */
   setBloom(on: boolean): void {
-    if (!on) {
+    if (!on || this.software) {
       this.composer?.dispose();
       this.composer = null;
       this.bloom = null;
