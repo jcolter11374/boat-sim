@@ -9,8 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       days:
-        description: "Days to drift"
+        description: "Days to drift (the dead-boat run uses 30 for #73)"
         default: "10"
+      mode:
+        description: "hatteras (#19 set), shared (36-42N 75-50W, #73) or dead-boat (#73)"
+        default: "hatteras"
   pull_request:
     paths:
       - src/boatsim/mc/drifters.py
@@ -25,6 +28,7 @@ jobs:
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       DAYS: ${{ inputs.days || '10' }}
+      MODE: ${{ inputs.mode || 'hatteras' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,11 +42,17 @@ jobs:
             exit 1
           fi
       - name: Drift the models alongside real drifters
-        run: python -m boatsim.mc.drifters --days "$DAYS" --out runs/drifters
+        if: env.MODE != 'dead-boat'
+        run: python -m boatsim.mc.drifters --set "$MODE" --days "$DAYS" --out runs/drifters
+      - name: Drift the dead kayak from the drop point (15 May 2023)
+        if: env.MODE == 'dead-boat'
+        run: python -m boatsim.mc.drifters --dead-boat --days "$DAYS" --out runs/drifters
       - name: Show the report on the run page
         if: always()
         run: |
-          if [ -f runs/drifters/drift_report.md ]; then cat runs/drifters/drift_report.md >> "$GITHUB_STEP_SUMMARY"; fi
+          for f in runs/drifters/drift_report.md runs/drifters/dead_boat_report.md; do
+            if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

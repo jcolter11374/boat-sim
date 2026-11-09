@@ -9,7 +9,13 @@ runs/
 *.nc
 *.zarr/
 *.parquet
-# Except the land mask (#70): small, built from Natural Earth (public domain).
+# Except the ship-traffic map, which is small and built from CC BY 4.0 sources
+# (see THIRD_PARTY_NOTICES.md). Rebuild with the "Build ship density" workflow.
+!data/traffic/
+data/traffic/*
+!data/traffic/ship_density_v1.nc
+# And the land mask (#70): small, built from Natural Earth (public domain).
+# Rebuild with the "Build land mask" workflow.
 !data/land/
 data/land/*
 !data/land/land_mask_v1.npz

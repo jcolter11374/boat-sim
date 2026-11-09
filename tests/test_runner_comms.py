@@ -103,3 +103,82 @@ def test_delivered_route_counts_as_contact_for_safe_mode():
     )
     log = simulate(c, datetime(2020, 10, 1), 36.85, -75.7, default_mission(), max_days=3)
     assert ap.contacts == [_first(log, EventKind.MISSION_UPDATED)]
+
+
+class DarkThenSun:
+    """No sun for the first 4 days (the battery runs flat), then bright sun."""
+
+    def __init__(self, dark_days=4.0):
+        self.dark_until = None
+        self.dark_days = dark_days
+
+    def sample(self, t, lat, lon):
+        if self.dark_until is None:
+            self.dark_until = t + timedelta(days=self.dark_days)
+        return EnvState(ghi=0.0 if t < self.dark_until else 900.0)
+
+
+class PowerLog:
+    """Wraps a vessel and records (t, electronics_on) after every step."""
+
+    def __init__(self, vessel):
+        self.vessel, self.trace = vessel, []
+
+    def initial_state(self, *a):
+        return self.vessel.initial_state(*a)
+
+    def sense(self, *a):
+        return self.vessel.sense(*a)
+
+    def step(self, *a):
+        state, events = self.vessel.step(*a)
+        self.trace.append((state.t, state.electronics_on))
+        return state, events
+
+
+class EveryReportBase:
+    """Sends a route after every report, and records when it saw reports."""
+
+    def __init__(self):
+        self.seen = []
+
+    def on_report(self, report, forecast):
+        self.seen.append(datetime.fromisoformat(report["t"]))
+        return Mission([Waypoint(38.5, -28.0)])
+
+
+def test_dead_boat_stops_reporting_and_collects_routes_after_restart():
+    from boatsim.comms import IridiumSBDLink
+    from boatsim.vessel import KayakVessel
+
+    design = load_design("configs/v4_kayak.yaml")
+    vessel = PowerLog(KayakVessel(design))
+    env = DarkThenSun()
+    link = IridiumSBDLink(p_try_calm=1.0)
+    base = EveryReportBase()
+    pinger = GlobalstarPinger(p_copy_calm=1.0)
+    # Full thrust with no sun drains the 1,280 Wh battery in under a day.
+    c = Components(env, PerfectForecast(env), vessel, WaypointAutopilot(), link, base, pinger)
+    log = simulate(c, datetime(2020, 10, 1), 36.85, -75.7, default_mission(), max_days=8)
+
+    off = [t for t, on in vessel.trace if not on]
+    assert off, "battery should have gone flat in the dark"
+    off_start, back_on = off[0], next(t for t, on in vessel.trace if on and t > off[-1])
+
+    sent = [e.t for e in log.events if e.kind == EventKind.MESSAGE_SENT]
+    assert not any(off_start <= t < back_on for t in sent)  # silent while dead
+    assert any(t >= back_on for t in sent)  # talks again after restart
+    assert not any(off_start <= t < back_on for t in base.seen)
+
+    updates = [e.t for e in log.events if e.kind == EventKind.MISSION_UPDATED]
+    assert not any(off_start <= t < back_on for t in updates)
+
+    # Globalstar has its own solar cell and keeps pinging throughout.
+    pings = [e.t for e in log.events if e.detail == "globalstar ping"]
+    assert any(off_start <= t < back_on for t in pings)
+
+    # No mailbox checks are billed while the modem was dead.
+    full = IridiumSBDLink(p_try_calm=1.0)
+    cost_dead = link.voyage_cost_usd(log.start, log.end)["empty_mailbox_checks"]
+    cost_alive = full.voyage_cost_usd(log.start, log.end)["empty_mailbox_checks"]
+    assert cost_dead < cost_alive

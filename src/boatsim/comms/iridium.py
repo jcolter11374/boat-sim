@@ -106,6 +106,10 @@ class IridiumSBDLink:
     line_rental_usd_month: float = 17.0  # [2]: prepaid, all RockBLOCKs
     monthly_budget_usd: float | None = None  # no cap: measure cost, don't limit it
     ledger: list[LedgerEntry] = field(default_factory=list)
+    # Periods when the boat's battery was flat and the modem had no power, as
+    # [start, end) pairs; end is None while it is still off. No mailbox checks
+    # happen (or are billed) inside them.
+    off_periods: list[list] = field(default_factory=list)
 
     # ------------------------------------------------------------ accounting
 
@@ -144,6 +148,7 @@ class IridiumSBDLink:
         Line rental for every calendar month touched, credits for delivered
         messages, and a credit for each scheduled mailbox check that found
         nothing (checks that collected a base message are paid by that message).
+        No checks happen while the modem is unpowered (see `set_powered`).
         """
         months = set()
         t = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -155,7 +160,7 @@ class IridiumSBDLink:
         checks = 0
         t = self.next_mailbox_check(start)
         while t <= end:
-            checks += 1
+            checks += self._powered_at(t)
             t += self.mailbox_every
         down = sum(1 for e in self.ledger if e.status == "delivered" and e.direction == "down")
         empty = max(0, checks - down) * self.credit_usd
@@ -165,6 +170,16 @@ class IridiumSBDLink:
             "empty_mailbox_checks": round(empty, 2),
             "total": round(rental + msgs + empty, 2),
         }
+
+    def set_powered(self, t: datetime, on: bool) -> None:
+        """Called by the runner when the boat's electronics lose or regain power."""
+        if not on:
+            self.off_periods.append([t, None])
+        elif self.off_periods and self.off_periods[-1][1] is None:
+            self.off_periods[-1][1] = t
+
+    def _powered_at(self, t: datetime) -> bool:
+        return not any(a <= t and (b is None or t < b) for a, b in self.off_periods)
 
     # ---------------------------------------------------------------- timing
 

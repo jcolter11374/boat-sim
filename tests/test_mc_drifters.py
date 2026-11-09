@@ -142,3 +142,41 @@ def test_report_judges_drogued_against_water_and_undrogued_against_float():
     assert "beat 'stay put' in 2 of 2" in md
     header, sep = [ln for ln in md.splitlines() if ln.startswith("|")][:2]
     assert header.count("|") == sep.count("|")
+
+
+def test_shared_cases_start_in_the_shared_stretch():
+    import re
+
+    assert len(D.SHARED_CASES) == 20
+    assert len({c.drifter_id for c in D.SHARED_CASES}) == 20
+    for c in D.SHARED_CASES:
+        lat, lon = map(float, re.search(r"\(([\d.]+)N ([\d.]+)W\)", c.note).groups())
+        assert 36 <= lat <= 42 and 50 <= lon <= 75
+    assert set(D.CASE_SETS) == {"hatteras", "shared"}
+
+
+class _Currents:
+    """Land (NaN) east of 69.9 W, sea west of it."""
+
+    def sample(self, t, lat, lon):
+        nan = float("nan")
+        return {"current_u": nan if lon > -69.9 else 0.0, "current_v": 0.0}
+
+
+def test_dead_boat_stops_at_first_land():
+    design = load_design("configs/v4_kayak.yaml")
+    env = ConstantEnvironment(EnvState(current_u=0.5))  # drifts east into "land"
+    track, s = D.dead_boat(env, _Currents(), design, T0, 36.0, -70.0, days=5)
+    assert s["aground"]
+    assert s["end_lon"] > -69.9 and track["lon"].iloc[-2] <= -69.9
+    assert 0.1 < s["days"] < 1.0  # ~9 km at 0.5 m/s plus wind/waves: a few hours
+    assert s["path_km"] == pytest.approx(s["km_from_start"], rel=0.05)
+    assert "first reached land" in D.dead_boat_markdown(s)
+
+
+def test_dead_boat_at_sea_runs_the_full_time():
+    design = load_design("configs/v4_kayak.yaml")
+    env = ConstantEnvironment(EnvState())
+    _, s = D.dead_boat(env, _Currents(), design, T0, 36.0, -75.0, days=1)
+    assert not s["aground"] and s["days"] == pytest.approx(1.0)
+    assert "still at sea" in D.dead_boat_markdown(s)

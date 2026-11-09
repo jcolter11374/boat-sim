@@ -88,6 +88,7 @@ def simulate(
     pending_up: list[tuple[datetime, dict]] = []
     pending_down: list[tuple[datetime, Mission]] = []
     n_steps = int(timedelta(days=max_days) / dt)
+    was_powered = True
 
     for i in range(n_steps):
         env = c.env.sample(state.t, state.lat, state.lon)
@@ -96,17 +97,35 @@ def simulate(
         state, events = c.vessel.step(state, cmd, env, dt, rng)
         log.events.extend(events)
 
+        # A flat battery cuts power to the Iridium modem: no reports, no mailbox
+        # checks, and routes from base wait in the mailbox until it restarts.
+        # The Globalstar beacon has its own solar cell and keeps pinging.
+        powered = getattr(state, "electronics_on", True)
+        if powered != was_powered:
+            note = getattr(c.link, "set_powered", None)
+            if note is not None:
+                note(state.t, powered)
+            if powered:
+                # Routes that arrived while it was off are collected at the
+                # first mailbox check after restart.
+                next_check = getattr(c.link, "next_mailbox_check", None)
+                for k, (t_due, new) in enumerate(pending_down):
+                    if t_due <= state.t and next_check is not None:
+                        pending_down[k] = (next_check(state.t), new)
+            was_powered = powered
+
         # Satellite traffic. Reports and routes take effect when they are
         # delivered, not when they are sent: an uplink may need retries, and a
         # route from base waits in the Iridium mailbox until the boat checks it.
         if state.t >= next_report:
             next_report += report_every
-            report = _report(state)
-            msg = Message(state.t, "up", report, size_bytes=len(str(report)))
-            t_up = c.link.send(msg, env, rng)
-            if t_up is not None:
-                log.events.append(Event(state.t, EventKind.MESSAGE_SENT))
-                pending_up.append((t_up, report))
+            if powered:
+                report = _report(state)
+                msg = Message(state.t, "up", report, size_bytes=len(str(report)))
+                t_up = c.link.send(msg, env, rng)
+                if t_up is not None:
+                    log.events.append(Event(state.t, EventKind.MESSAGE_SENT))
+                    pending_up.append((t_up, report))
 
         for item in [x for x in pending_up if x[0] <= state.t]:
             pending_up.remove(item)
@@ -124,7 +143,7 @@ def simulate(
                 if t_down is not None:
                     pending_down.append((t_down, new))
 
-        for item in [x for x in pending_down if x[0] <= state.t]:
+        for item in [x for x in pending_down if x[0] <= state.t and powered]:
             pending_down.remove(item)
             new = item[1]
             new.version = mission.version + 1
