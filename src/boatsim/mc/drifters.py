@@ -58,6 +58,7 @@ GDP_URL = "https://noaa-oar-hourly-gdp-pds.s3.amazonaws.com/latest/gdp-v2.01.1.z
 class DrifterCase:
     drifter_id: int
     note: str  # why it was picked; written for John
+    start: str | None = None  # YYYY-MM-DD: start this far into the track (None: its first fix)
 
 
 # Picked from every GDP drifter whose first good fix is between 33-39.5N and
@@ -107,7 +108,58 @@ SHARED_CASES: tuple[DrifterCase, ...] = (
     DrifterCase(118426, "Jun 2012, east band (39.2N 54.8W), drogued"),
     DrifterCase(300534061650930, "Apr 2022, east band (36.8N 53.9W), drogued"),
 )
-CASE_SETS = {"hatteras": CASES, "shared": SHARED_CASES}
+# SMOC against GLORYS (#116). SMOC starts 1 Nov 2020 and the GDP hourly file ends
+# Oct 2022, so only 2 of the 20 SHARED_CASES overlap it. These are 10-day segments
+# from every GDP drifter in the shared box (36-42N, 75-50W) from 2 Nov 2020 on,
+# starting at 00 UTC inside the box, with no gap over 1.5 h, one drogue state
+# throughout, and staying inside the SMOC box (33-46N, 78-40W): 245 segments
+# from 49 drifters. Kept: every drogued drifter (21, first segment each, which
+# includes the two shared cases), and 19 undrogued ones spread over the bands,
+# from Nov-Dec 2020 and Aug-Sep 2021 only, to keep the SMOC download small.
+# 300534061392260 appears twice: drogued in Jun 2021, undrogued from Aug 2021.
+SMOC_CASES: tuple[DrifterCase, ...] = (
+    DrifterCase(300234065705950, "Nov 2020, east band (36.6N 52.6W), drogued", "2020-11-02"),
+    DrifterCase(300234068243710, "Nov 2020, east band (41.7N 50.5W), drogued", "2020-11-16"),
+    DrifterCase(300234068244450, "Jan 2021, east band (41.9N 50.1W), drogued", "2021-01-13"),
+    DrifterCase(300234066292540, "Feb 2021, east band (41.9N 50.5W), drogued", "2021-02-15"),
+    DrifterCase(300234068343700, "Apr 2021, east band (41.8N 50.3W), drogued", "2021-04-16"),
+    DrifterCase(300234068343830, "Apr 2021, east band (42.0N 50.7W), drogued", "2021-04-28"),
+    DrifterCase(300234067877470, "May 2021, east band (41.8N 50.6W), drogued", "2021-05-02"),
+    DrifterCase(300534061392260, "Jun 2021, east band (36.3N 53.4W), drogued", "2021-06-15"),
+    DrifterCase(300534061650930, "Apr 2022, east band (36.7N 53.9W), drogued", "2022-04-30"),
+    DrifterCase(300234068347650, "Nov 2020, mid band (36.1N 61.4W), drogued", "2020-11-04"),
+    DrifterCase(300234066391380, "Nov 2020, mid band (41.8N 57.4W), drogued", "2020-11-18"),
+    DrifterCase(300234068347620, "Nov 2020, mid band (36.0N 64.7W), drogued", "2020-11-21"),
+    DrifterCase(300534060359560, "Nov 2020, mid band (41.8N 57.2W), drogued", "2020-11-22"),
+    DrifterCase(300234068763480, "Sep 2021, mid band (41.8N 60.5W), drogued", "2021-09-15"),
+    DrifterCase(300234065703970, "Nov 2020, west band (36.0N 70.8W), drogued", "2020-11-07"),
+    DrifterCase(300234067876760, "Dec 2020, west band (36.1N 73.1W), drogued", "2020-12-03"),
+    DrifterCase(300234067876670, "Dec 2020, west band (36.0N 71.7W), drogued", "2020-12-20"),
+    DrifterCase(300534060381970, "Jan 2022, west band (36.1N 73.0W), drogued", "2022-01-03"),
+    DrifterCase(300534063515100, "Jul 2022, west band (36.2N 73.1W), drogued", "2022-07-21"),
+    DrifterCase(300534061550990, "Aug 2022, west band (40.5N 66.4W), drogued", "2022-08-20"),
+    DrifterCase(300534061551770, "Aug 2022, west band (40.4N 68.2W), drogued", "2022-08-21"),
+    DrifterCase(300234067208590, "Nov 2020, east band (38.8N 54.5W), undrogued", "2020-11-02"),
+    DrifterCase(300234064501790, "Nov 2020, east band (36.2N 50.5W), undrogued", "2020-11-09"),
+    DrifterCase(300234063942720, "Nov 2020, east band (36.1N 51.0W), undrogued", "2020-11-29"),
+    DrifterCase(300534061392260, "Aug 2021, east band (36.0N 53.5W), undrogued", "2021-08-01"),
+    DrifterCase(300534061604780, "Aug 2021, east band (36.1N 53.7W), undrogued", "2021-08-05"),
+    DrifterCase(300234064500600, "Aug 2021, east band (36.2N 53.6W), undrogued", "2021-08-12"),
+    DrifterCase(300234063947890, "Nov 2020, mid band (38.2N 60.5W), undrogued", "2020-11-02"),
+    DrifterCase(300234065382690, "Nov 2020, mid band (41.0N 57.2W), undrogued", "2020-11-02"),
+    DrifterCase(300234066315040, "Nov 2020, mid band (37.0N 62.1W), undrogued", "2020-11-02"),
+    DrifterCase(300234068346820, "Nov 2020, mid band (36.9N 57.8W), undrogued", "2020-11-02"),
+    DrifterCase(300234068347000, "Nov 2020, mid band (37.3N 58.6W), undrogued", "2020-11-02"),
+    DrifterCase(300234068347700, "Nov 2020, mid band (36.7N 60.5W), undrogued", "2020-11-02"),
+    DrifterCase(300234065740710, "Nov 2020, west band (36.0N 72.0W), undrogued", "2020-11-07"),
+    DrifterCase(300234066619950, "Nov 2020, west band (37.3N 73.1W), undrogued", "2020-11-12"),
+    DrifterCase(300234064013010, "Nov 2020, west band (36.3N 73.7W), undrogued", "2020-11-23"),
+    DrifterCase(300234064779920, "Aug 2021, west band (40.2N 66.0W), undrogued", "2021-08-10"),
+    DrifterCase(300234064761620, "Aug 2021, west band (36.0N 73.0W), undrogued", "2021-08-19"),
+    DrifterCase(300534061608600, "Sep 2021, west band (36.2N 70.7W), undrogued", "2021-09-03"),
+    DrifterCase(300234064014420, "Sep 2021, west band (36.1N 67.0W), undrogued", "2021-09-05"),
+)
+CASE_SETS = {"hatteras": CASES, "shared": SHARED_CASES, "smoc": SMOC_CASES}
 
 
 # --- Real tracks ------------------------------------------------------------
@@ -119,7 +171,9 @@ def open_gdp(url: str = GDP_URL):
     return xr.open_zarr(url, consolidated=True, decode_times=False)
 
 
-def load_track(drifter_id: int, ds=None, days: float | None = None) -> pd.DataFrame:
+def load_track(
+    drifter_id: int, ds=None, days: float | None = None, start: str | None = None
+) -> pd.DataFrame:
     """Hourly track of one drifter: columns t, lat, lon, drogued.
 
     The GDP file is a "ragged array": all drifters' rows end to end, with
@@ -145,6 +199,8 @@ def load_track(drifter_id: int, ds=None, days: float | None = None) -> pd.DataFr
         }
     ).dropna(subset=["lat", "lon"])
     out["lon"] = (out["lon"] + 180.0) % 360.0 - 180.0
+    if start is not None:
+        out = out[out["t"] >= pd.Timestamp(start)]
     if days is not None:
         out = out[out["t"] <= out["t"].iloc[0] + pd.Timedelta(days=days)]
     return out.reset_index(drop=True)
@@ -277,14 +333,25 @@ def glorys_months(start: datetime, days: float) -> list[str]:
 
 
 def run_check(
-    env, design, cases=CASES, days: int = 10, gdp=None, log=print
+    env,
+    design,
+    cases=CASES,
+    days: int = 10,
+    gdp=None,
+    log=print,
+    models: tuple[str, ...] = ("water", "float", "kayak"),
+    env_for=None,
 ) -> tuple[pd.DataFrame, dict]:
-    """Run every case through every model. Returns (scores table, tracks by case)."""
+    """Run every case through every model. Returns (scores table, tracks by case).
+
+    env_for: optional function (drogued fraction) -> environment, to pick the
+    current source per drifter (SMOC: daily model current for drogued floats,
+    hourly total current for undrogued ones, #116). Default: `env` for all."""
     gdp = gdp if gdp is not None else open_gdp()
-    kayak = kayak_for_drift(design)
+    kayak = kayak_for_drift(design) if "kayak" in models else None
     rows, tracks = [], {}
     for case in cases:
-        real = load_track(case.drifter_id, gdp, days=days + 0.5)
+        real = load_track(case.drifter_id, gdp, days=days + 0.5, start=case.start)
         t0 = real["t"].iloc[0].to_pydatetime()
         lat0, lon0 = float(real["lat"].iloc[0]), float(real["lon"].iloc[0])
         span = (real["t"].iloc[-1] - real["t"].iloc[0]).total_seconds() / 86400.0
@@ -295,14 +362,16 @@ def run_check(
         drogued = float(
             real["drogued"][real["t"] <= real["t"].iloc[0] + pd.Timedelta(days=days)].mean()
         )
-        tracks[case.drifter_id] = {"real": real}
-        for model in ("water", "float", "kayak"):
-            m = drift(env, t0, lat0, lon0, days, model, vessel=kayak)
-            tracks[case.drifter_id][model] = m
+        key = case.drifter_id if case.start is None else f"{case.drifter_id}_{case.start}"
+        tracks[key] = {"real": real}
+        e = env if env_for is None else env_for(drogued)
+        for model in models:
+            m = drift(e, t0, lat0, lon0, days, model, vessel=kayak)
+            tracks[key][model] = m
             s = score(real, m, days)
             rows.append(
                 {
-                    "drifter": case.drifter_id,
+                    "drifter": key,
                     "note": case.note,
                     "start": t0,
                     "lat0": lat0,
@@ -374,6 +443,129 @@ def report_markdown(table: pd.DataFrame, days: int) -> str:
     ]
     for model, g in table.groupby("model", sort=False):
         lines.append(f"| {model} | {g['skill'].median():.2f} | {g[d].median():.0f} km |")
+    return "\n".join(lines) + "\n"
+
+
+def _band(note: str) -> str:
+    for b in ("west", "mid", "east"):
+        if f"{b} band" in note:
+            return b
+    return "?"
+
+
+def compare_markdown(glorys: pd.DataFrame, smoc: pd.DataFrame, days: int) -> str:
+    """SMOC against GLORYS on the same drifters, like with like (#116).
+
+    GLORYS: the judged model (fair_model). SMOC: its "water" run, which used the
+    daily model current for drogued drifters and the hourly total current
+    (tides and Stokes drift included) for undrogued ones."""
+    g = pd.DataFrame(
+        [
+            r
+            for _, grp in glorys.groupby("drifter", sort=False)
+            for _, r in grp[grp["model"] == fair_model(grp["drogued_frac"].iloc[0])].iterrows()
+        ]
+    ).set_index("drifter")
+    m = smoc.set_index("drifter")
+    both = g.join(m, rsuffix="_smoc", how="inner")
+    both["band"] = [_band(n) for n in both["note"]]
+    both["drogued"] = both["drogued_frac"] >= 0.5
+    d = f"sep_d{days}_km"
+
+    def row(label, b):
+        if b.empty:
+            return f"| {label} | 0 | | | | | | |"
+        sw = int((b[f"{d}_smoc"] < b[d]).sum())
+        return (
+            f"| {label} | {len(b)} | {b['skill'].median():.2f} | {b['skill_smoc'].median():.2f} "
+            f"| {b[d].median():.0f} | {b[f'{d}_smoc'].median():.0f} "
+            f"| {int((b['skill'] > b['stay_put_skill']).sum())} / "
+            f"{int((b['skill_smoc'] > b['stay_put_skill']).sum())} | {sw} of {len(b)} |"
+        )
+
+    marks = marks_for(days)
+    lines = [
+        f"# SMOC against GLORYS on real drifters ({days} days, #116)",
+        "",
+        (
+            "Same drifters, same start, same wind and waves (ERA5). Like with like: drogued "
+            "drifters are scored on the plain ocean current (GLORYS daily mean against SMOC's "
+            "daily mean of its hourly model current); undrogued ones on current plus wave push "
+            "(GLORYS plus ERA5 Stokes drift against SMOC's hourly total current, which has "
+            "Stokes drift and tides built in)."
+        ),
+        "",
+        (
+            f"| Group | Drifters | Skill GLORYS | Skill SMOC | Gap day {days} GLORYS (km) "
+            f"| Gap day {days} SMOC (km) | Beat stay put (GLORYS / SMOC) "
+            f"| SMOC closer at day {days} |"
+        ),
+        "|---|---|---|---|---|---|---|---|",
+        row("All", both),
+    ]
+    for b in ("west", "mid", "east"):
+        lines.append(row(f"{b.capitalize()} band", both[both["band"] == b]))
+    lines.append(row("Drogued", both[both["drogued"]]))
+    lines.append(row("Undrogued", both[~both["drogued"]]))
+    lines += [
+        "",
+        "Median gap (km) by day:",
+        "",
+        "| Source | " + " | ".join(f"Day {k}" for k in marks) + " |",
+        "|---" * (1 + len(marks)) + "|",
+        "| GLORYS | " + " | ".join(f"{both[f'sep_d{k}_km'].median():.0f}" for k in marks) + " |",
+        "| SMOC | " + " | ".join(f"{both[f'sep_d{k}_km_smoc'].median():.0f}" for k in marks) + " |",
+        "",
+        "Per drifter:",
+        "",
+        (
+            f"| Drifter | When / type | Skill GLORYS | Skill SMOC | Gap day {days} GLORYS | "
+            f"Gap day {days} SMOC | Stay put |"
+        ),
+        "|---|---|---|---|---|---|---|",
+    ]
+    for k, r in both.iterrows():
+        lines.append(
+            f"| {k} | {r['note']} | {r['skill']:.2f} | {r['skill_smoc']:.2f} | {r[d]:.0f} km "
+            f"| {r[f'{d}_smoc']:.0f} km | {r['stay_put_km']:.0f} km |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _drogue_fracs(scores: pd.DataFrame, cases) -> list[float]:
+    """Drogued fraction per case, from a scores table (cases it skipped count as 1)."""
+    by = scores.drop_duplicates("drifter").set_index("drifter")["drogued_frac"]
+    keys = [c.drifter_id if c.start is None else f"{c.drifter_id}_{c.start}" for c in cases]
+    return [float(by.get(k, 1.0)) for k in keys]
+
+
+def stokes_split_markdown(
+    glorys: pd.DataFrame, smoc: pd.DataFrame, smoc_float: pd.DataFrame, days: int
+) -> str:
+    """Undrogued floats three ways: is SMOC's gap in its current or its extras?"""
+    d = f"sep_d{days}_km"
+    g = glorys[glorys["model"] == "float"].set_index("drifter")
+    t = smoc.set_index("drifter")
+    f = smoc_float.set_index("drifter")
+    keys = [k for k in f.index if k in g.index and k in t.index]
+    rows = [
+        ("GLORYS daily + ERA5 Stokes", g.loc[keys]),
+        ("SMOC daily + ERA5 Stokes", f.loc[keys]),
+        ("SMOC hourly total (its own Stokes and tides)", t.loc[keys]),
+    ]
+    lines = [
+        f"## Undrogued floats: SMOC's current or SMOC's extras? ({len(keys)} drifters)",
+        "",
+        f"| Current used | Median skill | Median gap day {days} (km) | Higher skill than GLORYS |",
+        "|---|---|---|---|",
+    ]
+    for label, r in rows:
+        wins = (
+            ""
+            if r is rows[0][1]
+            else f"{int((r['skill'] > g.loc[keys, 'skill']).sum())} of {len(keys)}"
+        )
+        lines.append(f"| {label} | {r['skill'].median():.2f} | {r[d].median():.0f} | {wins} |")
     return "\n".join(lines) + "\n"
 
 
@@ -459,6 +651,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     p.add_argument("--set", default="hatteras", choices=list(CASE_SETS), help="which drifters")
     p.add_argument(
+        "--smoc",
+        action="store_true",
+        help="also drift on SMOC currents and compare with GLORYS (#116; data from Nov 2020)",
+    )
+    p.add_argument(
         "--dead-boat",
         action="store_true",
         help="instead: drift the dead kayak from the drop point on 15 May 2023 (#73)",
@@ -470,7 +667,10 @@ def main(argv: list[str] | None = None) -> None:
         return
     cases = CASE_SETS[a.set]
     gdp = open_gdp()
-    starts = [load_track(c.drifter_id, gdp, days=1)["t"].iloc[0].to_pydatetime() for c in cases]
+    starts = [
+        load_track(c.drifter_id, gdp, days=1, start=c.start)["t"].iloc[0].to_pydatetime()
+        for c in cases
+    ]
     if a.months:
         need = sorted({m for t in starts for m in glorys_months(t - timedelta(days=1), a.days + 2)})
         print(" ".join(need))
@@ -489,6 +689,32 @@ def main(argv: list[str] | None = None) -> None:
         frames = [df.assign(source=name) for name, df in tr.items()]
         pd.concat(frames).to_csv(out / f"track_{drifter}.csv", index=False)
     md = report_markdown(table, a.days)
+    if a.smoc:
+        from boatsim.oceandata.smoc import SmocSource
+
+        smoc = {k: ReanalysisEnvironment(ERA5Source(), SmocSource(k)) for k in ("model", "total")}
+        st, _ = run_check(
+            None,
+            None,
+            cases,
+            days=a.days,
+            gdp=gdp,
+            models=("water",),
+            env_for=lambda frac: smoc["model" if fair_model(frac) == "water" else "total"],
+        )
+        st.to_csv(out / "drift_scores_smoc.csv", index=False)
+        # Priya's split for undrogued floats: SMOC daily model current plus our
+        # ERA5 Stokes drift, i.e. our float model on SMOC water.
+        und = [c for c, f in zip(cases, _drogue_fracs(st, cases)) if f < 0.5]
+        sf, _ = run_check(smoc["model"], None, und, days=a.days, gdp=gdp, models=("float",))
+        sf.to_csv(out / "drift_scores_smoc_float.csv", index=False)
+        md = (
+            compare_markdown(table, st, a.days)
+            + "\n"
+            + stokes_split_markdown(table, st, sf, a.days)
+            + "\n"
+            + md
+        )
     (out / "drift_report.md").write_text(md)
     print(md)
 
@@ -526,7 +752,9 @@ __all__ = [
     "CASES",
     "CASE_SETS",
     "SHARED_CASES",
+    "SMOC_CASES",
     "DrifterCase",
+    "compare_markdown",
     "dead_boat",
     "drift",
     "fair_model",
@@ -536,4 +764,5 @@ __all__ = [
     "report_markdown",
     "run_check",
     "score",
+    "stokes_split_markdown",
 ]
