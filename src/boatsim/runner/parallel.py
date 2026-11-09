@@ -102,13 +102,16 @@ def _environment(weather: str, currents: bool, for_forecast: bool = False):
     if weather == "constant":
         return ConstantEnvironment()
     if weather == "reanalysis":
+        from boatsim.oceandata.traffic import default_source
+
         era5 = ERA5Source(max_tiles=6 if for_forecast else 3)
+        ships = default_source()  # data/traffic/ship_density_v1.nc if present (#13)
         if currents:
             from boatsim.oceandata import GlorysSource
 
             glorys = GlorysSource(max_tiles=3 if for_forecast else 2)
-            return ReanalysisEnvironment(era5=era5, currents=glorys)
-        return ReanalysisEnvironment(era5=era5, currents=None)
+            return ReanalysisEnvironment(era5=era5, currents=glorys, ships=ships)
+        return ReanalysisEnvironment(era5=era5, currents=None, ships=ships)
     raise ValueError(f"unknown weather {weather!r}: use 'reanalysis' or 'constant'")
 
 

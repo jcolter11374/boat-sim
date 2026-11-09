@@ -292,3 +292,17 @@ class ShipDensitySource:
         lon = min(max(lon, lons[0]), lons[-1])
         v = self._g.sample(self._g.times[0], lat, lon, ["ship_density"])["ship_density"]
         return v if np.isfinite(v) else 0.0
+
+
+def default_source(path: str | Path = DEFAULT_PATH) -> ShipDensitySource | None:
+    """The built map if it is in the data folder, else None (no ship traffic) with a warning."""
+    if Path(path).exists():
+        return ShipDensitySource(path)
+    import warnings
+
+    warnings.warn(
+        f"{path} not found: running with no ship traffic. Build it with the "
+        '"Build ship density" workflow and put it there.',
+        stacklevel=2,
+    )
+    return None
