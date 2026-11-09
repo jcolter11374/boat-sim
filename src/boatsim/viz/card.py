@@ -365,11 +365,30 @@ class BatchCard:
         return asdict(self)
 
 
+def _ships_warning(summary: pd.DataFrame) -> str:
+    """Say whether ship traffic was on, from the batch's own `ships` column
+    (True when the voyage ran with the ship-density map, #13)."""
+    if "ships" not in summary or summary["ships"].isna().all():
+        return (
+            "This batch doesn't record whether ship traffic was on. Runs before the "
+            "ship-traffic map (#13) had none, so collisions with ships are missing there."
+        )
+    on = summary["ships"].fillna(False).astype(bool)
+    if on.all():
+        return "Ship traffic was on in every run (#13), so collisions with ships are included."
+    if not on.any():
+        return "Ship traffic was off in this batch, so collisions with ships are missing."
+    return (
+        f"Ship traffic was off in {int((~on).sum())} of {len(on)} runs; "
+        "collisions with ships are missing from those."
+    )
+
+
 def batch_card(summary: pd.DataFrame) -> BatchCard:
     """Build the card for a Monte Carlo batch.
 
     Needs the `start` and `outcome` columns of BatchResult.summary; uses
-    `days`, `cause` (from card_row) and `airtime_usd` when present.
+    `days`, `cause` (from card_row), `airtime_usd` and `ships` when present.
     """
     n = len(summary)
     arrived_mask = summary["outcome"] == Outcome.ARRIVED.value if n else pd.Series(dtype=bool)
@@ -414,9 +433,10 @@ def batch_card(summary: pd.DataFrame) -> BatchCard:
         )
     if "cause" not in summary:
         warnings.append("This batch didn't record causes of loss (add card_row to run_batch).")
+    warnings.append(_ships_warning(summary))
     warnings.append(
         "Odds are only as good as the model: ocean currents checked against real "
-        "drifters (#19); ship traffic not modelled yet (#13), so collisions are missing."
+        "drifters (#19); ERA5 weather understates hurricane winds."
     )
 
     return BatchCard(
