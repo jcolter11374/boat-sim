@@ -147,7 +147,7 @@ The before runs are [42577011450](https://github.com/jcolter11374/boat-sim/actio
 - **Re-planning still doesn't add finishes.**
   - After the fix, the 6-hour default finishes 70, and never re-planning finishes 78. That split (15 gained, 7 lost) has a 13% chance of being luck: suggestive, not proven.
   - The 72-hour row is identical to "never" voyage for voyage. On these launches no forecast detour ever saves 72 hours, so the base never sends one.
-- **Open question for Sam.** The extra losses in the default row are almost all dead electronics offshore: 21, against 14 when the base keeps the route fixed. Re-planning shouldn't change electronics failures directly. Something links the two, and I haven't found it. Candidates: more messages means more radio time, or the random-number stream shifting with the route. Until that is understood, the 70 against 78 may be noise riding on a quirk of the dice, not a real cost of re-planning.
+- **The electronics gap is dice, not wear (answered by Sam).** The default row loses 21 voyages to dead electronics offshore, against 14 when the base keeps the route fixed. Electronics failure rates depend only on days at sea and on whether the electronics tub has leaked. They don't depend on radio use. But every random draw in a voyage comes from one shared stream (`runner/simulate.py`): sensors, hazards, the satellite link and the pinger. Every message the base sends uses up draws. So once the base sends its first route change, every later hazard roll in that voyage differs from the "never" voyage. 21 against 14 is about 1.3 standard deviations, which is noise. Read 70 against 78 as mostly dice too, and don't tune `min_gain_h` on it.
 - **What it means for us.** Nothing here shows that daily forecast re-routing from home earns its keep. Only the daily "all well" message and the land and keep-out detours are clearly worth keeping. A 24- to 72-hour threshold is a safe setting whichever way the open question goes.
 
 ### Same seeds, same voyages? (determinism check)
@@ -162,3 +162,22 @@ The default row read 72 on dc5ff0d but 71 on ce6027a. Between those commits noth
   - The likely cause is a data load that differed between the two earlier runs, such as a silent live fetch mid-run. It is not proven.
 - **#108 now guards against this.** Batch runs refuse to fetch mid-run and fail with the file's name instead, so a repeat would show up straight away.
 - **Effect on the results.** One voyage in 100 moved, and the gained/lost counts reported here are 10 or more. The conclusions stand.
+
+### What "same dice" really means (applies to the whole study)
+
+Sam's finding above reaches beyond re-planning. Each voyage draws from one shared random stream. Any change that alters the number of draws reshuffles every hazard roll after that point, for the rest of the voyage. Changes that do this include:
+- a different route;
+- more or fewer messages;
+- a different sea state on the satellite link's retries.
+
+So the rows share their dice only until they first diverge. That happens early for comms, route and cruise-power changes. After that, the two rows are closer to independent samples than to true pairs.
+
+**What still holds.**
+- The finish counts and their 95% ranges are unaffected.
+- The large effects stand: the route, the record-fitted failure rates, one thruster, and 10 W cruise.
+
+**What is weaker.**
+- "Gained / lost" pairs flip partly by chance.
+- The paired test therefore has less power than it appears. Treat any difference under about 10 voyages as noise, as the caveats already say.
+
+The fix is one random stream per source of chance: hazards, link, sensors, pinger. Maya and Theo own it, and Sam will do the link side. Once it lands, rerun the close calls: the comms rows, battery and panels, and the 25 W cruise.
