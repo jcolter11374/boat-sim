@@ -319,13 +319,42 @@ def sweep_table(df: pd.DataFrame, values=SWEEP) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+WINDOW = (4, 5, 6)  # John's chosen launch window: April to June (Nov 2026, CLAUDE.md)
+
+
+def window_headline(df: pd.DataFrame, months=WINDOW) -> list[str]:
+    """The lines that lead every report: odds for launches in the chosen window."""
+    g = df[df["month"].isin(months)]
+    if len(g) == 0:
+        return []
+    names = f"{MONTHS[months[0] - 1]} to {MONTHS[months[-1] - 1]}"
+    k = int((g["outcome"] == "arrived").sum())
+    p, lo, hi = wilson(k, len(g))
+    out = [
+        f"## Chosen launch window ({names})",
+        "",
+        f"**{k} of {len(g)} arrived: {p:.0%} (95% range {lo:.0%} to {hi:.0%}).**",
+    ]
+    if "unknown_p_run" in g and (g["unknown_p_run"] == 0.0).all():
+        sweep = ", ".join(f"{swept_odds(g, x):.0%} at {x:.0%}" for x in SWEEP)
+        out += [
+            "",
+            (
+                "That leaves out failures we haven't modelled. With the 'unknown failure' "
+                f"guess put back (chance of a fatal surprise by day 60): {sweep}."
+            ),
+        ]
+    return out + ["", "Every launch month, for context:", ""]
+
+
 def report_markdown(df: pd.DataFrame) -> str:
     t = by_month(df)
     years = sorted(df["year"].unique())
     p, lo, hi = wilson(int((df["outcome"] == "arrived").sum()), len(df))
     lines = [
-        "# Odds by launch month (first batch)",
+        "# Odds by launch month",
         "",
+        *window_headline(df),
         (
             f"{len(df)} voyages: launches on the 1st and 15th of every month, "
             f"{years[0]} to {years[-1]}, real weather and currents. Overall: arrived "
@@ -333,8 +362,8 @@ def report_markdown(df: pd.DataFrame) -> str:
         ),
         "",
         (
-            "Base station sees a perfect forecast until #12 lands, so treat these odds "
-            "as optimistic."
+            "Base station plans from a forecast with realistic error (#12). Ship traffic "
+            "(#13) is not modelled yet, so treat these odds as optimistic."
             + (
                 " Each boat was built slightly differently: drag, solar loss and fouling "
                 "rate were varied per voyage (spread_* columns)."
