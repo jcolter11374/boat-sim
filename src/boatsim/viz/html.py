@@ -78,7 +78,7 @@ _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
 def outcome_group(outcome: str) -> str:
     if outcome == Outcome.ARRIVED.value:
         return "arrived"
-    if outcome == Outcome.LOST.value:
+    if outcome in (Outcome.LOST.value, Outcome.AGROUND.value):
         return "lost"
     return "at_sea"  # timeout, left_data_box
 

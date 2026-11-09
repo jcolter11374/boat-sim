@@ -4,8 +4,12 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 # Downloaded weather/ocean data and run outputs never go in git
-data/
+data/*
 runs/
 *.nc
 *.zarr/
 *.parquet
+# Except the land mask (#70): small, built from Natural Earth (public domain).
+!data/land/
+data/land/*
+!data/land/land_mask_v1.npz

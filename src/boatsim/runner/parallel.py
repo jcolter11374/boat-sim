@@ -128,6 +128,7 @@ class StandardVoyage:
     weather: str = "reanalysis"  # or "constant" for tests and quick looks
     currents: bool = True
     max_days: float = 120.0
+    land: bool = True  # end the voyage when it runs ashore outside Europe (#70)
     forecast_error: float = 1.0  # 0 = base sees the future perfectly; 2 = twice the error
 
     def components(self, seed: int = 0) -> Components:
@@ -136,6 +137,7 @@ class StandardVoyage:
         from boatsim.comms import GlobalstarPinger, IridiumSBDLink
         from boatsim.config import load_design
         from boatsim.oceandata import ErrorForecast
+        from boatsim.runner.land import default_land
         from boatsim.vessel import KayakVessel
 
         design = load_design(self.design_path)
@@ -153,6 +155,7 @@ class StandardVoyage:
             link=IridiumSBDLink(),
             pinger=GlobalstarPinger(),
             base=ForecastReplanPolicy(route=default_mission().waypoints),
+            land=default_land() if self.land else None,
         )
 
     def __call__(self, start: datetime, seed: int) -> VoyageLog:

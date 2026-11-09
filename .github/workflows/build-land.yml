@@ -1,0 +1,56 @@
+# Builds the land mask the runner uses to end a voyage that runs ashore (#70),
+# from Natural Earth 1:10m land (public domain). Thread sandboxes can't reach
+# Natural Earth; GitHub's runners can.
+# On a pull request that changes the builder, it commits the mask to the PR
+# branch. Run by hand with "commit" ticked to commit it to the chosen branch.
+name: Build land mask
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit the built mask to this branch"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/build-land.yml"
+      - "src/boatsim/runner/land.py"
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write  # only for the commit step
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . "shapely>=2.0"
+      - name: Download Natural Earth 1:10m land
+        run: |
+          curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
+            "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
+          ls -l ne_10m_land.geojson
+      - name: Build the mask (prints spot checks; fails if any is wrong)
+        run: python -m boatsim.runner.land ne_10m_land.geojson
+      - name: Commit the mask
+        if: >-
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'workflow_dispatch' && inputs.commit)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/land/land_mask_v1.npz
+          git commit -m "Land mask built by run ${{ github.run_id }} (#70)" || { echo "mask unchanged"; exit 0; }
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: land-mask
+          path: data/land/
+          retention-days: 90
