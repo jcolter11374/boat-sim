@@ -34,6 +34,7 @@ from boatsim.viz.html import (
     _PCT_TICKS,
     BAR,
     BAR_OUTSIDE,
+    INK,
     INK_2,
     MUTED,
     _layout,
@@ -71,6 +72,7 @@ def hero_html(
     headline_tag: str = "",
     baseline_name: str = "",
     shakedown_link: str = "",
+    caveat: str = "",
 ) -> str:
     """The headline: design odds with the planned shakedown, no-shakedown beside it.
 
@@ -78,6 +80,8 @@ def hero_html(
     "target_39_5n", when the design has moved on before a new baseline run).
     headline_tag: extra words after the shakedown label, e.g. where it came from.
     shakedown_link: URL of the shakedown procedure, linked under the numbers.
+    caveat: one plain sentence shown in the headline box, e.g. why the numbers
+    are an upper bound.
     baseline_name: what the run's baseline was, shown with the no-shakedown
     number when that was measured on a different design than the headline.
     """
@@ -114,10 +118,11 @@ def hero_html(
         if shakedown_link
         else ""
     )
+    caveat_html = f'<p class="caveat">{html.escape(caveat)}</p>' if caveat else ""
     return f"""<div class="hero">
   <div>Chance of finishing under Microtransat rules (within 25 km of the target off Portugal),
   April to June launches</div>
-  <div class="cells">{"".join(cells)}</div>{link}
+  <div class="cells">{"".join(cells)}</div>{caveat_html}{link}
 </div>"""
 
 
@@ -329,6 +334,8 @@ _STUDY_CSS = f"""
 .hero .cell + .cell {{ border-left: 1px solid rgba(11,11,11,0.10); padding-left: 32px; }}
 .hero .cell + .cell .big {{ color: {INK_2}; }}
 .hero .tag {{ font-weight: 600; color: {INK_2}; }}
+.hero .caveat {{ margin: 16px 0 0; padding: 8px 12px; border-left: 3px solid #fab219;
+  background: #fff4d6; color: {INK}; }}
 .retired {{ border-left: 3px solid {MUTED}; padding: 8px 12px; margin: 16px 0;
   background: #f1f0ec; }}
 """
@@ -348,6 +355,7 @@ def study_html(
     baseline_name: str = "",
     baseline_label: str = "The design as it stands",
     shakedown_link: str = "",
+    caveat: str = "",
 ) -> str:
     """The results page as a string.
 
@@ -439,7 +447,7 @@ def study_html(
 <h1>{html.escape(title)}</h1>
 <p>{html.escape(subtitle)}</p>
 {banner_html}
-{hero_html(compare, shakedown_days, headline, headline_tag, baseline_name, shakedown_link)}
+{hero_html(compare, shakedown_days, headline, headline_tag, baseline_name, shakedown_link, caveat)}
 {retired_html}
 {"".join(parts)}
 <h2>Every change tried</h2>
@@ -468,6 +476,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--baseline-name", default="", help="what the run's baseline was")
     ap.add_argument("--baseline-label", default="The design as it stands")
     ap.add_argument("--shakedown-link", default="", help="URL of the shakedown procedure")
+    ap.add_argument("--caveat", default="", help="one sentence in the headline box")
     a = ap.parse_args(argv)
     voyages = (
         pd.concat([pd.read_csv(f) for f in a.voyages], ignore_index=True) if a.voyages else None
@@ -490,6 +499,7 @@ def main(argv: list[str] | None = None) -> None:
             a.baseline_name,
             a.baseline_label,
             a.shakedown_link,
+            a.caveat,
         ),
         encoding="utf-8",
     )
