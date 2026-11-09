@@ -41,7 +41,16 @@ from boatsim.vessel.hazards import (
 from boatsim.vessel.power import BatteryParams, SolarParams, energy_step, solar_power_w
 from boatsim.vessel.propulsion import ThrusterParams, total_thrust
 
-THRUSTER_PARTS = ("thruster_port", "thruster_starboard")
+THRUSTER_PARTS = ("thruster_port", "thruster_starboard")  # the v4 pair
+
+
+def thruster_parts(count: int) -> tuple[str, ...]:
+    """Damage-dict names for the thrusters a boat actually has."""
+    if count == 1:
+        return ("thruster_centre",)
+    if count == 2:
+        return THRUSTER_PARTS
+    return tuple(f"thruster_{i + 1}" for i in range(count))
 
 
 @dataclass
@@ -159,6 +168,7 @@ class KayakVessel:
         self.dark_ghi = float(e.get("nav_light_on_below_ghi", 5.0))
         self.min_steer_w = float(design.propulsion.get("min_steer_w", 1.0))  # GUESS
         self.hazards = HazardParams.from_config(design.hazards)
+        self.thruster_parts = thruster_parts(self.thrusters.count)
         self.panels_w = dict(design.power.get("panels_w", DEFAULT_PANELS_W))
         self._panels_total_w = sum(self.panels_w.values()) or 1.0
 
@@ -183,8 +193,7 @@ class KayakVessel:
         return left / self._panels_total_w
 
     def working_thrusters(self, state: BoatState) -> int:
-        failed = sum(1 for k in THRUSTER_PARTS if state.damage.get(k, False))
-        return max(0, self.thrusters.count - failed)
+        return sum(1 for k in self.thruster_parts if not state.damage.get(k, False))
 
     def step(
         self,
@@ -224,7 +233,8 @@ class KayakVessel:
             se, sn = H.stokes_drift(env.hs, env.tp, env.wave_dir)
             cur_e, cur_n = cur_e + se, cur_n + sn
 
-        # Rudder gone: differential thrust can still steer, but only with both thrusters.
+        # Rudder gone: differential thrust can still steer, but only with two working
+        # thrusters. A one-thruster boat can't steer at all without its rudder.
         can_steer = working >= (2 if state.damage.get("rudder") else 1)
         steering = es.drive_w >= self.min_steer_w and can_steer
         if steering:
@@ -285,7 +295,16 @@ class KayakVessel:
         for part in hz.failed_parts:
             new.damage[part] = True
         fl = sample_failures(
-            self.hazards, env, hours, new.damage, new.t, new.lat, new.lon, days + hours / 48.0, rng
+            self.hazards,
+            env,
+            hours,
+            new.damage,
+            new.t,
+            new.lat,
+            new.lon,
+            days + hours / 48.0,
+            rng,
+            thrusters=self.thruster_parts,
         )
         events += fl.events
         for part in fl.failed_parts:

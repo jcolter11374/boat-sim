@@ -152,6 +152,10 @@ class HazardParams:
     entangle_extra_drag: float = 3.0
     entangle_clear_per_day: float = 0.5
     p_thruster_wrap: float = 0.1
+    # Thruster wear-out (bearings, seized prop), per thruster. GUESS from the design
+    # doc: a single thruster is a 4 % single point of failure over the crossing
+    # (option A), i.e. ~0.0007/day; with two, both failing is ~0.2 % (FMEA row 8: 0.5 %).
+    thruster_per_day: float = 0.0007
     # Capture: picked up by a fishing boat or a passer-by. Randolph: 0.002/day, only
     # within 50 km of land.
     capture_per_day: float = 0.002
@@ -304,9 +308,13 @@ def sample_failures(
     lon: float,
     days_at_sea: float,
     rng: np.random.Generator,
+    thrusters: tuple[str, ...] = ("thruster_port", "thruster_starboard"),
 ) -> HazardOutcome:
     """Draw the non-wave failures for one step: leaks, electronics, software,
-    steering, entanglement, capture and early-life defects."""
+    steering, entanglement, thruster wear-out, capture and early-life defects.
+
+    thrusters: damage names of the thrusters the boat has (KayakVessel passes
+    them from propulsion.thruster_count), so a one-thruster boat only rolls one die."""
     out = HazardOutcome([], [], False, 0)
     if not (p.enabled and p.failures_enabled):
         return out
@@ -360,11 +368,14 @@ def sample_failures(
             out.cleared_parts.append("entangled")  # no event: EventKind has no "recovered"
     elif rng.random() < _p(entangle_rate_per_day(p, lat, lon, land_km), hours):
         fail("entangled", "fishing line or weed")
-        if rng.random() < p.p_thruster_wrap:
-            for th in ("thruster_port", "thruster_starboard"):
-                if not broken(th):
-                    fail(th, "line wrapped round it")
-                    break
+        working = [th for th in thrusters if not broken(th)]
+        if working and rng.random() < p.p_thruster_wrap:
+            fail(working[int(rng.integers(len(working)))], "line wrapped round it")
+
+    # Thruster wear-out: one die per thruster the boat actually has
+    for th in thrusters:
+        if not broken(th) and rng.random() < _p(p.thruster_per_day, hours):
+            fail(th, "bearing or motor failure")
 
     # Picked up near land
     if land_km < p.capture_near_land_km and rng.random() < _p(p.capture_per_day, hours):
