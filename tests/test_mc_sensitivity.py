@@ -39,6 +39,12 @@ def test_variants_change_what_they_say_and_nothing_else():
     assert _components("no_throttle_back").autopilot.throttle_scale(0.2) == 1.0
     assert base.autopilot.throttle_scale(0.2) < 1.0
 
+    one = _components("one_thruster")
+    assert one.vessel.inner.thruster_parts == ("thruster_centre",)
+    assert one.autopilot.thruster_count == 1
+    assert one.autopilot.cruise_fraction == pytest.approx(15 / 50)
+    assert _components("battery_640").autopilot.thruster_count == 2
+
     assert math.isinf(_components("no_corrections").base.min_gain_h)
     assert isinstance(_components("silent_base").base, HoldCoursePolicy)
 

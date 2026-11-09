@@ -25,9 +25,9 @@ Dollar costs aren't in yet: the parts catalogue (#25) will price battery and
 panel changes. Settings changes (cruise power, safe mode, base policy) are free.
 Airtime per voyage is reported, since it is an output to minimise.
 
-Not in this batch: one thruster instead of two. The vessel model still rolls
-failure dice for both thruster positions, so a one-thruster boat would be
-judged unfairly. Needs a vessel change first.
+One thruster instead of two (`one_thruster`) needs #65 and #66 (thruster
+count decides which thrusters exist and can fail), so compare it only with a
+baseline run on the same commit or later.
 
 Owner: Ravi.
 """
@@ -95,6 +95,11 @@ VARIANTS: dict[str, Variant] = {
     "cruise_25w": Variant(
         "cruise", "Faster cruise (25 W motor power)", (("propulsion", "cruise_drive_w", 25),)
     ),
+    "one_thruster": Variant(
+        "thrusters",
+        "One thruster instead of two (same 15 W cruise, 50 W burst)",
+        (("propulsion", "thruster_count", 1), ("propulsion", "max_drive_w", 50)),
+    ),
     "hold_at_30": Variant(
         "safe mode",
         "Stop motors earlier: below 30% charge, restart at 40%",
@@ -140,7 +145,9 @@ class SensitivityVoyage(MonthlyVoyage):
         if v.design or v.safemode:
             prop = design.propulsion
             c.autopilot = SafeModeAutopilot(
-                cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"], **dict(v.safemode)
+                cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
+                thruster_count=int(prop.get("thruster_count", 2)),
+                **dict(v.safemode),
             )
         if v.base == "no_corrections":
             c.base = ForecastReplanPolicy(route=default_mission().waypoints, min_gain_h=math.inf)
