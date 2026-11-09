@@ -125,4 +125,4 @@ With the record's failure rates, there are more of both of these losses:
   - The typical voyage is slower with re-planning: 110 days against 92.
   - I haven't traced why. My guess is that the forecast re-planner sends the boat on detours that don't pay off for something this slow.
   - That 18-day gap is large enough to look into. It is for Sam (autopilot and comms): it may mean re-planning should switch on only for specific hazards, such as storms or land, and not every day.
-- **The daily "all well" report still matters.** All of these rows except "base sends nothing" keep the daily position report, which keeps the boat inside the silence rule. Only steering from home, not reporting, is in question.
+- **The boat's own daily report still matters.** In every one of these rows the boat keeps sending its daily position, including "base sends nothing", where only the base goes quiet. That report keeps the boat inside the silence rule. Only the messages sent from home to steer the boat are in question.
