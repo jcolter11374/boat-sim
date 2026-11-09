@@ -1,0 +1,19 @@
+{
+ "schema": 1,
+ "voyages": [
+  {
+   "file": "voyage_2020-05-01.json",
+   "boat": "v4 kayak",
+   "start": "2020-05-01T12:00",
+   "outcome": "lost",
+   "days": 3.92
+  },
+  {
+   "file": "voyage_2020-05-15.json",
+   "boat": "v4 kayak",
+   "start": "2020-05-15T12:00",
+   "outcome": "disqualified",
+   "days": 64.51
+  }
+ ]
+}
