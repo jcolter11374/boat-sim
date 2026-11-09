@@ -46,6 +46,7 @@ jobs:
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       YEAR: ${{ matrix.year }}
+      BOATSIM_REQUIRE_SHIPS: "1"  # fail, not warn, if the ship map is missing (#13)
       MAX_DAYS: ${{ inputs.max_days || '150' }}
       SPREAD: ${{ inputs.spread || 'true' }}
     steps:
