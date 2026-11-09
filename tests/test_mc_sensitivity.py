@@ -166,3 +166,13 @@ def test_every_target_is_on_the_eastern_line():
     for name, v in S.VARIANTS.items():
         if isinstance(v.finish, tuple):
             S.SensitivityVoyage(variant=name, weather="constant").components(1)  # validates
+
+
+def test_hazard_variants_switch_shakedown_and_rate_set():
+    base = S.SensitivityVoyage(weather="constant").components(1).vessel.inner.hazards
+    assert base.rate_set == "planning" and base.shakedown_days == 14.0
+    no = S.SensitivityVoyage(variant="no_shakedown", weather="constant").components(1)
+    assert no.vessel.inner.hazards.shakedown_days == 0.0
+    hist = S.SensitivityVoyage(variant="historical_rates", weather="constant").components(1)
+    assert hist.vessel.inner.hazards.rate_set == "historical"
+    assert hist.vessel.inner.hazards.unknown_p_by_60_days == 0.0  # override survives

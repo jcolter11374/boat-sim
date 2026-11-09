@@ -143,6 +143,19 @@ VARIANTS: dict[str, Variant] = {
     "target_44_5n": _target(44.5, -13.5, "44.5N 13.5W (off NW Spain)"),
     "target_39_5n": _target(39.5, -13.5, "39.5N 13.5W (off Lisbon)"),
     "target_37n": _target(37.0, -13.5, "37N 13.5W (off SW Portugal)"),
+    # Hazard assumptions (#89, #91). The baseline uses the "planning" rate set,
+    # which assumes a 14-day unattended shakedown trial before the drop. John
+    # hasn't confirmed one, so no_shakedown shows the cost of skipping it.
+    "no_shakedown": Variant(
+        "hazards",
+        "No 14-day shakedown trial before the drop",
+        (("hazards", "shakedown_days", 0.0),),
+    ),
+    "historical_rates": Variant(
+        "hazards",
+        "Failure rates fitted to the Microtransat record, not the planning set",
+        (("hazards", "rate_set", "historical"),),
+    ),
     "battery_640": Variant(
         "battery", "Half the battery (one 50 Ah pack, 640 Wh)", (("power", "battery_wh", 640),)
     ),
@@ -210,7 +223,12 @@ class SensitivityVoyage(MonthlyVoyage):
         design = patched_design(load_design(self.design_path), v.design)
         if v.design:
             inner = KayakVessel(design)
-            inner.hazards = c.vessel.inner.hazards  # keeps the unknown-p override
+            if self.unknown_p_by_60_days is not None:  # same override as MonthlyVoyage
+                from dataclasses import replace as _replace
+
+                inner.hazards = _replace(
+                    inner.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days
+                )
             c.vessel = MeteredVessel(inner)
         if v.design or v.safemode:
             prop = design.propulsion
