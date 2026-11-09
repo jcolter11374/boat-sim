@@ -1,0 +1,38 @@
+# Is the 2 km land mask right near the Bay mouth and Hampton Roads? (#11)
+# Compares it with Natural Earth 1:10m and GSHHG full resolution. Thread
+# sandboxes can't reach NOAA, so this runs here.
+name: Check land mask near the Bay
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/check-coast.yml"
+      - "src/boatsim/oceandata/coast_check.py"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . shapely pyshp
+      - name: Download Natural Earth 1:10m land and GSHHG full
+        run: |
+          curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
+            "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
+          # GSHHG 2.3.7 moved from NGDC to the NCEI archive (accession 0304143),
+          # where the shapefiles sit unzipped. Full resolution, level 1 (land).
+          base=https://www.ncei.noaa.gov/data/oceans/archive/arc0234/0304143/1.1/data/0-data/GSHHS_shp/f
+          mkdir -p GSHHS_shp/f
+          for ext in shp shx dbf prj; do
+            curl -fsSL --retry 3 --max-time 900 -o "GSHHS_shp/f/GSHHS_f_L1.$ext" "$base/GSHHS_f_L1.$ext"
+          done
+          ls -l ne_10m_land.geojson GSHHS_shp/f/
+      - name: Check
+        run: >
+          python -m boatsim.oceandata.coast_check
+          --natural-earth ne_10m_land.geojson --gshhg GSHHS_shp/f/GSHHS_f_L1.shp
