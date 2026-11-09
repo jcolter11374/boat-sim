@@ -24,6 +24,12 @@ jobs:
         run: |
           curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
             "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
+          for d in https://www.ngdc.noaa.gov/mgg/shorelines/ https://www.ngdc.noaa.gov/mgg/shorelines/data/ \
+            https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/ https://ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/ \
+            https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhs/latest/ https://www.ncei.noaa.gov/products/shorelines; do
+            echo "$d -> $(curl -sSL -o page.html -w '%{http_code} %{url_effective}' --max-time 60 "$d")"
+            grep -o 'href="[^"]*"' page.html | grep -i -E 'gshh|zip|shore' | head -15
+          done
           base=https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg
           latest=$(curl -fsSL --max-time 60 "$base/latest/" | grep -o 'gshhg-shp-[0-9.]*zip' | head -1 || true)
           echo "latest listing: ${latest:-none}"
