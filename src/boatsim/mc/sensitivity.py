@@ -243,7 +243,7 @@ VARIANTS: dict[str, Variant] = {
     ),
     "one_thruster": Variant(
         "thrusters",
-        "One thruster instead of two (same 15 W cruise, 50 W burst)",
+        "One thruster instead of two (same cruise power, 50 W burst)",
         (("propulsion", "thruster_count", 1), ("propulsion", "max_drive_w", 50)),
     ),
     "hold_at_30": Variant(
