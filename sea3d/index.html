@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>boat-sim 3D: open sea</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc3dc;
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #17212b; }
+  #app { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; background: rgba(255,255,255,.88);
+    border-radius: 10px; padding: 10px 14px; max-width: 320px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  #panel h1 { font-size: 16px; margin: 0 0 4px; }
+  #panel p { margin: 4px 0; }
+  #panel label { display: block; margin-top: 6px; }
+  #panel select, #panel input { font: inherit; }
+  .muted { color: #5b6875; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="panel">
+  <h1>Open sea (Phase 0)</h1>
+  <p class="muted">An empty sea to prove the page builds and runs. The two boats arrive in Phase 1.</p>
+  <label>Sea state
+    <select id="sea">
+      <option value="calm">Calm (0.5 m waves)</option>
+      <option value="moderate" selected>Moderate (1.5 m)</option>
+      <option value="gale">Gale (5 m)</option>
+    </select>
+  </label>
+  <label>Quality
+    <select id="quality">
+      <option value="low">Low (older laptops)</option>
+      <option value="high" selected>High</option>
+    </select>
+  </label>
+  <p class="muted">Drag to look around, scroll to zoom.</p>
+</div>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
