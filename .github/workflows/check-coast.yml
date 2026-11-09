@@ -24,23 +24,22 @@ jobs:
         run: |
           curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
             "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
-          curl -sSL --max-time 60 -o page.html "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0304143"
-          grep -o 'href="[^"]*"' page.html | grep -i -E 'archive|download|0304143|https://www.ncei.noaa.gov/data' | sort -u | head -30
-          for d in https://www.ncei.noaa.gov/data/oceans/archive/arc0221/0304143/ https://www.ncei.noaa.gov/archive/accession/0304143; do
-            echo "$d -> $(curl -sSL -o page2.html -w '%{http_code} %{url_effective}' --max-time 60 "$d")"
-            grep -o 'href="[^"]*"' page2.html | sort -u | head -30
+          # GSHHG moved from NGDC to the NCEI archive (accession 0304143) in 2026.
+          # Walk the archive's directory pages to find the shapefile zip.
+          arc=https://www.ncei.noaa.gov/data/oceans/archive/arc0234/0304143/
+          url=""
+          queue="$arc"
+          for _ in $(seq 1 30); do
+            [ -z "$queue" ] && break
+            d=${queue%% *}; queue=${queue#"$d"}; queue=${queue# }
+            page=$(curl -fsSL --max-time 60 "$d" || true); echo "visit $d: $(echo "$page" | grep -o 'href="[^"?]*"' | cut -d\" -f2 | tr "\n" " " | cut -c1-300)"
+            z=$(echo "$page" | grep -o 'href="gshhg-shp-[0-9.]*zip"' | head -1 | cut -d'"' -f2)
+            if [ -n "$z" ]; then url="$d$z"; break; fi
+            for sub in $(echo "$page" | grep -o 'href="[^"?/][^"]*/"' | cut -d'"' -f2); do queue="$queue $d$sub"; done
+            queue=${queue# }
           done
-          base=https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg
-          latest=$(curl -fsSL --max-time 60 "$base/latest/" | grep -o 'gshhg-shp-[0-9.]*zip' | head -1 || true)
-          echo "latest listing: ${latest:-none}"
-          for u in \
-            ${latest:+$base/latest/$latest} \
-            $base/oldversions/version2.3.7/gshhg-shp-2.3.7.zip \
-            $base/oldversions/version2.3.6/gshhg-shp-2.3.6.zip; do
-            echo "trying $u"
-            curl -fsSL --retry 3 --max-time 600 -o gshhg.zip "$u" && unzip -tq gshhg.zip && break
-            rm -f gshhg.zip
-          done
+          echo "GSHHG zip: ${url:-not found}"
+          curl -fsSL --retry 3 --max-time 900 -o gshhg.zip "$url"
           unzip -o -q gshhg.zip 'GSHHS_shp/f/GSHHS_f_L1.*'
           ls -l ne_10m_land.geojson gshhg.zip GSHHS_shp/f/
       - name: Check
