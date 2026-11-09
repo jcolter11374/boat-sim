@@ -1,0 +1,86 @@
+# Dead-boat drift by drop distance (issue #90): a kayak with motors off drifts
+# for 30 days from today's drop point, 50 km, 100 km and the shelf edge, on the
+# 1st and 15th of April to June, one job per year, through real weather (ERA5)
+# and currents (GLORYS12), then one combined report.
+# Run it by hand: Actions tab -> "Dead-boat drift" -> Run workflow.
+# Uses the Copernicus secrets for currents; GitHub masks them in logs.
+name: Dead-boat drift
+on:
+  workflow_dispatch:
+    inputs:
+      first_year:
+        description: "First launch year"
+        default: "2019"
+      last_year:
+        description: "Last launch year"
+        default: "2023"
+      days:
+        description: "Days to drift"
+        default: "30"
+  pull_request:
+    paths:
+      - src/boatsim/mc/deadboat.py
+      - .github/workflows/dead-boat.yml
+permissions:
+  contents: read
+jobs:
+  years:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.y.outputs.list }}
+    steps:
+      - id: y
+        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2023' }}, ${{ inputs.last_year || '2023' }}+1))))")" >> "$GITHUB_OUTPUT"
+  run:
+    needs: years
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJson(needs.years.outputs.list) }}
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      BOATSIM_REQUIRE_LAND: "1"  # fail, not sail through land, if the mask is missing
+      YEAR: ${{ matrix.year }}
+      DAYS: ${{ inputs.days || '30' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Fetch currents for April to July
+        run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-07"
+      - name: Drift from every start point and date
+        run: python -m boatsim.mc.deadboat run "$YEAR" --days "$DAYS" --out runs/deadboat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deadboat-${{ matrix.year }}
+          path: runs/deadboat/deadboat_${{ matrix.year }}.csv
+          retention-days: 90
+  report:
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deadboat-*
+          path: runs/in
+          merge-multiple: true
+      - name: Combine the years
+        run: python -m boatsim.mc.deadboat report runs/in/deadboat_*.csv --out runs/deadboat
+      - name: Show the report on the run page
+        run: cat runs/deadboat/deadboat_report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deadboat
+          path: runs/deadboat/
+          retention-days: 90
