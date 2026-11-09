@@ -32,3 +32,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Ship-traffic map (`data/traffic/ship_density_v1.nc`)
+
+This file is built by `src/boatsim/oceandata/traffic.py` (workflow "Build ship
+density"). It is derived from two datasets, both under the
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
+licence. We changed them: we averaged them onto a 0.1 degree grid, converted
+them to ships per km², and filled the non-EMODnet water using a table fitted
+between the two maps.
+
+- **EMODnet Human Activities, Vessel Density Map**, annual averages 2022 and
+  2023, all ship types. This data was downloaded from the
+  [EMODnet Portal](https://emodnet.ec.europa.eu/en/). The data originator is
+  Cogea Srl. Licence: CC BY 4.0
+  ([catalogue record](https://emodnet.ec.europa.eu/geonetwork/srv/api/records/0f2f3ff1-30ef-49e1-96e7-8ca78d58a07c)).
+- **Global Shipping Traffic Density**, World Bank Data Catalog, dataset 0037580
+  (https://datacatalog.worldbank.org/search/dataset/0037580), from the IMF's
+  World Seaborne Trade Monitoring System (Cerdeiro, Komaromi, Liu and Saeed,
+  2020). Licence: CC BY 4.0.

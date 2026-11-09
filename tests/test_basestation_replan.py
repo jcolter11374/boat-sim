@@ -76,7 +76,7 @@ def test_no_route_change_when_the_plan_is_already_best():
     c = Components(env, PerfectForecast(env), KayakVessel(design), sm, PerfectLink(), policy)
     simulate(c, T0, *START, Mission([GOAL]), max_days=10)
     assert policy.sent == []
-    assert len(policy.acks) >= 8
+    assert len(policy.acks) >= 4  # every 2 days
     assert Mode.LOST_COMMS not in {m for _, m in sm.mode_log}
 
 

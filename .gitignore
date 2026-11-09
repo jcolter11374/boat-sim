@@ -4,8 +4,13 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 # Downloaded weather/ocean data and run outputs never go in git
-data/
+data/*
 runs/
 *.nc
 *.zarr/
 *.parquet
+# Except the ship-traffic map, which is small and built from CC BY 4.0 sources
+# (see THIRD_PARTY_NOTICES.md). Rebuild with the "Build ship density" workflow.
+!data/traffic/
+data/traffic/*
+!data/traffic/ship_density_v1.nc

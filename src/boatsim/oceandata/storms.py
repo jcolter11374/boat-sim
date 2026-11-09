@@ -26,7 +26,10 @@ perfect agreement and anything below it is ERA5 undershooting.
 from __future__ import annotations
 
 import math
-from datetime import date
+import os
+from datetime import date, datetime
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 
@@ -166,3 +169,79 @@ def run(csv, first_year: int, last_year: int, workers: int = 4, log=print):
     src = era5.ERA5Source(fetch=False, max_tiles=2)
     res = compare(df, src)
     return res, summarise(res, log=log)
+
+
+# ------------------------------------------------- voyages meeting a storm
+
+DEFAULT_TRACKS = (
+    Path(os.environ.get("BOATSIM_DATA", "data")) / "storms" / "ibtracs.NA.list.v04r01.csv"
+)
+_EPOCH = datetime(1970, 1, 1)
+NEAR_KM = 200.0  # GUESS: inside this a hurricane's gales and big seas reach the boat
+
+
+class HurricaneTracks:
+    """IBTrACS best-track points indexed by 6-hour slot, for fast lookups of
+    "how close was the nearest storm at this moment"."""
+
+    def __init__(self, csv=DEFAULT_TRACKS, first_year: int = 1980, last_year: int = 2100):
+        df = load_ibtracs(csv, first_year, last_year)
+        secs = (df.time - _EPOCH).dt.total_seconds().to_numpy()
+        slot = np.round(secs / 21600.0).astype(int)
+        self._by_slot: dict[int, tuple[np.ndarray, ...]] = {}
+        for s in np.unique(slot):
+            m = slot == s
+            self._by_slot[int(s)] = (
+                df.LAT.to_numpy()[m],
+                df.LON.to_numpy()[m],
+                df.USA_SSHS.to_numpy()[m],
+                df.NAME.to_numpy()[m],
+            )
+
+    def nearest(self, t: datetime, lat: float, lon: float, min_sshs: int = 1):
+        """(km, name) of the nearest storm of at least category min_sshs at the
+        best-track time closest to t (within 3 hours), or (inf, "")."""
+        s = round((t.replace(tzinfo=None) - _EPOCH).total_seconds() / 21600.0)  # times are UTC
+        pts = self._by_slot.get(s)
+        if pts is None:
+            return math.inf, ""
+        la, lo, cat, name = pts
+        m = cat >= min_sshs
+        if not m.any():
+            return math.inf, ""
+        dy = (la[m] - lat) * 111.0
+        dx = (lo[m] - lon) * 111.0 * math.cos(math.radians(lat))
+        d = np.hypot(dx, dy)
+        i = int(np.argmin(d))
+        return float(d[i]), str(name[m][i])
+
+
+def encounter(rows, tracks: HurricaneTracks, near_km: float = NEAR_KM) -> dict:
+    """Per-voyage storm fields from logged rows (t, lat, lon): closest approach
+    to a hurricane and to a tropical storm or stronger, and hours spent within
+    near_km of a hurricane."""
+    best_h, best_ts, name = math.inf, math.inf, ""
+    hours = 0.0
+    prev_t = None
+    for r in rows:
+        dh, nm = tracks.nearest(r["t"], r["lat"], r["lon"], min_sshs=1)
+        dts, _ = tracks.nearest(r["t"], r["lat"], r["lon"], min_sshs=0)
+        if dh < best_h:
+            best_h, name = dh, nm
+        best_ts = min(best_ts, dts)
+        if prev_t is not None and dh <= near_km:
+            hours += (r["t"] - prev_t).total_seconds() / 3600.0
+        prev_t = r["t"]
+    return {
+        "hurricane_min_km": best_h,
+        "hurricane_name": name,
+        "hurricane_hours_near": hours,
+        "storm_min_km": best_ts,
+    }
+
+
+@lru_cache(maxsize=2)
+def default_tracks(path=DEFAULT_TRACKS) -> HurricaneTracks | None:
+    """The IBTrACS file if downloaded (the batch workflows fetch it), else None.
+    Cached, so each worker process reads it once."""
+    return HurricaneTracks(path) if Path(path).exists() else None

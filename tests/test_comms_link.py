@@ -73,13 +73,26 @@ def test_failed_tries_are_not_billed():
 
 
 def test_downlink_waits_for_the_next_mailbox_check():
-    link = IridiumSBDLink(p_try_calm=1.0, mailbox_every=timedelta(hours=6))
+    link = IridiumSBDLink(p_try_calm=1.0, mailbox="scheduled", mailbox_every=timedelta(hours=6))
     t = datetime(2020, 10, 1, 7, 30, tzinfo=UTC)  # next 6-hourly check is 12:00
     done = link.send(_msg(t, "down", 60), CALM, np.random.default_rng(0))
     assert done == datetime(2020, 10, 1, 12, 0, 40, tzinfo=UTC)
-    daily = IridiumSBDLink(p_try_calm=1.0)  # default: once a day at 00:00 UTC
+    daily = IridiumSBDLink(p_try_calm=1.0, mailbox="scheduled")  # once a day at 00:00 UTC
     done = daily.send(_msg(t, "down", 60), CALM, np.random.default_rng(0))
     assert done == datetime(2020, 10, 2, 0, 0, 40, tzinfo=UTC)
+
+
+def test_default_mailbox_rides_on_the_next_report_session():
+    """Default: the boat only collects base messages in its daily report session."""
+    link = IridiumSBDLink(p_try_calm=1.0)
+    rng = np.random.default_rng(0)
+    report_t = datetime(2020, 10, 1, 14, 0, tzinfo=UTC)
+    link.send(_msg(report_t, "up", 16), CALM, rng)
+    reply_t = report_t + timedelta(minutes=1)  # base answers straight away
+    done = link.send(_msg(reply_t, "down", 24), CALM, rng)
+    assert done == datetime(2020, 10, 2, 14, 0, 40, tzinfo=UTC)  # with tomorrow's report
+    cost = link.voyage_cost_usd(report_t, report_t + timedelta(days=10))
+    assert cost["empty_mailbox_checks"] == 0.0
 
 
 def test_no_spending_cap_by_default():
@@ -91,7 +104,7 @@ def test_no_spending_cap_by_default():
 
 
 def test_voyage_cost_is_itemised():
-    link = IridiumSBDLink(p_try_calm=1.0)
+    link = IridiumSBDLink(p_try_calm=1.0, mailbox="scheduled")
     rng = np.random.default_rng(0)
     start = datetime(2020, 10, 15, 12, tzinfo=UTC)
     end = datetime(2020, 12, 3, 12, tzinfo=UTC)  # touches Oct, Nov, Dec
