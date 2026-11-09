@@ -299,6 +299,73 @@ def ship_strike_rate_per_hour(p: HazardParams, ships_per_km2: float, ais_ok: boo
     return density_m2 * sweep_m2_per_h * (1.0 - p_avoid)
 
 
+# --- Common random numbers -------------------------------------------------------
+# Each step the kayak draws ONE fixed block of uniforms, rng.random(K_DICE), and
+# every decision below reads its own slot, whether or not it applies this step
+# (no ships here, far from land, part already broken...). So the hull's random
+# stream advances by exactly K_DICE per step wherever the boat is, and two runs
+# that differ only in their path (route, re-planning, cruise power) keep seeing
+# the same dice step for step: paired comparisons stay paired.
+# K_DICE is one slot per decision, with 8 reserved slots for knockdown parts and 8
+# for thrusters, so K doesn't depend on the design. Add new slots at the end only.
+MAX_KNOCKDOWN_PARTS = 8
+MAX_THRUSTERS = 8
+_names = [
+    "knockdown_count",
+    "knockdown_inverted",
+    *(f"knockdown_part_{i}" for i in range(MAX_KNOCKDOWN_PARTS)),
+    "strike",
+    "strike_survived",
+    "strike_leak",
+    "leak",
+    "leak_tub",
+    "electronics_common",
+    "electronics_main",
+    "electronics_safe",
+    "comms_silent",
+    "beacon",
+    "steering",
+    "steering_jam",
+    "entangle",
+    "thruster_wrap",
+    "thruster_wrap_which",
+    *(f"thruster_{i}" for i in range(MAX_THRUSTERS)),
+    "capture",
+    "unknown",
+]
+SLOT = {name: i for i, name in enumerate(_names)}
+K_DICE = len(_names)
+del _names
+
+
+def draw_dice(rng: np.random.Generator) -> np.ndarray:
+    """The step's fixed block of uniforms (see SLOT)."""
+    return rng.random(K_DICE)
+
+
+def _dice(u: np.ndarray | np.random.Generator) -> np.ndarray:
+    return draw_dice(u) if isinstance(u, np.random.Generator) else u
+
+
+def poisson_from_uniform(lam: float, u: float, k_max: int = 10_000) -> int:
+    """Poisson(lam) count by inverting its CDF at u: one uniform, any lam."""
+    if lam <= 0.0:
+        return 0
+    k, pmf = 0, math.exp(-lam)
+    if pmf == 0.0:  # huge lam (never on our boat): normal approximation
+        from statistics import NormalDist
+
+        return max(0, round(NormalDist(lam, math.sqrt(lam)).inv_cdf(min(max(u, 1e-12), 1 - 1e-12))))
+    cdf = pmf
+    while u > cdf and k < k_max:
+        k += 1
+        pmf *= lam / k
+        cdf += pmf
+        if pmf < 1e-300:
+            break
+    return k
+
+
 @dataclass
 class HazardOutcome:
     events: list[Event]
@@ -314,43 +381,50 @@ def sample_hazards(
     hours: float,
     damage: dict[str, bool],
     t: datetime,
-    rng: np.random.Generator,
+    rng: np.ndarray | np.random.Generator,
 ) -> HazardOutcome:
-    """Draw what happens to the boat in one step of `hours`."""
+    """Draw what happens to the boat in one step of `hours`.
+
+    rng: the step's dice block (draw_dice), or a Generator to draw one from."""
+    u = _dice(rng)
     events: list[Event] = []
     failed: list[str] = []
     lost = False
     if not p.enabled:
         return HazardOutcome(events, failed, lost, 0)
+    if len(p.p_part) > MAX_KNOCKDOWN_PARTS:
+        raise ValueError(f"at most {MAX_KNOCKDOWN_PARTS} knockdown parts have dice slots")
 
     wind = math.hypot(env.wind_u, env.wind_v)
-    n = int(rng.poisson(knockdown_rate_per_hour(p, env.hs, env.tp, wind) * hours))
+    lam = knockdown_rate_per_hour(p, env.hs, env.tp, wind) * hours
+    n = poisson_from_uniform(lam, u[SLOT["knockdown_count"]])
     if n:
+        # n knockdowns in the step: each part (and the boat) gets n independent
+        # chances, i.e. 1 - (1 - q)^n, from one uniform each.
         scale = damage_scale(p, env.hs)
         events.append(Event(t, EventKind.CAPSIZE, f"{n} knockdown(s), Hs {env.hs:.1f} m"))
-        for _ in range(n):
-            if rng.random() < min(p.p_inverted_stuck * scale, p.max_damage_p):
-                events.append(Event(t, EventKind.LOST, "stuck inverted or keel lost"))
-                lost = True
-                break
-            for part, base in p.p_part.items():
-                if damage.get(part) or part in failed:
-                    continue
-                if rng.random() < min(base * scale, p.max_damage_p):
+        q_inv = min(p.p_inverted_stuck * scale, p.max_damage_p)
+        if u[SLOT["knockdown_inverted"]] < 1.0 - (1.0 - q_inv) ** n:
+            events.append(Event(t, EventKind.LOST, "stuck inverted or keel lost"))
+            lost = True
+        else:
+            for i, (part, base) in enumerate(p.p_part.items()):
+                q = min(base * scale, p.max_damage_p)
+                if not damage.get(part) and u[SLOT[f"knockdown_part_{i}"]] < 1.0 - (1.0 - q) ** n:
                     failed.append(part)
                     events.append(Event(t, EventKind.PART_FAILED, f"{part} (knockdown)"))
 
     # AIS needs its antenna and the main electronics box it lives in.
     ais_ok = not any(damage.get(k) or k in failed for k in ("ais_whip", "electronics_main"))
     lam = ship_strike_rate_per_hour(p, env.ship_density, ais_ok)
-    if not lost and lam > 0.0 and rng.random() < 1.0 - math.exp(-lam * hours):
-        survived = rng.random() >= p.p_lost_given_strike
+    if not lost and u[SLOT["strike"]] < 1.0 - math.exp(-lam * hours):
+        survived = u[SLOT["strike_survived"]] >= p.p_lost_given_strike
         events.append(
             Event(t, EventKind.SHIP_STRIKE, "survived, damaged" if survived else "sunk or wrecked")
         )
         if survived:
             hit = ("panel_100w_a", "rudder", "leak_main_tub")
-            for part in hit if rng.random() < p.p_leak_given_strike else hit[:2]:
+            for part in hit if u[SLOT["strike_leak"]] < p.p_leak_given_strike else hit[:2]:
                 if not damage.get(part) and part not in failed:
                     failed.append(part)
         else:
@@ -434,18 +508,25 @@ def sample_failures(
     lat: float,
     lon: float,
     days_at_sea: float,
-    rng: np.random.Generator,
+    rng: np.ndarray | np.random.Generator,
     thrusters: tuple[str, ...] = ("thruster_port", "thruster_starboard"),
 ) -> HazardOutcome:
     """Draw the non-wave failures for one step: leaks, electronics, software,
     Iridium going silent, the beacon, steering, entanglement, thruster wear-out
     and capture. Hardware rates carry the early-life multiplier.
 
+    rng: the step's dice block (draw_dice), or a Generator to draw one from.
     thrusters: damage names of the thrusters the boat has (KayakVessel passes
     them from propulsion.thruster_count), so a one-thruster boat only rolls one die."""
+    u = _dice(rng)
     out = HazardOutcome([], [], False, 0)
     if not (p.enabled and p.failures_enabled):
         return out
+    if len(thrusters) > MAX_THRUSTERS:
+        raise ValueError(f"at most {MAX_THRUSTERS} thrusters have dice slots")
+
+    def roll(slot: str, rate_per_day: float) -> bool:
+        return bool(u[SLOT[slot]] < _p(rate_per_day, hours))
 
     def broken(part: str) -> bool:
         return bool(damage.get(part)) or part in out.failed_parts
@@ -463,8 +544,8 @@ def sample_failures(
     early = early_life_mult(p, days_at_sea)
 
     # Leak into one of the two tubs
-    if rng.random() < _p(p.leak_per_day * (1.0 + (hs / 3.0) ** 2) * early, hours):
-        tub = "leak_main_tub" if rng.random() < 0.5 else "leak_safe_tub"
+    if roll("leak", p.leak_per_day * (1.0 + (hs / 3.0) ** 2) * early):
+        tub = "leak_main_tub" if u[SLOT["leak_tub"]] < 0.5 else "leak_safe_tub"
         if not broken(tub):
             fail(tub, "water getting into the hull")
 
@@ -476,64 +557,61 @@ def sample_failures(
     common = beta * p.electronics_per_day * early
     if wet:
         common *= p.electronics_wet_multiplier
-    if not all(broken(b) for b in ELECTRONICS) and rng.random() < _p(common, hours):
+    if roll("electronics_common", common) and not all(broken(b) for b in ELECTRONICS):
         for box in ELECTRONICS:
             if not broken(box):
                 fail(box, "common-cause electronics failure")
     for box in ELECTRONICS:
-        if broken(box):
-            continue
         rate = (1.0 - beta) * p.electronics_per_day * early
         if broken(TUB_FOR_BOX[box]):
             rate *= p.electronics_wet_multiplier
         if box == "electronics_main":
             rate += p.software_hang_per_day * (1.0 - p.watchdog_recovers)
-        if rng.random() < _p(rate, hours):
+        if roll(box, rate) and not broken(box):
             fail(box, "electronics or software failure")
     if all(broken(b) for b in ELECTRONICS):
         lose("both electronics boxes dead: silent and uncontrolled")
         return out
 
     # Comms: Iridium goes silent while the boat sails on; the beacon on its own
-    if not broken("comms_silent") and rng.random() < _p(
-        p.comms_silent_per_day * (1.0 + hs / 4.0) * early, hours
-    ):
+    comms_rate = p.comms_silent_per_day * (1.0 + hs / 4.0) * early
+    if roll("comms_silent", comms_rate) and not broken("comms_silent"):
         fail("comms_silent", "Iridium modem, antenna or comms power")
-    if not broken("beacon") and rng.random() < _p(p.beacon_per_day * early, hours):
+    if roll("beacon", p.beacon_per_day * early) and not broken("beacon"):
         fail("beacon", "Globalstar beacon failed")
 
     # Steering
-    if not broken("rudder") and rng.random() < _p(
-        p.steering_per_day * (1.0 + hs / 4.0) * early, hours
-    ):
-        if rng.random() < p.steering_jam_share:
+    if roll("steering", p.steering_per_day * (1.0 + hs / 4.0) * early) and not broken("rudder"):
+        if u[SLOT["steering_jam"]] < p.steering_jam_share:
             fail("rudder", "servo jammed")
             out.failed_parts.append("rudder_jammed")
         else:
             fail("rudder", "servo failed limp, spring centres it")
 
-    # Entanglement: comes and goes
+    # Entanglement: comes and goes (one slot: it either clears or starts)
     if broken("entangled"):
-        if rng.random() < _p(p.entangle_clear_per_day, hours):
+        if roll("entangle", p.entangle_clear_per_day):
             out.cleared_parts.append("entangled")  # no event: EventKind has no "recovered"
-    elif rng.random() < _p(entangle_rate_per_day(p, lat, lon, land_km), hours):
+    elif roll("entangle", entangle_rate_per_day(p, lat, lon, land_km)):
         fail("entangled", "fishing line or weed")
         working = [th for th in thrusters if not broken(th)]
-        if working and rng.random() < p.p_thruster_wrap:
-            fail(working[int(rng.integers(len(working)))], "line wrapped round it")
+        if working and u[SLOT["thruster_wrap"]] < p.p_thruster_wrap:
+            which = min(int(u[SLOT["thruster_wrap_which"]] * len(working)), len(working) - 1)
+            fail(working[which], "line wrapped round it")
 
     # Thruster wear-out: one die per thruster the boat actually has
-    for th in thrusters:
-        if not broken(th) and rng.random() < _p(p.thruster_per_day * early, hours):
+    for i, th in enumerate(thrusters):
+        if roll(f"thruster_{i}", p.thruster_per_day * early) and not broken(th):
             fail(th, "bearing or motor failure")
 
     # Taken or snagged by fishermen near land
-    if land_km < p.capture_near_land_km and rng.random() < _p(p.capture_per_day, hours):
+    rate = p.capture_per_day if land_km < p.capture_near_land_km else 0.0
+    if roll("capture", rate):
         lose("taken or snagged by fishermen")
         return out
 
     # Early-life defect or unknown (the "original" set only, by default)
-    if rng.random() < _p(unknown_hazard_per_day(p, days_at_sea), hours):
+    if roll("unknown", unknown_hazard_per_day(p, days_at_sea)):
         lose("early-life defect or unknown failure")
 
     return out

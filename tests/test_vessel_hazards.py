@@ -415,3 +415,39 @@ def test_losses_record_their_phase():
     v = KayakVessel(replace(DESIGN, hazards=hz))
     s, ev = v.step(v.initial_state(T0, *OPEN_OCEAN), Command(90.0, 0.3), env, dt, rng)
     assert next(e.detail for e in ev if e.kind == EventKind.LOST).endswith("[open ocean]")
+
+
+# --- Common random numbers: a fixed block of dice per step ----------------------
+
+
+def test_poisson_from_uniform_is_poisson():
+    u = np.random.default_rng(3).random(40_000)
+    for lam in (0.02, 0.7, 6.0):
+        k = np.array([Z.poisson_from_uniform(lam, x) for x in u])
+        assert k.mean() == pytest.approx(lam, rel=0.03)
+        assert k.var() == pytest.approx(lam, rel=0.05)
+        assert np.mean(k == 0) == pytest.approx(math.exp(-lam), abs=0.01)
+    assert Z.poisson_from_uniform(0.0, 0.99) == 0
+
+
+def test_slots_are_fixed_and_unique():
+    assert len(set(Z.SLOT.values())) == Z.K_DICE == len(Z.SLOT)
+    assert len(Z.draw_dice(np.random.default_rng(0))) == Z.K_DICE
+
+
+def test_boats_on_different_paths_see_the_same_dice():
+    """Two boats with the same seed but different places, weather, power and
+    damage: the hull's stream must advance identically every step."""
+    v = KayakVessel(DESIGN)
+    a = v.initial_state(T0, *OPEN_OCEAN)
+    b = with_damage(v.initial_state(T0, *SHELF_120KM), "entangled")
+    calm = EnvState(ghi=500.0)
+    rough = EnvState(ghi=200.0, hs=6.0, tp=11.0, wind_u=17.0, ship_density=1e-3)
+    ra, rb = np.random.default_rng(42), np.random.default_rng(42)
+    dt = timedelta(minutes=10)
+    for i in range(60):
+        a, _ = v.step(a, Command(90.0, 0.2), calm, dt, ra)
+        b, _ = v.step(b, Command(45.0 + i, 0.9), rough, dt, rb)
+        assert ra.bit_generator.state == rb.bit_generator.state
+    # and the next step's dice really are the same numbers
+    assert np.array_equal(Z.draw_dice(ra), Z.draw_dice(rb))
