@@ -20,28 +20,18 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e . shapely pyshp
-      - name: Download Natural Earth 1:10m land and GSHHG
+      - name: Download Natural Earth 1:10m land and GSHHG full
         run: |
           curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
             "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
-          # GSHHG moved from NGDC to the NCEI archive (accession 0304143) in 2026.
-          # Walk the archive's directory pages to find the shapefile zip.
-          arc=https://www.ncei.noaa.gov/data/oceans/archive/arc0234/0304143/
-          url=""
-          queue="$arc"
-          for _ in $(seq 1 30); do
-            [ -z "$queue" ] && break
-            d=${queue%% *}; queue=${queue#"$d"}; queue=${queue# }
-            page=$(curl -fsSL --max-time 60 "$d" || true); echo "visit $d: $(echo "$page" | grep -o 'href="[^"?]*"' | cut -d\" -f2 | tr "\n" " " | cut -c1-300)"
-            z=$(echo "$page" | grep -o 'href="gshhg-shp-[0-9.]*zip"' | head -1 | cut -d'"' -f2)
-            if [ -n "$z" ]; then url="$d$z"; break; fi
-            for sub in $(echo "$page" | grep -o 'href="[^"?/][^"]*/"' | cut -d'"' -f2); do queue="$queue $d$sub"; done
-            queue=${queue# }
+          # GSHHG 2.3.7 moved from NGDC to the NCEI archive (accession 0304143),
+          # where the shapefiles sit unzipped. Full resolution, level 1 (land).
+          base=https://www.ncei.noaa.gov/data/oceans/archive/arc0234/0304143/1.1/data/0-data/GSHHS_shp/f
+          mkdir -p GSHHS_shp/f
+          for ext in shp shx dbf prj; do
+            curl -fsSL --retry 3 --max-time 900 -o "GSHHS_shp/f/GSHHS_f_L1.$ext" "$base/GSHHS_f_L1.$ext"
           done
-          echo "GSHHG zip: ${url:-not found}"
-          curl -fsSL --retry 3 --max-time 900 -o gshhg.zip "$url"
-          unzip -o -q gshhg.zip 'GSHHS_shp/f/GSHHS_f_L1.*'
-          ls -l ne_10m_land.geojson gshhg.zip GSHHS_shp/f/
+          ls -l ne_10m_land.geojson GSHHS_shp/f/
       - name: Check
         run: >
           python -m boatsim.oceandata.coast_check
