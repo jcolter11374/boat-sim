@@ -17,18 +17,18 @@ CALLS = []
 
 def _fake_opener(dataset_id, variables, box, start, end):
     CALLS.append((dataset_id, tuple(variables)))
-    hourly = dataset_id.endswith("PT1H-i")
-    step = np.timedelta64(1, "h") if hourly else np.timedelta64(1, "D")
-    t = np.arange(np.datetime64("2020-11-01"), np.datetime64("2026-01-01"), step)
+    t = np.arange(
+        np.datetime64("2020-11-01T00"), np.datetime64("2026-01-01T00"), np.timedelta64(1, "h")
+    )
     t = t[(t >= np.datetime64(start)) & (t <= np.datetime64(end))]
     lat = np.arange(box.lat_min, box.lat_max + 0.01, 0.5)
     lon = np.arange(box.lon_min, box.lon_max + 0.01, 0.5)
-    hours = ((t - t[0]) / np.timedelta64(1, "h")).astype(float) if len(t) else np.zeros(0)
+    hours = ((t - t[0]) / np.timedelta64(1, "h")).astype(float)
     shape = (len(t), 1, len(lat), len(lon))
-    if hourly:  # 0.5 m/s east plus a 12-hour tide of 0.2 m/s
-        u = 0.5 + 0.2 * np.sin(2 * np.pi * hours / 12.0)
-    else:  # grows 0.1 m/s a day
-        u = hours / 24.0 * 0.1
+    # u steps up 0.1 m/s each day, plus a 12-hour tide of 0.2 m/s
+    u = 0.1 * (hours // 24) + 0.2 * np.sin(2 * np.pi * hours / 12.0)
+    if variables[0] == "utotal":
+        u = u + 0.05  # Stokes drift
     u = np.broadcast_to(u[:, None, None, None], shape).astype(np.float32)
     v = np.full(shape, -0.3, dtype=np.float32)
     dims = ("time", "depth", "latitude", "longitude")
@@ -41,23 +41,31 @@ def _fake_opener(dataset_id, variables, box, start, end):
 def test_model_kind_is_daily_mean_at_noon(tmp_path):
     CALLS.clear()
     src = smoc.SmocSource("model", tmp_path, box=BOX, opener=_fake_opener)
-    # File starts Apr 30 (u = 0); May 1 daily mean u = 0.1, stamped May 1 12:00.
+    # File starts Apr 30 (u = 0); May 1 averages to u = 0.1 (tide gone), stamped 12:00.
     assert src.sample(datetime(2022, 5, 1, 12), 37.0, -69.0)["current_u"] == pytest.approx(0.1)
     assert src.sample(datetime(2022, 5, 1, 0), 37.0, -69.0)["current_u"] == pytest.approx(0.05)
     assert src.sample(datetime(2022, 5, 1, 0), 37.0, -69.0)["current_v"] == pytest.approx(-0.3)
-    assert CALLS == [("cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m", ("uo", "vo"))]
+    assert CALLS == [(smoc.HOURLY, ("uo", "vo"))]
+    with xr.open_dataset(smoc.tile_path(2022, 5, "model", tmp_path)) as ds:
+        assert ds.sizes["time"] == 31 + 2  # Apr 30 .. Jun 1
 
 
 def test_total_kind_is_hourly_with_the_tide(tmp_path):
     CALLS.clear()
     src = smoc.SmocSource("total", tmp_path, box=BOX, opener=_fake_opener)
-    # Fake series starts Apr 30 00:00, so the tide peaks at 03:00, 15:00, ...
+    # Apr 30 is day 0, so May 1 has u = 0.1 + 0.05 Stokes, tide peaks at 03:00.
     peak = src.sample(datetime(2022, 5, 1, 3), 37.0, -69.0)["current_u"]
     trough = src.sample(datetime(2022, 5, 1, 9), 37.0, -69.0)["current_u"]
-    assert peak == pytest.approx(0.7, abs=0.001) and trough == pytest.approx(0.3, abs=0.001)
+    assert peak == pytest.approx(0.35, abs=0.001) and trough == pytest.approx(-0.05, abs=0.001)
     assert CALLS[0][1] == ("utotal", "vtotal")
     with xr.open_dataset(smoc.tile_path(2022, 5, "total", tmp_path)) as ds:
         assert ds.sizes["time"] == (31 + 2) * 24  # Apr 30 .. Jun 1, hourly
+
+
+def test_first_month_has_no_padding_day_before(tmp_path):
+    path = smoc.fetch_month(2020, 11, "model", tmp_path, BOX, opener=_fake_opener)
+    with xr.open_dataset(path) as ds:
+        assert str(ds.time.values[0])[:13] == "2020-11-01T12"
 
 
 def test_months_and_box_are_checked(tmp_path):
@@ -66,8 +74,10 @@ def test_months_and_box_are_checked(tmp_path):
     src = smoc.SmocSource("model", tmp_path, box=BOX, opener=_fake_opener)
     with pytest.raises(OutsideCoverage):
         src.sample(datetime(2022, 5, 1), 45.0, -69.0)
-    with pytest.raises(ValueError, match="no SMOC"):
-        smoc.fetch_month(2019, 6, "model", tmp_path, BOX, opener=_fake_opener)
+    with pytest.raises(ValueError, match="starts 2020-11-01"):
+        smoc.fetch_month(2020, 10, "model", tmp_path, BOX, opener=_fake_opener)
+    with pytest.raises(ValueError, match="cover all"):
+        smoc.fetch_month(2026, 1, "total", tmp_path, BOX, opener=_fake_opener)
 
 
 def test_without_login_says_so(tmp_path, monkeypatch):

@@ -1,5 +1,5 @@
 # SMOC currents (oceandata/smoc.py, #73) for the drifter months Ravi picked:
-# checks coverage and file sizes for both kinds. Uses the Copernicus secrets;
+# checks coverage and file sizes for both kinds (data start 1 Nov 2020). Uses the Copernicus secrets;
 # GitHub masks them in logs.
 name: Fetch SMOC currents
 on:
@@ -32,18 +32,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e '.[data]'
-      - name: First month the product covers
-        continue-on-error: true
-        run: |
-          python - <<'PY'
-          from datetime import datetime
-          from boatsim.oceandata import smoc
-          from boatsim.oceandata.grid import Box
-          ds_id, var, _ = smoc.KINDS["${{ matrix.kind }}"]
-          ds = smoc._copernicus_open(ds_id, var, Box(37.0, 37.1, -60.0, -59.9),
-                                     datetime(2019, 1, 1), datetime(2021, 12, 31))
-          print(ds_id, "first time:", str(ds.time.values[0])[:16])
-          PY
       - name: Fetch each month
         run: |
           for m in $MONTHS; do

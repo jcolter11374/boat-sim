@@ -10,10 +10,13 @@ Product: Copernicus Marine GLOBAL_ANALYSISFORECAST_PHY_001_024
 (doi:10.48670/moi-00016), Mercator's operational ocean model on a
 1/12 degree grid. Two kinds, as Ravi asked:
 
-    kind="model"  daily mean ocean-model current at the surface (0.49 m):
-                  dataset cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m, uo/vo.
+    kind="model"  daily mean of the hourly ocean-model surface current
+                  (uo/vo of dataset cmems_mod_glo_phy_anfc_merged-uv_PT1H-i).
                   The same kind of thing GLORYS gives, so it's a like-for-like
-                  swap. Daily means are moved from 00:00 to 12:00, like GLORYS.
+                  swap. Stamped 12:00 of the day it averages, like GLORYS.
+                  (The product's own daily-mean dataset,
+                  cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m, only starts
+                  1 Jun 2022, so we average the hourly one ourselves.)
     kind="total"  hourly current including tides and the waves' Stokes drift
                   (the slow push waves give anything floating at the
                   surface): dataset cmems_mod_glo_phy_anfc_merged-uv_PT1H-i,
@@ -22,9 +25,10 @@ Product: Copernicus Marine GLOBAL_ANALYSISFORECAST_PHY_001_024
                   Stokes drift on top (the drifter check's "float" and
                   "kayak") counts it twice.
 
-Coverage: an operational product, so it starts late (about Nov 2020, GUESS:
-check the first month in Actions) and runs to the present. Not a reanalysis:
-the model changed versions over the years.
+Coverage: an operational product, so it starts late: the hourly dataset
+begins 1 Nov 2020 (checked in Actions, 9 Nov 2026) and runs to the present.
+A month the data doesn't fully cover is refused rather than cached half
+empty. Not a reanalysis: the model changed versions over the years.
 
 Box: hourly fields are big (about 200 MB a month for the default box), so the
 default is the Gulf Stream stretch both teams cross (36-42N, 75-50W, #73)
@@ -46,11 +50,13 @@ import numpy as np
 from boatsim.oceandata.glorys import SCALE, CopernicusLoginMissing, _have_login, load_tile
 from boatsim.oceandata.grid import Box, OutsideCoverage, TileCache, to_datetime64
 
+HOURLY = "cmems_mod_glo_phy_anfc_merged-uv_PT1H-i"
 KINDS = {
-    # kind: (dataset, (u variable, v variable), hours added to the time stamp)
-    "model": ("cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m", ("uo", "vo"), 12),
-    "total": ("cmems_mod_glo_phy_anfc_merged-uv_PT1H-i", ("utotal", "vtotal"), 0),
+    # kind: (dataset, (u variable, v variable), daily mean?)
+    "model": (HOURLY, ("uo", "vo"), True),
+    "total": (HOURLY, ("utotal", "vtotal"), False),
 }
+FIRST_HOUR = datetime(2020, 11, 1)
 SMOC_BOX = Box(lat_min=33.0, lat_max=46.0, lon_min=-78.0, lon_max=-40.0)
 DEFAULT_CACHE = Path(os.environ.get("BOATSIM_DATA", "data")) / "smoc"
 
@@ -94,7 +100,7 @@ def fetch_month(
     """Subset one month of SMOC surface current and cache it. Returns the path."""
     import xarray as xr
 
-    dataset_id, (vu, vv), shift_h = KINDS[kind]
+    dataset_id, (vu, vv), daily = KINDS[kind]
     path = tile_path(year, month, kind, cache_dir)
     if path.exists():
         return path
@@ -104,14 +110,22 @@ def fetch_month(
             "set COPERNICUSMARINE_SERVICE_USERNAME / COPERNICUSMARINE_SERVICE_PASSWORD."
         )
     start, end = month_span(year, month)
-    ds = opener(dataset_id, (vu, vv), box, start, end)
+    first_needed = datetime(year, month, 1)
+    if first_needed < FIRST_HOUR:
+        raise ValueError(f"no SMOC data for {year}-{month:02d}: it starts {FIRST_HOUR:%Y-%m-%d}")
+    ds = opener(dataset_id, (vu, vv), box, max(start, FIRST_HOUR), end)
     ds = ds.sel(time=slice(np.datetime64(start), np.datetime64(end)))
-    if not ds.sizes.get("time", 0):
-        raise ValueError(f"no SMOC {kind} data for {year}-{month:02d} (coverage starts ~2020-11)")
+    last_needed = np.datetime64(end - timedelta(days=1))  # last hour of the month itself
+    t = ds.time.values
+    if not len(t) or t[0] > np.datetime64(first_needed) or t[-1] < last_needed:
+        raise ValueError(f"SMOC does not cover all of {year}-{month:02d}")
     if "depth" in ds.dims:
         ds = ds.isel(depth=0)
     ds = ds.rename({"latitude": "lat", "longitude": "lon"}).sortby("lat").sortby("lon")
-    ds = ds.assign_coords(time=ds.time + np.timedelta64(shift_h, "h"))
+    if daily:  # mean of each whole day, stamped at its middle
+        hours = ds.time.resample(time="1D").count()
+        ds = ds.resample(time="1D").mean().sel(time=hours.time[hours.values == 24])
+        ds = ds.assign_coords(time=ds.time + np.timedelta64(12, "h"))
     out = xr.Dataset(
         {
             "current_u": (("time", "lat", "lon"), ds[vu].values.astype(np.float32)),
