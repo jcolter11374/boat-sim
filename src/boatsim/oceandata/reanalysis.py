@@ -1,7 +1,8 @@
 """The real Environment: past weather and ocean as it actually happened.
 
 Combines ERA5 (wind, waves, sunlight, cloud, air temperature) with GLORYS12
-(surface currents). Both are fetched on demand for the days a voyage uses and
+(surface currents), plus a fixed ship-traffic map (traffic.py). ERA5 and
+GLORYS12 are fetched on demand for the days a voyage uses and
 cached under data/.
 """
 
@@ -13,6 +14,7 @@ from datetime import datetime
 
 from boatsim.oceandata.era5 import ERA5Source
 from boatsim.oceandata.glorys import GlorysSource
+from boatsim.oceandata.traffic import ShipDensitySource
 from boatsim.types import EnvState
 
 
@@ -30,11 +32,20 @@ class ReanalysisEnvironment:
     Missing values: waves and currents are NaN on land. Near the coast we use
     the sea-side grid points; if there are none (the boat is on land, which the
     runner should have caught) the value is reported as 0.
+
+    ships=None means no ship traffic (no ship-strike risk). Build the map with
+    the "Build ship density" workflow and pass ShipDensitySource().
     """
 
-    def __init__(self, era5: ERA5Source | None = None, currents: GlorysSource | None = None):
+    def __init__(
+        self,
+        era5: ERA5Source | None = None,
+        currents: GlorysSource | None = None,
+        ships: ShipDensitySource | None = None,
+    ):
         self.era5 = era5 or ERA5Source()
         self.currents = currents
+        self.ships = ships
         self._warned = False
 
     def sample(self, t: datetime, lat: float, lon: float) -> EnvState:
@@ -57,5 +68,5 @@ class ReanalysisEnvironment:
             ghi=max(_or0(w["ghi"]), 0.0),
             cloud_fraction=min(max(_or0(w["cloud_fraction"]), 0.0), 1.0),
             air_temp=w["air_temp"] if math.isfinite(w["air_temp"]) else 15.0,
-            ship_density=0.0,  # issue #13
+            ship_density=self.ships.sample(lat, lon) if self.ships is not None else 0.0,
         )

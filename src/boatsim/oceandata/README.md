@@ -60,18 +60,61 @@ the whole globe for that hour. That sets the transfer cost.
 | 1993 to 2025 (all launch years with currents) | about 120 GB, about 4 to 5 h |
 | 90-day voyage with a warm cache (stub boat) | 15 s |
 
-GLORYS sizes are **not measured yet** (see below). Calculated from the grid:
-421 × 1045 points × 2 fields × 2 bytes ≈ 1.8 MB/day before compression, so
-roughly 30 to 55 MB per month and 0.4 to 0.7 GB per year on disk.
+GLORYS12, measured in GitHub Actions on Oct 2020: 25 MB per month on disk
+(about 0.3 GB per year). Gulf Stream peak that month: 2.51 m/s at 37.2N 71.7W.
 
-## What still needs John
+## Ship traffic (traffic.py, issue #13)
 
-1. **Copernicus Marine login** (free): register at
-   https://data.marine.copernicus.eu/register. Then add two GitHub Actions
-   secrets on the repo, `COPERNICUSMARINE_SERVICE_USERNAME` and
-   `COPERNICUSMARINE_SERVICE_PASSWORD`. No ERA5 account is needed.
-2. **Network access for thread sandboxes**: the built-in cloud environment
-   blocks Copernicus Marine's servers (`*.marine.copernicus.eu`,
-   `s3.waw3-1.cloudferro.com`) and NOAA's (`www.ndbc.noaa.gov`,
-   `www.ncei.noaa.gov`). GitHub Actions can reach them. To fetch from a
-   thread sandbox too, add those hosts in a custom cloud environment.
+`EnvState.ship_density` is the number of ships per km² at any moment. The
+vessel's ship-strike odds use it directly (vessel/hazards.py).
+
+* **EMODnet vessel density** (Europe, Azores, part of the eastern Atlantic):
+  hours of ship presence per km² per month, 2022 and 2023 averaged.
+  Hours per km² per month ÷ 730.5 hours in an average month = ships per km²
+  at any moment. This is an exact identity, no assumption.
+* **World Bank / IMF global AIS counts** (everywhere else, including the US
+  side and open ocean): AIS position reports per 0.005 degree pixel, Jan
+  2015 to Feb 2021. About 7.5% of the pixels in our box are corrupt (values
+  of ~1.7 million or ~25 million where real counts stop near 100); they are
+  masked. The corrupt pixels are mostly the busiest ones: the share of
+  corrupt pixels in a 0.1 degree cell rises steadily with EMODnet's traffic
+  (2.7e-6 ships/km² under 2% corrupt, 7.7e-4 over 40%). So outside EMODnet
+  we look up the EMODnet median for the cell's (corrupt share, remaining
+  count) band, from a table fitted where both maps exist. Holdout test
+  (fit on alternate 1 degree columns, test on the rest): typically within a
+  factor of 1.6 of EMODnet, 90% within a factor of 3.9 (one plain scale
+  factor: 1.6 and 5.5).
+* Built once in GitHub Actions ("Build ship density" workflow) into a 0.1
+  degree map, `data/traffic/ship_density_v1.nc` (artifact `ship-density`).
+  The runner uses it when that file is present and warns, with no ship
+  traffic, when it is not.
+* Spot values (build of 9 Nov 2026), ships per km²: drop point off the Bay
+  mouth 1.2e-3, Gulf Stream at 38N 70W 1.2e-5, mid-ocean at 40N 45W 2.0e-5,
+  Azores 2.7e-4, off Lisbon 2.4e-3.
+* Limits: one average map, no seasons; ships that don't carry AIS (many
+  fishing boats and yachts) are missing from both sources; the table is
+  fitted on European water and applied to American water.
+
+## Storm check (storms.py, issue #13)
+
+"Check storms against IBTrACS" compares ERA5's highest wind within 200 km of
+each storm centre with NOAA's best-track maximum wind, for every 6-hourly
+point inside the route box. ERA5's 25 km grid is known to understate
+hurricane cores; this measures by how much on our route.
+
+Result, 2012 to 2021 (121 storms, 2,607 best-track points in the route box,
+run on 9 Nov 2026; 637 ERA5 days, 11 minutes in Actions). Ratio is ERA5's
+peak within 200 km ÷ best-track 1-minute wind; 0.93 would be perfect:
+
+| Storm class | Points | Best track (median) | ERA5 peak (median) | Ratio p25 / median / p75 |
+|---|---|---|---|---|
+| Below storm strength or post-tropical | 1354 | 18.0 m/s | 13.8 m/s | 0.70 / 0.78 / 0.85 |
+| Tropical storm (34-63 kt) | 713 | 23.1 m/s | 16.2 m/s | 0.61 / 0.70 / 0.78 |
+| Hurricane, category 1-2 | 455 | 38.6 m/s | 24.1 m/s | 0.53 / 0.64 / 0.71 |
+| Major hurricane, category 3-5 | 85 | 56.6 m/s | 27.6 m/s | 0.41 / 0.48 / 0.54 |
+
+So ERA5 gives about three quarters of a tropical storm's true peak wind and
+about half of a major hurricane's (worst case: Dorian, 1 Sep 2019, 82 m/s in
+the best track, 25 m/s in ERA5). Wave heights will be understated near storm
+cores too. Voyages that meet a hurricane are therefore safer in the simulator
+than at sea. Not corrected yet: see PR #62 for the options.
