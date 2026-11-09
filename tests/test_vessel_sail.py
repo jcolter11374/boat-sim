@@ -101,13 +101,14 @@ def test_step_sails_without_drive_power_and_reaches_on_once_the_rudder_is_gone()
     assert s1.drive_w == 0.0
     assert s1.speed_through_water > 0.5 * KN and s1.lon > s0.lon
     # Rudder gone, wing still trimmed: it weathervanes onto a reach ~110 deg off
-    # the wind on the side it was on, and keeps sailing (their simulator does too).
+    # the wind, on the side nearer its course, and keeps sailing.
     broken = v.initial_state(t, 38.02, -74.01)
-    broken.heading = 100.0
+    broken.heading = 300.0  # was heading west-north-west
     broken.damage["rudder"] = True
-    s2, _ = v.step(broken, Command(heading=90.0, thrust_fraction=0.0), env, step, rng)
-    assert abs(S.wrap180(s2.heading - (270.0 - 110.0))) < 1e-9  # 100 deg is on the minus side
-    assert s2.speed_through_water > 0.5 * KN
+    # course 120: of the reaches 020 and 160, 160 is clearly nearer
+    s2, _ = v.step(broken, Command(heading=120.0, thrust_fraction=0.0), env, step, rng)
+    assert abs(S.wrap180(s2.heading - 160.0)) < 1e-9
+    assert s2.speed_through_water > 0.5 * KN and s2.lon > broken.lon
     # Rudder and wing both gone: it drifts at a few percent of the wind.
     broken.damage["sail"] = True
     s3, _ = v.step(broken, Command(heading=90.0, thrust_fraction=0.0), env, step, rng)
