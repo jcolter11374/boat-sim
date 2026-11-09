@@ -313,8 +313,8 @@ class KayakVessel:
             # A sailboat steers with its rudder alone: it needs the autopilot powered
             # and the rudder working. It can't point into the wind (sail_heading).
             # Rudder gone but autopilot alive: the tail still trims the wing, and the
-            # boat weathervanes onto a reach on the side it was on (their sim, ~110
-            # deg off the wind), so it keeps sailing, just not where it is told.
+            # boat weathervanes onto a reach ~110 deg off the wind (their sim), on
+            # the side nearer its course (sail.unsteered_heading), so it keeps sailing.
             steering = on and not state.damage.get("rudder")
             sailing = on and not state.damage.get("sail") and not calm
         else:
@@ -328,8 +328,7 @@ class KayakVessel:
         elif steering:
             heading = cmd.heading
         elif sailing:
-            side = 1.0 if S.wrap180(state.heading - wind_from) >= 0.0 else -1.0
-            heading = (wind_from + side * self.sail.unsteered_twa_deg) % 360.0
+            heading = S.unsteered_heading(self.sail, cmd.heading, wind_from, state.heading)
             feather = tws > self.sail.storm_wind_ms
         else:
             # Can't steer: lie beam-on to the wind relative to the water.
