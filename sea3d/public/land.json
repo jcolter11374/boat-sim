@@ -1,0 +1,8 @@
+{
+ "lat_min": 25.0,
+ "lat_max": 62.0,
+ "lon_min": -82.0,
+ "lon_max": 5.0,
+ "res_deg": 0.1,
+ "source": "data/land/land_mask_v1.npz (Natural Earth 1:10m land, public domain)"
+}

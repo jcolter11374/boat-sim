@@ -6,7 +6,8 @@
 //
 // Run after `npm run build`. Needs the `playwright` package and Chromium.
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFixture } from "./fixture-voyage.mjs";
 import { chromium } from "playwright";
 
 const URL = "http://localhost:4173/";
@@ -65,6 +66,42 @@ try {
   // Every camera button works.
   for (const shot of ["kayak", "randolph", "low", "high", "side"]) await page.click(`#shots button[data-shot="${shot}"]`);
   await page.waitForTimeout(300);
+  if (errors.length) fail(`page errors: ${errors.join("; ")}`);
+
+  // ---------- voyage replay page ----------
+  // Real replays if the build has them (sea3d/public/voyages), else a made-up fixture.
+  const real = existsSync("dist/voyages/index.json");
+  const dataDir = real ? "voyages" : "voyages-fixture";
+  if (!real) writeFixture("dist/voyages-fixture");
+  const idx = JSON.parse(readFileSync(`dist/${dataDir}/index.json`, "utf8")).voyages;
+  for (const v of idx.slice(0, real ? 3 : 1)) {
+    const rep = JSON.parse(readFileSync(`dist/${dataDir}/${v.file}`, "utf8"));
+    await page.goto(`${URL}voyage.html?data=./${dataDir}&voyage=${v.file}`);
+    await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
+    const err = await page.evaluate(() => window.__replay.error);
+    if (err) fail(`voyage page: ${err}`);
+    // The page's position at every logged hour is the logged position.
+    const bad = await page.evaluate((r) => {
+      const out = [];
+      for (let i = 0; i < r.h.length; i++) {
+        if (r.lat[i] == null || r.lon[i] == null) continue;
+        const [la, lo] = window.__replay.positionAt(r.h[i]);
+        if (la !== r.lat[i] || lo !== r.lon[i]) out.push([r.h[i], la, lo, r.lat[i], r.lon[i]]);
+      }
+      return out;
+    }, rep);
+    if (bad.length) fail(`${v.file}: ${bad.length} logged hours drawn off the log, first ${JSON.stringify(bad[0])}`);
+    // Playing moves time forward; the end shows the outcome card.
+    const h0 = await page.evaluate(() => window.__replay.hour);
+    await page.waitForTimeout(1500);
+    const h1 = await page.evaluate(() => window.__replay.hour);
+    if (!(h1 > h0)) fail(`${v.file}: playback didn't advance (${h0} -> ${h1})`);
+    await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
+    await page.waitForSelector("#outcome.show", { timeout: 10000 });
+    const pngV = await page.screenshot({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
+    if (pngV.length < 20000) fail(`voyage screenshot looks blank (${pngV.length} bytes)`);
+    log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} hours on the log`);
+  }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();
