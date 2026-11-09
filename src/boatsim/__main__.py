@@ -12,6 +12,7 @@ from boatsim.config import load_design
 from boatsim.mc import run_batch
 from boatsim.oceandata import ConstantEnvironment, PerfectForecast
 from boatsim.runner import Components, simulate
+from boatsim.runner.land import default_land
 from boatsim.runner.simulate import default_mission
 from boatsim.vessel import KayakVessel
 from boatsim.viz import text_summary
@@ -35,6 +36,7 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
             autopilot=SafeModeAutopilot(cruise_fraction=cruise_fraction),
             link=IridiumSBDLink(),
             pinger=GlobalstarPinger(),
+            land=default_land(),
             base=ForecastReplanPolicy(route=default_mission().waypoints),
         )
         return simulate(c, start, lat, lon, default_mission(), seed=seed)
