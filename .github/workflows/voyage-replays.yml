@@ -19,6 +19,9 @@ on:
       months:
         description: "Launch months (space-separated)"
         default: "4 5 6"
+      design:
+        description: "Boat design file (configs/v4_kayak.yaml, or e.g. configs/randolph_rev_b.yaml)"
+        default: "configs/v4_kayak.yaml"
       commit:
         description: "Commit the replays to this branch"
         type: boolean
@@ -46,6 +49,7 @@ jobs:
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       YEAR: ${{ inputs.year || '2020' }}
       MONTHS: ${{ inputs.months || '5' }}
+      DESIGN: ${{ inputs.design || 'configs/v4_kayak.yaml' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,7 +66,7 @@ jobs:
           python -m boatsim.oceandata fetch-glorys "$YEAR-$(printf %02d $first)" "${end:0:7}"
           python -m boatsim.oceandata fetch-era5 "$YEAR-$(printf %02d $first)-01" "$end" --workers 4
       - name: Simulate the launches and write the replays
-        run: python -m boatsim.runner.replay run "$YEAR" --months $MONTHS --workers 4 --out sea3d/public/voyages
+        run: python -m boatsim.runner.replay run "$YEAR" --months $MONTHS --design "$DESIGN" --workers 4 --out sea3d/public/voyages
       - run: ls -l sea3d/public/voyages && cat sea3d/public/voyages/index.json
       - uses: actions/upload-artifact@v4
         with:
@@ -78,5 +82,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add sea3d/public/voyages
-          git commit -m "Voyage replays $YEAR months $MONTHS (run ${{ github.run_id }})" || { echo "replays unchanged"; exit 0; }
+          git commit -m "Voyage replays $YEAR months $MONTHS, $DESIGN (run ${{ github.run_id }})" || { echo "replays unchanged"; exit 0; }
           git push
