@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
-    "test": "node tests/smoke.mjs"
+    "test": "node tests/smoke.mjs",
+    "test:unit": "esbuild tests/motion.test.ts --bundle --platform=node --format=esm --outfile=test-output/motion.test.mjs --log-level=warning && node --test test-output/motion.test.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
