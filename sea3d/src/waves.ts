@@ -101,3 +101,30 @@ export function displace(
   }
   return [dx, y, dz];
 }
+
+/**
+ * Sea surface height at a fixed world point (x, z) at time t.
+ *
+ * displace() moves each surface point sideways as well as up, so the height
+ * above a fixed point is the y of the surface point that has drifted onto it.
+ * A few fixed-point steps find that point; with the default steepness the
+ * error is well under a millimetre. This is what floats the boats, so the
+ * picture and the motion use the same sea.
+ */
+export function heightAt(
+  comps: WaveComponent[],
+  x: number,
+  z: number,
+  t: number,
+  steepness = 0.5,
+  iterations = 4,
+): number {
+  let x0 = x;
+  let z0 = z;
+  for (let i = 0; i < iterations; i++) {
+    const [dx, , dz] = displace(comps, x0, z0, t, steepness);
+    x0 = x - dx;
+    z0 = z - dz;
+  }
+  return displace(comps, x0, z0, t, steepness)[1];
+}
