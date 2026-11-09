@@ -24,10 +24,15 @@ jobs:
         run: |
           curl -sSL --retry 3 --max-time 300 -o ne_10m_land.geojson \
             "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
-          curl -sSL --retry 3 --max-time 600 -o gshhg.zip \
-            "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip" \
-          || curl -sSL --retry 3 --max-time 600 -o gshhg.zip \
-            "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
+          for u in \
+            https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip \
+            https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhs/latest/gshhg-shp-2.3.7.zip \
+            https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip \
+            http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip; do
+            echo "trying $u"
+            curl -fsSL --retry 3 --max-time 600 -o gshhg.zip "$u" && unzip -tq gshhg.zip && break
+            rm -f gshhg.zip
+          done
           unzip -o -q gshhg.zip 'GSHHS_shp/f/GSHHS_f_L1.*'
           ls -l ne_10m_land.geojson gshhg.zip GSHHS_shp/f/
       - name: Check
