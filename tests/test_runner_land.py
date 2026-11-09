@@ -10,7 +10,6 @@ from boatsim.runner.land import (
     ISLAND_CHECKS,
     SPOT_CHECKS,
     LandMask,
-    is_european_land,
     land_cells,
 )
 from boatsim.runner.parallel import StandardVoyage
@@ -39,13 +38,6 @@ def test_mask_lookup_and_round_trip(tmp_path):
     m2 = LandMask.load(p)
     assert np.array_equal(m.mask, m2.mask)
     assert m2.on_land(36.5, -76.5)
-
-
-def test_european_land_counts_as_arrival_zone():
-    assert is_european_land(38.7, -27.2)  # Azores
-    assert is_european_land(52.0, -8.5)  # Ireland
-    assert not is_european_land(32.3, -64.8)  # Bermuda
-    assert not is_european_land(32.7, -16.9)  # Madeira: not named by the rule
 
 
 def test_dead_boat_drifting_onshore_ends_aground():

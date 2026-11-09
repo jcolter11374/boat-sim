@@ -166,5 +166,5 @@ def test_full_voyage_daily_reports_get_through_and_are_costed():
     sent = sum(e.kind == EventKind.MESSAGE_SENT for e in log.events)
     assert sent >= 0.95 * int(log.days)
     cost = link.voyage_cost_usd(log.start, log.end)
-    # ~2 months of rental plus a few dollars of credits for daily reports.
-    assert 30.0 < cost["total"] < 75.0
+    # ~2.5 months of rental plus a few dollars of credits for daily reports.
+    assert 30.0 < cost["total"] < 95.0

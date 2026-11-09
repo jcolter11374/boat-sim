@@ -160,15 +160,12 @@ def test_keep_out_line_check():
     assert not p.crosses_keep_out(*START, GOAL.lat, GOAL.lon)  # nowhere near
 
 
-def test_detours_round_the_azores_and_never_enters_them(monkeypatch):
+def test_detours_round_the_azores_and_never_enters_them():
     """A route straight through the central Azores: base must send the boat round.
 
-    The Azores no longer count as arriving (#80); patch the old rule out so the
-    voyage runs on to the goal whichever rule is on main.
+    Under the Microtransat rule (#80) the Azores are not a finish, so the voyage
+    runs on towards the goal.
     """
-    import sys
-
-    monkeypatch.setattr(sys.modules["boatsim.runner.simulate"], "in_europe", lambda lat, lon: False)
     goal = Waypoint(38.5, -20.0)
     start = (38.5, -36.0)
     policy = ForecastReplanPolicy(route=[goal])

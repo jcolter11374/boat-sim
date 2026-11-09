@@ -59,7 +59,15 @@ def summarize(log: VoyageLog) -> dict[str, Any]:
         "ship_strikes": kinds.count(EventKind.SHIP_STRIKE),
         "routes_received": kinds.count(EventKind.MISSION_UPDATED),
         "loss_cause": first_bad.detail if first_bad else None,
+        # Microtransat lines: days from drop to the start line, and whether the
+        # boat crossed the finish line at all (a near miss if it didn't finish).
+        "start_line_day": _day(log, log.t_start_line),
+        "finish_line_day": _day(log, log.t_finish_line),
     }
+
+
+def _day(log: VoyageLog, t) -> float | None:
+    return None if t is None else round((t - log.start).total_seconds() / 86400.0, 2)
 
 
 def _call(args):
@@ -128,7 +136,7 @@ class StandardVoyage:
     weather: str = "reanalysis"  # or "constant" for tests and quick looks
     currents: bool = True
     max_days: float = 120.0
-    land: bool = True  # end the voyage when it runs ashore outside Europe (#70)
+    land: bool = True  # end the voyage when it runs ashore (#70)
     forecast_error: float = 1.0  # 0 = base sees the future perfectly; 2 = twice the error
 
     def components(self, seed: int = 0) -> Components:
@@ -137,6 +145,7 @@ class StandardVoyage:
         from boatsim.comms import GlobalstarPinger, IridiumSBDLink
         from boatsim.config import load_design
         from boatsim.oceandata import ErrorForecast
+        from boatsim.runner.arrival import FinishTarget
         from boatsim.runner.land import default_land
         from boatsim.vessel import KayakVessel
 
@@ -156,6 +165,7 @@ class StandardVoyage:
             pinger=GlobalstarPinger(),
             base=ForecastReplanPolicy(route=default_mission().waypoints),
             land=default_land() if self.land else None,
+            finish=FinishTarget.from_voyage(design.voyage),
         )
 
     def __call__(self, start: datetime, seed: int) -> VoyageLog:

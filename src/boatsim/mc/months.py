@@ -21,9 +21,10 @@ What is in the first batch, and what isn't yet:
 * Spread (--spread): each boat gets its own drag, solar-loss and fouling
   multipliers (SPREAD), recorded in the spread_* columns. Off by default.
 
-Outcomes: arrived (any landfall in Europe, Azores included, per the runner's
+Outcomes: arrived (reached the Microtransat finish target, per the runner's
 arrival rule), lost (sunk, stuck upside down, wrecked), timeout (still at sea
-after max_days), or left_data_box (drifted out of the 25-60N, 82W-5E weather
+after max_days), aground (ran ashore first), disqualified (silent too long),
+or left_data_box (drifted out of the 25-60N, 82W-5E weather
 box, which in practice means it went badly astray).
 
 Each row also carries Iris's report-card fields (viz/card.py card_row: cause,
@@ -95,7 +96,9 @@ def cause_of_end(log) -> str:
     if log.outcome.value == "timeout":
         return "still at sea"
     if log.outcome.value == "aground":
-        return "ran aground outside Europe"
+        return "ran aground before the finish"
+    if log.outcome.value == "disqualified":
+        return "disqualified: silent too long"
     for e in reversed(log.events):
         if e.kind == EventKind.SHIP_STRIKE:
             return "ship strike"
