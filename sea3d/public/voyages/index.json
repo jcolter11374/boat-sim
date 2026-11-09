@@ -54,8 +54,8 @@
    "file": "voyage_randolph-rev-b_2020-05-15.json",
    "boat": "Randolph Rev B",
    "start": "2020-05-15T12:00",
-   "outcome": "disqualified",
-   "days": 47.01
+   "outcome": "lost",
+   "days": 138.47
   },
   {
    "file": "voyage_2020-06-01.json",
@@ -69,7 +69,7 @@
    "boat": "Randolph Rev B",
    "start": "2020-06-01T12:00",
    "outcome": "lost",
-   "days": 127.01
+   "days": 17.12
   },
   {
    "file": "voyage_2020-06-15.json",
@@ -83,7 +83,7 @@
    "boat": "Randolph Rev B",
    "start": "2020-06-15T12:00",
    "outcome": "aground",
-   "days": 50.39
+   "days": 1.85
   }
  ]
 }
