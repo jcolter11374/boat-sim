@@ -126,3 +126,39 @@ With the record's failure rates, there are more of both of these losses:
   - I haven't traced why. My guess is that the forecast re-planner sends the boat on detours that don't pay off for something this slow.
   - That 18-day gap is large enough to look into. It is for Sam (autopilot and comms): it may mean re-planning should switch on only for specific hazards, such as storms or land, and not every day.
 - **The boat's own daily report still matters.** In every one of these rows the boat keeps sending its daily position, including "base sends nothing", where only the base goes quiet. That report keeps the boat inside the silence rule. Only the messages sent from home to steer the boat are in question.
+
+## How often should the base re-plan? Before and after Sam's fix (#106, #107)
+
+In the earlier rows, daily re-planning cost about 18 days (110 against 92). Sam traced it (#107). The base scored each candidate leg by stretching the current at one spot over the thousands of km still to go. That made it re-route the boat almost every day, even with a perfect forecast.
+
+The rows below sweep `min_gain_h`: how many hours a forecast detour must save before the base sends it. Detours around land and the Azores keep-out zone fire in every row. Same 100 launches, 180 days.
+
+| Re-plan when a detour saves at least… | Before #107: finished | Median days | After #107: finished | Gained / lost | Chance | Median days |
+|---|---|---|---|---|---|---|
+| 6 hours (default) | 71 | 110 | 70 | | | 90 |
+| 24 hours | 70 | 107 | 77 | 19 / 12 | 28% | 92 |
+| 72 hours | 72 | 106 | 78 | 15 / 7 | 13% | 92 |
+| Never (base keeps the route fixed) | 78 | 92 | 78 | 15 / 7 | 13% | 92 |
+| Base sends nothing at all | 73 | 92 | 73 | 15 / 12 | 70% | 92 |
+
+The before runs are [42577011450](https://github.com/jcolter11374/boat-sim/actions/runs/42577011450) (ce6027a) and, for the last row, [42567314818](https://github.com/jcolter11374/boat-sim/actions/runs/42567314818). The after run is [42579926504](https://github.com/jcolter11374/boat-sim/actions/runs/42579926504) (00de68d). Gained/lost is measured against the default row of the same run.
+
+- **The fix removes the time cost.** The default row's median voyage falls from 110 to 90 days, level with never re-planning. Before the fix, raising the threshold didn't help: 24 h and 72 h stayed at 106 to 107 days. That fits Sam's diagnosis that the leg score was wrong at any threshold.
+- **Re-planning still doesn't add finishes.**
+  - After the fix, the 6-hour default finishes 70, and never re-planning finishes 78. That split (15 gained, 7 lost) has a 13% chance of being luck: suggestive, not proven.
+  - The 72-hour row is identical to "never" voyage for voyage. On these launches no forecast detour ever saves 72 hours, so the base never sends one.
+- **Open question for Sam.** The extra losses in the default row are almost all dead electronics offshore: 21, against 14 when the base keeps the route fixed. Re-planning shouldn't change electronics failures directly. Something links the two, and I haven't found it. Candidates: more messages means more radio time, or the random-number stream shifting with the route. Until that is understood, the 70 against 78 may be noise riding on a quirk of the dice, not a real cost of re-planning.
+- **What it means for us.** Nothing here shows that daily forecast re-routing from home earns its keep. Only the daily "all well" message and the land and keep-out detours are clearly worth keeping. A 24- to 72-hour threshold is a safe setting whichever way the open question goes.
+
+### Same seeds, same voyages? (determinism check)
+
+The default row read 72 on dc5ff0d but 71 on ce6027a. Between those commits nothing changed in the physics or in the base, only docs, comments and new variants.
+
+- **Only one voyage differed.** I diffed the per-voyage results in the job logs. 99 of 100 baseline voyages were identical to the hundredth of a day.
+- **The one that flipped** is the 2018-04-21 launch. On dc5ff0d it arrived on day 130.45. On ce6027a it was lost on day 110.72, both electronics boxes dead in open ocean.
+- **The base re-planning path is where it differs.** The same launch with the base keeping the route fixed was identical in both runs.
+- **Three test runs on one commit agree.** Runs [42579926504](https://github.com/jcolter11374/boat-sim/actions/runs/42579926504), [42580166618](https://github.com/jcolter11374/boat-sim/actions/runs/42580166618) and [42580169658](https://github.com/jcolter11374/boat-sim/actions/runs/42580169658), all on 00de68d with different variant lists, gave a bit-identical 2018 baseline.
+  - So results don't depend on which voyages share a worker, or in what order.
+  - The likely cause is a data load that differed between the two earlier runs, such as a silent live fetch mid-run. It is not proven.
+- **#108 now guards against this.** Batch runs refuse to fetch mid-run and fail with the file's name instead, so a repeat would show up straight away.
+- **Effect on the results.** One voyage in 100 moved, and the gained/lost counts reported here are 10 or more. The conclusions stand.
