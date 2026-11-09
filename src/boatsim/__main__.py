@@ -23,18 +23,20 @@ def main(path: str = "configs/v4_kayak.yaml") -> None:
     prop = design.propulsion
     # Cruise at the design power; safe mode throttles back on low charge (#15).
     cruise_fraction = prop["cruise_drive_w"] / prop["max_drive_w"]
-    c = Components(
-        env=env,
-        forecast=PerfectForecast(env),
-        vessel=KayakVessel(design),
-        autopilot=SafeModeAutopilot(cruise_fraction=cruise_fraction),
-        link=IridiumSBDLink(),
-        pinger=GlobalstarPinger(),
-        base=ForecastReplanPolicy(route=default_mission().waypoints),
-    )
     lat, lon = design.voyage["drop_lat"], design.voyage["drop_lon"]
 
     def run_one(start, seed):
+        # Fresh components per voyage: the link's ledger and the autopilot's
+        # safe-mode state must not carry over from one run to the next.
+        c = Components(
+            env=env,
+            forecast=PerfectForecast(env),
+            vessel=KayakVessel(design),
+            autopilot=SafeModeAutopilot(cruise_fraction=cruise_fraction),
+            link=IridiumSBDLink(),
+            pinger=GlobalstarPinger(),
+            base=ForecastReplanPolicy(route=default_mission().waypoints),
+        )
         return simulate(c, start, lat, lon, default_mission(), seed=seed)
 
     starts = [datetime(2020, 10, 1) + timedelta(days=7 * i) for i in range(4)]
