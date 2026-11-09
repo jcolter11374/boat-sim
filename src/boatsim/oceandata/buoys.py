@@ -94,12 +94,27 @@ def to_10m(wspd, z: float = ANEMOMETER_M):
     return wspd * (10.0 / z) ** POWER
 
 
-def hourly(df):
-    """Nearest-hour buoy values, one per hour (the report closest to the hour)."""
+def hourly(df, cols=("wdir", "wspd", "wvht")):
+    """One value per hour for each column: the report nearest the hour that
+    has that value. Recent NDBC files mix 10-minute wind-only reports with
+    hourly reports that carry the wave height, so picking one report per hour
+    for all columns at once would lose most wave heights."""
+    import pandas as pd
+
     d = df.copy()
     d["hour"] = d.time.dt.round("h")
     d["off"] = (d.time - d.hour).abs()
-    return d.sort_values("off").drop_duplicates("hour").sort_values("hour").set_index("hour")
+    d = d.sort_values("off")
+    wind = d[d.wspd.notna()].drop_duplicates("hour").set_index("hour")  # speed, direction together
+    out = {}
+    for c in cols:
+        src = (
+            wind
+            if c in ("wspd", "wdir")
+            else d[d[c].notna()].drop_duplicates("hour").set_index("hour")
+        )
+        out[c] = src[c]
+    return pd.DataFrame(out).sort_index()
 
 
 def pair(df, era5, lat: float, lon: float):

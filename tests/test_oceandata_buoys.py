@@ -53,3 +53,16 @@ def test_pair_matches_nearest_hour_and_stats():
     assert s["corr"] == pytest.approx(1.0)
     bands = B.by_height(np.array([0.5] * 10 + [5.0] * 10), np.array([0.5] * 10 + [4.0] * 10))
     assert bands[-1]["band"] == "4-6 m" and bands[-1]["ratio"] == pytest.approx(0.8)
+
+
+def test_hourly_takes_waves_and_wind_from_different_reports():
+    # Recent files: 10-minute wind-only reports plus an hourly report with waves.
+    text = STDMET.splitlines()[:2] + [
+        "2023 01 01 00 40 200  7.0 10.0 99.00 99.00 99.00 999 1015.0 10.0 12.0 8.0 99.0 99.00",
+        "2023 01 01 00 50 999 99.0 99.0  2.50  9.00  6.00 210 1015.0 10.0 12.0 8.0 99.0 99.00",
+        "2023 01 01 01 00 210  9.0 11.0 99.00 99.00 99.00 999 1015.0 10.0 12.0 8.0 99.0 99.00",
+    ]
+    h = B.hourly(B.parse_stdmet("\n".join(text)))
+    assert len(h) == 1
+    assert h.wvht.iloc[0] == pytest.approx(2.5)
+    assert h.wspd.iloc[0] == pytest.approx(9.0) and h.wdir.iloc[0] == 210
