@@ -69,8 +69,12 @@ comms:
   ais: Class B
 
 voyage:
-  drop_lat: 36.85            # ~15 nm east of the Chesapeake Bay Bridge-Tunnel
-  drop_lon: -75.70
+  # Drop (decided 9 Nov 2026; John left it to Maya): 100 km out from Cape Henry,
+  # east-south-east on the line through the old 29 km drop (mc/deadboat.py).
+  # A boat that dies here washes ashore about 17% of the time, against 50% from
+  # the old drop (#90). Fallback: 50 km out (36.79N 75.48W).
+  drop_lat: 36.65
+  drop_lon: -74.94
   # Finish (John, 2026-11-09): Microtransat Challenge rules, runner/arrival.py.
   # Reach within 25 km of a target centred on the rules' eastern line; landfall
   # is not a finish. Our target: on the line due west of Lisbon.

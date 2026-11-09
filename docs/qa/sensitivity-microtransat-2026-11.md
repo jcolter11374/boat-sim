@@ -1,8 +1,25 @@
 # Sensitivity study under the Microtransat rule (#21, rerun)
 
-Ravi (QA), 9 Nov 2026. Latest numbers (25 W default): [run 42613153956](https://github.com/jcolter11374/boat-sim/actions/runs/42613153956) (42d5799). Earlier final at 15 W: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (3ef856e). History below starts from [run 42556820831](https://github.com/jcolter11374/boat-sim/actions/runs/42556820831) (f2d0ab1).
+Ravi (QA), 9 Nov 2026. Latest numbers (100 km drop): [run 42689829882](https://github.com/jcolter11374/boat-sim/actions/runs/42689829882). Before that (25 W default, old drop): [run 42613153956](https://github.com/jcolter11374/boat-sim/actions/runs/42613153956) (42d5799). Earlier final at 15 W: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (3ef856e). History below starts from [run 42556820831](https://github.com/jcolter11374/boat-sim/actions/runs/42556820831) (f2d0ab1).
 
-## 25 W default: read this first
+## 100 km drop: read this first
+
+[Run 42689829882](https://github.com/jcolter11374/boat-sim/actions/runs/42689829882), from PR #128. The drop now happens 100 km east-south-east of Cape Henry, at 36.65N 74.94W, chosen on 9 Nov. Everything else is the same as the run below: 25 W cruise, the same 100 spring launches, and the same dice.
+
+**Headline: 78 of 100 finish (95% range 69–85%), median 72 days.** That is the same finish rate as at the old drop, and the trip is about 3 days shorter.
+
+| Drop point | Finished | Gained / lost vs 100 km | Median days |
+|---|---|---|---|
+| **100 km out (new)** | **78** | | **72** |
+| 50 km out (fallback) | 79 | 5 / 4 | 73 |
+| 29 km out (old) | 76 | 4 / 6 | 75 |
+| 100 km, failure rates fitted to the record | 70 | 0 / 8 | 73 |
+
+- For a working boat, where you drop it makes no measurable difference to the finish rate. The splits are 4 to 6 voyages either way, which is coin-flip territory.
+- The reason to go further out is the boat that dies early. From 100 km, a dead boat drifts ashore about 17% of the time, against 50% from the old drop (#90).
+- Record-like failure rates still give 70%, the same as before.
+
+## 25 W default (old 29 km drop)
 
 [Run 42613153956](https://github.com/jcolter11374/boat-sim/actions/runs/42613153956), main at 42d5799. This is the first run with 25 W as the default cruise (#114). It uses the same 100 spring launches and the same shared dice as the run below.
 

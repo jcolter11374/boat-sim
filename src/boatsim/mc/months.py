@@ -197,14 +197,19 @@ class MonthlyVoyage(StandardVoyage):
 
         return default_mission()
 
-    def __call__(self, start: datetime, seed: int):
+    def drop_point(self) -> tuple[float, float]:
+        """Where the voyage starts (variants may move it)."""
         from boatsim.config import load_design
+
+        voyage = load_design(self.design_path).voyage
+        return voyage["drop_lat"], voyage["drop_lon"]
+
+    def __call__(self, start: datetime, seed: int):
         from boatsim.oceandata.grid import OutsideCoverage
         from boatsim.runner import VoyageLog, simulate
         from boatsim.types import Outcome
 
-        voyage = load_design(self.design_path).voyage
-        drop = (voyage["drop_lat"], voyage["drop_lon"])
+        drop = self.drop_point()
         c = self.components(seed)
         mult = apply_spread(c.vessel.inner, seed) if self.spread else {}
         try:

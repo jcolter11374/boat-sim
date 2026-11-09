@@ -33,7 +33,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from boatsim.runner.simulate import VoyageLog
+from boatsim.runner.simulate import DROP_POINT, VoyageLog
 from boatsim.types import Outcome
 from boatsim.viz.card import (
     CAUSES,
@@ -272,12 +272,12 @@ def map_figure(tracks: list[dict]):
         )
     fig.add_trace(
         go.Scattergeo(
-            lat=[36.85],
-            lon=[-75.70],
+            lat=[DROP_POINT[0]],
+            lon=[DROP_POINT[1]],
             mode="markers",
             marker={"size": 9, "color": INK, "line": {"width": 2, "color": SURFACE}},
             name="Drop point",
-            hovertext=["Drop point, east of the Chesapeake Bay mouth"],
+            hovertext=["Drop point, 100 km east-south-east of Cape Henry"],
             hoverinfo="text",
         )
     )
@@ -416,12 +416,12 @@ def endpoints_figure(summary: pd.DataFrame):
         )
     fig.add_trace(
         go.Scattergeo(
-            lat=[36.85],
-            lon=[-75.70],
+            lat=[DROP_POINT[0]],
+            lon=[DROP_POINT[1]],
             mode="markers",
             marker={"size": 10, "color": INK, "symbol": "star"},
             name="Drop point",
-            hovertext=["Drop point, east of the Chesapeake Bay mouth"],
+            hovertext=["Drop point, 100 km east-south-east of Cape Henry"],
             hoverinfo="text",
         )
     )

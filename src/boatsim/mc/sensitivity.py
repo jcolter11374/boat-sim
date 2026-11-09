@@ -54,6 +54,7 @@ from boatsim.mc.months import (
     swept_odds,
     wilson,
 )
+from boatsim.runner.simulate import DROP_POINT
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ class Variant:
     min_gain_h: float | None = None
 
 
-BAY_MOUTH = (36.9, -75.5)  # first waypoint of every route, as in default_mission
+BAY_MOUTH = DROP_POINT  # first waypoint of every route, as in default_mission (the drop)
 # Pre-#80 route and rule, for the old-vs-new comparison (Maya, Nov 2026).
 OLD_ROUTE = (BAY_MOUTH, (38.5, -28.0), (39.5, -9.6))
 _OLD_EUROPE_BOXES = [  # rough sea areas next to European coasts (old arrival.py)
@@ -171,6 +172,18 @@ VARIANTS: dict[str, Variant] = {
         "hazards",
         "No 14-day shakedown trial before the drop",
         (("hazards", "shakedown_days", 0.0),),
+    ),
+    # Drop distance (decided 9 Nov 2026: 100 km, the default). The route still
+    # starts at the 100 km point, which lies on the way out from either.
+    "drop_29km": Variant(
+        "drop",
+        "Old drop point, 29 km out (36.85N 75.70W)",
+        (("voyage", "drop_lat", 36.85), ("voyage", "drop_lon", -75.70)),
+    ),
+    "drop_50km": Variant(
+        "drop",
+        "Fallback drop point, 50 km out (36.79N 75.48W)",
+        (("voyage", "drop_lat", 36.79), ("voyage", "drop_lon", -75.48)),
     ),
     "historical_rates": Variant(
         "hazards",
@@ -273,6 +286,12 @@ class SensitivityVoyage(MonthlyVoyage):
     """MonthlyVoyage with one variant applied."""
 
     variant: str = "baseline"
+
+    def drop_point(self) -> tuple[float, float]:
+        from boatsim.config import load_design
+
+        v = patched_design(load_design(self.design_path), VARIANTS[self.variant].design).voyage
+        return v["drop_lat"], v["drop_lon"]
 
     def mission(self):
         from boatsim.types import Mission, Waypoint
