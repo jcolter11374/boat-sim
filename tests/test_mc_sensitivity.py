@@ -34,7 +34,8 @@ def test_variants_change_what_they_say_and_nothing_else():
     assert batt.vessel.inner.hazards.unknown_p_by_60_days == 0.0  # override survives
 
     assert _components("solar_350").vessel.inner.solar.rated_wp == 350
-    assert _components("cruise_25w").autopilot.cruise_fraction == pytest.approx(0.25)
+    assert _components("cruise_30w").autopilot.cruise_fraction == pytest.approx(0.30)
+    assert base.autopilot.cruise_fraction == pytest.approx(0.25)
     assert _components("hold_at_30").autopilot.hold_below_soc == 0.30
     assert _components("no_throttle_back").autopilot.throttle_scale(0.2) == 1.0
     assert base.autopilot.throttle_scale(0.2) < 1.0
@@ -42,7 +43,7 @@ def test_variants_change_what_they_say_and_nothing_else():
     one = _components("one_thruster")
     assert one.vessel.inner.thruster_parts == ("thruster_centre",)
     assert one.autopilot.thruster_count == 1
-    assert one.autopilot.cruise_fraction == pytest.approx(15 / 50)
+    assert one.autopilot.cruise_fraction == pytest.approx(25 / 50)
     assert _components("battery_640").autopilot.thruster_count == 2
 
     assert base.link.mailbox == "with_report"
@@ -61,14 +62,14 @@ def test_every_variant_builds_and_has_a_plain_label():
 def test_run_year_pairs_variants_on_the_same_seeds():
     df = S.run_year(
         2020,
-        ("baseline", "cruise_25w"),
+        ("baseline", "cruise_30w"),
         every_days=45,
         workers=1,
         weather="constant",
         max_days=3,
         unknown_p_by_60_days=0.0,
     )
-    a, b = (df[df["variant"] == n].reset_index() for n in ("baseline", "cruise_25w"))
+    a, b = (df[df["variant"] == n].reset_index() for n in ("baseline", "cruise_30w"))
     assert list(a["seed"]) == list(b["seed"]) == [2020000, 2020001, 2020002]
     assert list(a["start"]) == list(b["start"])
     assert (b["km_from_drop"] > a["km_from_drop"]).all()  # more power, further in 3 days

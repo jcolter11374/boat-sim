@@ -15,7 +15,7 @@ def _voyages():
     rows = []
     starts = [datetime(2015, m, d, 12) for m in (4, 5, 6) for d in (1, 11, 21)]
     finish = {"baseline": 6, "no_shakedown": 4, "old_rule": 9, "target_51n": 2,
-              "target_39_5n": 5, "cruise_25w": 7}  # fmt: skip
+              "target_39_5n": 5, "cruise_30w": 7}  # fmt: skip
     for name, k in finish.items():
         for i, s in enumerate(starts):
             ok = i < k
@@ -66,7 +66,7 @@ def test_page_retires_old_figure_and_keeps_other_changes_apart():
 
 def test_missing_variants_leave_sections_out():
     v = _voyages()
-    t = compare(v[v["variant"].isin(["baseline", "cruise_25w"])])
+    t = compare(v[v["variant"].isin(["baseline", "cruise_30w"])])
     assert study.rule_figure(t) is None
     assert study.target_figure(t) is None
     page = study.study_html(t)
