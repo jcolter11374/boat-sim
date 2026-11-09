@@ -151,9 +151,9 @@ export const KAYAK_V4: HullParams = {
 
 // --- Randolph team Rev B (drone-boat simulator/drone_sim/design.py, MIT) -----
 // Published numbers (docs/Simulation_RevB.md): 20.8 kg, GM 0.201 m, max GZ
-// 0.434 m, self-righting from 180 deg. Their GZ curve's shape isn't published,
-// so GZ = A sin(phi) + B sin(2 phi), fitted to GM and the maximum (GUESS on
-// the shape: peak at ~111 deg, positive to 180). Point masses estimated from
+// 0.434 m, self-righting from 180 deg. The GZ curve and inertias are theirs:
+// docs/data/revB_gz_curve.csv (geometry.py gz_curve, free trim, full load),
+// shared on our #50, 9 Nov 2026. Point masses (for the CG) estimated from
 // design.py (heights above the hull bottom, x aft of the bow).
 export const REVB_MASS_ITEMS: MassItem[] = [
   [7.9, -0.434, "lead bulb, 0.32 m x 68 mm"],
@@ -177,13 +177,15 @@ const REVB_WATERLINE = 0.09;
 const REVB_SPREAD = [0.07, 0.43, 0.23, 0.45, 1.0, 0, 0, 0.4, 0, 0, 0, 0, 0];
 const revbMass = massProperties(REVB_MASS_ITEMS, REVB_SPREAD);
 export const REVB_GM = 0.201;
-const REVB_A = 0.396;
-const REVB_B = (REVB_GM - REVB_A) / 2;
-const revbGz: [number, number][] = [];
-for (let a = 0; a <= 180; a += 5) {
-  const r = (a * Math.PI) / 180;
-  revbGz.push([a, REVB_A * Math.sin(r) + REVB_B * Math.sin(2 * r)]);
-}
+// Righting arm (deg, m) every 5 deg. The jump between 90 and 100 deg is the
+// buoyant wing going under; max 0.434 m at 105 deg; no negative range.
+const revbGz: [number, number][] = [
+  [0, 0.0], [5, 0.0175], [10, 0.0349], [15, 0.0521], [20, 0.0689], [25, 0.0852], [30, 0.101], [35, 0.1161],
+  [40, 0.1305], [45, 0.1439], [50, 0.1552], [55, 0.1639], [60, 0.1706], [65, 0.1753], [70, 0.1788], [75, 0.1818],
+  [80, 0.1872], [85, 0.2054], [90, 0.2005], [95, 0.2935], [100, 0.4129], [105, 0.4341], [110, 0.4312], [115, 0.4178],
+  [120, 0.398], [125, 0.3737], [130, 0.3456], [135, 0.3142], [140, 0.2798], [145, 0.2432], [150, 0.2052], [155, 0.1663],
+  [160, 0.1273], [165, 0.0894], [170, 0.0545], [175, 0.0246], [180, 0.0],
+];
 
 export const RANDOLPH_REVB: HullParams = {
   name: "Randolph Rev B",
@@ -192,8 +194,8 @@ export const RANDOLPH_REVB: HullParams = {
   waterlineBeam: 0.36, // GUESS: 0.40 m max beam
   waterplaneCoeff: 0.68, // GUESS
   gzTable: revbGz,
-  rollInertia: revbMass.rollInertia, // ~3.4 kg m^2
-  pitchInertia: 20.8 * (0.25 * 1.5) ** 2 + 7.9 * 0.39 ** 2 * 0.2, // GUESS
+  rollInertia: 2.487, // their Ixx about the CG: hull, wing and rig
+  pitchInertia: 4.117, // their Iyy about the CG
   cgBelowWaterline: REVB_WATERLINE - revbMass.cg,
   cgX: REVB_X.reduce((s, x, i) => s + x * REVB_MASS_ITEMS[i][0], 0) / revbMass.mass,
   addedHeave: 1.0,
@@ -205,7 +207,7 @@ export const RANDOLPH_REVB: HullParams = {
   // fin 0.16 m chord from the hull bottom to 0.43 m below it; bulb 0.32 x 0.068 m
   // side-on at the fin tip. CG ~0.04 m above the bottom.
   rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.16, -0.04, 0.43 - 0.04) + 0.022 * 0.47 ** 3),
-  source: "drone-boat docs/Simulation_RevB.md (mass, GM, max GZ) and design.py (masses)",
+  source: "drone-boat docs/Simulation_RevB.md (mass, GM), docs/data/revB_gz_curve.csv (GZ, inertias), design.py (masses)",
 };
 
 /** Righting arm (m) at heel phi (rad), any angle; odd and 360-periodic. */

@@ -75,6 +75,17 @@ test("Rev B righting curve matches its published GM 0.201 m and max GZ 0.434 m",
   assert.ok(Math.abs(max - 0.434) < 0.002, `max GZ ${max}`);
 });
 
+test("Rev B uses the Randolph team's own GZ curve and inertias (#50)", () => {
+  // spot values from their docs/data/revB_gz_curve.csv
+  for (const [a, g] of [[30, 0.101], [90, 0.2005], [105, 0.4341], [150, 0.2052]]) {
+    assert.ok(Math.abs(gz(RANDOLPH_REVB, a * D2R) - g) < 1e-9, `GZ at ${a} deg`);
+  }
+  // the wing going under: the arm doubles between 90 and 100 deg
+  assert.ok(gz(RANDOLPH_REVB, 100 * D2R) > 2 * gz(RANDOLPH_REVB, 90 * D2R));
+  assert.equal(RANDOLPH_REVB.rollInertia, 2.487);
+  assert.equal(RANDOLPH_REVB.pitchInertia, 4.117);
+});
+
 test("both curves are positive all the way to 180 deg (no stable upside-down position)", () => {
   for (const p of BOATS) {
     for (let a = 1; a < 180; a += 1) assert.ok(gz(p, a * D2R) > 0, `${p.name} at ${a} deg`);
