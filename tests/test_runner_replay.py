@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 
-from boatsim.runner.replay import COLUMNS, SCHEMA, to_replay, write
+from boatsim.runner.replay import COLUMNS, SCHEMA, file_name, slug, to_replay, write
 from boatsim.runner.simulate import VoyageLog
 from boatsim.types import Event, EventKind, Outcome
 
@@ -76,3 +76,11 @@ def test_write_merges_index(tmp_path):
     ]
     back = json.loads((tmp_path / "voyage_2020-05-01.json").read_text())
     assert back["lat"][0] == 36.65
+
+
+def test_other_boats_get_their_own_file_names():
+    rep = to_replay(_log(), label="Randolph Rev B")
+    assert rep["boat"] == "Randolph Rev B"
+    assert slug("Randolph Rev B") == "randolph-rev-b"
+    assert file_name(rep) == "voyage_randolph-rev-b_2020-05-01.json"
+    assert file_name(to_replay(_log())) == "voyage_2020-05-01.json"
