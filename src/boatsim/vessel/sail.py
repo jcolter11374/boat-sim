@@ -125,6 +125,26 @@ def best_alpha(p: SailParams, ax: float, ay: float, alpha_max_deg: float) -> flo
     return best
 
 
+def unsteered_heading(
+    p: SailParams, desired: float, wind_from: float, prev_heading: float
+) -> float:
+    """Heading of a boat with no rudder but a working wing: it weathervanes onto a
+    reach `unsteered_twa_deg` off the wind. The autopilot picks which side by
+    backing the wing through the wind with the tail flap (GUESS: their sim keeps
+    the side it was on). It takes the reach that heads more toward `desired`
+    (the course to the route, which keeps it off the coast), with the tacking
+    hysteresis so it doesn't flip back and forth."""
+    a = p.unsteered_twa_deg
+    h_plus, h_minus = (wind_from + a) % 360.0, (wind_from - a) % 360.0
+    g_plus = math.cos(math.radians(wrap180(h_plus - desired)))
+    g_minus = math.cos(math.radians(wrap180(h_minus - desired)))
+    best = 1 if g_plus >= g_minus else -1
+    cur = 1 if wrap180(prev_heading - wind_from) >= 0.0 else -1
+    if best != cur and abs(g_plus - g_minus) <= math.sin(math.radians(p.tack_hysteresis_deg)):
+        best = cur
+    return h_plus if best == 1 else h_minus
+
+
 def sail_heading(
     p: SailParams, desired: float, wind_from: float, prev_heading: float, tws: float
 ) -> tuple[float, bool]:
