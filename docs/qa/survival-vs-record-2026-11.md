@@ -9,7 +9,7 @@ Ravi (QA), 9 Nov 2026. Data: [run 42597360814](https://github.com/jcolter11374/b
 **Short version.**
 - The record ends a boat at its **last satellite report**. Scored that way, our simulated boats fail at close to the record's pace in the first week and offshore. They still last somewhat longer than the record overall.
 - So most of the big gap in the first version came from how it was counted, not from failure rates that are far too kind. Some of the gap is real.
-- About a third of our finishers arrive with Iridium already dead, and only the beacon still reporting. That matters for #89 step 5.
+- About a third of our finishers arrive with Iridium already dead, and only the beacon still reporting. They still count as finishes under the race rules (see the step 5 section below).
 
 **Still reporting by Iridium** (the record's yardstick; finishers count as surviving):
 
@@ -42,11 +42,30 @@ Ravi (QA), 9 Nov 2026. Data: [run 42597360814](https://github.com/jcolter11374/b
 
 What it says:
 - **The two electronics boxes are worth about 18 finishes** under record rates: 69 with our design against 51 if one fault takes out both. Whether they fail together 10% or 30% of the time makes no difference.
-- **Iridium is the weak link, not the boat.** Under historical rates, 38 of the 69 finishers arrive with Iridium dead. Our boat counts as arriving because the beacon keeps reporting. The race's silence rule allows that only if beacon positions count as reports. #89 step 5 needs to settle that, and it may be John's call.
+- **Iridium is the weak link, not the boat.** Under historical rates, 38 of the 69 finishers arrive with Iridium dead. Our boat still counts as arriving because the beacon keeps reporting, and the race rules allow that (see the step 5 section below).
 - **Capsizes that leave the boat stuck upside down** cost 3 finishes at 10x the guessed rate, and 5 at 30x. They are a small part of the gap.
 - **Wear-out doesn't make things worse here.** The fitted curves keep the record's average rate, but move failures later. Since most of our voyages end around day 75, fewer of them meet the late failures, and the finish rate rises (79 and 86). That is an artefact of fitting the shape to the record's average. Report wear-out as a sensitivity, not as a correction.
 
-**Bottom line for the odds.** The 78% headline uses planning rates. On the record's yardstick, the historical rates now match the record offshore, so 69% is a fair "record-like" figure, with a range of about 59 to 77%. We no longer have reason to think 69% is far too kind. The open question is reporting, not survival: a third of the arrivals rely on the beacon alone.
+**Bottom line for the odds.** The 78% headline uses planning rates. On the record's yardstick, the historical rates now match the record offshore, so 69% is a fair "record-like" figure, with a range of about 59 to 77%. We no longer have reason to think 69% is far too kind. The weak point is reporting, not survival: a third of the arrivals rely on the beacon alone.
+
+## Finishing with Iridium alive, or on the beacon only (#89 step 5)
+
+Under the race rules, a finish on the beacon alone still counts (Maya's reading, 9 Nov, of the 2021 rules John chose):
+- B1: "Competitors are free to decide how this information is obtained and transmitted."
+- D5: the boat finishes if it "add[s] at least one point to its GPS log or transmit[s] a position update" inside the target.
+
+Our Globalstar beacon pings every 6 hours, which matches the rules' 6-hour reporting interval, and the silence check already counts those pings. So both kinds of arrival are finishes. They are still worth showing apart, because a boat on the beacon alone can't be sent new routes from home.
+
+Same run (42623431597). "Beacon only" means Iridium's last report came 2 or more days before arrival.
+
+| Variant | Finished | With Iridium working | Beacon only | Iridium died (median day) | Beacon-only days at arrival (median) |
+|---|---|---|---|---|---|
+| Planning rates (design as it stands) | 78 | 54 | 24 | 44 | 36 |
+| Historical rates | 69 | 31 | 38 | 20 | 48 |
+| Historical, one fault kills both boxes | 51 | 27 | 24 | 24 | 46 |
+
+- With the design as planned, about 1 finisher in 3 sails the last month or so on its stored route, with no help from home. Under record-like rates it's more than half.
+- Iridium is the part most worth making tougher. A second, independent Iridium path is the obvious idea, but it costs money, so that is a decision for John with an itemised plan, not something this page recommends.
 
 ## First version (kept for the record): the "boat lost" endpoint
 
