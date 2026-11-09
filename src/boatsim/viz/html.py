@@ -579,7 +579,7 @@ def sensitivity_figure(rows: pd.DataFrame):
     lo = min(-20.0, float(rows["delta_pts"].min()) - 22)  # room for labels left of a bar
     _layout(
         fig,
-        "Change in chance of reaching Europe vs the design as it stands (April to June)",
+        "Change in chance of finishing vs the design as it stands (April to June)",
         height=90 + 38 * len(rows),
         bargap=0.35,
     )
