@@ -144,7 +144,8 @@ class StandardVoyage:
             forecast=ErrorForecast(forecast_env, seed=seed, scale=self.forecast_error),
             vessel=KayakVessel(design),
             autopilot=SafeModeAutopilot(
-                cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"]
+                cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
+                thruster_count=int(prop.get("thruster_count", 2)),
             ),
             link=IridiumSBDLink(),
             pinger=GlobalstarPinger(),
