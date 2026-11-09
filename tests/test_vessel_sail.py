@@ -136,3 +136,19 @@ def test_route_starts_at_the_designs_own_drop_point():
     wp = default_mission((38.02, -74.01)).waypoints
     assert (wp[0].lat, wp[0].lon) == (38.02, -74.01)
     assert (wp[-1].lat, wp[-1].lon) == (39.5, -13.5)
+
+
+def test_rudderless_boat_with_an_upwind_course_takes_the_offshore_reach():
+    p = _vessel().sail
+    # Wind ENE (from 058), course upwind of it: the reaches are 168 (SSE, offshore)
+    # and 308 (NW, at the coast). 308 is nearer the course in angle (just under
+    # 90 deg off it for course 035) but makes no real headway, so it takes the one
+    # with more easting, and holds it.
+    for course in (50.0, 35.0):
+        for prev in (300.0, 170.0):
+            assert abs(S.unsteered_heading(p, course, 58.0, prev) - 168.0) < 1e-9
+    # Equal easting (wind from 090: reaches 200 and 340): stays on its side.
+    assert abs(S.unsteered_heading(p, 90.0, 90.0, 330.0) - 340.0) < 1e-9
+    assert abs(S.unsteered_heading(p, 90.0, 90.0, 210.0) - 200.0) < 1e-9
+    # A course one reach can make headway on still picks by the course.
+    assert abs(S.unsteered_heading(p, 300.0, 58.0, 170.0) - 308.0) < 1e-9

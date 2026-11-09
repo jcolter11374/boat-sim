@@ -132,12 +132,21 @@ def unsteered_heading(
     reach `unsteered_twa_deg` off the wind. The autopilot picks which side by
     backing the wing through the wind with the tail flap (GUESS: their sim keeps
     the side it was on). It takes the reach that heads more toward `desired`
-    (the course to the route, which keeps it off the coast), with the tacking
-    hysteresis so it doesn't flip back and forth."""
+    (the course to the route), with the tacking hysteresis so it doesn't flip
+    back and forth.
+
+    When the course is upwind (inside `min_upwind_twa_deg` of the wind, where it
+    couldn't sail even with a rudder), neither reach makes real headway and
+    "nearer the course" can mean straight at the coast. Then it takes the reach
+    with more easting instead, which is offshore
+    for the US east coast and toward Europe (GUESS: what their autopilot would
+    do; 15 June 2020 replay, #148)."""
     a = p.unsteered_twa_deg
     h_plus, h_minus = (wind_from + a) % 360.0, (wind_from - a) % 360.0
     g_plus = math.cos(math.radians(wrap180(h_plus - desired)))
     g_minus = math.cos(math.radians(wrap180(h_minus - desired)))
+    if abs(wrap180(desired - wind_from)) < p.min_upwind_twa_deg:
+        g_plus, g_minus = math.sin(math.radians(h_plus)), math.sin(math.radians(h_minus))
     best = 1 if g_plus >= g_minus else -1
     cur = 1 if wrap180(prev_heading - wind_from) >= 0.0 else -1
     if best != cur and abs(g_plus - g_minus) <= math.sin(math.radians(p.tack_hysteresis_deg)):
