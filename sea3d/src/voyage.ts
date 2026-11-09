@@ -11,7 +11,6 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { BUILDERS, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
@@ -34,51 +33,29 @@ import {
 } from "./replay/data";
 import type { Placement } from "./standin";
 import { Wake } from "./wake";
-import { Sea, SEA_SIZE } from "./water";
+import { Atmosphere, sunPosition } from "./atmosphere";
+import { Sea } from "./water";
 import { heightAt, Sea as LiveSea } from "./waves";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const BASE = params.get("data") ?? "./voyages";
 
-// ---------- renderer, sky, light (as the showroom) ----------
+// ---------- renderer; sky, light and haze come from atmosphere.ts ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
 $("app").appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 3000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 12000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 1.5;
 controls.maxDistance = 60;
 controls.maxPolarAngle = Math.PI * 0.495;
-const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(78), THREE.MathUtils.degToRad(-150));
-const sky = new Sky();
-sky.scale.setScalar(SEA_SIZE * 4);
-const su = sky.material.uniforms;
-su.turbidity.value = 4;
-su.rayleigh.value = 1.4;
-su.mieCoefficient.value = 0.004;
-su.mieDirectionalG.value = 0.85;
-su.sunPosition.value.copy(sunDir);
-scene.add(sky);
-{
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = new THREE.Scene();
-  env.add(sky.clone());
-  scene.environment = pmrem.fromScene(env).texture;
-  pmrem.dispose();
-}
-const fog = new THREE.Fog(0xc9dbe6, 60, SEA_SIZE * 0.55);
-scene.fog = fog;
-const FAIR = new THREE.Color(0xc9dbe6);
-const STORM = new THREE.Color(0x7d8a94);
-const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
-sun.position.copy(sunDir).multiplyScalar(100);
-scene.add(sun, new THREE.HemisphereLight(0xcfe6ff, 0x0b2a3f, 0.5));
+const atmos = new Atmosphere(renderer, scene, camera);
 
 // ---------- sea and boat ----------
 let quality = ($<HTMLSelectElement>("quality").value as Quality) ?? "high";
@@ -110,7 +87,10 @@ function setQuality(q: Quality): void {
     seaTarget(rep, hour);
     live.snap();
   }
-  renderer.setPixelRatio(q === "high" ? Math.min(window.devicePixelRatio, 2) : 1);
+  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : 1;
+  renderer.setPixelRatio(ratio);
+  atmos.setBloom(q === "high");
+  atmos.setPixelRatio(ratio);
 }
 
 // ---------- the sea of a voyage hour ----------
@@ -165,7 +145,7 @@ const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : 
 const fmtDate = (rep: Replay, h: number) => {
   const d = new Date(utc(rep.start) + h * 3600e3);
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) +
-    " " + d.toISOString().slice(11, 16) + " UTC";
+    " " + d.toISOString().slice(11, warp < 1 / 60 ? 19 : 16) + " UTC"; // seconds when they tick by
 };
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const compass = (deg: number) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
@@ -297,6 +277,7 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  atmos.setSize(window.innerWidth, window.innerHeight);
 });
 
 // The link to the showroom only works where both pages are served together.
@@ -368,7 +349,11 @@ renderer.setAnimationLoop(() => {
     }
     const hs = seaTarget(rep, hour);
     const comps = live.advance(t);
-    sea.setSea(hs);
+    {
+      const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
+      const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+      sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv)); // north = -z
+    }
     sea.update(comps, t);
     // Heading: compass degrees -> scene yaw (bow along (cos yaw, -sin yaw) in x east, z south).
     const hdg = angleAt(rep, rep.heading, hour) ?? 90;
@@ -396,16 +381,17 @@ renderer.setAnimationLoop(() => {
     rigHeave = motion.heave;
     camera.position.y += dy;
     controls.target.y += dy;
-    // Weather mood from the logged wind: greyer, darker and closer in a blow.
+    // Weather mood from the logged wind: greyer, darker and closer in a blow;
+    // the sun where it really was for this hour and place.
     const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
     const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
     const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * 1.94384 - 15) / 20, 0, 1);
     storm += (target - storm) * Math.min(1, dt * 1.5);
-    renderer.toneMappingExposure = 0.55 - 0.17 * storm;
-    fog.color.copy(FAIR).lerp(STORM, storm);
-    fog.far = SEA_SIZE * (0.55 - 0.25 * storm);
-    su.turbidity.value = 4 + 8 * storm;
-    sun.intensity = 2.4 - 1.4 * storm;
+    const [lat, lon] = positionAt(rep, hour);
+    const sp = sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
+    atmos.set(sp.el, sp.az, storm);
+    sea.setSun(atmos.glintDir, atmos.glintLight);
+    wake?.setLight(atmos.ambient);
     hud(rep, stw, hs);
     status.hour = hour;
   }
@@ -414,7 +400,7 @@ renderer.setAnimationLoop(() => {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;
   }
-  renderer.render(scene, camera);
+  atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
   status.frames++;
 });

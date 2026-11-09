@@ -31,8 +31,15 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
   dirFrom is the direction the waves come from, in degrees true) and eases
   between them without jumps. The boats float on this same function, so what
   you see and what moves the boats always agree.
-- `src/water.ts`: the drawn sea (fine grid near the boats, coarse at the
-  horizon), coloured by height with foam on the crests.
+- `src/water.ts`: the drawn sea. The moving waves cover the 400 m round the
+  boats; a flat grid carries on to the horizon (3 km). The shader adds small
+  ripples and sun glitter, long swell texture far out, light glowing through
+  wave tops, and whitecaps whose share of the sea follows the wind
+  (Monahan & O'Muircheartaigh 1980). Looks only: the physics reads waves.ts.
+- `src/atmosphere.ts`: sky, sun, moonlight, stars, haze, storm overcast and
+  the glow round bright things (high quality). The voyage page puts the sun
+  where it really was for the logged time and place, so replays have
+  sunrises, sunsets and nights.
 - `src/boats/specs.ts`: each boat's real measurements (length, beam, mass,
   ballast, centre of gravity, cruising speed). No graphics code.
 - `src/boats/parts.ts`, `src/boats/model.ts`: the 3D models built from those
@@ -46,7 +53,7 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
   kept as a fallback; the page says which motion is running.
 - `src/wake.ts`: foam trail behind each boat (cosmetic).
 - `src/main.ts`: the showroom page (`index.html`): both boats side by side,
-  scene, sky, lights, camera shots, controls.
+  scene, camera shots, controls.
 - `voyage.html`, `src/voyage.ts`: the voyage replay page (Phase 2). Plays a
   replay file from `public/voyages/` (written by `boatsim.runner.replay`):
   Atlantic chart with the track, race lines, target circle and events
