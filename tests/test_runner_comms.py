@@ -182,3 +182,19 @@ def test_dead_boat_stops_reporting_and_collects_routes_after_restart():
     cost_dead = link.voyage_cost_usd(log.start, log.end)["empty_mailbox_checks"]
     cost_alive = full.voyage_cost_usd(log.start, log.end)["empty_mailbox_checks"]
     assert cost_dead < cost_alive
+
+
+def test_silent_boat_is_disqualified_after_ten_days():
+    """Microtransat rule: no transmission for more than 10 days in a row."""
+    from boatsim.types import Outcome
+
+    log = _run(DeadLink(), OneShotBase(), days=20)
+    assert log.outcome == Outcome.DISQUALIFIED
+    assert 10.0 < log.days < 10.1
+
+
+def test_globalstar_pings_keep_a_boat_with_a_dead_modem_in_the_race():
+    from boatsim.types import Outcome
+
+    log = _run(DeadLink(), OneShotBase(), pinger=GlobalstarPinger(p_copy_calm=1.0), days=20)
+    assert log.outcome != Outcome.DISQUALIFIED

@@ -24,9 +24,10 @@ def _log(outcome, events=(), track=None, days=10):
     return log
 
 
-def test_km_to_europe_is_zero_at_the_azores_and_large_at_the_bay():
-    assert km_to_europe(38.5, -28.0) == 0.0
-    assert 3500 < km_to_europe(36.85, -75.7) < 4500
+def test_km_to_finish_is_zero_at_the_target_and_large_at_the_bay():
+    assert km_to_europe(39.5, -13.5) == 0.0  # inside the Microtransat target circle
+    assert km_to_europe(38.5, -28.0) > 1000  # the Azores are no longer a finish
+    assert 5000 < km_to_europe(36.85, -75.7) < 6000
 
 
 def test_causes_cover_each_way_a_voyage_ends():
@@ -76,7 +77,7 @@ def test_voyage_card_reads_plainly_and_carries_the_caveat():
     assert card.knockdowns == 3 and card.parts_broken == ["ais_whip"]
     assert card.trouble_day == 2.0
     text = render_voyage(card)
-    assert "DID NOT ARRIVE" in text and "km short of Europe" in text
+    assert "DID NOT ARRIVE" in text and "km short of the finish" in text
     assert "not priced yet" in text  # no invented build cost
     assert "story, not a forecast" in text
     assert len(text.splitlines()) <= 24  # one screen
@@ -132,7 +133,7 @@ def test_batch_card_odds_causes_and_months():
     may, nov = card.months
     assert (may.month, may.rate, nov.month, nov.rate) == (5, 0.8, 11, 0.2)
     text = render_batch(card)
-    assert "Chance of reaching Europe  50%" in text
+    assert "Chance of finishing        50%" in text
     assert "Only 20 runs" in text  # small sample flagged
     assert "Nov" in text and "Battery ran flat" in text
 

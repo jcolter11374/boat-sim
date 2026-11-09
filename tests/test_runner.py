@@ -25,12 +25,13 @@ def _components(env_state=None):
     )
 
 
-def test_stub_boat_reaches_azores_in_plausible_time():
+def test_stub_boat_reaches_the_finish_in_plausible_time():
     _, c = _components()
     log = simulate(c, datetime(2020, 10, 1), 36.85, -75.7, default_mission())
     assert log.outcome == Outcome.ARRIVED
-    # ~2,300 nm at 1.7 kt is ~56 days
-    assert 45 < log.days < 70
+    # ~2,900 nm to the target west of Lisbon at 1.7 kt is ~71 days
+    assert 60 < log.days < 85
+    assert log.t_start_line is not None  # crossed the Microtransat western line
 
 
 def test_head_current_stops_progress():

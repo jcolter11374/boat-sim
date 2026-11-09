@@ -52,7 +52,7 @@ def test_report_has_every_section_and_plain_words():
     tracks = [track_rows(_log(o, seed=i)) for i, o in enumerate(Outcome)]
     page = report_html(_summary(), tracks, subtitle="test")
     for heading in [
-        "Chance of reaching Europe",
+        "Chance of finishing",
         "Odds by launch month",
         "How the voyages ended",
         "Where the boats went",

@@ -1,7 +1,7 @@
 """HTML report (#22): one self-contained file John can open in any browser.
 
 Sections, top to bottom:
-1. The headline: chance of reaching Europe, with its 95% range and warnings.
+1. The headline: chance of finishing (Microtransat rules), with its 95% range and warnings.
 2. Odds by launch month, each bar with its range.
 3. How the voyages ended (causes of loss).
 4. Map of sample tracks, coloured by how they ended.
@@ -55,7 +55,7 @@ OUTCOME_COLOURS = {
     "lost": "#eb6834",  # orange
 }
 OUTCOME_LABELS = {
-    "arrived": "Reached Europe",
+    "arrived": "Finished",
     "lost": "Lost at sea",
     "at_sea": "Still at sea at the end",
 }
@@ -78,7 +78,7 @@ _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
 def outcome_group(outcome: str) -> str:
     if outcome == Outcome.ARRIVED.value:
         return "arrived"
-    if outcome in (Outcome.LOST.value, Outcome.AGROUND.value):
+    if outcome in (Outcome.LOST.value, Outcome.AGROUND.value, Outcome.DISQUALIFIED.value):
         return "lost"
     return "at_sea"  # timeout, left_data_box
 
@@ -198,13 +198,13 @@ def month_figure(card, window: tuple[int, int] | None = None):
             },
             customdata=[[m.arrived, m.runs, m.low * 100, m.high * 100] for m in card.months],
             hovertemplate=(
-                "%{x}: %{y:.0f}% reached Europe<br>"
+                "%{x}: %{y:.0f}% finished<br>"
                 "%{customdata[0]} of %{customdata[1]} runs<br>"
                 "95% range %{customdata[2]:.0f}% to %{customdata[3]:.0f}%<extra></extra>"
             ),
         )
     )
-    _layout(fig, "Chance of reaching Europe, by launch month", bargap=0.35)
+    _layout(fig, "Chance of finishing, by launch month", bargap=0.35)
     fig.update_yaxes(range=[0, 108], title="", **_PCT_TICKS)
     _shade_window(fig, window, months)
     return fig
@@ -375,7 +375,7 @@ def sweep_figure(summary: pd.DataFrame, window: tuple[int, int] | None = None):
                 hovertemplate=f"%{{x}}: %{{y:.0f}}% if {p:.0%} fail by day 60<extra></extra>",
             )
         )
-    _layout(fig, "Chance of reaching Europe, by launch month and unknown-failure rate", 420)
+    _layout(fig, "Chance of finishing, by launch month and unknown-failure rate", 420)
     fig.update_yaxes(range=[0, 102], ticksuffix="%")
     fig.update_layout(legend={"orientation": "h", "y": -0.15}, hovermode="x unified")
     fig.update_yaxes(range=[0, 108], **_PCT_TICKS)
@@ -604,7 +604,7 @@ def _hero(df: pd.DataFrame, label: str, sweep: bool) -> str:
     else:
         big, detail = f"{o['rate']:.0%}", model
     return f"""<div class="hero">
-  <div>Chance of reaching Europe (Azores included): {html.escape(label)}</div>
+  <div>Chance of finishing (within 25 km of the target off Portugal, Microtransat rules): {html.escape(label)}</div>
   <div class="big">{big}</div>
   <div class="range">{detail}</div>
 </div>"""
@@ -663,8 +663,8 @@ def report_html(
                 "Odds by launch month",
                 month_figure(card, window),
                 (
-                    "Each bar is the share of simulated launches in that month that reached "
-                    "Europe. The thin line on each bar is the 95% range: with this many runs, "
+                    "Each bar is the share of simulated launches in that month that finished "
+                    "(reached the target off Portugal). The thin line on each bar is the 95% range: with this many runs, "
                     "the true odds are probably somewhere inside it."
                     + (
                         " These bars are the model alone, with no unknown failures."

@@ -2,8 +2,8 @@
 
 A boat that drifts onto the Outer Banks, Bermuda or Nova Scotia, or back into
 the Chesapeake, must stop there: in the real world it is aground, not still at
-sea. The arrival rule runs first, so a landfall in Europe still counts as
-arrived (John's rule, Azores included).
+sea. Under the Microtransat rules we follow (runner/arrival.py) a landfall is
+never a finish, in Europe or anywhere else: only the 25 km target circle is.
 
 The land map is a bit mask on a 0.02 degree grid (about 2 km) over the route
 box, 25-62N, 82W-5E, built from Natural Earth 1:10m land (public domain) by
@@ -27,16 +27,6 @@ import numpy as np
 DEFAULT_PATH = Path("data/land/land_mask_v1.npz")
 BOX = (25.0, 62.0, -82.0, 5.0)  # lat_min, lat_max, lon_min, lon_max
 RES_DEG = 0.02
-
-# Land that ends a voyage as "arrived" rather than "aground": Europe east of
-# 32W and north of 36N (Iberia to Norway, Britain, Ireland, the Azores). South
-# of 36N is Africa, Madeira and the Canaries, which John's rule doesn't name.
-EUROPE_LON_MIN = -32.0
-EUROPE_LAT_MIN = 36.0
-
-
-def is_european_land(lat: float, lon: float) -> bool:
-    return lon >= EUROPE_LON_MIN and lat >= EUROPE_LAT_MIN
 
 
 class LandMask:
