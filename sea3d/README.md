@@ -25,9 +25,12 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
 
 ## Files
 
-- `src/waves.ts`: the sea surface (sum of wave trains, sized so the
-  significant wave height matches the sea state). The boats float on this same
-  function, so what you see and what moves the boats always agree.
+- `src/waves.ts`: the sea surface: wave trains drawn from a JONSWAP spectrum
+  with directional spreading, sized so the significant wave height is exact.
+  `Sea` follows changing conditions (`setSeaState(hs, tp, dirFrom)`, where
+  dirFrom is the direction the waves come from, in degrees true) and eases
+  between them without jumps. The boats float on this same function, so what
+  you see and what moves the boats always agree.
 - `src/water.ts`: the drawn sea (fine grid near the boats, coarse at the
   horizon), coloured by height with foam on the crests.
 - `src/boats/specs.ts`: each boat's real measurements (length, beam, mass,
@@ -46,3 +49,4 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
 - `tests/smoke.mjs`: the CI check (both boats afloat with finite poses,
   wave heights per sea state, quality switch, screenshots).
 - `tests/motion.test.ts`: the wave-motion gate.
+- `tests/waves.test.ts`: the sea: exact Hs, spectrum and spread, no jumps.
