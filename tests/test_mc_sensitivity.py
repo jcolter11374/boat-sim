@@ -178,3 +178,11 @@ def test_hazard_variants_switch_shakedown_and_rate_set():
     hist = S.SensitivityVoyage(variant="historical_rates", weather="constant").components(1)
     assert hist.vessel.inner.hazards.rate_set == "historical"
     assert hist.vessel.inner.hazards.unknown_p_by_60_days == 0.0  # override survives
+
+
+def test_replan_threshold_variants():
+    assert _components("baseline").base.min_gain_h == 6.0
+    assert _components("replan_24h").base.min_gain_h == 24.0
+    r72 = _components("replan_72h").base
+    assert isinstance(r72, ForecastReplanPolicy) and r72.min_gain_h == 72.0
+    assert r72.route[-1].lat == 39.5  # still toward the default target

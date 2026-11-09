@@ -72,6 +72,10 @@ class Variant:
     # Finish: (lat, lon) of a Microtransat target on the eastern line, or
     # "old_rule" for the pre-#80 rule (any landfall in Europe, Azores included).
     finish: tuple[float, float] | str | None = None
+    # Hours a forecast detour must save before the base sends it (base="replan"
+    # only; None keeps the policy default, 6 h). Land and keep-out detours
+    # ignore it.
+    min_gain_h: float | None = None
 
 
 BAY_MOUTH = (36.9, -75.5)  # first waypoint of every route, as in default_mission
@@ -117,6 +121,16 @@ VARIANTS: dict[str, Variant] = {
         "comms",
         "Base never changes the route (still sends a daily 'all well')",
         base="no_corrections",
+    ),
+    "replan_24h": Variant(
+        "comms",
+        "Base changes the route only for a forecast gain of 24 hours or more",
+        min_gain_h=24.0,
+    ),
+    "replan_72h": Variant(
+        "comms",
+        "Base changes the route only for a forecast gain of 72 hours or more",
+        min_gain_h=72.0,
     ),
     "silent_base": Variant(
         "comms",
@@ -251,8 +265,9 @@ class SensitivityVoyage(MonthlyVoyage):
             c.base = HoldCoursePolicy()
         elif v.base != "replan":
             raise ValueError(f"unknown base policy {v.base!r}")
-        elif v.route:
-            c.base = ForecastReplanPolicy(route=route)
+        elif v.route or v.min_gain_h is not None:
+            kw = {} if v.min_gain_h is None else {"min_gain_h": v.min_gain_h}
+            c.base = ForecastReplanPolicy(route=route, **kw)
         if v.finish == "old_rule":
             c.finish = OldRuleFinish()
         elif v.finish is not None:
