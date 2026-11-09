@@ -51,6 +51,7 @@ class SailParams:
     min_upwind_twa_deg: float = 50.0
     min_downwind_twa_deg: float = 165.0
     tack_hysteresis_deg: float = 20.0
+    unsteered_twa_deg: float = 110.0  # where it settles with no rudder, wing still trimmed
 
     @classmethod
     def from_config(cls, sail: dict | None) -> SailParams | None:

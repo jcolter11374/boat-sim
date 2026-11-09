@@ -305,30 +305,40 @@ class KayakVessel:
         # Rudder gone: differential thrust can still steer, but only with two working
         # thrusters. A one-thruster boat can't steer at all without its rudder.
         sail_alpha_max = 0.0
+        we, wn = env.wind_u - cur_e, env.wind_v - cur_n
+        calm = we == 0.0 and wn == 0.0
+        wind_to = math.degrees(math.atan2(we, wn))
+        wind_from = (wind_to + 180.0) % 360.0
         if self.sail is not None:
             # A sailboat steers with its rudder alone: it needs the autopilot powered
             # and the rudder working. It can't point into the wind (sail_heading).
+            # Rudder gone but autopilot alive: the tail still trims the wing, and the
+            # boat weathervanes onto a reach on the side it was on (their sim, ~110
+            # deg off the wind), so it keeps sailing, just not where it is told.
             steering = on and not state.damage.get("rudder")
+            sailing = on and not state.damage.get("sail") and not calm
         else:
             can_steer = working >= (2 if state.damage.get("rudder") else 1)
             steering = es.drive_w >= self.min_steer_w and can_steer
+            sailing = False
+        tws = math.hypot(env.wind_u, env.wind_v)
+        feather = False
         if steering and self.sail is not None:
-            we, wn = env.wind_u - cur_e, env.wind_v - cur_n
-            wind_from = (math.degrees(math.atan2(we, wn)) + 180.0) % 360.0
-            tws = math.hypot(env.wind_u, env.wind_v)
             heading, feather = S.sail_heading(self.sail, cmd.heading, wind_from, state.heading, tws)
-            if not feather and not state.damage.get("sail"):
-                sail_alpha_max = self.sail.max_alpha_deg
         elif steering:
             heading = cmd.heading
+        elif sailing:
+            side = 1.0 if S.wrap180(state.heading - wind_from) >= 0.0 else -1.0
+            heading = (wind_from + side * self.sail.unsteered_twa_deg) % 360.0
+            feather = tws > self.sail.storm_wind_ms
         else:
             # Can't steer: lie beam-on to the wind relative to the water.
-            we, wn = env.wind_u - cur_e, env.wind_v - cur_n
-            if we == 0.0 and wn == 0.0:
+            if calm:
                 heading = state.heading
             else:
-                wind_to = math.degrees(math.atan2(we, wn))
                 heading = (wind_to + self.hull.drift_heading_offset_deg) % 360.0
+        if sailing and not feather:
+            sail_alpha_max = self.sail.max_alpha_deg
 
         foul = H.fouling_frac(self.hull, days)
         # A boat that can't steer just turns circles: the power is spent (until the
