@@ -42,13 +42,18 @@ let kayakDetailed: THREE.Group | null = null;
 /** Load models/kayak.glb if present. Resolves true when the detailed kayak is ready. */
 export async function loadDetailedModels(base = "./models"): Promise<boolean> {
   if (new URLSearchParams(location.search).get("models") === "simple") return false;
-  try {
-    const gltf = await new GLTFLoader().loadAsync(`${base}/kayak.glb`);
-    kayakDetailed = gltf.scene;
-    return true;
-  } catch {
-    return false; // not built: keep the drawn-in-code model
+  // kayak.glb is what the build makes; kayak.json (the same model as text) is
+  // for hosts that won't serve .glb files.
+  for (const file of ["kayak.glb", "kayak.json"]) {
+    try {
+      const gltf = await new GLTFLoader().loadAsync(`${base}/${file}`);
+      kayakDetailed = gltf.scene;
+      return true;
+    } catch {
+      // try the next one
+    }
   }
+  return false; // not built: keep the drawn-in-code model
 }
 export const hasDetailedKayak = () => kayakDetailed !== null;
 
