@@ -19,6 +19,9 @@ on:
       variants:
         description: "Variants to run (space separated; empty = all). Baseline is always added."
         default: ""
+      max_days:
+        description: "Give up after this many days at sea (the report also counts finishes by day 150)"
+        default: "150"
   # On a PR that changes the study: a quick 2020 check of two variants.
   pull_request:
     paths:
@@ -49,6 +52,7 @@ jobs:
       YEAR: ${{ matrix.year }}
       BOATSIM_REQUIRE_SHIPS: "1"  # fail, not warn, if the ship map is missing (#13)
       EVERY_DAYS: ${{ inputs.every_days || '30' }}
+      MAX_DAYS: ${{ inputs.max_days || '150' }}
       VARIANTS: ${{ github.event_name == 'pull_request' && 'no_corrections' || inputs.variants }}
     steps:
       - uses: actions/checkout@v4
@@ -56,18 +60,18 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e '.[data]'
-      # Launches run April 1 to June 30; 150 days at sea reaches late November.
-      - name: Fetch currents for April to December
-        run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-12"
+      # Launches run April 1 to June 30; 180 days at sea reaches late December.
+      - name: Fetch currents for April to the next January
+        run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$((YEAR + 1))-01"
       - name: Download hurricane tracks (IBTrACS, about 58 MB) for the storm-encounter columns
         run: |
           mkdir -p data/storms
           curl -sSL --retry 3 --max-time 600 -o data/storms/ibtracs.NA.list.v04r01.csv \
             "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv"
       - name: Fetch weather (ERA5) for the same span
-        run: python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$YEAR-12-05" --workers 4
+        run: python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$((YEAR + 1))-01-05" --workers 4
       - name: Run every variant over the year's April to June launches
-        run: python -m boatsim.mc.sensitivity run "$YEAR" --every-days "$EVERY_DAYS" --workers 4 --unknown-p 0 ${VARIANTS:+--variants $VARIANTS} --out runs/sensitivity
+        run: python -m boatsim.mc.sensitivity run "$YEAR" --every-days "$EVERY_DAYS" --max-days "$MAX_DAYS" --workers 4 --unknown-p 0 ${VARIANTS:+--variants $VARIANTS} --out runs/sensitivity
       - uses: actions/upload-artifact@v4
         with:
           name: sensitivity-${{ matrix.year }}

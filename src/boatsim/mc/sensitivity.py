@@ -67,6 +67,47 @@ class Variant:
     base: str = "replan"
     safemode: tuple[tuple[str, object], ...] = ()  # SafeModeAutopilot keyword overrides
     link: tuple[tuple[str, object], ...] = ()  # IridiumSBDLink attribute overrides
+    # Launch route as (lat, lon) waypoints; empty keeps runner.default_mission.
+    route: tuple[tuple[float, float], ...] = ()
+    # Finish: (lat, lon) of a Microtransat target on the eastern line, or
+    # "old_rule" for the pre-#80 rule (any landfall in Europe, Azores included).
+    finish: tuple[float, float] | str | None = None
+
+
+BAY_MOUTH = (36.9, -75.5)  # first waypoint of every route, as in default_mission
+# Pre-#80 route and rule, for the old-vs-new comparison (Maya, Nov 2026).
+OLD_ROUTE = (BAY_MOUTH, (38.5, -28.0), (39.5, -9.6))
+_OLD_EUROPE_BOXES = [  # rough sea areas next to European coasts (old arrival.py)
+    (36.0, 44.0, -10.5, -8.0),  # Portugal and NW Spain, Atlantic coast
+    (43.0, 48.5, -5.0, -1.0),  # Bay of Biscay
+    (48.0, 51.5, -6.0, 2.0),  # Brittany, Channel
+    (49.5, 59.5, -11.0, -5.0),  # Ireland, west Scotland
+    (59.5, 71.0, 4.0, 15.0),  # Norway
+]
+
+
+class OldRuleFinish:
+    """The arrival rule before #80: any landfall in Europe, the Azores included
+    (within 300 km of the islands' centre, or in a sea box next to a European
+    coast). Only for comparing odds under the old and new rules. The silence
+    limit from #80 still applies; under the old rule a silent boat had lost both
+    electronics boxes anyway, which was already a loss."""
+
+    def reached(self, lat: float, lon: float) -> bool:
+        from boatsim.geo import distance_m
+
+        if distance_m(lat, lon, 38.5, -28.0) < 300_000.0:
+            return True
+        return any(a <= lat <= b and c <= lon <= d for a, b, c, d in _OLD_EUROPE_BOXES)
+
+
+def _target(lat: float, lon: float, label: str) -> Variant:
+    return Variant(
+        "finish target",
+        f"Finish target at {label}, straight route there",
+        route=(BAY_MOUTH, (lat, lon)),
+        finish=(lat, lon),
+    )
 
 
 # All values are trial settings to compare, not recommendations.
@@ -86,6 +127,34 @@ VARIANTS: dict[str, Variant] = {
         "comms",
         "Boat checks for base messages on a separate daily call, not with its report",
         link=(("mailbox", "scheduled"),),
+    ),
+    "old_rule": Variant(
+        "finish rule",
+        "Old rule: any landfall in Europe, Azores included (old route via the Azores)",
+        route=OLD_ROUTE,
+        finish="old_rule",
+    ),
+    # Finish targets along the Microtransat eastern line (Maya, Nov 2026). The
+    # baseline goes to 39.5N 13.5W via a waypoint south of the Azores; these go
+    # straight there (great circle, which passes north of the Azores), so
+    # target_39_5n is the route-only comparison.
+    "target_51n": _target(51.0, -16.0, "51N 16W (west of Ireland)"),
+    "target_46n": _target(46.0, -11.0, "46N 11W (Bay of Biscay)"),
+    "target_44_5n": _target(44.5, -13.5, "44.5N 13.5W (off NW Spain)"),
+    "target_39_5n": _target(39.5, -13.5, "39.5N 13.5W (off Lisbon)"),
+    "target_37n": _target(37.0, -13.5, "37N 13.5W (off SW Portugal)"),
+    # Hazard assumptions (#89, #91). The baseline uses the "planning" rate set,
+    # which assumes a 14-day unattended shakedown trial before the drop. John
+    # hasn't confirmed one, so no_shakedown shows the cost of skipping it.
+    "no_shakedown": Variant(
+        "hazards",
+        "No 14-day shakedown trial before the drop",
+        (("hazards", "shakedown_days", 0.0),),
+    ),
+    "historical_rates": Variant(
+        "hazards",
+        "Failure rates fitted to the Microtransat record, not the planning set",
+        (("hazards", "rate_set", "historical"),),
     ),
     "battery_640": Variant(
         "battery", "Half the battery (one 50 Ah pack, 640 Wh)", (("power", "battery_wh", 640),)
@@ -134,11 +203,19 @@ class SensitivityVoyage(MonthlyVoyage):
 
     variant: str = "baseline"
 
+    def mission(self):
+        from boatsim.types import Mission, Waypoint
+
+        v = VARIANTS[self.variant]
+        if not v.route:
+            return super().mission()
+        return Mission(waypoints=[Waypoint(lat, lon) for lat, lon in v.route])
+
     def components(self, seed: int = 0):
         from boatsim.autonomy import SafeModeAutopilot
         from boatsim.basestation import ForecastReplanPolicy, HoldCoursePolicy
         from boatsim.config import load_design
-        from boatsim.runner.simulate import default_mission
+        from boatsim.runner.arrival import FinishTarget
         from boatsim.vessel import KayakVessel
 
         v = VARIANTS[self.variant]
@@ -146,7 +223,12 @@ class SensitivityVoyage(MonthlyVoyage):
         design = patched_design(load_design(self.design_path), v.design)
         if v.design:
             inner = KayakVessel(design)
-            inner.hazards = c.vessel.inner.hazards  # keeps the unknown-p override
+            if self.unknown_p_by_60_days is not None:  # same override as MonthlyVoyage
+                from dataclasses import replace as _replace
+
+                inner.hazards = _replace(
+                    inner.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days
+                )
             c.vessel = MeteredVessel(inner)
         if v.design or v.safemode:
             prop = design.propulsion
@@ -155,12 +237,19 @@ class SensitivityVoyage(MonthlyVoyage):
                 thruster_count=int(prop.get("thruster_count", 2)),
                 **dict(v.safemode),
             )
+        route = self.mission().waypoints
         if v.base == "no_corrections":
-            c.base = ForecastReplanPolicy(route=default_mission().waypoints, min_gain_h=math.inf)
+            c.base = ForecastReplanPolicy(route=route, min_gain_h=math.inf)
         elif v.base == "silent":
             c.base = HoldCoursePolicy()
         elif v.base != "replan":
             raise ValueError(f"unknown base policy {v.base!r}")
+        elif v.route:
+            c.base = ForecastReplanPolicy(route=route)
+        if v.finish == "old_rule":
+            c.finish = OldRuleFinish()
+        elif v.finish is not None:
+            c.finish = FinishTarget(*v.finish)
         for attr, value in v.link:
             if not hasattr(c.link, attr):
                 raise AttributeError(f"link has no setting {attr!r}")
@@ -246,6 +335,7 @@ def compare(df: pd.DataFrame) -> pd.DataFrame:
                 "label": v.label,
                 "voyages": len(g),
                 "arrived": k,
+                "within_150": int((ok & (g["days"] <= 150.0)).sum()),
                 "odds": p,
                 "low95": lo,
                 "high95": hi,
@@ -274,7 +364,9 @@ def report_markdown(df: pd.DataFrame) -> str:
             f"Each row is the v4 kayak with one change, sailing the same {n} launches "
             f"({MONTHS[months[0] - 1]} to {MONTHS[months[-1] - 1]}, {years[0]} to "
             f"{years[-1]}, real weather and currents) with the same random dice. "
-            "'Gained' and 'lost' count voyages that arrive with the change but not "
+            "'Finished' follows each row's own finish rule (the Microtransat target "
+            "unless the row says otherwise); 'within 150 days' counts those that made it "
+            "by day 150. 'Gained' and 'lost' count voyages that finish with the change but not "
             "without it, and the other way round. 'Chance' is how likely that split "
             "is if the change did nothing; above about 5% treat it as noise."
         ),
@@ -288,16 +380,16 @@ def report_markdown(df: pd.DataFrame) -> str:
         ),
         "",
         (
-            "| Change | Arrived | Odds (95% range) | Gained | Lost | Chance | "
+            "| Change | Finished | Within 150 days | Odds (95% range) | Gained | Lost | Chance | "
             "Median days | With unknown 10% | With unknown 50% | Airtime $ | "
             "Lowest charge |"
         ),
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in t.itertuples():
         same = r.variant == "baseline"
         lines.append(
-            f"| {r.label} | {r.arrived}/{r.voyages} | {r.odds:.0%} ({r.low95:.0%} to "
+            f"| {r.label} | {r.arrived}/{r.voyages} | {r.within_150} | {r.odds:.0%} ({r.low95:.0%} to "
             f"{r.high95:.0%}) | {'' if same else r.gained} | {'' if same else r.lost} | "
             f"{'' if same else f'{r.sign_p:.0%}'} | {r.median_days:.0f} | "
             f"{r.odds_unknown_10:.0%} | {r.odds_unknown_50:.0%} | {r.airtime_usd:.0f} | "
