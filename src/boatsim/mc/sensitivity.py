@@ -66,6 +66,7 @@ class Variant:
     # "all well" message but never a new route; "silent": base sends nothing.
     base: str = "replan"
     safemode: tuple[tuple[str, object], ...] = ()  # SafeModeAutopilot keyword overrides
+    link: tuple[tuple[str, object], ...] = ()  # IridiumSBDLink attribute overrides
 
 
 # All values are trial settings to compare, not recommendations.
@@ -80,6 +81,11 @@ VARIANTS: dict[str, Variant] = {
         "comms",
         "Base sends nothing; boat follows its stored route, then heads east",
         base="silent",
+    ),
+    "mailbox_scheduled": Variant(
+        "comms",
+        "Boat checks for base messages on a separate daily call, not with its report",
+        link=(("mailbox", "scheduled"),),
     ),
     "battery_640": Variant(
         "battery", "Half the battery (one 50 Ah pack, 640 Wh)", (("power", "battery_wh", 640),)
@@ -155,6 +161,10 @@ class SensitivityVoyage(MonthlyVoyage):
             c.base = HoldCoursePolicy()
         elif v.base != "replan":
             raise ValueError(f"unknown base policy {v.base!r}")
+        for attr, value in v.link:
+            if not hasattr(c.link, attr):
+                raise AttributeError(f"link has no setting {attr!r}")
+            setattr(c.link, attr, value)
         return c
 
 
@@ -272,8 +282,9 @@ def report_markdown(df: pd.DataFrame) -> str:
         (
             "The 'unknown failure' hazard is off in the runs and put back in the two "
             "'with unknown' columns (10% and 50% chance of a fatal surprise by day 60). "
-            "Those columns reward faster crossings. Ship traffic (#13) is not "
-            "modelled yet. Build cost isn't priced until the parts catalogue (#25)."
+            "Those columns reward faster crossings. Ship traffic (#13) is in runs on code "
+            "7856a64 or later; ERA5 understates hurricane winds, so storm losses are "
+            "optimistic. Build cost isn't priced until the parts catalogue (#25)."
         ),
         "",
         (

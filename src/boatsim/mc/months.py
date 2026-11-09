@@ -371,7 +371,8 @@ def report_markdown(df: pd.DataFrame) -> str:
         "",
         (
             "Base station plans from a forecast with realistic error (#12). Ship traffic "
-            "(#13) is not modelled yet, so treat these odds as optimistic."
+            "(#13) is in runs on code 7856a64 or later. ERA5 understates hurricane winds, "
+            "so treat these odds as somewhat optimistic."
             + (
                 " Each boat was built slightly differently: drag, solar loss and fouling "
                 "rate were varied per voyage (spread_* columns)."
