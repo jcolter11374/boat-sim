@@ -9,6 +9,8 @@
   Azores and Europe included, is not a finish; silent >10 days in a row or >15 total
   is disqualified. Test all launch months, but the target window is April to June:
   tune and headline on Apr-Jun, report every month for context.
+- Length rule (John, 9 Nov 2026): the race caps length at 2.4 m; our 3.05 m kayak breaks
+  that on purpose ("we can break that rule. Just make a note of it"). Every other rule applies.
 - Shakedown (John, 9 Nov 2026): a 14-day unattended shakedown trial before the drop is
   planned, so the planning hazard set's shakedown_days: 14 is the real plan, not a guess.
 - Runs in the cloud only (thread sandboxes, GitHub Actions). Stream or subset data

@@ -20,8 +20,10 @@ forward until reviewed), https://sourceforge.net/p/microtransat/wiki/2021%20rule
 
 Class and division we enter, for the record: "non-sailing" (any propulsion,
 so solar-electric is fine) and "unmanned" (base may send new waypoints).
-The rules also cap length at 2.4 m; the v4 kayak is 3.05 m, so it follows the
-rules' course and finish but wouldn't be an eligible entry.
+The rules also cap length at 2.4 m; the v4 kayak is 3.05 m. We break that rule
+on purpose (John, 9 Nov 2026: "we can break that rule. Just make a note of
+it"): the kayak follows the rules' course, finish and silence limits, but
+wouldn't be an eligible entry.
 
 This replaces "any landfall in Europe, Azores included": the Azores lie west
 of the eastern line, so they are no longer a finish.
