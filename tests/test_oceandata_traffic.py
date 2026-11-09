@@ -108,3 +108,14 @@ def test_source_samples_and_feeds_the_environment(monkeypatch, tmp_path):
 def test_default_source_warns_when_missing(tmp_path):
     with pytest.warns(UserWarning, match="no ship traffic"):
         assert T.default_source(tmp_path / "nope.nc") is None
+
+
+def test_spikes_drop_lone_cells_but_keep_lanes():
+    a = np.ones((7, 7))
+    a[1, 1] = 25_179_640  # lone spurious cell
+    a[4, :] = 300_000  # a busy lane across the strip
+    a[6, 6] = np.nan
+    bad = T._spikes(a)
+    assert bad[1, 1]
+    assert not bad[4].any()
+    assert bad.sum() == 1

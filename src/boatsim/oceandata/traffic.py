@@ -22,9 +22,10 @@ thread sandboxes):
    two corrections:
      a. The file contains isolated spurious cells of ~1.7 million and ~25
         million whose values drift steadily with row number (seen in the
-        #13 probe, PR #62). Real counts on our route are below about 100
-        per cell, and almost no cells lie between 100 and 100,000. Cells at
-        or above BAD_COUNT are treated as no data.
+        #13 probe, PR #62), each surrounded by counts of 0 to 5. A cell far
+        above all eight of its neighbours is treated as no data (_spikes).
+        A plain threshold does not work: real lane and port cells near the
+        Bay mouth also pass 100,000.
      b. Position counts are not ships per km^2: they depend on how often
         AIS was received. We calibrate them against EMODnet where both
         exist (see calibrate()), and record the factor and its spread.
@@ -47,7 +48,9 @@ from boatsim.oceandata.grid import ROUTE_BOX, Box, GridSeries
 DEFAULT_PATH = Path(os.environ.get("BOATSIM_DATA", "data")) / "traffic" / "ship_density_v1.nc"
 HOURS_PER_MONTH = 730.5
 RES = 0.1  # degrees
-BAD_COUNT = 100_000
+BAD_COUNT = 100_000  # only for the log: how many real cells are this busy
+SPIKE_MIN = 10_000  # GUESS: below this a lone high cell could be a real anchored ship
+SPIKE_FACTOR = 100.0  # GUESS: spikes are 10^5 to 10^7 times their neighbours
 EMODNET_WCS = "https://ows.emodnet-humanactivities.eu/wcs"
 EMODNET_YEARS = (2022, 2023)  # 2020 had COVID-era traffic; 2024 lost satellite AIS from June
 WORLD_BANK_ZIP = (
@@ -146,6 +149,25 @@ def emodnet_grid(box: Box = ROUTE_BOX, res: float = RES, tile_deg: float = 5.0, 
 # -------------------------------------------------------------- World Bank
 
 
+def _spikes(a: np.ndarray, factor: float = SPIKE_FACTOR) -> np.ndarray:
+    """Cells far above all 8 neighbours: the file's spurious values.
+
+    The bad cells are single pixels (~1.7 million or ~25 million, drifting
+    with row number) surrounded by counts of 0 to 5. A shipping lane or port
+    is high too, but so are its neighbours along the lane, so it survives.
+    """
+    z = np.where(np.isfinite(a), a, 0.0)
+    p = np.pad(z, 1)
+    h, w = z.shape
+    nb = np.zeros_like(z)
+    for di in (0, 1, 2):
+        for dj in (0, 1, 2):
+            if di == 1 and dj == 1:
+                continue
+            nb = np.maximum(nb, p[di : di + h, dj : dj + w])
+    return np.isfinite(a) & (a >= SPIKE_MIN) & (a > factor * (nb + 1.0))
+
+
 def world_bank_grid(tif: str | Path, box: Box = ROUTE_BOX, res: float = RES, log=print):
     """AIS positions per km^2 per year per 0.1 degree cell, plus ocean fraction.
 
@@ -159,16 +181,17 @@ def world_bank_grid(tif: str | Path, box: Box = ROUTE_BOX, res: float = RES, log
     pos = np.zeros(shape)
     n_ok = np.zeros(shape)
     n_all = np.zeros(shape)
-    n_bad = 0
+    n_bad = n_big = 0
     with rasterio.open(tif) as r:
         step = 1.0  # degree strips of latitude
         for s in np.arange(box.lat_min, box.lat_max, step):
             win = from_bounds(box.lon_min, s, box.lon_max, s + step, r.transform).round_offsets()
             a = r.read(1, window=win).astype(np.float64)
             a[a == r.nodata] = np.nan
-            bad = a >= BAD_COUNT
+            bad = _spikes(a)
             n_bad += int(bad.sum())
             a[bad] = np.nan
+            n_big += int((a >= BAD_COUNT).sum())
             t = r.window_transform(win)
             rows, cols = np.indices(a.shape)
             lo = t.c + (cols + 0.5) * t.a
@@ -177,7 +200,10 @@ def world_bank_grid(tif: str | Path, box: Box = ROUTE_BOX, res: float = RES, log
             pos += t_
             n_ok += v_
             n_all += a_
-    log(f"World Bank: {n_bad} spurious cells (>= {BAD_COUNT}) dropped in the route box")
+    log(
+        f"World Bank: {n_bad} isolated spikes dropped in the route box; "
+        f"{n_big} real cells of {BAD_COUNT} or more kept (busy lanes and ports)"
+    )
     # Cell area of one 0.005 degree pixel at the cell's latitude.
     km_per_deg = 111.32
     px_km2 = (0.005 * km_per_deg) ** 2 * np.cos(np.deg2rad(lats))[:, None]
