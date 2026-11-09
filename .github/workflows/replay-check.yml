@@ -1,0 +1,78 @@
+# Gate for the 3D page's voyage replays (sea3d Phase 2): the shortest committed
+# replay is re-simulated from its seed, with that year's real weather and
+# currents, and the build fails if anything differs from the file. A replay the
+# simulator wouldn't produce today is stale; regenerate it with "Voyage replays".
+# The cheap checks (well formed, right seed, today's drop point) run in CI on
+# every PR (tests/test_voyage_files.py); the page-side check is in the sea3d
+# smoke test. Owner: Ravi (QA).
+name: Replay check
+on:
+  pull_request:
+    paths:
+      - "sea3d/public/voyages/**"
+      - "src/boatsim/runner/replay.py"
+      - ".github/workflows/replay-check.yml"
+  push:
+    branches: [main]
+    paths:
+      # After any simulator change lands, report whether the replays went stale.
+      - "src/boatsim/**"
+      - "configs/**"
+      - "sea3d/public/voyages/**"
+  workflow_dispatch:
+    inputs:
+      files:
+        description: "Replay files to check (blank = the shortest one)"
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: replay-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BOATSIM_REQUIRE_LAND: "1"
+      BOATSIM_REQUIRE_SHIPS: "1"
+      BOATSIM_NO_FETCH: "1"  # data is pre-fetched below, as in the replay run
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Pick the replay(s) and the data window
+        id: pick
+        env:
+          FILES: ${{ inputs.files }}
+        run: |
+          python - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, os
+          from datetime import datetime, timedelta
+          from pathlib import Path
+          d = Path("sea3d/public/voyages")
+          names = os.environ.get("FILES", "").split()
+          if not names:
+              idx = json.loads((d / "index.json").read_text())["voyages"]
+              names = [min(idx, key=lambda e: e["days"])["file"]] if idx else []
+          reps = [json.loads((d / n).read_text()) for n in names]
+          if reps:
+              t0 = min(datetime.fromisoformat(r["start"]) for r in reps)
+              t1 = max(datetime.fromisoformat(r["end"]) for r in reps) + timedelta(days=5)
+              print(f"files={' '.join(str(d / n) for n in names)}")
+              print(f"era5_from={t0:%Y-%m-%d}\nera5_to={t1:%Y-%m-%d}")
+              print(f"glorys_from={t0:%Y-%m}\nglorys_to={t1:%Y-%m}")
+          EOF
+          cat "$GITHUB_OUTPUT"
+      - name: Fetch that window's currents and weather
+        if: steps.pick.outputs.files != ''
+        run: |
+          python -m boatsim.oceandata fetch-glorys ${{ steps.pick.outputs.glorys_from }} ${{ steps.pick.outputs.glorys_to }}
+          python -m boatsim.oceandata fetch-era5 ${{ steps.pick.outputs.era5_from }} ${{ steps.pick.outputs.era5_to }} --workers 4
+      - name: Re-simulate and compare
+        if: steps.pick.outputs.files != ''
+        run: python -m boatsim.runner.replay verify ${{ steps.pick.outputs.files }}
