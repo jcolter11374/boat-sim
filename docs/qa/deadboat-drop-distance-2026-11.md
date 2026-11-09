@@ -73,7 +73,8 @@ Where the ones that ran ashore landed:
 - **Only a boat that dies at the drop.** These runs assume the boat dies the moment it is dropped. The real risk depends on how often it dies in the first days, and that is what the 14-day shakedown in the sensitivity study is about. Multiply the two to get a real number.
 - **Windage is a guess.** How hard the wind pushes the hull is still a guess until the tow test. More windage would mean more onshore drift in an easterly wind.
 - **One weather source.** Five years of a single reanalysis (ERA5 weather plus GLORYS12 currents) is all we have here.
-- **Disagrees with the earlier single run.** The 15 May 2023 run from the drop doesn't match the earlier one in #73.
-  - The earlier run used a coarser 9 km land test. It slid into the Bay and grounded on day 9.6.
-  - This run grounds on the Eastern Shore barrier islands (37.33°N 75.73°W) on day 3.5.
-  - By day 3 the two tracks are about 30 km apart in longitude. I haven't run down why. The finer coastline map is one difference, but it doesn't explain the gap before the boat touches land. Treat individual tracks as rough, as #73 already warned.
+- **The earlier single run (#73) agrees once the coastline is the same.** On 15 May 2023, #73's run went into the Bay and grounded on day 9.6. This run grounds on the Eastern Shore barrier islands (37.33°N 75.73°W) on day 3.5.
+  - #73's own track was at 37.33°N 75.79°W on day 4, the same spot as this run's grounding. The two tracks agree.
+  - #73 used the coarse 9 km GLORYS land test, which doesn't see those islands. It let the boat carry on past them into the Bay.
+  - A rerun of 2023 launched at midnight (as #73 was), not noon ([run 42566337848](https://github.com/jcolter11374/boat-sim/actions/runs/42566337848)), grounds at 37.34°N 75.74°W on day 3.9. So the start hour isn't the cause.
+  - Across 2023, 8 of the 10 noon groundings also happen at midnight, and midnight adds none of its own. Two flip to staying at sea: 1 April from the drop, and 15 June from 50 km. That is the kind of noise a 12-hour shift brings near the coast. It is one more reason to read the table as rough.
