@@ -33,10 +33,10 @@ stale: these runs did use #58's forecast error. #60 fixes the wording.
 - **Forecast error didn't measurably hurt.** The only simulator change between
   the old run and this baseline is #58. The old run got 182 of 240 (76%) and
   58 of 60 in April to June. This one got 189 of 240 (79%) and 56 of 60. Both
-  differences are inside the noise. That suggests the base station's course
-  corrections are worth little either way, which matters for airtime cost
-  (an output to minimise): worth testing in #21 whether a simpler, cheaper
-  base policy does as well.
+  differences are inside the noise. So forecast quality doesn't matter much
+  at this level. That does NOT show whether course corrections are worth
+  anything; only a "no corrections" run can show that. It's the first arm of
+  #21, because corrections drive airtime cost (an output to minimise).
 - **Season still dominates:** September and October launches arrive 40 to 50%
   of the time against 90 to 100% from February to June.
 - **Still optimistic:** no ship traffic yet (#13).
