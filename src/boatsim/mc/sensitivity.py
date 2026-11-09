@@ -177,6 +177,27 @@ VARIANTS: dict[str, Variant] = {
         "Failure rates fitted to the Microtransat record, not the planning set",
         (("hazards", "rate_set", "historical"),),
     ),
+    # Wear-out (#118): open-ocean hardware rates rise with days offshore. The
+    # record can't tell this from a constant rate; these bracket the fit.
+    "wearout_central": Variant(
+        "hazards",
+        "Kit wears out at sea: failure rate rises with days offshore (best fit)",
+        (("hazards", "wearout_k", 1.41), ("hazards", "wearout_t_ref_days", 34.9)),
+    ),
+    "wearout_high": Variant(
+        "hazards",
+        "Kit wears out fast at sea (top of the record's range)",
+        (("hazards", "wearout_k", 2.24), ("hazards", "wearout_t_ref_days", 48.6)),
+    ),
+    "historical_wearout_high": Variant(
+        "hazards",
+        "Record failure rates plus fast wear-out",
+        (
+            ("hazards", "rate_set", "historical"),
+            ("hazards", "wearout_k", 2.24),
+            ("hazards", "wearout_t_ref_days", 48.6),
+        ),
+    ),
     "battery_640": Variant(
         "battery", "Half the battery (one 50 Ah pack, 640 Wh)", (("power", "battery_wh", 640),)
     ),

@@ -187,3 +187,11 @@ def test_replan_threshold_variants():
     r72 = _components("replan_72h").base
     assert isinstance(r72, ForecastReplanPolicy) and r72.min_gain_h == 72.0
     assert r72.route[-1].lat == 39.5  # still toward the default target
+
+
+def test_wearout_variants_set_the_knob():
+    base = S.SensitivityVoyage(weather="constant").components(1).vessel.inner.hazards
+    assert base.wearout_k == 1.0  # off by default: results unchanged
+    hz = S.SensitivityVoyage(variant="historical_wearout_high", weather="constant").components(1)
+    h = hz.vessel.inner.hazards
+    assert h.rate_set == "historical" and h.wearout_k == 2.24 and h.wearout_t_ref_days == 48.6

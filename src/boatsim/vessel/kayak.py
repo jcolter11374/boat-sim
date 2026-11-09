@@ -36,6 +36,7 @@ from boatsim.vessel import hull as H
 from boatsim.vessel.coast import distance_to_land_km
 from boatsim.vessel.hazards import (
     DEFAULT_PANELS_W,
+    OPEN_OCEAN,
     HazardParams,
     draw_dice,
     phase,
@@ -76,6 +77,7 @@ class KayakState(BoatState):
     fouling_frac: float = 0.0
     electronics_on: bool = True
     knockdowns: int = 0  # total so far this voyage
+    days_open_ocean: float = 0.0  # offshore days; counted only with wear-out on (#118)
 
     @property
     def iridium_ok(self) -> bool:
@@ -315,6 +317,12 @@ class KayakVessel:
         hz = sample_hazards(self.hazards, env, hours, state.damage, new.t, dice)
         events += hz.events
         new.knockdowns = getattr(state, "knockdowns", 0) + hz.knockdowns
+        new.days_open_ocean = getattr(state, "days_open_ocean", 0.0)
+        if (
+            self.hazards.wearout_k != 1.0
+            and phase(self.hazards, distance_to_land_km(new.lat, new.lon)) == OPEN_OCEAN
+        ):
+            new.days_open_ocean += hours / 24.0
         for part in hz.failed_parts:
             new.damage[part] = True
         fl = sample_failures(
@@ -328,6 +336,7 @@ class KayakVessel:
             days + hours / 48.0,
             dice,
             thrusters=self.thruster_parts,
+            days_open_ocean=new.days_open_ocean,
         )
         events += fl.events
         for part in fl.failed_parts:
