@@ -1,0 +1,40 @@
+# SMOC currents (oceandata/smoc.py, #73) for the drifter months Ravi picked:
+# checks coverage and file sizes for both kinds (data start 1 Nov 2020). Uses the Copernicus secrets;
+# GitHub masks them in logs.
+name: Fetch SMOC currents
+on:
+  workflow_dispatch:
+    inputs:
+      months:
+        description: "YYYY-MM months, space separated"
+        default: "2020-10 2020-11 2022-04 2022-05 2022-08 2022-09"
+  pull_request:
+    paths:
+      - ".github/workflows/fetch-smoc.yml"
+      - "src/boatsim/oceandata/smoc.py"
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [model, total]
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      MONTHS: ${{ inputs.months || '2020-10 2020-11 2022-04 2022-05 2022-08 2022-09' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Fetch each month
+        run: |
+          for m in $MONTHS; do
+            python -m boatsim.oceandata fetch-smoc "$m" "$m" --kind ${{ matrix.kind }} \
+              || echo "::warning::no SMOC ${{ matrix.kind }} for $m"
+          done
