@@ -15,8 +15,9 @@ With no drive power the boat can't steer and lies beam-on to the wind (GUESS),
 so it drifts with wind and current: the M1 drifter comparison case.
 
 5. Draw hazards (vessel/hazards.py): knockdowns from breaking waves, the
-   parts they break, ship strikes, then leaks, electronics, steering,
-   entanglement, capture and early-life failures. Broken panels cut solar; a broken
+   parts they break, ship strikes, then leaks, electronics, Iridium and
+   beacon failures, steering, entanglement, thrusters and capture. A loss is
+   tagged with its phase, near land or open ocean. Broken panels cut solar; a broken
    rudder leaves steering to differential thrust, which needs both thrusters.
 """
 
@@ -32,11 +33,14 @@ from boatsim.config import Design
 from boatsim.geo import move
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
+from boatsim.vessel.coast import distance_to_land_km
 from boatsim.vessel.hazards import (
     DEFAULT_PANELS_W,
     HazardParams,
+    phase,
     sample_failures,
     sample_hazards,
+    tag_phase,
 )
 from boatsim.vessel.power import BatteryParams, SolarParams, energy_step, solar_power_w
 from boatsim.vessel.propulsion import ThrusterParams, total_thrust
@@ -71,6 +75,21 @@ class KayakState(BoatState):
     fouling_frac: float = 0.0
     electronics_on: bool = True
     knockdowns: int = 0  # total so far this voyage
+
+    @property
+    def iridium_ok(self) -> bool:
+        """Can the boat send reports and check its Iridium mailbox? Needs power,
+        the main box (it holds the RockBLOCK) and the comms path itself."""
+        return (
+            self.electronics_on
+            and not self.damage.get("electronics_main", False)
+            and not self.damage.get("comms_silent", False)
+        )
+
+    @property
+    def beacon_ok(self) -> bool:
+        """Is the Globalstar beacon still pinging? It has its own solar cell."""
+        return not self.damage.get("beacon", False)
 
 
 @dataclass(frozen=True)
@@ -313,6 +332,11 @@ class KayakVessel:
             new.damage.pop(part, None)
         if hz.lost or fl.lost:
             new.alive = False
+            ph = phase(self.hazards, distance_to_land_km(new.lat, new.lon))
+            events = [
+                replace(e, detail=tag_phase(e.detail, ph)) if e.kind == EventKind.LOST else e
+                for e in events
+            ]
         return new, events
 
     def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
