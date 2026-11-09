@@ -40,3 +40,16 @@ def test_autopilot_gets_thruster_count_from_config(tmp_path):
     c = StandardVoyage(design_path=str(one), weather="constant").components()
     assert c.autopilot.thruster_count == 1
     assert c.vessel.thruster_parts == ("thruster_centre",)
+
+
+def test_no_fetch_env_var_turns_live_fetches_off(monkeypatch):
+    """Batch runs pre-fetch; BOATSIM_NO_FETCH=1 makes a cache miss an error."""
+    from boatsim.runner import parallel
+
+    fn = getattr(parallel._environment, "__wrapped__", parallel._environment)
+    monkeypatch.setenv("BOATSIM_NO_FETCH", "1")
+    env = fn("reanalysis", True)
+    assert env.era5.fetch is False and env.currents.fetch is False
+    monkeypatch.delenv("BOATSIM_NO_FETCH")
+    env = fn("reanalysis", True)
+    assert env.era5.fetch is True and env.currents.fetch is True
