@@ -9,6 +9,7 @@ import pandas as pd
 from boatsim.autonomy.base import Autopilot
 from boatsim.basestation.base import BasePolicy
 from boatsim.comms.base import Link
+from boatsim.comms.packing import pack_report
 from boatsim.oceandata.base import Environment, Forecast
 from boatsim.runner.arrival import EAST_LINE, WEST_LINE, FinishTarget, SilenceClock, crosses
 from boatsim.types import Event, EventKind, Message, Mission, Outcome, Waypoint
@@ -51,7 +52,8 @@ class VoyageLog:
 
 
 def _report(state) -> dict:
-    """The daily position report the boat sends home. Keep it under 340 bytes."""
+    """The daily position report the boat sends home, packed to 16 bytes
+    (comms/packing.py) so it costs one Iridium credit."""
     return {
         "t": state.t.isoformat(timespec="minutes"),
         "lat": round(state.lat, 4),
@@ -132,7 +134,7 @@ def simulate(
             next_report += report_every
             if powered:
                 report = _report(state)
-                msg = Message(state.t, "up", report, size_bytes=len(str(report)))
+                msg = Message(state.t, "up", report, size_bytes=len(pack_report(report)))
                 t_up = c.link.send(msg, env, rng)
                 if t_up is not None:
                     log.events.append(Event(state.t, EventKind.MESSAGE_SENT))

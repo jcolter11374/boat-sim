@@ -154,7 +154,7 @@ def test_dead_boat_stops_reporting_and_collects_routes_after_restart():
     design = load_design("configs/v4_kayak.yaml")
     vessel = PowerLog(KayakVessel(design))
     env = DarkThenSun()
-    link = IridiumSBDLink(p_try_calm=1.0)
+    link = IridiumSBDLink(p_try_calm=1.0, mailbox="scheduled")
     base = EveryReportBase()
     pinger = GlobalstarPinger(p_copy_calm=1.0)
     # Full thrust with no sun drains the 1,280 Wh battery in under a day.
@@ -178,7 +178,7 @@ def test_dead_boat_stops_reporting_and_collects_routes_after_restart():
     assert any(off_start <= t < back_on for t in pings)
 
     # No mailbox checks are billed while the modem was dead.
-    full = IridiumSBDLink(p_try_calm=1.0)
+    full = IridiumSBDLink(p_try_calm=1.0, mailbox="scheduled")
     cost_dead = link.voyage_cost_usd(log.start, log.end)["empty_mailbox_checks"]
     cost_alive = full.voyage_cost_usd(log.start, log.end)["empty_mailbox_checks"]
     assert cost_dead < cost_alive

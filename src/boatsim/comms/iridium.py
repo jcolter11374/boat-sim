@@ -20,8 +20,14 @@ How the real hardware behaves, in plain terms:
   message schedule that still gets the boat across. A cap
   (`monthly_budget_usd`) exists only to test what a limit would do.
 
-  The cheapest default schedule: one check of the mailbox a day. Every extra
-  daily check costs a credit whenever base has nothing to send.
+  **Mailbox schedule (decision, issue #72).** A session that sends a message
+  also downloads whatever is waiting in the mailbox, at no extra charge beyond
+  the message bytes. So by default (`mailbox="with_report"`) the boat checks
+  its mailbox only as part of its daily report, and never pays for a separate
+  empty check. The price is speed: base's reply to today's report reaches the
+  boat with tomorrow's report, about 24 h later instead of about 10. The
+  older schedule (`mailbox="scheduled"`, a separate check every
+  `mailbox_every`) stays available so the Monte Carlo can compare the two.
 * **Globalstar SmartOne** is a separate one-way beacon: it only transmits a
   position, a few times over in case one copy is lost, and needs no power from
   the main battery. It's the "where is it" backup if Iridium dies.
@@ -96,9 +102,11 @@ class IridiumSBDLink:
     retry_every: timedelta = timedelta(minutes=15)  # GUESS: firmware setting we choose
     max_tries: int = 8  # GUESS: then give up and let the next report supersede it
     session_s: float = 40.0  # GUESS: typical SBD session length incl. satellite acquisition
-    # Boat checks the mailbox for base messages this often, aligned to 00:00 UTC.
-    # Firmware setting we choose; once a day is the cheapest that still lets base
-    # correct the course daily. Each empty check costs a credit [1].
+    # When the boat collects messages from base. "with_report": only in its
+    # report session (cheapest, the default). "scheduled": a separate check
+    # every `mailbox_every`, aligned to 00:00 UTC; each empty one costs a credit [1].
+    mailbox: str = "with_report"
+    report_every: timedelta = timedelta(hours=24)  # must match the runner's schedule
     mailbox_every: timedelta = timedelta(hours=24)
     # Billing (RockBLOCK / Ground Control).
     credit_bytes: int = 50  # [1]: 1 credit per 50 bytes or part
@@ -110,6 +118,7 @@ class IridiumSBDLink:
     # [start, end) pairs; end is None while it is still off. No mailbox checks
     # happen (or are billed) inside them.
     off_periods: list[list] = field(default_factory=list)
+    _last_session: datetime | None = None  # last report session that got through
 
     # ------------------------------------------------------------ accounting
 
@@ -159,7 +168,7 @@ class IridiumSBDLink:
         msgs = sum(e.cost_usd for e in self.ledger if e.status == "delivered")
         checks = 0
         t = self.next_mailbox_check(start)
-        while t <= end:
+        while self.mailbox == "scheduled" and t <= end:
             checks += self._powered_at(t)
             t += self.mailbox_every
         down = sum(1 for e in self.ledger if e.status == "delivered" and e.direction == "down")
@@ -184,7 +193,12 @@ class IridiumSBDLink:
     # ---------------------------------------------------------------- timing
 
     def next_mailbox_check(self, t: datetime) -> datetime:
-        """First scheduled mailbox check at or after t."""
+        """When the boat next collects its mailbox, at or after t."""
+        if self.mailbox == "with_report":
+            s = self._last_session or t
+            while s < t:
+                s += self.report_every
+            return s
         base = _midnight(t)
         n = math.ceil((t - base) / self.mailbox_every)
         return base + n * self.mailbox_every
@@ -219,11 +233,20 @@ class IridiumSBDLink:
             return None
 
         # Up: the boat tries right away. Down: it waits for the next mailbox check.
-        first = msg.t_sent if msg.direction == "up" else self.next_mailbox_check(msg.t_sent)
+        if msg.direction == "up":
+            first = msg.t_sent
+        elif self.mailbox == "with_report":
+            # Base's reply always misses the session it answers, so it waits
+            # for the next report session.
+            first = self.next_mailbox_check(msg.t_sent + timedelta(seconds=1))
+        else:
+            first = self.next_mailbox_check(msg.t_sent)
         p = self.p_try(env)
         for k in range(self.max_tries):
             if rng.random() < p:
                 t_done = first + k * self.retry_every + timedelta(seconds=self.session_s)
+                if msg.direction == "up":
+                    self._last_session = msg.t_sent
                 self.ledger.append(
                     LedgerEntry(
                         msg.t_sent,
