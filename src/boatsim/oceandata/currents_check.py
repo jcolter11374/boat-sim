@@ -195,18 +195,26 @@ def open_meteo_check(day: date, points=POINTS, opener=_open, log=print) -> list[
     ds = opener(SMOC_DATASET, ["utotal", "vtotal"], t0, t0 + timedelta(hours=23)).mean("time")
     rows = []
     for lat, lon in points:
-        r = requests.get(
-            OPEN_METEO,
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "hourly": "ocean_current_velocity,ocean_current_direction",
-                "start_date": str(day),
-                "end_date": str(day),
-                "timezone": "GMT",
-            },
-            timeout=60,
-        )
+        r = None
+        for attempt in range(3):
+            try:
+                r = requests.get(
+                    OPEN_METEO,
+                    params={
+                        "latitude": lat,
+                        "longitude": lon,
+                        "hourly": "ocean_current_velocity,ocean_current_direction",
+                        "start_date": str(day),
+                        "end_date": str(day),
+                        "timezone": "GMT",
+                    },
+                    timeout=120,
+                )
+                break
+            except requests.RequestException as e:
+                log(f"Open-Meteo {lat},{lon}: attempt {attempt + 1} failed: {e!r}"[:200])
+        if r is None:
+            continue  # a side check only: the comparison above stands without it
         if r.status_code != 200:
             log(f"Open-Meteo {lat},{lon}: HTTP {r.status_code} {r.text[:200]}")
             continue
