@@ -55,8 +55,11 @@ def region_slice(mask, region=REGION):
     """Rows/cols of a runner.land.LandMask that cover the region, with the
     lat/lon of each cell centre."""
     lat0, lat1, lon0, lon1 = region
-    i0, i1 = int((lat0 - mask.lat0) // mask.res), int((lat1 - mask.lat0) // mask.res)
-    j0, j1 = int((lon0 - mask.lon0) // mask.res), int((lon1 - mask.lon0) // mask.res)
+    def idx(x, x0):  # round first: 11.5 / 0.02 is 574.999... in floating point
+        return int(np.floor(round((x - x0) / mask.res, 6)))
+
+    i0, i1 = idx(lat0, mask.lat0), idx(lat1, mask.lat0)
+    j0, j1 = idx(lon0, mask.lon0), idx(lon1, mask.lon0)
     lats = mask.lat0 + (np.arange(i0, i1) + 0.5) * mask.res
     lons = mask.lon0 + (np.arange(j0, j1) + 0.5) * mask.res
     return mask.mask[i0:i1, j0:j1], lats, lons

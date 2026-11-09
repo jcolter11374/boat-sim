@@ -185,3 +185,33 @@ No correction applied: the errors are small next to the
 other unknowns, and slightly low big seas make the simulator a little
 optimistic in storms, which the storm check above already flags. NDBC data
 is US government work, public domain.
+
+## Land map near the Bay mouth (coast_check.py, issue #11)
+
+"Check land mask near the Bay" tests the runner's 2 km land map
+(`data/land/land_mask_v1.npz`, built from Natural Earth 1:10m) on 36.5-37.6N,
+76.6-75.4W, where a dead boat is most likely to go ashore in its first days.
+It compares the map with GSHHG full resolution (Wessel and Smith 1996,
+doi:10.1029/96JB00104, LGPL; since 2026 in NOAA's NCEI archive, accession
+0304143), which for the US east coast comes from NOAA's World Vector Shoreline
+(run of 9 Nov 2026):
+
+- **Named points: all 11 correct.** The drop point, Thimble Shoal and
+  Chesapeake channels, Hampton Roads, the lower James and York, and the lower
+  Bay are water. Cape Henry, Cape Charles, Fisherman Island and the Virginia
+  Beach shore are land.
+- **Nothing is cut off.** Drifting cell by cell from the drop point, a boat
+  can reach every one of those water points, including through the roughly 3 km
+  gap at Hampton Roads.
+- **Cell by cell, against GSHHG (3300 cells):** 159 cells are land in the map
+  but mostly water in GSHHG. That is by design: the map marks any cell
+  holding a piece of coastline as land, which moves the shore up to 2 km out
+  to sea, so a drifting boat counts as aground slightly early. 39 cells go the
+  other way (water in the map, mostly land in GSHHG). All of them are in marsh
+  creeks and lagoons, such as Back Bay behind Sandbridge, the Eastern Shore
+  barrier marshes and the Mobjack Bay shore. None is on a path from the drop.
+
+No fix needed. The Chesapeake Bay Bridge-Tunnel is in neither coastline
+(its four islands are about 300 m long), so the simulator lets a boat drift
+through the bridge line. Between the islands that is open trestle, and a
+kayak would pass under it.
