@@ -229,6 +229,7 @@ def test_entanglement_slows_the_boat():
 
 def test_early_life_risk_is_front_loaded_and_sized_to_the_fmea():
     h = Z.unknown_hazard_per_day
+    P = Z.HazardParams.from_config({}, rate_set="original")  # the only set that uses it
     assert h(P, 1.0) > h(P, 10.0) > h(P, 50.0)
     # integrate the hazard to day 60: should give the configured 3 %
     days = np.linspace(1e-4, 60.0, 200_001)
@@ -307,3 +308,110 @@ def test_one_thruster_boat_cannot_steer_without_its_rudder():
     s, _ = v.step(st, Command(90.0, 0.6), env, dt, rng)
     assert s.speed_through_water < 0.05  # turns circles, drifts
     assert v.sense(s, rng).thrusters_ok == 1
+
+
+# --- Shared failure table (#89) ------------------------------------------------
+
+SHELF_120KM = (38.9, -73.3)  # ~120 km off New Jersey: on the fishing shelf, past 50 km
+
+
+def test_rate_sets_switch_with_one_flag():
+    plan = Z.HazardParams.from_config(DESIGN.hazards)
+    assert plan.rate_set == "planning" and plan.capture_per_day == 0.01
+    hist = Z.HazardParams.from_config(DESIGN.hazards, rate_set="historical")
+    assert hist.rate_set == "historical"
+    assert (hist.electronics_per_day, hist.comms_silent_per_day) == (0.0035, 0.0022)
+    assert (hist.capture_per_day, hist.shakedown_days) == (0.02, 0.0)
+    # the design's own knockdown and drag numbers carry over
+    assert hist.p_part == plan.p_part and hist.entangle_extra_drag == plan.entangle_extra_drag
+    orig = Z.HazardParams.from_config({"rate_set": "original"})
+    assert (orig.capture_near_land_km, orig.unknown_p_by_60_days) == (50.0, 0.03)
+    assert orig.comms_silent_per_day == 0.0 and orig.early_life_k == 0.0
+    # a rate in the config block overrides the set it names, for sweeps...
+    assert Z.HazardParams.from_config({"capture_per_day": 0.005}).capture_per_day == 0.005
+    # ...but an explicit rate_set wins, so one flag gives the whole set
+    over = Z.HazardParams.from_config({"capture_per_day": 0.005}, rate_set="historical")
+    assert over.capture_per_day == 0.02
+    with pytest.raises(ValueError):
+        Z.HazardParams.from_config({"rate_set": "optimistic"})
+
+
+def test_early_life_multiplier_matches_shared_table():
+    hist = Z.HazardParams.from_config({}, rate_set="historical")
+    assert Z.early_life_mult(hist, 0.0) == pytest.approx(4.0)  # launch day, no shakedown
+    assert Z.early_life_mult(P, 0.0) == pytest.approx(1.4, abs=0.01)  # 14-day shakedown
+    assert Z.early_life_mult(hist, 60.0) == pytest.approx(1.0, abs=1e-3)
+    # averages about x2.9 over the first week (R2 section 4.4)
+    week = np.mean([Z.early_life_mult(hist, d) for d in np.linspace(0, 7, 701)])
+    assert week == pytest.approx(2.9, abs=0.05)
+
+
+def test_comms_silent_boat_sails_on_with_its_beacon():
+    p = replace(P, comms_silent_per_day=1e6, capture_per_day=0.0)
+    (out,) = _draw(p, EnvState(), {}, 1.0, *OPEN_OCEAN)
+    assert "comms_silent" in out.failed_parts and not out.lost
+    v = KayakVessel(DESIGN)
+    st = with_damage(v.initial_state(T0, *OPEN_OCEAN), "comms_silent")
+    assert not st.iridium_ok and st.beacon_ok
+    assert not with_damage(v.initial_state(T0, *OPEN_OCEAN), "electronics_main").iridium_ok
+    assert not with_damage(st, "beacon").beacon_ok
+    assert v.initial_state(T0, *OPEN_OCEAN).iridium_ok
+
+
+def test_common_cause_takes_out_both_boxes():
+    base = replace(P, electronics_per_day=1e6, software_hang_per_day=0.0, capture_per_day=0.0)
+    (both,) = _draw(replace(base, electronics_common_cause=1.0), EnvState(), {}, 1.0, *OPEN_OCEAN)
+    assert both.lost
+    # with no common cause, both still die here (huge rate), but one at a time:
+    rare = replace(P, electronics_per_day=0.01, software_hang_per_day=0.0, capture_per_day=0.0)
+
+    def losses(beta):
+        n = 0
+        for seed in range(300):
+            (o,) = _draw(
+                replace(rare, electronics_common_cause=beta),
+                EnvState(),
+                {},
+                24.0 * 30,
+                *OPEN_OCEAN,
+                seed=seed,
+            )
+            n += o.lost
+        return n
+
+    # 30 days at 0.01/day: ~26 % with one common cause vs ~7 % for two separate failures
+    assert losses(1.0) > 2.5 * losses(0.0) > 0
+
+
+def test_capture_reaches_the_shelf_edge():
+    from boatsim.vessel.coast import distance_to_land_km
+
+    assert 90 < distance_to_land_km(*SHELF_120KM) < 150
+    p = replace(P, capture_per_day=1000.0)
+    (shelf,) = _draw(p, EnvState(), {}, 1.0, *SHELF_120KM)
+    assert shelf.lost
+    orig = replace(
+        Z.HazardParams.from_config({}, rate_set="original"),
+        capture_per_day=1000.0,
+        unknown_p_by_60_days=0.0,
+    )
+    (old,) = _draw(orig, EnvState(), {}, 1.0, *SHELF_120KM)
+    assert not old.lost  # the old 50 km band missed the shelf
+
+
+def test_losses_record_their_phase():
+    assert Z.split_phase("taken or snagged by fishermen [near land]") == (
+        "taken or snagged by fishermen",
+        Z.NEAR_LAND,
+    )
+    assert Z.split_phase("sunk") == ("sunk", None)
+    hz = {**DESIGN.hazards, "capture_per_day": 1e6}
+    v = KayakVessel(replace(DESIGN, hazards=hz))
+    env, dt, rng = EnvState(ghi=500.0), timedelta(minutes=10), np.random.default_rng(0)
+    s, ev = v.step(v.initial_state(T0, *SHELF_120KM), Command(90.0, 0.3), env, dt, rng)
+    lost = [e for e in ev if e.kind == EventKind.LOST]
+    assert not s.alive and lost and lost[0].detail.endswith("[near land]")
+    hz = {**DESIGN.hazards, "electronics_per_day": 1e6, "electronics_common_cause": 1.0}
+    v = KayakVessel(replace(DESIGN, hazards=hz))
+    s, ev = v.step(v.initial_state(T0, *OPEN_OCEAN), Command(90.0, 0.3), env, dt, rng)
+    assert next(e.detail for e in ev if e.kind == EventKind.LOST).endswith("[open ocean]")
