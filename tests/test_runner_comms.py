@@ -254,3 +254,36 @@ def test_boat_with_no_working_radio_is_disqualified():
         beacon_ok=False,
     )
     assert log.outcome == Outcome.DISQUALIFIED
+
+
+class HungryLink(PerfectLink):
+    """Delivers at once but burns extra random draws, like Iridium retries."""
+
+    def send(self, msg, env, rng):
+        rng.random(7)
+        return super().send(msg, env, rng)
+
+
+def test_link_draws_do_not_reshuffle_the_boats_failure_dice():
+    """Separate random streams: what comms does can't change the hazards' luck,
+    so paired sensitivity rows really are paired."""
+    from boatsim.basestation import HoldCoursePolicy
+    from boatsim.vessel import KayakVessel
+
+    design = load_design("configs/v4_kayak.yaml")
+    env = ConstantEnvironment(EnvState(ghi=800.0, hs=2.5, wind_u=10.0))
+
+    def hazard_events(link):
+        c = Components(
+            env=env,
+            forecast=PerfectForecast(env),
+            vessel=KayakVessel(design),
+            autopilot=WaypointAutopilot(),
+            link=link,
+            base=HoldCoursePolicy(),
+        )
+        log = simulate(c, datetime(2021, 5, 1), 36.85, -75.7, default_mission(), seed=3)
+        keep = {EventKind.MESSAGE_SENT, EventKind.MESSAGE_RECEIVED, EventKind.MISSION_UPDATED}
+        return [(e.t, e.kind, e.detail) for e in log.events if e.kind not in keep]
+
+    assert hazard_events(PerfectLink()) == hazard_events(HungryLink())

@@ -84,7 +84,13 @@ def simulate(
 
     log_every: keep one log row per N steps (6 x 10 min = hourly) to keep files small.
     """
-    rng = np.random.default_rng(seed)
+    # Separate random streams, so that a change in one part (say base sends an
+    # extra route, which costs the link a few draws) doesn't reshuffle the dice
+    # of another (the boat's failures). Paired comparisons in the sensitivity
+    # study rely on this: same seed, same luck at sea, whatever base does.
+    hull_rng, sense_rng, link_rng, ping_rng = (
+        np.random.default_rng(s) for s in np.random.SeedSequence(seed).spawn(4)
+    )
     state = c.vessel.initial_state(start, start_lat, start_lon)
     log = VoyageLog(start=start, seed=seed)
     next_report = start + report_every
@@ -97,10 +103,10 @@ def simulate(
 
     for i in range(n_steps):
         env = c.env.sample(state.t, state.lat, state.lon)
-        sensors = c.vessel.sense(state, rng)
+        sensors = c.vessel.sense(state, sense_rng)
         cmd = c.autopilot.update(sensors, mission, state.t)
         prev_pos = (state.lat, state.lon)
-        state, events = c.vessel.step(state, cmd, env, dt, rng)
+        state, events = c.vessel.step(state, cmd, env, dt, hull_rng)
         log.events.extend(events)
         pos = (state.lat, state.lon)
         if log.t_start_line is None and crosses(WEST_LINE, prev_pos, pos):
@@ -137,7 +143,7 @@ def simulate(
             if powered:
                 report = _report(state)
                 msg = Message(state.t, "up", report, size_bytes=len(pack_report(report)))
-                t_up = c.link.send(msg, env, rng)
+                t_up = c.link.send(msg, env, link_rng)
                 if t_up is not None:
                     log.events.append(Event(state.t, EventKind.MESSAGE_SENT))
                     pending_up.append((t_up, report))
@@ -155,7 +161,7 @@ def simulate(
                     {"waypoints": len(new.waypoints)},
                     size_bytes=mission_size_bytes(new),
                 )
-                t_down = c.link.send(down, env, rng)
+                t_down = c.link.send(down, env, link_rng)
                 if t_down is not None:
                     pending_down.append((t_down, new))
 
@@ -174,7 +180,7 @@ def simulate(
             next_ping += c.pinger.every
             if (
                 getattr(state, "beacon_ok", True)
-                and c.pinger.ping(state.t, state.lat, state.lon, env, rng) is not None
+                and c.pinger.ping(state.t, state.lat, state.lon, env, ping_rng) is not None
             ):
                 log.events.append(Event(state.t, EventKind.MESSAGE_RECEIVED, "globalstar ping"))
                 silence.heard(state.t)
