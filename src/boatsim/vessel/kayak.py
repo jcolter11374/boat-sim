@@ -33,6 +33,7 @@ from boatsim.config import Design
 from boatsim.geo import move
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
+from boatsim.vessel import sail as S
 from boatsim.vessel.coast import distance_to_land_km
 from boatsim.vessel.hazards import (
     DEFAULT_PANELS_W,
@@ -102,6 +103,8 @@ class SpeedSolution:
     thrust_n: float
     drag_n: float
     wave_frac: float
+    sail_alpha_deg: float = 0.0  # wing angle to the apparent wind (sailing designs)
+    sail_drive_n: float = 0.0  # wing's forward force
 
 
 def _boat_axes(heading_deg: float, east: float, north: float) -> tuple[float, float]:
@@ -118,33 +121,10 @@ def _world_axes(heading_deg: float, fwd: float, stbd: float) -> tuple[float, flo
     return fwd * s + stbd * c, fwd * c - stbd * s
 
 
-def solve_speed(
-    hp: H.HullParams,
-    tp: ThrusterParams,
-    heading_deg: float,
-    drive_w: float,
-    working_thrusters: int,
-    env: EnvState,
-    fouling: float,
-    current_e: float,
-    current_n: float,
-    extra_drag_mult: float = 1.0,
-) -> SpeedSolution:
-    """Steady speed through the water for a given heading and drive power."""
-    # Wind relative to the water, in boat axes. (The boat's own speed is
-    # subtracted inside the balances, which is what makes them self-consistent.)
-    wx, wy = _boat_axes(heading_deg, env.wind_u - current_e, env.wind_v - current_n)
-    wave_rel = (env.wave_dir - heading_deg) % 360.0
-    f_wave = H.wave_drag_frac(hp, env.hs, wave_rel)
-    mult = (1.0 + fouling) * (1.0 + f_wave) * extra_drag_mult
-
-    def surplus(u: float) -> float:
-        thrust = total_thrust(tp, drive_w, u, working_thrusters)
-        fx, _ = H.air_force(hp, wx - u, 0.0)
-        return thrust + fx - H.calm_drag(hp, u) * mult
-
-    # surplus() falls as u rises (more drag, less thrust, less tailwind), so a
-    # bracketed root-finder is safe. Illinois variant of regula falsi.
+def _surge_root(surplus) -> float:
+    """Speed where surplus(u) = 0. surplus() falls as u rises (more drag, less
+    thrust, less tailwind), so a bracketed root-finder is safe. Illinois variant
+    of regula falsi."""
     lo, hi = -3.0, 4.0
     f_lo, f_hi = surplus(lo), surplus(hi)
     while f_hi > 0.0 and hi < 64.0:  # storm tailwind: widen the bracket
@@ -167,10 +147,68 @@ def solve_speed(
             if side == -1:
                 f_lo *= 0.5
             side = -1
+    return u
 
-    v = H.lateral_speed(hp, wy, u)
+
+SAIL_PASSES = 4  # surge / leeway / wing-angle passes; settles to < 1 mm/s
+
+
+def solve_speed(
+    hp: H.HullParams,
+    tp: ThrusterParams,
+    heading_deg: float,
+    drive_w: float,
+    working_thrusters: int,
+    env: EnvState,
+    fouling: float,
+    current_e: float,
+    current_n: float,
+    extra_drag_mult: float = 1.0,
+    sail: S.SailParams | None = None,
+    sail_alpha_max_deg: float = 0.0,
+) -> SpeedSolution:
+    """Steady speed through the water for a given heading and drive power.
+
+    With a sail, the wing's drive and side force join the balances; the wing
+    angle (up to `sail_alpha_max_deg`, 0 = feathered) is re-chosen each pass.
+    """
+    # Wind relative to the water, in boat axes. (The boat's own speed is
+    # subtracted inside the balances, which is what makes them self-consistent.)
+    wx, wy = _boat_axes(heading_deg, env.wind_u - current_e, env.wind_v - current_n)
+    wave_rel = (env.wave_dir - heading_deg) % 360.0
+    f_wave = H.wave_drag_frac(hp, env.hs, wave_rel)
+    mult = (1.0 + fouling) * (1.0 + f_wave) * extra_drag_mult
+
+    def surplus_with(wing_fx):
+        def surplus(u: float) -> float:
+            thrust = total_thrust(tp, drive_w, u, working_thrusters)
+            fx, _ = H.air_force(hp, wx - u, 0.0)
+            return thrust + fx + wing_fx(u) - H.calm_drag(hp, u) * mult
+
+        return surplus
+
+    if sail is None:
+        u = _surge_root(surplus_with(lambda u: 0.0))
+        v = H.lateral_speed(hp, wy, u)
+        thrust = total_thrust(tp, drive_w, u, working_thrusters)
+        return SpeedSolution(u, v, thrust, H.calm_drag(hp, u) * mult, f_wave)
+
+    # The wing feels the wind at its own (low) height.
+    k = S.wind_factor(sail, env.hs)
+    ax, ay = k * wx, k * wy
+    u = v = alpha = 0.0
+    for _ in range(SAIL_PASSES):
+        alpha = S.best_alpha(sail, ax - u, ay - v, sail_alpha_max_deg)
+        u = _surge_root(
+            surplus_with(lambda u, a=alpha, v=v: S.wing_force(sail, ax - u, ay - v, a)[0])
+        )
+        fy = S.wing_force(sail, ax - u, ay - v, alpha)[1]
+        v = H.lateral_speed_with_force(hp, wy, u, fy)
+    drive = S.wing_force(sail, ax - u, ay - v, alpha)[0]
     thrust = total_thrust(tp, drive_w, u, working_thrusters)
-    return SpeedSolution(u, v, thrust, H.calm_drag(hp, u) * mult, f_wave)
+    return SpeedSolution(
+        u, v, thrust, H.calm_drag(hp, u) * mult, f_wave, math.degrees(alpha), drive
+    )
 
 
 class KayakVessel:
@@ -193,12 +231,21 @@ class KayakVessel:
         self.thruster_parts = thruster_parts(self.thrusters.count)
         self.panels_w = dict(design.power.get("panels_w", DEFAULT_PANELS_W))
         self._panels_total_w = sum(self.panels_w.values()) or 1.0
+        # Sailing designs: a wing sail; the rudder steers whenever the autopilot is
+        # powered, with no drive power needed (vessel/sail.py).
+        self.sail = S.SailParams.from_config(design.sail)
+        # No independent beacon fitted (comms.beacon: false): count it as failed
+        # from the start, so a silent main radio means a silent boat.
+        self.has_beacon = bool(design.comms.get("beacon", True))
 
     def initial_state(self, t, lat: float, lon: float) -> KayakState:
         cap = self.battery.capacity_wh
-        return KayakState(
+        state = KayakState(
             t=t, lat=lat, lon=lon, battery_wh=cap, battery_capacity_wh=cap, t_launch=t
         )
+        if not self.has_beacon:
+            state.damage["beacon"] = True
+        return state
 
     def extra_drag_mult(self, state: BoatState) -> float:
         """Drag from damage: line or weed caught on the boat, a rudder jammed over."""
@@ -257,9 +304,22 @@ class KayakVessel:
 
         # Rudder gone: differential thrust can still steer, but only with two working
         # thrusters. A one-thruster boat can't steer at all without its rudder.
-        can_steer = working >= (2 if state.damage.get("rudder") else 1)
-        steering = es.drive_w >= self.min_steer_w and can_steer
-        if steering:
+        sail_alpha_max = 0.0
+        if self.sail is not None:
+            # A sailboat steers with its rudder alone: it needs the autopilot powered
+            # and the rudder working. It can't point into the wind (sail_heading).
+            steering = on and not state.damage.get("rudder")
+        else:
+            can_steer = working >= (2 if state.damage.get("rudder") else 1)
+            steering = es.drive_w >= self.min_steer_w and can_steer
+        if steering and self.sail is not None:
+            we, wn = env.wind_u - cur_e, env.wind_v - cur_n
+            wind_from = (math.degrees(math.atan2(we, wn)) + 180.0) % 360.0
+            tws = math.hypot(env.wind_u, env.wind_v)
+            heading, feather = S.sail_heading(self.sail, cmd.heading, wind_from, state.heading, tws)
+            if not feather and not state.damage.get("sail"):
+                sail_alpha_max = self.sail.max_alpha_deg
+        elif steering:
             heading = cmd.heading
         else:
             # Can't steer: lie beam-on to the wind relative to the water.
@@ -285,6 +345,8 @@ class KayakVessel:
             cur_e,
             cur_n,
             extra_drag_mult=self.extra_drag_mult(state),
+            sail=self.sail,
+            sail_alpha_max_deg=sail_alpha_max,
         )
         ve, vn = _world_axes(heading, sol.surge, sol.sway)
         ge, gn = ve + cur_e, vn + cur_n

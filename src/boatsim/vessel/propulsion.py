@@ -55,7 +55,7 @@ class ThrusterParams:
         if "thruster_efficiency" in prop:
             kw["efficiency"] = float(prop["thruster_efficiency"])
         if "max_drive_w" in prop:
-            kw["max_power_each_w"] = float(prop["max_drive_w"]) / kw.get("count", cls.count)
+            kw["max_power_each_w"] = float(prop["max_drive_w"]) / max(kw.get("count", cls.count), 1)
         return cls(**kw)
 
     @property
