@@ -134,6 +134,7 @@ def summarise(log) -> dict:
             "unknown_p_run": getattr(log, "unknown", (math.nan, math.nan))[0],
             "unknown_shape": getattr(log, "unknown", (math.nan, math.nan))[1],
             **{f"spread_{k}": v for k, v in getattr(log, "spread", {}).items()},
+            "ships": getattr(log, "ships", None),
         }
     )
     # Closest hurricane (Priya, #13 follow-up): only when IBTrACS is downloaded.
@@ -198,6 +199,8 @@ class MonthlyVoyage(StandardVoyage):
         hz = c.vessel.hazards
         log.unknown = (hz.unknown_p_by_60_days, hz.unknown_shape)
         log.spread = mult
+        # Was the ship-traffic map on? (#13; read by viz batch_card, #86)
+        log.ships = getattr(c.env, "ships", None) is not None
         return log
 
 
