@@ -23,12 +23,13 @@ const vertexShader = /* glsl */ `
   }
 `;
 const fragmentShader = /* glsl */ `
+uniform float uLight;
   varying float vAlpha;
   void main() {
     vec2 d = gl_PointCoord - 0.5;
     float r = dot(d, d) * 4.0;
     if (r > 1.0) discard;
-    gl_FragColor = vec4(0.96, 0.98, 1.0, vAlpha * (1.0 - r) * (1.0 - r));
+    gl_FragColor = vec4(vec3(0.96, 0.98, 1.0) * uLight, vAlpha * (1.0 - r) * (1.0 - r));
   }
 `;
 
@@ -67,12 +68,18 @@ export class Wake {
     const mat = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
+      uniforms: { uLight: { value: 1 } },
       transparent: true,
       depthWrite: false,
     });
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = 11; // on top of the sea
+  }
+
+  /** Foam brightness, 0..1: dimmer at dusk and night. */
+  setLight(l: number): void {
+    this.points.material.uniforms.uLight.value = l;
   }
 
   reset(): void {

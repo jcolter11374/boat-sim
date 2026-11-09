@@ -7,14 +7,14 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { BUILDERS, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BOATS, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
 import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
-import { Sea, SEA_SIZE } from "./water";
+import { Atmosphere } from "./atmosphere";
+import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./waves";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
@@ -55,7 +55,7 @@ renderer.toneMappingExposure = 0.55;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 3000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 12000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -65,30 +65,8 @@ controls.maxPolarAngle = Math.PI * 0.495;
 controls.autoRotateSpeed = 0.35;
 
 // Late-afternoon sun low over the sea, so the glint shows the wave shapes.
-const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(80), THREE.MathUtils.degToRad(-150));
-const sky = new Sky();
-sky.scale.setScalar(SEA_SIZE * 4);
-const su = sky.material.uniforms;
-su.turbidity.value = 4;
-su.rayleigh.value = 1.4;
-su.mieCoefficient.value = 0.004;
-su.mieDirectionalG.value = 0.85;
-su.sunPosition.value.copy(sunDir);
-scene.add(sky);
-{
-  // Reflections of this sky on the water and hulls.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = new THREE.Scene();
-  env.add(sky.clone());
-  scene.environment = pmrem.fromScene(env).texture;
-  pmrem.dispose();
-}
-const horizon = new THREE.Color(0xc9dbe6);
-scene.fog = new THREE.Fog(horizon, 60, SEA_SIZE * 0.55);
-const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
-sun.position.copy(sunDir).multiplyScalar(100);
-scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x0b2a3f, 0.5));
+const atmos = new Atmosphere(renderer, scene, camera);
+atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
 const clock = new THREE.Clock();
@@ -165,7 +143,10 @@ function setQuality(q: Quality): void {
   quality = q;
   sea.setQuality(q);
   buildBoats(q);
-  renderer.setPixelRatio(q === "high" ? Math.min(window.devicePixelRatio, 2) : 1);
+  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : 1;
+  renderer.setPixelRatio(ratio);
+  atmos.setBloom(q === "high");
+  atmos.setPixelRatio(ratio);
 }
 
 // ---------- camera presets ----------
@@ -219,6 +200,7 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  atmos.setSize(window.innerWidth, window.innerHeight);
 });
 
 setQuality(quality);
@@ -288,7 +270,8 @@ renderer.setAnimationLoop(() => {
   controls.update();
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
-  renderer.render(scene, camera);
+  sea.setSun(atmos.glintDir, atmos.glintLight);
+  atmos.render();
   // Name tags above each boat.
   const w = window.innerWidth;
   const h = window.innerHeight;

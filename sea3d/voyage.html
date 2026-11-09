@@ -20,6 +20,13 @@
   #top .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
   #top .row select { width: auto; padding: 2px 4px; }
   #top a { color: #8ab4ff; }
+  #top select + select { margin-top: 6px; }
+  #focus { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
+  #focus[hidden] { display: none; }
+  #focus button { font: 600 12px system-ui, sans-serif; padding: 4px 10px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: #1b3352; color: var(--ink); }
+  #focus button[data-lane="0"][aria-pressed="true"] { background: #ff8a2a; color: #1a0d00; border-color: #ff8a2a; }
+  #focus button[data-lane="1"][aria-pressed="true"] { background: #2ec4b6; color: #002420; border-color: #2ec4b6; }
   #hud { position: fixed; top: 12px; right: 12px; display: grid; grid-template-columns: repeat(3, 134px); gap: 8px; }
   .card { padding: 8px 11px 9px; }
   .card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
@@ -68,8 +75,14 @@
 <div id="app"></div>
 <div id="top" class="glass">
   <h1>Voyage replay</h1>
-  <p class="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
+  <p class="sub" id="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
+  <select id="boat" aria-label="Boat"></select>
   <select id="voyage" aria-label="Voyage"></select>
+  <div id="focus" role="group" aria-label="Close-up follows" hidden>
+    <span>Close-up:</span>
+    <button data-lane="0" aria-pressed="true">Our kayak</button>
+    <button data-lane="1" aria-pressed="false">Randolph boat</button>
+  </div>
   <div class="row">
     <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option></select></label>
     <a href="./index.html">Both boats side by side &rarr;</a>
@@ -92,6 +105,9 @@
 <div id="transport" class="glass">
   <button id="play" aria-label="Play or pause">&#9654;</button>
   <div id="warp" role="group" aria-label="Time warp">
+    <button data-warp="0.000277778" title="Real time: one second of voyage per second">Real time</button>
+    <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
+    <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
     <button data-warp="1">1 h/s</button>
     <button data-warp="6">6 h/s</button>
     <button data-warp="24" aria-pressed="true">1 day/s</button>
