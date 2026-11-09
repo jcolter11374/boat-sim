@@ -43,7 +43,7 @@ from boatsim.viz.html import (
 
 # Finish targets on the Microtransat eastern line, north to south (mc.sensitivity).
 TARGETS = ["target_51n", "target_46n", "target_44_5n", "target_39_5n", "target_37n"]
-SHOWN_ELSEWHERE = {"baseline", "old_rule", "no_shakedown", *TARGETS}
+SHOWN_ELSEWHERE = {"baseline", "old_rule", "no_shakedown", "dogleg_azores", *TARGETS}
 RETIRED = "#898781"  # grey: the retired old-rule figure
 
 
@@ -64,16 +64,34 @@ def _unknown(r: pd.Series) -> str:
     return f"{_pct(a)} to {_pct(b)}"
 
 
-def hero_html(t: pd.DataFrame, shakedown_days: int = 14) -> str:
-    """The headline: design odds (assumes a shakedown) with no-shakedown beside it."""
-    b = _row(t, "baseline")
+def hero_html(
+    t: pd.DataFrame,
+    shakedown_days: int = 14,
+    headline: str = "baseline",
+    headline_tag: str = "",
+    baseline_name: str = "",
+) -> str:
+    """The headline: design odds (assumes a shakedown) with no-shakedown beside it.
+
+    headline: the variant to lead with (normally "baseline"; another row, e.g.
+    "target_39_5n", when the design has moved on before a new baseline run).
+    headline_tag: extra words after the shakedown label, e.g. where it came from.
+    baseline_name: what the run's baseline was, shown with the no-shakedown
+    number when that was measured on a different design than the headline.
+    """
+    b = _row(t, headline)
     if b is None:
         return ""
+    lead = f"assumes a {shakedown_days}-day shakedown"
+    if headline_tag:
+        lead += f"; {headline_tag}"
+    other = "with no shakedown"
+    if baseline_name and headline != "baseline":
+        base = _row(t, "baseline")
+        other += f" ({baseline_name}"
+        other += f", which made {_pct(base['odds'])} with one)" if base is not None else ")"
     cells = []
-    for r, label in (
-        (b, f"assumes a {shakedown_days}-day shakedown"),
-        (_row(t, "no_shakedown"), "with no shakedown"),
-    ):
+    for r, label in ((b, lead), (_row(t, "no_shakedown"), other)):
         if r is None:
             continue
         unk = _unknown(r)
@@ -160,8 +178,14 @@ def rule_figure(t: pd.DataFrame):
     )
 
 
-def target_figure(t: pd.DataFrame):
-    """Finishing odds for each finish target, north to south, plus the current plan."""
+def target_figure(
+    t: pd.DataFrame,
+    headline: str = "baseline",
+    baseline_label: str = "The design as it stands",
+):
+    """Finishing odds for each finish target, north to south, plus the baseline
+    (and the old dog-leg south of the Azores, if the run has it). The headline
+    row is strong blue, the rest pale."""
     rows = []
     for name in TARGETS:
         r = _row(t, name)
@@ -171,11 +195,14 @@ def target_figure(t: pd.DataFrame):
                 .replace("Finish target at ", "")
                 .replace(", straight route there", "")
             )
-            rows.append((f"{label}, straight", r, BAR_OUTSIDE))
+            rows.append((f"{label}, straight", r, BAR if name == headline else BAR_OUTSIDE))
     b = _row(t, "baseline")
     if not rows or b is None:
         return None
-    rows.append(("Current plan: 39.5N 13.5W, south of the Azores", b, BAR))
+    rows.append((baseline_label, b, BAR if headline == "baseline" else BAR_OUTSIDE))
+    dog = _row(t, "dogleg_azores")
+    if dog is not None:
+        rows.append(("Old plan: 39.5N 13.5W via south of the Azores", dog, BAR_OUTSIDE))
     return _odds_bars(rows, "Chance of finishing for each finish target (north to south)")
 
 
@@ -218,7 +245,7 @@ def month_figure(voyages: pd.DataFrame):
     )
     _layout(
         fig,
-        "Chance of finishing, by launch month (the design as it stands)",
+        "Chance of finishing, by launch month (the run's baseline)",
         height=300,
         bargap=0.45,
     )
@@ -255,7 +282,7 @@ def endings_figure(voyages: pd.DataFrame):
             hovertemplate="%{y}: %{x:.0f}%<extra></extra>",
         )
     )
-    _layout(fig, "How the voyages ended (the design as it stands)", height=80 + 40 * len(counts))
+    _layout(fig, "How the voyages ended (the run's baseline)", height=80 + 40 * len(counts))
     fig.update_xaxes(range=[0, 118], showticklabels=False, showgrid=False)
     fig.update_layout(margin={"l": 330, "r": 20, "t": 50, "b": 20})
     return fig
@@ -298,9 +325,15 @@ def study_html(
     retired: str = "",
     notes: dict[str, str] | None = None,
     shakedown_days: int = 14,
+    headline: str = "baseline",
+    headline_tag: str = "",
+    baseline_name: str = "",
+    baseline_label: str = "The design as it stands",
 ) -> str:
     """The results page as a string.
 
+    headline, headline_tag, baseline_name: see hero_html; baseline_label names
+    the baseline's bar in the target chart.
     retired: text for a grey "retired figure" box under the headline.
     notes: extra text appended under a section, keyed by "rule", "targets",
     "other", "months", "endings".
@@ -320,17 +353,17 @@ def study_html(
                 "differs. " + notes.get("rule", ""),
             )
         )
-    targets = target_figure(compare)
+    targets = target_figure(compare, headline, baseline_label)
     if targets is not None:
         figs.append(
             (
                 "Where to aim on the finish line",
                 targets,
                 "We pick our 25 km target circle before launch, anywhere on the race's "
-                "eastern line. Each pale bar sails straight to a different target (that "
-                "route passes north of the Azores); the strong bar is the current plan, "
-                "which dog-legs south of the Azores. The thin line on each bar is its 95% "
-                "range. " + notes.get("targets", ""),
+                "eastern line. Each 'straight' bar sails straight to a different target "
+                "(that route passes north of the Azores). The strong bar is the one the "
+                "headline uses. The thin line on each bar is its 95% range. "
+                + notes.get("targets", ""),
             )
         )
     others = compare[~compare["variant"].isin(SHOWN_ELSEWHERE)]
@@ -352,7 +385,7 @@ def study_html(
             (
                 "Odds by launch month",
                 month_figure(voyages),
-                "The design as it stands, split by launch month. " + notes.get("months", ""),
+                "The run's baseline design, split by launch month. " + notes.get("months", ""),
             )
         )
         if "ending" in voyages:
@@ -388,7 +421,7 @@ def study_html(
 <h1>{html.escape(title)}</h1>
 <p>{html.escape(subtitle)}</p>
 {banner_html}
-{hero_html(compare, shakedown_days)}
+{hero_html(compare, shakedown_days, headline, headline_tag, baseline_name)}
 {retired_html}
 {"".join(parts)}
 <h2>Every change tried</h2>
@@ -412,6 +445,10 @@ def main(argv: list[str] | None = None) -> None:
     for key in ("rule", "targets", "other", "months", "endings"):
         ap.add_argument(f"--note-{key}", default="")
     ap.add_argument("--shakedown-days", type=int, default=14)
+    ap.add_argument("--headline", default="baseline", help="variant to lead with")
+    ap.add_argument("--headline-tag", default="", help="where the headline row came from")
+    ap.add_argument("--baseline-name", default="", help="what the run's baseline was")
+    ap.add_argument("--baseline-label", default="The design as it stands")
     a = ap.parse_args(argv)
     voyages = (
         pd.concat([pd.read_csv(f) for f in a.voyages], ignore_index=True) if a.voyages else None
@@ -429,6 +466,10 @@ def main(argv: list[str] | None = None) -> None:
             a.retired,
             notes,
             a.shakedown_days,
+            a.headline,
+            a.headline_tag,
+            a.baseline_name,
+            a.baseline_label,
         ),
         encoding="utf-8",
     )

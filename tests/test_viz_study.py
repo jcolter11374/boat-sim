@@ -50,7 +50,7 @@ def test_rule_and_target_figures():
     assert list(rule.data[0].x) == pytest.approx([100.0, 600 / 9])
     tf = study.target_figure(t)
     assert tf.data[0].y[0].startswith("51N 16W")
-    assert tf.data[0].y[-1].startswith("Current plan")
+    assert tf.data[0].y[-1] == "The design as it stands"
 
 
 def test_page_retires_old_figure_and_keeps_other_changes_apart():
@@ -71,3 +71,17 @@ def test_missing_variants_leave_sections_out():
     assert study.target_figure(t) is None
     page = study.study_html(t)
     assert "with no shakedown" not in page
+
+
+def test_headline_can_lead_with_another_row():
+    t = compare(_voyages())
+    h = study.hero_html(
+        t, headline="target_39_5n", headline_tag="straight route", baseline_name="old dog-leg"
+    )
+    assert "56%" in h  # 5/9 for the straight route leads
+    assert "assumes a 14-day shakedown; straight route" in h
+    assert "with no shakedown (old dog-leg, which made 67% with one)" in h
+    tf = study.target_figure(t, headline="target_39_5n", baseline_label="Old plan")
+    colours = list(tf.data[0].marker.color)
+    assert colours[list(tf.data[0].y).index("Old plan")] != colours[1]
+    assert sum(c == study.BAR for c in colours) == 1
