@@ -134,15 +134,22 @@ VARIANTS: dict[str, Variant] = {
         route=OLD_ROUTE,
         finish="old_rule",
     ),
-    # Finish targets along the Microtransat eastern line (Maya, Nov 2026). The
-    # baseline goes to 39.5N 13.5W via a waypoint south of the Azores; these go
-    # straight there (great circle, which passes north of the Azores), so
-    # target_39_5n is the route-only comparison.
+    # Finish targets along the Microtransat eastern line (Maya, Nov 2026), each
+    # sailed straight there (great circle, which passes north of the Azores).
+    # Since the baseline also goes straight to 39.5N 13.5W, target_39_5n matches
+    # it; it stays so the sweep reads north to south. dogleg_azores is the old
+    # baseline route (via 36N 26W, south of the Azores), for comparison.
     "target_51n": _target(51.0, -16.0, "51N 16W (west of Ireland)"),
     "target_46n": _target(46.0, -11.0, "46N 11W (Bay of Biscay)"),
     "target_44_5n": _target(44.5, -13.5, "44.5N 13.5W (off NW Spain)"),
     "target_39_5n": _target(39.5, -13.5, "39.5N 13.5W (off Lisbon)"),
     "target_37n": _target(37.0, -13.5, "37N 13.5W (off SW Portugal)"),
+    "dogleg_azores": Variant(
+        "route",
+        "Old route: dog-leg south of the Azores via 36N 26W",
+        route=(BAY_MOUTH, (36.0, -26.0), (39.5, -13.5)),
+        finish=(39.5, -13.5),
+    ),
     # Hazard assumptions (#89, #91). The baseline uses the "planning" rate set,
     # which assumes a 14-day unattended shakedown trial before the drop. John
     # hasn't confirmed one, so no_shakedown shows the cost of skipping it.

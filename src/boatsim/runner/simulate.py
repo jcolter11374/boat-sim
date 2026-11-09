@@ -223,11 +223,18 @@ def simulate(
 
 
 def default_mission() -> Mission:
-    """Placeholder route: Bay mouth, past the Azores, to the finish target west of Lisbon."""
+    """Launch route: Bay mouth, then straight (great circle) to the finish target.
+
+    The great circle peaks near 42.6N and passes about 250 km north of Flores and
+    Corvo, so it clears the Azores. It replaced a dog-leg south of the Azores via
+    36N 26W: in the Nov 2026 sensitivity study (run 42556820831, 2012-2021
+    Apr-Jun launches, 100 voyages) the straight route finished 72/100 against
+    56/100 for the dog-leg, sign test p ~ 0.01. Base still re-plans around
+    foul currents and land on the way (basestation/replan.py).
+    """
     return Mission(
         waypoints=[
             Waypoint(36.9, -75.5),
-            Waypoint(36.0, -26.0),  # south of the Azores, clear of Santa Maria
             Waypoint(39.5, -13.5),  # the finish target (runner/arrival.py)
         ]
     )
