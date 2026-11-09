@@ -152,7 +152,71 @@ def test_shared_cases_start_in_the_shared_stretch():
     for c in D.SHARED_CASES:
         lat, lon = map(float, re.search(r"\(([\d.]+)N ([\d.]+)W\)", c.note).groups())
         assert 36 <= lat <= 42 and 50 <= lon <= 75
-    assert set(D.CASE_SETS) == {"hatteras", "shared"}
+    assert set(D.CASE_SETS) == {"hatteras", "shared", "smoc"}
+
+
+def test_smoc_cases_are_in_the_smoc_era():
+    import re
+    from datetime import datetime
+
+    assert len(D.SMOC_CASES) == 40
+    keys = {(c.drifter_id, c.start) for c in D.SMOC_CASES}
+    assert len(keys) == 40
+    for c in D.SMOC_CASES:
+        assert datetime.fromisoformat(c.start) >= datetime(2020, 11, 2)  # SMOC starts 1 Nov 2020
+        lat, lon = map(float, re.search(r"\(([\d.]+)N ([\d.]+)W\)", c.note).groups())
+        assert 36 <= lat <= 42 and 50 <= lon <= 75
+    drogued = [c for c in D.SMOC_CASES if c.note.endswith(", drogued")]
+    assert len(drogued) == 21
+    # The two shared cases SMOC covers are in
+    ids = {c.drifter_id for c in D.SMOC_CASES}
+    assert {300534061551770, 300534061650930} <= ids
+
+
+def test_load_track_can_start_mid_track():
+    import numpy as np
+    import xarray as xr
+
+    t = np.arange(0, 5 * 86400, 3600, dtype=np.int64) + 1_600_000_000
+    ds = xr.Dataset(
+        {
+            "id": ("traj", [7]),
+            "rowsize": ("traj", [len(t)]),
+            "time": ("obs", t),
+            "lat": ("obs", np.full(len(t), 37.0)),
+            "lon": ("obs", np.full(len(t), -60.0)),
+            "drogue_status": ("obs", np.ones(len(t), bool)),
+        }
+    )
+    full = D.load_track(7, ds)
+    later = D.load_track(7, ds, days=1, start="2020-09-15")
+    assert later["t"].iloc[0] >= pd.Timestamp("2020-09-15")
+    assert len(later) < len(full) and later["t"].iloc[-1] - later["t"].iloc[0] <= pd.Timedelta(
+        days=1
+    )
+
+
+def test_compare_markdown_pairs_the_two_sources():
+    def rows(skill, gap, model):
+        out = []
+        for i, frac in enumerate((1.0, 0.0)):
+            out.append(
+                {
+                    "drifter": f"d{i}",
+                    "note": f"Nov 2020, {'west' if i else 'east'} band (37.0N 60.0W), x",
+                    "drogued_frac": frac,
+                    "model": model if model != "fair" else ("water" if frac >= 0.5 else "float"),
+                    "skill": skill,
+                    "stay_put_skill": 0.1,
+                    "stay_put_km": 50.0,
+                    **{f"sep_d{k}_km": gap for k in (1, 3, 5, 10)},
+                }
+            )
+        return pd.DataFrame(out)
+
+    md = D.compare_markdown(rows(0.6, 100.0, "fair"), rows(0.4, 150.0, "water"), 10)
+    assert "| All | 2 | 0.60 | 0.40 | 100 | 150 | 2 / 2 | 0 of 2 |" in md
+    assert "| Drogued | 1 |" in md and "| Undrogued | 1 |" in md
 
 
 class _Currents:

@@ -12,7 +12,7 @@ on:
         description: "Days to drift (the dead-boat run uses 30 for #73)"
         default: "10"
       mode:
-        description: "hatteras (#19 set), shared (36-42N 75-50W, #73) or dead-boat (#73)"
+        description: "hatteras (#19 set), shared (36-42N 75-50W, #73), smoc (SMOC vs GLORYS, #116) or dead-boat (#73)"
         default: "hatteras"
   pull_request:
     paths:
@@ -23,7 +23,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240
     env:
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
@@ -42,8 +42,11 @@ jobs:
             exit 1
           fi
       - name: Drift the models alongside real drifters
-        if: env.MODE != 'dead-boat'
+        if: env.MODE != 'dead-boat' && env.MODE != 'smoc'
         run: python -m boatsim.mc.drifters --set "$MODE" --days "$DAYS" --out runs/drifters
+      - name: Drift on GLORYS and on SMOC, side by side (#116)
+        if: env.MODE == 'smoc'
+        run: python -m boatsim.mc.drifters --set smoc --smoc --days "$DAYS" --out runs/drifters
       - name: Drift the dead kayak from the drop point (15 May 2023)
         if: env.MODE == 'dead-boat'
         run: python -m boatsim.mc.drifters --dead-boat --days "$DAYS" --out runs/drifters
