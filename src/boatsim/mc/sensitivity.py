@@ -152,7 +152,7 @@ VARIANTS: dict[str, Variant] = {
     ),
     # Hazard assumptions (#89, #91). The baseline uses the "planning" rate set,
     # which assumes a 14-day unattended shakedown trial before the drop. John
-    # hasn't confirmed one, so no_shakedown shows the cost of skipping it.
+    # confirmed it is planned (9 Nov 2026); no_shakedown shows what it is worth.
     "no_shakedown": Variant(
         "hazards",
         "No 14-day shakedown trial before the drop",

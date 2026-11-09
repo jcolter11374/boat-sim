@@ -9,6 +9,8 @@
   Azores and Europe included, is not a finish; silent >10 days in a row or >15 total
   is disqualified. Test all launch months, but the target window is April to June:
   tune and headline on Apr-Jun, report every month for context.
+- Shakedown (John, 9 Nov 2026): a 14-day unattended shakedown trial before the drop is
+  planned, so the planning hazard set's shakedown_days: 14 is the real plan, not a guess.
 - Runs in the cloud only (thread sandboxes, GitHub Actions). Stream or subset data
   (ARCO-ERA5 public Zarr, Copernicus Marine subsetting) rather than bulk downloads.
 - One boat only (the v4 kayak in configs/v4_kayak.yaml). No rescue after the drop.
