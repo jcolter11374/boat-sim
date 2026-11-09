@@ -1,0 +1,37 @@
+# Builds the ship-traffic density grid for the route box (issue #13) and
+# uploads it as an artifact (about 1 MB). Both sources are free and need no
+# account; thread sandboxes can't reach them, GitHub's runners can.
+# Run it by hand: Actions tab -> "Build ship density" -> Run workflow.
+name: Build ship density
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/build-ships.yml"
+      - "src/boatsim/oceandata/traffic.py"
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[traffic]'
+      - name: Download World Bank global ship density (535 MB zip, one 9.8 GB tif)
+        run: |
+          curl -sSL --retry 3 --max-time 1200 \
+            "https://datacatalogfiles.worldbank.org/ddh-published/0037580/DR0045406/shipdensity_global.zip" -o wb.zip
+          ls -l wb.zip
+          unzip -o wb.zip shipdensity_global.tif -d wb >/dev/null
+          rm wb.zip
+      - name: Build the grid (prints the calibration and spot values)
+        run: python -m boatsim.oceandata build-ships wb/shipdensity_global.tif
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ship-density
+          path: data/traffic/
+          retention-days: 90

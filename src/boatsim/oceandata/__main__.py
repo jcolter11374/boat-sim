@@ -3,6 +3,7 @@
 python -m boatsim.oceandata fetch-era5 2020-10-01 2020-12-31 [--workers 4]
 python -m boatsim.oceandata fetch-glorys 2020-10 2020-12      (needs Copernicus login)
 python -m boatsim.oceandata sample 2020-10-15T12:00 37.0 -70.0 [--no-currents]
+python -m boatsim.oceandata build-ships shipdensity_global.tif   (GitHub Actions; see traffic.py)
 """
 
 from __future__ import annotations
@@ -66,6 +67,9 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("lat", type=float)
     s.add_argument("lon", type=float)
     s.add_argument("--no-currents", action="store_true")
+    b = sub.add_parser("build-ships", help="build the ship-density grid (needs EMODnet access)")
+    b.add_argument("world_bank_tif", help="shipdensity_global.tif from the World Bank zip")
+    b.add_argument("--out", default=None)
     a = p.parse_args(argv)
 
     if a.cmd == "fetch-era5":
@@ -83,6 +87,13 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{path} {path.stat().st_size / 1e6:.1f} MB")
     elif a.cmd == "check-glorys":
         check_glorys(a.month)
+    elif a.cmd == "build-ships":
+        from pathlib import Path
+
+        from boatsim.oceandata import traffic
+
+        out = traffic.build(Path(a.out) if a.out else traffic.DEFAULT_PATH, a.world_bank_tif)
+        print(f"{out} {out.stat().st_size / 1e6:.1f} MB")
     elif a.cmd == "sample":
         env = ReanalysisEnvironment(currents=None if a.no_currents else glorys.GlorysSource())
         print(env.sample(a.t, a.lat, a.lon))
