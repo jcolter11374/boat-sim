@@ -41,6 +41,12 @@ COLUMNS = {
     "ghi": ("ghi", 0),
 }
 
+# Per-hour yes/no columns, written as 1/0 (null when the log lacks them).
+FLAGS = {
+    "iridium_ok": "iridium_ok",
+    "beacon_ok": "beacon_ok",
+}
+
 
 def _num(x, nd: int):
     if x is None:
@@ -66,6 +72,8 @@ def to_replay(log, label: str = "v4 kayak") -> dict:
     rows = log.rows
     hours = [round((r["t"] - start).total_seconds() / 3600.0, 3) for r in rows]
     cols = {name: [_num(r.get(key), nd) for r in rows] for name, (key, nd) in COLUMNS.items()}
+    for name, key in FLAGS.items():
+        cols[name] = [None if r.get(key) is None else int(bool(r[key])) for r in rows]
     events = [
         {
             "h": round((e.t - start).total_seconds() / 3600.0, 3),
@@ -110,6 +118,8 @@ def to_replay(log, label: str = "v4 kayak") -> dict:
             "current_u": "m/s eastward",
             "current_v": "m/s northward",
             "ghi": "W/m^2 sunlight",
+            "iridium_ok": "1 = Iridium can report this hour (powered, main box and comms path ok)",
+            "beacon_ok": "1 = Globalstar backup beacon still working",
         },
         "h": hours,
         **cols,

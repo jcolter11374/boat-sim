@@ -26,6 +26,8 @@ def _log():
                 "current_u": 0.4,
                 "current_v": 0.1,
                 "ghi": 600.0,
+                "iridium_ok": h < 2,
+                "beacon_ok": True,
             }
         )
     log.events.append(Event(t0 + timedelta(hours=2), EventKind.PART_FAILED, "rudder"))
@@ -44,6 +46,8 @@ def test_replay_keeps_the_log_exactly():
         assert len(rep[name]) == 3
         for v, row in zip(rep[name], log.rows, strict=True):
             assert abs(v - row[key]) <= 0.5 * 10**-nd + 1e-12, name
+    assert rep["iridium_ok"] == [1, 1, 0]
+    assert rep["beacon_ok"] == [1, 1, 1]
     assert rep["events"] == [{"h": 2.0, "kind": "part_failed", "detail": "rudder"}]
     assert rep["outcome"] == "lost"
     assert rep["course"]["drop"] == [36.65, -74.94]
@@ -54,7 +58,10 @@ def test_missing_columns_become_null():
     log = _log()
     for r in log.rows:
         del r["tp"]
-    assert to_replay(log)["tp"] == [None, None, None]
+        del r["beacon_ok"]
+    rep = to_replay(log)
+    assert rep["tp"] == [None, None, None]
+    assert rep["beacon_ok"] == [None, None, None]
 
 
 def test_write_merges_index(tmp_path):
