@@ -45,6 +45,9 @@ def test_variants_change_what_they_say_and_nothing_else():
     assert one.autopilot.cruise_fraction == pytest.approx(15 / 50)
     assert _components("battery_640").autopilot.thruster_count == 2
 
+    assert base.link.mailbox == "with_report"
+    assert _components("mailbox_scheduled").link.mailbox == "scheduled"
+
     assert math.isinf(_components("no_corrections").base.min_gain_h)
     assert isinstance(_components("silent_base").base, HoldCoursePolicy)
 
