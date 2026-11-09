@@ -105,3 +105,24 @@ With the record's failure rates, there are more of both of these losses:
 - **Storms are understated.** ERA5 understates hurricane winds, so storm losses are optimistic.
 - **Build cost isn't priced yet.** It waits for the parts catalogue (#25).
 - **Next run.** Once #98 makes the straight route the default, I'll run the baseline alone on main to confirm the 72. The message-from-base rows should also be rerun on the straight route.
+
+## Addendum: confirmed on the straight route (#98)
+
+[Run 42567314818](https://github.com/jcolter11374/boat-sim/actions/runs/42567314818) is on main at dc5ff0d, where the straight route is now the default. It uses the same 100 launches and the same dice as the main run.
+
+| Row | Finished | By day 150 | Gained / lost | Chance | Median days | Ran aground |
+|---|---|---|---|---|---|---|
+| Today's default (straight route; base re-plans from forecasts) | 72 | 69 | | | 110 | 2 |
+| Base never changes the route (still sends a daily "all well") | 78 | 78 | 17 / 11 | 34% | 92 | 1 |
+| Base sends nothing at all | 73 | 73 | 19 / 18 | 100% | 92 | 3 |
+| Boat checks for base messages on a separate daily call | 77 | 76 | 16 / 11 | 44% | 107 | 1 |
+| Old bent route south of the Azores | 55 | 45 | 12 / 29 | 1% | 127 | 10 |
+
+- **72 is confirmed.** It matches the straight-route row of the main run exactly. The old bent route gives 55 here, against 56 there.
+- **On the straight route, steering from home no longer prevents groundings.** "Base sends nothing" runs aground 3 times, against 2 for the default. On the bent route it was 28 against 7.
+- **Re-planning from forecasts doesn't help, and it costs speed.**
+  - With the base re-planning, 72 finish. With the base keeping the route fixed, 78 finish, which is within the noise.
+  - The typical voyage is slower with re-planning: 110 days against 92.
+  - I haven't traced why. My guess is that the forecast re-planner sends the boat on detours that don't pay off for something this slow.
+  - That 18-day gap is large enough to look into. It is for Sam (autopilot and comms): it may mean re-planning should switch on only for specific hazards, such as storms or land, and not every day.
+- **The daily "all well" report still matters.** All of these rows except "base sends nothing" keep the daily position report, which keeps the boat inside the silence rule. Only steering from home, not reporting, is in question.
