@@ -181,3 +181,49 @@ So the rows share their dice only until they first diverge. That happens early f
 - The paired test therefore has less power than it appears. Treat any difference under about 10 voyages as noise, as the caveats already say.
 
 The fix is one random stream per source of chance: hazards, link, sensors, pinger. Maya and Theo own it, and Sam will do the link side. Once it lands, rerun the close calls: the comms rows, battery and panels, and the 25 W cruise.
+
+## Rerun with separate random streams (#110)
+
+[Run 42584093445](https://github.com/jcolter11374/boat-sim/actions/runs/42584093445) was made on main at 99e2bb0. It uses the same 100 launches, 180 days, and a full set of pre-fetched data (#108). After #110, the hull, sensors, satellite link and beacon each draw from their own random stream. Sending an extra message no longer reshuffles the hull's hazard dice. Every seed therefore gets new dice, so the baseline was rerun along with the rest.
+
+**The pairing now works.** Changes that never alter the voyage now give identical voyages: "Half again the battery" and "Bigger panels" both show 0 gained and 0 lost. Under the shared stream they showed 2/1 and 3/1, which was pure dice.
+
+| Row | Finished | Gained / lost | Chance | Median days | Electronics dead offshore | Airtime $ |
+|---|---|---|---|---|---|---|
+| **Today's default (re-plan when a detour saves 6 h)** | **78** | | | 91 | 15 | 83 |
+| Re-plan only for 24 h or more | 75 | 6 / 9 | 61% | 91 | 15 | 82 |
+| Re-plan only for 72 h or more | 66 | 5 / 17 | 2% | 95 | 22 | 82 |
+| Base never changes the route | 66 | 5 / 17 | 2% | 95 | 22 | 82 |
+| Base sends nothing at all | 67 | 6 / 17 | 3% | 94 | 21 | 78 |
+| Boat checks for base messages on a separate daily call | 73 | 7 / 12 | 36% | 87 | 18 | 85 |
+| Half the battery (640 Wh) | 78 | 4 / 4 | 100% | 94 | 13 | 83 |
+| Half again the battery (1920 Wh) | 78 | 0 / 0 | | 91 | 15 | 83 |
+| Smaller panels (150 W) | 74 | 4 / 8 | 39% | 92 | 14 | 83 |
+| Bigger panels (350 W) | 78 | 0 / 0 | | 91 | 15 | 83 |
+| Faster cruise (25 W) | 84 | 16 / 10 | 33% | 76 | 12 | 66 |
+
+- **Course changes from home now look worth having.**
+  - With Sam's fix (#107) and real pairing, re-planning beats never re-planning by 78 to 66: 17 voyages gained, 5 lost, about a 2% chance of luck.
+  - The 72-hour row is again identical to "never", because no forecast detour ever saves 72 hours.
+  - A base that sends nothing at all also falls to 67.
+- **The gap is almost all dead electronics offshore: 15 against 22.** Now that the hull dice are shared, that difference has to come through the voyage itself.
+  - The likely path: the electronics tub leaks more in big waves, and a wet tub fails six times as often (#91). Weather routing keeps the boat out of the worst seas.
+  - I haven't checked that against the wave heights along each track. It is a hypothesis.
+- **This reverses the earlier shared-stream result, and that is worth being honest about.**
+  - On the old dice, never re-planning led 78 to 70. Pooling both dice sets, the two settings are level: re-planning 148 of 200, never 144 of 200.
+  - The new run is the better test, because its pairs are real. The old run's gaps were partly reshuffled dice.
+  - Still, one run at 2% is evidence, not proof.
+- **24 hours against 6 hours** is within the noise: 75 against 78, 6 gained and 9 lost. Neither costs time (median 91 days either way) or airtime.
+- **Battery and panels don't matter in spring**, confirmed with clean pairs. Small panels lean slightly the wrong way (74), but that is within the noise.
+- **Cruising at 25 W** finishes 84 of 100 and takes 15 days fewer (76 against 91). It also costs $17 less airtime, because the voyage is shorter. That is 16 gained against 10 lost, a 33% chance of luck: promising, not proven. The cost is a lower minimum battery charge, 38% against 68%.
+
+### Recommendation on re-planning (Ravi; Sam to confirm)
+
+**Keep the default at 6 hours.** Don't raise `min_gain_h`.
+- On the truly paired run, re-planning at 6 hours is the best of the rows tested.
+- 24 hours is no better.
+- 72 hours or more throws away the gain entirely.
+
+Two follow-ups would make this solid:
+1. Log the wave height along each track, to check the "fewer wet-tub failures" explanation.
+2. Repeat the 6-hour against never comparison on a second set of seeds.
