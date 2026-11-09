@@ -90,6 +90,7 @@ import numpy as np
 
 from boatsim.types import EnvState, Event, EventKind
 from boatsim.vessel.coast import distance_to_land_km
+from boatsim.vessel.wearout import wearout_multiplier
 
 # Parts a knockdown can break, with their share of per-knockdown damage odds.
 # Panel names match the deck layout in the design doc (2 x 100 W + 1 x 50 W).
@@ -207,6 +208,12 @@ class HazardParams:
     # twice. Ravi's sweep (#52) can still turn it up.
     unknown_shape: float = 0.5
     unknown_p_by_60_days: float = 0.0
+    # Wear-out (#118): hardware rates in open ocean x (t / t_ref)^(k - 1), t = days
+    # spent in open ocean so far (vessel/wearout.py). k = 1 is off. The record can't
+    # tell wear-out from a constant rate, so every set keeps it off until we choose;
+    # wearout.WEAROUT_PARAMS holds the fitted range (central k 1.41, high 2.24).
+    wearout_k: float = 1.0
+    wearout_t_ref_days: float = 35.0
 
     @classmethod
     def from_config(cls, hazards: dict, rate_set: str | None = None) -> HazardParams:
@@ -448,6 +455,13 @@ def _p(rate_per_day: float, hours: float) -> float:
     return 1.0 - math.exp(-max(rate_per_day, 0.0) * hours / 24.0)
 
 
+def wearout_mult(p: HazardParams, days_open_ocean: float) -> float:
+    """#118 wear-out on open-ocean hardware rates; 1 when wearout_k is 1."""
+    return wearout_multiplier(
+        days_open_ocean, {"k": p.wearout_k, "t_ref_days": p.wearout_t_ref_days}
+    )
+
+
 def early_life_mult(p: HazardParams, days_at_sea: float) -> float:
     """R2 infant mortality: 1 + k e^(-(day + shakedown)/tau)."""
     if p.early_life_k <= 0.0:
@@ -510,6 +524,7 @@ def sample_failures(
     days_at_sea: float,
     rng: np.ndarray | np.random.Generator,
     thrusters: tuple[str, ...] = ("thruster_port", "thruster_starboard"),
+    days_open_ocean: float = 0.0,
 ) -> HazardOutcome:
     """Draw the non-wave failures for one step: leaks, electronics, software,
     Iridium going silent, the beacon, steering, entanglement, thruster wear-out
@@ -517,7 +532,8 @@ def sample_failures(
 
     rng: the step's dice block (draw_dice), or a Generator to draw one from.
     thrusters: damage names of the thrusters the boat has (KayakVessel passes
-    them from propulsion.thruster_count), so a one-thruster boat only rolls one die."""
+    them from propulsion.thruster_count), so a one-thruster boat only rolls one die.
+    days_open_ocean: days spent beyond near_land_km so far, for the wear-out term."""
     u = _dice(rng)
     out = HazardOutcome([], [], False, 0)
     if not (p.enabled and p.failures_enabled):
@@ -542,6 +558,8 @@ def sample_failures(
     hs = max(env.hs, 0.0)
     land_km = distance_to_land_km(lat, lon)
     early = early_life_mult(p, days_at_sea)
+    if land_km >= p.near_land_km:
+        early *= wearout_mult(p, days_open_ocean)
 
     # Leak into one of the two tubs
     if roll("leak", p.leak_per_day * (1.0 + (hs / 3.0) ** 2) * early):

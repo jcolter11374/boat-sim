@@ -37,6 +37,23 @@ def test_monthly_voyage_meters_energy_and_summarises():
     assert row["sun_kwh_m2_day"] == pytest.approx(6.0, rel=0.01)
     assert row["drive_w_avg"] == pytest.approx(25.0, rel=0.01)
     assert row["km_from_drop"] > 100
+    # Healthy 3-day voyage: heard from in the last day (record-like endpoint, #118)
+    assert 2.0 < row["last_report_day"] <= 3.0
+    assert row["last_heard_day"] >= row["last_report_day"]
+
+
+def test_last_heard_ignores_beacon_for_reports():
+    from types import SimpleNamespace
+
+    from boatsim.types import Event, EventKind
+
+    t0 = datetime(2015, 6, 1)
+    ev = [
+        Event(datetime(2015, 6, 3), EventKind.MESSAGE_RECEIVED, "report at base"),
+        Event(datetime(2015, 6, 9), EventKind.MESSAGE_RECEIVED, "globalstar ping"),
+    ]
+    out = M.last_heard(SimpleNamespace(events=ev, start=t0))
+    assert out == {"last_report_day": 2.0, "last_heard_day": 8.0}
 
 
 def test_leaving_the_weather_box_ends_cleanly(monkeypatch):

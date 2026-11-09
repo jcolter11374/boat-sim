@@ -2,7 +2,12 @@
 
 Ravi (QA), 9 Nov 2026. Data: [run 42597360814](https://github.com/jcolter11374/boat-sim/actions/runs/42597360814) (the fully paired sensitivity run, 100 voyages per variant, April to June launches).
 
-**Short version.**
+> **Correction (9 Nov, from Theo, #122): this compares the wrong endpoint, so the gap below is overstated, probably by most of its size.**
+> - The record ends a boat at its **last report**. Here, "still working" means not lost, aground or disqualified. A boat whose Iridium dies carries on in our sim, reporting through the beacon only, so it still counts as working.
+> - Theo's rough count for the historical set offshore gives Iridium-ending failures at about 0.0077 a day: the main box 0.0035, an uncleared software hang 0.001, and Iridium itself about 0.0032. The record, leaving out its rig failures, runs at 0.0080 a day. On the record's own yardstick, the two may roughly agree.
+> - Sensitivity runs now log `last_report_day` per voyage (#122). The next batch scores three endpoints: last Iridium report, the boat lost or completely silent, and the boat lost. Read this page's numbers as "boat lost" survival until that batch is in.
+
+**Short version (as first written).**
 - No. Even with the "historical" failure rates switched on, our simulated boats keep working far longer than the real boats in the Microtransat crossing record.
 - The gap is small in the first week and very large after it:
 

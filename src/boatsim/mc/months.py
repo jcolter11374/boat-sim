@@ -107,6 +107,25 @@ def cause_of_end(log) -> str:
     return "lost (other)"
 
 
+def last_heard(log) -> dict:
+    """Days from launch to the last Iridium report base received, and to the last
+    anything (report or beacon ping). The crossing record ends a boat at its last
+    report, so last_report_day is the record-like endpoint (#89, #118)."""
+    rep = beacon = None
+    for e in log.events:
+        if e.kind == EventKind.MESSAGE_RECEIVED:
+            if e.detail == "report at base":
+                rep = e.t
+            elif e.detail == "globalstar ping":
+                beacon = e.t
+
+    def day(t):
+        return (t - log.start).total_seconds() / 86400.0 if t is not None else 0.0
+
+    heard = max((t for t in (rep, beacon) if t is not None), default=None)
+    return {"last_report_day": day(rep), "last_heard_day": day(heard)}
+
+
 def summarise(log) -> dict:
     """run_many reduce step: runner.parallel.summarize, Iris's card fields
     (cause, first trouble, km to go, airtime) and our sun and power numbers."""
@@ -128,6 +147,7 @@ def summarise(log) -> dict:
             "month": log.start.month,
             "year": log.start.year,
             "ending": cause_of_end(log),
+            **last_heard(log),
             "km_from_drop": distance_m(*drop, *end) / 1000.0 if end[0] is not None else math.nan,
             "min_soc": min(socs) if socs else math.nan,
             "sun_kwh_m2_day": m.get("ghi_wh_m2", 0.0) / 1000.0 / days,
