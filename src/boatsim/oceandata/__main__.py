@@ -77,6 +77,9 @@ def main(argv: list[str] | None = None) -> None:
     h.add_argument("last_year", type=int)
     h.add_argument("--workers", type=int, default=4)
     h.add_argument("--out", default="runs/storms/era5_vs_ibtracs.csv")
+    sub.add_parser(
+        "compare-currents", help="GLORYS vs SMOC on the shared Gulf Stream stretch (#73)"
+    )
     a = p.parse_args(argv)
 
     if a.cmd == "fetch-era5":
@@ -94,6 +97,19 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{path} {path.stat().st_size / 1e6:.1f} MB")
     elif a.cmd == "check-glorys":
         check_glorys(a.month)
+    elif a.cmd == "compare-currents":
+        from pathlib import Path
+
+        import pandas as pd
+
+        from boatsim.oceandata import currents_check as cc
+
+        rows = cc.run()
+        Path("runs/currents").mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).to_csv("runs/currents/glorys_vs_smoc.csv", index=False)
+        cc.summarise(rows)
+        print(f"\nOpen-Meteo vs SMOC total, {cc.DATES[2]} daily means:")
+        cc.open_meteo_check(cc.DATES[2])
     elif a.cmd == "check-storms":
         from pathlib import Path
 
