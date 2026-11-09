@@ -161,7 +161,7 @@ def _spikes(a: np.ndarray, factor: float = SPIKE_FACTOR) -> np.ndarray:
     kept 7 million bad cells because bad cells touch each other.)
     """
     z = np.where(np.isfinite(a), a, 0.0).astype(np.float32)
-    p = np.pad(z, 1)
+    p = np.pad(z, 1, mode="edge")  # edges: no fake empty water beyond the strip
     h, w = z.shape
     nb = np.stack(
         [p[di : di + h, dj : dj + w] for di in (0, 1, 2) for dj in (0, 1, 2) if (di, dj) != (1, 1)]
