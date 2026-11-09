@@ -45,6 +45,8 @@ export interface Replay {
   current_u: Col;
   current_v: Col;
   ghi: Col;
+  iridium_ok?: Col; // 1/0 per hour (from PR #135); absent in older files
+  beacon_ok?: Col;
   events: ReplayEvent[];
 }
 
@@ -146,8 +148,11 @@ export function describeEvent(e: ReplayEvent): string {
       return "Reached the finish target";
     case "part_failed":
       return "Part failed" + d;
-    case "capsize":
-      return "Knocked over by a wave" + d;
+    case "capsize": {
+      const m = /(\d+) knockdown\(s\), Hs ([\d.]+) m/.exec(e.detail);
+      if (m) return `Knocked flat by a breaking wave${m[1] !== "1" ? ` (${m[1]} times)` : ""}, waves ${m[2]} m`;
+      return "Knocked flat by a breaking wave" + d;
+    }
     case "safe_mode":
       return "Backup controller took over" + d;
     case "battery_empty":
@@ -181,4 +186,15 @@ export function toneOf(e: ReplayEvent): Tone {
   if (["part_failed", "capsize", "safe_mode", "timeout"].includes(e.kind)) return "warn";
   if (/silent|iridium|comms/i.test(e.detail)) return "warn";
   return "info";
+}
+
+/** Comms at an hour: "ok", "beacon" (only the backup beacon), "silent", or null if the file doesn't say. */
+export function commsAt(rep: Replay, hour: number): "ok" | "beacon" | "silent" | null {
+  if (!rep.iridium_ok) return null;
+  const [i] = locate(rep.h, hour);
+  const ir = rep.iridium_ok[i];
+  const bc = rep.beacon_ok?.[i];
+  if (ir == null) return null;
+  if (ir) return "ok";
+  return bc ? "beacon" : "silent";
 }

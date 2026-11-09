@@ -19,13 +19,13 @@ import { BoatMotion, KAYAK_V4 } from "./motion";
 import { Chart, TONE_COLOUR, type LandBounds } from "./replay/chart";
 import {
   angleAt,
+  commsAt,
   describeEvent,
   distanceKm,
   isNotable,
   lastHour,
   loadIndex,
   loadReplay,
-  locate,
   positionAt,
   toneOf,
   valueAt,
@@ -35,12 +35,11 @@ import {
 import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Sea, SEA_SIZE } from "./water";
-import { components, heightAt, type WaveComponent } from "./waves";
+import { heightAt, Sea as LiveSea } from "./waves";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const BASE = params.get("data") ?? "./voyages";
-const N_COMP = { low: 10, high: 16 } as const;
 
 // ---------- renderer, sky, light (as the showroom) ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -73,7 +72,10 @@ scene.add(sky);
   scene.environment = pmrem.fromScene(env).texture;
   pmrem.dispose();
 }
-scene.fog = new THREE.Fog(0xc9dbe6, 60, SEA_SIZE * 0.55);
+const fog = new THREE.Fog(0xc9dbe6, 60, SEA_SIZE * 0.55);
+scene.fog = fog;
+const FAIR = new THREE.Color(0xc9dbe6);
+const STORM = new THREE.Color(0x7d8a94);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
 sun.position.copy(sunDir).multiplyScalar(100);
 scene.add(sun, new THREE.HemisphereLight(0xcfe6ff, 0x0b2a3f, 0.5));
@@ -103,38 +105,26 @@ function setQuality(q: Quality): void {
   quality = q;
   sea.setQuality(q);
   buildBoat(q);
-  compCache.clear();
+  live = new LiveSea(undefined, { n: N_COMP[q], smoothing: 0.4 });
+  if (rep) {
+    seaTarget(rep, hour);
+    live.snap();
+  }
   renderer.setPixelRatio(q === "high" ? Math.min(window.devicePixelRatio, 2) : 1);
 }
 
 // ---------- the sea of a voyage hour ----------
-// Wave trains for logged hour i (cached). Same random seed every hour, so two
-// neighbouring hours differ only in size, length and direction, and a blend
-// between them is smooth.
-const compCache = new Map<number, WaveComponent[]>();
-function hourComps(rep: Replay, i: number): WaveComponent[] {
-  let c = compCache.get(i);
-  if (!c) {
-    const hs = Math.max(rep.hs[i] ?? valueAt(rep, rep.hs, rep.h[i]) ?? 0.3, 0.05);
-    const tp = Math.max(rep.tp[i] ?? valueAt(rep, rep.tp, rep.h[i]) ?? 3 + 2.5 * Math.sqrt(hs), 2);
-    const from = rep.wave_dir[i] ?? angleAt(rep, rep.wave_dir, rep.h[i]) ?? 270;
-    // Compass "from" bearing -> travel direction in the scene (x east, z south).
-    const meanDirection = THREE.MathUtils.degToRad(from + 90);
-    c = components({ name: "", hs, tp, meanDirection }, N_COMP[quality], 1);
-    compCache.set(i, c);
-  }
-  return c;
-}
-/** Blend of the two logged hours around `hour`: heights mix linearly. */
-function seaAt(rep: Replay, hour: number): WaveComponent[] {
-  const [i, f] = locate(rep.h, hour);
-  const a = hourComps(rep, i);
-  if (f === 0 || i + 1 >= rep.h.length) return a;
-  const b = hourComps(rep, i + 1);
-  return [
-    ...a.map((c) => ({ ...c, amplitude: c.amplitude * (1 - f) })),
-    ...b.map((c) => ({ ...c, amplitude: c.amplitude * f })),
-  ];
+// Theo's live sea (#133): realistic JONSWAP wave trains that ease toward each
+// hour's logged Hs, Tp and wave direction without jumps. The inputs are already
+// interpolated between logged hours, so only a short easing is needed.
+const N_COMP = { low: 16, high: 24 } as const;
+let live = new LiveSea(undefined, { n: N_COMP[quality], smoothing: 0.4 });
+function seaTarget(rep: Replay, hour: number): number {
+  const hs = Math.max(valueAt(rep, rep.hs, hour) ?? 0.3, 0.05);
+  const tp = Math.max(valueAt(rep, rep.tp, hour) ?? 3 + 2.5 * Math.sqrt(hs), 2);
+  const from = angleAt(rep, rep.wave_dir, hour) ?? 270;
+  live.setSeaState(hs, tp, from);
+  return hs;
 }
 
 // ---------- chart ----------
@@ -192,6 +182,8 @@ function seek(h: number): void {
   hour = Math.min(Math.max(h, 0), lastHour(rep));
   shownEvents = rep.events.filter((e) => e.h <= hour).length;
   ended = false; // the loop shows the outcome card if this is the end
+  seaTarget(rep, hour);
+  live.snap();
   $("outcome").classList.remove("show");
 }
 
@@ -239,7 +231,6 @@ async function selectVoyage(f: string): Promise<void> {
     const r = await loadReplay(BASE, f);
     rep = r;
 
-    compCache.clear();
     chart?.setReplay(r);
     status.file = f;
     status.maxHour = lastHour(r);
@@ -308,6 +299,9 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// The link to the showroom only works where both pages are served together.
+if (!location.pathname.endsWith("voyage.html")) document.querySelector<HTMLElement>("#top a")!.style.display = "none";
+
 // ---------- start ----------
 setQuality(quality);
 camera.position.set(-5.6, 2.0, 4.6);
@@ -346,6 +340,7 @@ const clock = new THREE.Clock();
 let last = 0;
 let rigHeave = 0;
 let smoothYaw: number | null = null;
+let storm = 0; // 0 fair .. 1 gale, eased
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
   const dt = Math.min(t - last, 0.1);
@@ -360,14 +355,17 @@ renderer.setAnimationLoop(() => {
       const e = rep.events[shownEvents++];
       if (!isNotable(e)) continue;
       status.shown.push(e.kind);
+      // A knockdown: give the boat a hard shove so the physics rolls it over and
+      // rights it again (the keel and dome do the righting, as designed).
+      if (e.kind === "capsize" && warp <= 24) motion.rollRate += (Math.random() < 0.5 ? -1 : 1) * 7;
       toast(describeEvent(e), `Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
     }
     if (hour >= lastHour(rep) && !ended) {
       ended = true;
       showOutcome();
     }
-    const comps = seaAt(rep, hour);
-    const hs = valueAt(rep, rep.hs, hour) ?? 0;
+    const hs = seaTarget(rep, hour);
+    const comps = live.advance(t);
     sea.setSea(hs);
     sea.update(comps, t);
     // Heading: compass degrees -> scene yaw (bow along (cos yaw, -sin yaw) in x east, z south).
@@ -396,12 +394,22 @@ renderer.setAnimationLoop(() => {
     rigHeave = motion.heave;
     camera.position.y += dy;
     controls.target.y += dy;
+    // Weather mood from the logged wind: greyer, darker and closer in a blow.
+    const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
+    const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+    const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * 1.94384 - 15) / 20, 0, 1);
+    storm += (target - storm) * Math.min(1, dt * 1.5);
+    renderer.toneMappingExposure = 0.55 - 0.17 * storm;
+    fog.color.copy(FAIR).lerp(STORM, storm);
+    fog.far = SEA_SIZE * (0.55 - 0.25 * storm);
+    su.turbidity.value = 4 + 8 * storm;
+    sun.intensity = 2.4 - 1.4 * storm;
     hud(rep, stw, hs);
     status.hour = hour;
   }
   controls.update();
   if (rep) {
-    const floor = heightAt(seaAt(rep, hour), camera.position.x, camera.position.z, t) + 0.35;
+    const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;
   }
   renderer.render(scene, camera);
@@ -444,5 +452,8 @@ function hud(r: Replay, stw: number, hs: number): void {
     $("h-dist").innerHTML = `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("en-GB")}<small>km</small>`;
   }
   const ghi = valueAt(r, r.ghi, hour);
-  $("h-sun").textContent = ghi == null ? "" : ghi > 20 ? `sun ${Math.round(ghi)} W/m²` : "night";
+  const sunTxt = ghi == null ? "" : ghi > 20 ? "daylight" : "night";
+  const comms = commsAt(r, hour);
+  const commsTxt = comms === "ok" ? "reporting home" : comms === "beacon" ? "beacon only" : comms === "silent" ? "SILENT" : "";
+  $("h-sun").textContent = [commsTxt, sunTxt].filter(Boolean).join(" · ");
 }
