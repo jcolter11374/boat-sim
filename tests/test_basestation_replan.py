@@ -148,3 +148,54 @@ def test_reused_policy_resets_between_voyages():
     # Next voyage in a batch starts earlier in time: it must still get service.
     assert p.on_report(_report(T0, *START), FoulBand()) is not None
     assert len(p.sent) + len(p.acks) == 1
+
+
+# ------------------------------------------------------------- keep clear of land
+
+
+def test_keep_out_line_check():
+    p = ForecastReplanPolicy(route=[GOAL])
+    assert p.crosses_keep_out(38.5, -35.0, 38.5, -20.0)  # straight through the central group
+    assert not p.crosses_keep_out(36.0, -35.0, 36.0, -20.0)  # south of Santa Maria
+    assert not p.crosses_keep_out(*START, GOAL.lat, GOAL.lon)  # nowhere near
+
+
+def test_detours_round_the_azores_and_never_enters_them(monkeypatch):
+    """A route straight through the central Azores: base must send the boat round.
+
+    The Azores no longer count as arriving (#80); patch the old rule out so the
+    voyage runs on to the goal whichever rule is on main.
+    """
+    import sys
+
+    monkeypatch.setattr(sys.modules["boatsim.runner.simulate"], "in_europe", lambda lat, lon: False)
+    goal = Waypoint(38.5, -20.0)
+    start = (38.5, -36.0)
+    policy = ForecastReplanPolicy(route=[goal])
+    design = load_design("configs/v4_kayak.yaml")
+    env = ConstantEnvironment(EnvState(ghi=800.0))
+    c = Components(
+        env,
+        PerfectForecast(env),
+        KayakVessel(design),
+        SafeModeAutopilot(cruise_fraction=CRUISE),
+        PerfectLink(),
+        policy,
+    )
+    log = simulate(c, T0, *start, Mission([goal]), max_days=40)
+    assert policy.sent, "expected a detour"
+    for _, m in policy.sent:
+        for a, b in itertools.pairwise(m.waypoints):
+            assert not policy.crosses_keep_out(a.lat, a.lon, b.lat, b.lon)
+    assert not any(policy._inside(r["lat"], r["lon"]) for r in log.rows)
+    assert min(distance_m(r["lat"], r["lon"], goal.lat, goal.lon) for r in log.rows) < 10_000
+
+
+def test_land_detour_is_sent_even_without_time_gain():
+    """Crossing land is never acceptable, so min_gain_h doesn't apply."""
+    goal = Waypoint(38.5, -20.0)
+    p = ForecastReplanPolicy(route=[goal], min_gain_h=1e6)
+    m = p.on_report(_report(T0, 38.5, -31.0), ConstantEnvironment(EnvState()))
+    assert m is not None and p.sent
+    a = m.waypoints[0]
+    assert not p.crosses_keep_out(38.5, -31.0, a.lat, a.lon)
