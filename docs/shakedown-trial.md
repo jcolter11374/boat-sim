@@ -39,7 +39,7 @@ with the sailboat for the visits.
 | Iridium keeps reporting | The daily report arrives at base | No missed day |
 | Beacon keeps pinging | Globalstar track | At least one ping every day |
 | Power keeps up | Battery % in the daily report | Steady or rising from day to day |
-| Thrusters and steering | The daily test, and the heading in the next report | Every test runs and the course change shows up |
+| Thrusters and steering | The daily test, then the boat's log at the end (on a mooring the heading follows the wind) | Every test ran and the rudder moved to each new course |
 
 **If anything fails:** bring the boat in, find the cause and fix it, then **start the
 14 days again from zero**. A fault you can't explain counts as a fail: the point is to
