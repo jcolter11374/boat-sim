@@ -142,7 +142,7 @@ def _odds_bars(rows: list[tuple[str, pd.Series, str]], title: str, height: int =
     _layout(fig, title, height=height or 90 + 48 * len(rows), bargap=0.35)
     fig.update_xaxes(range=[0, 150], **_PCT_TICKS)
     fig.update_yaxes(autorange="reversed")
-    fig.update_layout(margin={"l": 330, "r": 30, "t": 50, "b": 40})
+    fig.update_layout(margin={"l": 330, "r": 30, "t": 50, "b": 40}, showlegend=False)
     return fig
 
 
