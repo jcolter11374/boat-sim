@@ -67,6 +67,21 @@ Paired over the same drifters, counting which source scores higher (ties left ou
 
 SMOC does better on both, which fits the drogued hint. Two drifters are not evidence.
 
+## Follow-up: is SMOC's weaker undrogued score its current, or its extras?
+
+Priya's test, from [run 42641637887](https://github.com/jcolter11374/boat-sim/actions/runs/42641637887). The main table reproduced exactly in that run. The idea is to swap SMOC's hourly total current for its daily-mean ocean current, then add our own ERA5 wave push. The question is whether the undrogued gap comes from SMOC's ocean current itself, or from the extras in its hourly total: its own wave push (Stokes drift), tides, and the hourly wobble from inertial oscillations.
+
+| Current used for the 19 undrogued floats | Median skill | Median gap day 10 | Scores higher than GLORYS |
+|---|---|---|---|
+| GLORYS daily + ERA5 Stokes | 0.61 | 149 km | |
+| SMOC daily + ERA5 Stokes | 0.56 | 114 km | 8 of 19 |
+| SMOC hourly total (its own Stokes and tides) | 0.55 | 151 km | 5 of 19 |
+
+- With SMOC's extras swapped for ours, SMOC moves back towards a coin flip against GLORYS: from 5 of 19 to 8 of 19. Its median day-10 gap drops from 151 km to 114 km.
+- So part of the undrogued lean comes from SMOC's hourly extras, and most likely its own Stokes drift. Priya's reasoning: a surface float about 35 cm across feels less wave push than the surface value, and Mercator's wave model may give a stronger surface push than ERA5. Tides are a few cm/s out here and almost cancel over 10 days.
+- What's left (8 of 19) is no different from chance. SMOC's ocean current is about as good as GLORYS for surface floats too.
+- **For the Randolph team:** if they drift surface objects on SMOC's total current and add a wave push of their own, they count it twice (see `oceandata/smoc.py`). If they don't add one, SMOC's built-in push may still run a little strong for a small float or a low hull. Their windage and leeway settings matter more than the choice of current source.
+
 ## Why the hints might be real
 
 - **Drogued floats.** SMOC is an operational forecast that takes in satellite sea-height data within days. GLORYS from mid-2021 on is its "interim" extension. SMOC may place eddies better in real time. We'd need more drogued drifters, or a longer period, to tell.
