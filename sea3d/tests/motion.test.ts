@@ -22,12 +22,7 @@ const D2R = Math.PI / 180;
 const CALM: WaveComponent[] = [];
 const BOATS: HullParams[] = [KAYAK_V4, RANDOLPH_REVB];
 
-function run(
-  m: BoatMotion,
-  comps: WaveComponent[],
-  seconds: number,
-  every = 0.01,
-) {
+function run(m: BoatMotion, comps: WaveComponent[], seconds: number, every = 0.01) {
   const out: { t: number; heave: number; pitch: number; roll: number }[] = [];
   for (let t = every; t <= seconds + 1e-9; t += every) {
     m.advance(comps, t);
@@ -74,28 +69,16 @@ test("righting curve reproduces the design doc table for the kayak", () => {
 });
 
 test("Rev B righting curve matches its published GM 0.201 m and max GZ 0.434 m", () => {
-  assert.ok(
-    Math.abs(gmOf(RANDOLPH_REVB) - REVB_GM) < 0.002,
-    `GM ${gmOf(RANDOLPH_REVB)}`,
-  );
+  assert.ok(Math.abs(gmOf(RANDOLPH_REVB) - REVB_GM) < 0.002, `GM ${gmOf(RANDOLPH_REVB)}`);
   let max = 0;
-  for (let a = 0; a <= 180; a += 0.5)
-    max = Math.max(max, gz(RANDOLPH_REVB, a * D2R));
+  for (let a = 0; a <= 180; a += 0.5) max = Math.max(max, gz(RANDOLPH_REVB, a * D2R));
   assert.ok(Math.abs(max - 0.434) < 0.002, `max GZ ${max}`);
 });
 
 test("Rev B uses the Randolph team's own GZ curve and inertias (#50)", () => {
   // spot values from their docs/data/revB_gz_curve.csv
-  for (const [a, g] of [
-    [30, 0.101],
-    [90, 0.2005],
-    [105, 0.4341],
-    [150, 0.2052],
-  ]) {
-    assert.ok(
-      Math.abs(gz(RANDOLPH_REVB, a * D2R) - g) < 1e-9,
-      `GZ at ${a} deg`,
-    );
+  for (const [a, g] of [[30, 0.101], [90, 0.2005], [105, 0.4341], [150, 0.2052]]) {
+    assert.ok(Math.abs(gz(RANDOLPH_REVB, a * D2R) - g) < 1e-9, `GZ at ${a} deg`);
   }
   // the wing going under: the arm doubles between 90 and 100 deg
   assert.ok(gz(RANDOLPH_REVB, 100 * D2R) > 2 * gz(RANDOLPH_REVB, 90 * D2R));
@@ -105,8 +88,7 @@ test("Rev B uses the Randolph team's own GZ curve and inertias (#50)", () => {
 
 test("both curves are positive all the way to 180 deg (no stable upside-down position)", () => {
   for (const p of BOATS) {
-    for (let a = 1; a < 180; a += 1)
-      assert.ok(gz(p, a * D2R) > 0, `${p.name} at ${a} deg`);
+    for (let a = 1; a < 180; a += 1) assert.ok(gz(p, a * D2R) > 0, `${p.name} at ${a} deg`);
     assert.ok(Math.abs(gz(p, Math.PI)) < 1e-9);
     // odd: heeling the other way rights the other way
     assert.ok(Math.abs(gz(p, -0.5) + gz(p, 0.5)) < 1e-12);
@@ -125,15 +107,9 @@ test("free roll in calm water swings at the period the stability numbers predict
       s.map((r) => r.roll),
       dt,
     );
-    assert.ok(
-      Math.abs(tSim / tExpected - 1) < 0.03,
-      `${p.name}: ${tSim.toFixed(3)} s vs ${tExpected.toFixed(3)} s`,
-    );
+    assert.ok(Math.abs(tSim / tExpected - 1) < 0.03, `${p.name}: ${tSim.toFixed(3)} s vs ${tExpected.toFixed(3)} s`);
     // and it's the period you get from first principles: 2 pi sqrt(I / (W GM))
-    const direct =
-      2 *
-      Math.PI *
-      Math.sqrt((p.rollInertia * (1 + p.addedRoll)) / (p.mass * G * gmOf(p)));
+    const direct = 2 * Math.PI * Math.sqrt((p.rollInertia * (1 + p.addedRoll)) / (p.mass * G * gmOf(p)));
     assert.ok(Math.abs(direct - d.periodRoll) < 1e-9);
   }
 });
@@ -153,10 +129,7 @@ test("both boats right themselves from upside down within 10 s (the pool test)",
       m.roll = side * 179 * D2R;
       const s = run(m, CALM, 10);
       const end = s[s.length - 1];
-      assert.ok(
-        Math.abs(end.roll) < 5 * D2R,
-        `${p.name}: ended at ${(end.roll / D2R).toFixed(1)} deg`,
-      );
+      assert.ok(Math.abs(end.roll) < 5 * D2R, `${p.name}: ended at ${(end.roll / D2R).toFixed(1)} deg`);
     }
   }
 });
@@ -167,10 +140,7 @@ test("a knockdown to 90 deg comes back upright", () => {
     m.roll = 90 * D2R;
     const s = run(m, CALM, 10);
     const late = s.filter((r) => r.t > 6).map((r) => Math.abs(r.roll));
-    assert.ok(
-      Math.max(...late) < 10 * D2R,
-      `${p.name}: still swinging ${(Math.max(...late) / D2R).toFixed(1)} deg after 6 s`,
-    );
+    assert.ok(Math.max(...late) < 10 * D2R, `${p.name}: still swinging ${(Math.max(...late) / D2R).toFixed(1)} deg after 6 s`);
     assert.ok(Math.abs(s[s.length - 1].roll) < 3 * D2R, p.name);
   }
 });
@@ -178,34 +148,22 @@ test("a knockdown to 90 deg comes back upright", () => {
 test("in long swell the boat rides the surface (heave follows the wave)", () => {
   // One 10 s swell, 1 m high: far longer than either boat, so heave ~ the wave.
   const swell: WaveComponent[] = [
-    {
-      amplitude: 0.5,
-      wavelength: (G * 100) / (2 * Math.PI),
-      direction: 0,
-      phase: 0,
-    },
+    { amplitude: 0.5, wavelength: (G * 100) / (2 * Math.PI), direction: 0, phase: 0 },
   ];
   for (const p of BOATS) {
     const m = new BoatMotion(p);
     const s = run(m, swell, 60).filter((r) => r.t > 20);
-    const range =
-      Math.max(...s.map((r) => r.heave)) - Math.min(...s.map((r) => r.heave));
-    assert.ok(
-      Math.abs(range - 1.0) < 0.08,
-      `${p.name}: heave range ${range.toFixed(3)} m`,
-    );
+    const range = Math.max(...s.map((r) => r.heave)) - Math.min(...s.map((r) => r.heave));
+    assert.ok(Math.abs(range - 1.0) < 0.08, `${p.name}: heave range ${range.toFixed(3)} m`);
   }
 });
 
 test("short chop much smaller than the hull barely moves it", () => {
   // 1 s waves are 1.6 m long, shorter than the kayak: averaging over the hull filters them.
-  const chop: WaveComponent[] = [
-    { amplitude: 0.1, wavelength: 1.56, direction: 0, phase: 0 },
-  ];
+  const chop: WaveComponent[] = [{ amplitude: 0.1, wavelength: 1.56, direction: 0, phase: 0 }];
   const m = new BoatMotion(KAYAK_V4);
   const s = run(m, chop, 20).filter((r) => r.t > 10);
-  const range =
-    Math.max(...s.map((r) => r.heave)) - Math.min(...s.map((r) => r.heave));
+  const range = Math.max(...s.map((r) => r.heave)) - Math.min(...s.map((r) => r.heave));
   assert.ok(range < 0.05, `heave range ${range}`);
 });
 
@@ -216,11 +174,7 @@ test("stays finite and sensible in a gale, from any heading", () => {
       const m = new BoatMotion(p, { x: 10, z: -5, yaw });
       const s = run(m, gale, 120, 0.05);
       for (const r of s) {
-        assert.ok(
-          Number.isFinite(r.heave) &&
-            Number.isFinite(r.pitch) &&
-            Number.isFinite(r.roll),
-        );
+        assert.ok(Number.isFinite(r.heave) && Number.isFinite(r.pitch) && Number.isFinite(r.roll));
         assert.ok(Math.abs(r.heave) < 6, `${p.name} heave ${r.heave}`);
         assert.ok(Math.abs(r.pitch) < 50 * D2R, `${p.name} pitch ${r.pitch}`);
       }
