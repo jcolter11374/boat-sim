@@ -25,6 +25,12 @@ What a person at base would do each morning, written down as a rule:
    credit now that the boat collects messages only with its report (#72);
    2 days still leaves room for one lost ack inside the 5-day limit.
 
+7. **Keep clear of land.** Under the Microtransat rules (#80) running ashore
+   ends the voyage, and the Azores sit right on the route. Any leg whose
+   predicted track, or whose line on to the rest of the route, passes inside a
+   keep-out circle around an island group is thrown out. If the boat's current
+   leg would cross one, base sends a detour even when it gains no time.
+
 The forecast it reads already contains realistic error (oceandata's Forecast),
 so it can't cheat by seeing the future.
 
@@ -33,6 +39,7 @@ Owner: Sam.
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -41,6 +48,21 @@ from boatsim.autonomy.sphere import destination
 from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.oceandata.base import Environment
 from boatsim.types import Mission, Waypoint
+
+# Keep-out circles around the Azores island groups: (lat, lon, radius_m).
+# Centres and island extents from standard charts/gazetteer positions (rounded);
+# each radius is the island group's half-extent plus a 20 km margin for GPS,
+# drift between daily reports and the autopilot's 5 km waypoint radius (GUESS).
+# Replace with the land mask from #75 once it is shared.
+AZORES_KEEP_OUT: tuple[tuple[float, float, float], ...] = (
+    (39.55, -31.15, 35_000.0),  # Flores and Corvo
+    (38.50, -28.40, 50_000.0),  # Faial and Pico
+    (38.65, -28.05, 50_000.0),  # Sao Jorge
+    (39.05, -28.00, 30_000.0),  # Graciosa
+    (38.72, -27.20, 40_000.0),  # Terceira
+    (37.78, -25.50, 55_000.0),  # Sao Miguel
+    (36.97, -25.10, 30_000.0),  # Santa Maria
+)
 
 
 def _ground_velocity(heading_deg: float, speed: float, ce: float, cn: float) -> tuple[float, float]:
@@ -75,6 +97,7 @@ class ForecastReplanPolicy:
     min_interval: timedelta = timedelta(hours=24)
     east_margin_deg: float = 0.05  # waypoints this far west of the boat are behind it
     low_soc: float = 0.5  # below this, safe mode throttles back; assume slower
+    keep_out: tuple[tuple[float, float, float], ...] = AZORES_KEEP_OUT
     sent: list[tuple[datetime, Mission]] = field(default_factory=list)  # route changes
     acks: list[datetime] = field(default_factory=list)
     _current: list[Waypoint] | None = None
@@ -90,6 +113,25 @@ class ForecastReplanPolicy:
         # speed goes roughly with the cube root of power. GUESS.
         return self.boat_speed * (0.6 ** (1 / 3) if soc < self.low_soc else 1.0)
 
+    def _inside(self, lat: float, lon: float) -> bool:
+        return any(distance_m(lat, lon, a, b) < r for a, b, r in self.keep_out)
+
+    def crosses_keep_out(self, lat1: float, lon1: float, lat2: float, lon2: float) -> bool:
+        """Does the great-circle line between two points pass through a keep-out circle?"""
+        d = distance_m(lat1, lon1, lat2, lon2)
+        brg = bearing_deg(lat1, lon1, lat2, lon2)
+        n = max(1, math.ceil(d / 5_000.0))
+        return any(self._inside(*destination(lat1, lon1, brg, d * k / n)) for k in range(n + 1))
+
+    def _route_after(self, lat: float, lon: float) -> tuple[float, Waypoint]:
+        """Distance from a point to the goal along the planned route, and the first
+        route waypoint it would head for."""
+        ahead = self._ahead(lon)
+        dist = distance_m(lat, lon, ahead[0].lat, ahead[0].lon)
+        for a, b in itertools.pairwise(ahead):
+            dist += distance_m(a.lat, a.lon, b.lat, b.lon)
+        return dist, ahead[0]
+
     def predict(
         self,
         forecast: Environment,
@@ -100,6 +142,19 @@ class ForecastReplanPolicy:
         speed: float,
     ) -> tuple[float, float]:
         """Where the boat is after `horizon`, holding the line toward wp."""
+        return self.predict_path(forecast, t0, lat, lon, wp, speed)[-1]
+
+    def predict_path(
+        self,
+        forecast: Environment,
+        t0: datetime,
+        lat: float,
+        lon: float,
+        wp: Waypoint,
+        speed: float,
+    ) -> list[tuple[float, float]]:
+        """Predicted positions every `step` over the horizon, holding the line toward wp."""
+        path = [(lat, lon)]
         t, n = t0, int(self.horizon / self.step)
         secs = self.step.total_seconds()
         for _ in range(n):
@@ -110,8 +165,9 @@ class ForecastReplanPolicy:
             cn = env.current_v + self.windage * env.wind_v
             ve, vn = _ground_velocity(bearing_deg(lat, lon, wp.lat, wp.lon), speed, ce, cn)
             lat, lon = move(lat, lon, ve * secs, vn * secs)
+            path.append((lat, lon))
             t += self.step
-        return lat, lon
+        return path
 
     # -------------------------------------------------------------- interface
 
@@ -124,14 +180,25 @@ class ForecastReplanPolicy:
         wp: Waypoint,
         speed: float,
     ) -> float:
-        """Seconds to the goal: follow wp for the horizon, then head straight for the goal."""
-        goal = self.route[-1]
-        plat, plon = self.predict(forecast, t0, lat, lon, wp, speed)
-        left = distance_m(plat, plon, goal.lat, goal.lon)
+        """Seconds to the goal: follow wp for the horizon, then the planned route.
+
+        Infinite if the leg runs through a keep-out circle, or if the line from
+        wp on to the rest of the route would.
+        """
+        path = self.predict_path(forecast, t0, lat, lon, wp, speed)
+        if any(self._inside(a, b) for a, b in path) or self.crosses_keep_out(
+            lat, lon, wp.lat, wp.lon
+        ):
+            return math.inf
+        _, rejoin = self._route_after(wp.lat, wp.lon)
+        if rejoin != wp and self.crosses_keep_out(wp.lat, wp.lon, rejoin.lat, rejoin.lon):
+            return math.inf
+        plat, plon = path[-1]
+        left, nxt = self._route_after(plat, plon)
         env = forecast.sample(t0 + self.horizon, plat, plon)
         ce = env.current_u + self.windage * env.wind_u
         cn = env.current_v + self.windage * env.wind_v
-        ve, vn = _ground_velocity(bearing_deg(plat, plon, goal.lat, goal.lon), speed, ce, cn)
+        ve, vn = _ground_velocity(bearing_deg(plat, plon, nxt.lat, nxt.lon), speed, ce, cn)
         made_good = max(math.hypot(ve, vn), 0.05 * speed)  # never divide by ~0
         return self.horizon.total_seconds() + left / made_good
 
@@ -165,7 +232,8 @@ class ForecastReplanPolicy:
             if score < best:
                 best, best_wp = score, wp
 
-        if best_wp is not None and base - best >= self.min_gain_h * 3600.0:
+        # A current leg that would hit land is always replaced, whatever the gain.
+        if best_wp is not None and (base == math.inf or base - best >= self.min_gain_h * 3600.0):
             rest = [w for w in ahead if w.lon > best_wp.lon + self.east_margin_deg]
             self._current = [best_wp, *(rest or [self.route[-1]])]
             mission = Mission(list(self._current))
