@@ -532,6 +532,43 @@ def compare_markdown(glorys: pd.DataFrame, smoc: pd.DataFrame, days: int) -> str
     return "\n".join(lines) + "\n"
 
 
+def _drogue_fracs(scores: pd.DataFrame, cases) -> list[float]:
+    """Drogued fraction per case, from a scores table (cases it skipped count as 1)."""
+    by = scores.drop_duplicates("drifter").set_index("drifter")["drogued_frac"]
+    keys = [c.drifter_id if c.start is None else f"{c.drifter_id}_{c.start}" for c in cases]
+    return [float(by.get(k, 1.0)) for k in keys]
+
+
+def stokes_split_markdown(
+    glorys: pd.DataFrame, smoc: pd.DataFrame, smoc_float: pd.DataFrame, days: int
+) -> str:
+    """Undrogued floats three ways: is SMOC's gap in its current or its extras?"""
+    d = f"sep_d{days}_km"
+    g = glorys[glorys["model"] == "float"].set_index("drifter")
+    t = smoc.set_index("drifter")
+    f = smoc_float.set_index("drifter")
+    keys = [k for k in f.index if k in g.index and k in t.index]
+    rows = [
+        ("GLORYS daily + ERA5 Stokes", g.loc[keys]),
+        ("SMOC daily + ERA5 Stokes", f.loc[keys]),
+        ("SMOC hourly total (its own Stokes and tides)", t.loc[keys]),
+    ]
+    lines = [
+        f"## Undrogued floats: SMOC's current or SMOC's extras? ({len(keys)} drifters)",
+        "",
+        f"| Current used | Median skill | Median gap day {days} (km) | Higher skill than GLORYS |",
+        "|---|---|---|---|",
+    ]
+    for label, r in rows:
+        wins = (
+            ""
+            if r is rows[0][1]
+            else f"{int((r['skill'] > g.loc[keys, 'skill']).sum())} of {len(keys)}"
+        )
+        lines.append(f"| {label} | {r['skill'].median():.2f} | {r[d].median():.0f} | {wins} |")
+    return "\n".join(lines) + "\n"
+
+
 # --- Dead-boat run (#73) -----------------------------------------------------
 
 DEAD_BOAT_START = datetime(2023, 5, 15)  # agreed with the Randolph team (#73)
@@ -666,7 +703,18 @@ def main(argv: list[str] | None = None) -> None:
             env_for=lambda frac: smoc["model" if fair_model(frac) == "water" else "total"],
         )
         st.to_csv(out / "drift_scores_smoc.csv", index=False)
-        md = compare_markdown(table, st, a.days) + "\n" + md
+        # Priya's split for undrogued floats: SMOC daily model current plus our
+        # ERA5 Stokes drift, i.e. our float model on SMOC water.
+        und = [c for c, f in zip(cases, _drogue_fracs(st, cases)) if f < 0.5]
+        sf, _ = run_check(smoc["model"], None, und, days=a.days, gdp=gdp, models=("float",))
+        sf.to_csv(out / "drift_scores_smoc_float.csv", index=False)
+        md = (
+            compare_markdown(table, st, a.days)
+            + "\n"
+            + stokes_split_markdown(table, st, sf, a.days)
+            + "\n"
+            + md
+        )
     (out / "drift_report.md").write_text(md)
     print(md)
 
@@ -716,4 +764,5 @@ __all__ = [
     "report_markdown",
     "run_check",
     "score",
+    "stokes_split_markdown",
 ]

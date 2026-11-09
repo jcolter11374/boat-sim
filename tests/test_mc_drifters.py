@@ -244,3 +244,14 @@ def test_dead_boat_at_sea_runs_the_full_time():
     _, s = D.dead_boat(env, _Currents(), design, T0, 36.0, -75.0, days=1)
     assert not s["aground"] and s["days"] == pytest.approx(1.0)
     assert "still at sea" in D.dead_boat_markdown(s)
+
+
+def test_stokes_split_markdown():
+    def t(model, skill):
+        return pd.DataFrame(
+            [{"drifter": "u1", "model": model, "skill": skill, "sep_d10_km": 100 / skill}]
+        )
+
+    md = D.stokes_split_markdown(t("float", 0.6), t("water", 0.5), t("float", 0.7), 10)
+    assert "| SMOC daily + ERA5 Stokes | 0.70 | 143 | 1 of 1 |" in md
+    assert "| SMOC hourly total (its own Stokes and tides) | 0.50 | 200 | 0 of 1 |" in md
