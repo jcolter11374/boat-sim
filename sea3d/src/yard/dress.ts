@@ -9,8 +9,10 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { BoatModel } from "../boats/model";
 import { Kit } from "../boats/parts";
+import { loadShapeModel } from "../boats/model";
 import { KAYAK } from "../boats/specs";
 import { MM_PER_KG, PLANNED_KG, type Summary } from "./design";
+import { HULL_SHAPES } from "./shapes";
 
 /** What the model shows for a design, for tests. */
 export interface Dressed {
@@ -27,6 +29,8 @@ export interface Dressed {
   bottom: string;
   material: string;
   shape: string;
+  /** True while the shape's own model is on show (false for the kayak, or until it loads). */
+  shapeModel: boolean;
   drive: string;
   sinkMm: number;
 }
@@ -54,12 +58,6 @@ const MATERIALS: Record<string, { color: number; rough: number; metal: number; p
   carbon: { color: 0x2c3036, rough: 0.28, metal: 0.15, pattern: 1 },
   "plywood-epoxy": { color: 0xc8925a, rough: 0.3, metal: 0, pattern: 2 },
   aluminium: { color: 0xb9c0c6, rough: 0.38, metal: 0.85, pattern: 0 },
-};
-// Hull shape: stretch of the drawn kayak (length, height, beam). 5.2 x 0.45 m surf-ski; ~2 m pod.
-const SHAPES: Record<string, [number, number, number]> = {
-  kayak: [1, 1, 1],
-  "surf-ski": [5.2 / 3.05, 0.9, 0.45 / 0.79],
-  pod: [2.0 / 3.05, 1.35, 1.25],
 };
 
 const PE_TOP = new THREE.Color(0xf26a1b); // the as-built paint (blender/build_kayak.py)
@@ -97,6 +95,10 @@ export class Outfit {
   private pulses = new Map<string, number>(); // slot -> time the pulse started
   private glow: { mat: THREE.MeshStandardMaterial; slot: string; base: THREE.Color; baseI: number }[] = [];
   private view: View = "afloat";
+  private shapes = new Map<string, THREE.Group>(); // shape id -> its model, in the boat frame
+  private wanted = "kayak";
+  /** Called when a shape's model arrives after apply() asked for it (redraw then). */
+  onShapeLoaded: (() => void) | null = null;
   private x = 0; // inside-view blend, 0..1
 
   constructor(private model: BoatModel) {
@@ -388,11 +390,20 @@ uniform vec3 uTop; uniform float uTopLum, uMat, uPattern, uBare, uWl, uBottomLum
       this.hullMat.metalness = m?.metal ?? this.hullBase.metal;
     }
     const shape = picks.shape ?? "kayak";
-    const [sx, sy, sz] = SHAPES[shape] ?? SHAPES.kayak;
-    // Stretch about the centre of gravity, so the boat stays where it was.
-    this.g.userData.p ??= this.g.position.clone();
-    this.g.scale.set(sx, sy, sz);
-    this.g.position.set(this.g.userData.p.x * sx, this.g.userData.p.y * sy, 0);
+    const onShow = this.showShape(shape);
+    if (onShow) {
+      // The kit on the other shapes follows the same picks as on the kayak.
+      const by = (n: string) => onShow.getObjectByName(n);
+      const sp = by("thruster_port");
+      const ss = by("thruster_starboard");
+      if (ss) ss.visible = motors === 2;
+      if (sp) sp.visible = motors > 0;
+      for (const [names, on] of [
+        [["ais_base", "ais_whip"], s.ais],
+        [["beacon", "beacon_top"], s.beacon],
+      ] as const)
+        for (const n of names) by(n)?.traverse((o) => (o.visible = on));
+    }
     const sinkMm = (s.massKg - PLANNED_KG) * MM_PER_KG;
     return {
       thrusters: motors,
@@ -408,9 +419,43 @@ uniform vec3 uTop; uniform float uTopLum, uMat, uPattern, uBare, uWl, uBottomLum
       bottom: picks.paint === "none" ? "bare" : "antifouling",
       material: picks.material ?? "polyethylene",
       shape,
+      shapeModel: onShow !== null,
       drive,
       sinkMm,
     };
+  }
+
+  /**
+   * Show a hull shape's own model in place of the kayak (loading it the first time),
+   * at the same waterline; the kayak until it arrives. Returns the model on show, or null.
+   */
+  private showShape(id: string): THREE.Group | null {
+    this.wanted = id;
+    const spec = HULL_SHAPES[id];
+    let on = spec ? (this.shapes.get(id) ?? null) : null;
+    if (spec && !on && !this.shapes.has(id)) {
+      this.shapes.set(id, null as unknown as THREE.Group); // asked for
+      loadShapeModel(id).then((m) => {
+        if (!m) return;
+        const g = new THREE.Group();
+        g.name = `shape_${id}`;
+        g.add(m.clone(true));
+        // Builder frame (x aft from the bow, y up from the bottom) -> boat frame, as frame() does:
+        // turned bow-forward about the shape's CG, its waterline on the kayak's.
+        g.rotation.y = Math.PI;
+        g.position.set(spec.cgX, KAYAK.cgBelowWaterline - spec.draft, 0);
+        g.traverse((o) => {
+          if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true;
+        });
+        this.model.root.add(g);
+        this.shapes.set(id, g);
+        g.visible = this.wanted === id;
+        if (this.wanted === id) this.onShapeLoaded?.();
+      });
+    }
+    for (const [k, g] of this.shapes) if (g) g.visible = k === id && !!spec;
+    this.g.visible = !on;
+    return on;
   }
 
   /** Flash the parts of a slot that just changed. */

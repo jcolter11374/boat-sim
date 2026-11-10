@@ -314,6 +314,21 @@ try {
     shape: !!document.querySelector('.opt[data-slot="shape"]'),
   }));
   if (!greyed.shape || greyed.noeff < 3) fail(`boatyard: the simulator's new slots or "no effect yet" options are missing: ${JSON.stringify(greyed)}`);
+  // The other hull shapes show their own models (when the build has them), in place of the kayak.
+  const shapes = await page.evaluate(async () => {
+    const out = {};
+    for (const id of ["cat", "semisub", "board"]) {
+      const built = await fetch(`./models/shape_${id}.glb`, { method: "HEAD" }).then((r) => r.ok && !/text\/html/.test(r.headers.get("content-type") ?? ""), () => false);
+      window.__yard.pick("shape", id);
+      const t0 = performance.now();
+      while (built && !window.__yard.dressed.shapeModel && performance.now() - t0 < 30000) await new Promise((r) => setTimeout(r, 200));
+      out[id] = { built, shown: !!window.__yard.dressed.shapeModel };
+    }
+    window.__yard.pick("shape", "kayak");
+    return out;
+  });
+  for (const [id, s] of Object.entries(shapes)) if (s.built && !s.shown) fail(`boatyard: the ${id} model was built but the kayak still shows`);
+  log.push(`shapes ${Object.entries(shapes).map(([id, s]) => `${id} ${s.shown ? "shown" : s.built ? "MISSING" : "not built"}`).join(" / ")}`);
   // No grid or sandbox files in a test build: the launch says so instead of hanging.
   await page.click("#launch");
   await page.waitForFunction(() => window.__yard.backend && !document.querySelector("#launch").disabled, null, { timeout: 30000 });
