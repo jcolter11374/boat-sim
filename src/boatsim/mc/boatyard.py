@@ -91,11 +91,29 @@ def _rev_b_parts(wing_factor: float) -> dict:
     return parts
 
 
+CAT_STAYS_OVER = (0.2, 0.8)  # GUESS bracket around the cat's 0.5
+
+
 def _builds() -> dict[str, Build]:
     out = {}
     for g in catalog.GRID:
         k = _kayak(g)
         out[k.id] = k
+    # The cat's odds hang on one GUESS: how often a roll leaves it upside down for
+    # good (catalog.SHAPES["cat"], 0.5). Bracket it (Maya). Not in catalog.GRID,
+    # so a design never snaps to these; they come after the 0.5 build.
+    cat = _kayak({"shape": "cat"})
+    for q in CAT_STAYS_OVER:
+        label = f"{cat.label} (if {q:.0%} of rolls leave it upside down, not 50 %)"
+        change = ("hazards", "p_capsize_stays_over", q)
+        out[f"{cat.id}-over{round(q * 100)}"] = Build(
+            f"{cat.id}-over{round(q * 100)}",
+            cat.boat,
+            KAYAK,
+            label,
+            Variant("boatyard", label, (*cat.variant.design, change)),
+            {**cat.options, "stays_over": q},
+        )
     out["revb"] = Build(
         "revb",
         "Randolph Rev B",

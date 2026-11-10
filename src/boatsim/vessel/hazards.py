@@ -120,6 +120,9 @@ class HazardParams:
         }
     )
     max_damage_p: float = 0.05  # cap on any per-knockdown odds in extreme seas
+    # Boats that aren't self-righting (a catamaran): the chance a knockdown leaves
+    # it upside down for good, on top of p_inverted_stuck. Not scaled or capped.
+    p_capsize_stays_over: float = 0.0
     # Ship strikes
     ship_speed_ms: float = 7.0  # GUESS: ~14 kt, typical merchant ship
     ship_beam_m: float = 32.0  # GUESS: Panamax-ish beam
@@ -419,8 +422,14 @@ def sample_hazards(
         scale = damage_scale(p, env.hs)
         events.append(Event(t, EventKind.CAPSIZE, f"{n} knockdown(s), Hs {env.hs:.1f} m"))
         q_inv = min(p.p_inverted_stuck * scale, p.max_damage_p)
+        q_inv = 1.0 - (1.0 - q_inv) * (1.0 - p.p_capsize_stays_over)
         if u[SLOT["knockdown_inverted"]] < 1.0 - (1.0 - q_inv) ** n:
-            events.append(Event(t, EventKind.LOST, "stuck inverted or keel lost"))
+            why = (
+                "capsized and stayed upside down (not self-righting)"
+                if p.p_capsize_stays_over
+                else "stuck inverted or keel lost"
+            )
+            events.append(Event(t, EventKind.LOST, why))
             lost = True
         else:
             for i, (part, base) in enumerate(p.p_part.items()):
