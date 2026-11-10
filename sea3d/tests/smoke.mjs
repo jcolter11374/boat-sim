@@ -77,7 +77,9 @@ try {
   const dataDir = real ? "voyages" : "voyages-fixture";
   if (!real) writeFixture("dist/voyages-fixture");
   const idx = JSON.parse(readFileSync(`dist/${dataDir}/index.json`, "utf8")).voyages;
-  for (const v of idx.slice(0, real ? 3 : 1)) {
+  // Every replay is position-checked; the first three also get playback and a screenshot.
+  for (const [n, v] of idx.entries()) {
+    const full = n < (real ? 3 : 1);
     const rep = JSON.parse(readFileSync(`dist/${dataDir}/${v.file}`, "utf8"));
     await page.goto(`${URL}voyage.html?quality=low&data=./${dataDir}&voyage=${v.file}`);
     await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
@@ -99,6 +101,34 @@ try {
       return out;
     }, rep);
     if (bad.length) fail(`${v.file}: ${bad.length} logged hours drawn off the log, first ${JSON.stringify(bad[0])}`);
+    // Ravi's gate: at every whole hour the boat drawn on the chart (boatPosition after
+    // setHour) is the straight-line blend of the two logged rows around it, worked
+    // out here independently of the page's code.
+    const whole = [];
+    for (let k = Math.ceil(rep.h[0]); k <= rep.h[rep.h.length - 1]; k++) {
+      let i = 0;
+      while (i + 1 < rep.h.length && rep.h[i + 1] <= k) i++;
+      const j = Math.min(i + 1, rep.h.length - 1);
+      const f = j > i ? (k - rep.h[i]) / (rep.h[j] - rep.h[i]) : 0;
+      whole.push([k, rep.lat[i] + (rep.lat[j] - rep.lat[i]) * f, rep.lon[i] + (rep.lon[j] - rep.lon[i]) * f]);
+    }
+    const off = await page.evaluate((ws) => {
+      window.__replay.pause();
+      const out = [];
+      for (const [k, la, lo] of ws) {
+        window.__replay.setHour(k);
+        const [a, b] = window.__replay.boatPosition();
+        if (!(Math.abs(a - la) < 1e-9 && Math.abs(b - lo) < 1e-9)) out.push([k, a, b, la, lo]);
+      }
+      window.__replay.setHour(0);
+      window.__replay.play();
+      return out;
+    }, whole);
+    if (off.length) fail(`${v.file}: boat drawn off the log at ${off.length} of ${whole.length} whole hours, first ${JSON.stringify(off[0])}`);
+    if (!full) {
+      log.push(`${v.file} ${rep.h.length} rows, ${whole.length} whole hours checked`);
+      continue;
+    }
     // Playing moves time forward; the end shows the outcome card.
     const h0 = await page.evaluate(() => window.__replay.hour);
     await page.waitForTimeout(1500);
@@ -122,7 +152,7 @@ try {
     if (real && unsigned.length) fail(`${v.file}: no warning sign for ${unsigned.join(", ")}`);
     const pngV = await page.screenshot({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
     if (pngV.length < 20000) fail(`voyage screenshot looks blank (${pngV.length} bytes)`);
-    log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} hours on the log`);
+    log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} rows, ${whole.length} whole hours checked`);
   }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
