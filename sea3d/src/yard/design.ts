@@ -21,8 +21,29 @@ export interface CatalogOption {
   beacon?: number;
   ais?: number;
   af?: number; // antifouling
+  /** From the simulator: what the option does there ("wired", "no effect yet", "fixed") and why. */
+  effect?: string;
+  basis?: string;
+  simEst?: boolean;
+  /** No price or weight yet (the simulator's new slots: drive, hull material, hull shape). */
+  priceTbd?: boolean;
   [k: string]: unknown;
 }
+/** The simulator's side of each option (Theo's sim-slots.json, from boatsim.sandbox.catalog.slot_table()). */
+export interface SimOption {
+  id: string;
+  n?: string;
+  effect: "wired" | "no effect yet" | "fixed" | string;
+  est: boolean;
+  basis: string;
+  sim?: string[];
+}
+export interface SimSlots {
+  note: string;
+  catalog_slots: { id: string; opts: SimOption[] }[];
+  new_slots: { id: string; name: string; opts: SimOption[] }[];
+}
+
 export interface CatalogSlot {
   id: string;
   name: string;
@@ -35,6 +56,47 @@ export interface Catalog {
   program: [string, number, string][];
   slots: CatalogSlot[];
 }
+
+/**
+ * The catalog with the simulator's notes merged in by slot and option id, and
+ * the simulator's new slots (drive, hull material, hull shape) added at the end.
+ * Options with no effect in the simulator yet stay in, marked (Maya's call).
+ */
+export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
+  if (!sim) return cat;
+  const by = new Map(sim.catalog_slots.map((s) => [s.id, new Map(s.opts.map((o) => [o.id, o]))]));
+  const slots: CatalogSlot[] = cat.slots.map((s) => ({
+    ...s,
+    opts: s.opts.map((o) => {
+      const so = by.get(s.id)?.get(o.id);
+      return so ? { ...o, effect: so.effect, basis: so.basis, simEst: so.est } : o;
+    }),
+  }));
+  for (const ns of sim.new_slots) {
+    if (slots.some((s) => s.id === ns.id)) continue;
+    slots.push({
+      id: ns.id,
+      name: ns.name,
+      opts: ns.opts.map((o, i) => ({
+        id: o.id,
+        n: o.n ?? o.id,
+        d: o.basis,
+        cost: 0,
+        kg: 0,
+        def: i === 0 ? 1 : undefined, // the first is the kayak as built
+        est: o.est ? 1 : undefined,
+        effect: o.effect,
+        basis: o.basis,
+        simEst: o.est,
+        priceTbd: i !== 0,
+      })),
+    });
+  }
+  return { ...cat, slots };
+}
+
+/** The design as the simulator takes it: slot id -> option id, plus cruise_w (Theo's run_voyage). */
+export const simChoices = (d: Design): Record<string, string | number> => ({ ...d.picks, cruise_w: d.cruiseW });
 
 /** Choice per slot id (option id), and the cruise power in watts. */
 export interface Design {
@@ -149,6 +211,8 @@ export function hintsFor(from: CatalogOption | undefined, to: CatalogOption): st
   if (to.ais === 0) out.push("ships can't see it on their screens");
   if (to.af === 0) out.push("weed and barnacles slow it down over the weeks");
   if (to.est) out.push("figure is an estimate");
+  if (to.effect === "no effect yet") out.push("the simulator doesn't model this yet: a launch sails it as built");
+  if (to.priceTbd) out.push("price and weight not worked out yet");
   return out;
 }
 

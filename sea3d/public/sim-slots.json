@@ -1,0 +1,501 @@
+{
+ "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, all 'no effect yet' except today's choice, until the physics lands (order: mass link, hybrid drive, materials, then surf-ski and pod). Catamaran deferred (Maya). cost and kg for the new options: Sam.",
+ "catalog_slots": [
+  {
+   "id": "thr",
+   "name": "Thrusters",
+   "opts": [
+    {
+     "id": "two-t200",
+     "effect": "wired",
+     "est": false,
+     "basis": "Blue Robotics T200 datasheet, 50 W burst each",
+     "sim": [
+      "propulsion.thruster_count",
+      "propulsion.max_drive_w"
+     ],
+     "kg": 0.0
+    },
+    {
+     "id": "one-t200",
+     "effect": "wired",
+     "est": false,
+     "basis": "Blue Robotics T200 datasheet, 50 W burst each",
+     "sim": [
+      "propulsion.thruster_count",
+      "propulsion.max_drive_w",
+      "hull.mass_kg"
+     ],
+     "kg": -0.45
+    }
+   ]
+  },
+  {
+   "id": "sol",
+   "name": "Solar panels",
+   "opts": [
+    {
+     "id": "solar-250",
+     "effect": "wired",
+     "est": false,
+     "basis": "panel datasheets",
+     "sim": [
+      "power.solar_wp"
+     ],
+     "kg": 0.0
+    },
+    {
+     "id": "solar-200",
+     "effect": "wired",
+     "est": false,
+     "basis": "panel datasheets",
+     "sim": [
+      "power.solar_wp",
+      "hull.mass_kg"
+     ],
+     "kg": -1.2
+    },
+    {
+     "id": "solar-300",
+     "effect": "wired",
+     "est": true,
+     "basis": "needs a panel that fits the deck; layout not checked",
+     "sim": [
+      "power.solar_wp",
+      "hull.mass_kg"
+     ],
+     "kg": 1.2
+    }
+   ]
+  },
+  {
+   "id": "bat",
+   "name": "Batteries",
+   "opts": [
+    {
+     "id": "two-50ah",
+     "effect": "wired",
+     "est": false,
+     "basis": "2 x 12.8 V 50 Ah",
+     "sim": [
+      "power.battery_wh"
+     ],
+     "kg": 0.0
+    },
+    {
+     "id": "one-50ah",
+     "effect": "wired",
+     "est": false,
+     "basis": "1 x 12.8 V 50 Ah",
+     "sim": [
+      "power.battery_wh",
+      "hull.mass_kg"
+     ],
+     "kg": -5.1
+    },
+    {
+     "id": "two-100ah",
+     "effect": "wired",
+     "est": true,
+     "basis": "2 x 12.8 V 100 Ah; fit in the hull not checked",
+     "sim": [
+      "power.battery_wh",
+      "hull.mass_kg"
+     ],
+     "kg": 10.0
+    }
+   ]
+  },
+  {
+   "id": "mppt",
+   "name": "Solar charge controllers",
+   "opts": [
+    {
+     "id": "two-mppt",
+     "effect": "wired",
+     "est": false,
+     "basis": "weight only: charge-controller failure isn't modelled yet",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "one-mppt",
+     "effect": "wired",
+     "est": false,
+     "basis": "weight only: charge-controller failure isn't modelled yet",
+     "sim": [
+      "hull.mass_kg"
+     ],
+     "kg": -0.5
+    }
+   ]
+  },
+  {
+   "id": "brain",
+   "name": "Autopilot",
+   "opts": [
+    {
+     "id": "two-box",
+     "effect": "wired",
+     "est": true,
+     "basis": "box failure rates are GUESSes (Randolph's table)",
+     "sim": [
+      "electronics.hotel_load_wh_per_day"
+     ],
+     "kg": 0.0
+    },
+    {
+     "id": "one-box",
+     "effect": "wired",
+     "est": true,
+     "basis": "box failure rates are GUESSes (Randolph's table)",
+     "sim": [
+      "hazards.electronics_boxes",
+      "electronics.hotel_load_wh_per_day",
+      "hull.mass_kg"
+     ],
+     "kg": -0.4
+    }
+   ]
+  },
+  {
+   "id": "sat",
+   "name": "Satellite modem",
+   "opts": [
+    {
+     "id": "rockblock-9603n",
+     "effect": "fixed",
+     "est": false,
+     "basis": "RockBLOCK 9603N datasheet",
+     "sim": [],
+     "kg": 0.0
+    }
+   ]
+  },
+  {
+   "id": "beacon",
+   "name": "Backup beacon",
+   "opts": [
+    {
+     "id": "smartone-solar",
+     "effect": "wired",
+     "est": true,
+     "basis": "beacon failure rate is a GUESS",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "none",
+     "effect": "wired",
+     "est": false,
+     "basis": "no backup tracker",
+     "sim": [
+      "comms.beacon",
+      "hull.mass_kg"
+     ],
+     "kg": -0.3
+    }
+   ]
+  },
+  {
+   "id": "ais",
+   "name": "AIS",
+   "opts": [
+    {
+     "id": "emtrak-b921",
+     "effect": "wired",
+     "est": true,
+     "basis": "ships' avoidance odds are a GUESS",
+     "sim": [
+      "electronics.hotel_load_wh_per_day"
+     ],
+     "kg": 0.0
+    },
+    {
+     "id": "dy-ait1500",
+     "effect": "wired",
+     "est": true,
+     "basis": "ships' avoidance odds are a GUESS",
+     "sim": [
+      "electronics.hotel_load_wh_per_day",
+      "hull.mass_kg"
+     ],
+     "kg": 0.1
+    },
+    {
+     "id": "none",
+     "effect": "wired",
+     "est": false,
+     "basis": "design doc: losing AIS roughly doubles collision risk",
+     "sim": [
+      "hazards.p_avoid_with_ais",
+      "electronics.hotel_load_wh_per_day",
+      "hull.mass_kg"
+     ],
+     "kg": -1.2
+    }
+   ]
+  },
+  {
+   "id": "radar",
+   "name": "Radar reflector",
+   "opts": [
+    {
+     "id": "echomax-230br",
+     "effect": "no effect yet",
+     "est": false,
+     "basis": "how often ships see us doesn't depend on it yet",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "davis-echomaster",
+     "effect": "no effect yet",
+     "est": false,
+     "basis": "how often ships see us doesn't depend on it yet",
+     "sim": [],
+     "kg": 0.0
+    }
+   ]
+  },
+  {
+   "id": "light",
+   "name": "Navigation light",
+   "opts": [
+    {
+     "id": "hella-naviled-360",
+     "effect": "fixed",
+     "est": false,
+     "basis": "design doc, 0.5 W at night",
+     "sim": [],
+     "kg": 0.0
+    }
+   ]
+  },
+  {
+   "id": "lead",
+   "name": "Keel bulb",
+   "opts": [
+    {
+     "id": "lead-50-new",
+     "effect": "wired",
+     "est": false,
+     "basis": "design doc: 50 kg bulb",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "lead-50-scrap",
+     "effect": "wired",
+     "est": false,
+     "basis": "same weight as new; only the price differs",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "lead-40",
+     "effect": "wired",
+     "est": true,
+     "basis": "weight from the catalog; how a lighter bulb rights the boat is a GUESS",
+     "sim": [
+      "hazards.p_inverted_stuck",
+      "hull.mass_kg"
+     ],
+     "kg": -10.0
+    }
+   ]
+  },
+  {
+   "id": "paint",
+   "name": "Antifouling paint",
+   "opts": [
+    {
+     "id": "micron-csc",
+     "effect": "wired",
+     "est": true,
+     "basis": "design doc allowance, +30 % drag by day 50 (GUESS)",
+     "sim": [
+      "hull.fouling_frac_per_day"
+     ],
+     "kg": 0.0
+    },
+    {
+     "id": "none",
+     "effect": "wired",
+     "est": true,
+     "basis": "GUESS: bare hull fouls about twice as fast",
+     "sim": [
+      "hull.fouling_frac_per_day"
+     ],
+     "kg": 0.0
+    }
+   ]
+  },
+  {
+   "id": "spares",
+   "name": "Spares",
+   "opts": [
+    {
+     "id": "spares-full",
+     "effect": "no effect yet",
+     "est": false,
+     "basis": "spares are for the trials only",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "spares-no-pixhawk",
+     "effect": "no effect yet",
+     "est": false,
+     "basis": "spares are for the trials only",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "none",
+     "effect": "no effect yet",
+     "est": false,
+     "basis": "spares are for the trials only",
+     "sim": [],
+     "kg": 0.0
+    }
+   ]
+  }
+ ],
+ "new_slots": [
+  {
+   "id": "drive",
+   "name": "Drive",
+   "opts": [
+    {
+     "id": "solar-electric",
+     "n": "Solar-electric (as built)",
+     "effect": "wired",
+     "est": false,
+     "basis": "the v4 kayak as modelled",
+     "sim": []
+    },
+    {
+     "id": "wing-sail",
+     "n": "Wing sail only",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "wing on the kayak: mass, windage and heel limit are estimates",
+     "sim": [
+      "sail.*"
+     ]
+    },
+    {
+     "id": "hybrid",
+     "n": "Wing sail + motors",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "motors upwind instead of tacking: new autopilot choice, estimates",
+     "sim": [
+      "sail.*",
+      "propulsion.*"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "material",
+   "name": "Hull material",
+   "opts": [
+    {
+     "id": "polyethylene",
+     "n": "Polyethylene (rotomoulded, as built)",
+     "effect": "wired",
+     "est": false,
+     "basis": "the v4 kayak as modelled",
+     "sim": []
+    },
+    {
+     "id": "fibreglass",
+     "n": "Fibreglass",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "leak and impact multipliers are estimates (no fleet data per material)",
+     "sim": [
+      "hull.mass_kg",
+      "hazards.leak*",
+      "hazards.p_lost_given_strike"
+     ]
+    },
+    {
+     "id": "carbon",
+     "n": "Carbon fibre",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "light but stiff: impact cracks become leaks (estimate)",
+     "sim": [
+      "hull.mass_kg",
+      "hazards.leak*",
+      "hazards.p_lost_given_strike"
+     ]
+    },
+    {
+     "id": "plywood-epoxy",
+     "n": "Plywood and epoxy",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "leak multiplier 1.5x is an estimate",
+     "sim": [
+      "hull.mass_kg",
+      "hazards.leak*",
+      "hazards.p_lost_given_strike"
+     ]
+    },
+    {
+     "id": "aluminium",
+     "n": "Aluminium",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "leak multiplier 0.7x and galvanic risk are estimates",
+     "sim": [
+      "hull.mass_kg",
+      "hazards.leak*",
+      "hazards.p_lost_given_strike",
+      "hull.fouling_frac_per_day"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "shape",
+   "name": "Hull shape",
+   "opts": [
+    {
+     "id": "kayak",
+     "n": "10 ft kayak (as built)",
+     "effect": "wired",
+     "est": false,
+     "basis": "the v4 kayak as modelled",
+     "sim": []
+    },
+    {
+     "id": "surf-ski",
+     "n": "Long narrow kayak, 5.2 x 0.45 m",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "scaled from our kayak; drag of a narrow hull in big seas is uncertain",
+     "sim": [
+      "hull.*",
+      "hazards.critical_wave_*"
+     ]
+    },
+    {
+     "id": "pod",
+     "n": "Sealed self-righting pod, about 2 m",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "scaled from Rev B's hull; drag of a blunt body in waves has few data",
+     "sim": [
+      "hull.*",
+      "hazards.critical_wave_*"
+     ]
+    }
+   ]
+  }
+ ]
+}

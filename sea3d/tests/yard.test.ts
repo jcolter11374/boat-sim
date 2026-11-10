@@ -11,12 +11,17 @@ import {
   nightHours,
   optionOf,
   plannedDesign,
+  simChoices,
   summarise,
+  withSim,
   type Catalog,
+  type SimSlots,
 } from "../src/yard/design";
 import { gridDistance } from "../src/yard/launch";
+import { replayUrl } from "../src/replay/data";
 
 const cat = JSON.parse(readFileSync("public/parts-catalog.json", "utf8")) as Catalog;
+const sim = JSON.parse(readFileSync("public/sim-slots.json", "utf8")) as SimSlots;
 
 test("every option has a stable id, unique in its slot, and each slot has a planned choice", () => {
   for (const s of cat.slots) {
@@ -84,13 +89,45 @@ test("the design file lists every slot's pick and the totals", () => {
   assert.match(y, /^name: "quote \\"test\\""$/m);
 });
 
-test("the grid launcher finds the build nearest a design", () => {
-  const energy = [
-    { id: "s", label: "small", battery_wh: 640, solar_wp: 200 },
-    { id: "m", label: "current", battery_wh: 1280, solar_wp: 250 },
-  ];
-  const b = (motors: number, e: string, boxes: number, w = 25) => ({ id: "", boat: "v4 kayak", label: "", options: { motors, cruise_w: w, energy: e, boxes }, odds: null, replays: [] });
-  const s = summarise(cat, plannedDesign(cat));
-  assert.equal(gridDistance(b(2, "m", 2), energy, s), 0);
-  assert.ok(gridDistance(b(1, "m", 2), energy, s) > gridDistance(b(2, "s", 2), energy, s), "a motor matters more than battery size");
+test("the grid launcher's distance counts differing modelled slots, then cruise watts", () => {
+  const c = withSim(cat, sim);
+  const plan = plannedDesign(c);
+  const b = (options: Record<string, string | number>) => ({ id: "", boat: "v4 kayak", label: "", options, odds: null, replays: [] });
+  assert.deepEqual(gridDistance(b({ ...plan.picks, cruise_w: 25 }), c, plan), [0, 0]);
+  // A grid build that lists only what differs: unlisted slots are the planned choice.
+  assert.deepEqual(gridDistance(b({ thr: "one-t200", cruise_w: 20 }), c, plan), [1, 5]);
+  // Options the simulator doesn't model yet don't count against a build.
+  const mat = c.slots.find((s) => s.id === "material")!;
+  const fancy = { ...plan, picks: { ...plan.picks, material: mat.opts[1].id } };
+  assert.equal(mat.opts[1].effect, "no effect yet");
+  assert.deepEqual(gridDistance(b({ cruise_w: 25 }), c, fancy), [0, 0]);
+});
+
+test("the simulator's notes merge into the catalog without losing prices", () => {
+  const c = withSim(cat, sim);
+  for (const s of cat.slots) {
+    const m = c.slots.find((x) => x.id === s.id)!;
+    assert.deepEqual(m.opts.map((o) => [o.id, o.cost, o.kg]), s.opts.map((o) => [o.id, o.cost, o.kg]), s.id);
+  }
+  for (const id of ["drive", "material", "shape"]) {
+    const s = c.slots.find((x) => x.id === id);
+    assert.ok(s, `new slot ${id}`);
+    assert.equal(s!.opts.filter((o) => o.def).length, 1, `${id} has one planned choice`);
+    assert.ok(s!.opts.slice(1).every((o) => o.priceTbd), `${id}: alternatives have no price yet`);
+  }
+  assert.equal(withSim(cat, null), cat);
+  // Share links carry the new slots too.
+  const d = plannedDesign(c);
+  d.picks.shape = "surf-ski";
+  assert.equal(decodeDesign(c, encodeDesign(c, d)).picks.shape, "surf-ski");
+  assert.equal(simChoices(d).shape, "surf-ski");
+  assert.equal(simChoices(d).cruise_w, 25);
+});
+
+test("replays are read from this site only", () => {
+  const o = "https://jcolter11374.github.io";
+  assert.equal(replayUrl("./voyages", "a.json", o), "./voyages/a.json");
+  assert.equal(replayUrl(".", `${o}/boat-sim/boatyard/x.json`, o), `${o}/boat-sim/boatyard/x.json`);
+  assert.equal(replayUrl(".", `blob:${o}/1234`, o), `blob:${o}/1234`);
+  assert.throws(() => replayUrl(".", "https://example.com/x.json", o));
 });

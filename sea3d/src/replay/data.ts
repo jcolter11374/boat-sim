@@ -65,12 +65,25 @@ export async function loadIndex(base: string): Promise<IndexEntry[]> {
   return j.voyages;
 }
 
+/**
+ * A replay file. `file` is a path under `base`, or a full URL on this page's own
+ * origin (a Boatyard launch hands over blob: URLs made in the browser).
+ */
 export async function loadReplay(base: string, file: string): Promise<Replay> {
-  const r = await fetch(`${base}/${file}`);
+  const r = await fetch(replayUrl(base, file));
   if (!r.ok) throw new Error(`${file}: ${r.status}`);
   const rep = (await r.json()) as Replay;
   if (rep.schema !== 1) throw new Error(`${file}: replay schema ${rep.schema}, this page reads schema 1`);
   return rep;
+}
+
+/** Where a replay lives: same-origin absolute URLs (blob: included) as they are, else under base. */
+export function replayUrl(base: string, file: string, origin = globalThis.location?.origin): string {
+  if (/^(blob:|https?:)/.test(file)) {
+    if (new URL(file).origin !== origin) throw new Error(`${file}: replays are only read from this site`);
+    return file;
+  }
+  return `${base}/${file}`;
 }
 
 /** Index i and fraction f with h[i] <= hour <= h[i+1] (clamped to the ends). */
