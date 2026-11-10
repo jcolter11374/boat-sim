@@ -49,7 +49,7 @@ import { Sea } from "./water";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, Sea as LiveSea } from "./waves";
-import { FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
+import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -219,6 +219,8 @@ let warp = 1 / 3600; // voyage hours per real second: real time to start (John)
 let ended = false;
 /** The live tracker's voyage (?live), and whether the page is showing the forecast. */
 let tracked: Tracked | null = null;
+/** The feed's "now" and the wall-clock time it was loaded, to carry "now" on from. */
+let liveClock = { hour: 0, at: 0 };
 let forecastLook = false;
 // The launch-day game (?mode=game).
 let beats: Beat[] = [];
@@ -452,7 +454,9 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
   try {
     const { voyage, ghost } = await loadFeed(FEED);
     const wasNow = !tracked || Math.abs(hour - tracked.nowHour) < 0.5;
+    const wasPlaying = playing;
     tracked = feedToReplay(voyage, ghost, course);
+    liveClock = { hour: tracked.nowHour, at: Date.now() };
     const r = tracked.rep;
     lanes = [{ key: keyOf(r.boat), file: "live", rep: r, shown: 0 }];
     status.file = "live";
@@ -473,7 +477,8 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
     setFocus(0, true);
     ticks();
     seek(keepHour && !wasNow ? Math.min(hour, endHour()) : tracked.nowHour);
-    setPlaying(false);
+    // A reload carries on as it was (a reload that stopped the playback looked like a glitch).
+    setPlaying(keepHour && wasPlaying);
     status.ready = true;
   } catch (e) {
     fail(String(e));
@@ -727,6 +732,8 @@ renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
   const dt = Math.min(t - last, 0.1);
   last = t;
+  // The live tracker's "now" moves on with the clock between feed reloads.
+  if (tracked) advanceNow(tracked, liveClock.hour + (Date.now() - liveClock.at) / 3600e3);
   if (rep && playing) {
     hour = Math.min(hour + dt * warp, endHour());
     if (hour >= endHour()) setPlaying(false);
@@ -873,10 +880,12 @@ renderer.setAnimationLoop(() => {
     status.wet = wetNow;
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
-    hud(rep, stw, hs);
+    // The live cards overwrite some of the replay's, so they must update in the same frame:
+    // drawn a frame apart, the battery, its bar and the captions flicker between the two.
+    const fresh = hud(rep, stw, hs);
     if (tracked) {
       setForecastLook(hour > tracked.nowHour + 1e-3);
-      liveHud(tracked);
+      if (fresh) liveHud(tracked);
     }
     status.hour = hour;
   }
@@ -1159,12 +1168,9 @@ function equipment(r: Replay, failed: Map<string, string>): void {
   }
 }
 
-let lastLiveHud = -1;
 /** The live tracker's cards: battery only from a fresh report, report age, forecast arrival. */
+/** The live tracker's cards, over the replay's; call only right after hud() updated. */
 function liveHud(tr: Tracked): void {
-  const now = performance.now();
-  if (now - lastLiveHud < 100) return;
-  lastLiveHud = now;
   const forecast = hour > tr.nowHour + 1e-3;
   const rpt = forecast ? null : reportAt(tr, hour);
   const rptH = rpt ? (utc(rpt.t) - utc(tr.rep.start)) / 3600e3 : -1;
@@ -1190,9 +1196,10 @@ function liveHud(tr: Tracked): void {
 const fmtAgo = (h: number) => (h < 1 ? "under an hour ago" : h < 48 ? `${Math.round(h)} h ago` : `${(h / 24).toFixed(1)} days ago`);
 
 let lastHud = -1;
-function hud(r: Replay, stw: number, hs: number): void {
+/** The cards, ten times a second; true when they were redrawn this call. */
+function hud(r: Replay, stw: number, hs: number): boolean {
   const now = performance.now();
-  if (now - lastHud < 100) return;
+  if (now - lastHud < 100) return false;
   lastHud = now;
   const day = hour / 24;
   $("h-day").textContent = day.toFixed(1);
@@ -1230,4 +1237,5 @@ function hud(r: Replay, stw: number, hs: number): void {
   const comms = commsAt(r, hour);
   const commsTxt = comms === "ok" ? "reporting home" : comms === "beacon" ? "beacon only" : comms === "silent" ? "SILENT" : "";
   $("h-sun").textContent = [commsTxt, sunTxt].filter(Boolean).join(" · ");
+  return true;
 }
