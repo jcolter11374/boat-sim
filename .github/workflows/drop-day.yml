@@ -64,7 +64,7 @@ jobs:
           retention-days: 90
   report:
     needs: run
-    if: always()
+    if: ${{ !cancelled() }}  # partial years still report; a cancelled run (superseded push) does not
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
