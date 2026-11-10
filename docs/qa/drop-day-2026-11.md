@@ -4,6 +4,11 @@ Ravi (QA). Runs: [42868553501](https://github.com/jcolter11374/boat-sim/actions/
 [42882830822](https://github.com/jcolter11374/boat-sim/actions/runs/42882830822). The second adds better
 forecast rules. Both runs produced the same drift results.
 
+**Decision (Maya, Lead, 10 Nov 2026; John delegated the drop distance):** keep the 100 km drop and
+retire the 50 km fallback (if the sailboat can't reach 100 km, wait). The planned go/no-go check is the
+5-day mean onshore-wind rule (item 5), without the extra "forecast drift runs ashore" clause. Late
+April is the safest drop window.
+
 **What this measures.** It is the worst case: the boat dies at the moment of the drop, and wind, waves
 and current push it for 30 days. A working boat motors away from the coast in its first day or two, so
 none of this changes the 78% crossing odds (#128). It only matters for an early death.
