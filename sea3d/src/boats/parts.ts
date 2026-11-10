@@ -241,7 +241,9 @@ export class Kit {
     g.setIndex(idx);
     g.computeVertexNormals();
     const map = this.keep(cellTexture(cols, rows));
-    return this.mesh(g, this.std(0xffffff, { map, roughness: 0.3, metalness: 0.3 }), parent);
+    const m = this.mesh(g, this.std(0xffffff, { map, roughness: 0.3, metalness: 0.3 }), parent);
+    m.name = "panel"; // the gear finds panels by name
+    return m;
   }
 }
 

@@ -41,6 +41,11 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const app = $("app");
 const seaSelect = $<HTMLSelectElement>("sea");
 const qualitySelect = $<HTMLSelectElement>("quality");
+{
+  // ?quality=low|high picks the starting quality (the smoke test runs Low on software graphics).
+  const q = new URLSearchParams(location.search).get("quality");
+  if (q === "low" || q === "high") qualitySelect.value = q;
+}
 const headingSelect = $<HTMLSelectElement>("heading");
 const underCheck = $<HTMLInputElement>("under");
 const tourCheck = $<HTMLInputElement>("tour");
@@ -143,7 +148,8 @@ function setQuality(q: Quality): void {
   quality = q;
   sea.setQuality(q);
   buildBoats(q);
-  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : 1;
+  // Low on software graphics (no graphics card) draws at half resolution to keep moving.
+  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
   renderer.setPixelRatio(ratio);
   atmos.setBloom(q === "high");
   atmos.setPixelRatio(ratio);

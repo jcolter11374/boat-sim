@@ -168,11 +168,12 @@ export class Atmosphere {
     }
     if (this.bloom) this.bloom.strength = 0.22 + 0.25 * dusk + 0.15 * night;
 
-    // Re-light reflections when the sky has changed enough, a few times a second at most.
+    // Re-light reflections when the sky has changed enough, a few times a second at most
+    // (every few seconds on software graphics, where each re-light costs about a frame).
     const now = performance.now();
     const k = this.envKey;
     const moved = Math.abs(elDeg - k[0]) > 0.7 || Math.abs(((azDeg - k[1] + 540) % 360) - 180) > 3 || Math.abs(storm - k[2]) > 0.05;
-    if (forceEnv || (moved && now - this.envAt > 250)) {
+    if (forceEnv || (moved && now - this.envAt > (this.software ? 5000 : 250))) {
       const rt = this.pmrem.fromScene(this.envScene);
       this.scene.environment = rt.texture;
       this.scene.environmentIntensity = 0.25 + 0.75 * day;

@@ -85,7 +85,18 @@ def build(out: Path) -> None:
     foil("keel", 0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12, fin)
     lathe("bulb", bulb_profile(0.32, 0.068, 0.4), 40, lead, (0.579, -0.434, 0))
     # Rudder, stock at x = 1400 mm.
-    foil("rudder", 0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12, fin)
+    foil(
+        "rudder",
+        0.12,
+        0.12,
+        1.378,
+        1.378,
+        0.05,
+        -0.19,
+        0.12,
+        fin,
+        parent=pivot("rudder_pivot", (1.4, 0, 0)),
+    )
     # Two solar panels on the aft deck.
     panel("panel_fwd", 0.65, 1.07, 0.28, deck, 4, 2)
     panel("panel_aft", 1.08, 1.48, 0.28, deck, 4, 2)

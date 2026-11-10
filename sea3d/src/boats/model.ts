@@ -9,6 +9,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
 
@@ -19,7 +20,10 @@ export interface BoatModel {
   stern: THREE.Vector3;
   /** Height in the boat frame for a name tag. */
   tagHeight: number;
-  animate(t: number): void; // propellers, wing: cosmetic only
+  /** Working equipment (props, rudder, wing, comms light, failures): cosmetic only. */
+  gear: Gear;
+  /** Showroom: everything working, a gentle breeze. */
+  animate(t: number): void;
   dispose(): void;
 }
 
@@ -152,7 +156,11 @@ export function buildKayak(quality: Quality): BoatModel {
     kit.mesh(kit.foil(0.25, 0.25, 1.32, 1.32 + (0.05 - (bulbY + 0.03)) * Math.tan((20 * Math.PI) / 180), 0.05, bulbY + 0.03, 0.1), g10, g);
     kit.bulb(g, lead, 0.55, 0.125, 0.4, 1.4, bulbY, 0);
 
-    kit.mesh(kit.foil(0.2, 0.17, 2.86, 2.9, 0.06, -0.3, 0.12), kit.std(0x2b2f33), g);
+    const rp = new THREE.Group();
+    rp.name = "rudder_pivot"; // turned by the gear about its stock
+    rp.position.x = 2.91;
+    g.add(rp);
+    kit.mesh(kit.foil(0.2, 0.17, 2.86, 2.9, 0.06, -0.3, 0.12), kit.std(0x2b2f33), rp).position.x = -2.91;
     // Deck kit: AIS whip, all-round light, Globalstar beacon, tow eye.
     const white = kit.std(0xf4f4f0);
     const black = kit.std(0x222426);
@@ -201,15 +209,38 @@ export function buildKayak(quality: Quality): BoatModel {
     kit.rod(th, g10, 0.008, [0, 0.03, 0], [0, sy + 0.07, -z * 0.35]);
   }
 
+  // Builder frame: z is to port. Deck height for placing the light and signs.
+  const kDeck = (x: number) => K.dz(x / K.L) + K.crown;
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const gear = new Gear(g, {
+    props, // port first
+    light: V(3.0, kDeck(3.0) + 0.27, -0.11), // on top of the all-round light
+    spots: {
+      thruster_port: V(2.8, 0.02, 0.24),
+      thruster_starboard: V(2.8, 0.02, -0.24),
+      rudder: V(2.98, -0.08, 0),
+      entangled: V(2.6, -0.2, 0),
+      electronics_main: V(1.2, 0.72, 0), // the two boxes inside the dome
+      electronics_safe: V(1.9, 0.72, 0),
+      leak_main_tub: V(1.2, 0.3, 0.44),
+      leak_safe_tub: V(1.9, 0.3, 0.44),
+      beacon: V(0.3, kDeck(0.3) + 0.14, 0),
+      comms_silent: V(3.0, kDeck(3.0) + 0.45, -0.11),
+    },
+    smoky: ["electronics_main", "electronics_safe"],
+  });
+
   return {
     spec: KAYAK,
     root,
     stern: new THREE.Vector3(KAYAK.cgX - K.L, KAYAK.cgBelowWaterline, 0),
     tagHeight: 1.3 + KAYAK.cgBelowWaterline,
-    animate(t) {
-      for (const p of props) p.rotation.x = t * 6;
+    gear,
+    animate: (t) => gear.update(idleGear(t), t),
+    dispose: () => {
+      gear.dispose();
+      kit.dispose();
     },
-    dispose: () => kit.dispose(),
   };
 }
 
@@ -228,14 +259,10 @@ export function buildRandolph(quality: Quality): BoatModel {
     dz: (s) => 0.23 + 0.03 * Math.max(1 - s / 0.4, 0) ** 2,
   };
   const { root, inner: g } = frame(RANDOLPH);
-  let pivot: THREE.Object3D;
-  let vane: THREE.Object3D;
   if (randolphDetailed) {
     // Our Blender model of their boat; the wing and the wind vane hang under named pivots.
     const m = randolphDetailed.clone(true);
     g.add(m);
-    pivot = m.getObjectByName("wing_pivot") ?? new THREE.Group();
-    vane = m.getObjectByName("vane_pivot") ?? new THREE.Group();
   } else {
     const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
     kit.mesh(kit.hull(R, { top: 0xf1f3f4, deck: 0xdfe5e8, bottom: 0x2e5566, boot: 0x0f8a8a }), hullMat, g);
@@ -249,7 +276,11 @@ export function buildRandolph(quality: Quality): BoatModel {
     kit.mesh(kit.foil(0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12), kit.std(0x30373c), g);
     kit.bulb(g, kit.std(0x6d7378, { roughness: 0.4, metalness: 0.5 }), 0.32, 0.068, 0.4, 0.579, -0.434, 0);
     // Rudder, stock at x = 1400.
-    kit.mesh(kit.foil(0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12), kit.std(0x30373c), g);
+    const rp = new THREE.Group();
+    rp.name = "rudder_pivot";
+    rp.position.x = 1.4;
+    g.add(rp);
+    kit.mesh(kit.foil(0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12), kit.std(0x30373c), rp).position.x = -1.4;
     // Two solar panels on the aft deck.
     kit.panel(g, 0.65, 1.07, 0.28, rDeck, 4, 2);
     kit.panel(g, 1.08, 1.48, 0.28, rDeck, 4, 2);
@@ -262,14 +293,15 @@ export function buildRandolph(quality: Quality): BoatModel {
     kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
     kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
     // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.
-    pivot = new THREE.Group();
+    const pivot = new THREE.Group();
+    pivot.name = "wing_pivot";
     pivot.position.set(0.6, 0, 0);
     g.add(pivot);
     kit.mesh(kit.foil(0.3, 0.3, -0.066, -0.066, 0.3, 1.3, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
     kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.31);
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
     kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
-    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot);
+    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot).name = "tail_flap";
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]);
     kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
     // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
@@ -277,24 +309,41 @@ export function buildRandolph(quality: Quality): BoatModel {
     kit.cyl(g, spar, 0.01, 1.53, 0.15, 0.65);
     kit.cyl(g, pvc, 0.04, 1.53, 0.553, 0.567);
     kit.cyl(g, dark, 0.018, 1.53, 0.65, 0.69);
-    vane = new THREE.Group();
+    const vane = new THREE.Group();
+    vane.name = "vane_pivot";
     vane.position.set(1.53, 0.68, 0);
     g.add(vane);
     kit.rod(vane, dark, 0.004, [0, 0, 0], [0.16, 0, 0]);
     kit.box(vane, kit.std(0x0f8a8a), 0.1, 0.17, -0.03, 0.04, -0.002, 0.002);
   }
 
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const gear = new Gear(g, {
+    props: [], // no motors: the wing sails it
+    light: V(1.53, 0.585, 0), // on the antenna platform
+    spots: {
+      rudder: V(1.42, -0.06, 0),
+      sail: V(0.6, 1.42, 0),
+      entangled: V(0.62, -0.26, 0),
+      electronics_main: V(0.43, 0.42, 0), // under the hatch
+      leak_main_tub: V(0.43, 0.2, 0.24),
+      beacon: V(1.45, 0.47, 0),
+      comms_silent: V(1.53, 0.76, 0),
+    },
+    smoky: ["electronics_main"],
+  });
+
   return {
     spec: RANDOLPH,
     root,
     stern: new THREE.Vector3(RANDOLPH.cgX - R.L, RANDOLPH.cgBelowWaterline, 0),
     tagHeight: 1.6 + RANDOLPH.cgBelowWaterline,
-    animate(t) {
-      // Cosmetic: the wing weathervanes gently. Real wing angle needs wind (later phase).
-      pivot.rotation.y = 0.35 * Math.sin(t * 0.35);
-      vane.rotation.y = 0.2 * Math.sin(t * 0.5 + 1);
+    gear,
+    animate: (t) => gear.update(idleGear(t), t),
+    dispose: () => {
+      gear.dispose();
+      kit.dispose();
     },
-    dispose: () => kit.dispose(),
   };
 }
 
