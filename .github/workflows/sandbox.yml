@@ -69,7 +69,17 @@ jobs:
           python -m boatsim.sandbox pack --out site/boatsim.zip
           python -c "import zipfile; [print(f'{i.filename:22s} {i.compress_size/1e6:6.2f} MB') for i in zipfile.ZipFile('site/forcing_$YEAR.npz').infolist()]"
       - name: Reference voyages in CPython
-        run: python -m boatsim.sandbox reference --bundle "site/forcing_$YEAR.npz" --builds $BUILDS --out site/reference_cpython.json
+        run: python -m boatsim.sandbox reference --bundle "site/forcing_$YEAR.npz" --builds $BUILDS --trace --out site/reference_cpython.json
+      # Ravi's control: how much does a nudge of rounding size (1e-9 deg at the
+      # drop, ~0.1 mm) change voyages within CPython itself? If it flips about
+      # as many as CPython vs Pyodide do, the cross-runtime differences are the
+      # sim's own sensitivity, not something Pyodide-specific.
+      - name: Control - CPython with the drop nudged 1e-9 deg
+        run: |
+          python -m boatsim.sandbox reference --bundle "site/forcing_$YEAR.npz" --builds $BUILDS --trace \
+            --nudge 1e-9 --out site/reference_cpython_nudged.json
+          python -m boatsim.sandbox compare site/reference_cpython.json site/reference_cpython_nudged.json || true
+          python -m boatsim.sandbox diverge site/reference_cpython.json site/reference_cpython_nudged.json
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -78,11 +88,12 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           node reference.mjs --pack ../../site/boatsim.zip --bundle "../../site/forcing_$YEAR.npz" \
-            --builds $BUILDS --out ../../site/reference.json
+            --builds $BUILDS --trace --out ../../site/reference.json
       - name: CPython vs Pyodide (reported, not enforced)
         run: |
           python -m boatsim.sandbox compare site/reference_cpython.json site/reference.json \
             || echo "::warning::CPython and Pyodide differ on some voyages (last-bit maths differences grow over a voyage); the exact gate is browser vs reference.json"
+          python -m boatsim.sandbox diverge site/reference_cpython.json site/reference.json
       - name: Pyodide reference is deterministic (second run, exact)
         working-directory: tools/pyodide
         run: |
@@ -109,6 +120,15 @@ jobs:
           for r in a:
               o = b.get((r["build"], r["start"]), {})
               print(f"| {r['build']} | {r['start'][:10]} | {r['outcome']} {r['days']} d, {r['events']} events | {o.get('outcome', '')} {o.get('days', '')} d, {o.get('events', '')} events |")
+          # Calibration (Ravi): the kayak as built, sandbox vs the full-resolution
+          # server replays of the same launches (sea3d/public/voyages, same seeds).
+          full = {v["start"]: v for v in json.loads(pathlib.Path("sea3d/public/voyages/index.json").read_text())["voyages"] if v["boat"] == "v4 kayak"}
+          print("\n| Kayak as built | Full resolution (server) | Sandbox, CPython | Sandbox, browser |\n|---|---|---|---|")
+          for r in a:
+              if r["build"] != "k-p25":
+                  continue
+              f, o = full.get(r["start"], {}), b.get((r["build"], r["start"]), {})
+              print(f"| {r['start'][:10]} | {f.get('outcome', '')} {f.get('days', '')} d | {r['outcome']} {r['days']} d | {o.get('outcome', '')} {o.get('days', '')} d |")
           PY
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

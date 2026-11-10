@@ -115,6 +115,20 @@ match `reference.json` **exactly**:
 python -m boatsim.sandbox compare reference.json browser.json --exact
 ```
 
+The gate is pinned to Pyodide 0.27.7 with numpy 2.0.2 (the page and
+`tools/pyodide` must use the same). Bumping Pyodide will break it, as it
+should: the fix is to bump both together and regenerate `reference.json` with
+the workflow, never to loosen the comparison.
+
+The workflow also runs two diagnostics. **Control**: CPython with the drop
+moved 1e-9 deg (about 0.1 mm), compared with CPython; if that flips about as many
+voyages as CPython vs Pyodide, the differences are the simulation's own
+sensitivity and not something Pyodide-specific. **Diverge**
+(`python -m boatsim.sandbox diverge a.json b.json`, with `reference --trace`):
+for each voyage that ends differently, the hour where the tracks first part and
+the events either run had in the day before. The run summary also puts the kayak's
+sandbox endings next to the full-resolution server replays of the same launches.
+
 ## Catalog mapping (`boatsim.sandbox.catalog`)
 
 Every option is a change from the kayak as it stands. "No effect yet" options

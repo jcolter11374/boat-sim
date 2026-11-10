@@ -36,9 +36,13 @@ def pack(out: Path, root: Path = Path(".")) -> int:
     return n
 
 
-def reference(bundle: Path, builds: list[str] | None, which=None) -> list[dict]:
+def reference(
+    bundle: Path, builds: list[str] | None, which=None, nudge: float = 0.0, trace: bool = False
+) -> list[dict]:
     """Every launch of each grid build: outcome, days, events and end position,
-    exactly as the browser gets them (repr of floats, so exact compares work)."""
+    exactly as the browser gets them (repr of floats, so exact compares work).
+    nudge: move the drop north by this many degrees (sensitivity test).
+    trace: add each voyage's 6-hourly track and events, for `diverge`."""
     from boatsim.sandbox import catalog
     from boatsim.sandbox.run import launches, open_bundle, run_voyage
 
@@ -51,8 +55,15 @@ def reference(bundle: Path, builds: list[str] | None, which=None) -> list[dict]:
         for i, (start, seed) in enumerate(launches(env)):
             if which is not None and i not in which:
                 continue
-            r = run_voyage(grid[bid], env, start, seed)
-            out.append(fingerprint(bid, r))
+            r = run_voyage(grid[bid], env, start, seed, drop_nudge_deg=nudge)
+            row = fingerprint(bid, r)
+            if trace and r["replay"]:
+                rep = r["replay"]
+                row["track"] = {
+                    "h": rep["h"], "lat": rep["lat"], "lon": rep["lon"],
+                    "events": [[e["h"], e["kind"], e.get("detail", "")] for e in rep["events"]],
+                }  # fmt: skip
+            out.append(row)
     return out
 
 
@@ -87,10 +98,45 @@ def compare(a: list[dict], b: list[dict], exact: bool = False) -> list[str]:
         o = bb.get(key(r))
         if o is None:
             continue
-        fields = [f for f in r if f != "runtime"] if exact else SAME_RUNTIME
+        fields = [f for f in r if f not in ("runtime", "track")] if exact else SAME_RUNTIME
         for f in fields:
             if r.get(f) != o.get(f):
                 out.append(f"{key(r)} {f}: {r.get(f)!r} vs {o.get(f)!r}")
+    return out
+
+
+def diverge(a: list[dict], b: list[dict], tol_deg: float = 0.002) -> list[str]:
+    """For each voyage whose ending differs, where the two tracks first part
+    (more than tol_deg apart; tracks are to 0.001 deg) and the events either run
+    had in the day before, that the other didn't."""
+    key = lambda r: (r["build"], r["start"])
+    bb = {key(r): r for r in b}
+    out = []
+    for r in a:
+        o = bb.get(key(r))
+        if o is None or all(r[f] == o[f] for f in SAME_RUNTIME):
+            continue
+        ta, tb = r.get("track"), o.get("track")
+        if not ta or not tb:
+            out.append(f"{key(r)}: no tracks (run reference with --trace)")
+            continue
+        n = min(len(ta["h"]), len(tb["h"]))
+        k = next(
+            (i for i in range(n)
+             if abs(ta["lat"][i] - tb["lat"][i]) + abs(ta["lon"][i] - tb["lon"][i]) > tol_deg),
+            None,
+        )  # fmt: skip
+        if k is None:
+            out.append(f"{key(r)}: tracks agree to {tol_deg} deg until one ends")
+            continue
+        h = ta["h"][k]
+        ea = {tuple(e) for e in ta["events"] if h - 24 <= e[0] <= h}
+        eb = {tuple(e) for e in tb["events"] if h - 24 <= e[0] <= h}
+        out.append(
+            f"{key(r)}: tracks part by hour {h:g} (day {h / 24:.1f}) at "
+            f"{ta['lat'][k]},{ta['lon'][k]} vs {tb['lat'][k]},{tb['lon'][k]}; "
+            f"events only in the first: {sorted(ea - eb)}; only in the second: {sorted(eb - ea)}"
+        )
     return out
 
 
@@ -108,6 +154,11 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--builds", nargs="*", default=None)
     r.add_argument("--launches", type=int, nargs="*", default=None, help="launch indexes 0-5")
     r.add_argument("--out", required=True)
+    r.add_argument("--nudge", type=float, default=0.0, help="move the drop north, deg")
+    r.add_argument("--trace", action="store_true", help="add tracks for `diverge`")
+    dv = sub.add_parser("diverge")
+    dv.add_argument("a")
+    dv.add_argument("b")
     m = sub.add_parser("compare")
     m.add_argument("a")
     m.add_argument("b")
@@ -124,6 +175,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "pack":
         n = pack(Path(a.out))
         print(f"{a.out}: {n} files, {Path(a.out).stat().st_size / 1e6:.2f} MB")
+    elif a.cmd == "diverge":
+        for line in diverge(json.loads(Path(a.a).read_text()), json.loads(Path(a.b).read_text())):
+            print(line)
     elif a.cmd == "compare":
         diffs = compare(
             json.loads(Path(a.a).read_text()), json.loads(Path(a.b).read_text()), a.exact
@@ -136,7 +190,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         import numpy
 
-        rows = reference(Path(a.bundle), a.builds, a.launches)
+        rows = reference(Path(a.bundle), a.builds, a.launches, a.nudge, a.trace)
         for x in rows:
             x["runtime"] = f"python {sys.version.split()[0]} numpy {numpy.__version__}"
         Path(a.out).write_text(json.dumps(rows, indent=1))

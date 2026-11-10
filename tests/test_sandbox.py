@@ -241,3 +241,16 @@ def test_weight_from_the_catalog_reaches_the_hull():
     assert light.hull["mass_kg"] == base.hull["mass_kg"] - 11.2
     assert light.hazards["p_inverted_stuck"] > base.hazards["p_inverted_stuck"]
     assert C.matters("mppt", "one-mppt") and not C.matters("lead", "lead-50-scrap")
+
+
+def test_diverge_finds_where_two_tracks_part_and_the_events_around_it():
+    def row(outcome, lat2, ev):
+        return {"build": "k-p25", "start": "s", "outcome": outcome, "days": 1.0, "events": 1,
+                "track": {"h": [0.0, 6.0, 12.0], "lat": [36.0, 36.1, lat2],
+                          "lon": [-74.0, -73.9, -73.8], "events": ev}}  # fmt: skip
+
+    a = [row("arrived", 36.2, [[11.0, "capsize", "1 knockdown(s)"]])]
+    b = [row("lost", 36.5, [])]
+    (line,) = M.diverge(a, b)
+    assert "hour 12" in line and "capsize" in line
+    assert M.diverge(a, a) == []

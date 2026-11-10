@@ -3,7 +3,7 @@
 // browser's bit for bit (Ravi's gate, docs/sandbox.md).
 //
 //   node reference.mjs --pack boatsim.zip --bundle forcing_2020.npz --out ref.json \
-//       [--builds k-p25 ...] [--launches 0 1 ...] [--packages DIR]
+//       [--builds k-p25 ...] [--launches 0 1 ...] [--trace] [--packages DIR]
 //
 // --pack is the zip from `python -m boatsim.sandbox pack`, unpacked into
 // Pyodide's file system as the page does. --packages: a folder with the numpy
@@ -16,7 +16,8 @@ function args(argv) {
   const out = { builds: [], launches: [] };
   let key = null;
   for (const a of argv) {
-    if (a.startsWith("--")) key = a.slice(2);
+    if (a === "--trace") out.trace = true;
+    else if (a.startsWith("--")) key = a.slice(2);
     else if (key === "builds" || key === "launches") out[key].push(a);
     else out[key] = a;
   }
@@ -43,6 +44,7 @@ console.error(`pyodide ${py.version} ready in ${Date.now() - t0} ms`);
 
 py.globals.set("builds", py.toPy(a.builds));
 py.globals.set("which", py.toPy(a.launches.map(Number)));
+py.globals.set("trace", Boolean(a.trace));
 let rows;
 try {
   rows = py.runPython(`
@@ -52,7 +54,7 @@ sys.path.insert(0, "/sandbox")
 os.chdir("/sandbox")
 from boatsim.sandbox.__main__ import reference
 import numpy
-rows = reference("forcing.npz", list(builds) or None, list(which) or None)
+rows = reference("forcing.npz", list(builds) or None, list(which) or None, trace=trace)
 for r in rows:
     r["runtime"] = f"pyodide {sys.version.split()[0]} numpy {numpy.__version__}"
 json.dumps(rows)
