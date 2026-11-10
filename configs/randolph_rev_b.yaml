@@ -96,9 +96,12 @@ electronics:
 comms:
   two_way: RockBLOCK 9603 (Iridium SBD), one box with the autopilot
   report_interval_h: 4       # design.py; our runner still uses our own report schedule
-  # Backup_Tracker.md recommends a YB3 tracker, but their default simulator has no
-  # second tracker, so neither does this model. Set true to give it one.
-  beacon: false
+  # Backup tracker: a YB3 (Yellowbrick, Iridium SBD) in its own sealed compartment,
+  # own battery and antenna (Backup_Tracker.md; their reply on #50, #153). If the main
+  # box dies it keeps reporting, and the boat drifts on, tracked. Our runner pings it
+  # with our beacon model (every 6 h, GUESS); they plan 12 h, 3 h in the first week.
+  # Either is far inside the Microtransat 10-day silence limit.
+  beacon: true
 
 voyage:
   # Their drop: 100 km (54 nm) off Ocean City, Maryland (Route_MidAtlantic.md).
@@ -120,6 +123,7 @@ hazards:
   beam_on_share: 0.25
   knockdown_scale: 1.0
   damage_ref_hs_m: 3.0
+  beacon_per_day: 0.0007     # GUESS: the YB3 dying on its own, as our beacon (their sim's second tracker never fails)
   p_inverted_stuck: 4.0e-5   # GUESS: as ours; their curve has no stable upside-down position
   p_part:
     panel_100w_a: 0          # our kayak's parts: not on this boat
@@ -129,7 +133,9 @@ hazards:
     panel_fwd: 4.0e-5        # GUESS: as ours
     panel_aft: 4.0e-5        # GUESS
     rudder: 1.5e-5           # GUESS: as ours
-    sail: 0.003              # failures.py planning knockdown_damage (rig damage per knockdown; ours also scales with (Hs/3 m)^2)
+    sail: 0.003              # failures.py planning knockdown_damage (rig damage per knockdown; ours also scales with (Hs/3 m)^2).
+    #                          They agree it is too high for the hundreds of knockdowns real seas give (#153) and will
+    #                          re-tune it, with a 30-32 mm spar; kept at their published value until they do.
   ship_speed_ms: 7.0         # GUESS
   ship_beam_m: 32.0          # GUESS
   p_avoid_with_ais: 0.95     # no AIS: same as without

@@ -30,7 +30,7 @@ def _speed(v, heading, tws=6.0, hs=1.0, alpha_max=20.0):
     )  # fmt: skip
 
 
-def test_config_loads_as_a_sailboat_with_no_thrusters_and_no_beacon():
+def test_config_loads_as_a_sailboat_with_no_thrusters_and_a_backup_tracker():
     d = load_design(REV_B)
     assert d.name == "Randolph Rev B"
     v = KayakVessel(d)
@@ -38,7 +38,7 @@ def test_config_loads_as_a_sailboat_with_no_thrusters_and_no_beacon():
     assert v.thrusters.count == 0
     assert v.battery.capacity_wh == 192
     s = v.initial_state(datetime(2020, 5, 1), d.voyage["drop_lat"], d.voyage["drop_lon"])
-    assert not s.beacon_ok and s.iridium_ok
+    assert s.beacon_ok and s.iridium_ok  # the YB3 backup tracker (#153)
     # our kayak has no sail and keeps its beacon
     k = KayakVessel(load_design("configs/v4_kayak.yaml"))
     assert k.sail is None
@@ -122,13 +122,35 @@ def test_rev_b_has_one_electronics_box():
     assert hz.electronics_boxes == 1
     dice = np.ones(K_DICE)
     dice[SLOT["electronics_common"]] = 0.0  # this step's electronics die comes up
-    out = sample_failures(
-        hz, EnvState(), 1.0, {}, datetime(2020, 5, 1), 38.0, -60.0, 30.0, dice, thrusters=()
-    )
+
+    def box_dies(damage):
+        return sample_failures(
+            hz, EnvState(), 1.0, damage, datetime(2020, 5, 1), 38.0, -60.0, 30.0, dice, thrusters=()
+        )  # fmt: skip
+
+    # No working backup tracker: silent and uncontrolled, a loss.
+    out = box_dies({"beacon": True})
     assert out.lost
     names = [e.detail for e in out.events]
     assert any("one electronics box" in n for n in names)
     assert not any("electronics_safe" in n or "both" in n for n in names)
+    # The YB3 still reporting: the box is dead but the boat isn't lost (#153).
+    out = box_dies({})
+    assert not out.lost and "electronics_main" in out.failed_parts
+
+
+def test_dead_box_with_a_tracker_drifts_tracked_and_unsteered():
+    v = _vessel()
+    t = datetime(2020, 5, 1)
+    s0 = v.initial_state(t, 38.02, -74.01)
+    s0.damage["electronics_main"] = s0.damage["electronics_safe"] = True
+    env = EnvState(wind_u=7.0, hs=1.0, tp=6.0, wave_dir=270.0, ghi=300.0)  # westerly
+    rng = np.random.default_rng(0)
+    s1, _ = v.step(s0, Command(heading=270.0, thrust_fraction=0.0), env, timedelta(minutes=10), rng)
+    assert not s1.iridium_ok and s1.beacon_ok
+    # no autopilot: it can't hold the commanded course west, and drifts downwind
+    assert s1.speed_through_water < 0.045 * 7.0
+    assert s1.lon > s0.lon
 
 
 def test_route_starts_at_the_designs_own_drop_point():
