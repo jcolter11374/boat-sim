@@ -49,6 +49,9 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const params = new URLSearchParams(location.search);
 const BASE = params.get("data") ?? "./voyages";
 /** "Pick your launch day": ?mode=game. Spoilers (outcomes, voyage length, event marks) stay hidden. */
+/** ?replay=path/to/file.json: play one replay file from anywhere on the site (the Boatyard's launches). */
+const REPLAY = params.get("replay");
+if (REPLAY) document.body.classList.add("single");
 const GAME = params.get("mode") === "game" || document.documentElement.dataset.mode === "game"; // or <html data-mode="game">
 if (GAME) document.body.classList.add("game");
 
@@ -334,7 +337,7 @@ async function selectRace(date: string): Promise<void> {
 }
 async function load(files: string[], pick = files[0], autoplay = true): Promise<void> {
   try {
-    const reps = await Promise.all(files.map((f) => loadReplay(BASE, f)));
+    const reps = await Promise.all(files.map((f) => (f === REPLAY ? loadReplay(".", f.replace(/^\.\//, "")) : loadReplay(BASE, f))));
     lanes = reps.map((r, i) => ({ key: keyOf(r.boat), file: files[i], rep: r, shown: 0 }));
     status.file = files.join(",");
     status.boats = reps.map((r) => r.boat);
@@ -530,7 +533,9 @@ controls.target.set(0, 0.2, 0);
     boatSel.disabled = modes.length < 2;
     const wantRace = params.get("race");
     const want = params.get("voyage");
-    if (GAME) {
+    if (REPLAY) {
+      await selectVoyage(REPLAY);
+    } else if (GAME) {
       // The sea behind the picker: our kayak's first launch day, waiting at the start.
       const first = [...byKey.kayak.values()].sort((a, b) => a.start.localeCompare(b.start))[0] ?? index[0];
       await selectVoyage(first.file, false);
