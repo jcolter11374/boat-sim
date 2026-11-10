@@ -80,9 +80,10 @@ try {
     await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
     const err = await page.evaluate(() => window.__replay.error);
     if (err) fail(`voyage page: ${err}`);
-    // The detailed Blender kayak is used when the build has it.
-    if (existsSync("dist/models/kayak.glb")) {
-      await page.waitForFunction(() => window.__replay.detailed === true, null, { timeout: 30000 }).catch(() => fail("models/kayak.glb is in the build but the page didn't use it"));
+    // The detailed Blender boats are used when the build has them.
+    for (const m of ["kayak", "randolph"]) {
+      if (!existsSync(`dist/models/${m}.glb`)) continue;
+      await page.waitForFunction((name) => window.__replay.models?.includes(name), m, { timeout: 30000 }).catch(() => fail(`models/${m}.glb is in the build but the page didn't load it`));
     }
     // The page's position at every logged hour is the logged position.
     const bad = await page.evaluate((r) => {
