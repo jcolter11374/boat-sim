@@ -38,24 +38,31 @@ function frame(spec: BoatSpec): { root: THREE.Group; inner: THREE.Group } {
 
 // Detailed model built in Blender from the same numbers (blender/build_kayak.py),
 // loaded once if the page has it; otherwise the kayak is drawn in code below.
+// Detailed models built with Blender (blender/*.py) when the build has them.
 let kayakDetailed: THREE.Group | null = null;
-/** Load models/kayak.glb if present. Resolves true when the detailed kayak is ready. */
-export async function loadDetailedModels(base = "./models"): Promise<boolean> {
-  if (new URLSearchParams(location.search).get("models") === "simple") return false;
-  // kayak.glb is what the build makes; kayak.json (the same model as text) is
+let randolphDetailed: THREE.Group | null = null;
+
+async function loadOne(base: string, name: string): Promise<THREE.Group | null> {
+  // NAME.glb is what the build makes; NAME.json (the same model as text) is
   // for hosts that won't serve .glb files.
-  for (const file of ["kayak.glb", "kayak.json"]) {
+  for (const file of [`${name}.glb`, `${name}.json`]) {
     try {
-      const gltf = await new GLTFLoader().loadAsync(`${base}/${file}`);
-      kayakDetailed = gltf.scene;
-      return true;
+      return (await new GLTFLoader().loadAsync(`${base}/${file}`)).scene;
     } catch {
       // try the next one
     }
   }
-  return false; // not built: keep the drawn-in-code model
+  return null; // not built: keep the drawn-in-code model
+}
+
+/** Load the detailed models; true if any arrived (rebuild the boats then). */
+export async function loadDetailedModels(base = "./models"): Promise<boolean> {
+  if (new URLSearchParams(location.search).get("models") === "simple") return false;
+  [kayakDetailed, randolphDetailed] = await Promise.all([loadOne(base, "kayak"), loadOne(base, "randolph")]);
+  return kayakDetailed !== null || randolphDetailed !== null;
 }
 export const hasDetailedKayak = () => kayakDetailed !== null;
+export const hasDetailedRandolph = () => randolphDetailed !== null;
 
 // =====================================================================
 // OUR BOAT: v4 kayak. Metres. Bow at x = 0 in the builder frame.
@@ -221,51 +228,61 @@ export function buildRandolph(quality: Quality): BoatModel {
     dz: (s) => 0.23 + 0.03 * Math.max(1 - s / 0.4, 0) ** 2,
   };
   const { root, inner: g } = frame(RANDOLPH);
-  const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
-  kit.mesh(kit.hull(R, { top: 0xf1f3f4, deck: 0xdfe5e8, bottom: 0x2e5566, boot: 0x0f8a8a }), hullMat, g);
-  const rDeck = (x: number, z: number) => {
-    const s = x / R.L;
-    const b = R.hb(s);
-    return R.dz(s) + R.crown * (1 - Math.min((z / b) ** 2, 1));
-  };
+  let pivot: THREE.Object3D;
+  let vane: THREE.Object3D;
+  if (randolphDetailed) {
+    // Our Blender model of their boat; the wing and the wind vane hang under named pivots.
+    const m = randolphDetailed.clone(true);
+    g.add(m);
+    pivot = m.getObjectByName("wing_pivot") ?? new THREE.Group();
+    vane = m.getObjectByName("vane_pivot") ?? new THREE.Group();
+  } else {
+    const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
+    kit.mesh(kit.hull(R, { top: 0xf1f3f4, deck: 0xdfe5e8, bottom: 0x2e5566, boot: 0x0f8a8a }), hullMat, g);
+    const rDeck = (x: number, z: number) => {
+      const s = x / R.L;
+      const b = R.hb(s);
+      return R.dz(s) + R.crown * (1 - Math.min((z / b) ** 2, 1));
+    };
 
-  // Keel fin (root 170, tip 150 mm chord, 430 mm deep) and 8.2 kg lead bulb.
-  kit.mesh(kit.foil(0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12), kit.std(0x30373c), g);
-  kit.bulb(g, kit.std(0x6d7378, { roughness: 0.4, metalness: 0.5 }), 0.32, 0.068, 0.4, 0.579, -0.434, 0);
-  // Rudder, stock at x = 1400.
-  kit.mesh(kit.foil(0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12), kit.std(0x30373c), g);
-  // Two solar panels on the aft deck.
-  kit.panel(g, 0.65, 1.07, 0.28, rDeck, 4, 2);
-  kit.panel(g, 1.08, 1.48, 0.28, rDeck, 4, 2);
-  // Hatch.
-  kit.box(g, kit.std(0xc9d2d6), 0.33, 0.53, rDeck(0.43, 0) - 0.002, rDeck(0.43, 0) + 0.012, -0.11, 0.11);
-  // Mast tube (2 in PVC) and bearing housing.
-  const pvc = kit.std(0xe9ecee);
-  const dark = kit.std(0x26292c);
-  const spar = kit.std(0x2a2d31, { metalness: 0.4 });
-  kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
-  kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
-  // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.
-  const pivot = new THREE.Group();
-  pivot.position.set(0.6, 0, 0);
-  g.add(pivot);
-  kit.mesh(kit.foil(0.3, 0.3, -0.066, -0.066, 0.3, 1.3, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
-  kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.31);
-  kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
-  kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
-  kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot);
-  kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]);
-  kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
-  // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
-  kit.box(g, dark, 1.49, 1.545, 0.15, 0.2, -0.02, 0.02);
-  kit.cyl(g, spar, 0.01, 1.53, 0.15, 0.65);
-  kit.cyl(g, pvc, 0.04, 1.53, 0.553, 0.567);
-  kit.cyl(g, dark, 0.018, 1.53, 0.65, 0.69);
-  const vane = new THREE.Group();
-  vane.position.set(1.53, 0.68, 0);
-  g.add(vane);
-  kit.rod(vane, dark, 0.004, [0, 0, 0], [0.16, 0, 0]);
-  kit.box(vane, kit.std(0x0f8a8a), 0.1, 0.17, -0.03, 0.04, -0.002, 0.002);
+    // Keel fin (root 170, tip 150 mm chord, 430 mm deep) and 8.2 kg lead bulb.
+    kit.mesh(kit.foil(0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12), kit.std(0x30373c), g);
+    kit.bulb(g, kit.std(0x6d7378, { roughness: 0.4, metalness: 0.5 }), 0.32, 0.068, 0.4, 0.579, -0.434, 0);
+    // Rudder, stock at x = 1400.
+    kit.mesh(kit.foil(0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12), kit.std(0x30373c), g);
+    // Two solar panels on the aft deck.
+    kit.panel(g, 0.65, 1.07, 0.28, rDeck, 4, 2);
+    kit.panel(g, 1.08, 1.48, 0.28, rDeck, 4, 2);
+    // Hatch.
+    kit.box(g, kit.std(0xc9d2d6), 0.33, 0.53, rDeck(0.43, 0) - 0.002, rDeck(0.43, 0) + 0.012, -0.11, 0.11);
+    // Mast tube (2 in PVC) and bearing housing.
+    const pvc = kit.std(0xe9ecee);
+    const dark = kit.std(0x26292c);
+    const spar = kit.std(0x2a2d31, { metalness: 0.4 });
+    kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
+    kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
+    // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.
+    pivot = new THREE.Group();
+    pivot.position.set(0.6, 0, 0);
+    g.add(pivot);
+    kit.mesh(kit.foil(0.3, 0.3, -0.066, -0.066, 0.3, 1.3, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
+    kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.31);
+    kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
+    kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
+    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot);
+    kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]);
+    kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
+    // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
+    kit.box(g, dark, 1.49, 1.545, 0.15, 0.2, -0.02, 0.02);
+    kit.cyl(g, spar, 0.01, 1.53, 0.15, 0.65);
+    kit.cyl(g, pvc, 0.04, 1.53, 0.553, 0.567);
+    kit.cyl(g, dark, 0.018, 1.53, 0.65, 0.69);
+    vane = new THREE.Group();
+    vane.position.set(1.53, 0.68, 0);
+    g.add(vane);
+    kit.rod(vane, dark, 0.004, [0, 0, 0], [0.16, 0, 0]);
+    kit.box(vane, kit.std(0x0f8a8a), 0.1, 0.17, -0.03, 0.04, -0.002, 0.002);
+  }
 
   return {
     spec: RANDOLPH,

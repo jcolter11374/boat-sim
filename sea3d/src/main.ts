@@ -87,7 +87,7 @@ const boats: Boat[] = BOATS.map((spec) => {
   tag.className = "tag";
   tag.style.setProperty("--c", "#" + spec.colour.toString(16).padStart(6, "0"));
   tag.innerHTML = `<b></b><span></span>`;
-  tag.querySelector("b")!.textContent = spec.key === "kayak" ? "Our kayak" : "Randolph drone";
+  tag.querySelector("b")!.textContent = spec.key === "kayak" ? "Our kayak" : "Randolph boat (our model)";
   tag.querySelector("span")!.textContent = `${spec.length.toFixed(2)} m, ${spec.massKg} kg`;
   $("tags").appendChild(tag);
   const place = { x: 0, z: 0, yaw: 0 };
@@ -204,7 +204,7 @@ window.addEventListener("resize", () => {
 });
 
 setQuality(quality);
-// The detailed (Blender) kayak, when the build has it: swap it in once loaded.
+// The detailed (Blender) boats, when the build has them: swap them in once loaded.
 loadDetailedModels().then((ok) => {
   if (ok) buildBoats(quality);
 });
