@@ -9,6 +9,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
@@ -65,6 +66,7 @@ async function loadOne(base: string, name: string): Promise<THREE.Group | null> 
 export async function loadDetailedModels(base = "./models"): Promise<boolean> {
   if (new URLSearchParams(location.search).get("models") === "simple") return false;
   [kayakDetailed, randolphDetailed] = await Promise.all([loadOne(base, "kayak"), loadOne(base, "randolph")]);
+  if (kayakDetailed) applyFinishes(kayakDetailed); // our kayak's real materials (Randolph's are theirs to say)
   return kayakDetailed !== null || randolphDetailed !== null;
 }
 export const hasDetailedKayak = () => kayakDetailed !== null;
