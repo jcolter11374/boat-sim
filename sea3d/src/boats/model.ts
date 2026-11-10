@@ -66,7 +66,8 @@ async function loadOne(base: string, name: string): Promise<THREE.Group | null> 
 export async function loadDetailedModels(base = "./models"): Promise<boolean> {
   if (new URLSearchParams(location.search).get("models") === "simple") return false;
   [kayakDetailed, randolphDetailed] = await Promise.all([loadOne(base, "kayak"), loadOne(base, "randolph")]);
-  if (kayakDetailed) applyFinishes(kayakDetailed); // our kayak's real materials (Randolph's are theirs to say)
+  if (kayakDetailed) applyFinishes(kayakDetailed, "kayak");
+  if (randolphDetailed) applyFinishes(randolphDetailed, "randolph"); // generic finishes: their materials are theirs to say
   return kayakDetailed !== null || randolphDetailed !== null;
 }
 export const hasDetailedKayak = () => kayakDetailed !== null;

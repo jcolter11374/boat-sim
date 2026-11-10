@@ -110,13 +110,63 @@ const FINISHES: Record<string, Finish> = {
   },
 };
 
+// Our model of the Randolph boat: generic finishes for what its parts look like
+// (a painted hull, a sailcloth wing on a dark spar), not a claim about their materials.
+const RANDOLPH_FINISHES: Record<string, Finish> = {
+  hull: (m) => {
+    m.roughness = 0.38;
+    m.clearcoat = 0.55;
+    m.clearcoatRoughness = 0.1;
+    withGrain(m, 30);
+  },
+  transom: (m) => RANDOLPH_FINISHES.hull(m),
+  hatch: (m) => {
+    m.roughness = 0.35;
+    m.clearcoat = 0.4;
+  },
+  teal: (m) => {
+    m.roughness = 0.35;
+    m.clearcoat = 0.5;
+    m.clearcoatRoughness = 0.1;
+  },
+  fin: (m) => FINISHES.g10(m),
+  lead: (m) => FINISHES.lead(m),
+  weight: (m) => FINISHES.lead(m),
+  panel_fwd: (m) => FINISHES.panel_fwd(m),
+  panel_aft: (m) => FINISHES.panel_fwd(m),
+  // The wing: sailcloth stretched on a frame, soft sheen, no gloss.
+  wing: (m) => {
+    m.roughness = 0.62;
+    m.clearcoat = 0;
+    m.sheen = 0.5;
+    m.sheenRoughness = 0.6;
+    m.sheenColor.set(0xffffff);
+    m.side = THREE.DoubleSide;
+  },
+  // Dark composite spar: satin with a thin coat.
+  spar: (m) => {
+    m.metalness = 0.1;
+    m.roughness = 0.4;
+    m.clearcoat = 0.5;
+    m.clearcoatRoughness = 0.15;
+  },
+  pvc: (m) => {
+    m.roughness = 0.6;
+    m.clearcoat = 0;
+  },
+  dark: (m) => FINISHES.black(m),
+};
+
+export type Boat = "kayak" | "randolph";
+
 /** Give a detailed model's materials their real-world finish (each material once; they're shared). */
-export function applyFinishes(root: THREE.Object3D): void {
+export function applyFinishes(root: THREE.Object3D, boat: Boat = "kayak"): void {
+  const table = boat === "kayak" ? FINISHES : RANDOLPH_FINISHES;
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
       if (!(m instanceof THREE.MeshPhysicalMaterial) || m.userData.finished) continue;
-      const f = FINISHES[m.name];
+      const f = table[m.name];
       if (!f) continue;
       f(m);
       m.userData.finished = true;
