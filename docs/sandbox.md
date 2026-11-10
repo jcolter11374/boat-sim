@@ -11,6 +11,10 @@ Label sandbox results **"sandbox, 2020 weather"**. They are not the headline
 odds: the weather is thinned (below), so the voyages are close to, but not the
 same as, the full-resolution runs.
 
+Show this sentence on the page wherever sandbox results appear: **"Browser runs
+can end differently from the same build run on our servers; the odds shown come
+from the server grid."** (See "The exactness gate" below for why.)
+
 ## What the page downloads
 
 From the `sandbox-data` release (workflow "Sandbox data", publish ticked):
