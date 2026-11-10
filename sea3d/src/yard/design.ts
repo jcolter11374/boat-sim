@@ -40,7 +40,7 @@ export interface SimOption {
 }
 export interface SimSlots {
   note: string;
-  catalog_slots: { id: string; opts: SimOption[] }[];
+  catalog_slots: { id: string; name?: string; opts: SimOption[] }[];
   new_slots: { id: string; name: string; opts: SimOption[] }[];
 }
 
@@ -57,6 +57,24 @@ export interface Catalog {
   slots: CatalogSlot[];
 }
 
+/** Plain names for the simulator's own options, when its slot table gives only ids. */
+const OPTION_NAMES: Record<string, string> = {
+  "solar-electric": "Solar-electric (as built)",
+  "wing-sail": "Wing sail only",
+  hybrid: "Wing sail + motors",
+  polyethylene: "Polyethylene (rotomoulded, as built)",
+  fibreglass: "Fibreglass",
+  carbon: "Carbon fibre",
+  "plywood-epoxy": "Plywood and epoxy",
+  aluminium: "Aluminium",
+  kayak: "10 ft kayak (as built)",
+  "surf-ski": "Long narrow kayak, 5.2 x 0.45 m",
+  pod: "Sealed self-righting pod, about 2 m",
+};
+
+/** True when the motors and cruise power don't apply: a wing sail with no motors. */
+export const sailOnly = (d: Design): boolean => d.picks.drive === "wing-sail";
+
 /**
  * The catalog with the simulator's notes merged in by slot and option id, and
  * the simulator's new slots (drive, hull material, hull shape) added at the end.
@@ -72,14 +90,15 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
       return so ? { ...o, effect: so.effect, basis: so.basis, simEst: so.est } : o;
     }),
   }));
-  for (const ns of sim.new_slots) {
+  // The simulator's slots the parts catalog doesn't have yet (drive, hull material, hull shape) go at the end.
+  for (const ns of [...sim.catalog_slots, ...sim.new_slots] as { id: string; name?: string; opts: SimOption[] }[]) {
     if (slots.some((s) => s.id === ns.id)) continue;
     slots.push({
       id: ns.id,
-      name: ns.name,
+      name: ns.name ?? ns.id,
       opts: ns.opts.map((o, i) => ({
         id: o.id,
-        n: o.n ?? o.id,
+        n: o.n ?? OPTION_NAMES[o.id] ?? o.id,
         d: o.basis,
         cost: 0,
         kg: 0,
@@ -167,7 +186,7 @@ export function summarise(cat: Catalog, d: Design): Summary {
     beacon: num("beacon", "beacon", 1) > 0,
     ais: num("ais", "ais", 1) > 0,
     antifouling: num("paint", "af", 1) > 0,
-    cruiseW: d.cruiseW,
+    cruiseW: sailOnly(d) ? 0 : d.cruiseW,
     estimates,
   };
 }

@@ -332,6 +332,136 @@
    ]
   },
   {
+   "id": "drive",
+   "name": "Drive",
+   "opts": [
+    {
+     "id": "solar-electric",
+     "effect": "wired",
+     "est": false,
+     "basis": "the v4 kayak as modelled",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "wing-sail",
+     "effect": "wired",
+     "est": true,
+     "basis": "wing scaled from Randolph's Rev B; size, weight and breakage are GUESSes; no motors, so it tacks upwind",
+     "sim": [
+      "sail.area_m2",
+      "sail.aspect_ratio",
+      "sail.cd0",
+      "sail.max_alpha_deg",
+      "sail.ce_height_m",
+      "sail.heel_arm_m",
+      "sail.max_heel_moment_nm",
+      "sail.storm_wind_ms",
+      "sail.storm_run_twa_deg",
+      "sail.min_upwind_twa_deg",
+      "sail.min_downwind_twa_deg",
+      "sail.tack_hysteresis_deg",
+      "sail.unsteered_twa_deg",
+      "hazards.p_part",
+      "hazards.steering_per_day",
+      "propulsion.thruster_count",
+      "electronics.hotel_load_wh_per_day",
+      "hull.mass_kg"
+     ],
+     "kg": 5.1
+    },
+    {
+     "id": "hybrid",
+     "effect": "wired",
+     "est": true,
+     "basis": "wing scaled from Randolph's Rev B; size, weight and breakage are GUESSes; motors hold the course upwind instead of tacking",
+     "sim": [
+      "sail.area_m2",
+      "sail.aspect_ratio",
+      "sail.cd0",
+      "sail.max_alpha_deg",
+      "sail.ce_height_m",
+      "sail.heel_arm_m",
+      "sail.max_heel_moment_nm",
+      "sail.storm_wind_ms",
+      "sail.storm_run_twa_deg",
+      "sail.min_upwind_twa_deg",
+      "sail.min_downwind_twa_deg",
+      "sail.tack_hysteresis_deg",
+      "sail.unsteered_twa_deg",
+      "hazards.p_part",
+      "hazards.steering_per_day",
+      "electronics.hotel_load_wh_per_day",
+      "hull.mass_kg"
+     ],
+     "kg": 6.0
+    }
+   ]
+  },
+  {
+   "id": "material",
+   "name": "Hull material",
+   "opts": [
+    {
+     "id": "polyethylene",
+     "effect": "wired",
+     "est": false,
+     "basis": "the v4 kayak as modelled",
+     "sim": [],
+     "kg": 0.0
+    },
+    {
+     "id": "fibreglass",
+     "effect": "wired",
+     "est": true,
+     "basis": "GUESS: lighter; cracks at fittings leak a bit more",
+     "sim": [
+      "hazards.leak_per_day",
+      "hazards.p_lost_given_strike",
+      "hull.mass_kg"
+     ],
+     "kg": -6.0
+    },
+    {
+     "id": "carbon",
+     "effect": "wired",
+     "est": true,
+     "basis": "GUESS: lightest; stiff, so impacts crack and leak",
+     "sim": [
+      "hazards.leak_per_day",
+      "hazards.p_lost_given_strike",
+      "hull.mass_kg"
+     ],
+     "kg": -11.0
+    },
+    {
+     "id": "plywood-epoxy",
+     "effect": "wired",
+     "est": true,
+     "basis": "GUESS: leaks where the epoxy skin is broken",
+     "sim": [
+      "hazards.leak_per_day",
+      "hazards.p_lost_given_strike",
+      "hull.mass_kg"
+     ],
+     "kg": -4.0
+    },
+    {
+     "id": "aluminium",
+     "effect": "wired",
+     "est": true,
+     "basis": "GUESS: tough and dent-resistant; copper antifouling can't go on it",
+     "sim": [
+      "hazards.leak_per_day",
+      "hazards.p_lost_given_strike",
+      "hull.fouling_frac_per_day",
+      "hull.mass_kg"
+     ],
+     "kg": -2.0
+    }
+   ]
+  },
+  {
    "id": "spares",
    "name": "Spares",
    "opts": [
@@ -363,104 +493,6 @@
   }
  ],
  "new_slots": [
-  {
-   "id": "drive",
-   "name": "Drive",
-   "opts": [
-    {
-     "id": "solar-electric",
-     "n": "Solar-electric (as built)",
-     "effect": "wired",
-     "est": false,
-     "basis": "the v4 kayak as modelled",
-     "sim": []
-    },
-    {
-     "id": "wing-sail",
-     "n": "Wing sail only",
-     "effect": "no effect yet",
-     "est": true,
-     "basis": "wing on the kayak: mass, windage and heel limit are estimates",
-     "sim": [
-      "sail.*"
-     ]
-    },
-    {
-     "id": "hybrid",
-     "n": "Wing sail + motors",
-     "effect": "no effect yet",
-     "est": true,
-     "basis": "motors upwind instead of tacking: new autopilot choice, estimates",
-     "sim": [
-      "sail.*",
-      "propulsion.*"
-     ]
-    }
-   ]
-  },
-  {
-   "id": "material",
-   "name": "Hull material",
-   "opts": [
-    {
-     "id": "polyethylene",
-     "n": "Polyethylene (rotomoulded, as built)",
-     "effect": "wired",
-     "est": false,
-     "basis": "the v4 kayak as modelled",
-     "sim": []
-    },
-    {
-     "id": "fibreglass",
-     "n": "Fibreglass",
-     "effect": "no effect yet",
-     "est": true,
-     "basis": "leak and impact multipliers are estimates (no fleet data per material)",
-     "sim": [
-      "hull.mass_kg",
-      "hazards.leak*",
-      "hazards.p_lost_given_strike"
-     ]
-    },
-    {
-     "id": "carbon",
-     "n": "Carbon fibre",
-     "effect": "no effect yet",
-     "est": true,
-     "basis": "light but stiff: impact cracks become leaks (estimate)",
-     "sim": [
-      "hull.mass_kg",
-      "hazards.leak*",
-      "hazards.p_lost_given_strike"
-     ]
-    },
-    {
-     "id": "plywood-epoxy",
-     "n": "Plywood and epoxy",
-     "effect": "no effect yet",
-     "est": true,
-     "basis": "leak multiplier 1.5x is an estimate",
-     "sim": [
-      "hull.mass_kg",
-      "hazards.leak*",
-      "hazards.p_lost_given_strike"
-     ]
-    },
-    {
-     "id": "aluminium",
-     "n": "Aluminium",
-     "effect": "no effect yet",
-     "est": true,
-     "basis": "leak multiplier 0.7x and galvanic risk are estimates",
-     "sim": [
-      "hull.mass_kg",
-      "hazards.leak*",
-      "hazards.p_lost_given_strike",
-      "hull.fouling_frac_per_day"
-     ]
-    }
-   ]
-  },
   {
    "id": "shape",
    "name": "Hull shape",

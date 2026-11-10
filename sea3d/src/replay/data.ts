@@ -38,6 +38,8 @@ export interface Replay {
   stw: Col;
   soc: Col;
   wind_u: Col;
+  /** Rain rate, mm per hour (ERA5 total precipitation), in newer replays. */
+  rain?: Col;
   wind_v: Col;
   hs: Col;
   tp: Col;
