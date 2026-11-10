@@ -138,6 +138,11 @@ try {
     const g0 = (await page.evaluate(() => window.__replay.gear)).parts ?? {};
     const sailboat = /randolph/i.test(rep.boat ?? "");
     const gearOk = sailboat ? g0.props === 0 && g0.wing && g0.vane : g0.props === 2 && !g0.wing;
+    // Sky guide: the North Star stands due north at the boat's latitude; the sun and moon are where the almanac puts them.
+    const sky = await page.evaluate(() => ({ ...window.__replay.sky, here: window.__replay.boatPosition() }));
+    if (!(Math.abs(sky.polarisEl - sky.here[0]) < 1.2 && Math.min(sky.polarisAz, 360 - sky.polarisAz) < 1.5))
+      fail(`${v.file}: North Star not due north at the boat's latitude: ${JSON.stringify(sky)}`);
+    if (![sky.sunEl, sky.sunAz, sky.moonEl, sky.moonAz, sky.view].every(Number.isFinite)) fail(`${v.file}: sky guide numbers missing: ${JSON.stringify(sky)}`);
     const c0 = await page.evaluate(() => window.__replay.contact);
     if (!(c0.collar > 0)) fail(`${v.file}: no foam where the hull meets the water: ${JSON.stringify(c0)}`);
     if (!gearOk || !g0.rudder || !g0.light || !(g0.panels > 0)) fail(`${v.file}: gear missing: ${JSON.stringify(g0)}`);

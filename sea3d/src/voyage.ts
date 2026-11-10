@@ -212,6 +212,17 @@ const status = {
   lanePositionAt: (i: number, h: number): [number, number] => (lanes[i] ? positionAt(lanes[i].rep, h) : [NaN, NaN]),
   /** The launch-day game: picks, story beats shown so far, and the result. */
   game: { on: GAME, picking: false, guess: "", beats: [] as string[], beat: "", result: "" },
+  /** Put the camera behind the boat looking along a compass bearing (tests and screenshots). */
+  aim: (bearing: number, up = false) => {
+    setLookUp(up);
+    const b = THREE.MathUtils.degToRad(bearing);
+    const base = controls.target.y - (lifted ? LIFT : 0);
+    const dist = lifted ? 8 : 6;
+    camera.position.set(controls.target.x - Math.sin(b) * dist, base + (lifted ? 0.4 : 1.2), controls.target.z + Math.cos(b) * dist);
+  },
+  lookUp: false,
+  /** The sky guide's numbers: view bearing, sun, moon and North Star (degrees). */
+  sky: {} as Record<string, number>,
   /** Make the postcard; returns the PNG as a data URL (for tests). */
   postcard: (): string => (rep ? postcard().toDataURL("image/png") : ""),
 };
@@ -653,6 +664,10 @@ renderer.setAnimationLoop(() => {
     storm += (target - storm) * Math.min(1, dt * 1.5);
     const [lat, lon] = positionAt(rep, hour);
     const sp = sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
+    // Moon, its phase and the stars where they really were from this spot at this time.
+    if (Number.isFinite(lat)) atmos.setCelestial(utc(rep.start) + hour * 3600e3, lat, lon);
+    sunEl = sp.el;
+    sunAz = sp.az;
     atmos.set(sp.el, sp.az, storm);
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
@@ -674,6 +689,7 @@ renderer.setAnimationLoop(() => {
     setQuality("high");
     toast("Switched to High quality: Ultra was running slowly on this computer.", "Quality", "#8ab4ff");
   }
+  skyGuide();
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
   status.frames++;
@@ -799,6 +815,110 @@ function postcard(): HTMLCanvasElement {
     guess: v ? `${v.title} ${v.text}` : "",
     finished: r.outcome === "arrived",
   });
+}
+
+// ---------- sky guide: a compass for the view, labels on the sun, moon and North Star ----------
+let sunEl = 30;
+let sunAz = 180;
+let lastGuide = 0;
+const guideBox = $<HTMLInputElement>("skyguide");
+const showGuide = () => {
+  $("compass").hidden = !guideBox.checked;
+  $("skylabels").hidden = !guideBox.checked;
+  $("lookup").hidden = !guideBox.checked;
+};
+// Look up: the camera orbits the boat, so it can't tilt far above the horizon on its own.
+// Raising the point it looks at tips the view up about 20 degrees: horizon near the bottom, about 50 degrees up at the top.
+const LIFT = 3.5; // m
+let lifted = false;
+function setLookUp(on: boolean): void {
+  if (on === lifted) return;
+  lifted = on;
+  controls.target.y += on ? LIFT : -LIFT;
+  if (on) {
+    // Come down near the water and a little way back, so the view tilts up past the boat.
+    const off = camera.position.clone().sub(controls.target);
+    off.y = 0;
+    off.setLength(8);
+    camera.position.copy(controls.target).add(off);
+    camera.position.y = controls.target.y - LIFT + 0.4;
+  }
+  controls.maxDistance = on ? 80 : 60;
+  // Let the camera sit below the raised point (it still never goes under the water).
+  controls.maxPolarAngle = Math.PI * (on ? 0.8 : 0.495);
+  // A wider lens while looking up: from the horizon to about 50 degrees up.
+  camera.fov = on ? 62 : 45;
+  camera.updateProjectionMatrix();
+  $("lookup").setAttribute("aria-pressed", String(on));
+  $("lookup").textContent = on ? "\u2B07 Back to the boat" : "\u2B06 Look up at the sky";
+  status.lookUp = on;
+}
+$("lookup").addEventListener("click", () => setLookUp(!lifted));
+guideBox.addEventListener("change", showGuide);
+showGuide();
+const CARD: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
+const RANGE = 75; // degrees either side of the view shown on the strip
+const viewDir = new THREE.Vector3();
+const proj = new THREE.Vector3();
+function bearingOf(v: THREE.Vector3): number {
+  return (THREE.MathUtils.radToDeg(Math.atan2(v.x, -v.z)) + 360) % 360;
+}
+function span(cls: string, text: string, x: number, colour = ""): HTMLSpanElement {
+  const e = document.createElement("span");
+  e.className = cls;
+  e.textContent = text;
+  e.style.left = `${x}px`;
+  if (colour) e.style.color = colour;
+  return e;
+}
+function skyGuide(): void {
+  if (!guideBox.checked) return;
+  const now = performance.now();
+  if (now - lastGuide < 50) return;
+  lastGuide = now;
+  viewDir.copy(controls.target).sub(camera.position);
+  const view = bearingOf(viewDir);
+  const W = 420;
+  const px = W / (2 * RANGE);
+  const rel = (b: number) => ((b - view + 540) % 360) - 180;
+  const xOf = (b: number) => W / 2 + rel(b) * px;
+  const out: HTMLSpanElement[] = [];
+  for (let b = 0; b < 360; b += 5) {
+    if (Math.abs(rel(b)) > RANGE) continue;
+    const x = xOf(b);
+    out.push(span(b % 15 === 0 ? "tick big" : "tick", "", x));
+    if (b % 15 === 0) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
+  }
+  // What's out there along the strip: the boat's heading, the sun, the moon, the North Star.
+  const night = sunEl < -6;
+  const marks: [number, string, string][] = [];
+  if (model) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw ?? 0) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
+  if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
+  if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
+  const polaris = atmos.starDirs.get("North Star (Polaris)");
+  if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
+  for (const [b, text, colour] of marks) if (Math.abs(rel(b)) <= RANGE) out.push(span("mk", text, xOf(b), colour));
+  $("tape").replaceChildren(...out);
+
+  // Labels in the sky itself.
+  const labels: HTMLSpanElement[] = [];
+  const tag = (dir: THREE.Vector3, text: string) => {
+    if (dir.y < 0.005) return; // below the horizon
+    proj.copy(camera.position).addScaledVector(dir, 1000).project(camera);
+    if (proj.z > 1 || Math.abs(proj.x) > 1 || Math.abs(proj.y) > 1) return;
+    const e = span("", text, (proj.x * 0.5 + 0.5) * window.innerWidth);
+    e.style.top = `${(-proj.y * 0.5 + 0.5) * window.innerHeight}px`;
+    labels.push(e);
+  };
+  if (sunEl > 0) tag(atmos.sunDir, "Sun");
+  tag(atmos.moonDir, `Moon (${atmos.moonPhaseName})`);
+  if (night && polaris) tag(polaris, "North Star: due north");
+  const dubhe = atmos.starDirs.get("Dubhe");
+  if (night && dubhe) tag(dubhe, "Big Dipper");
+  const betel = atmos.starDirs.get("Alnilam");
+  if (night && betel) tag(betel, "Orion's belt");
+  $("skylabels").replaceChildren(...labels);
+  status.sky = { view, sunEl, sunAz, moonEl: atmos.moonEl, moonAz: bearingOf(atmos.moonDir), moonLit: atmos.moonLit, polarisEl: polaris ? THREE.MathUtils.radToDeg(Math.asin(polaris.y)) : NaN, polarisAz: polaris ? bearingOf(polaris) : NaN };
 }
 
 // ---------- equipment card ----------

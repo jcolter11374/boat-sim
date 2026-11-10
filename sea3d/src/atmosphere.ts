@@ -14,27 +14,17 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { HORIZON } from "./water";
+import { BRIGHT_STARS, equatorialVector, moonEquatorial, moonPhase, sunEquatorial, toHorizon } from "./sky";
 
 const rad = THREE.MathUtils.degToRad;
-const deg = THREE.MathUtils.radToDeg;
 const smooth = THREE.MathUtils.smoothstep;
 
 /** Where the sun is (degrees) for a UTC time and place. Low-precision
  *  almanac formulas, good to about half a degree: plenty for pictures.
  *  Azimuth is the compass bearing, clockwise from north. */
 export function sunPosition(ms: number, lat: number, lon: number): { el: number; az: number } {
-  const d = ms / 86400e3 - 10957.5; // days since 2000-01-01 12:00 UTC
-  const g = rad(357.529 + 0.98560028 * d);
-  const L = rad(280.459 + 0.98564736 * d + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g));
-  const e = rad(23.439 - 0.00000036 * d);
-  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
-  const dec = Math.asin(Math.sin(e) * Math.sin(L));
-  const gmst = (((18.697374558 + 24.06570982441908 * d) % 24) + 24) % 24; // hours
-  const ha = rad(gmst * 15 + lon) - ra;
-  const phi = rad(lat);
-  const el = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(ha));
-  const az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(phi) - Math.sin(phi) * Math.cos(ha));
-  return { el: deg(el), az: (deg(az) + 360) % 360 };
+  const s = sunEquatorial(ms);
+  return toHorizon(s.ra, s.dec, ms, lat, lon);
 }
 
 /** Compass bearing and elevation -> unit vector in the scene (x east, y up, z south). */
@@ -96,7 +86,18 @@ export class Atmosphere {
   readonly moon = new THREE.DirectionalLight(MOON, 0);
   readonly hemi = new THREE.HemisphereLight(0xcfe6ff, 0x0b2a3f, 0.5);
   readonly fog = new THREE.Fog(DAY_HAZE.getHex(), 150, HORIZON * 0.9);
-  readonly stars: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  /** The night sky, turned to the real time and place by setCelestial(): faint stars plus the bright named ones. */
+  readonly stars = new THREE.Group();
+  private starMats: THREE.PointsMaterial[] = [];
+  /** The moon's disc, lit on the side facing the sun (so it shows its real phase). */
+  readonly moonDisc: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  /** Unit vector towards the moon, its elevation (degrees) and how much of it is lit (0..1). */
+  readonly moonDir = new THREE.Vector3();
+  moonEl = 35;
+  moonLit = 0.6;
+  moonPhaseName = "";
+  /** Bright stars by name, as unit vectors in the scene (for labels). */
+  readonly starDirs = new Map<string, THREE.Vector3>();
   /** A grey lid over the sky in a blow (the sky shader has no cloud). */
   readonly overcast = new THREE.Mesh(
     new THREE.SphereGeometry(HORIZON * 2, 32, 16),
@@ -148,29 +149,73 @@ export class Atmosphere {
     this.envScene.add(this.sky.clone()); // shares the sky's material, so it follows it
     this.pmrem = new THREE.PMREMGenerator(renderer);
 
-    // Stars: a fixed sprinkle on a big dome, brighter ones rarer.
-    const n = 2600;
-    const p = new Float32Array(n * 3);
-    const c = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      const y = Math.random() * 1.05 - 0.05;
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.sqrt(1 - y * y);
-      const R = HORIZON * 2.5;
-      p.set([Math.cos(a) * r * R, y * R, Math.sin(a) * r * R], i * 3);
-      const b = 0.25 + 0.75 * Math.random() ** 4;
-      const warm = Math.random();
-      c.set([b * (0.85 + 0.15 * warm), b * 0.9, b * (1 - 0.15 * warm)], i * 3);
+    // Stars, placed on the sky's own sphere (equator and pole): setCelestial()
+    // turns the whole sphere to the right time and place. Faint ones at random
+    // (they only make the sky look right); the bright ones are the real stars.
+    const R = HORIZON * 2.5;
+    const field = (pts: [number, number, number][], cols: number[][], size: number) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts.flatMap((v) => v.map((x) => x * R))), 3));
+      g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(cols.flat()), 3));
+      const m = new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, fog: false, depthWrite: false });
+      this.starMats.push(m);
+      const pts3 = new THREE.Points(g, m);
+      pts3.renderOrder = -1;
+      pts3.frustumCulled = false;
+      this.stars.add(pts3);
+    };
+    {
+      const pts: [number, number, number][] = [];
+      const cols: number[][] = [];
+      for (let i = 0; i < 3200; i++) {
+        const z = Math.random() * 2 - 1;
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(1 - z * z);
+        pts.push([Math.cos(a) * r, Math.sin(a) * r, z]);
+        const b = 0.2 + 0.6 * Math.random() ** 4;
+        const warm = Math.random();
+        cols.push([b * (0.85 + 0.15 * warm), b * 0.9, b * (1 - 0.15 * warm)]);
+      }
+      field(pts, cols, 1.5);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(p, 3));
-    g.setAttribute("color", new THREE.BufferAttribute(c, 3));
-    this.stars = new THREE.Points(
-      g,
-      new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, fog: false, depthWrite: false }),
+    for (const [lo, hi, size] of [[-2, 0.6, 4.6], [0.6, 1.6, 3.7], [1.6, 9, 3.0]] as const) {
+      const sel = BRIGHT_STARS.filter((st) => st.mag >= lo && st.mag < hi);
+      field(
+        sel.map((st) => equatorialVector(st.ra * 15, st.dec)),
+        sel.map((st) => (/Betelgeuse|Antares|Aldebaran|Arcturus/.test(st.name) ? [1, 0.78, 0.6] : [0.92, 0.95, 1])),
+        size,
+      );
+    }
+    this.stars.matrixAutoUpdate = false;
+    this.moonDisc = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.ShaderMaterial({
+        uniforms: { uSun: { value: new THREE.Vector3(1, 0, 0) }, uAlpha: { value: 0 }, uGlow: { value: 1 } },
+        vertexShader: VERT,
+        fragmentShader: `
+          uniform vec3 uSun; uniform float uAlpha; uniform float uGlow; varying vec2 vUv;
+          float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
+          void main() {
+            vec2 p = vUv * 2.0 - 1.0;
+            float r2 = dot(p, p);
+            float edge = 1.0 - smoothstep(0.92, 1.0, r2);
+            if (edge <= 0.0) discard;
+            vec3 n = vec3(p, sqrt(max(1.0 - r2, 0.0)));
+            float lit = smoothstep(-0.04, 0.08, dot(n, normalize(uSun)));
+            float maria = 0.78 + 0.22 * vnoise(p * 3.0 + 4.0) - 0.12 * smoothstep(0.55, 0.8, vnoise(p * 2.2 + 1.3));
+            vec3 c = vec3(0.98, 0.96, 0.9) * maria * mix(0.05, 1.0, lit) * uGlow;
+            gl_FragColor = vec4(c, edge * uAlpha * mix(0.12, 1.0, lit));
+          }`,
+        transparent: true,
+        depthWrite: false,
+        fog: false,
+      }),
     );
-    this.stars.renderOrder = -1;
-    this.moon.position.copy(compassToScene(35, 150)).multiplyScalar(100);
+    this.moonDisc.renderOrder = -1;
+    this.moonDisc.frustumCulled = false;
+    this.setCelestial(Date.UTC(2020, 4, 1, 3), 38, -50); // a spring night mid-ocean until a page says otherwise
     this.overcast.renderOrder = -1;
     // Sun shadows (Ultra): a tight box round the boat, moved by shadowAround().
     const sc = this.sun.shadow.camera;
@@ -183,7 +228,7 @@ export class Atmosphere {
     this.sun.shadow.normalBias = 0.02;
     this.sun.shadow.radius = 3;
     scene.add(this.sun.target);
-    scene.add(this.sky, this.overcast, this.stars, this.sun, this.moon, this.hemi);
+    scene.add(this.sky, this.overcast, this.stars, this.moonDisc, this.sun, this.moon, this.hemi);
     scene.fog = this.fog;
     this.set(30, 210, 0, true);
   }
@@ -203,10 +248,13 @@ export class Atmosphere {
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;
     this.sun.position.copy(this.sunDir).multiplyScalar(100);
-    this.moon.intensity = 0.9 * night * (1 - 0.8 * storm);
+    const moonUp = smooth(this.moonEl, -1, 4);
+    this.moon.intensity = 0.9 * night * (1 - 0.8 * storm) * moonUp * (0.25 + 0.75 * this.moonLit);
     this.hemi.intensity = 0.12 + 0.38 * day;
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
-    this.stars.material.opacity = night * (1 - storm);
+    for (const m of this.starMats) m.opacity = night * (1 - storm);
+    this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day));
+    this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
     this.ambient = 0.18 + 0.82 * day * (1 - 0.4 * storm);
 
@@ -219,9 +267,9 @@ export class Atmosphere {
     this.overcast.material.color.copy(this.fog.color);
 
     // The moon makes the glints at night.
-    if (day > 0.15) {
+    if (day > 0.15 || this.moonEl < 0) {
       this.glintDir.copy(this.sunDir);
-      this.glintLight = this.sunLight;
+      this.glintLight = day > 0.15 ? this.sunLight : 0;
     } else {
       this.glintDir.copy(this.moon.position).normalize();
       this.glintLight = this.moon.intensity * 0.6;
@@ -244,6 +292,48 @@ export class Atmosphere {
       this.envKey = [elDeg, azDeg, storm];
       this.envAt = now;
     }
+  }
+
+  /**
+   * Turn the sky to a real moment and place: stars, the moon and its phase.
+   * (The sun goes in through set(), from sunPosition(), for the same moment.)
+   */
+  setCelestial(ms: number, latDeg: number, lonDeg: number): void {
+    // The sky sphere's three axes, seen from here now: x = RA 0h, y = RA 6h on the equator, z = the pole.
+    const ax = (ra: number, dec: number) => {
+      const h = toHorizon(ra, dec, ms, latDeg, lonDeg);
+      return compassToScene(h.el, h.az);
+    };
+    this.stars.matrix.makeBasis(ax(0, 0), ax(90, 0), ax(0, 90));
+    this.stars.matrixWorldNeedsUpdate = true;
+    for (const st of BRIGHT_STARS) {
+      const h = toHorizon(st.ra * 15, st.dec, ms, latDeg, lonDeg);
+      const v = this.starDirs.get(st.name) ?? new THREE.Vector3();
+      this.starDirs.set(st.name, compassToScene(h.el, h.az, v));
+    }
+    const m = moonEquatorial(ms);
+    const mh = toHorizon(m.ra, m.dec, ms, latDeg, lonDeg);
+    this.moonEl = mh.el;
+    compassToScene(mh.el, mh.az, this.moonDir);
+    this.moon.position.copy(this.moonDir).multiplyScalar(100);
+    const ph = moonPhase(ms);
+    this.moonLit = ph.lit;
+    this.moonPhaseName = ph.name;
+  }
+
+  /** Keep the moon's disc in its place in the sky as the camera moves, lit from the sun's side. */
+  private placeMoon(): void {
+    const cam = this.camera.position;
+    const D = HORIZON * 2.2;
+    const disc = this.moonDisc;
+    disc.position.copy(cam).addScaledVector(this.moonDir, D);
+    disc.lookAt(cam);
+    // Drawn about three times its real size (half a degree) so it reads on a screen.
+    disc.scale.setScalar(D * Math.tan(THREE.MathUtils.degToRad(1.5)));
+    disc.updateMatrixWorld();
+    // The sun's direction in the disc's own frame (x right, y up, z towards the viewer).
+    const q = disc.quaternion.clone().invert();
+    disc.material.uniforms.uSun.value.copy(this.sunDir).applyQuaternion(q);
   }
 
   /** True when the browser draws without a graphics card (software GL, as on
@@ -331,6 +421,7 @@ export class Atmosphere {
   }
 
   render(): void {
+    this.placeMoon();
     if (this.grade) {
       const u = this.grade.uniforms;
       u.storm.value = this.storm;
