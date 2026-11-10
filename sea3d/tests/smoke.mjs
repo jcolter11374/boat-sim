@@ -246,10 +246,32 @@ try {
   if (!(y1.s.batteryWh === 2560 && y1.s.thrusters === 1 && y1.s.massKg > y0.massKg && y1.d.thrusters === 1))
     fail(`boatyard swap didn't take: ${JSON.stringify(y1)}`);
   if (y1.share !== "#thr=one-t200&bat=two-100ah") fail(`boatyard share link: ${y1.share}`);
+  if ((await page.evaluate(() => window.__yard.view)) !== "inside") fail("boatyard: a battery swap should open the see-inside view");
   await page.goto(`${URL}boatyard.html?quality=low${y1.share}`);
   await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
   const y2 = await page.evaluate(() => window.__yard.design.picks);
   if (y2.thr !== "one-t200" || y2.bat !== "two-100ah") fail(`boatyard link didn't reopen the design: ${JSON.stringify(y2)}`);
+  // Every choice looks different on the boat (spares stay ashore; one-option slots have nothing to swap).
+  const looks = await page.evaluate(() => {
+    const y = window.__yard;
+    const same = [];
+    for (const b of document.querySelectorAll(".opt")) {
+      const slot = b.dataset.slot;
+      if (slot === "spares") continue;
+      const opts = [...document.querySelectorAll(`.opt[data-slot="${slot}"]`)].map((o) => o.dataset.opt);
+      if (opts[0] !== b.dataset.opt) continue;
+      const seen = new Map();
+      for (const o of opts) {
+        y.pick(slot, o);
+        const k = JSON.stringify(y.dressed);
+        if (seen.has(k)) same.push(`${slot}: ${seen.get(k)} = ${o}`);
+        seen.set(k, o);
+      }
+      y.pick(slot, opts[0]);
+    }
+    return same;
+  });
+  if (looks.length) fail(`boatyard: choices that look the same on the boat: ${looks.join("; ")}`);
   const greyed = await page.evaluate(() => ({
     noeff: document.querySelectorAll(".opt.noeff").length,
     shape: !!document.querySelector('.opt[data-slot="shape"]'),

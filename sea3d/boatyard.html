@@ -55,7 +55,14 @@
   #result { margin-top: 10px; font-size: 13px; }
   #result .odds { font-size: 26px; font-weight: 750; }
   #result ul { margin: 6px 0 0; padding-left: 18px; }
-  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 8px 14px; display: none; }
+  #views { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px; }
+  #views button { font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  #views button[aria-pressed="true"] { background: rgba(255,138,42,.18); border-color: var(--orange); }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  #labels div { position: absolute; left: 0; top: 0; white-space: nowrap; font: 600 11.5px system-ui, sans-serif; color: #fff;
+    background: rgba(10,22,38,.82); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
+  #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); padding: 8px 14px; display: none; }
   #toast.show { display: block; }
   #error { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); padding: 16px 20px; display: none; max-width: 520px; }
 </style>
@@ -88,6 +95,12 @@
   <div id="result"></div>
   <p class="muted" style="margin:10px 0 0"><a href="./voyage.html">Voyage replays &rarr;</a></p>
 </section>
+<div id="views" class="glass" role="group" aria-label="How to look at the boat">
+  <button data-view="afloat" aria-pressed="true" title="The boat as it floats">On the water</button>
+  <button data-view="inside" aria-pressed="false" title="See the batteries, computers and radios inside the hull">See inside</button>
+  <button data-view="lifted" aria-pressed="false" title="Lift the boat out to see the keel, bottom paint and motors">Lift out of the water</button>
+</div>
+<div id="labels"></div>
 <div id="toast" class="glass"></div>
 <div id="error" class="glass"></div>
 <script type="module" src="./src/boatyard.ts"></script>
