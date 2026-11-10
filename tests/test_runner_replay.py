@@ -26,6 +26,7 @@ def _log():
                 "current_u": 0.4,
                 "current_v": 0.1,
                 "ghi": 600.0,
+                "rain": 1.3,
                 "iridium_ok": h < 2,
                 "beacon_ok": True,
             }

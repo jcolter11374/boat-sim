@@ -193,6 +193,7 @@ class IssuedForecast:
             wave_dir=s.wave_dir,
             ghi=mult(s.ghi, eghi, "ghi"),
             cloud_fraction=s.cloud_fraction,
+            rain=s.rain,
             air_temp=s.air_temp + eair,
             ship_density=s.ship_density,
         )

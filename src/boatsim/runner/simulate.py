@@ -203,6 +203,7 @@ def simulate(
                     "current_u": env.current_u,
                     "current_v": env.current_v,
                     "ghi": env.ghi,
+                    "rain": getattr(env, "rain", 0.0),
                     # Radios this hour (the 3D page shades silent spells from these).
                     "iridium_ok": bool(
                         getattr(state, "electronics_on", True)

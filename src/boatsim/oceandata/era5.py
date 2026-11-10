@@ -1,4 +1,4 @@
-"""ERA5 wind, waves, sunlight, cloud and air temperature, read on demand from
+"""ERA5 wind, waves, sunlight, cloud, air temperature and rain, read on demand from
 Google's public ARCO-ERA5 cloud copy. No account and no bulk download.
 
 Source: ERA5 hourly reanalysis (Hersbach et al. 2020, doi:10.1002/qj.3803),
@@ -10,7 +10,8 @@ and are interpolated to 0.25 degree in this store; they are NaN over land.
 
 How fetching works: the store keeps each hour of each variable as one global
 chunk, so reading our route box still transfers the whole globe for that hour
-(about 18 MB for the 8 variables below, measured). We therefore fetch one UTC
+(about 18 MB for the first 8 variables below, measured; rain adds one more
+global chunk, about +12%). We therefore fetch one UTC
 day at a time, crop it to the route box, pack it, and cache it as one small
 NetCDF file under data/era5/. A voyage only fetches the days it actually uses,
 and every later run reads the local file.
@@ -20,6 +21,10 @@ Conversions done here, so the rest of the code is SI and plain:
         -> ghi in W/m^2 (divide by 3600), treated as valid at the middle of
            that hour (see ERA5Source.sample)
     t2m (K) -> air_temp (deg C)
+    tp (m of water accumulated over the hour ending at the time stamp)
+        -> rain in mm/h (times 1000), valid at the middle of that hour like
+           ghi. Rain and snow together. For the 3D replay only: no physics
+           uses it. (ERA5 calls it "tp"; our tp is the peak wave period.)
     mean_wave_direction is the direction waves come FROM, degrees true,
         same convention as EnvState.wave_dir
 """
@@ -59,6 +64,7 @@ VARIABLES: dict[str, tuple[str, float, float]] = {
     "surface_solar_radiation_downwards": ("ghi", 0.05, 0.0),  # W/m^2 after conversion
     "total_cloud_cover": ("cloud_fraction", 0.0001, 0.0),  # 0..1
     "2m_temperature": ("air_temp", 0.01, 0.0),  # deg C after conversion
+    "total_precipitation": ("rain", 0.01, 0.0),  # mm/h after conversion
 }
 FIELDS = [v[0] for v in VARIABLES.values()]
 HOURS_PER_TILE = 26  # 00:00 of the day to 01:00 next day, so every in-day sample has a bracket
@@ -136,6 +142,8 @@ def fetch_day(
             a = np.maximum(a / 3600.0, 0.0)  # J/m^2 per hour -> mean W/m^2
         elif name == "air_temp":
             a = a - 273.15
+        elif name == "rain":
+            a = np.maximum(a * 1000.0, 0.0)  # m per hour -> mm/h
         if not np.isfinite(a).any() and name not in ("hs", "tp", "wave_dir"):
             raise ValueError(f"{src} is all missing on {day}")
         out[name] = (("time", "lat", "lon"), a)
@@ -151,6 +159,7 @@ def fetch_day(
         "source": url,
         "citation": "Hersbach et al. 2020 (ERA5), via Google ARCO-ERA5",
         "ghi_note": "hourly mean of the hour ENDING at the time stamp",
+        "rain_note": "mm/h, total over the hour ENDING at the time stamp",
         "box": f"{box}",
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,7 +189,14 @@ def load_tile(path: Path) -> GridSeries:
     import xarray as xr
 
     with xr.open_dataset(path, engine="netcdf4") as ds:
-        fields = {name: ds[name].values.astype(np.float32) for name in FIELDS}
+        shape = (ds.sizes["time"], ds.sizes["lat"], ds.sizes["lon"])
+        # Days cached before rain was added have no rain field: NaN, read as 0.
+        fields = {
+            name: ds[name].values.astype(np.float32)
+            if name in ds
+            else np.full(shape, np.nan, dtype=np.float32)
+            for name in FIELDS
+        }
         times, lats, lons = ds.time.values, ds.lat.values, ds.lon.values
     # Directions are averaged as unit vectors, so 350 and 10 degrees give 0, not 180.
     rad = np.deg2rad(fields["wave_dir"])
@@ -220,11 +236,14 @@ class ERA5Source:
         t64 = to_datetime64(t)
         day = t64.astype("datetime64[D]").astype(object)
         tile = self._tiles.get(day)
-        out = tile.sample(t64, lat, lon, [f for f in FIELDS if f not in ("ghi", "wave_dir")])
+        hourly_means = ("ghi", "rain")
+        out = tile.sample(
+            t64, lat, lon, [f for f in FIELDS if f not in (*hourly_means, "wave_dir")]
+        )
         # Sunlight: each value is the mean over the hour ending at its stamp, so
         # the value stamped hh:00 best represents hh-0:30. Sampling at t + 30 min
         # lines the hourly means up with the time they describe.
-        out.update(tile.sample(t64 + np.timedelta64(30, "m"), lat, lon, ["ghi"]))
+        out.update(tile.sample(t64 + np.timedelta64(30, "m"), lat, lon, list(hourly_means)))
         out["wave_dir"] = _sample_direction(tile, t64, lat, lon)
         return out
 
