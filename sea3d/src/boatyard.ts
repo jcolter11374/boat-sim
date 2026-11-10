@@ -37,7 +37,7 @@ import {
   type Design,
 } from "./yard/design";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
-import { GridLauncher, SandboxLauncher, type LaunchResult } from "./yard/launch";
+import { GridLauncher, SandboxLauncher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -117,6 +117,8 @@ const grid = new GridLauncher(() => cat);
 const sandbox = new SandboxLauncher(grid);
 const sandboxReady = sandbox.available();
 let launching = false;
+let planned: LaunchResult | null = null;
+const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
 /** Slots by theme, in the order a builder thinks about them. Unknown slots go at the end. */
 const GROUPS: [string, string[]][] = [
@@ -138,6 +140,7 @@ const status = {
   yaml: "",
   launch: null as unknown,
   launchError: "",
+  planned: null as unknown,
   backend: "",
   frames: 0,
   view: "afloat" as View,
@@ -383,9 +386,22 @@ $("launch").addEventListener("click", async () => {
     // The real simulator in the browser when the page has its files; else the precomputed grid.
     const useSandbox = await sandboxReady;
     status.backend = useSandbox ? sandbox.name : grid.name;
-    r = await (useSandbox ? sandbox : grid).launch(design, summarise(cat, design), (text, done, total) => {
+    const launcher = useSandbox ? sandbox : grid;
+    r = await launcher.launch(design, summarise(cat, design), (text, done, total) => {
       say(done ? `${text} (${done} of ${total})` : `${text} This takes a minute or two.`);
     });
+    // The planned build on the same launches, to compare with (once per back end; it never changes).
+    if (r && encodeDesign(cat, design) !== "") {
+      const plan = plannedDesign(cat);
+      let p = plannedRuns.get(launcher.name);
+      if (!p) {
+        p = (await launcher.launch(plan, summarise(cat, plan), (text, done, total) => {
+          say(`Now the planned build, to compare: ${done ? `${text} (${done} of ${total})` : text}`);
+        })) ?? undefined;
+        if (p) plannedRuns.set(launcher.name, p);
+      }
+      planned = p ?? null;
+    } else planned = null;
   } catch (e) {
     say(`The launch failed: ${e instanceof Error ? e.message : e}`);
     status.launchError = String(e);
@@ -395,10 +411,72 @@ $("launch").addEventListener("click", async () => {
     btn.disabled = false;
   }
   status.launch = r;
-  showResult(box, r);
+  status.planned = planned;
+  showResult(box, r, planned);
 });
 
-function showResult(box: HTMLElement, r: LaunchResult | null): void {
+/** One launch's ending in a few words. */
+const ending = (rp: LaunchReplay | undefined) =>
+  !rp ? "-" : rp.outcome === "arrived" ? `finished in ${Math.round(rp.days)} d` : rp.outcome.replace(/_/g, " ");
+const dayOf = (start: string) =>
+  new Date(start + (/Z|[+-]\d\d:?\d\d$/.test(start) ? "" : "Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const replayLink = (rp: LaunchReplay, text: string) =>
+  Object.assign(document.createElement("a"), {
+    // Absolute, so the voyage page can fetch it (blob: URLs only work in this browser session).
+    href: `./voyage.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`,
+    target: "_blank",
+    textContent: text,
+  });
+const oddsText = (o: LaunchOdds) => `${Math.round(o.odds * 100)}%`;
+const rangeText = (o: LaunchOdds) =>
+  `likely ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%` + (o.median_days ? `, typically ${Math.round(o.median_days)} days` : "");
+
+/** Planned build and yours side by side: the odds, then the same launches row by row (Maya). */
+function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
+  const grid = document.createElement("div");
+  grid.className = "vs";
+  for (const [who, res] of [["Planned build", p], ["Your build", r]] as const) {
+    const col = document.createElement("div");
+    col.append(
+      Object.assign(document.createElement("div"), { className: "muted", textContent: who }),
+      Object.assign(document.createElement("div"), { className: "odds", textContent: res.odds ? oddsText(res.odds) : "?" }),
+      Object.assign(document.createElement("div"), { className: "muted", textContent: res.odds ? rangeText(res.odds) : "no odds for this build yet" }),
+    );
+    grid.append(col);
+  }
+  box.append(grid);
+  const starts = [...new Set([...p.replays, ...r.replays].map((x) => x.start))].sort();
+  if (!starts.length) return;
+  box.append(
+    Object.assign(document.createElement("p"), {
+      className: "muted",
+      textContent: `The same ${starts.length} launches, both builds. ${starts.length < 10 ? `${starts.length} voyages is a small sample; the odds line is the better guide.` : ""}`,
+    }),
+  );
+  const t = document.createElement("table");
+  t.className = "pairs";
+  const head = t.insertRow();
+  const years = [...new Set(starts.map((x) => x.slice(0, 4)))];
+  for (const h of [`Launch${years.length === 1 ? ` (${years[0]})` : ""}`, "Planned", "Yours"]) head.append(Object.assign(document.createElement("th"), { textContent: h }));
+  for (const st of starts) {
+    const a = p.replays.find((x) => x.start === st);
+    const b = r.replays.find((x) => x.start === st);
+    const row = t.insertRow();
+    row.insertCell().textContent = years.length === 1 ? dayOf(st).replace(/ \d{4}$/, "") : dayOf(st);
+    for (const rp of [a, b]) {
+      const c = row.insertCell();
+      if (rp) c.append(replayLink(rp, ending(rp)));
+      else c.textContent = "-";
+      if (rp?.outcome === "arrived") c.className = "ok";
+    }
+    // Better, worse or the same, in a word.
+    const score = (x?: LaunchReplay) => (x?.outcome === "arrived" ? 1000 - x.days : -1);
+    if (a && b && score(a) !== score(b)) row.className = score(b) > score(a) ? "better" : "worse";
+  }
+  box.append(t);
+}
+
+function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | null = null): void {
   box.replaceChildren();
   if (!r) {
     box.append(
@@ -410,7 +488,8 @@ function showResult(box: HTMLElement, r: LaunchResult | null): void {
     );
     return;
   }
-  if (r.odds) {
+  if (p) showCompare(box, r, p);
+  else if (r.odds) {
     const o = r.odds;
     const big = Object.assign(document.createElement("div"), { className: "odds", textContent: `${Math.round(o.odds * 100)}% finish` });
     const range = Object.assign(document.createElement("div"), {
@@ -427,7 +506,7 @@ function showResult(box: HTMLElement, r: LaunchResult | null): void {
     p.append(a);
     box.append(p);
   }
-  if (r.replays.length) {
+  if (r.replays.length && !p) {
     const ul = document.createElement("ul");
     for (const rp of r.replays) {
       const li = document.createElement("li");
