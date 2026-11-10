@@ -49,7 +49,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const params = new URLSearchParams(location.search);
 const BASE = params.get("data") ?? "./voyages";
 /** "Pick your launch day": ?mode=game. Spoilers (outcomes, voyage length, event marks) stay hidden. */
-const GAME = params.get("mode") === "game";
+const GAME = params.get("mode") === "game" || document.documentElement.dataset.mode === "game"; // or <html data-mode="game">
 if (GAME) document.body.classList.add("game");
 
 // ---------- renderer; sky, light and haze come from atmosphere.ts ----------
