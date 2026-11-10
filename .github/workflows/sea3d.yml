@@ -47,6 +47,7 @@ jobs:
           path: |
             sea3d/public/models/kayak.glb
             sea3d/public/models/randolph.glb
+            sea3d/public/models/shape_*.glb
           key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
       - uses: actions/setup-python@v5
         if: steps.kayak-cache.outputs.cache-hit != 'true'
@@ -61,6 +62,7 @@ jobs:
           pip install -q bpy==4.2.0 pillow numpy
           python blender/build_kayak.py public/models/kayak.glb
           python blender/build_randolph.py public/models/randolph.glb
+          for s in cat semisub board; do python blender/build_shapes.py $s public/models/shape_$s.glb; done
       # The Boatyard's simulator in the browser (docs/sandbox.md): Theo's
       # boatsim.zip and the 2020 weather, served from this site so the page can
       # fetch them (a release download can't be read from a browser page). If
