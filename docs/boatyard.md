@@ -1,24 +1,26 @@
 # Boatyard grid: file format for the yard page
 
-The browser can't run the simulator, so every build the yard offers is simulated
-ahead of time by `boatsim.mc.boatyard` (workflow "Boatyard grid") and written to
-`sea3d/public/boatyard/`. The page looks a build up by its id and plays a replay.
+Finish odds need 100 voyages over ten years each, too many for the browser
+sandbox (docs/sandbox.md), so a grid of builds is simulated ahead of time by
+`boatsim.mc.boatyard` (workflow "Boatyard grid") and written to
+`sea3d/public/boatyard/`. The page looks a build up by its id, shows its odds and
+plays a replay; a sandbox run shows the nearest grid build's odds.
 
 ## Builds
 
-The v4 kayak, with four knobs (2 × 5 × 3 × 2 = 60 builds):
+Eighteen builds of the v4 kayak, picked from Sam's parts catalog
+(`boatsim.sandbox.catalog.GRID`): the kayak as it stands at 25 W cruise; 10, 15,
+20 and 30 W cruise; each modelled option changed on its own (one thruster, solar
+200 and 300 W, battery 640 and 2560 Wh, one electronics box, no beacon, no AIS,
+no antifouling); one box with no beacon; the big-energy build (300 W, 2560 Wh) at
+25 and 30 W; and everything cheapest at 15 W.
 
-| Knob | Values | Id part |
-|---|---|---|
-| Motors | 1 or 2 (one motor: 50 W burst; two: 100 W) | `m1`, `m2` |
-| Cruise power | 10, 15, 20, 25, 30 W | `p10` ... `p30` |
-| Battery and panels (together) | small 640 Wh + 150 W, current 1280 Wh + 250 W, large 1920 Wh + 350 W | `es`, `em`, `el` |
-| Electronics boxes | 1 or 2 | `b1`, `b2` |
-
-Id: `k-m{motors}-p{cruise W}-e{s|m|l}-b{boxes}`. The design as it stands is
-`k-m2-p25-em-b2`, and its index entry has `"current": true`. With one box, a
-box failure stops the autopilot and the Iridium radio. The Globalstar beacon
-keeps reporting while the boat drifts, until it fails too.
+Ids are `k-p{cruise W}` plus each non-default modelled choice as
+`-{slot}.{option}`, e.g. `k-p25-thr.one-t200` (`catalog.grid_id`). Options with
+no effect yet in the simulator are left out of the id. The design as it stands
+is `k-p25`, and its index entry has `"current": true`. With one box, a box
+failure stops the autopilot and the Iridium radio. The Globalstar beacon keeps
+reporting while the boat drifts, until it fails too.
 
 Two more builds use our model of the Randolph Rev B. These are for display only
 and are not their numbers:
@@ -31,24 +33,20 @@ and are not their numbers:
 
 ```jsonc
 {
-  "schema": 1,
-  "options": {
-    "motors": [1, 2], "cruise_w": [10, 15, 20, 25, 30],
-    "energy": [{"id": "s", "label": "small", "battery_wh": 640, "solar_wp": 150}, ...],
-    "boxes": [1, 2],
-    "id_pattern": "k-m{motors}-p{cruise_w}-e{energy id}-b{boxes}",
-    "rev_b": ["revb", "revb-spar"]
-  },
+  "schema": 2,
+  "slots": {"thr": ["two-t200", "one-t200"], ...},       // catalog option ids per slot
+  "defaults": {"thr": "two-t200", ..., "cruise_w": 25},  // the kayak as it stands
+  "current": "k-p25",
   "stride_h": 6,                 // hours between replay rows
   "units": {"h": "hours since launch", "lat": "deg N", ...},
   "odds_source": {"years": [2012, 2021], "months": [4, 5, 6], "voyages_per_build": 100, "note": "..."},
   "commit": "abc1234",           // code the grid was run on
   "builds": [
     {
-      "id": "k-m2-p25-em-b2",
+      "id": "k-p25",
       "boat": "v4 kayak",        // or "Randolph Rev B": which model to draw
-      "label": "2 motors, 25 W cruise, current battery and panels (1280 Wh, 250 W), 2 electronics boxes",
-      "options": {"motors": 2, "cruise_w": 25, "energy": "current", "boxes": 2},  // Rev B: {"wing": ...}
+      "label": "25 W cruise, kayak as it stands",
+      "options": {"thr": "two-t200", ..., "cruise_w": 25},  // every slot; Rev B: {"wing": ...}
       "current": true,
       "odds": {
         "voyages": 100, "finished": 78,
@@ -58,7 +56,7 @@ and are not their numbers:
         "endings": {"arrived": 78, "lost at sea": 12, ...}
       },
       "replays": [
-        {"file": "k-m2-p25-em-b2/2020-04-01.json", "start": "2020-04-01T12:00", "outcome": "arrived", "days": 71.7},
+        {"file": "k-p25/2020-04-01.json", "start": "2020-04-01T12:00", "outcome": "arrived", "days": 71.7},
         ...                        // the 1st and 15th of April, May and June
       ]
     }
@@ -88,5 +86,5 @@ loads them), made smaller:
   won't flash on reports.
 - Extra keys: `build` (the id) and `stride_h`.
 
-The seeds are the voyage replays' seeds, so `k-m2-p25-em-b2` replays the same
+The seeds are the voyage replays' seeds, so `k-p25` replays the same
 voyages as `sea3d/public/voyages/voyage_<date>.json`, thinned.

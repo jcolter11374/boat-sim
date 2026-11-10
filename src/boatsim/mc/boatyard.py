@@ -11,13 +11,11 @@ The page looks a build up by its id and gets two things:
   same seeds as the voyage replays (runner.replay), thinned to one row every few
   hours so the whole grid stays small enough for git and the Pages build.
 
-Builds of the v4 kayak (ids like ``k-m2-p25-e2-b2``):
-
-* motors: 1 or 2 thrusters (one motor: 50 W burst, as sensitivity's one_thruster)
-* cruise power: 10, 15, 20, 25 or 30 W
-* energy: battery and panels together, small / current / large
-* electronics boxes: 1 or 2. With one box, losing it stops the autopilot and
-  the Iridium radio; the Globalstar beacon keeps reporting while the boat drifts.
+Builds of the v4 kayak are picked from Sam's parts catalog (sandbox.catalog.GRID,
+ids like ``k-p25`` or ``k-p25-thr.one-t200``): the kayak as it stands, each
+modelled option changed on its own, the cruise power from 10 to 30 W, and a few
+combinations. The browser sandbox runs any other build on one season's weather
+and shows the nearest grid build's odds beside it.
 
 Plus two builds of our model of the Randolph Rev B (display only, not their
 numbers): as published, and a stronger wing spar (GUESS: a tenth of their
@@ -43,24 +41,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from boatsim.mc.sensitivity import SensitivityVoyage, Variant, window_launches
+from boatsim.runner.replay import DROP_COLUMNS, QUIET_EVENTS, thin  # noqa: F401 (re-exported)
+from boatsim.sandbox import catalog
 
-SCHEMA = 1
+SCHEMA = 2  # 2: builds from the parts catalog
 KAYAK = "configs/v4_kayak.yaml"
 REV_B = "configs/randolph_rev_b.yaml"
 STRIDE_H = 6  # hours between replay rows (the voyage replays are hourly)
-
-MOTORS = (1, 2)
-CRUISE_W = (10, 15, 20, 25, 30)
-# Battery and panels move together: one "how much energy" knob for the yard.
-# Small and large are the sensitivity study's battery_640/solar_150 and
-# battery_1920/solar_350 rows, taken together.
-ENERGY = {
-    "s": {"label": "small", "battery_wh": 640, "solar_wp": 150},
-    "m": {"label": "current", "battery_wh": 1280, "solar_wp": 250},
-    "l": {"label": "large", "battery_wh": 1920, "solar_wp": 350},
-}
-BOXES = (1, 2)
-CURRENT = {"motors": 2, "cruise_w": 25, "energy": "m", "boxes": 2}  # the design as it stands
+CURRENT = "k-p25"  # the kayak as it stands
 
 
 @dataclass(frozen=True)
@@ -70,31 +58,27 @@ class Build:
     design_path: str
     label: str  # plain words for John
     variant: Variant
-    options: dict
+    options: dict  # catalog slot -> option id, plus cruise_w (Rev B: {"wing": ...})
 
 
-def kayak_id(motors: int, cruise_w: int, energy: str, boxes: int) -> str:
-    return f"k-m{motors}-p{cruise_w}-e{energy}-b{boxes}"
+def _label(choices: dict) -> str:
+    picked, cruise = catalog.normalise(choices)
+    diffs = [f"{catalog.SLOT_NAMES[s]}: {o}" for s, o in picked.items() if o != catalog.DEFAULTS[s]]
+    return f"{cruise} W cruise" + (", " + ", ".join(diffs) if diffs else ", kayak as it stands")
 
 
-def _kayak(motors: int, cruise_w: int, energy: str, boxes: int) -> Build:
-    e = ENERGY[energy]
-    changes = [
-        ("propulsion", "thruster_count", motors),
-        ("propulsion", "max_drive_w", 100 if motors == 2 else 50),
-        ("propulsion", "cruise_drive_w", cruise_w),
-        ("power", "battery_wh", e["battery_wh"]),
-        ("power", "solar_wp", e["solar_wp"]),
-        ("hazards", "electronics_boxes", boxes),
-    ]
-    label = (
-        f"{motors} motor{'s' if motors > 1 else ''}, {cruise_w} W cruise, "
-        f"{e['label']} battery and panels ({e['battery_wh']} Wh, {e['solar_wp']} W), "
-        f"{boxes} electronics box{'es' if boxes > 1 else ''}"
+def _kayak(choices: dict) -> Build:
+    picked, cruise = catalog.normalise(choices)
+    label = _label(choices)
+    changes = catalog.design_changes(choices)
+    return Build(
+        catalog.grid_id(choices),
+        "v4 kayak",
+        KAYAK,
+        label,
+        Variant("boatyard", label, changes),
+        {**picked, "cruise_w": cruise},
     )
-    opts = {"motors": motors, "cruise_w": cruise_w, "energy": e["label"], "boxes": boxes}
-    bid = kayak_id(motors, cruise_w, energy, boxes)
-    return Build(bid, "v4 kayak", KAYAK, label, Variant("boatyard", label, tuple(changes)), opts)
 
 
 def _rev_b_parts(wing_factor: float) -> dict:
@@ -108,12 +92,9 @@ def _rev_b_parts(wing_factor: float) -> dict:
 
 def _builds() -> dict[str, Build]:
     out = {}
-    for m in MOTORS:
-        for p in CRUISE_W:
-            for e in ENERGY:
-                for b in BOXES:
-                    k = _kayak(m, p, e, b)
-                    out[k.id] = k
+    for g in catalog.GRID:
+        k = _kayak(g)
+        out[k.id] = k
     out["revb"] = Build(
         "revb",
         "Randolph Rev B",
@@ -225,38 +206,6 @@ def _r(x, nd):
 # --- Replays -----------------------------------------------------------------
 
 
-# Columns left out of yard replays: sunlight sampled every few hours aliases day
-# and night, and the page doesn't draw currents. Positions to 1e-3 deg (~100 m).
-DROP_COLUMNS = ("current_u", "current_v", "ghi")
-QUIET_EVENTS = ("message_sent", "message_received", "mission_updated")  # not shown as notes
-
-
-def thin(rep: dict, stride_h: float = STRIDE_H) -> dict:
-    """A voyage replay made small for the yard: one row every stride_h hours (and
-    the last row), no sunlight or current columns, positions to 1e-3 deg, the
-    routine satellite-traffic events left out (every notable event stays), and
-    the units moved to the index."""
-    from boatsim.runner.replay import COLUMNS, FLAGS
-
-    h = rep["h"]
-    keep, nxt = [], 0.0
-    for i, t in enumerate(h):
-        if t + 1e-6 >= nxt:
-            keep.append(i)
-            nxt = t + stride_h
-    if h and keep[-1] != len(h) - 1:
-        keep.append(len(h) - 1)
-    out = {k: v for k, v in rep.items() if k not in DROP_COLUMNS and k != "units"}
-    for col in ("h", *COLUMNS, *FLAGS):
-        if col in out:
-            out[col] = [rep[col][i] for i in keep]
-    for col in ("lat", "lon"):
-        out[col] = [None if x is None else round(x, 3) for x in out[col]]
-    out["events"] = [e for e in rep["events"] if e["kind"] not in QUIET_EVENTS]
-    out["stride_h"] = stride_h
-    return out
-
-
 class _ReplayReduce:
     def __init__(self, bid: str):
         self.bid = bid
@@ -325,21 +274,16 @@ def build_index(odds: dict[str, dict], replay_dir: Path, meta: dict) -> dict:
                 "boat": b.boat,
                 "label": b.label,
                 "options": b.options,
-                "current": b.options == {**CURRENT, "energy": ENERGY[CURRENT["energy"]]["label"]},
+                "current": bid == CURRENT,
                 "odds": odds.get(bid),
                 "replays": reps,
             }
         )
     return {
         "schema": SCHEMA,
-        "options": {
-            "motors": list(MOTORS),
-            "cruise_w": list(CRUISE_W),
-            "energy": [{"id": k, **v} for k, v in ENERGY.items()],
-            "boxes": list(BOXES),
-            "id_pattern": "k-m{motors}-p{cruise_w}-e{energy id}-b{boxes}",
-            "rev_b": ["revb", "revb-spar"],
-        },
+        "slots": {k: list(v) for k, v in catalog.SLOTS.items()},
+        "defaults": {**catalog.DEFAULTS, "cruise_w": catalog.DEFAULT_CRUISE_W},
+        "current": CURRENT,
         "stride_h": STRIDE_H,
         "units": _units(),
         **meta,

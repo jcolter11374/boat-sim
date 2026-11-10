@@ -38,12 +38,13 @@ import argparse
 import math
 import os
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 
+from boatsim.config import patched_design
 from boatsim.mc.months import (
     MAX_DAYS,
     MONTHS,
@@ -272,13 +273,6 @@ VARIANTS: dict[str, Variant] = {
 }
 
 FIRST_BATCH = tuple(VARIANTS)
-
-
-def patched_design(design, changes):
-    """The design with (section, key, value) changes applied."""
-    for section, key, value in changes:
-        design = replace(design, **{section: {**getattr(design, section), key: value}})
-    return design
 
 
 @dataclass(frozen=True)

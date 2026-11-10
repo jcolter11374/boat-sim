@@ -1,0 +1,109 @@
+# Boatyard sandbox: the simulator in the browser
+
+The yard page runs the real simulator in the browser (Pyodide: CPython compiled
+to WebAssembly, with numpy and pyyaml). Any build from Sam's parts catalog runs
+on one season of thinned weather, six launches, with replays. Finish odds need
+100 voyages over ten years, which is too much for a browser, so those come from
+the precomputed grid (docs/boatyard.md). The page shows the nearest grid build's
+odds beside a sandbox run.
+
+Label sandbox results **"sandbox, 2020 weather"**. They are not the headline
+odds: the weather is thinned (below), so the voyages are close to, but not the
+same as, the full-resolution runs.
+
+## What the page downloads
+
+From the `sandbox-data` release (workflow "Sandbox data", publish ticked):
+
+| File | Size | What |
+|---|---|---|
+| `forcing_2020.npz` | ~13 MB | The season's forcing bundle (below) |
+| `boatsim.zip` | ~0.25 MB | `src/boatsim`, the design files and the land mask |
+| `reference.json` | small | Reference voyages run in Node + Pyodide |
+
+Plus the Pyodide runtime with numpy and pyyaml (~13 MB, from the Pyodide CDN).
+Everything is cached after the first visit.
+
+### The forcing bundle (`boatsim.sandbox.forcing`)
+
+1 April to 20 November (the last launch, 15 June, plus 150 days and a little
+forecast look-ahead), over 28 to 50 N, 78 to 8 W.
+
+| Field | Full runs | Sandbox |
+|---|---|---|
+| Wind, waves, cloud (ERA5) | 0.25 deg, hourly | 1 deg, 6-hourly |
+| Air temperature | hourly | daily mean |
+| Sunlight | hourly | daily clearness x a clear-sky sun model |
+| Currents (GLORYS12) | 1/12 deg, daily | 0.25 deg, daily (the Gulf Stream is ~100 km wide) |
+| Ship density | as is | as is |
+
+Sunlight hourly at sea would be far too big, so the bundle carries each day's
+clearness (ERA5 sunlight over clear-sky sunlight, summed over the day) and the
+browser multiplies it by the clear-sky model at the boat's time and place.
+
+## Running a build (`boatsim.sandbox.run`)
+
+A design is Sam's catalog slot id -> option id, plus `cruise_w` (10 to 30 W).
+Missing slots take the catalog default; the all-default build is
+`configs/v4_kayak.yaml` untouched.
+
+```python
+from boatsim.sandbox.run import open_bundle, launches, run_voyage, launch
+
+env = open_bundle(open("forcing_2020.npz", "rb").read())  # bytes or a path
+launches(env)  # [(datetime(2020, 4, 1, 12), 2020006), ...]: 1st/15th Apr-Jun
+run_voyage({"thr": "one-t200", "cruise_w": 15}, env, *launches(env)[0])
+# -> {"result": {...outcome, days, end_lat, loss_cause...}, "replay": {...}}
+launch(design, env)  # all six in a row (a worker pool can call run_voyage instead)
+# -> {"build", "effects", "results", "replays", "odds_build", "exact", "note"}
+```
+
+- Seeds are the voyage replays' (year x 1000 + the launch's place in the year),
+  so the default build replays the same dice as `sea3d/public/voyages/`.
+- `replay` is the boatyard's slim replay (6-hourly rows, notable events only).
+- `odds_build` is the nearest grid build; `exact` is true when it is this build.
+- `effects` gives each slot's option, what it does in the simulator (`wired`,
+  `no effect yet` or `fixed`), its badge (`est`: estimated) and `basis` (why).
+  Show "no effect yet" options greyed with that label, not hidden.
+
+One voyage takes 20 to 80 s in Pyodide on a laptop; run one per Web Worker.
+
+## The exactness gate
+
+The "Sandbox data" workflow runs the reference builds twice on the same bundle:
+
+1. in CPython, and
+2. in Node + Pyodide (`tools/pyodide/reference.mjs`, from `boatsim.zip`).
+
+They must agree on outcome, days and event count (`python -m boatsim.sandbox
+compare`). Positions differ in the last bits because numpy's maths libraries
+differ between the two. The Pyodide run is the same WebAssembly the browser
+runs, so a browser run must match `reference.json` **exactly**:
+
+```
+python -m boatsim.sandbox compare reference.json browser.json --exact
+```
+
+## Catalog mapping (`boatsim.sandbox.catalog`)
+
+Every option is a change from the kayak as it stands. "No effect yet" options
+change nothing until the physics for them lands; they stay visible.
+
+| Slot | Options | Sim | Effect |
+|---|---|---|---|
+| Thrusters | two-t200, one-t200 | thruster count, 50 W burst each | wired |
+| Solar | solar-200/250/300 | `power.solar_wp` | wired (300: est) |
+| Batteries | one-50ah 640, two-50ah 1280, two-100ah 2560 Wh | `power.battery_wh` | wired (2560: est) |
+| Charge controllers | one, two | none | no effect yet |
+| Autopilot | two-box, one-box | `electronics_boxes`, hotel load | wired (est) |
+| Satellite modem | rockblock-9603n | none | fixed |
+| Backup beacon | smartone-solar, none | `comms.beacon` | wired |
+| AIS | emtrak-b921, dy-ait1500, none | hotel load; none: ships avoid as with a dead AIS | wired (est) |
+| Radar reflector | two models | none | no effect yet |
+| Navigation light | hella-naviled-360 | none | fixed |
+| Keel bulb | 50 kg new or scrap, 40 kg | none | no effect yet (the mass link is next) |
+| Antifouling | micron-csc, none | `hull.fouling_frac_per_day` (none: x2, GUESS) | wired (est) |
+| Spares | three sets | none | no effect yet (trials only) |
+
+The hotel load is the design's 85 Wh/day with the default autopilot (31 Wh)
+and AIS (36 Wh) swapped for the chosen ones' catalog figures.

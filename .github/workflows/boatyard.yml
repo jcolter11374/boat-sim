@@ -33,6 +33,7 @@ on:
     paths:
       - ".github/workflows/boatyard.yml"
       - "src/boatsim/mc/boatyard.py"
+      - "src/boatsim/sandbox/catalog.py"
 permissions:
   contents: read
 concurrency:

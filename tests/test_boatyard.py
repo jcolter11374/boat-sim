@@ -14,23 +14,21 @@ from boatsim.vessel import KayakVessel
 from boatsim.vessel.hazards import HazardParams
 
 
-def test_grid_has_every_kayak_combination_and_two_rev_b_builds():
-    assert len(Y.BUILDS) == 2 * 5 * 3 * 2 + 2
-    assert Y.kayak_id(2, 25, "m", 2) == "k-m2-p25-em-b2"
-    assert {"revb", "revb-spar"} <= set(Y.BUILDS)
+def test_grid_is_catalog_builds_and_two_rev_b_builds():
+    assert len(Y.BUILDS) == 18 + 2
+    assert {"k-p25", "k-p10", "k-p25-brain.one-box", "revb", "revb-spar"} <= set(Y.BUILDS)
+    assert Y.BUILDS["k-p25"].options["thr"] == "two-t200"
 
 
 def test_builds_patch_the_design_as_labelled():
-    d = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-m1-p10-es-b1"].variant.design)
+    d = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-p25-thr.one-t200"].variant.design)
     assert d.propulsion["thruster_count"] == 1 and d.propulsion["max_drive_w"] == 50
-    assert d.propulsion["cruise_drive_w"] == 10
-    assert d.power["battery_wh"] == 640 and d.power["solar_wp"] == 150
-    assert HazardParams.from_config(d.hazards).electronics_boxes == 1
+    assert d.propulsion["cruise_drive_w"] == 25
+    assert Y.BUILDS["k-p25-thr.one-t200"].label == "25 W cruise, Thrusters: one-t200"
+    one = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-p25-brain.one-box"].variant.design)
+    assert HazardParams.from_config(one.hazards).electronics_boxes == 1
     # The current build is the design as it stands.
-    cur = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-m2-p25-em-b2"].variant.design)
-    base = load_design(Y.KAYAK)
-    assert cur.propulsion == base.propulsion and cur.power == base.power
-    assert HazardParams.from_config(cur.hazards) == HazardParams.from_config(base.hazards)
+    assert Y.BUILDS[Y.CURRENT].variant.design == ()
     # Stronger spar: only the wing's knockdown damage changes.
     rb = load_design(Y.REV_B)
     spar = patched_design(rb, Y.BUILDS["revb-spar"].variant.design)
@@ -43,7 +41,7 @@ def test_builds_patch_the_design_as_labelled():
 
 
 def test_one_box_kayak_with_a_dead_box_drifts_without_power_to_the_motors():
-    d = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-m2-p25-em-b1"].variant.design)
+    d = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-p25-brain.one-box"].variant.design)
     v = KayakVessel(d)
     s0 = v.initial_state(datetime(2020, 5, 1), 37.0, -70.0)
     s0.damage["electronics_main"] = s0.damage["electronics_safe"] = True
@@ -83,19 +81,20 @@ def test_thin_keeps_every_stride_and_the_last_row_and_the_notable_events():
 
 def test_index_lists_every_build_with_its_odds_and_replays(tmp_path):
     rep = Y.thin(_rep(30))
-    rep["build"] = "k-m1-p10-es-b1"
+    rep["build"] = "k-p10"
     Y.write_replays([rep], tmp_path)
-    odds = {"k-m1-p10-es-b1": {"voyages": 10, "finished": 3, "odds": 0.3}}
+    odds = {"k-p10": {"voyages": 10, "finished": 3, "odds": 0.3}}
     idx = Y.build_index(odds, tmp_path, {"commit": "abc"})
     json.dumps(idx)  # JSON-ready
     by_id = {b["id"]: b for b in idx["builds"]}
     assert len(by_id) == len(Y.BUILDS)
-    b = by_id["k-m1-p10-es-b1"]
+    b = by_id["k-p10"]
     assert b["odds"]["finished"] == 3
     assert b["replays"] == [
-        {"file": "k-m1-p10-es-b1/2020-05-01.json", "start": "2020-05-01T12:00",
+        {"file": "k-p10/2020-05-01.json", "start": "2020-05-01T12:00",
          "outcome": "timeout", "days": 1.25}
     ]  # fmt: skip
     assert (tmp_path / b["replays"][0]["file"]).exists()
-    assert [x["id"] for x in idx["builds"] if x["current"]] == ["k-m2-p25-em-b2"]
+    assert [x["id"] for x in idx["builds"] if x["current"]] == ["k-p25"]
+    assert idx["schema"] == 2 and idx["defaults"]["cruise_w"] == 25
     assert "ghi" not in idx["units"] and idx["commit"] == "abc"
