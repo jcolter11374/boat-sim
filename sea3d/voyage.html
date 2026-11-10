@@ -114,6 +114,27 @@
   body.game #guesschip:not([hidden]) { display: block; }
   #o-postcard { display: none; }
   body.game #o-postcard { display: inline-block; background: var(--orange); color: #1a0d00; border-color: var(--orange); }
+  /* Sky guide: compass strip and labels on the sun, moon and North Star */
+  #compass { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); width: 420px; height: 46px; overflow: hidden; padding: 0; }
+  #compass[hidden], #skylabels[hidden] { display: none; }
+  #tape { position: absolute; inset: 0; }
+  #tape span { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  #tape .tick { top: 0; width: 1px; height: 7px; background: rgba(255,255,255,.35); }
+  #tape .tick.big { height: 11px; background: rgba(255,255,255,.7); }
+  #tape .lbl { top: 11px; font-size: 11px; color: var(--dim); }
+  #tape .lbl.card { font-size: 13px; font-weight: 700; color: var(--ink); }
+  #tape .lbl.card.n { color: #ff6b6b; }
+  #tape .mk { bottom: 2px; font-size: 11.5px; font-weight: 600; }
+  #compass .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--orange); opacity: .8; }
+  #compass .hint { position: absolute; right: 6px; top: 2px; font-size: 9.5px; color: var(--dim); letter-spacing: .5px; }
+  #skylabels { position: fixed; inset: 0; pointer-events: none; }
+  #skylabels span { position: absolute; transform: translate(-50%, -100%); margin-top: -10px; font-size: 11.5px; color: #e9f1fb;
+    text-shadow: 0 1px 3px rgba(0,0,0,.9); white-space: nowrap; }
+  #skylabels span::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 7px; background: rgba(233,241,251,.6); }
+  #lookup { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; padding: 5px 12px;
+    border-radius: 8px; border: 1px solid var(--line); background: var(--glass); color: var(--ink); cursor: pointer; }
+  #lookup[hidden] { display: none; }
+  #lookup[aria-pressed="true"] { background: #1b3352; border-color: #8ab4ff; }
 </style>
 </head>
 <body>
@@ -131,6 +152,7 @@
   </div>
   <div class="row">
     <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option><option value="ultra">Ultra (good graphics card)</option></select></label>
+    <label title="A compass along the top, and labels on the sun, moon and North Star"><input type="checkbox" id="skyguide" checked> Sky guide</label>
     <a href="./index.html">Both boats side by side &rarr;</a>
   </div>
   <div class="row">
@@ -147,6 +169,9 @@
   <div class="card glass"><div class="k">To target</div><div class="v" id="h-dist">-</div><div class="s" id="h-sun"></div></div>
   <div class="card glass wide"><div class="k">Equipment <span class="muted">· green working, red broken</span></div><div id="eq"></div></div>
 </div>
+<div id="compass" class="glass" aria-label="Compass: which way the camera is looking"><div id="tape"></div><div class="mid"></div><div class="hint">VIEW</div></div>
+<div id="skylabels"></div>
+<button id="lookup" aria-pressed="false" title="Tilt the view up to see the moon and stars">&#11014; Look up at the sky</button>
 <div id="toasts"></div>
 <div id="chartbox" class="glass" title="Click to enlarge">
   <canvas id="chart"></canvas>
