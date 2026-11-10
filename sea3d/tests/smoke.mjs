@@ -250,7 +250,17 @@ try {
   await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
   const y2 = await page.evaluate(() => window.__yard.design.picks);
   if (y2.thr !== "one-t200" || y2.bat !== "two-100ah") fail(`boatyard link didn't reopen the design: ${JSON.stringify(y2)}`);
-  log.push(`boatyard ${y1.share}`);
+  const greyed = await page.evaluate(() => ({
+    noeff: document.querySelectorAll(".opt.noeff").length,
+    shape: !!document.querySelector('.opt[data-slot="shape"]'),
+  }));
+  if (!greyed.shape || greyed.noeff < 3) fail(`boatyard: the simulator's new slots or "no effect yet" options are missing: ${JSON.stringify(greyed)}`);
+  // No grid or sandbox files in a test build: the launch says so instead of hanging.
+  await page.click("#launch");
+  await page.waitForFunction(() => window.__yard.backend && !document.querySelector("#launch").disabled, null, { timeout: 30000 });
+  const how = await page.evaluate(() => ({ backend: window.__yard.backend, text: document.querySelector("#result").textContent }));
+  if (!how.text || /failed/.test(how.text)) fail(`boatyard launch: ${JSON.stringify(how)}`);
+  log.push(`boatyard ${y1.share}, ${greyed.noeff} greyed options, launch via ${how.backend}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();

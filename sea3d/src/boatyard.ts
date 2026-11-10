@@ -28,13 +28,15 @@ import {
   optionOf,
   plannedDesign,
   summarise,
+  withSim,
+  type SimSlots,
   type Catalog,
   type CatalogOption,
   type CatalogSlot,
   type Design,
 } from "./yard/design";
 import { dress } from "./yard/dress";
-import { GridLauncher, type Launcher } from "./yard/launch";
+import { GridLauncher, SandboxLauncher, type LaunchResult } from "./yard/launch";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
@@ -100,7 +102,10 @@ frameView();
 // ---------- the catalog and the design ----------
 let cat: Catalog | null = null;
 let design: Design;
-const launcher: Launcher & { ready?: () => Promise<boolean> } = new GridLauncher();
+const grid = new GridLauncher(() => cat);
+const sandbox = new SandboxLauncher(grid);
+const sandboxReady = sandbox.available();
+let launching = false;
 
 /** Slots by theme, in the order a builder thinks about them. Unknown slots go at the end. */
 const GROUPS: [string, string[]][] = [
@@ -121,6 +126,8 @@ const status = {
   share: "",
   yaml: "",
   launch: null as unknown,
+  launchError: "",
+  backend: "",
   frames: 0,
   /** Choose an option in a slot (tests). */
   pick: (slot: string, id: string) => choose(slot, id),
@@ -138,9 +145,14 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   name.textContent = o.n;
   if (o.def) name.append(badge("plan", "PLANNED"));
   if (o.est) name.append(badge("est", "ESTIMATE"));
+  if (o.effect === "no effect yet") {
+    name.append(badge("noeff", "NO EFFECT YET"));
+    b.classList.add("noeff");
+    b.title = `The simulator doesn't model this yet${o.basis ? `: ${o.basis}` : ""}. A launch sails it as built.`;
+  }
   const price = document.createElement("span");
   price.className = "price";
-  price.textContent = o.cost ? usd(o.cost) : "$0";
+  price.textContent = o.priceTbd ? "price TBD" : o.cost ? usd(o.cost) : "$0";
   top.append(name, price);
   const d = document.createElement("div");
   d.className = "d";
@@ -235,7 +247,7 @@ function redraw(): void {
   const cr = $<HTMLInputElement>("cruise");
   if (cr) cr.value = String(CRUISE_W.indexOf(design.cruiseW));
   const cl = document.getElementById("cruise-label");
-  if (cl) cl.textContent = `Cruising power: ${design.cruiseW} W per hour of motoring`;
+  if (cl) cl.textContent = `Cruising power: ${design.cruiseW} W while motoring`;
   // Totals.
   $("s-cost").textContent = usd(s.partsCost);
   $("s-prog").textContent = usd(s.programCost);
@@ -294,11 +306,34 @@ $("reset").addEventListener("click", () => {
   redraw();
 });
 $("launch").addEventListener("click", async () => {
-  if (!cat) return;
+  if (!cat || launching) return;
   const box = $("result");
-  box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: "Launching..." }));
-  const r = await launcher.launch(design, summarise(cat, design));
+  const btn = $<HTMLButtonElement>("launch");
+  const say = (text: string) => box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: text }));
+  say("Launching...");
+  launching = true;
+  btn.disabled = true;
+  let r: LaunchResult | null = null;
+  try {
+    // The real simulator in the browser when the page has its files; else the precomputed grid.
+    const useSandbox = await sandboxReady;
+    status.backend = useSandbox ? sandbox.name : grid.name;
+    r = await (useSandbox ? sandbox : grid).launch(design, summarise(cat, design), (text, done, total) => {
+      say(done ? `${text} (${done} of ${total})` : `${text} This takes a minute or two.`);
+    });
+  } catch (e) {
+    say(`The launch failed: ${e instanceof Error ? e.message : e}`);
+    status.launchError = String(e);
+    return;
+  } finally {
+    launching = false;
+    btn.disabled = false;
+  }
   status.launch = r;
+  showResult(box, r);
+});
+
+function showResult(box: HTMLElement, r: LaunchResult | null): void {
   box.replaceChildren();
   if (!r) {
     box.append(
@@ -326,26 +361,53 @@ $("launch").addEventListener("click", async () => {
     for (const rp of r.replays) {
       const li = document.createElement("li");
       const a = document.createElement("a");
-      a.href = `./voyage.html?replay=${encodeURIComponent(rp.url)}`;
-      a.textContent = `Watch the ${new Date(rp.start + (rp.start.endsWith("Z") ? "" : "Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })} 2020 launch`;
-      li.append(a);
+      // Absolute, so the voyage page can fetch it (blob: URLs only work in this browser session).
+      a.href = `./voyage.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`;
+      a.target = "_blank";
+      const when = new Date(rp.start + (/Z|[+-]\d\d:?\d\d$/.test(rp.start) ? "" : "Z"));
+      a.textContent = `Watch the ${when.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })} launch`;
+      const how = Object.assign(document.createElement("span"), {
+        className: "muted",
+        textContent: rp.outcome === "arrived" ? ` (finished, ${Math.round(rp.days)} days)` : ` (${rp.outcome.replace(/_/g, " ")})`,
+      });
+      li.append(a, how);
       ul.append(li);
     }
     box.append(ul);
   }
-});
+  if (r.fingerprints?.length) {
+    // Ravi's gate: these must match reference.json exactly (python -m boatsim.sandbox compare ... --exact).
+    const b = Object.assign(document.createElement("button"), { textContent: "Download results (JSON)" });
+    b.title = "Each launch's result in the simulator's reference format, for checking the browser against the real thing";
+    b.addEventListener("click", () => {
+      const a = document.createElement("a");
+      a.download = "boatyard-results.json";
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(r.fingerprints, null, 1)], { type: "application/json" }));
+      document.body.append(a);
+      a.click();
+      a.remove();
+    });
+    box.append(b);
+  }
+}
 
 // ---------- start ----------
 build();
 loadDetailedModels().then((ok) => {
   if (ok) build();
 });
-fetch("./parts-catalog.json")
-  .then((r) => {
+Promise.all([
+  fetch("./parts-catalog.json").then((r) => {
     if (!r.ok) throw new Error(`parts-catalog.json: ${r.status}`);
     return r.json() as Promise<Catalog>;
-  })
-  .then((c) => {
+  }),
+  // The simulator's notes per option (what it models); optional.
+  fetch("./sim-slots.json")
+    .then((r) => (r.ok ? (r.json() as Promise<SimSlots>) : null))
+    .catch(() => null),
+])
+  .then(([catalog, sim]) => {
+    const c = withSim(catalog, sim);
     cat = c;
     design = decodeDesign(c, location.hash);
     drawSlots();

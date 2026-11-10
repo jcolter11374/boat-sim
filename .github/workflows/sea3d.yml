@@ -61,6 +61,17 @@ jobs:
           pip install -q bpy==4.2.0 pillow numpy
           python blender/build_kayak.py public/models/kayak.glb
           python blender/build_randolph.py public/models/randolph.glb
+      # The Boatyard's simulator in the browser (docs/sandbox.md): Theo's
+      # boatsim.zip and the 2020 weather, served from this site so the page can
+      # fetch them (a release download can't be read from a browser page). If
+      # the release isn't there, the yard launches from the precomputed grid.
+      - name: Fetch the Boatyard sandbox files
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download sandbox-data -R "$GITHUB_REPOSITORY" -D public/sandbox -p boatsim.zip -p forcing_2020.npz \
+            && ls -l public/sandbox || echo "no sandbox-data release yet: the yard uses the grid"
       - name: Type-check and build
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)
