@@ -115,7 +115,12 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
 }
 
 /** The design as the simulator takes it: slot id -> option id, plus cruise_w (Theo's run_voyage). */
-export const simChoices = (d: Design): Record<string, string | number> => ({ ...d.picks, cruise_w: d.cruiseW });
+/** The design for the simulator: each pick, or with `base` only the picks that differ from it
+ * (the simulator's defaults are the planned build), plus the cruise power. */
+export function simChoices(d: Design, base?: Design | null): Record<string, string | number> {
+  const picks = Object.entries(d.picks).filter(([s, o]) => !base || base.picks[s] !== o);
+  return { ...Object.fromEntries(picks), cruise_w: d.cruiseW };
+}
 
 /** Choice per slot id (option id), and the cruise power in watts. */
 export interface Design {

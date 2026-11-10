@@ -114,7 +114,7 @@ frameView();
 let cat: Catalog | null = null;
 let design: Design;
 const grid = new GridLauncher(() => cat);
-const sandbox = new SandboxLauncher(grid);
+const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
 const sandboxReady = sandbox.available();
 let launching = false;
 let planned: LaunchResult | null = null;
@@ -377,7 +377,19 @@ $("launch").addEventListener("click", async () => {
   if (!cat || launching) return;
   const box = $("result");
   const btn = $<HTMLButtonElement>("launch");
-  const say = (text: string) => box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: text }));
+  // A clock beside the status, so a long run in the browser never looks frozen.
+  const t0 = Date.now();
+  let line = "";
+  const draw = () => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    const clock = s >= 3 ? ` · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "";
+    box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: line + clock }));
+  };
+  const say = (text: string) => {
+    line = text;
+    draw();
+  };
+  const tick = setInterval(draw, 1000);
   say("Launching...");
   launching = true;
   btn.disabled = true;
@@ -407,6 +419,7 @@ $("launch").addEventListener("click", async () => {
     status.launchError = String(e);
     return;
   } finally {
+    clearInterval(tick);
     launching = false;
     btn.disabled = false;
   }

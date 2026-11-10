@@ -115,28 +115,53 @@ export class GridLauncher implements Launcher {
 
 // ---------- the simulator in the browser ----------
 interface Job {
+  worker: number;
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
 }
 
-/** A few Web Workers, each with its own Pyodide, the simulator and the 2020 weather loaded once. */
-class Pool {
+/** How long a worker may stay silent before we give up on it and use the grid: loading Python and the
+ * weather (one message when it starts), and one voyage (20 to 80 s on a laptop; slow machines get room). */
+export const LOAD_TIMEOUT_MS = 150_000;
+export const RUN_TIMEOUT_MS = 300_000;
+
+/** A few Web Workers, each with its own Pyodide, the simulator and the 2020 weather loaded once.
+ * A worker that crashes, can't start, or goes quiet too long fails its job (and the pool is spent),
+ * so a launch always ends: in the browser's results or the grid's, never a page waiting forever. */
+export class Pool {
   private workers: Worker[] = [];
   private jobs = new Map<number, Job>();
+  private timers = new Map<number, ReturnType<typeof setTimeout>>();
   private next = 1;
+  broken: Error | null = null;
   onProgress: (text: string) => void = () => {};
-  constructor(n: number) {
+  constructor(
+    n: number,
+    make: () => Worker = () => new Worker(new URL("./sim.worker.ts", import.meta.url), { type: "module" }),
+    private loadMs = LOAD_TIMEOUT_MS,
+    private runMs = RUN_TIMEOUT_MS,
+  ) {
     for (let i = 0; i < n; i++) {
-      const w = new Worker(new URL("./sim.worker.ts", import.meta.url), { type: "module" });
+      const w = make();
       w.onmessage = (ev) => {
         const m = ev.data;
-        if (m.type === "progress") return this.onProgress(m.text);
+        if (m.type === "progress") {
+          this.kick(i);
+          return this.onProgress(m.text);
+        }
         const job = this.jobs.get(m.id);
         if (!job) return;
-        this.jobs.delete(m.id);
+        this.settle(m.id);
         if (m.ok) job.resolve(m.value);
         else job.reject(new Error(m.error));
       };
+      // A worker script that fails to load or throws outside a job (an old browser, a blocked
+      // download, out of memory) never answers: fail everything rather than hang.
+      w.onerror = (ev) => {
+        ev.preventDefault?.();
+        this.fail(new Error(`the simulator stopped (${ev.message || "worker error"})`));
+      };
+      w.onmessageerror = () => this.fail(new Error("the simulator sent a message the page couldn't read"));
       this.workers.push(w);
     }
   }
@@ -144,11 +169,38 @@ class Pool {
     return this.workers.length;
   }
   ask<T>(worker: number, msg: Record<string, unknown>): Promise<T> {
+    if (this.broken) return Promise.reject(this.broken);
     const id = this.next++;
     return new Promise<T>((resolve, reject) => {
-      this.jobs.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      this.jobs.set(id, { worker, resolve: resolve as (v: unknown) => void, reject });
+      this.arm(id, this.loadMs);
       this.workers[worker].postMessage({ ...msg, id });
     });
+  }
+  /** Stop every worker and fail every job still waiting. */
+  fail(e: Error): void {
+    this.broken ??= e;
+    for (const w of this.workers) w.terminate();
+    for (const [id, job] of [...this.jobs]) {
+      this.settle(id);
+      job.reject(this.broken);
+    }
+  }
+  private arm(id: number, ms: number): void {
+    clearTimeout(this.timers.get(id));
+    this.timers.set(
+      id,
+      setTimeout(() => this.fail(new Error(`the simulator went quiet for ${Math.round(ms / 1000)} s`)), ms),
+    );
+  }
+  /** A worker said something: its job is alive; after "Sailing..." the voyage budget applies. */
+  private kick(worker: number): void {
+    for (const [id, job] of this.jobs) if (job.worker === worker) this.arm(id, this.runMs);
+  }
+  private settle(id: number): void {
+    clearTimeout(this.timers.get(id));
+    this.timers.delete(id);
+    this.jobs.delete(id);
   }
 }
 
@@ -177,9 +229,11 @@ export const SANDBOX_CREDITS = {
 export class SandboxLauncher implements Launcher {
   readonly name = "simulator in the browser";
   private pool: Pool | null = null;
+  private crash: Error | null = null;
   constructor(
     private grid: GridLauncher,
     private base = "./sandbox/",
+    private planned?: () => Design | null,
   ) {}
   /** True when the page was published with the sandbox files (boatsim.zip, the weather bundle). */
   async available(): Promise<boolean> {
@@ -198,35 +252,51 @@ export class SandboxLauncher implements Launcher {
       // The published simulator can lag the page (a new part the page knows and it doesn't
       // yet answers "unknown slot"): fall back to the grid rather than fail the launch.
       console.warn("browser simulator failed, using the grid:", e);
+      const crashed = this.crash;
+      this.crash = null;
+      if (this.pool?.broken) this.pool = null; // spent: free its memory, start fresh next time
       const r = await this.grid.launch(d);
-      if (r) r.note = `${r.note} (The simulator in your browser can't sail this design yet; coming soon.)`;
+      if (r)
+        r.note = crashed
+          ? `${r.note} (The simulator couldn't run in this browser: ${crashed.message}. These are the results from our servers.)`
+          : `${r.note} (The simulator in your browser can't sail this design yet; coming soon.)`;
       return r;
     }
   }
   private async sail(d: Design, progress: Progress): Promise<LaunchResult | null> {
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
-    this.pool ??= new Pool(Math.max(1, Math.min(3, cores - 1)));
+    if (!this.pool || this.pool.broken) this.pool = new Pool(Math.max(1, Math.min(3, cores - 1)));
     const pool = this.pool;
-    const choices = simChoices(d);
+    // Only the parts that differ from the planned build: the simulator fills in the rest, so a
+    // slot the page knows and the published simulator doesn't yet (a new part, as planned) still sails.
+    const choices = simChoices(d, this.planned?.());
     // Absolute: inside a worker a relative URL means the worker script's folder, not the page's.
     const base = new URL(this.base, location.href).href;
     let done = 0;
     pool.onProgress = (text) => progress(text, done, 6);
-    const meta = await pool.ask<SandboxMeta>(0, { type: "meta", base, choices });
-    const total = meta.launches.length;
-    progress("Sailing...", 0, total);
-    const runs: SandboxRun[] = new Array(total);
-    let nextLaunch = 0;
-    await Promise.all(
-      Array.from({ length: pool.size }, async (_, w) => {
-        while (nextLaunch < total) {
-          const i = nextLaunch++;
-          runs[i] = await pool.ask<SandboxRun>(w, { type: "run", base, choices, index: i });
-          done++;
-          progress(`Sailed ${done} of ${total} launches`, done, total);
-        }
-      }),
-    );
+    let meta: SandboxMeta;
+    const runs: SandboxRun[] = [];
+    try {
+      meta = await pool.ask<SandboxMeta>(0, { type: "meta", base, choices });
+      const total = meta.launches.length;
+      progress("Sailing...", 0, total);
+      runs.length = total;
+      let nextLaunch = 0;
+      await Promise.all(
+        Array.from({ length: pool.size }, async (_, w) => {
+          while (nextLaunch < total) {
+            const i = nextLaunch++;
+            runs[i] = await pool.ask<SandboxRun>(w, { type: "run", base, choices, index: i });
+            done++;
+            progress(`Sailed ${done} of ${total} launches`, done, total);
+          }
+        }),
+      );
+    } catch (e) {
+      this.crash = pool.broken; // a crash or silence, as opposed to the simulator turning the design down
+      pool.fail(e instanceof Error ? e : new Error(String(e))); // stop the other workers too
+      throw e;
+    }
     const grid = await this.grid.build(meta.odds_build);
     const finished = runs.filter((r) => r.result.outcome === "arrived").length;
     const replays = runs
@@ -240,7 +310,7 @@ export class SandboxLauncher implements Launcher {
     return {
       exact: meta.exact,
       note:
-        `Sandbox (${meta.note}): ${finished} of ${total} voyages finished, run here in your browser. ` +
+        `Sandbox (${meta.note}): ${finished} of ${runs.length} voyages finished, run here in your browser. ` +
         "Browser runs can end differently from the same build run on our servers; the odds shown come from the server grid" +
         (grid?.odds ? (meta.exact ? " (this exact build)." : ` (the closest build we've run: ${grid.label}).`) : ", which hasn't run this build yet."),
       credits: SANDBOX_CREDITS,

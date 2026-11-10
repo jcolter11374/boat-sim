@@ -17,7 +17,7 @@ import {
   type Catalog,
   type SimSlots,
 } from "../src/yard/design";
-import { gridDistance } from "../src/yard/launch";
+import { Pool, gridDistance } from "../src/yard/launch";
 import { replayUrl } from "../src/replay/data";
 
 const cat = JSON.parse(readFileSync("public/parts-catalog.json", "utf8")) as Catalog;
@@ -126,6 +126,63 @@ test("the simulator's notes merge into the catalog without losing prices", () =>
   assert.equal(decodeDesign(c, encodeDesign(c, d)).picks.shape, "surf-ski");
   assert.equal(simChoices(d).shape, "surf-ski");
   assert.equal(simChoices(d).cruise_w, 25);
+  // Against the planned build only the changes go to the simulator, so a slot it doesn't know yet
+  // (a new part left as planned) can't stop a launch.
+  const plan = plannedDesign(c);
+  assert.deepEqual(simChoices(plan, plan), { cruise_w: 25 });
+  assert.deepEqual(simChoices(d, plan), { shape: "cat", cruise_w: 25 });
+});
+
+/** A stand-in Web Worker: answers per `script`, or never. */
+class FakeWorker {
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  onerror: ((ev: { message: string; preventDefault?: () => void }) => void) | null = null;
+  onmessageerror: (() => void) | null = null;
+  terminated = false;
+  constructor(private script: (msg: { id: number }, w: FakeWorker) => void) {}
+  postMessage(msg: { id: number }) {
+    setTimeout(() => this.script(msg, this), 1);
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  say(data: unknown) {
+    if (!this.terminated) this.onmessage?.({ data });
+  }
+}
+const pool = (script: (msg: { id: number }, w: FakeWorker) => void, n = 2, loadMs = 50, runMs = 80) => {
+  const ws: FakeWorker[] = [];
+  const p = new Pool(n, () => (ws.push(new FakeWorker(script)), ws.at(-1) as unknown as Worker), loadMs, runMs);
+  return { p, ws };
+};
+
+test("a launch in the browser always ends: answers, errors, crashes and silence", async () => {
+  const ok = pool((m, w) => w.say({ id: m.id, ok: true, value: 42 }));
+  assert.equal(await ok.p.ask(1, { type: "run" }), 42);
+
+  const err = pool((m, w) => w.say({ id: m.id, ok: false, error: "unknown slot 'shape'" }));
+  await assert.rejects(err.p.ask(0, {}), /unknown slot/);
+
+  // The worker script itself fails (old browser, blocked download): every job fails, workers stop.
+  const crash = pool((_m, w) => w.onerror?.({ message: "SyntaxError: import declarations" }));
+  const a = crash.p.ask(0, {});
+  const b = crash.p.ask(1, {});
+  await assert.rejects(a, /simulator stopped.*SyntaxError/);
+  await assert.rejects(b, /simulator stopped/);
+  assert.ok(crash.ws.every((w) => w.terminated));
+  await assert.rejects(crash.p.ask(0, {}), /simulator stopped/); // spent
+
+  // Never answers: the loading budget runs out.
+  const t0 = Date.now();
+  await assert.rejects(pool(() => {}).p.ask(0, {}), /went quiet for 0 s/);
+  assert.ok(Date.now() - t0 < 1000);
+
+  // Progress keeps a slow job alive past the loading budget; then the voyage budget applies.
+  const slow = pool((m, w) => {
+    setTimeout(() => w.say({ type: "progress", text: "Sailing..." }), 30);
+    setTimeout(() => w.say({ id: m.id, ok: true, value: "home" }), 100);
+  });
+  assert.equal(await slow.p.ask(0, {}), "home");
 });
 
 test("replays are read from this site only", () => {
