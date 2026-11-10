@@ -26,13 +26,18 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Sequence
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from typing import Any
 
-from boatsim.runner.simulate import Components, VoyageLog, default_mission, simulate
+from boatsim.runner.simulate import (
+    Components,
+    VoyageLog,
+    default_mission,
+    simulate,
+    standard_components,
+)
 from boatsim.types import EventKind
 
 Job = Callable[[datetime, int], VoyageLog]
@@ -92,6 +97,10 @@ def run_many(
     workers = workers or os.cpu_count() or 1
     if workers == 1 or len(tasks) <= 1:
         return [_call(t) for t in tasks]
+    from concurrent.futures import (
+        ProcessPoolExecutor,
+    )  # here, so the browser can import this module
+
     with ProcessPoolExecutor(max_workers=workers) as pool:
         return list(pool.map(_call, tasks, chunksize=max(1, len(tasks) // (workers * 8))))
 
@@ -144,36 +153,16 @@ class StandardVoyage:
     forecast_error: float = 1.0  # 0 = base sees the future perfectly; 2 = twice the error
 
     def components(self, seed: int = 0) -> Components:
-        from boatsim.autonomy import SafeModeAutopilot
-        from boatsim.basestation import ForecastReplanPolicy
-        from boatsim.comms import GlobalstarPinger, IridiumSBDLink
         from boatsim.config import load_design
-        from boatsim.oceandata import ErrorForecast
-        from boatsim.runner.arrival import FinishTarget
         from boatsim.runner.land import default_land
-        from boatsim.vessel import KayakVessel
 
-        design = load_design(self.design_path)
-        prop = design.propulsion
-        env = _environment(self.weather, self.currents)
-        forecast_env = _environment(self.weather, self.currents, for_forecast=True)
-        return Components(
-            env=env,
-            forecast=ErrorForecast(forecast_env, seed=seed, scale=self.forecast_error),
-            vessel=KayakVessel(design),
-            autopilot=SafeModeAutopilot(
-                cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
-                thruster_count=int(prop.get("thruster_count", 2)),
-            ),
-            link=IridiumSBDLink(),
-            pinger=GlobalstarPinger(),
-            base=ForecastReplanPolicy(
-                route=default_mission(
-                    (design.voyage["drop_lat"], design.voyage["drop_lon"])
-                ).waypoints
-            ),
+        return standard_components(
+            load_design(self.design_path),
+            _environment(self.weather, self.currents),
+            _environment(self.weather, self.currents, for_forecast=True),
+            seed=seed,
+            forecast_error=self.forecast_error,
             land=default_land() if self.land else None,
-            finish=FinishTarget.from_voyage(design.voyage),
         )
 
     def __call__(self, start: datetime, seed: int) -> VoyageLog:

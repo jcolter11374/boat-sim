@@ -68,5 +68,6 @@ class ReanalysisEnvironment:
             ghi=max(_or0(w["ghi"]), 0.0),
             cloud_fraction=min(max(_or0(w["cloud_fraction"]), 0.0), 1.0),
             air_temp=w["air_temp"] if math.isfinite(w["air_temp"]) else 15.0,
+            rain=max(_or0(w.get("rain", 0.0)), 0.0),
             ship_density=self.ships.sample(lat, lon) if self.ships is not None else 0.0,
         )

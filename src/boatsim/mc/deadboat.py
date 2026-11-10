@@ -104,10 +104,35 @@ def distance_to_land_km(lats, lons, coast: np.ndarray | None = None) -> np.ndarr
 # --- One dead-boat voyage ---------------------------------------------------
 
 
-def run_one(env, design, start: datetime, name: str, days: float = 30.0, land=None) -> dict:
+def with_windage(design, factor: float):
+    """The design with the side area the wind pushes on scaled by `factor`.
+
+    In steady wind the dead kayak drifts straight downwind at about 4.1% of the
+    wind speed (waves' push included); x0.6 gives about 3.3% (the Randolph
+    team's leeway) and x1.7 about 5.3% (#90, #163).
+    """
+    from dataclasses import replace
+
+    if factor == 1.0:
+        return design
+    return replace(
+        design, hull={**design.hull, "air_side_area_m2": design.hull["air_side_area_m2"] * factor}
+    )
+
+
+def run_one(
+    env,
+    design,
+    start: datetime,
+    name: str,
+    days: float = 30.0,
+    land=None,
+    point: tuple[float, float] | None = None,
+    track_out: list | None = None,
+) -> dict:
     from boatsim.mc.drifters import drift, kayak_for_drift
 
-    lat0, lon0 = start_point(name)
+    lat0, lon0 = point if point is not None else start_point(name)
     track = drift(env, start, lat0, lon0, days, "kayak", vessel=kayak_for_drift(design))
     hourly = track.iloc[::6].reset_index(drop=True)  # 10-minute steps -> hourly
     aground_at = None
@@ -118,6 +143,8 @@ def run_one(env, design, start: datetime, name: str, days: float = 30.0, land=No
                 break
     if aground_at is not None:
         hourly = hourly.iloc[: aground_at + 1]
+    if track_out is not None:
+        track_out.append(hourly)
     days_from = (hourly["t"] - hourly["t"].iloc[0]).dt.total_seconds() / 86400.0
     east = hourly["lon"] > GULF_STREAM_LON
     near = distance_to_land_km(hourly["lat"], hourly["lon"]) <= NEAR_LAND_KM
@@ -125,7 +152,7 @@ def run_one(env, design, start: datetime, name: str, days: float = 30.0, land=No
     end = hourly.iloc[-1]
     return {
         "start_point": name,
-        "start_km": STARTS_KM[name],
+        "start_km": STARTS_KM.get(name, math.nan),
         "start": start,
         "year": start.year,
         "lat0": lat0,

@@ -34,6 +34,7 @@ def _fake_arco(path):
         "surface_solar_radiation_downwards": np.broadcast_to(hours * 3600.0, shape),
         "total_cloud_cover": np.full(shape, 0.5),
         "2m_temperature": np.full(shape, 288.15),
+        "total_precipitation": np.full(shape, 0.0025),  # m in the hour = 2.5 mm/h
     }
     ds = xr.Dataset(
         {k: (("time", "latitude", "longitude"), v.astype(np.float32)) for k, v in data.items()},
@@ -56,6 +57,7 @@ def test_era5_fetch_crops_reorders_converts(tmp_path):
     # Sunlight: fake ssrd is (hour index) x 3600 J/m^2, i.e. W/m^2 = hour index,
     # sampled at t + 30 min. Hour index of 2020-10-15T06 is 30.
     assert s["ghi"] == pytest.approx(30.5, abs=0.05)
+    assert s["rain"] == pytest.approx(2.5, abs=0.01)  # m per hour -> mm/h
     path = era5.tile_path(date(2020, 10, 15), tmp_path / "cache")
     with xr.open_dataset(path) as ds:
         assert ds.sizes["time"] == era5.HOURS_PER_TILE
@@ -137,3 +139,16 @@ def test_reanalysis_environment_fills_envstate(tmp_path):
     s = env.sample(datetime(2020, 10, 15, 12), 30.2, -9.8)  # next to the land point
     assert s.current_v == pytest.approx(-0.2, abs=0.001)
     assert s.hs == pytest.approx(2.0, abs=0.001) and s.air_temp == pytest.approx(15.0, abs=0.01)
+    assert s.rain == pytest.approx(2.5, abs=0.01)
+
+
+def test_era5_day_cached_before_rain_reads_as_dry(tmp_path):
+    url = _fake_arco(tmp_path / "arco.zarr")
+    path = era5.fetch_day(date(2020, 10, 15), tmp_path / "c", BOX, url).day
+    p = era5.tile_path(path, tmp_path / "c")
+    with xr.open_dataset(p) as ds:
+        old = ds.drop_vars("rain").load()
+    p.unlink()
+    old.to_netcdf(p, engine="netcdf4")
+    src = era5.ERA5Source(tmp_path / "c", box=BOX, fetch=False)
+    assert np.isnan(src.sample(datetime(2020, 10, 15, 6), 35.5, -2.5)["rain"])

@@ -29,6 +29,7 @@ class EnvState:
     ghi: float = 0.0  # W/m^2, global horizontal irradiance (sunlight on a flat panel)
     cloud_fraction: float = 0.0  # 0..1
     air_temp: float = 15.0  # deg C
+    rain: float = 0.0  # mm/h, rain and snow (display only: no physics uses it)
     ship_density: float = 0.0  # ships per km^2 (for collision odds)
 
 

@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -158,7 +158,9 @@ class IssuedForecast:
         self.truth = truth
         self.t_issue = t_issue
         self.model = model
-        key = int(t_issue.timestamp() // 60)  # same minute, same forecast
+        # Same minute, same forecast. Naive times are UTC: .timestamp() alone would
+        # read them as the machine's local time, and a browser's is the visitor's.
+        key = int(t_issue.replace(tzinfo=t_issue.tzinfo or UTC).timestamp() // 60)
         self._p = _Patterns(model, np.random.default_rng([seed & 0xFFFFFFFF, key]))
         self._sig_cache: dict[float, np.ndarray] = {}
 
@@ -191,6 +193,7 @@ class IssuedForecast:
             wave_dir=s.wave_dir,
             ghi=mult(s.ghi, eghi, "ghi"),
             cloud_fraction=s.cloud_fraction,
+            rain=s.rain,
             air_temp=s.air_temp + eair,
             ship_density=s.ship_density,
         )

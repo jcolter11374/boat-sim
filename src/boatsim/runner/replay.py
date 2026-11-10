@@ -46,6 +46,7 @@ COLUMNS = {
     "current_u": ("current_u", 2),
     "current_v": ("current_v", 2),
     "ghi": ("ghi", 0),
+    "rain": ("rain", 1),
 }
 
 # Per-hour yes/no columns, written as 1/0 (null when the log lacks them).
@@ -125,6 +126,7 @@ def to_replay(log, label: str = DEFAULT_BOAT) -> dict:
             "current_u": "m/s eastward",
             "current_v": "m/s northward",
             "ghi": "W/m^2 sunlight",
+            "rain": "mm/h rain (ERA5, display only)",
             "iridium_ok": "1 = Iridium can report this hour (powered, main box and comms path ok)",
             "beacon_ok": "1 = Globalstar backup beacon still working",
         },
@@ -146,6 +148,36 @@ class ReplayReducer:
 
 
 replay_reduce = ReplayReducer()
+
+
+# Columns left out of yard replays: sunlight sampled every few hours aliases day
+# and night, and the page doesn't draw currents. Positions to 1e-3 deg (~100 m).
+DROP_COLUMNS = ("current_u", "current_v", "ghi")
+QUIET_EVENTS = ("message_sent", "message_received", "mission_updated")  # not shown as notes
+
+
+def thin(rep: dict, stride_h: float = 6) -> dict:
+    """A voyage replay made small for the yard: one row every stride_h hours (and
+    the last row), no sunlight or current columns, positions to 1e-3 deg, the
+    routine satellite-traffic events left out (every notable event stays), and
+    the units moved to the index."""
+    h = rep["h"]
+    keep, nxt = [], 0.0
+    for i, t in enumerate(h):
+        if t + 1e-6 >= nxt:
+            keep.append(i)
+            nxt = t + stride_h
+    if h and keep[-1] != len(h) - 1:
+        keep.append(len(h) - 1)
+    out = {k: v for k, v in rep.items() if k not in DROP_COLUMNS and k != "units"}
+    for col in ("h", *COLUMNS, *FLAGS):
+        if col in out:
+            out[col] = [rep[col][i] for i in keep]
+    for col in ("lat", "lon"):
+        out[col] = [None if x is None else round(x, 3) for x in out[col]]
+    out["events"] = [e for e in rep["events"] if e["kind"] not in QUIET_EVENTS]
+    out["stride_h"] = stride_h
+    return out
 
 
 def slug(label: str) -> str:
