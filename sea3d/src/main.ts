@@ -13,6 +13,7 @@ import { BOATS, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
 import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
+import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Atmosphere } from "./atmosphere";
 import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./waves";
@@ -41,11 +42,6 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const app = $("app");
 const seaSelect = $<HTMLSelectElement>("sea");
 const qualitySelect = $<HTMLSelectElement>("quality");
-{
-  // ?quality=low|high picks the starting quality (the smoke test runs Low on software graphics).
-  const q = new URLSearchParams(location.search).get("quality");
-  if (q === "low" || q === "high") qualitySelect.value = q;
-}
 const headingSelect = $<HTMLSelectElement>("heading");
 const underCheck = $<HTMLInputElement>("under");
 const tourCheck = $<HTMLInputElement>("tour");
@@ -75,9 +71,12 @@ atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
 const clock = new THREE.Clock();
-let quality = qualitySelect.value as Quality;
+// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
+let look: Look = startLook(qualitySelect);
+let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 scene.add(sea.mesh);
+sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 
 interface Boat {
   spec: BoatSpec;
@@ -111,6 +110,7 @@ function buildBoats(q: Quality): void {
     }
     b.model = BUILDERS[b.spec.key](q);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
+    shadowsOn(b.model.root);
     scene.add(b.model.root, b.wake.points);
   }
 }
@@ -144,7 +144,9 @@ function placeBoats(): void {
   });
 }
 
-function setQuality(q: Quality): void {
+function setQuality(l: Look): void {
+  look = l;
+  const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
   buildBoats(q);
@@ -152,6 +154,7 @@ function setQuality(q: Quality): void {
   const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
   renderer.setPixelRatio(ratio);
   atmos.setBloom(q === "high");
+  atmos.setUltra(l === "ultra");
   atmos.setPixelRatio(ratio);
 }
 
@@ -195,7 +198,7 @@ seaSelect.addEventListener("change", () => {
   setSea(seaSelect.value);
   placeBoats();
 });
-qualitySelect.addEventListener("change", () => setQuality(qualitySelect.value as Quality));
+qualitySelect.addEventListener("change", () => setQuality(qualitySelect.value as Look));
 headingSelect.addEventListener("change", () => {
   placeBoats();
   goTo(document.querySelector<HTMLButtonElement>('#shots button[aria-pressed="true"]')?.dataset.shot ?? "side");
@@ -209,7 +212,7 @@ window.addEventListener("resize", () => {
   atmos.setSize(window.innerWidth, window.innerHeight);
 });
 
-setQuality(quality);
+setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
 loadDetailedModels().then((ok) => {
   if (ok) buildBoats(quality);
@@ -241,6 +244,7 @@ const status = {
 seaSelect.addEventListener("change", () => (status.maxRoll = {}));
 
 // ---------- loop ----------
+const guard = new FpsGuard();
 const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
@@ -281,6 +285,15 @@ renderer.setAnimationLoop(() => {
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
   sea.setSun(atmos.glintDir, atmos.glintLight);
+  // Ultra: focus where the camera looks, shadows round both boats; back to High if too slow.
+  if (atmos.ultra) {
+    atmos.setFocus(camera.position.distanceTo(controls.target));
+    atmos.shadowAround(controls.target, 6);
+  }
+  if (guard.tick(t, look === "ultra")) {
+    qualitySelect.value = "high";
+    setQuality("high");
+  }
   atmos.render();
   // Name tags above each boat.
   const w = window.innerWidth;
