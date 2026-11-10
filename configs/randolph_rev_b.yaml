@@ -123,6 +123,7 @@ hazards:
   beam_on_share: 0.25
   knockdown_scale: 1.0
   damage_ref_hs_m: 3.0
+  beacon_name: YB3 backup tracker
   beacon_per_day: 0.0007     # GUESS: the YB3 dying on its own, as our beacon (their sim's second tracker never fails)
   p_inverted_stuck: 4.0e-5   # GUESS: as ours; their curve has no stable upside-down position
   p_part:

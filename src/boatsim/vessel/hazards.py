@@ -170,6 +170,8 @@ class HazardParams:
     # Globalstar SmartOne Solar beacon dying on its own (own cell and battery).
     # Not in R2. GUESS: same as a thruster, a sealed commercial unit.
     beacon_per_day: float = 0.0007
+    # What the backup tracker is called in events (Rev B carries a YB3).
+    beacon_name: str = "Globalstar beacon"
     # R2 software hang: 0.02/day, watchdog clears 95 %. A hang that isn't
     # cleared takes out the main box (Scout's suspected failure, 2013).
     software_hang_per_day: float = 0.02
@@ -616,7 +618,7 @@ def sample_failures(
     if roll("comms_silent", comms_rate) and not broken("comms_silent"):
         fail("comms_silent", "Iridium modem, antenna or comms power")
     if roll("beacon", p.beacon_per_day * early) and not broken("beacon"):
-        fail("beacon", "Globalstar beacon failed")
+        fail("beacon", f"{p.beacon_name} failed")
 
     # Steering
     if roll("steering", p.steering_per_day * (1.0 + hs / 4.0) * early) and not broken("rudder"):
