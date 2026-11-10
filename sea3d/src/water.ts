@@ -14,9 +14,9 @@
 
 import * as THREE from "three";
 import type { Quality } from "./boats/parts";
-import { G, type WaveComponent } from "./waves";
+import { MAX_GPU_WAVES, gpuWaves, type WaveComponent } from "./waves";
 
-const MAX_WAVES = 48; // wave trains the shader can carry
+const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
 export const HORIZON = 3000; // m, half-width of the whole sea out to the horizon
@@ -336,17 +336,14 @@ export class Sea {
   update(comps: WaveComponent[], t: number): void {
     const u = this.uniforms;
     u.uTime.value = t;
-    const n = Math.min(comps.length, MAX_WAVES);
-    // Same sideways scaling as waves.ts displace(): sum(k a) never passes the steepness.
-    let ka = 0;
-    for (let i = 0; i < n; i++) ka += ((2 * Math.PI) / comps[i].wavelength) * comps[i].amplitude;
-    u.uQ.value = ka > 0 ? Math.min(1, this.steepness / ka) : 0;
-    for (let i = 0; i < n; i++) {
-      const c = comps[i];
-      const k = (2 * Math.PI) / c.wavelength;
-      u.uWa.value[i].set(c.amplitude, k, Math.sqrt(G * k), c.phase);
-      u.uWd.value[i].set(Math.cos(c.direction), Math.sin(c.direction));
+    // Packed by waves.ts so the shader uses exactly displace()'s numbers.
+    const w = gpuWaves(comps, this.steepness);
+    u.uQ.value = w.q;
+    for (let i = 0; i < w.n; i++) {
+      u.uWa.value[i].fromArray(w.wa, i * 4);
+      u.uWd.value[i].fromArray(w.wd, i * 2);
     }
+    const n = w.n;
     u.uN.value = n;
     u.uAmp.value = this.hs / 2;
     u.uFoamAmt.value = this.foamAmount;

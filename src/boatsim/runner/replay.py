@@ -8,6 +8,11 @@ these files, so a replay can't disagree with the simulator.
     python -m boatsim.runner.replay run 2020 --months 4 5 6 --out sea3d/public/voyages
 
 writes one voyage_<date>.json per launch plus index.json listing them.
+
+    python -m boatsim.runner.replay verify sea3d/public/voyages/voyage_2020-05-01.json
+
+re-simulates one replay's launch with its seed and fails if anything differs
+(Ravi's gate: a committed replay must be what the simulator does today).
 Owner: Maya (Lead).
 """
 
@@ -183,6 +188,57 @@ def write(reps: list[dict], out: Path) -> Path:
     return idx_path
 
 
+# Fields a re-run must reproduce exactly (after the same rounding).
+VERIFY_FIELDS = ("start", "end", "seed", "outcome", "days", "t_start_line", "t_finish_line")
+
+
+def compare(saved: dict, fresh: dict, limit: int = 5) -> list[str]:
+    """Differences between a committed replay and a fresh one; empty if they agree."""
+    out = []
+    for k in VERIFY_FIELDS:
+        if saved.get(k) != fresh.get(k):
+            out.append(f"{k}: saved {saved.get(k)!r}, fresh {fresh.get(k)!r}")
+    if saved.get("course", {}).get("drop") != fresh.get("course", {}).get("drop"):
+        out.append(
+            f"drop: saved {saved['course'].get('drop')}, fresh {fresh['course'].get('drop')}"
+        )
+    for name in ("h", *COLUMNS):
+        a, b = saved.get(name) or [], fresh.get(name) or []
+        if len(a) != len(b):
+            out.append(f"{name}: saved {len(a)} rows, fresh {len(b)}")
+            continue
+        bad = [i for i, (x, y) in enumerate(zip(a, b, strict=True)) if x != y]
+        if bad:
+            i = bad[0]
+            out.append(
+                f"{name}: {len(bad)} of {len(a)} rows differ, first at h {saved['h'][i]}: "
+                f"saved {a[i]}, fresh {b[i]}"
+            )
+    if saved.get("events") != fresh.get("events"):
+        out.append(f"events: saved {saved.get('events')}, fresh {fresh.get('events')}")
+    return out[:limit] if limit else out
+
+
+def design_for(rep: dict) -> str:
+    """The design file a replay was made from: v4_kayak.yaml for our boat, else
+    configs/<boat name, snake_case>.yaml ('Randolph Rev B' -> randolph_rev_b.yaml)."""
+    if rep["boat"] == DEFAULT_BOAT:
+        return "configs/v4_kayak.yaml"
+    return f"configs/{slug(rep['boat']).replace('-', '_')}.yaml"
+
+
+def verify(path: Path, design: str | None = None, max_days: float = 150.0) -> list[str]:
+    """Re-simulate a committed replay's launch with its seed and compare."""
+    from boatsim.mc.months import MonthlyVoyage
+
+    saved = json.loads(Path(path).read_text())
+    design = design or design_for(saved)
+    job = MonthlyVoyage(design_path=design, max_days=max_days)
+    fresh = to_replay(job(datetime.fromisoformat(saved["start"]), saved["seed"]), saved["boat"])
+    # Round-trip through JSON so the fresh copy has exactly the file's types.
+    return compare(saved, json.loads(json.dumps(fresh)), limit=0)
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m boatsim.runner.replay")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -198,7 +254,26 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="boat name in the replay (default: v4 kayak for our design, else the design's name)",
     )
+    v = sub.add_parser("verify", help="re-simulate committed replays and fail if they differ")
+    v.add_argument("files", nargs="+")
+    v.add_argument("--design", default=None, help="default: from the replay's boat name")
+    v.add_argument("--max-days", type=float, default=150.0)
     a = p.parse_args(argv)
+
+    if a.cmd == "verify":
+        failed = 0
+        for f in a.files:
+            diffs = verify(Path(f), a.design, a.max_days)
+            print(f"{f}: {'matches a fresh run' if not diffs else 'DIFFERS from a fresh run'}")
+            for d in diffs[:10]:
+                print(f"  {d}")
+            failed += bool(diffs)
+        if failed:
+            raise SystemExit(
+                f"{failed} replay(s) no longer match the simulator; regenerate them with the "
+                "Voyage replays workflow"
+            )
+        return
 
     from boatsim.config import load_design
     from boatsim.mc.months import MonthlyVoyage, launches

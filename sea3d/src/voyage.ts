@@ -41,11 +41,16 @@ import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Sea } from "./water";
+import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
+import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, Sea as LiveSea } from "./waves";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const BASE = params.get("data") ?? "./voyages";
+/** "Pick your launch day": ?mode=game. Spoilers (outcomes, voyage length, event marks) stay hidden. */
+const GAME = params.get("mode") === "game" || document.documentElement.dataset.mode === "game"; // or <html data-mode="game">
+if (GAME) document.body.classList.add("game");
 
 // ---------- renderer; sky, light and haze come from atmosphere.ts ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -159,8 +164,16 @@ let focus = 0; // which lane the close-up and the cards follow
 let rep: Replay | null = null; // lanes[focus].rep
 let hour = 0;
 let playing = false;
-let warp = 24; // voyage hours per real second
+let warp = 1 / 3600; // voyage hours per real second: real time to start (John)
 let ended = false;
+// The launch-day game (?mode=game).
+let beats: Beat[] = [];
+let beatIdx = 0;
+let beatShown = false;
+let beatLeft = 0; // seconds of frames left before the beat goes away (frame time, so slow computers still get to read it)
+const BEAT_S = 7; // seconds a story beat stays up before the voyage carries on
+let guess: boolean | null = null; // the optional guess: true = "it will make it"
+let gamePicked = false; // a voyage picked in the game is on screen
 /** The page's clock runs until the longer voyage ends. */
 const endHour = () => lanes.reduce((m, l) => Math.max(m, lastHour(l.rep)), 0);
 const status = {
@@ -197,6 +210,10 @@ const status = {
   setFocus: (i: number) => setFocus(i),
   /** positionAt for any lane (0 = first boat, 1 = second in a race). */
   lanePositionAt: (i: number, h: number): [number, number] => (lanes[i] ? positionAt(lanes[i].rep, h) : [NaN, NaN]),
+  /** The launch-day game: picks, story beats shown so far, and the result. */
+  game: { on: GAME, picking: false, guess: "", beats: [] as string[], beat: "", result: "" },
+  /** Make the postcard; returns the PNG as a data URL (for tests). */
+  postcard: (): string => (rep ? postcard().toDataURL("image/png") : ""),
 };
 (window as unknown as { __replay: typeof status }).__replay = status;
 
@@ -211,6 +228,7 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const compass = (deg: number) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 
 function setPlaying(p: boolean): void {
+  if (p && beatShown) hideBeat();
   playing = p && !!rep;
   if (playing && rep && hour >= endHour()) seek(0);
   $("play").innerHTML = playing ? "&#10073;&#10073;" : "&#9654;";
@@ -221,6 +239,8 @@ function seek(h: number): void {
   if (!rep) return;
   hour = Math.min(Math.max(h, 0), endHour());
   for (const l of lanes) l.shown = l.rep.events.filter((e) => e.h <= hour).length;
+  beatIdx = beats.filter((b) => b.h < hour).length;
+  hideBeat();
   ended = false; // the loop shows the outcome card if this is the end
   seaTarget(rep, hour);
   live.snap();
@@ -259,7 +279,22 @@ function verdict(r: Replay): string {
 }
 function showOutcome(): void {
   if (!rep) return;
-  if (lanes.length > 1) {
+  if (GAME && gamePicked) {
+    $("o-kicker").textContent = `${boatName(rep)} · launched ${fmtDay(rep.start)}`;
+    if (guess !== null) {
+      const v = guessVerdict(rep, guess);
+      $("o-title").textContent = v.title;
+      $("o-title").style.color = v.right ? "var(--good)" : "var(--warn)";
+      $("o-text").textContent = `${outcomeLine(rep)} ${v.text}`;
+      status.game.result = v.right ? "right" : "wrong";
+    } else {
+      const [title, colour] = OUTCOME[rep.outcome] ?? [rep.outcome, "var(--ink)"];
+      $("o-title").textContent = title;
+      $("o-title").style.color = colour;
+      $("o-text").textContent = outcomeLine(rep);
+      status.game.result = "seen";
+    }
+  } else if (lanes.length > 1) {
     // Race: who finished, and who finished first.
     const done = lanes.filter((l) => l.rep.outcome === "arrived").sort((a, b) => a.rep.days - b.rep.days);
     const title = done.length ? `${SHORT[done[0].key]} wins` : "Neither boat finished";
@@ -277,8 +312,8 @@ function showOutcome(): void {
   $("outcome").classList.add("show");
 }
 
-async function selectVoyage(f: string): Promise<void> {
-  await load([f]);
+async function selectVoyage(f: string, autoplay = true): Promise<void> {
+  await load([f], f, autoplay);
 }
 /** Race: both boats' voyages from the same launch date. */
 async function selectRace(date: string): Promise<void> {
@@ -286,7 +321,7 @@ async function selectRace(date: string): Promise<void> {
   if (pair.length < 2) return fail(`no race for ${date}: both boats need a voyage from that day`);
   await load(pair.map((v) => v.file), `race:${date}`);
 }
-async function load(files: string[], pick = files[0]): Promise<void> {
+async function load(files: string[], pick = files[0], autoplay = true): Promise<void> {
   try {
     const reps = await Promise.all(files.map((f) => loadReplay(BASE, f)));
     lanes = reps.map((r, i) => ({ key: keyOf(r.boat), file: files[i], rep: r, shown: 0 }));
@@ -295,7 +330,8 @@ async function load(files: string[], pick = files[0]): Promise<void> {
     status.maxHour = endHour();
     status.outcome = reps.map((r) => r.outcome).join(",");
     status.shown = [];
-    $<HTMLInputElement>("scrub").max = String(endHour());
+    // In the game the bar always spans the longest possible voyage, so it can't give the ending away.
+    $<HTMLInputElement>("scrub").max = String(GAME ? Math.max(endHour(), 150 * 24) : endHour());
     const mode = lanes.length > 1 ? "race" : lanes[0].key;
     $<HTMLSelectElement>("boat").value = mode;
     fillVoyages(mode);
@@ -312,8 +348,9 @@ async function load(files: string[], pick = files[0]): Promise<void> {
           : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
     setFocus(0, true);
     ticks();
+    beats = GAME && gamePicked ? storyBeats(lanes[0].rep) : []; // none behind the picker
     seek(0);
-    setPlaying(true);
+    setPlaying(autoplay);
     status.ready = true;
   } catch (e) {
     fail(String(e));
@@ -399,8 +436,17 @@ document.querySelectorAll<HTMLButtonElement>("#focus button").forEach((b) =>
 );
 $<HTMLSelectElement>("quality").addEventListener("change", (e) => setQuality((e.target as HTMLSelectElement).value as Look));
 $("o-again").addEventListener("click", () => {
+  if (GAME) {
+    $("outcome").classList.remove("show");
+    openPicker();
+    return;
+  }
   seek(0);
   setPlaying(true);
+});
+$("o-postcard").addEventListener("click", () => {
+  if (!rep) return;
+  savePng(postcard(), `postcard_${keyOf(rep.boat)}_${rep.start.slice(0, 10)}.png`);
 });
 $("o-close").addEventListener("click", () => $("outcome").classList.remove("show"));
 window.addEventListener("keydown", (e) => {
@@ -473,7 +519,12 @@ controls.target.set(0, 0.2, 0);
     boatSel.disabled = modes.length < 2;
     const wantRace = params.get("race");
     const want = params.get("voyage");
-    if (wantRace) await selectRace(wantRace);
+    if (GAME) {
+      // The sea behind the picker: our kayak's first launch day, waiting at the start.
+      const first = [...byKey.kayak.values()].sort((a, b) => a.start.localeCompare(b.start))[0] ?? index[0];
+      await selectVoyage(first.file, false);
+      openPicker();
+    } else if (wantRace) await selectRace(wantRace);
     else {
       // Default: our longest voyage, which has the most to watch.
       const ours = [...byKey.kayak.values()];
@@ -517,7 +568,17 @@ renderer.setAnimationLoop(() => {
         toast(describeEvent(e, l.rep.boat), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
       }
     }
-    if (hour >= endHour() && !ended) {
+    // Story beats (game): stop at each one, then carry on.
+    if (GAME && !beatShown && beatIdx < beats.length && beats[beatIdx].h <= hour) showBeat(beats[beatIdx++]);
+    if (beatShown) {
+      beatLeft -= dt;
+      if (beatLeft <= 0) {
+        hideBeat();
+        if (hour < endHour()) setPlaying(true);
+      } else $("b-timer").style.transform = `scaleX(${beatLeft / BEAT_S})`;
+    }
+    // The result card waits for the last story beat.
+    if (hour >= endHour() && !ended && !beatShown && beatIdx >= beats.length) {
       ended = true;
       showOutcome();
     }
@@ -618,6 +679,128 @@ renderer.setAnimationLoop(() => {
   status.frames++;
 });
 
+// ---------- "Pick your launch day" ----------
+function showBeat(b: Beat): void {
+  setPlaying(false);
+  beatShown = true;
+  beatLeft = BEAT_S;
+  const box = $("beat");
+  box.style.setProperty("--c", TONE_COLOUR[b.tone]);
+  $("b-when").textContent = b.h < 1 ? "Day 0" : `Day ${(b.h / 24).toFixed(1)} · ${rep ? fmtDay(new Date(utc(rep.start) + b.h * 3600e3).toISOString()) : ""}`;
+  $("b-title").textContent = b.title;
+  // Real time is the default (John): say how to speed up, or the next beat is weeks away.
+  $("b-text").textContent =
+    b.kind === "launch" && warp < 1 ? `${b.text} It's running in real time now: use the speed buttons at the bottom to fast-forward.` : b.text;
+  box.classList.add("show");
+  status.game.beats.push(b.kind);
+  status.game.beat = b.kind;
+}
+function hideBeat(): void {
+  if (!beatShown) return;
+  beatShown = false;
+  $("beat").classList.remove("show");
+  status.game.beat = "";
+}
+$("b-next").addEventListener("click", () => {
+  hideBeat();
+  if (hour < endHour()) setPlaying(true);
+});
+
+let pickBoat: BoatKey = "kayak";
+let pickDate = "";
+let pickGuess: boolean | null = null;
+function pickButton(label: string, sub: string, pressed: boolean, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.textContent = label;
+  const s = document.createElement("small");
+  s.textContent = sub;
+  b.append(s);
+  b.setAttribute("aria-pressed", String(pressed));
+  b.addEventListener("click", onClick);
+  return b;
+}
+function drawPicker(): void {
+  const boats = $("g-boats");
+  boats.replaceChildren();
+  const choices: [BoatKey, string, string][] = [["kayak", "Our kayak", "3 m, solar-electric motors"]];
+  if (byKey.randolph.size) choices.push(["randolph", "Randolph boat", "our model of it · a small sailboat"]);
+  for (const [k, label, sub] of choices)
+    boats.append(
+      pickButton(label, sub, pickBoat === k, () => {
+        pickBoat = k;
+        if (!byKey[k].has(pickDate)) pickDate = "";
+        drawPicker();
+      }),
+    );
+  const dates = $("g-dates");
+  dates.replaceChildren();
+  for (const d of [...byKey[pickBoat].keys()].sort()) {
+    const day = new Date(utc(d + "T12:00"));
+    const label = day.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+    dates.append(
+      pickButton(label, String(day.getUTCFullYear()), pickDate === d, () => {
+        pickDate = d;
+        drawPicker();
+      }),
+    );
+  }
+  document.querySelectorAll<HTMLButtonElement>("#g-guess button").forEach((b) =>
+    b.setAttribute("aria-pressed", String(pickGuess !== null && (b.dataset.guess === "yes") === pickGuess)),
+  );
+  $<HTMLButtonElement>("g-go").disabled = !pickDate;
+  $("g-need").textContent = pickDate ? "" : "Pick a launch day to start.";
+}
+document.querySelectorAll<HTMLButtonElement>("#g-guess button").forEach((b) =>
+  b.addEventListener("click", () => {
+    const g = b.dataset.guess === "yes";
+    pickGuess = pickGuess === g ? null : g; // click again to take the guess back
+    drawPicker();
+  }),
+);
+function openPicker(): void {
+  setPlaying(false);
+  hideBeat();
+  drawPicker();
+  $("game").classList.add("show");
+  status.game.picking = true;
+}
+$("g-go").addEventListener("click", async () => {
+  const v = byKey[pickBoat].get(pickDate);
+  if (!v) return;
+  guess = pickGuess;
+  status.game = { ...status.game, picking: false, guess: guess === null ? "" : guess ? "yes" : "no", beats: [], beat: "", result: "" };
+  gamePicked = true;
+  $("game").classList.remove("show");
+  $("g-chip").textContent = guess === null ? "" : guess ? "it will make it" : "it won't make it";
+  $("guesschip").hidden = guess === null;
+  $("h1").textContent = `${pickBoat === "kayak" ? "Our kayak" : "Randolph boat (our model)"}, launched ${fmtDay(v.start)}`;
+  await selectVoyage(v.file);
+});
+$("quitlink").addEventListener("click", (e) => {
+  e.preventDefault();
+  location.href = location.pathname;
+});
+if (GAME) {
+  $("h1").textContent = "Pick your launch day";
+  $("sub").textContent = "Watch your pick play out. The voyage stops at each big moment to tell you what happened.";
+  $("playlink").hidden = true;
+  $("quitlink").hidden = false;
+  $("o-again").textContent = "Play again";
+}
+
+/** The postcard for the voyage on screen (game result, or just what happened). */
+function postcard(): HTMLCanvasElement {
+  const r = rep!;
+  const v = guess !== null ? guessVerdict(r, guess) : null;
+  return drawPostcard(renderer.domElement, $<HTMLCanvasElement>("chart"), {
+    boat: boatName(r),
+    launched: fmtDay(r.start),
+    outcome: outcomeLine(r),
+    guess: v ? `${v.title} ${v.text}` : "",
+    finished: r.outcome === "arrived",
+  });
+}
+
 // ---------- equipment card ----------
 /** The parts each boat shows on the card, in order. "comms" is the satellite radio's live state. */
 const EQUIPMENT: Record<BoatKey, string[]> = {
@@ -657,7 +840,7 @@ function hud(r: Replay, stw: number, hs: number): void {
   const day = hour / 24;
   $("h-day").textContent = day.toFixed(1);
   $("h-date").textContent = fmtDate(r, hour);
-  $("w-day").textContent = `Day ${day.toFixed(1)} of ${(endHour() / 24).toFixed(1)}`;
+  $("w-day").textContent = GAME ? `Day ${day.toFixed(1)}` : `Day ${day.toFixed(1)} of ${(endHour() / 24).toFixed(1)}`;
   $("w-date").textContent = fmtDate(r, hour);
   if (document.activeElement !== scrub) scrub.value = String(hour);
   const soc = valueAt(r, r.soc, hour);
