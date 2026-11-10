@@ -162,7 +162,30 @@ change nothing until the physics for them lands; they stay visible.
 | Navigation light | hella-naviled-360 | none | fixed |
 | Keel bulb | 50 kg new or scrap, 40 kg | weight; 40 kg: `p_inverted_stuck` x (50/40)^2, GUESS | wired (40 kg: est) |
 | Antifouling | micron-csc, none | `hull.fouling_frac_per_day` (none: x2, GUESS) | wired (est) |
+| Drive | solar-electric, wing-sail, hybrid | wing: a `sail:` block (vessel/sail.py) scaled up from Rev B; wing-sail: no thrusters, cruise 0 W | wired (est) |
+| Hull material | polyethylene, fibreglass, carbon, plywood-epoxy, aluminium | weight; `leak_per_day`, `p_lost_given_strike`; aluminium also fouling | wired (est) |
 | Spares | three sets | none | no effect yet (trials only) |
+
+**Drive.** The wing (all GUESSes, `catalog.KAYAK_WING`): 1.0 m^2, 2.0 m span,
+centre of effort 1.3 m up, heel limit 250 N m (the 50 kg bulb rights the kayak far
+harder than Rev B's 17 N m), +6 kg, +5 Wh/day for the tail servo, the tail servo's
+failure rate added to steering (Randolph's 0.002/day), and a sixth of Rev B's
+published rig-damage rate per knockdown (they say theirs is too high, #153).
+*Wing-sail* has no motors: it tacks upwind like Rev B, and the thruster and
+cruise-power choices don't apply. *Hybrid* keeps both thrusters: while the motors
+push, it holds its course even dead upwind, and the wing adds whatever drive it
+can at that heading (`vessel/kayak.py`). Lose the wing and it is the kayak again,
+less the wing's drag.
+
+**Hull material.** The as-built hull is rotomoulded polyethylene, foam-filled.
+Every other material keeps the foam. GUESSes, no fleet data per material:
+
+| Material | Weight vs PE | Leaks vs PE | Ship strike ends it | Other |
+|---|---|---|---|---|
+| Fibreglass | -6 kg | x1.2 | 0.85 | |
+| Carbon | -11 kg | x1.5 | 0.9 | |
+| Plywood and epoxy | -4 kg | x1.5 | 0.85 | |
+| Aluminium | -2 kg | x0.7 | 0.7 | fouls 1.5x (no copper antifouling) |
 
 The hotel load is the design's 85 Wh/day with the default autopilot (31 Wh)
 and AIS (36 Wh) swapped for the chosen ones' catalog figures.

@@ -46,6 +46,7 @@ class Option:
     basis: str = ""
     wh: float | None = None  # brain/AIS daily energy (catalog), for the hotel load
     kg: float = 0.0  # weight against the default option (catalog), for the mass link
+    hotel_wh: float = 0.0  # extra daily energy (Wh/day) for parts with no catalog figure
 
 
 def _thr(n: int, kg: float = 0.0) -> Option:
@@ -65,6 +66,64 @@ BULB_BASIS = "weight from the catalog; how a lighter bulb rights the boat is a G
 # GUESS: the bulb's righting moment goes with its weight, and the odds of
 # staying upside down after a knockdown with the square of the shortfall.
 P_STUCK_40KG = round(4.0e-5 * (50 / 40) ** 2, 9)
+
+# --- Drive: a wing sail on the kayak ------------------------------------------
+# A free-rotating wing with a tail flap, the Randolph team's design (vessel/sail.py)
+# scaled up for a 3 m kayak. All GUESSes until one is built and weighed:
+# 2.0 m span x 0.5 m chord on a mast, its centre of effort 1.3 m up. The righting
+# moment at 25 deg heel: 129 kg x g x GZ ~0.2 m (50 kg bulb 0.9 m down, plus the
+# hull's own form stability) = ~250 N m.
+KAYAK_WING = {
+    "area_m2": 1.0,
+    "aspect_ratio": 5.0,
+    "cd0": 0.012,
+    "max_alpha_deg": 20,
+    "ce_height_m": 1.3,
+    "heel_arm_m": 1.5,
+    "max_heel_moment_nm": 250.0,
+    "storm_wind_ms": 20,
+    "storm_run_twa_deg": 140,
+    "min_upwind_twa_deg": 50,
+    "min_downwind_twa_deg": 165,
+    "tack_hysteresis_deg": 20,
+    "unsteered_twa_deg": 110,
+}
+WING_KG = 6.0  # GUESS: carbon tube mast, foam-and-glass wing, tail and servo
+WING_WH = 5.0  # GUESS: tail-flap servo, Wh/day
+# GUESS: rig damage per knockdown at Hs 3 m. Randolph's published 0.003 is, by
+# their own account (#153), too high for the hundreds of knockdowns real seas
+# give; we take a sixth of it until they re-tune.
+WING_P_BREAK = 5.0e-4
+_WING = (
+    *(("sail", k, v) for k, v in KAYAK_WING.items()),
+    ("hazards", "p_part", {"sail": WING_P_BREAK}),
+    # Rudder servo plus tail servo (Randolph's table: 0.002 each).
+    ("hazards", "steering_per_day", 0.004),
+)
+WING_BASIS = "wing scaled from Randolph's Rev B; size, weight and breakage are GUESSes"
+T200_KG = 0.45  # one thruster, as the thr slot's one-t200 option
+
+# --- Hull material ---------------------------------------------------------------
+# The as-built kayak is rotomoulded polyethylene: tough, flexes rather than cracks,
+# and is foam-filled. Every material keeps the foam, so a hole still can't sink it.
+# GUESSES all (no fleet data per material): hull weight from typical 10 ft hulls
+# (~20 kg in PE), leaks from fittings and cracks relative to PE, and the share of
+# ship strikes that end the voyage.
+LEAK = 0.0025  # planning set's leak_per_day for the as-built hull
+
+
+def _material(kg: float, leak: float, strike: float, basis: str, *extra) -> Option:
+    return Option(
+        (
+            ("hazards", "leak_per_day", round(LEAK * leak, 6)),
+            ("hazards", "p_lost_given_strike", strike),
+            *extra,
+        ),
+        est=True,
+        basis=basis,
+        kg=kg,
+    )
+
 
 SLOTS: dict[str, dict[str, Option]] = {
     "thr": {"two-t200": _thr(2), "one-t200": _thr(1, -0.45)},
@@ -146,6 +205,41 @@ SLOTS: dict[str, dict[str, Option]] = {
             basis="GUESS: bare hull fouls about twice as fast",
         ),
     },
+    "drive": {
+        "solar-electric": Option(basis="the v4 kayak as modelled"),
+        "wing-sail": Option(
+            (
+                *_WING,
+                ("propulsion", "thruster_count", 0),
+            ),
+            est=True,
+            basis=WING_BASIS + "; no motors, so it tacks upwind",
+            hotel_wh=WING_WH,
+            kg=WING_KG - 2 * T200_KG,
+        ),
+        "hybrid": Option(
+            _WING,
+            est=True,
+            basis=WING_BASIS + "; motors hold the course upwind instead of tacking",
+            hotel_wh=WING_WH,
+            kg=WING_KG,
+        ),
+    },
+    "material": {
+        "polyethylene": Option(basis="the v4 kayak as modelled"),
+        "fibreglass": _material(
+            -6.0, 1.2, 0.85, "GUESS: lighter; cracks at fittings leak a bit more"
+        ),
+        "carbon": _material(-11.0, 1.5, 0.9, "GUESS: lightest; stiff, so impacts crack and leak"),
+        "plywood-epoxy": _material(-4.0, 1.5, 0.85, "GUESS: leaks where the epoxy skin is broken"),
+        "aluminium": _material(
+            -2.0,
+            0.7,
+            0.7,
+            "GUESS: tough and dent-resistant; copper antifouling can't go on it",
+            ("hull", "fouling_frac_per_day", 0.009),
+        ),
+    },
     "spares": {
         "spares-full": Option(effect="no effect yet", basis="spares are for the trials only"),
         "spares-no-pixhawk": Option(effect="no effect yet", basis="spares are for the trials only"),
@@ -166,6 +260,8 @@ SLOT_NAMES = {  # as in Sam's catalog
     "light": "Navigation light",
     "lead": "Keel bulb",
     "paint": "Antifouling paint",
+    "drive": "Drive",
+    "material": "Hull material",
     "spares": "Spares",
 }
 
@@ -183,6 +279,8 @@ DEFAULTS = {
     "light": "hella-naviled-360",
     "lead": "lead-50-new",
     "paint": "micron-csc",
+    "drive": "solar-electric",
+    "material": "polyethylene",
     "spares": "spares-full",
 }
 
@@ -201,6 +299,10 @@ def normalise(choices: dict | None) -> tuple[dict, int]:
         if opt not in SLOTS[slot]:
             raise ValueError(f"unknown option {opt!r} for slot {slot!r}")
         out[slot] = opt
+    # A wing-only boat has no thrusters, so the thruster and cruise power
+    # choices don't apply (cruise 0 W, as Rev B).
+    if out["drive"] == "wing-sail":
+        out["thr"], cruise = DEFAULTS["thr"], 0
     return out, cruise
 
 
@@ -210,10 +312,14 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
     picked, cruise = normalise(choices)
     changes = []
     for slot, opt in picked.items():
-        changes += SLOTS[slot][opt].changes
+        for sec, key, val in SLOTS[slot][opt].changes:
+            if isinstance(val, dict):  # merge into the design's table (e.g. p_part)
+                val = {**getattr(base, sec).get(key, {}), **val}
+            changes.append((sec, key, val))
     changes.append(("propulsion", "cruise_drive_w", cruise))
     brain, ais = SLOTS["brain"][picked["brain"]], SLOTS["ais"][picked["ais"]]
     d_wh = (brain.wh - BASE_BRAIN_WH) + (ais.wh - BASE_AIS_WH)
+    d_wh += sum(SLOTS[slot][opt].hotel_wh for slot, opt in picked.items())
     if d_wh:
         hotel = base.electronics["hotel_load_wh_per_day"] + d_wh
         changes.append(("electronics", "hotel_load_wh_per_day", hotel))
@@ -262,6 +368,9 @@ GRID: tuple[dict, ...] = (
     {"ais": "none"},
     {"paint": "none"},
     {"lead": "lead-40"},
+    {"drive": "hybrid"},
+    {"drive": "wing-sail"},
+    *({"material": m} for m in ("fibreglass", "carbon", "plywood-epoxy", "aluminium")),
     {"brain": "one-box", "beacon": "none"},
     {"sol": "solar-300", "bat": "two-100ah"},
     {"sol": "solar-300", "bat": "two-100ah", "cruise_w": 30},
@@ -283,7 +392,10 @@ def matters(slot: str, opt: str) -> bool:
     """Does this option run differently from the slot's default?"""
     o, d = SLOTS[slot][opt], SLOTS[slot][DEFAULTS[slot]]
     return opt != DEFAULTS[slot] and (
-        o.changes != d.changes or o.kg != d.kg or (o.wh or 0) != (d.wh or 0)
+        o.changes != d.changes
+        or o.kg != d.kg
+        or (o.wh or 0) != (d.wh or 0)
+        or o.hotel_wh != d.hotel_wh
     )
 
 
@@ -328,7 +440,11 @@ def slot_table() -> list[dict]:
                     "est": o.est,
                     "basis": o.basis,
                     "sim": [f"{s}.{k}" for s, k, _ in o.changes]
-                    + (["electronics.hotel_load_wh_per_day"] if o.wh is not None else [])
+                    + (
+                        ["electronics.hotel_load_wh_per_day"]
+                        if o.wh is not None or o.hotel_wh
+                        else []
+                    )
                     + (["hull.mass_kg"] if o.kg else []),
                     "kg": o.kg,
                 }

@@ -323,13 +323,25 @@ class KayakVessel:
             ap = on and not state.damage.get("electronics_main")
             steering = ap and not state.damage.get("rudder")
             sailing = ap and not state.damage.get("sail") and not calm
+            # Hybrid (wing plus thrusters): with the motors pushing it holds its
+            # course even upwind, motoring where a sailboat would tack, and the
+            # wing adds whatever drive it can at that heading (best_alpha picks
+            # feathered when it can't help). With a dead rudder, two thrusters
+            # still steer by differential thrust, as on the kayak.
+            can_motor = working >= (2 if state.damage.get("rudder") else 1)
+            motoring = can_motor and es.drive_w >= self.min_steer_w
+            steering = steering or motoring
         else:
+            motoring = False
             can_steer = working >= (2 if state.damage.get("rudder") else 1)
             steering = es.drive_w >= self.min_steer_w and can_steer
             sailing = False
         tws = math.hypot(env.wind_u, env.wind_v)
         feather = False
-        if steering and self.sail is not None:
+        if motoring:
+            heading = cmd.heading % 360.0
+            feather = tws > self.sail.storm_wind_ms
+        elif steering and self.sail is not None:
             heading, feather = S.sail_heading(self.sail, cmd.heading, wind_from, state.heading, tws)
         elif steering:
             heading = cmd.heading
