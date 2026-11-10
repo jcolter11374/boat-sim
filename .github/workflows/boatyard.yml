@@ -5,7 +5,9 @@
 #   replays - the 1st/15th April to June launches of one year, slimmed for git
 #   build   - sea3d/public/boatyard/index.json plus the replays; commits them to
 #             the chosen branch when "commit" is ticked (main redeploys the page)
-# Run it by hand: Actions tab -> "Boatyard grid" -> Run workflow. Free runners only.
+# Run it by hand: Actions tab -> "Boatyard grid" -> Run workflow. On a pull request
+# that changes the grid code it runs the whole grid and commits it to the PR
+# branch, so the data always matches the code it ships with. Free runners only.
 # Uses the Copernicus secrets for currents; GitHub masks them in logs.
 name: Boatyard grid
 on:
@@ -27,6 +29,10 @@ on:
         description: "Commit the grid to this branch"
         type: boolean
         default: false
+  pull_request:
+    paths:
+      - ".github/workflows/boatyard.yml"
+      - "src/boatsim/mc/boatyard.py"
 permissions:
   contents: read
 concurrency:
@@ -46,7 +52,7 @@ jobs:
       list: ${{ steps.y.outputs.list }}
     steps:
       - id: y
-        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year }}, ${{ inputs.last_year }}+1))))")" >> "$GITHUB_OUTPUT"
+        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2012' }}, ${{ inputs.last_year || '2021' }}+1))))")" >> "$GITHUB_OUTPUT"
   odds:
     needs: years
     runs-on: ubuntu-latest
@@ -85,7 +91,7 @@ jobs:
       matrix:
         shard: ["1/4", "2/4", "3/4", "4/4"]
     env:
-      YEAR: ${{ inputs.replay_year }}
+      YEAR: ${{ inputs.replay_year || '2020' }}
       SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v4
@@ -112,6 +118,8 @@ jobs:
       contents: write  # only for the commit step
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -127,9 +135,11 @@ jobs:
           path: runs/replays
           merge-multiple: true
       - name: Build the index and copy the replays into the page
+        env:
+          CODE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           rm -rf sea3d/public/boatyard
-          python -m boatsim.mc.boatyard build --odds runs/odds/odds_*.csv --replays runs/replays --out sea3d/public/boatyard --commit "${GITHUB_SHA::7}"
+          python -m boatsim.mc.boatyard build --odds runs/odds/odds_*.csv --replays runs/replays --out sea3d/public/boatyard --commit "${CODE_SHA::7}"
           du -sh sea3d/public/boatyard
           python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import json
@@ -150,7 +160,10 @@ jobs:
             runs/odds/
           retention-days: 90
       - name: Commit the grid
-        if: inputs.commit
+        if: >-
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name == 'workflow_dispatch' && inputs.commit)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
