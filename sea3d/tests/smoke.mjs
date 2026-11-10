@@ -202,6 +202,34 @@ try {
   log.push(`${raceDate ? "" : "fixture "}race ${date}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
+  // "Pick your launch day": pick a boat, a day and a guess; the story stops at
+  // its beats; the result scores the guess; the postcard draws.
+  await page.goto(`${URL}voyage.html?quality=low&data=./${dataDir}&mode=game`);
+  await page.waitForFunction(() => window.__replay?.game.picking, null, { timeout: 60000 });
+  const picker = await page.locator("#g-dates").innerText();
+  if (/lost|finish|days|aground|disq/i.test(picker)) fail(`the date picker gives the ending away: ${picker}`);
+  const nDates = await page.locator("#g-dates button").count();
+  if (!nDates) fail("no launch days to pick");
+  await page.locator("#g-dates button").first().click();
+  await page.locator('#g-guess button[data-guess="no"]').click();
+  await page.locator("#g-go").click();
+  await page.waitForFunction(() => window.__replay.game.beat === "launch", null, { timeout: 60000 });
+  await page.locator("#b-next").click();
+  const g0 = await page.evaluate(() => window.__replay.maxHour);
+  await page.evaluate((h) => { window.__replay.setHour(h - 1); window.__replay.play(); }, g0);
+  // Any beats near the end show and are dismissed; then the result card.
+  for (let i = 0; i < 5; i++) {
+    const r = await page.waitForFunction(() => window.__replay.game.result || window.__replay.game.beat, null, { timeout: 60000 }).then((h) => h.jsonValue());
+    if (await page.evaluate(() => !!window.__replay.game.result)) break;
+    await page.locator("#b-next").click();
+  }
+  const game = await page.evaluate(() => window.__replay.game);
+  if (!game.result || game.guess !== "no") fail(`game never scored the guess: ${JSON.stringify(game)}`);
+  const card = await page.evaluate(() => window.__replay.postcard());
+  if (!card.startsWith("data:image/png") || card.length < 50000) fail(`postcard looks empty (${card.length} chars)`);
+  log.push(`game ${game.beats.join("/")} -> ${game.result}`);
+  if (errors.length) fail(`page errors: ${errors.join("; ")}`);
+
   await browser.close();
   console.log(`OK: ${log.join(", ")}; both boats afloat; sea vertices high ${vHigh}, low ${vLow}`);
 } catch (e) {
