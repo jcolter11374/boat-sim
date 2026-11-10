@@ -122,6 +122,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cat > NOTES.md <<EOF
+          Forcing bundles, the packed simulator and reference voyages for the yard page's
+          sandbox (docs/sandbox.md). Rebuilt by the Sandbox data workflow.
+
+          Data sources (thinned and quantised by us):
+          - ERA5: Contains modified Copernicus Climate Change Service information $YEAR. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains.
+          - GLORYS12 currents (GLOBAL_MULTIYEAR_PHY_001_030): E.U. Copernicus Marine Service Information.
+          - Ship density: EMODnet Human Activities Vessel Density Map (Cogea Srl) and World Bank Global Shipping Traffic Density (dataset 0037580), CC BY 4.0, modified.
+          - Land mask: Made with Natural Earth. Free vector and raster map data @ naturalearthdata.com.
+          EOF
           gh release view sandbox-data >/dev/null 2>&1 || gh release create sandbox-data \
-            --title "Boatyard sandbox data" --notes "Forcing bundles, the packed simulator and reference voyages for the yard page's sandbox (docs/sandbox.md). Rebuilt by the Sandbox data workflow."
+            --title "Boatyard sandbox data" --notes-file NOTES.md
+          gh release edit sandbox-data --notes-file NOTES.md
           gh release upload sandbox-data site/* --clobber

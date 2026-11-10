@@ -41,6 +41,28 @@ Sunlight hourly at sea would be far too big, so the bundle carries each day's
 clearness (ERA5 sunlight over clear-sky sunlight, summed over the day) and the
 browser multiplies it by the clear-sky model at the boat's time and place.
 
+## Data sources and attribution
+
+The sandbox files (`forcing_<year>.npz`, and the land mask inside `boatsim.zip`)
+redistribute modified data from these sources:
+
+- **ERA5** wind, waves, cloud, air temperature and sunlight (Hersbach et al.
+  2020, via Google's ARCO-ERA5). Contains modified Copernicus Climate Change
+  Service information 2020. Neither the European Commission nor ECMWF is
+  responsible for any use that may be made of the Copernicus information or
+  data it contains.
+- **GLORYS12** surface currents (Copernicus Marine product
+  GLOBAL_MULTIYEAR_PHY_001_030, https://doi.org/10.48670/moi-00021).
+  E.U. Copernicus Marine Service Information.
+- **Ship density**: EMODnet Human Activities Vessel Density Map (originator
+  Cogea Srl) and the World Bank Global Shipping Traffic Density (dataset
+  0037580). Both are CC BY 4.0, and we changed them (THIRD_PARTY_NOTICES.md).
+- **Land mask**: Made with Natural Earth. Free vector and raster map data @
+  naturalearthdata.com.
+
+We thinned and quantised all of these (see the bundle table above). The page
+should show these lines, or link to them, wherever it offers the sandbox.
+
 ## Running a build (`boatsim.sandbox.run`)
 
 A design is Sam's catalog slot id -> option id, plus `cruise_w` (10 to 30 W).
