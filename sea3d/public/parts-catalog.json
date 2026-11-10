@@ -1,0 +1,392 @@
+{
+ "note": "Parts catalog from Sam, 10 Nov 2026; prices USD checked that day. Key options by slot id + option id (stable); list order may change. kg = change vs planned 123 kg build; wh = electronics Wh/day; wp = solar W; bat = battery Wh; def = planned build.",
+ "base": {
+  "label": "Rest of the boat (hull, dome, keel structure, wiring, boxes, placards)",
+  "cost": 2062,
+  "kg": 0
+ },
+ "program": [
+  [
+   "Iridium airtime: $17/month line rental, only in months used, plus message credits",
+   140,
+   "https://www.groundcontrol.com/products/iridium/short-burst-data-range/short-burst-data-plans/"
+  ],
+  [
+   "FCC ship station licence with MMSI",
+   185,
+   "https://docksideradio.com/fcc_license.htm"
+  ],
+  [
+   "State registration (estimate)",
+   50,
+   ""
+  ],
+  [
+   "Bay trial anchor, sailboat fuel (estimate)",
+   150,
+   ""
+  ]
+ ],
+ "slots": [
+  {
+   "id": "thr",
+   "name": "Thrusters",
+   "buy": 1,
+   "opts": [
+    {
+     "id": "two-t200",
+     "n": "Two Blue Robotics T200",
+     "d": "Either one can fail and the boat keeps going",
+     "cost": 757.6,
+     "kg": 0,
+     "thr": 2,
+     "url": "https://bluerobotics.com/store/thrusters/t200-thruster/",
+     "def": 1
+    },
+    {
+     "id": "one-t200",
+     "n": "One T200",
+     "d": "Steers with the rudder only. Simulator: 54% instead of 78%",
+     "cost": 378.8,
+     "kg": -0.45,
+     "thr": 1,
+     "url": "https://bluerobotics.com/store/thrusters/t200-thruster/"
+    }
+   ]
+  },
+  {
+   "id": "sol",
+   "name": "Solar panels",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "solar-250",
+     "n": "250 W: 2 × 100 W + 50 W",
+     "d": "Planned. Covers the dome and side decks",
+     "cost": 332.91999999999996,
+     "kg": 0,
+     "wp": 250,
+     "url": "https://offgridstores.com/products/renogy-100-watt-12-volt-flexible-monocrystalline-solar-panel",
+     "def": 1
+    },
+    {
+     "id": "solar-200",
+     "n": "200 W: 2 × 100 W",
+     "d": "Cheaper, and about 0.1 kt slower (design doc)",
+     "cost": 252.92,
+     "kg": -1.2,
+     "wp": 200,
+     "url": "https://offgridstores.com/products/renogy-100-watt-12-volt-flexible-monocrystalline-solar-panel"
+    },
+    {
+     "id": "solar-300",
+     "n": "300 W: 3 × 100 W",
+     "d": "Needs more deck than the kayak may have",
+     "cost": 379.38,
+     "kg": 1.2,
+     "wp": 300,
+     "est": 1,
+     "url": "https://offgridstores.com/products/renogy-100-watt-12-volt-flexible-monocrystalline-solar-panel"
+    }
+   ]
+  },
+  {
+   "id": "bat",
+   "name": "Batteries",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "two-50ah",
+     "n": "Two 12 V 50 Ah LiFePO4",
+     "d": "1,280 Wh in two separate banks",
+     "cost": 431.98,
+     "kg": 0,
+     "bat": 1280,
+     "banks": 2,
+     "url": "https://www.litime.com/products/12v-50ah-tm-lifepo4-battery-with-bluetooth",
+     "def": 1
+    },
+    {
+     "id": "one-50ah",
+     "n": "One 12 V 50 Ah",
+     "d": "640 Wh, a single bank",
+     "cost": 215.99,
+     "kg": -5.1,
+     "bat": 640,
+     "banks": 1,
+     "url": "https://www.litime.com/products/12v-50ah-tm-lifepo4-battery-with-bluetooth"
+    },
+    {
+     "id": "two-100ah",
+     "n": "Two 12 V 100 Ah",
+     "d": "2,560 Wh, about 10 kg heavier",
+     "cost": 639.18,
+     "kg": 10,
+     "bat": 2560,
+     "banks": 2,
+     "est": 1,
+     "url": "https://www.litime.com/collections/low-temp-cutoff-batteries?page=1"
+    }
+   ]
+  },
+  {
+   "id": "mppt",
+   "name": "Solar charge controllers",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "two-mppt",
+     "n": "Two Victron MPPT 75/15",
+     "d": "One for each battery bank",
+     "cost": 236.3,
+     "kg": 0,
+     "url": "https://www.18650batterystore.com/products/victron-smartsolar-mppt-75-15",
+     "def": 1
+    },
+    {
+     "id": "one-mppt",
+     "n": "One Victron MPPT 75/15",
+     "d": "One controller for everything, so one failure stops all charging",
+     "cost": 118.15,
+     "kg": -0.5,
+     "url": "https://www.18650batterystore.com/products/victron-smartsolar-mppt-75-15"
+    }
+   ]
+  },
+  {
+   "id": "brain",
+   "name": "Autopilot",
+   "buy": 1,
+   "opts": [
+    {
+     "id": "two-box",
+     "n": "Pixhawk plus a separate safe-mode box",
+     "d": "Two boxes: if the Pixhawk dies, the second box steers 070°. Worth about 18 points in the simulator",
+     "cost": 333,
+     "kg": 0,
+     "wh": 31,
+     "boxes": 2,
+     "url": "https://pyrodrone.com/collections/everything-excluding-dji/products/holybro-pixhawk-6c-mini-model-a-flight-controller-only",
+     "def": 1
+    },
+    {
+     "id": "one-box",
+     "n": "Pixhawk only",
+     "d": "One box: if it dies, the boat drifts",
+     "cost": 250,
+     "kg": -0.4,
+     "wh": 27,
+     "boxes": 1,
+     "url": "https://pyrodrone.com/collections/everything-excluding-dji/products/holybro-pixhawk-6c-mini-model-a-flight-controller-only"
+    }
+   ]
+  },
+  {
+   "id": "sat",
+   "name": "Satellite modem (two-way)",
+   "buy": 1,
+   "opts": [
+    {
+     "id": "rockblock-9603n",
+     "n": "RockBLOCK 9603N (Iridium)",
+     "d": "Sends a daily report and receives course changes from base",
+     "cost": 299.95,
+     "kg": 0,
+     "wh": 1,
+     "url": "https://www.sparkfun.com/rockblock-9603n-iridium-satcomm-module.html",
+     "def": 1
+    }
+   ]
+  },
+  {
+   "id": "beacon",
+   "name": "Backup beacon",
+   "buy": 1,
+   "opts": [
+    {
+     "id": "smartone-solar",
+     "n": "Globalstar SmartOne Solar",
+     "d": "Has its own solar cell and sends position every 6 hours. Price includes about 5 months of service",
+     "cost": 472,
+     "kg": 0,
+     "beacon": 1,
+     "url": "https://osat.com/products/smartone-solar-satellite-tracker",
+     "def": 1
+    },
+    {
+     "id": "none",
+     "n": "None",
+     "d": "If the Iridium modem goes quiet, nobody knows where the boat is. Under race rules, more than 10 days silent disqualifies it",
+     "cost": 0,
+     "kg": -0.3,
+     "beacon": 0
+    }
+   ]
+  },
+  {
+   "id": "ais",
+   "name": "AIS (shows the boat to ships)",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "emtrak-b921",
+     "n": "em-trak B921, Class B",
+     "d": "1.6 W. Ships see the boat on their screens",
+     "cost": 730.58,
+     "kg": 0,
+     "wh": 36,
+     "ais": 1,
+     "url": "https://defender.com/en_us/em-trak-b921-2w-cstdma-class-b-ais-transceiver-430-0001",
+     "def": 1
+    },
+    {
+     "id": "dy-ait1500",
+     "n": "Digital Yacht AIT1500, Class B",
+     "d": "Same price, under 2 W",
+     "cost": 729.94,
+     "kg": 0.1,
+     "wh": 40,
+     "ais": 1,
+     "url": "https://lifeofsailing.com/products/digital-yacht-ait1500-class-b-ais-transponder-w-built-in-gps-zdigait1500"
+    },
+    {
+     "id": "none",
+     "n": "None",
+     "d": "Saves power, but roughly doubles the chance of being hit by a ship (design doc)",
+     "cost": 0,
+     "kg": -1.2,
+     "wh": 0,
+     "ais": 0
+    }
+   ]
+  },
+  {
+   "id": "radar",
+   "name": "Radar reflector",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "echomax-230br",
+     "n": "Echomax 230BR",
+     "d": "Direct replacement for the Firdell Blipper, which is no longer sold",
+     "cost": 325,
+     "kg": 0,
+     "url": "https://www.landfallnavigation.com/echomax-230-w-blipper-210-7-mountable.html",
+     "def": 1
+    },
+    {
+     "id": "davis-echomaster",
+     "n": "Davis Echomaster",
+     "d": "$125 cheaper, if it fits inside the dome",
+     "cost": 199.99,
+     "kg": 0,
+     "url": "https://davisinstruments.com/products/echomaster-radar-reflector"
+    }
+   ]
+  },
+  {
+   "id": "light",
+   "name": "Navigation light",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "hella-naviled-360",
+     "n": "Hella NaviLED 360",
+     "d": "All-round white light, on only at night",
+     "cost": 103.99,
+     "kg": 0,
+     "wh": 4,
+     "url": "https://sportfishoutfitters.com/products/hella-marine-naviled-360-compact-all-round-white-navigation-lamp-2nm-fixed-mount-white-base-980960011",
+     "def": 1
+    }
+   ]
+  },
+  {
+   "id": "lead",
+   "name": "Keel bulb (lead weight)",
+   "buy": 2,
+   "opts": [
+    {
+     "id": "lead-50-new",
+     "n": "50 kg of new lead ingots",
+     "d": "Planned weight. Self-rights from upside down",
+     "cost": 309.76,
+     "kg": 0,
+     "url": "https://www.rotometals.com/pure-soft-lead-metal-99-9-5-pound-ingot",
+     "def": 1
+    },
+    {
+     "id": "lead-50-scrap",
+     "n": "50 kg of scrap lead",
+     "d": "About half the price. Clean it well before casting",
+     "cost": 160,
+     "kg": 0,
+     "est": 1
+    },
+    {
+     "id": "lead-40",
+     "n": "40 kg bulb",
+     "d": "Lighter boat, but it rights itself more slowly. Theo must re-check it still comes back up",
+     "cost": 253.44,
+     "kg": -10,
+     "url": "https://www.rotometals.com/pure-soft-lead-metal-99-9-5-pound-ingot"
+    }
+   ]
+  },
+  {
+   "id": "paint",
+   "name": "Antifouling paint",
+   "buy": 3,
+   "opts": [
+    {
+     "id": "micron-csc",
+     "n": "Interlux Micron CSC",
+     "d": "Keeps weed and barnacles off the bottom",
+     "cost": 122.96,
+     "kg": 0,
+     "af": 1,
+     "url": "https://www.fisheriessupply.com/interlux-micron-csc-ablative-antifouling-paint/y5583-qt",
+     "def": 1
+    },
+    {
+     "id": "none",
+     "n": "None",
+     "d": "Growth on the hull slows the boat as the weeks go by",
+     "cost": 0,
+     "kg": 0,
+     "af": 0
+    }
+   ]
+  },
+  {
+   "id": "spares",
+   "name": "Spares for the trials",
+   "buy": 4,
+   "opts": [
+    {
+     "id": "spares-full",
+     "n": "Thruster, servo and Pixhawk",
+     "d": "A failure during the trials costs days, not weeks",
+     "cost": 648.8,
+     "kg": 0,
+     "url": "https://bluerobotics.com/store/thrusters/t200-thruster/",
+     "def": 1
+    },
+    {
+     "id": "spares-no-pixhawk",
+     "n": "Thruster and servo",
+     "d": "No spare Pixhawk; it gets 8 weeks of bench running first",
+     "cost": 471.8,
+     "kg": 0
+    },
+    {
+     "id": "none",
+     "n": "None",
+     "d": "Any failure means waiting on an order",
+     "cost": 0,
+     "kg": 0
+    }
+   ]
+  }
+ ]
+}

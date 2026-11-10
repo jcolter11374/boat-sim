@@ -236,6 +236,23 @@ try {
   log.push(`game ${game.beats.join("/")} -> ${game.result}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
+  // Boatyard: the catalog loads, a swap changes the totals, the model and the share link.
+  await page.goto(`${URL}boatyard.html?quality=low`);
+  await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
+  const y0 = await page.evaluate(() => window.__yard.summary);
+  await page.locator('.opt[data-slot="thr"][data-opt="one-t200"]').click();
+  await page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click();
+  const y1 = await page.evaluate(() => ({ s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));
+  if (!(y1.s.batteryWh === 2560 && y1.s.thrusters === 1 && y1.s.massKg > y0.massKg && y1.d.thrusters === 1))
+    fail(`boatyard swap didn't take: ${JSON.stringify(y1)}`);
+  if (y1.share !== "#thr=one-t200&bat=two-100ah") fail(`boatyard share link: ${y1.share}`);
+  await page.goto(`${URL}boatyard.html?quality=low${y1.share}`);
+  await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
+  const y2 = await page.evaluate(() => window.__yard.design.picks);
+  if (y2.thr !== "one-t200" || y2.bat !== "two-100ah") fail(`boatyard link didn't reopen the design: ${JSON.stringify(y2)}`);
+  log.push(`boatyard ${y1.share}`);
+  if (errors.length) fail(`page errors: ${errors.join("; ")}`);
+
   await browser.close();
   console.log(`OK: ${log.join(", ")}; both boats afloat; sea vertices high ${vHigh}, low ${vLow}`);
 } catch (e) {

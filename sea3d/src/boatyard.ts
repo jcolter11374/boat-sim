@@ -1,0 +1,390 @@
+// The Boatyard: build your own version of our kayak from the real parts
+// catalog, watch the boat change, see the cost, weight and power add up, share
+// the design as a link or a file, and launch it.
+//
+// The catalog (public/parts-catalog.json) is the single source of prices,
+// weights and power figures; the yard only adds them up and draws them.
+// Launching goes through a Launcher (yard/launch.ts), so the same page works
+// with Theo's precomputed grid now and the simulator in the browser later.
+
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Atmosphere } from "./atmosphere";
+import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import type { Quality } from "./boats/parts";
+import { KAYAK } from "./boats/specs";
+import { Contact } from "./contact";
+import { BoatMotion, KAYAK_V4 } from "./motion";
+import { shadowsOn } from "./ultra";
+import { Sea } from "./water";
+import { SEA_STATES, components, heightAt, hsOf } from "./waves";
+import {
+  CRUISE_W,
+  decodeDesign,
+  designYaml,
+  encodeDesign,
+  hintsFor,
+  nightHours,
+  optionOf,
+  plannedDesign,
+  summarise,
+  type Catalog,
+  type CatalogOption,
+  type CatalogSlot,
+  type Design,
+} from "./yard/design";
+import { dress } from "./yard/dress";
+import { GridLauncher, type Launcher } from "./yard/launch";
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+
+// ---------- 3D: the kayak on a calm sea ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+$("app").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 12000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 1.8;
+controls.maxDistance = 25;
+controls.maxPolarAngle = Math.PI * 0.6; // can look under the waterline at the keel
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.4;
+renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false));
+const atmos = new Atmosphere(renderer, scene, camera);
+atmos.set(28, 215, 0, true);
+// ?quality=low for software graphics (tests); High otherwise.
+const quality: Quality = new URLSearchParams(location.search).get("quality") === "low" ? "low" : "high";
+renderer.setPixelRatio(quality === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.6 : 1);
+atmos.setBloom(quality === "high");
+atmos.setPixelRatio(renderer.getPixelRatio());
+const sea = new Sea(quality);
+scene.add(sea.mesh);
+const comps = components(SEA_STATES.calm);
+sea.setSea(SEA_STATES.calm.hs);
+const place = { x: 0, z: 0, yaw: -0.5 };
+const motion = new BoatMotion(KAYAK_V4, place);
+let model: BoatModel | null = null;
+let contact: Contact | null = null;
+let sinkM = 0;
+function build(): void {
+  if (model) {
+    scene.remove(model.root);
+    model.dispose();
+  }
+  if (contact) {
+    scene.remove(contact.collar, contact.spray);
+    contact.dispose();
+  }
+  model = BUILDERS.kayak(quality);
+  shadowsOn(model.root);
+  contact = new Contact(model.form, KAYAK, quality);
+  scene.add(model.root, contact.collar, contact.spray);
+  if (cat) redraw();
+}
+// Port quarter, a little above the deck: the panels, the dome and the keel all show.
+camera.position.set(-4.6, 1.9, 6.6);
+controls.target.set(0.1, -0.15, 0);
+// Centre the boat in the open space between the two panels.
+function frameView(): void {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const left = w > 900 ? 404 : 0;
+  const right = w > 900 ? 324 : 0;
+  camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+}
+frameView();
+
+// ---------- the catalog and the design ----------
+let cat: Catalog | null = null;
+let design: Design;
+const launcher: Launcher & { ready?: () => Promise<boolean> } = new GridLauncher();
+
+/** Slots by theme, in the order a builder thinks about them. Unknown slots go at the end. */
+const GROUPS: [string, string[]][] = [
+  ["Driving", ["thr"]],
+  ["Power", ["sol", "bat", "mppt"]],
+  ["Brains and radio", ["brain", "sat", "beacon"]],
+  ["Being seen by ships", ["ais", "radar", "light"]],
+  ["Hull and keel", ["lead", "paint"]],
+  ["Before launch", ["spares"]],
+];
+
+const status = {
+  ready: false,
+  error: "",
+  design: {} as Design,
+  summary: {} as Record<string, unknown>,
+  dressed: {} as Record<string, unknown>,
+  share: "",
+  yaml: "",
+  launch: null as unknown,
+  frames: 0,
+  /** Choose an option in a slot (tests). */
+  pick: (slot: string, id: string) => choose(slot, id),
+};
+(window as unknown as { __yard: typeof status }).__yard = status;
+
+function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.className = "opt";
+  b.dataset.slot = slot.id;
+  b.dataset.opt = o.id;
+  const top = document.createElement("div");
+  top.className = "top";
+  const name = document.createElement("span");
+  name.textContent = o.n;
+  if (o.def) name.append(badge("plan", "PLANNED"));
+  if (o.est) name.append(badge("est", "ESTIMATE"));
+  const price = document.createElement("span");
+  price.className = "price";
+  price.textContent = o.cost ? usd(o.cost) : "$0";
+  top.append(name, price);
+  const d = document.createElement("div");
+  d.className = "d";
+  d.textContent = o.d;
+  b.append(top, d);
+  b.addEventListener("click", () => choose(slot.id, o.id));
+  return b;
+}
+function badge(kind: string, text: string): HTMLSpanElement {
+  const s = document.createElement("span");
+  s.className = `badge ${kind}`;
+  s.textContent = text;
+  return s;
+}
+
+function drawSlots(): void {
+  if (!cat) return;
+  const box = $("slots");
+  box.replaceChildren();
+  const used = new Set<string>();
+  const groups = GROUPS.map(([title, ids]) => [title, ids.filter((id) => cat!.slots.some((s) => s.id === id))] as [string, string[]]);
+  const rest = cat.slots.map((s) => s.id).filter((id) => !GROUPS.some(([, ids]) => ids.includes(id)));
+  if (rest.length) groups.push(["Other", rest]);
+  for (const [title, ids] of groups) {
+    const g = document.createElement("div");
+    g.className = "slot";
+    const h = document.createElement("h3");
+    h.textContent = title;
+    g.append(h);
+    if (title === "Driving") g.append(cruiseControl());
+    for (const id of ids) {
+      const slot = cat.slots.find((s) => s.id === id)!;
+      used.add(id);
+      const name = document.createElement("div");
+      name.className = "muted";
+      name.style.margin = "6px 2px 4px";
+      name.textContent = slot.name;
+      g.append(name);
+      for (const o of slot.opts) g.append(optionButton(slot, o));
+      const hints = document.createElement("ul");
+      hints.className = "hints";
+      hints.id = `hints-${slot.id}`;
+      g.append(hints);
+    }
+    box.append(g);
+  }
+}
+
+function cruiseControl(): HTMLElement {
+  const wrap = document.createElement("div");
+  const label = document.createElement("div");
+  label.className = "muted";
+  label.style.margin = "2px 2px 4px";
+  label.id = "cruise-label";
+  const input = document.createElement("input");
+  input.type = "range";
+  input.id = "cruise";
+  input.min = "0";
+  input.max = String(CRUISE_W.length - 1);
+  input.step = "1";
+  input.addEventListener("input", () => {
+    design.cruiseW = CRUISE_W[Number(input.value)];
+    redraw();
+  });
+  const note = document.createElement("div");
+  note.className = "muted";
+  note.textContent = "More power is faster but empties the battery sooner at night. The planned setting is 25 W.";
+  wrap.append(label, input, note);
+  return wrap;
+}
+
+function choose(slot: string, id: string): void {
+  if (!cat || !cat.slots.some((s) => s.id === slot && s.opts.some((o) => o.id === id))) return;
+  design.picks[slot] = id;
+  redraw();
+}
+
+function redraw(): void {
+  if (!cat) return;
+  const s = summarise(cat, design);
+  const plan = plannedDesign(cat);
+  // Buttons and hints (each slot: what your choice changes against the planned build).
+  document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) =>
+    b.setAttribute("aria-pressed", String(design.picks[b.dataset.slot!] === b.dataset.opt)),
+  );
+  for (const slot of cat.slots) {
+    const ul = document.getElementById(`hints-${slot.id}`);
+    if (!ul) continue;
+    const hints = hintsFor(optionOf(cat, slot.id, plan), optionOf(cat, slot.id, design)!);
+    ul.replaceChildren(...hints.map((h) => Object.assign(document.createElement("li"), { textContent: h })));
+  }
+  const cr = $<HTMLInputElement>("cruise");
+  if (cr) cr.value = String(CRUISE_W.indexOf(design.cruiseW));
+  const cl = document.getElementById("cruise-label");
+  if (cl) cl.textContent = `Cruising power: ${design.cruiseW} W per hour of motoring`;
+  // Totals.
+  $("s-cost").textContent = usd(s.partsCost);
+  $("s-prog").textContent = usd(s.programCost);
+  $("s-total").textContent = usd(s.partsCost + s.programCost);
+  $("s-kg").textContent = `${s.massKg.toFixed(1)} kg`;
+  $("s-sol").textContent = `${s.solarW} W`;
+  $("s-bat").textContent = `${s.batteryWh.toLocaleString("en-US")} Wh`;
+  $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
+  $("s-est").textContent = s.estimates.length ? `Includes estimates: ${s.estimates.join(", ")}.` : "";
+  // The model.
+  if (model) {
+    const lead = optionOf(cat, "lead", design);
+    const d = dress(model, s, 50 + (lead?.kg ?? 0));
+    sinkM = d.sinkMm / 1000;
+    status.dressed = { ...d };
+  }
+  // Link and file.
+  const hash = encodeDesign(cat, design);
+  history.replaceState(null, "", location.pathname + location.search + hash);
+  status.design = JSON.parse(JSON.stringify(design));
+  status.summary = { ...s };
+  status.share = hash;
+  $("result").replaceChildren();
+}
+
+// ---------- buttons ----------
+function toast(text: string): void {
+  const t = $("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+$("share").addEventListener("click", async () => {
+  const url = location.href;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link copied: anyone who opens it sees this design.");
+  } catch {
+    toast(url);
+  }
+});
+$("yaml").addEventListener("click", () => {
+  if (!cat) return;
+  const text = designYaml(cat, design);
+  status.yaml = text;
+  const a = document.createElement("a");
+  a.download = "boatyard-design.yaml";
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/yaml" }));
+  document.body.append(a);
+  a.click();
+  a.remove();
+});
+$("reset").addEventListener("click", () => {
+  if (!cat) return;
+  design = plannedDesign(cat);
+  redraw();
+});
+$("launch").addEventListener("click", async () => {
+  if (!cat) return;
+  const box = $("result");
+  box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: "Launching..." }));
+  const r = await launcher.launch(design, summarise(cat, design));
+  status.launch = r;
+  box.replaceChildren();
+  if (!r) {
+    box.append(
+      Object.assign(document.createElement("p"), {
+        className: "muted",
+        textContent:
+          "Launch results aren't published yet: Theo is running every combination through the simulator. Until then, share the link or download the design file.",
+      }),
+    );
+    return;
+  }
+  if (r.odds) {
+    const o = r.odds;
+    const big = Object.assign(document.createElement("div"), { className: "odds", textContent: `${Math.round(o.odds * 100)}% finish` });
+    const range = Object.assign(document.createElement("div"), {
+      className: "muted",
+      textContent: `${o.finished} of ${o.voyages} simulated voyages (likely range ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%)` +
+        (o.median_days ? `, typically ${Math.round(o.median_days)} days` : ""),
+    });
+    box.append(big, range);
+  }
+  box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: r.note }));
+  if (r.replays.length) {
+    const ul = document.createElement("ul");
+    for (const rp of r.replays) {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = `./voyage.html?replay=${encodeURIComponent(rp.url)}`;
+      a.textContent = `Watch the ${new Date(rp.start + (rp.start.endsWith("Z") ? "" : "Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })} 2020 launch`;
+      li.append(a);
+      ul.append(li);
+    }
+    box.append(ul);
+  }
+});
+
+// ---------- start ----------
+build();
+loadDetailedModels().then((ok) => {
+  if (ok) build();
+});
+fetch("./parts-catalog.json")
+  .then((r) => {
+    if (!r.ok) throw new Error(`parts-catalog.json: ${r.status}`);
+    return r.json() as Promise<Catalog>;
+  })
+  .then((c) => {
+    cat = c;
+    design = decodeDesign(c, location.hash);
+    drawSlots();
+    redraw();
+    status.ready = true;
+  })
+  .catch((e) => {
+    status.error = String(e);
+    const box = $("error");
+    box.style.display = "block";
+    box.textContent = `Couldn't load the parts catalog: ${e}`;
+  });
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  frameView();
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  atmos.setSize(window.innerWidth, window.innerHeight);
+});
+
+const clock = new THREE.Clock();
+const bowW = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const t = clock.getElapsedTime();
+  sea.update(comps, t);
+  motion.advance(comps, t);
+  if (model) {
+    model.root.position.set(0, motion.heave - KAYAK.cgBelowWaterline - sinkM, 0);
+    model.root.rotation.set(motion.roll, place.yaw, motion.pitch, "YZX");
+    model.animate(t);
+    if (contact) {
+      model.root.updateMatrixWorld();
+      bowW.set(contact.bow[0], KAYAK.cgBelowWaterline, contact.bow[1]);
+      model.root.localToWorld(bowW);
+      contact.update(comps, t, place, hsOf(comps), { speed: 0, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
+    }
+  }
+  controls.update();
+  sea.setSun(atmos.glintDir, atmos.glintLight);
+  atmos.render();
+  status.frames++;
+});

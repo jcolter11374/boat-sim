@@ -185,6 +185,7 @@ export function buildKayak(quality: Quality): BoatModel {
   const blade = kit.std(0x2a6fdb);
   for (const z of [0.2, -0.2]) {
     const th = new THREE.Group();
+    th.name = z > 0 ? "thruster_port" : "thruster_starboard"; // builder z is to port
     th.position.set(2.8, -0.07, z);
     g.add(th);
     const body = kit.mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.11, kit.detail.round), t200, th);

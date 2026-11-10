@@ -13,6 +13,7 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, "index.html"),
         voyage: resolve(__dirname, "voyage.html"),
+        boatyard: resolve(__dirname, "boatyard.html"),
       },
     },
   },
