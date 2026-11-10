@@ -254,3 +254,43 @@ def test_diverge_finds_where_two_tracks_part_and_the_events_around_it():
     (line,) = M.diverge(a, b)
     assert "hour 12" in line and "capsize" in line
     assert M.diverge(a, a) == []
+
+
+def test_forecast_key_ignores_local_timezone():
+    """A browser's Pyodide runs in the visitor's timezone; forecasts must not care."""
+    import os
+    import time
+    from datetime import UTC, datetime
+
+    from boatsim.oceandata.forecast import IssuedForecast
+
+    if not hasattr(time, "tzset"):
+        return
+    t = datetime(2020, 4, 1, 12)
+    want = int(t.replace(tzinfo=UTC).timestamp() // 60)
+    old = os.environ.get("TZ")
+    try:
+        os.environ["TZ"] = "America/New_York"
+        time.tzset()
+        seen = {}
+
+        class Grab:
+            def __init__(self, model, rng):
+                seen["state"] = rng.bit_generator.state
+
+        import boatsim.oceandata.forecast as F
+
+        real, F._Patterns = F._Patterns, Grab
+        try:
+            IssuedForecast(None, t, None, 7)
+        finally:
+            F._Patterns = real
+        import numpy as np
+
+        assert seen["state"] == np.random.default_rng([7, want]).bit_generator.state
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
