@@ -30,6 +30,8 @@ export interface LaunchResult {
   note: string;
   odds: LaunchOdds | null;
   replays: LaunchReplay[];
+  /** Data attribution to show with the results (the sandbox redistributes modified data). */
+  credits?: { text: string; url: string };
   /** Sandbox runs, one per launch, in Theo's reference fingerprint shape (Ravi's exact-match gate). */
   fingerprints?: Record<string, unknown>[];
 }
@@ -161,6 +163,14 @@ interface SandboxRun {
   fingerprint: Record<string, unknown>;
 }
 
+/** docs/sandbox.md, "Data sources and attribution": shown wherever sandbox results appear. */
+export const SANDBOX_CREDITS = {
+  text:
+    "Weather and currents: contains modified Copernicus Climate Change Service and Copernicus Marine Service information (2020). " +
+    "Ship traffic: EMODnet and the World Bank (CC BY 4.0, changed by us). Land: made with Natural Earth.",
+  url: "https://github.com/jcolter11374/boat-sim/blob/main/docs/sandbox.md#data-sources-and-attribution",
+};
+
 export class SandboxLauncher implements Launcher {
   readonly name = "simulator in the browser";
   private pool: Pool | null = null;
@@ -216,10 +226,9 @@ export class SandboxLauncher implements Launcher {
       exact: meta.exact,
       note:
         `Sandbox (${meta.note}): ${finished} of ${total} voyages finished, run here in your browser. ` +
-        "A browser run can end differently from the same voyage on our servers, because tiny maths differences grow over months. " +
-        (grid?.odds
-          ? `The odds above come from our server runs over ten years of weather${meta.exact ? ", for this exact build." : `, for the closest build we've run: ${grid.label}.`}`
-          : "No server odds for this build yet."),
+        "Browser runs can end differently from the same build run on our servers; the odds shown come from the server grid" +
+        (grid?.odds ? (meta.exact ? " (this exact build)." : ` (the closest build we've run: ${grid.label}).`) : ", which hasn't run this build yet."),
+      credits: SANDBOX_CREDITS,
       odds: grid?.odds ?? null,
       replays,
       fingerprints: runs.map((r) => r.fingerprint),

@@ -356,6 +356,12 @@ function showResult(box: HTMLElement, r: LaunchResult | null): void {
     box.append(big, range);
   }
   box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: r.note }));
+  if (r.credits) {
+    const p = Object.assign(document.createElement("p"), { className: "muted credits", textContent: `${r.credits.text} ` });
+    const a = Object.assign(document.createElement("a"), { href: r.credits.url, target: "_blank", rel: "noopener", textContent: "Sources" });
+    p.append(a);
+    box.append(p);
+  }
   if (r.replays.length) {
     const ul = document.createElement("ul");
     for (const rp of r.replays) {
