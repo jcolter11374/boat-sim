@@ -113,7 +113,7 @@ jobs:
           retention-days: 90
   build:
     needs: [odds, replays]
-    if: always()
+    if: ${{ !cancelled() }}  # build what finished, but not after a cancel (no artifacts then)
     runs-on: ubuntu-latest
     permissions:
       contents: write  # only for the commit step
@@ -140,7 +140,10 @@ jobs:
           CODE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           rm -rf sea3d/public/boatyard
-          python -m boatsim.mc.boatyard build --odds runs/odds/odds_*.csv --replays runs/replays --out sea3d/public/boatyard --commit "${CODE_SHA::7}"
+          shopt -s nullglob
+          odds=(runs/odds/odds_*.csv)
+          mkdir -p runs/replays
+          python -m boatsim.mc.boatyard build --odds "${odds[@]}" --replays runs/replays --out sea3d/public/boatyard --commit "${CODE_SHA::7}"
           du -sh sea3d/public/boatyard
           python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import json
