@@ -129,6 +129,20 @@ for each voyage that ends differently, the hour where the tracks first part and
 the events either run had in the day before. The run summary also puts the kayak's
 sandbox endings next to the full-resolution server replays of the same launches.
 
+Result (10 Nov 2026, 2020 bundle, kayak and one-box builds, 12 voyages): the
+0.1 mm control changed 5 voyages and Pyodide changed 4, the same ones (the
+kayak's 1 April launch goes aground at 75.75 days, or arrives at 90.05 nudged
+and 116.76 in Pyodide). In every case the tracks drift apart slowly, by about
+0.001 deg somewhere between day 2 and day 68, with no event marking the split.
+That is chaos: storm-season voyages amplify any last-digit difference, whether
+it comes from a nudge or from a different maths library. It is not a Pyodide bug.
+
+One real bug turned up and is fixed: forecast-error patterns were keyed on
+`datetime.timestamp()` of a naive time, which reads it in the machine's local
+timezone. In a browser that is the visitor's timezone, so New York and UTC
+visitors got different voyages. Naive times are now read as UTC (no change on
+servers, which run UTC).
+
 ## Catalog mapping (`boatsim.sandbox.catalog`)
 
 Every option is a change from the kayak as it stands. "No effect yet" options
