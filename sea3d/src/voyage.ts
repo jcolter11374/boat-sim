@@ -32,6 +32,7 @@ import {
   isNotable,
   lastHour,
   loadIndex,
+  locate,
   loadReplay,
   positionAt,
   toneOf,
@@ -48,6 +49,7 @@ import { Sea } from "./water";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, Sea as LiveSea } from "./waves";
+import { FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -58,6 +60,17 @@ const REPLAY = params.get("replay");
 if (REPLAY) document.body.classList.add("single");
 const GAME = params.get("mode") === "game" || document.documentElement.dataset.mode === "game"; // or <html data-mode="game">
 if (GAME) document.body.classList.add("game");
+/**
+ * Live tracker: ?live (or <html data-mode="live">) shows the boat at its reported
+ * positions from the tracker feed, then the simulator's forecast after now.
+ * ?feed=path/ reads the feed from this site instead (tests); only same-site paths.
+ */
+const LIVE = !GAME && (params.has("live") || document.documentElement.dataset.mode === "live");
+if (LIVE) document.body.classList.add("live");
+const FEED = (() => {
+  const f = params.get("feed");
+  return f && !/^[a-z]+:|^\/\//i.test(f) ? (f.endsWith("/") ? f : `${f}/`) : FEED_BASE;
+})();
 
 // ---------- renderer; sky, light and haze come from atmosphere.ts ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -106,6 +119,7 @@ let motion = new BoatMotion(HULL[boatKey], place);
 let wet: Wetness | null = null;
 let drain: Drain | null = null;
 function buildBoat(q: Quality): void {
+  setForecastLook(false); // materials can be shared with the next model: put them back first
   if (model) {
     scene.remove(model.root);
     model.dispose();
@@ -160,7 +174,8 @@ function setQuality(l: Look): void {
 const N_COMP = { low: 16, high: 24 } as const;
 let live = new LiveSea(undefined, { n: N_COMP[quality], smoothing: 0.4 });
 function seaTarget(rep: Replay, hour: number): number {
-  const hs = Math.max(valueAt(rep, rep.hs, hour) ?? 0.3, 0.05);
+  // The tracker doesn't report the sea: a moderate one, and the cards say it isn't reported.
+  const hs = Math.max(valueAt(rep, rep.hs, hour) ?? (LIVE ? 1.2 : 0.3), 0.05);
   const tp = Math.max(valueAt(rep, rep.tp, hour) ?? 3 + 2.5 * Math.sqrt(hs), 2);
   const from = angleAt(rep, rep.wave_dir, hour) ?? 270;
   live.setSeaState(hs, tp, from);
@@ -188,6 +203,9 @@ let hour = 0;
 let playing = false;
 let warp = 1 / 3600; // voyage hours per real second: real time to start (John)
 let ended = false;
+/** The live tracker's voyage (?live), and whether the page is showing the forecast. */
+let tracked: Tracked | null = null;
+let forecastLook = false;
 // The launch-day game (?mode=game).
 let beats: Beat[] = [];
 let beatIdx = 0;
@@ -256,6 +274,10 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   force: { cloud: -1, fog: -1 },
+  /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
+  live: { on: LIVE, lastFix: 0, now: 0, simulated: false, forecast: false, banner: false, fixes: 0 },
+  /** Jump to the latest report (the Now button). */
+  goNow: () => tracked && seek(tracked.nowHour),
 };
 (window as unknown as { __replay: typeof status }).__replay = status;
 
@@ -400,6 +422,84 @@ async function load(files: string[], pick = files[0], autoplay = true): Promise<
   }
 }
 
+/** The live tracker: the feed's reports up to now, then the forecast. */
+async function loadLive(course: Replay["course"], keepHour = false): Promise<void> {
+  try {
+    const { voyage, ghost } = await loadFeed(FEED);
+    const wasNow = !tracked || Math.abs(hour - tracked.nowHour) < 0.5;
+    tracked = feedToReplay(voyage, ghost, course);
+    const r = tracked.rep;
+    lanes = [{ key: keyOf(r.boat), file: "live", rep: r, shown: 0 }];
+    status.file = "live";
+    status.boats = [r.boat];
+    status.maxHour = endHour();
+    status.outcome = r.outcome;
+    status.shown = [];
+    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: tracked.simulated, fixes: tracked.fixes.length };
+    $<HTMLInputElement>("scrub").max = String(endHour());
+    $("simbanner").hidden = !tracked.simulated;
+    $("boat").hidden = $("voyage").hidden = true;
+    $("now").hidden = $("c-report").hidden = $("c-eta").hidden = false;
+    $("h1").textContent = tracked.simulated ? "Live tracker (test run)" : "Live tracker";
+    $("sub").textContent =
+      "Where the kayak last reported (the main box's daily satellite report and the backup beacon's pings), then the simulator's forecast from that report: the dashed line on the chart, with the shaded band showing where most forecast runs end up. Wind and waves aren't reported, so the sea here is a stand-in.";
+    $("lg-ours").textContent = "reported track";
+    chart?.setGhost(tracked.ghost);
+    setFocus(0, true);
+    ticks();
+    seek(keepHour && !wasNow ? Math.min(hour, endHour()) : tracked.nowHour);
+    setPlaying(false);
+    status.ready = true;
+  } catch (e) {
+    fail(String(e));
+  }
+}
+
+/** Past now the boat is a forecast: drawn see-through, with a tag. */
+function setForecastLook(on: boolean): void {
+  if (on === forecastLook || !model) return;
+  forecastLook = on;
+  status.live.forecast = on;
+  $("forecasttag").hidden = !on;
+  model.root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    // See-through things are drawn after the sea, or the sea paints over them.
+    o.userData.order ??= o.renderOrder;
+    o.renderOrder = on ? 13 : (o.userData.order as number);
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      m.userData.solid ??= { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite };
+      const k = m.userData.solid as { transparent: boolean; opacity: number; depthWrite: boolean };
+      m.transparent = on || k.transparent;
+      m.opacity = on ? k.opacity * 0.4 : k.opacity;
+      m.depthWrite = on ? false : k.depthWrite;
+      m.needsUpdate = true;
+    }
+  });
+}
+
+/** Live equipment card: what the boat's own latest report says, and which radios are heard. */
+let lastLiveEquip = "";
+function liveEquipment(tr: Tracked): void {
+  const forecast = hour > tr.nowHour + 1e-3;
+  const rpt = reportAt(tr, Math.min(hour, tr.nowHour));
+  const f = rpt?.flags ?? {};
+  const comms = commsAt(tr.rep, Math.min(hour, tr.nowHour));
+  const chips: [string, boolean][] = [
+    ["Satellite radio", comms !== "ok"],
+    ["Backup beacon", tr.rep.beacon_ok?.[locate(tr.rep.h, Math.min(hour, tr.nowHour))[0]] === 0],
+    [f.one_thruster ? "One motor down" : f.motors_off ? "Motors off (saving battery)" : "Motors", !!(f.one_thruster || f.motors_off)],
+    ["Backup box", !!f.safe_box_down],
+    [f.safe_mode ? "Backup steering" : "Main box", !!f.safe_mode || comms !== "ok"],
+  ];
+  const html =
+    chips.map(([name, bad]) => `<span class="chip${bad ? " bad" : ""}"><i></i>${name}</span>`).join("") +
+    (forecast ? `<span class="chip"><i style="background:#cfe0ff"></i>Forecast: parts as at the last report</span>` : "");
+  if (html !== lastLiveEquip) {
+    lastLiveEquip = html;
+    $("eq").innerHTML = html; // constant names only
+  }
+}
+
 /** Point the close-up and the cards at one boat. */
 function setFocus(i: number, force = false): void {
   if (!lanes[i] || (i === focus && !force && rep === lanes[i].rep)) return;
@@ -448,6 +548,7 @@ function fail(msg: string): void {
 
 // ---------- controls ----------
 $("play").addEventListener("click", () => setPlaying(!playing));
+$("now").addEventListener("click", () => tracked && seek(tracked.nowHour));
 document.querySelectorAll<HTMLButtonElement>("#warp button").forEach((b) =>
   b.addEventListener("click", () => {
     warp = Number(b.dataset.warp);
@@ -562,7 +663,13 @@ controls.target.set(0, 0.2, 0);
     boatSel.disabled = modes.length < 2;
     const wantRace = params.get("race");
     const want = params.get("voyage");
-    if (REPLAY) {
+    if (LIVE) {
+      // The race lines come from any replay file (every voyage sails the same race).
+      const course = (await loadReplay(BASE, index[0].file)).course;
+      await loadLive(course);
+      // The feed is rebuilt hourly; look again every 10 minutes.
+      setInterval(() => loadLive(course, true), 10 * 60e3);
+    } else if (REPLAY) {
       await selectVoyage(REPLAY);
     } else if (GAME) {
       // The sea behind the picker: our kayak's first launch day, waiting at the start.
@@ -625,7 +732,7 @@ renderer.setAnimationLoop(() => {
       } else $("b-timer").style.transform = `scaleX(${beatLeft / BEAT_S})`;
     }
     // The result card waits for the last story beat.
-    if (hour >= endHour() && !ended && !beatShown && beatIdx >= beats.length) {
+    if (!LIVE && hour >= endHour() && !ended && !beatShown && beatIdx >= beats.length) {
       ended = true;
       showOutcome();
     }
@@ -688,7 +795,8 @@ renderer.setAnimationLoop(() => {
         t,
       );
       status.gear = { parts: model.gear.parts(), now: model.gear.shown, failed: [...failed.keys()] };
-      equipment(rep, failed);
+      if (tracked) liveEquipment(tracked);
+      else equipment(rep, failed);
     }
     wake?.update(comps, t, place, stw);
     // Camera rides the swell.
@@ -740,6 +848,10 @@ renderer.setAnimationLoop(() => {
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
     hud(rep, stw, hs);
+    if (tracked) {
+      setForecastLook(hour > tracked.nowHour + 1e-3);
+      liveHud(tracked);
+    }
     status.hour = hour;
   }
   controls.update();
@@ -1019,6 +1131,36 @@ function equipment(r: Replay, failed: Map<string, string>): void {
     $("eq").innerHTML = html;
   }
 }
+
+let lastLiveHud = -1;
+/** The live tracker's cards: battery only from a fresh report, report age, forecast arrival. */
+function liveHud(tr: Tracked): void {
+  const now = performance.now();
+  if (now - lastLiveHud < 100) return;
+  lastLiveHud = now;
+  const forecast = hour > tr.nowHour + 1e-3;
+  const rpt = forecast ? null : reportAt(tr, hour);
+  const rptH = rpt ? (utc(rpt.t) - utc(tr.rep.start)) / 3600e3 : -1;
+  const fresh = rpt && rpt.soc != null && hour - rptH <= 36;
+  $("h-soc").innerHTML = fresh ? `${Math.round(rpt.soc! * 100)}<small>%</small>` : "-";
+  const bar = $("h-socbar");
+  bar.style.width = fresh ? `${Math.round(rpt.soc! * 100)}%` : "0%";
+  bar.style.background = !fresh ? "" : rpt.soc! < 0.2 ? "var(--bad)" : rpt.soc! < 0.4 ? "var(--warn)" : "var(--good)";
+  $("h-charge").textContent = forecast ? "forecast: not known" : fresh ? `reported ${fmtAgo(hour - rptH)}` : "no recent report";
+  const sub = $("h-stw").nextElementSibling;
+  if (sub) sub.textContent = forecast ? "forecast" : "between reports";
+  const age = Math.min(hour, tr.nowHour) === tr.nowHour && !forecast ? tr.nowHour - tr.lastFixHour : reportAgeH(tr, Math.min(hour, tr.nowHour));
+  $("l-age").innerHTML = forecast ? "-" : `${age < 1 ? "<1" : age < 48 ? age.toFixed(age < 10 ? 1 : 0) : (age / 24).toFixed(1)}<small>${age < 48 ? "h ago" : "days ago"}</small>`;
+  const comms = commsAt(tr.rep, Math.min(hour, tr.nowHour));
+  $("l-src").textContent = forecast ? "not there yet" : comms === "ok" ? "daily report + beacon" : comms === "beacon" ? "backup beacon only" : "silent";
+  $("h-sun").textContent = forecast ? "forecast" : comms === "ok" ? "reporting home" : comms === "beacon" ? "beacon only" : "SILENT";
+  const g = tr.ghost;
+  const d = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  $("l-eta").textContent = g ? d(g.eta.p50) : "-";
+  $("l-range").textContent = g ? `${d(g.eta.p10)} to ${d(g.eta.p90)} · ${Math.round(g.p_finish * g.runs)} of ${g.runs} runs finish` : "no forecast yet";
+  $("w-day").textContent = forecast ? `Forecast, day ${(hour / 24).toFixed(1)}` : `Day ${(hour / 24).toFixed(1)} · now is day ${(tr.nowHour / 24).toFixed(1)}`;
+}
+const fmtAgo = (h: number) => (h < 1 ? "under an hour ago" : h < 48 ? `${Math.round(h)} h ago` : `${(h / 24).toFixed(1)} days ago`);
 
 let lastHud = -1;
 function hud(r: Replay, stw: number, hs: number): void {
