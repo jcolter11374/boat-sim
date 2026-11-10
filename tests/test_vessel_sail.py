@@ -174,3 +174,15 @@ def test_rudderless_boat_with_an_upwind_course_takes_the_offshore_reach():
     assert abs(S.unsteered_heading(p, 90.0, 90.0, 210.0) - 200.0) < 1e-9
     # A course one reach can make headway on still picks by the course.
     assert abs(S.unsteered_heading(p, 300.0, 58.0, 170.0) - 308.0) < 1e-9
+
+
+def test_rev_b_tracker_failure_names_the_yb3():
+    from boatsim.vessel.hazards import K_DICE, SLOT, sample_failures
+
+    dice = np.ones(K_DICE)
+    dice[SLOT["beacon"]] = 0.0
+    out = sample_failures(
+        _vessel().hazards, EnvState(), 1.0, {}, datetime(2020, 5, 1), 38.0, -60.0, 30.0, dice,
+        thrusters=(),
+    )  # fmt: skip
+    assert [e.detail for e in out.events] == ["beacon (YB3 backup tracker failed)"]
