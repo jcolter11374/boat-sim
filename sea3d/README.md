@@ -56,6 +56,14 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
   `python blender/build_kayak.py public/models/kayak.glb` (likewise for
   `build_randolph.py`). Without the files the pages draw the boats in code as
   before; `?models=simple` forces that.
+- `src/boats/gear.ts`: the boats' working equipment in the voyage replay,
+  driven only by the log: propellers spin with speed, the rudder follows the
+  turn, the Randolph wing and wind vane trim to the apparent wind, panels show
+  sun, a comms light (green Iridium, amber beacon only, red silent) flashes when
+  a message goes, and broken parts show (stopped prop, centred or loose rudder,
+  torn sail, warning signs, smoke from a dead box). Moving parts are found by
+  name (`rudder_pivot`, `wing_pivot`, `vane_pivot`, `tail_flap`, `panel*`), in
+  the Blender models and the drawn-in-code ones alike.
 - `src/boats/specs.ts`: each boat's real measurements (length, beam, mass,
   ballast, centre of gravity, cruising speed). No graphics code.
 - `src/boats/parts.ts`, `src/boats/model.ts`: the 3D models built from those

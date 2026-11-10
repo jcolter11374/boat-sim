@@ -49,6 +49,7 @@ from common import (
     new_image,
     out_path,
     panel,
+    pivot,
     reset,
     rounded_box,
     set_pixels,
@@ -168,7 +169,19 @@ def build(out: Path) -> None:
     foil("keel", 0.25, 0.25, 1.32, 1.32 + sweep, 0.05, bulb_y + 0.03, 0.1, g10)
     prof = bulb_profile(0.55, 0.125, 0.4)
     lathe("bulb", prof, 48, lead, (1.4, bulb_y, 0))
-    foil("rudder", 0.2, 0.17, 2.86, 2.9, 0.06, -0.3, 0.12, g10)
+    # Rudder on its stock, under a pivot the page turns.
+    foil(
+        "rudder",
+        0.2,
+        0.17,
+        2.86,
+        2.9,
+        0.06,
+        -0.3,
+        0.12,
+        g10,
+        parent=pivot("rudder_pivot", (2.91, 0, 0)),
+    )
 
     # Deck kit: AIS whip, all-round light, Globalstar beacon, tow eye.
     black = material("black", base=hexcol(0x222426), rough=0.5)

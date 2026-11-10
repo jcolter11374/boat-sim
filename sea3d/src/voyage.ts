@@ -12,6 +12,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./boats/specs";
@@ -22,6 +23,8 @@ import {
   commsAt,
   describeEvent,
   distanceKm,
+  failuresAt,
+  PART_NAME,
   isNotable,
   lastHour,
   loadIndex,
@@ -69,6 +72,11 @@ const keyOf = (boat: string | undefined): BoatKey => (/randolph/i.test(boat ?? "
 let boatKey: BoatKey = "kayak";
 
 // ---------- sea and boat ----------
+// ?quality=low|high picks the starting quality (the smoke test runs Low on software graphics).
+{
+  const q = params.get("quality");
+  if (q === "low" || q === "high") $<HTMLSelectElement>("quality").value = q;
+}
 let quality = ($<HTMLSelectElement>("quality").value as Quality) ?? "high";
 const sea = new Sea(quality);
 scene.add(sea.mesh);
@@ -99,7 +107,8 @@ function setQuality(q: Quality): void {
     seaTarget(rep, hour);
     live.snap();
   }
-  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : 1;
+  // Low on software graphics (no graphics card) draws at half resolution to keep moving.
+  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
   renderer.setPixelRatio(ratio);
   atmos.setBloom(q === "high");
   atmos.setPixelRatio(ratio);
@@ -166,6 +175,8 @@ const status = {
   /** True once a detailed Blender model is in use; models names which ones. */
   detailed: false,
   models: [] as string[],
+  /** The close-up boat's moving parts and what they show now. */
+  gear: {} as Record<string, unknown>,
   focus: 0,
   setFocus: (i: number) => setFocus(i),
   /** positionAt for any lane (0 = first boat, 1 = second in a race). */
@@ -227,7 +238,7 @@ function verdict(r: Replay): string {
     : r.outcome === "timeout"
       ? "Still sailing when the simulation stopped, so it doesn't count as a finish."
       : last
-        ? describeEvent(last) + "."
+        ? describeEvent(last, r.boat).replace(/\.?$/, ".")
         : "";
 }
 function showOutcome(): void {
@@ -327,7 +338,7 @@ function ticks(): void {
       const i = document.createElement("i");
       i.style.left = `${(100 * e.h) / max}%`;
       i.style.background = TONE_COLOUR[toneOf(e)];
-      i.title = (lanes.length > 1 ? `${SHORT[l.key]}: ` : "") + describeEvent(e);
+      i.title = (lanes.length > 1 ? `${SHORT[l.key]}: ` : "") + describeEvent(e, l.rep.boat);
       box.appendChild(i);
     }
 }
@@ -478,13 +489,14 @@ renderer.setAnimationLoop(() => {
     for (const [li, l] of lanes.entries()) {
       while (l.shown < l.rep.events.length && l.rep.events[l.shown].h <= hour) {
         const e = l.rep.events[l.shown++];
+        if (e.kind === "message_sent" && li === focus) model?.gear.flashLight(t);
         if (!isNotable(e)) continue;
         status.shown.push(e.kind);
         // A knockdown: give the boat a hard shove so the physics rolls it over and
         // rights it again (the keel and dome do the righting, as designed).
         if (e.kind === "capsize" && warp <= 24 && li === focus) motion.rollRate += (Math.random() < 0.5 ? -1 : 1) * 7;
         const who = lanes.length > 1 ? `${SHORT[l.key]} · ` : "";
-        toast(describeEvent(e), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+        toast(describeEvent(e, l.rep.boat), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
       }
     }
     if (hour >= endHour() && !ended) {
@@ -516,9 +528,29 @@ renderer.setAnimationLoop(() => {
     if (model) {
       model.root.position.set(0, motion.heave - SPEC[boatKey].cgBelowWaterline, 0);
       model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
-      model.animate(t);
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);
+    if (model) {
+      // Working equipment from the log: props with speed, rudder with the turn,
+      // wing and vane with the apparent wind, panels with the sun, the comms light.
+      const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
+      const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+      const shownHdg = 90 - THREE.MathUtils.radToDeg(smoothYaw);
+      const failed = failuresAt(rep, hour);
+      model.gear.update(
+        {
+          speed: stw / SPEC[boatKey].cruiseSpeed,
+          rudder: rudderFor(dt > 0 ? step / dt : 0),
+          sun: (valueAt(rep, rep.ghi, hour) ?? 0) / 1000,
+          comms: commsAt(rep, hour) ?? "",
+          flow: apparentFlow(wu, wv, stw, shownHdg),
+          failed,
+        },
+        t,
+      );
+      status.gear = { parts: model.gear.parts(), now: model.gear.shown, failed: [...failed.keys()] };
+      equipment(rep, failed);
+    }
     wake?.update(comps, t, place, stw);
     // Camera rides the swell.
     const dy = motion.heave - rigHeave;
@@ -549,6 +581,37 @@ renderer.setAnimationLoop(() => {
   status.frames++;
 });
 
+// ---------- equipment card ----------
+/** The parts each boat shows on the card, in order. "comms" is the satellite radio's live state. */
+const EQUIPMENT: Record<BoatKey, string[]> = {
+  kayak: ["thruster_port", "thruster_starboard", "rudder", "electronics_main", "electronics_safe", "comms", "beacon", "leak", "entangled"],
+  randolph: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak", "entangled"],
+};
+let lastEquip = "";
+function equipment(r: Replay, failed: Map<string, string>): void {
+  const comms = commsAt(r, hour);
+  const chips = EQUIPMENT[boatKey].map((p) => {
+    let bad: boolean;
+    let name: string;
+    if (p === "comms") {
+      bad = failed.has("comms_silent") || comms === "beacon" || comms === "silent";
+      name = PART_NAME.comms_silent;
+    } else if (p === "leak") {
+      bad = failed.has("leak_main_tub") || failed.has("leak_safe_tub");
+      name = PART_NAME.leak_main_tub;
+    } else {
+      bad = failed.has(p);
+      name = p === "beacon" && boatKey === "randolph" ? "Backup tracker" : PART_NAME[p] ?? p;
+    }
+    return `<span class="chip${bad ? " bad" : ""}" data-part="${p}"><i></i>${name}</span>`;
+  });
+  const html = chips.join("");
+  if (html !== lastEquip) {
+    lastEquip = html;
+    $("eq").innerHTML = html;
+  }
+}
+
 let lastHud = -1;
 function hud(r: Replay, stw: number, hs: number): void {
   const now = performance.now();
@@ -565,6 +628,8 @@ function hud(r: Replay, stw: number, hs: number): void {
   const bar = $("h-socbar");
   bar.style.width = `${Math.round((soc ?? 0) * 100)}%`;
   bar.style.background = soc == null ? "" : soc < 0.2 ? "var(--bad)" : soc < 0.4 ? "var(--warn)" : "var(--good)";
+  const sunNow = valueAt(r, r.ghi, hour);
+  $("h-charge").textContent = sunNow == null ? "" : sunNow > 50 ? "solar charging" : "night";
   $("h-stw").innerHTML = `${(stw * 1.94384).toFixed(1)}<small>kt</small>`;
   const u = valueAt(r, r.wind_u, hour);
   const v = valueAt(r, r.wind_v, hour);
