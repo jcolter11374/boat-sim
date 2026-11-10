@@ -215,6 +215,7 @@ try {
   await page.locator("#g-go").click();
   await page.waitForFunction(() => window.__replay.game.beat === "launch", null, { timeout: 60000 });
   await page.locator("#b-next").click();
+  await page.locator('#warp button[data-warp="24"]').click(); // it starts in real time
   const g0 = await page.evaluate(() => window.__replay.maxHour);
   await page.evaluate((h) => { window.__replay.setHour(h - 1); window.__replay.play(); }, g0);
   // Any beats near the end show and are dismissed; then the result card.

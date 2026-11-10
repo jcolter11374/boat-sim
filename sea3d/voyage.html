@@ -111,7 +111,7 @@
   #guesschip { display: none; margin-top: 8px; font-size: 12.5px; }
   #guesschip b { color: var(--orange); }
   body.game #boat, body.game #voyage, body.game #focus, body.game #ticks, body.game #toasts { display: none !important; }
-  body.game #guesschip { display: block; }
+  body.game #guesschip:not([hidden]) { display: block; }
   #o-postcard { display: none; }
   body.game #o-postcard { display: inline-block; background: var(--orange); color: #1a0d00; border-color: var(--orange); }
 </style>
@@ -123,7 +123,7 @@
   <p class="sub" id="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
   <select id="boat" aria-label="Boat"></select>
   <select id="voyage" aria-label="Voyage"></select>
-  <div id="guesschip">Your guess: <b id="g-chip"></b></div>
+  <div id="guesschip" hidden>Your prediction: <b id="g-chip"></b></div>
   <div id="focus" role="group" aria-label="Close-up follows" hidden>
     <span>Close-up:</span>
     <button data-lane="0" aria-pressed="true">Our kayak</button>
@@ -156,12 +156,12 @@
 <div id="transport" class="glass">
   <button id="play" aria-label="Play or pause">&#9654;</button>
   <div id="warp" role="group" aria-label="Time warp">
-    <button data-warp="0.000277778" title="Real time: one second of voyage per second">Real time</button>
+    <button data-warp="0.000277778" title="Real time: one second of voyage per second" aria-pressed="true">Real time</button>
     <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
     <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
     <button data-warp="1">1 h/s</button>
     <button data-warp="6">6 h/s</button>
-    <button data-warp="24" aria-pressed="true">1 day/s</button>
+    <button data-warp="24">1 day/s</button>
     <button data-warp="96">4 days/s</button>
   </div>
   <div id="scrubwrap"><div id="ticks"></div><input id="scrub" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the voyage"></div>
@@ -179,17 +179,19 @@
   <div class="panel glass">
     <div class="step on" id="g-step1">
       <h2>Pick your launch day</h2>
-      <p class="lead">Choose a boat and a day to drop it in the sea off Virginia. It will try to cross the Atlantic to a finish point off Portugal, through the real weather of spring 2020. Can you guess whether it makes it?</p>
+      <p class="lead">Pick a boat and the day it's dropped in the sea off Virginia, then watch it try to cross the Atlantic to the finish off Portugal, in the real weather of spring 2020. The voyage stops at each big moment to tell you what happened.</p>
       <div class="q">Which boat?</div>
       <div class="picks" id="g-boats"></div>
       <div class="q">Which launch day?</div>
       <div class="picks" id="g-dates"></div>
-      <div class="q">Will it make it to the finish?</div>
+      <div class="q">Want to guess first? <span class="muted">(optional)</span></div>
+      <p class="lead" style="margin:-4px 0 8px;font-size:12.5px">Some boats get all the way there; others are stopped by storms or breakdowns. Pick one and the end of the voyage tells you if you were right, or skip it.</p>
       <div class="picks guess" id="g-guess">
-        <button data-guess="yes">Yes, it'll make it<small>reaches the finish off Portugal</small></button>
-        <button data-guess="no">No, it won't<small>something stops it</small></button>
+        <button data-guess="yes">&#10003; It will make it<small>it reaches the finish off Portugal</small></button>
+        <button data-guess="no">&#10007; It won't make it<small>something stops it on the way</small></button>
       </div>
-      <button id="g-go" disabled>Launch!</button>
+      <button id="g-go" disabled>Launch and watch!</button>
+      <div class="muted" id="g-need" style="margin-top:6px">Pick a launch day and make your prediction to start.</div>
     </div>
   </div>
 </div>
