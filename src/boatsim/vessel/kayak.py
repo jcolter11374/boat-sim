@@ -315,8 +315,11 @@ class KayakVessel:
             # Rudder gone but autopilot alive: the tail still trims the wing, and the
             # boat weathervanes onto a reach ~110 deg off the wind (their sim), on
             # the side nearer its course (sail.unsteered_heading), so it keeps sailing.
-            steering = on and not state.damage.get("rudder")
-            sailing = on and not state.damage.get("sail") and not calm
+            # A dead electronics box (with a backup tracker still reporting) takes
+            # the autopilot with it: no rudder, no wing trim, so it drifts.
+            ap = on and not state.damage.get("electronics_main")
+            steering = ap and not state.damage.get("rudder")
+            sailing = ap and not state.damage.get("sail") and not calm
         else:
             can_steer = working >= (2 if state.damage.get("rudder") else 1)
             steering = es.drive_w >= self.min_steer_w and can_steer
