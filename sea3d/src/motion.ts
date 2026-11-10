@@ -210,6 +210,74 @@ export const RANDOLPH_REVB: HullParams = {
   source: "drone-boat docs/Simulation_RevB.md (mass, GM), docs/data/revB_gz_curve.csv (GZ, inertias), design.py (masses)",
 };
 
+// --- Randolph team Rev C (drone-boat simulator/drone_sim/design.py, MIT) -----
+// The Randolph team's Rev C (10 Nov 2026): foam-filled hull behind two
+// bulkheads, sealed battery box, twin rudders, D72 bulb, YB3 tracker and light
+// on the stern stub; 25.2 kg all up, waterline 0.098 m above the bottom. The GZ
+// curve is theirs (docs/data/revC_gz_curve.csv, free trim). Point masses are
+// their design.py equipment list plus Rev B's structure items above; they sum
+// to 25.26 kg. They haven't published Rev C inertias: ours are computed from
+// these masses and scaled by Rev B's published / computed ratio (GUESS).
+export const REVC_MASS_ITEMS: MassItem[] = [
+  [9.0, -0.436, "lead bulb, 0.32 m x 72 mm"],
+  [0.9, -0.2, "keel fin and rod"],
+  [0.9, -0.07, "two rudders and stocks"],
+  [2.4, 0.12, "hull and deck laminate, ~1.5 m^2 at 1.6 kg/m^2"],
+  [2.35, 0.65, "wing rig with counterweight, 30 x 26 mm spar"],
+  [2.0, 0.1, "battery"],
+  [1.1, 0.1, "electronics box"],
+  [1.0, 0.235, "solar panels"],
+  [0.45, 0.13, "mast tube and housing"],
+  [0.5, 0.14, "two rudder servos and trunks"],
+  [0.9, 0.42, "stern stub, vane, antenna, reflector"],
+  [0.5, 0.02, "keel box and backing"],
+  [0.6, 0.12, "misc fittings"],
+  [1.65, 0.13, "XPS foam fill, ~59 L"],
+  [0.2, 0.12, "two bulkheads"],
+  [0.35, 0.1, "sealed battery box"],
+  [0.4, 0.48, "YB3 tracker and platform"],
+  [0.06, 0.6, "all-round light"],
+];
+const REVC_X = [0.74, 0.74, 1.4, 0.72, 0.6, 0.87, 1.1, 1.06, 0.6, 1.36, 1.53, 0.745, 0.8, 0.8, 0.78, 0.87, 1.53, 1.53];
+const REVC_WATERLINE = 0.098;
+const REVC_SPREAD = [0.072, 0.43, 0.23, 0.45, 1.0, 0, 0, 0.4, 0, 0, 0, 0, 0, 0.23, 0.2, 0, 0, 0];
+const revcMass = massProperties(REVC_MASS_ITEMS, REVC_SPREAD);
+// GM from the curve's first step: 0.0163 m / sin 5 deg.
+export const REVC_GM = 0.187;
+const revcGz: [number, number][] = [
+  [0, 0.0], [5, 0.0163], [10, 0.0325], [15, 0.0486], [20, 0.0644], [25, 0.0798], [30, 0.0948], [35, 0.1092],
+  [40, 0.1231], [45, 0.1352], [50, 0.145], [55, 0.1524], [60, 0.1579], [65, 0.1609], [70, 0.1624], [75, 0.1629],
+  [80, 0.1639], [85, 0.1802], [90, 0.1791], [95, 0.2898], [100, 0.3672], [105, 0.3782], [110, 0.3722], [115, 0.3586],
+  [120, 0.3402], [125, 0.318], [130, 0.2927], [135, 0.2646], [140, 0.2347], [145, 0.2033], [150, 0.171], [155, 0.1383],
+  [160, 0.1061], [165, 0.0753], [170, 0.0471], [175, 0.0225], [180, 0.0],
+];
+// Rev B's published Ixx over the value its point masses give: how much the
+// spread-out structure adds that point masses miss (applied to Rev C, GUESS).
+const IXX_FIT = 2.487 / revbMass.rollInertia;
+
+export const RANDOLPH_REVC: HullParams = {
+  name: "Randolph Rev C",
+  mass: 25.2,
+  waterlineLength: 1.43, // their simulator at the 98 mm waterline
+  waterlineBeam: 0.34, // their randolph_rev_c.yaml
+  waterplaneCoeff: 0.68, // GUESS: as Rev B
+  gzTable: revcGz,
+  rollInertia: Math.round(revcMass.rollInertia * IXX_FIT * 1000) / 1000, // GUESS: ~2.86
+  pitchInertia: 5.07, // GUESS: point masses (x and z) scaled by Rev B's Iyy fit
+  cgBelowWaterline: REVC_WATERLINE - revcMass.cg,
+  cgX: REVC_X.reduce((s, x, i) => s + x * REVC_MASS_ITEMS[i][0], 0) / revcMass.mass,
+  addedHeave: 1.0,
+  addedPitch: 0.5,
+  addedRoll: 0.15,
+  zetaHeave: 0.25,
+  zetaPitch: 0.25,
+  zetaRoll: 0.12,
+  // as Rev B, with the CG ~0.07 m above the bottom and the D72 bulb (0.32 x 0.072 m)
+  rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.16, -0.07, 0.43 - 0.07) + 0.023 * 0.5 ** 3),
+  source:
+    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), simulator/drone_sim/design.py (masses); inertias GUESS",
+};
+
 /** Righting arm (m) at heel phi (rad), any angle; odd and 360-periodic. */
 export function gz(p: HullParams, phi: number): number {
   let a = (((phi * 180) / Math.PI + 180) % 360 + 360) % 360 - 180; // -180..180

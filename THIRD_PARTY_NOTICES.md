@@ -17,7 +17,11 @@ model in `src/boatsim/vessel/sail.py` (foil curve, wind at wing height, tacking
 rules) follows their `simulator/drone_sim/vpp.py` and `autopilot.py`, and
 `configs/randolph_rev_b.yaml` (our model of their boat) takes its numbers from
 their `simulator/drone_sim/design.py`, `failures.py`, `build-files/source/design.py`
-and docs. All under the same licence:
+and docs. `configs/randolph_rev_c.yaml` was written by the Randolph team in our
+format (their `designs/boat-sim/randolph_rev_c.yaml`, 10 Nov 2026, shared on #50) and is
+kept as they wrote it; the Rev C righting-arm curve and point masses in
+`sea3d/src/motion.ts` come from their `docs/data/revC_gz_curve.csv` and
+`simulator/drone_sim/design.py`. All under the same licence:
 
 ```
 MIT License
