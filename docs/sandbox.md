@@ -21,7 +21,7 @@ From the `sandbox-data` release (workflow "Sandbox data", publish ticked):
 
 | File | Size | What |
 |---|---|---|
-| `forcing_2020.npz` | ~13 MB | The season's forcing bundle (below) |
+| `forcing_2020.npz` | 18 MB | The season's forcing bundle (below) |
 | `boatsim.zip` | ~0.25 MB | `src/boatsim`, the design files and the land mask |
 | `reference.json` | small | Reference voyages run in Node + Pyodide |
 
