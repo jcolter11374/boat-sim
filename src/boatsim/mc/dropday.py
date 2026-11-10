@@ -104,7 +104,9 @@ def forecast_features(env, design, start: datetime, point, land, seed: int) -> d
     u = float(np.mean([w.wind_u for w in ws]))
     v = float(np.mean([w.wind_v for w in ws]))
     b = math.radians(ONSHORE_BEARING)
+    start_km = float(DB.distance_to_land_km([point[0]], [point[1]])[0])
     return {
+        "fc_start_land_km": start_km,
         "fc_aground7": bool(r["aground"]),
         "fc_min_land_km7": float(near.min()) if len(near) else math.nan,
         "fc_end_lat7": r["end_lat"],
@@ -261,11 +263,20 @@ def rule_table(base: pd.DataFrame, rules: list[tuple[str, pd.Series]]) -> list[s
     return lines
 
 
+WIND_RULE = "forecast 5-day mean wind blows toward the coast (WSW) at over 0 m/s"
+
+
 def candidate_rules(b: pd.DataFrame) -> list[tuple[str, pd.Series]]:
-    rules = []
-    for km in (25, 50, 75):
+    """No-go rules, each a True-means-don't-drop series. Thresholds are round numbers
+    chosen before seeing results, not tuned."""
+    start = b["fc_start_land_km"] if "fc_start_land_km" in b else pd.Series(np.nan, b.index)
+    rules = [("forecast 7-day dead drift comes within 25 km of land", b["fc_min_land_km7"] < 25)]
+    for km in (10, 25):
         rules.append(
-            (f"forecast 7-day dead drift comes within {km} km of land", b["fc_min_land_km7"] < km)
+            (
+                f"forecast 7-day dead drift ends up {km} km nearer land than the drop point",
+                start - b["fc_min_land_km7"] > km,
+            )
         )
     rules.append(("forecast 7-day dead drift runs ashore", b["fc_aground7"]))
     for ms in (0.0, 2.0, 4.0):
@@ -275,14 +286,41 @@ def candidate_rules(b: pd.DataFrame) -> list[tuple[str, pd.Series]]:
                 b["fc_wind_onshore5"] > ms,
             )
         )
-    for km in (25, 50):
+    rules.append(
+        (
+            "wind toward the coast OR forecast drift runs ashore",
+            (b["fc_wind_onshore5"] > 0) | b["fc_aground7"].fillna(False).astype(bool),
+        )
+    )
+    for km in (10, 25):
         rules.append(
             (
-                f"(perfect forecast, upper bound) 7-day drift comes within {km} km of land",
-                b["tr_min_land_km7"] < km,
+                f"(perfect forecast, upper bound) 7-day drift ends up {km} km nearer land",
+                start - b["tr_min_land_km7"] > km,
             )
         )
     return rules
+
+
+def rule_by_year(b: pd.DataFrame, nogo: pd.Series) -> list[str]:
+    """Does a rule work every year, or only on average?"""
+    nogo = nogo.fillna(False).astype(bool)
+    lines = [
+        (
+            "| Year | Ran ashore, no rule | Groundings avoided | Days turned away "
+            "| Ran ashore on days it allows |"
+        ),
+        "|---|---|---|---|---|",
+    ]
+    for y in sorted(b["year"].unique()):
+        m = b["year"] == y
+        g, n = b[m], nogo[m]
+        bad = int(g["aground"].sum())
+        lines.append(
+            f"| {y} | {_pct(bad, len(g))} | {_pct(int((n & g['aground']).sum()), bad)} "
+            f"| {_pct(int(n.sum()), len(g))} | {_pct(int(g.loc[~n, 'aground'].sum()), int((~n).sum()))} |"
+        )
+    return lines
 
 
 def report_markdown(df: pd.DataFrame) -> str:
@@ -361,7 +399,7 @@ def report_markdown(df: pd.DataFrame) -> str:
         tab = a.groupby(["point", "area"]).agg(n=("aground", "size"), day=("aground_day", "median"))
         L += ["| Start | Coast | Boats | Median days to ashore |", "|---|---|---|---|"]
         for (p, ar), r in tab.iterrows():
-            L.append(f"| {p} | {ar} | {r.n} | {r.day:.0f} |")
+            L.append(f"| {p} | {ar} | {int(r.n)} | {r.day:.0f} |")
     # 2023 side by side
     L += [
         "",
@@ -417,7 +455,10 @@ def report_markdown(df: pd.DataFrame) -> str:
         if b.empty or "fc_min_land_km7" not in b:
             continue
         L += [f"### {name}, all years", ""]
-        L += rule_table(b, candidate_rules(b))
+        rules = candidate_rules(b)
+        L += rule_table(b, rules)
+        L += ["", f'Year by year, rule "{WIND_RULE}":', ""]
+        L += rule_by_year(b, dict(rules)[WIND_RULE])
         L.append("")
     return "\n".join(L) + "\n"
 

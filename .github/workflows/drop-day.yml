@@ -79,6 +79,8 @@ jobs:
           merge-multiple: true
       - name: Combine the years
         run: python -m boatsim.mc.dropday report runs/in/dropday_*.csv --out runs/dropday
+      - name: Print the combined table (artifacts are not readable from thread sandboxes)
+        run: cat runs/dropday/dropday_all.csv
       - name: Show the report on the run page
         run: cat runs/dropday/dropday_report.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
