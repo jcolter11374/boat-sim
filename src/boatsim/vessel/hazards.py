@@ -159,7 +159,8 @@ class HazardParams:
     electronics_common_cause: float = 0.3
     # Boxes fitted: 2 (ours, above), or 1 for a single-box boat such as the
     # Randolph Rev B: one box holds autopilot and radio, so any electronics or
-    # unrecovered software failure is a loss. It rolls the common-cause die, so
+    # unrecovered software failure leaves it silent and uncontrolled: a loss,
+    # unless a working backup tracker keeps reporting (then it drifts, tracked). It rolls the common-cause die, so
     # paired runs against our kayak stay in step (hazards.SLOT).
     electronics_boxes: int = 2
     # R2 comms_silent (new): planning 0.0011, historical 0.0022, x (1 + Hs/4),
@@ -584,8 +585,12 @@ def sample_failures(
         if roll("electronics_common", rate) and not broken("electronics_main"):
             fail("electronics_main", "the one electronics box: electronics or software failure")
             out.failed_parts.append("electronics_safe")  # no second box to fall back on
-            lose("electronics box dead: silent and uncontrolled")
-            return out
+            if broken("beacon"):  # no working backup tracker (or none fitted)
+                lose("electronics box dead: silent and uncontrolled")
+                return out
+            # A backup tracker in its own compartment (Rev B's YB3) keeps reporting:
+            # the boat drifts on, uncontrolled but tracked, and the runner scores it
+            # as usual (#153). The tracker can still fail later (beacon die below).
     else:
         common = beta * p.electronics_per_day * early
         if wet:
