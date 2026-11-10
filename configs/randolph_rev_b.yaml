@@ -16,6 +16,7 @@ hull:
   length_m: 1.50             # design.py
   beam_m: 0.40               # design.py
   mass_kg: 20.8              # their Simulation_RevB.md, all-up
+  displacement_ref_kg: 20.8  # weight the drag numbers below are for (mass link: hull.py)
   self_righting_dome: false  # no dome: righting arm stays positive to 180 deg (revB_gz_curve.csv)
   keel_bulb_kg: 8.2          # README
   keel_bulb_depth_m: 0.43    # design.py: fin span below the hull bottom
@@ -24,6 +25,7 @@ hull:
   wetted_area_m2: 0.68       # geometry: hull 0.44 + fin 0.14 + rudder 0.055 + bulb 0.05
   form_factor: 1.15          # design.py hydro.form_factor
   wave_making_frac: 0.05     # GUESS: their Froude-number term is tiny at 0.3-0.6 m/s
+  waterplane_area_m2: 0.36   # GUESS: ~0.7 x 1.41 m waterline x ~0.36 m waterline beam
   # Windage: their VPP uses Cd 0.9 side-on (0.35 of that end-on) on hull plus
   # 0.08 m^2 of fittings, in 0.75 of the wind; folded into the coefficients here.
   air_side_area_m2: 0.30     # geometry: topsides 0.22 m^2 + their 0.08 m^2

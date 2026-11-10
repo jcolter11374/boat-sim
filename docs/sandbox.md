@@ -94,16 +94,26 @@ change nothing until the physics for them lands; they stay visible.
 | Thrusters | two-t200, one-t200 | thruster count, 50 W burst each | wired |
 | Solar | solar-200/250/300 | `power.solar_wp` | wired (300: est) |
 | Batteries | one-50ah 640, two-50ah 1280, two-100ah 2560 Wh | `power.battery_wh` | wired (2560: est) |
-| Charge controllers | one, two | none | no effect yet |
+| Charge controllers | one, two | weight only (failure not modelled yet) | wired |
 | Autopilot | two-box, one-box | `electronics_boxes`, hotel load | wired (est) |
 | Satellite modem | rockblock-9603n | none | fixed |
 | Backup beacon | smartone-solar, none | `comms.beacon` | wired |
 | AIS | emtrak-b921, dy-ait1500, none | hotel load; none: ships avoid as with a dead AIS | wired (est) |
 | Radar reflector | two models | none | no effect yet |
 | Navigation light | hella-naviled-360 | none | fixed |
-| Keel bulb | 50 kg new or scrap, 40 kg | none | no effect yet (the mass link is next) |
+| Keel bulb | 50 kg new or scrap, 40 kg | weight; 40 kg: `p_inverted_stuck` x (50/40)^2, GUESS | wired (40 kg: est) |
 | Antifouling | micron-csc, none | `hull.fouling_frac_per_day` (none: x2, GUESS) | wired (est) |
 | Spares | three sets | none | no effect yet (trials only) |
 
 The hotel load is the design's 85 Wh/day with the default autopilot (31 Wh)
 and AIS (36 Wh) swapped for the chosen ones' catalog figures.
+
+**Weight.** Every option's catalog `kg` (against the default) is added to
+`hull.mass_kg`. The mass link in `vessel/hull.py` turns weight into drag: the
+boat sinks by the extra mass over (water density x waterplane area, GUESS 1.5 m^2
+for the kayak), the wetted area grows by that band around the waterline, and
+wave-making grows with displacement. At the design weight
+(`hull.displacement_ref_kg`) nothing changes, so the kayak and Rev B baselines
+are exactly as before. The big batteries (+10 kg) add about 3 % calm-water drag;
+the 40 kg bulb takes about 3 % off but makes a knockdown that leaves the boat
+upside down more likely.

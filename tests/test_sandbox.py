@@ -29,7 +29,7 @@ def test_the_default_build_is_the_kayak_file_untouched():
     assert C.design_changes({"cruise_w": 25}) == ()
     assert C.design_for({}) == load_design(C.KAYAK)
     # Options the simulator doesn't model change nothing either, and share the id.
-    nothing = {"mppt": "one-mppt", "radar": "davis-echomaster", "lead": "lead-40"}
+    nothing = {"radar": "davis-echomaster", "lead": "lead-50-scrap", "spares": "none"}
     assert C.design_changes(nothing) == ()
     assert C.grid_id(nothing) == "k-p25"
 
@@ -69,8 +69,8 @@ def test_every_slot_has_its_default_and_a_badge():
 
 def test_odds_grid_is_twenty_catalog_builds_and_nearest_finds_them():
     ids = [C.grid_id(g) for g in C.GRID]
-    assert len(set(ids)) == len(ids) == 18
-    assert len(Y.BUILDS) == 20 and Y.CURRENT in Y.BUILDS
+    assert len(set(ids)) == len(ids) == 19
+    assert len(Y.BUILDS) == 21 and Y.CURRENT in Y.BUILDS
     for g in C.GRID:
         assert C.nearest(g) == (C.grid_id(g), True)
     assert C.nearest({"ais": "none", "cruise_w": 20}) in (
@@ -226,5 +226,18 @@ def test_slot_table_lists_every_option_with_its_effect():
     t = C.slot_table()
     assert [s["id"] for s in t] == list(C.SLOTS)
     ais = {o["id"]: o for o in next(s for s in t if s["id"] == "ais")["opts"]}
-    assert ais["none"]["sim"] == ["hazards.p_avoid_with_ais", "electronics.hotel_load_wh_per_day"]
+    assert ais["none"]["sim"] == [
+        "hazards.p_avoid_with_ais", "electronics.hotel_load_wh_per_day", "hull.mass_kg",
+    ]  # fmt: skip
+    assert ais["none"]["kg"] == -1.2
     json.dumps(t)
+
+
+def test_weight_from_the_catalog_reaches_the_hull():
+    base = load_design(C.KAYAK)
+    heavy = C.design_for({"bat": "two-100ah"})
+    assert heavy.hull["mass_kg"] == base.hull["mass_kg"] + 10
+    light = C.design_for({"lead": "lead-40", "ais": "none"})
+    assert light.hull["mass_kg"] == base.hull["mass_kg"] - 11.2
+    assert light.hazards["p_inverted_stuck"] > base.hazards["p_inverted_stuck"]
+    assert C.matters("mppt", "one-mppt") and not C.matters("lead", "lead-50-scrap")

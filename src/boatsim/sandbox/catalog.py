@@ -40,17 +40,19 @@ BASE_AIS_WH = 36
 
 @dataclass(frozen=True)
 class Option:
-    changes: tuple = ()  # (section, key, value); hotel load is handled separately
+    changes: tuple = ()  # (section, key, value); hotel load and weight are added up separately
     effect: str = "wired"  # wired | no effect yet | fixed
     est: bool = False
     basis: str = ""
     wh: float | None = None  # brain/AIS daily energy (catalog), for the hotel load
+    kg: float = 0.0  # weight against the default option (catalog), for the mass link
 
 
-def _thr(n: int) -> Option:
+def _thr(n: int, kg: float = 0.0) -> Option:
     return Option(
         (("propulsion", "thruster_count", n), ("propulsion", "max_drive_w", 50 * n)),
         basis="Blue Robotics T200 datasheet, 50 W burst each",
+        kg=kg,
     )
 
 
@@ -58,29 +60,37 @@ def _no_effect(why: str) -> Option:
     return Option(effect="no effect yet", basis=why)
 
 
+MPPT_BASIS = "weight only: charge-controller failure isn't modelled yet"
+BULB_BASIS = "weight from the catalog; how a lighter bulb rights the boat is a GUESS"
+# GUESS: the bulb's righting moment goes with its weight, and the odds of
+# staying upside down after a knockdown with the square of the shortfall.
+P_STUCK_40KG = round(4.0e-5 * (50 / 40) ** 2, 9)
+
 SLOTS: dict[str, dict[str, Option]] = {
-    "thr": {"two-t200": _thr(2), "one-t200": _thr(1)},
+    "thr": {"two-t200": _thr(2), "one-t200": _thr(1, -0.45)},
     "sol": {
         "solar-250": Option((("power", "solar_wp", 250),), basis="panel datasheets"),
-        "solar-200": Option((("power", "solar_wp", 200),), basis="panel datasheets"),
+        "solar-200": Option((("power", "solar_wp", 200),), basis="panel datasheets", kg=-1.2),
         "solar-300": Option(
             (("power", "solar_wp", 300),),
             est=True,
             basis="needs a panel that fits the deck; layout not checked",
+            kg=1.2,
         ),
     },
     "bat": {
         "two-50ah": Option((("power", "battery_wh", 1280),), basis="2 x 12.8 V 50 Ah"),
-        "one-50ah": Option((("power", "battery_wh", 640),), basis="1 x 12.8 V 50 Ah"),
+        "one-50ah": Option((("power", "battery_wh", 640),), basis="1 x 12.8 V 50 Ah", kg=-5.1),
         "two-100ah": Option(
             (("power", "battery_wh", 2560),),
             est=True,
             basis="2 x 12.8 V 100 Ah; fit in the hull not checked",
+            kg=10.0,
         ),
     },
     "mppt": {
-        "two-mppt": _no_effect("charge-controller failure isn't modelled yet"),
-        "one-mppt": _no_effect("charge-controller failure isn't modelled yet"),
+        "two-mppt": Option(basis=MPPT_BASIS),
+        "one-mppt": Option(basis=MPPT_BASIS, kg=-0.5),
     },
     "brain": {
         "two-box": Option(  # the hazard model's default: two boxes
@@ -93,23 +103,23 @@ SLOTS: dict[str, dict[str, Option]] = {
             est=True,
             basis="box failure rates are GUESSes (Randolph's table)",
             wh=27,
+            kg=-0.4,
         ),
     },
     "sat": {"rockblock-9603n": Option(effect="fixed", basis="RockBLOCK 9603N datasheet")},
     "beacon": {
-        "smartone-solar": Option(
-            est=True, basis="beacon failure rate is a GUESS"
-        ),  # fitted by default
-        "none": Option((("comms", "beacon", False),), basis="no backup tracker"),
+        "smartone-solar": Option(est=True, basis="beacon failure rate is a GUESS"),  # default
+        "none": Option((("comms", "beacon", False),), basis="no backup tracker", kg=-0.3),
     },
     "ais": {
         "emtrak-b921": Option(est=True, basis="ships' avoidance odds are a GUESS", wh=36),
-        "dy-ait1500": Option(est=True, basis="ships' avoidance odds are a GUESS", wh=40),
+        "dy-ait1500": Option(est=True, basis="ships' avoidance odds are a GUESS", wh=40, kg=0.1),
         # No AIS: ships avoid the boat only as often as without a working AIS today.
         "none": Option(
             (("hazards", "p_avoid_with_ais", 0.95),),
             basis="design doc: losing AIS roughly doubles collision risk",
             wh=0,
+            kg=-1.2,
         ),
     },
     "radar": {
@@ -118,9 +128,11 @@ SLOTS: dict[str, dict[str, Option]] = {
     },
     "light": {"hella-naviled-360": Option(effect="fixed", basis="design doc, 0.5 W at night")},
     "lead": {
-        "lead-50-new": _no_effect("weight doesn't change speed or stability yet"),
-        "lead-50-scrap": _no_effect("weight doesn't change speed or stability yet"),
-        "lead-40": _no_effect("weight doesn't change speed or stability yet"),
+        "lead-50-new": Option(basis="design doc: 50 kg bulb"),
+        "lead-50-scrap": Option(basis="same weight as new; only the price differs"),
+        "lead-40": Option(
+            (("hazards", "p_inverted_stuck", P_STUCK_40KG),), est=True, basis=BULB_BASIS, kg=-10.0
+        ),
     },
     "paint": {
         "micron-csc": Option(
@@ -205,6 +217,9 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
     if d_wh:
         hotel = base.electronics["hotel_load_wh_per_day"] + d_wh
         changes.append(("electronics", "hotel_load_wh_per_day", hotel))
+    d_kg = sum(SLOTS[slot][opt].kg for slot, opt in picked.items())
+    if d_kg:  # the mass link (vessel/hull.py) turns weight into draft and drag
+        changes.append(("hull", "mass_kg", round(base.hull["mass_kg"] + d_kg, 3)))
     # Leave out changes that set what the kayak already has, so the default build
     # is the design file untouched.
     return tuple((s, k, v) for s, k, v in changes if getattr(base, s).get(k, _MISSING) != v)
@@ -246,6 +261,7 @@ GRID: tuple[dict, ...] = (
     {"beacon": "none"},
     {"ais": "none"},
     {"paint": "none"},
+    {"lead": "lead-40"},
     {"brain": "one-box", "beacon": "none"},
     {"sol": "solar-300", "bat": "two-100ah"},
     {"sol": "solar-300", "bat": "two-100ah", "cruise_w": 30},
@@ -263,28 +279,34 @@ GRID: tuple[dict, ...] = (
 )
 
 
+def matters(slot: str, opt: str) -> bool:
+    """Does this option run differently from the slot's default?"""
+    o, d = SLOTS[slot][opt], SLOTS[slot][DEFAULTS[slot]]
+    return opt != DEFAULTS[slot] and (
+        o.changes != d.changes or o.kg != d.kg or (o.wh or 0) != (d.wh or 0)
+    )
+
+
 def grid_id(choices: dict | None) -> str:
-    """Stable id of a kayak build: 'k-p25' plus each non-default choice that the
-    simulator models, e.g. 'k-p15-thr.one-t200'. Options with no effect yet are
-    left out, so builds that run the same are the same id."""
+    """Stable id of a kayak build: 'k-p25' plus each choice that runs differently
+    from the default, e.g. 'k-p15-thr.one-t200'. Builds that run the same have
+    the same id."""
     picked, cruise = normalise(choices)
-    parts = [
-        f"{slot}.{opt}"
-        for slot, opt in picked.items()
-        if opt != DEFAULTS[slot] and SLOTS[slot][opt].effect == "wired"
-    ]
+    parts = [f"{slot}.{opt}" for slot, opt in picked.items() if matters(slot, opt)]
     return "-".join([f"k-p{cruise}", *parts])
 
 
 def nearest(choices: dict | None) -> tuple[str, bool]:
     """(grid id, exact) of the grid build closest to these choices: fewest
-    modelled slots that differ, then the closest cruise power."""
+    slots that run differently, then the closest cruise power."""
     picked, cruise = normalise(choices)
     want = grid_id(choices)
 
     def dist(g):
         p, c = normalise(g)
-        slots = sum(1 for s in SLOTS if p[s] != picked[s] and SLOTS[s][picked[s]].effect == "wired")
+        slots = sum(
+            1 for s in SLOTS if p[s] != picked[s] and (matters(s, p[s]) or matters(s, picked[s]))
+        )
         return (slots, abs(c - cruise))
 
     best = min(GRID, key=dist)
@@ -306,7 +328,9 @@ def slot_table() -> list[dict]:
                     "est": o.est,
                     "basis": o.basis,
                     "sim": [f"{s}.{k}" for s, k, _ in o.changes]
-                    + (["electronics.hotel_load_wh_per_day"] if o.wh is not None else []),
+                    + (["electronics.hotel_load_wh_per_day"] if o.wh is not None else [])
+                    + (["hull.mass_kg"] if o.kg else []),
+                    "kg": o.kg,
                 }
                 for oid, o in opts.items()
             ],

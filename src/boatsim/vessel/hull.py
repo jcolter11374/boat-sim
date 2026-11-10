@@ -22,6 +22,13 @@ What is modelled, and why it is this simple:
   craft in search-and-rescue leeway tables.
 * Stokes drift: waves carry floating things slowly downwave. The ocean current
   products (GLORYS) do not include it, so it is added here.
+* Weight (the mass link): the drag numbers above are for the boat at its
+  reference weight (hull.displacement_ref_kg). Loaded heavier, it sinks deeper
+  by the extra mass over (water density x waterplane area), which adds a band of
+  wetted skin around the waterline; wave-making grows with displacement. Lighter
+  works the other way. With no reference weight, or the weight at it, nothing
+  changes. Waterline length, windage and sideways drag are held fixed (the
+  changes are a few millimetres of draft).
 """
 
 from __future__ import annotations
@@ -63,12 +70,36 @@ class HullParams:
     # Drift attitude: angle between heading and the wind's "towards" direction
     drift_heading_offset_deg: float = 90.0  # GUESS: lies beam-on to the wind
     stokes_drift: bool = True
+    # Mass link (0 = off): waterplane area, and waterline girth per metre of
+    # waterline length (both sides plus the ends' flare: a little over 2).
+    waterplane_area_m2: float = 0.0
+    waterline_girth_factor: float = 2.1  # GUESS
 
     @classmethod
     def from_config(cls, hull: dict) -> HullParams:
-        """Build from the `hull:` block of a design YAML. Unknown keys are ignored."""
+        """Build from the `hull:` block of a design YAML. Unknown keys are ignored.
+        If hull.mass_kg differs from hull.displacement_ref_kg, the wetted area and
+        wave-making are moved to that weight (see with_mass)."""
         fields = cls.__dataclass_fields__
-        return cls(**{k: v for k, v in hull.items() if k in fields})
+        p = cls(**{k: v for k, v in hull.items() if k in fields})
+        ref, mass = hull.get("displacement_ref_kg"), hull.get("mass_kg")
+        if ref and mass is not None and mass != ref:
+            p = p.with_mass(float(mass), float(ref))
+        return p
+
+    def with_mass(self, mass_kg: float, ref_kg: float) -> HullParams:
+        """These drag numbers (worked out at ref_kg) moved to mass_kg."""
+        if self.waterplane_area_m2 <= 0.0 or mass_kg == ref_kg:
+            return self
+        from dataclasses import replace
+
+        sink = (mass_kg - ref_kg) / (RHO_WATER * self.waterplane_area_m2)  # m deeper
+        girth = self.waterline_girth_factor * self.waterline_length_m
+        area = max(self.wetted_area_m2 + girth * sink, 0.5 * self.wetted_area_m2)
+        # Wave-making drag goes with displacement at a given speed; it is stored
+        # as a fraction of friction drag, which goes with wetted area.
+        wave = self.wave_making_frac * (mass_kg / ref_kg) * (self.wetted_area_m2 / area)
+        return replace(self, wetted_area_m2=area, wave_making_frac=wave)
 
 
 def ittc57_cf(speed: float, length: float) -> float:
