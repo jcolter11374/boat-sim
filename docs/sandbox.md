@@ -75,10 +75,15 @@ The "Sandbox data" workflow runs the reference builds twice on the same bundle:
 1. in CPython, and
 2. in Node + Pyodide (`tools/pyodide/reference.mjs`, from `boatsim.zip`).
 
-They must agree on outcome, days and event count (`python -m boatsim.sandbox
-compare`). Positions differ in the last bits because numpy's maths libraries
-differ between the two. The Pyodide run is the same WebAssembly the browser
-runs, so a browser run must match `reference.json` **exactly**:
+Across the two runtimes, results are **not** guaranteed to match. numpy's maths
+libraries differ in the last bit between them, and over 60 to 150 days at sea a
+last-bit difference can tip a voyage: a different replan, a breaker that does or
+doesn't roll the boat. In the first run with currents, 8 of 12 voyages agreed on
+outcome, days and events, with end positions within 1e-8 deg, and 4 diverged.
+So the workflow reports CPython vs Pyodide (`python -m boatsim.sandbox compare`)
+but doesn't fail on it, and it checks that a second Pyodide run is identical.
+The Pyodide run is the same WebAssembly the browser runs, so a browser run must
+match `reference.json` **exactly**:
 
 ```
 python -m boatsim.sandbox compare reference.json browser.json --exact

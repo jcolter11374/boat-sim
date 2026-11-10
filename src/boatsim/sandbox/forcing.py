@@ -51,8 +51,8 @@ SCALES = {
     "cloud_fraction": 0.02,
     "air_temp": 0.1,
     "clearness": 0.001,
-    "current_u": 0.001,
-    "current_v": 0.001,
+    "current_u": 0.01,  # 1 cm/s: GLORYS itself is uncertain by ~10 cm/s; 1 mm/s doubled the bundle
+    "current_v": 0.01,
     "ship_density": None,  # float32 (spans orders of magnitude)
 }
 
