@@ -164,7 +164,7 @@ let focus = 0; // which lane the close-up and the cards follow
 let rep: Replay | null = null; // lanes[focus].rep
 let hour = 0;
 let playing = false;
-let warp = 24; // voyage hours per real second
+let warp = 1 / 3600; // voyage hours per real second: real time to start (John)
 let ended = false;
 // The launch-day game (?mode=game).
 let beats: Beat[] = [];
@@ -172,7 +172,8 @@ let beatIdx = 0;
 let beatShown = false;
 let beatLeft = 0; // seconds of frames left before the beat goes away (frame time, so slow computers still get to read it)
 const BEAT_S = 7; // seconds a story beat stays up before the voyage carries on
-let guess: boolean | null = null;
+let guess: boolean | null = null; // the optional guess: true = "it will make it"
+let gamePicked = false; // a voyage picked in the game is on screen
 /** The page's clock runs until the longer voyage ends. */
 const endHour = () => lanes.reduce((m, l) => Math.max(m, lastHour(l.rep)), 0);
 const status = {
@@ -278,13 +279,21 @@ function verdict(r: Replay): string {
 }
 function showOutcome(): void {
   if (!rep) return;
-  if (GAME && guess !== null) {
-    const v = guessVerdict(rep, guess);
+  if (GAME && gamePicked) {
     $("o-kicker").textContent = `${boatName(rep)} · launched ${fmtDay(rep.start)}`;
-    $("o-title").textContent = v.title;
-    $("o-title").style.color = v.right ? "var(--good)" : "var(--warn)";
-    $("o-text").textContent = `${outcomeLine(rep)} ${v.text}`;
-    status.game.result = v.right ? "right" : "wrong";
+    if (guess !== null) {
+      const v = guessVerdict(rep, guess);
+      $("o-title").textContent = v.title;
+      $("o-title").style.color = v.right ? "var(--good)" : "var(--warn)";
+      $("o-text").textContent = `${outcomeLine(rep)} ${v.text}`;
+      status.game.result = v.right ? "right" : "wrong";
+    } else {
+      const [title, colour] = OUTCOME[rep.outcome] ?? [rep.outcome, "var(--ink)"];
+      $("o-title").textContent = title;
+      $("o-title").style.color = colour;
+      $("o-text").textContent = outcomeLine(rep);
+      status.game.result = "seen";
+    }
   } else if (lanes.length > 1) {
     // Race: who finished, and who finished first.
     const done = lanes.filter((l) => l.rep.outcome === "arrived").sort((a, b) => a.rep.days - b.rep.days);
@@ -339,7 +348,7 @@ async function load(files: string[], pick = files[0], autoplay = true): Promise<
           : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
     setFocus(0, true);
     ticks();
-    beats = GAME && guess !== null ? storyBeats(lanes[0].rep) : []; // none behind the picker
+    beats = GAME && gamePicked ? storyBeats(lanes[0].rep) : []; // none behind the picker
     seek(0);
     setPlaying(autoplay);
     status.ready = true;
@@ -679,7 +688,9 @@ function showBeat(b: Beat): void {
   box.style.setProperty("--c", TONE_COLOUR[b.tone]);
   $("b-when").textContent = b.h < 1 ? "Day 0" : `Day ${(b.h / 24).toFixed(1)} · ${rep ? fmtDay(new Date(utc(rep.start) + b.h * 3600e3).toISOString()) : ""}`;
   $("b-title").textContent = b.title;
-  $("b-text").textContent = b.text;
+  // Real time is the default (John): say how to speed up, or the next beat is weeks away.
+  $("b-text").textContent =
+    b.kind === "launch" && warp < 1 ? `${b.text} It's running in real time now: use the speed buttons at the bottom to fast-forward.` : b.text;
   box.classList.add("show");
   status.game.beats.push(b.kind);
   status.game.beat = b.kind;
@@ -736,11 +747,13 @@ function drawPicker(): void {
   document.querySelectorAll<HTMLButtonElement>("#g-guess button").forEach((b) =>
     b.setAttribute("aria-pressed", String(pickGuess !== null && (b.dataset.guess === "yes") === pickGuess)),
   );
-  $<HTMLButtonElement>("g-go").disabled = !(pickDate && pickGuess !== null);
+  $<HTMLButtonElement>("g-go").disabled = !pickDate;
+  $("g-need").textContent = pickDate ? "" : "Pick a launch day to start.";
 }
 document.querySelectorAll<HTMLButtonElement>("#g-guess button").forEach((b) =>
   b.addEventListener("click", () => {
-    pickGuess = b.dataset.guess === "yes";
+    const g = b.dataset.guess === "yes";
+    pickGuess = pickGuess === g ? null : g; // click again to take the guess back
     drawPicker();
   }),
 );
@@ -753,15 +766,14 @@ function openPicker(): void {
 }
 $("g-go").addEventListener("click", async () => {
   const v = byKey[pickBoat].get(pickDate);
-  if (!v || pickGuess === null) return;
+  if (!v) return;
   guess = pickGuess;
-  status.game = { ...status.game, picking: false, guess: guess ? "yes" : "no", beats: [], beat: "", result: "" };
+  status.game = { ...status.game, picking: false, guess: guess === null ? "" : guess ? "yes" : "no", beats: [], beat: "", result: "" };
+  gamePicked = true;
   $("game").classList.remove("show");
-  $("g-chip").textContent = guess ? "it'll make it" : "it won't make it";
+  $("g-chip").textContent = guess === null ? "" : guess ? "it will make it" : "it won't make it";
+  $("guesschip").hidden = guess === null;
   $("h1").textContent = `${pickBoat === "kayak" ? "Our kayak" : "Randolph boat (our model)"}, launched ${fmtDay(v.start)}`;
-  // A steady day a second, so the story beats come at a watchable pace.
-  warp = 24;
-  document.querySelectorAll("#warp button").forEach((x) => x.setAttribute("aria-pressed", String(x.getAttribute("data-warp") === "24")));
   await selectVoyage(v.file);
 });
 $("quitlink").addEventListener("click", (e) => {
