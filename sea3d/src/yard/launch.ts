@@ -7,7 +7,7 @@
 //    finish odds over ten years for the nearest of ~20 builds.
 // The yard shows the sandbox's voyages beside the grid's odds.
 
-import { simChoices, type Catalog, type Design, type Summary } from "./design";
+import { sailOnly, simChoices, type Catalog, type Design, type Summary } from "./design";
 
 export interface LaunchOdds {
   voyages: number;
@@ -60,14 +60,17 @@ interface GridIndex {
 /** How far a grid build is from a design: [modelled slots that differ, cruise watts apart] (as boatsim.sandbox.catalog.nearest). */
 export function gridDistance(b: GridBuild, cat: Catalog, d: Design): [number, number] {
   let slots = 0;
+  // A wing sail with no motors: the motors and cruise power don't apply (Theo's k-p0-drive.wing-sail).
+  const sail = sailOnly(d);
   for (const s of cat.slots) {
+    if (sail && s.id === "thr") continue;
     const want = d.picks[s.id];
     const def = (s.opts.find((o) => o.def) ?? s.opts[0]).id;
     const have = (b.options[s.id] as string | undefined) ?? def;
     const opt = s.opts.find((o) => o.id === want);
     if (have !== want && (opt?.effect ?? "wired") === "wired") slots++;
   }
-  return [slots, Math.abs(Number(b.options.cruise_w ?? 25) - d.cruiseW)];
+  return [slots, sail ? 0 : Math.abs(Number(b.options.cruise_w ?? 25) - d.cruiseW)];
 }
 
 export class GridLauncher implements Launcher {

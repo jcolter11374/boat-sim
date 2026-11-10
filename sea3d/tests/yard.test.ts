@@ -97,10 +97,14 @@ test("the grid launcher's distance counts differing modelled slots, then cruise 
   // A grid build that lists only what differs: unlisted slots are the planned choice.
   assert.deepEqual(gridDistance(b({ thr: "one-t200", cruise_w: 20 }), c, plan), [1, 5]);
   // Options the simulator doesn't model yet don't count against a build.
-  const mat = c.slots.find((s) => s.id === "material")!;
-  const fancy = { ...plan, picks: { ...plan.picks, material: mat.opts[1].id } };
-  assert.equal(mat.opts[1].effect, "no effect yet");
+  const shape = c.slots.find((s) => s.id === "shape")!;
+  const fancy = { ...plan, picks: { ...plan.picks, shape: shape.opts[1].id } };
+  assert.equal(shape.opts[1].effect, "no effect yet");
   assert.deepEqual(gridDistance(b({ cruise_w: 25 }), c, fancy), [0, 0]);
+  // Wing sail only: no motors, so the thruster choice and cruise power don't count (Theo's k-p0-drive.wing-sail).
+  const sail = { picks: { ...plan.picks, drive: "wing-sail", thr: "one-t200" }, cruiseW: 20 };
+  assert.deepEqual(gridDistance(b({ drive: "wing-sail", cruise_w: 0 }), c, sail), [0, 0]);
+  assert.equal(summarise(c, sail).cruiseW, 0);
 });
 
 test("the simulator's notes merge into the catalog without losing prices", () => {

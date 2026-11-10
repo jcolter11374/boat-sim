@@ -27,6 +27,7 @@ import {
   nightHours,
   optionOf,
   plannedDesign,
+  sailOnly,
   summarise,
   withSim,
   type SimSlots,
@@ -299,9 +300,18 @@ function redraw(): void {
     ul.replaceChildren(...hints.map((h) => Object.assign(document.createElement("li"), { textContent: h })));
   }
   const cr = $<HTMLInputElement>("cruise");
-  if (cr) cr.value = String(CRUISE_W.indexOf(design.cruiseW));
+  const sail = sailOnly(design);
+  if (cr) {
+    cr.value = String(CRUISE_W.indexOf(design.cruiseW));
+    cr.disabled = sail;
+  }
   const cl = document.getElementById("cruise-label");
-  if (cl) cl.textContent = `Cruising power: ${design.cruiseW} W while motoring`;
+  if (cl) cl.textContent = sail ? "Cruising power: no motors with the wing sail only" : `Cruising power: ${design.cruiseW} W while motoring`;
+  // With the wing sail only, the motor choices don't apply: grey them.
+  document.querySelectorAll<HTMLButtonElement>('.opt[data-slot="thr"]').forEach((b) => {
+    b.classList.toggle("na", sail);
+    b.title = sail ? "Doesn't apply: the wing sail only build has no motors" : "";
+  });
   // Totals.
   $("s-cost").textContent = usd(s.partsCost);
   $("s-prog").textContent = usd(s.programCost);
