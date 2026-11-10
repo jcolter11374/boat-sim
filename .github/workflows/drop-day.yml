@@ -1,0 +1,90 @@
+# Drop-day study (issue #163): a dead kayak drifts for 30 days from every day,
+# 15 April to 30 June, from our 100 km drop point and the 50 km fallback, with
+# the wind's push at x0.6, x1 and x1.7, through real weather (ERA5) and currents
+# (GLORYS12). 2023 also runs from the Randolph team's 100 km point, for the side
+# by side with their result. One job per year, then one combined report.
+# Run it by hand: Actions tab -> "Drop-day drift" -> Run workflow.
+name: Drop-day drift
+on:
+  workflow_dispatch:
+    inputs:
+      first_year:
+        description: "First year"
+        default: "2019"
+      last_year:
+        description: "Last year"
+        default: "2024"
+  pull_request:
+    paths:
+      - src/boatsim/mc/dropday.py
+      - .github/workflows/drop-day.yml
+permissions:
+  contents: read
+concurrency:
+  group: drop-day-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  years:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.y.outputs.list }}
+    steps:
+      - id: y
+        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2019' }}, ${{ inputs.last_year || '2024' }}+1))))")" >> "$GITHUB_OUTPUT"
+  run:
+    needs: years
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJson(needs.years.outputs.list) }}
+    env:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      BOATSIM_REQUIRE_LAND: "1"  # fail, not sail through land, if the mask is missing
+      YEAR: ${{ matrix.year }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Fetch currents for April to August
+        run: python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-08"
+      - name: Drift from every drop day
+        run: |
+          POINTS="100km 50km"
+          if [ "$YEAR" = "2023" ]; then POINTS="$POINTS randolph100"; fi
+          python -m boatsim.mc.dropday run "$YEAR" --points $POINTS --workers 4 --out runs/dropday
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropday-${{ matrix.year }}
+          path: runs/dropday/*.csv
+          retention-days: 90
+  report:
+    needs: run
+    if: ${{ !cancelled() }}  # partial years still report; a cancelled run (superseded push) does not
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dropday-*
+          path: runs/in
+          merge-multiple: true
+      - name: Combine the years
+        run: python -m boatsim.mc.dropday report runs/in/dropday_*.csv --out runs/dropday
+      - name: Print the combined table (artifacts are not readable from thread sandboxes)
+        run: cat runs/dropday/dropday_all.csv
+      - name: Show the report on the run page
+        run: cat runs/dropday/dropday_report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropday
+          path: runs/dropday/
+          retention-days: 90

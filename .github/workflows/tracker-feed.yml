@@ -1,0 +1,64 @@
+# Live tracker feed (3D roadmap item 3), REPLAY MODE: a simulated voyage plays
+# out at one voyage day per real hour, and each run publishes what base would
+# have received by then as voyage.json (plus ghost.json, the predicted track)
+# on the orphan `feed` branch. The 3D viewer reads:
+#   https://raw.githubusercontent.com/jcolter11374/boat-sim/feed/voyage.json
+#   https://raw.githubusercontent.com/jcolter11374/boat-sim/feed/ghost.json
+# Builder: src/boatsim/comms/feed.py (Sam). Spec: the live-feed spec note.
+#
+# Rules for this workflow, kept when live mode replaces replay mode:
+# * Runs only on schedule and by hand, never on pull_request, so a fork's PR
+#   can never reach the provider keys that live mode will add as secrets.
+# * Write access only in this job, only to push the feed branch.
+# * Nothing identifying goes in the feed (see feed.py); raw bytes of any bad
+#   report go only to this job's log.
+# * Costs nothing: Actions minutes are free on a public repo.
+name: Tracker feed
+on:
+  schedule:
+    - cron: "17 * * * *" # hourly, off the hour
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "Publish as of this voyage day (blank = follow the replay clock)"
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: tracker-feed
+  cancel-in-progress: false
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # only to push the feed branch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Build voyage.json and ghost.json (replay mode)
+        env:
+          DAY: ${{ inputs.day }}
+        run: |
+          args="--out out"
+          if [ -n "$DAY" ]; then args="$args --day $DAY"; fi
+          python -m boatsim.comms.feed replay $args
+      - name: Publish to the feed branch
+        # One commit, replaced each hour (force-push), so hourly runs don't
+        # pile up history in the repo. The branch is written only by this job.
+        run: |
+          mkdir pub && cp out/voyage.json out/ghost.json pub/
+          printf '%s\n' "Live tracker feed, rewritten hourly by the Tracker feed workflow on main." \
+            "Currently REPLAY MODE: a simulated voyage, not the real boat." > pub/README.md
+          cd pub
+          git init -q -b feed
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add voyage.json ghost.json README.md
+          git commit -qm "feed: $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" feed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

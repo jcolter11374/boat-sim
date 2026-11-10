@@ -40,7 +40,12 @@ void main() {
   gl_FragColor = vec4(uColor, a);
 }`;
 
-/** How hard it rains, 0..1, for a storm level 0 (fair) .. 1 (gale). */
+/** How hard it rains, 0..1, from a logged rain rate in mm per hour (heavy at 4 mm/h and over). */
+export function rainFromRate(mmPerHour: number): number {
+  return THREE.MathUtils.smoothstep(mmPerHour, 0.1, 4);
+}
+
+/** Fallback for replays with no rain column: how hard it rains, 0..1, for a storm level 0 (fair) .. 1 (gale). */
 export function rainFromStorm(storm: number): number {
   return THREE.MathUtils.smoothstep(storm, 0.3, 0.85);
 }

@@ -10,7 +10,7 @@
 // the close-up sea runs in real time, so the waves always move naturally while
 // their size and direction follow the voyage hour by hour.
 
-import { Rain, rainFromStorm } from "./rain";
+import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { Wetness } from "./boats/wet";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -684,7 +684,9 @@ renderer.setAnimationLoop(() => {
     sunAz = sp.az;
     atmos.set(sp.el, sp.az, storm);
     // Scene x is east, -z is north.
-    rain.update(t, camera, rainFromStorm(storm), wu, -wv, atmos.ambient);
+    // The logged rain when the replay has it; older replays only have wind, so rain follows the storm.
+    const rate = rep.rain ? valueAt(rep, rep.rain, hour) : null;
+    rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
     status.rain = rain.amount;
     // Wet from rain and from spray once the waves get up.
     const wetNow = Math.min(1, rain.amount + THREE.MathUtils.smoothstep(valueAt(rep, rep.hs, hour) ?? 0, 1, 4) * 0.8);

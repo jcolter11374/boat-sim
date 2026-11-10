@@ -38,12 +38,13 @@ import argparse
 import math
 import os
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 
+from boatsim.config import patched_design
 from boatsim.mc.months import (
     MAX_DAYS,
     MONTHS,
@@ -274,29 +275,26 @@ VARIANTS: dict[str, Variant] = {
 FIRST_BATCH = tuple(VARIANTS)
 
 
-def patched_design(design, changes):
-    """The design with (section, key, value) changes applied."""
-    for section, key, value in changes:
-        design = replace(design, **{section: {**getattr(design, section), key: value}})
-    return design
-
-
 @dataclass(frozen=True)
 class SensitivityVoyage(MonthlyVoyage):
     """MonthlyVoyage with one variant applied."""
 
     variant: str = "baseline"
 
+    def spec(self) -> Variant:
+        """The variant's settings (subclasses may look them up elsewhere)."""
+        return VARIANTS[self.variant]
+
     def drop_point(self) -> tuple[float, float]:
         from boatsim.config import load_design
 
-        v = patched_design(load_design(self.design_path), VARIANTS[self.variant].design).voyage
+        v = patched_design(load_design(self.design_path), self.spec().design).voyage
         return v["drop_lat"], v["drop_lon"]
 
     def mission(self):
         from boatsim.types import Mission, Waypoint
 
-        v = VARIANTS[self.variant]
+        v = self.spec()
         if not v.route:
             return super().mission()
         return Mission(waypoints=[Waypoint(lat, lon) for lat, lon in v.route])
@@ -308,7 +306,7 @@ class SensitivityVoyage(MonthlyVoyage):
         from boatsim.runner.arrival import FinishTarget
         from boatsim.vessel import KayakVessel
 
-        v = VARIANTS[self.variant]
+        v = self.spec()
         c = super().components(seed)
         design = patched_design(load_design(self.design_path), v.design)
         if v.design:

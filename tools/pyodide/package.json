@@ -1,0 +1,9 @@
+{
+  "name": "boatsim-pyodide-reference",
+  "private": true,
+  "description": "Runs the sandbox reference voyages in Node + Pyodide, the WebAssembly the yard page runs (docs/sandbox.md).",
+  "type": "module",
+  "dependencies": {
+    "pyodide": "0.27.7"
+  }
+}
