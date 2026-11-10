@@ -215,8 +215,11 @@ export class SandboxLauncher implements Launcher {
     return {
       exact: meta.exact,
       note:
-        `${finished} of ${total} launches finished (${meta.note}). ` +
-        (grid?.odds ? (meta.exact ? "Odds over ten years of weather: this build's own." : `Odds over ten years of weather: from the closest precomputed build, ${grid.label}.`) : ""),
+        `Sandbox (${meta.note}): ${finished} of ${total} voyages finished, run here in your browser. ` +
+        "A browser run can end differently from the same voyage on our servers, because tiny maths differences grow over months. " +
+        (grid?.odds
+          ? `The odds above come from our server runs over ten years of weather${meta.exact ? ", for this exact build." : `, for the closest build we've run: ${grid.label}.`}`
+          : "No server odds for this build yet."),
       odds: grid?.odds ?? null,
       replays,
       fingerprints: runs.map((r) => r.fingerprint),
