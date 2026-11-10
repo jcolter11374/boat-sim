@@ -289,3 +289,27 @@ def nearest(choices: dict | None) -> tuple[str, bool]:
 
     best = min(GRID, key=dist)
     return grid_id(best), grid_id(best) == want
+
+
+def slot_table() -> list[dict]:
+    """Every slot and option with its effect and badge, in the catalog's shape
+    (slots[{id, name, opts[{id, effect, est, basis, sim}]}]), for the page to
+    merge into Sam's catalog by id. `sim` lists the design fields an option sets."""
+    return [
+        {
+            "id": slot,
+            "name": SLOT_NAMES[slot],
+            "opts": [
+                {
+                    "id": oid,
+                    "effect": o.effect,
+                    "est": o.est,
+                    "basis": o.basis,
+                    "sim": [f"{s}.{k}" for s, k, _ in o.changes]
+                    + (["electronics.hotel_load_wh_per_day"] if o.wh is not None else []),
+                }
+                for oid, o in opts.items()
+            ],
+        }
+        for slot, opts in SLOTS.items()
+    ]

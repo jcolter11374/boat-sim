@@ -220,3 +220,11 @@ def test_compare_checks_outcome_days_events_across_runtimes_and_everything_exact
     assert M.compare(a, b, exact=True) == ["('k-p25', 's') end_lat: '39.5' vs '39.50000001'"]
     assert M.compare(a, [{**b[0], "days": 71.0}]) != []
     assert M.compare(a, []) == ["missing from the second run: ('k-p25', 's')"]
+
+
+def test_slot_table_lists_every_option_with_its_effect():
+    t = C.slot_table()
+    assert [s["id"] for s in t] == list(C.SLOTS)
+    ais = {o["id"]: o for o in next(s for s in t if s["id"] == "ais")["opts"]}
+    assert ais["none"]["sim"] == ["hazards.p_avoid_with_ais", "electronics.hotel_load_wh_per_day"]
+    json.dumps(t)
