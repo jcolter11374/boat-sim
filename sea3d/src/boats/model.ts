@@ -22,6 +22,8 @@ export interface BoatModel {
   tagHeight: number;
   /** Working equipment (props, rudder, wing, comms light, failures): cosmetic only. */
   gear: Gear;
+  /** The hull's shape (builder frame), for the foam where hull meets water. */
+  form: HullForm;
   /** Showroom: everything working, a gentle breeze. */
   animate(t: number): void;
   dispose(): void;
@@ -236,6 +238,7 @@ export function buildKayak(quality: Quality): BoatModel {
     stern: new THREE.Vector3(KAYAK.cgX - K.L, KAYAK.cgBelowWaterline, 0),
     tagHeight: 1.3 + KAYAK.cgBelowWaterline,
     gear,
+    form: K,
     animate: (t) => gear.update(idleGear(t), t),
     dispose: () => {
       gear.dispose();
@@ -339,6 +342,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     stern: new THREE.Vector3(RANDOLPH.cgX - R.L, RANDOLPH.cgBelowWaterline, 0),
     tagHeight: 1.6 + RANDOLPH.cgBelowWaterline,
     gear,
+    form: R,
     animate: (t) => gear.update(idleGear(t), t),
     dispose: () => {
       gear.dispose();
