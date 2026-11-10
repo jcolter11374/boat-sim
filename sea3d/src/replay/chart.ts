@@ -27,9 +27,10 @@ export interface TrackColours {
   beacon: string;
   glow: string;
 }
-export const TRACK: Record<"kayak" | "randolph", TrackColours> = {
+export const TRACK: Record<"kayak" | "randolph" | "randolph_c", TrackColours> = {
   kayak: { main: "#ff8a2a", beacon: "#9cc8ff", glow: "rgba(255,140,40,0.9)" },
   randolph: { main: "#2ec4b6", beacon: "#b4f0ea", glow: "rgba(46,196,182,0.9)" },
+  randolph_c: { main: "#b78cff", beacon: "#e0d0ff", glow: "rgba(183,140,255,0.9)" },
 };
 const SILENT = "#8a94a3";
 
