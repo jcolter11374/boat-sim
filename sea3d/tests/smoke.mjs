@@ -236,6 +236,16 @@ try {
   log.push(`game ${game.beats.join("/")} -> ${game.result}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
+  // Weather: rain and a wet hull in the 42 kt blow of 13 Apr 2020 (hour 297), dry and clear on day 2.
+  await page.goto(`${URL}voyage.html?voyage=voyage_2020-04-01.json&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready, null, { timeout: 60000 });
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(297); });
+  await page.waitForFunction(() => window.__replay.rain > 0.5 && window.__replay.wet > 0.5, null, { timeout: 30000 })
+    .catch(async () => fail(`no rain in the blow: ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
+  await page.evaluate(() => window.__replay.setHour(30));
+  await page.waitForFunction(() => window.__replay.rain < 0.05, null, { timeout: 30000 }).catch(() => fail("rain on a calm day"));
+  log.push("rain in the blow, dry on a calm day");
+
   // Boatyard: the catalog loads, a swap changes the totals, the model and the share link.
   await page.goto(`${URL}boatyard.html?quality=low`);
   await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });

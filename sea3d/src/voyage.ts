@@ -10,6 +10,8 @@
 // the close-up sea runs in real time, so the waves always move naturally while
 // their size and direction follow the voyage hour by hour.
 
+import { Rain, rainFromStorm } from "./rain";
+import { Wetness } from "./boats/wet";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
@@ -87,12 +89,16 @@ let look: Look = startLook($<HTMLSelectElement>("quality"));
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 scene.add(sea.mesh);
+// Rain in a blow (cosmetic: the log has wind, not rain).
+const rain = new Rain();
+scene.add(rain.mesh);
 sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
 let motion = new BoatMotion(HULL[boatKey], place);
+let wet: Wetness | null = null;
 function buildBoat(q: Quality): void {
   if (model) {
     scene.remove(model.root);
@@ -113,6 +119,7 @@ function buildBoat(q: Quality): void {
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
+  wet = new Wetness(model.root);
 }
 function setQuality(l: Look): void {
   look = l;
@@ -180,6 +187,8 @@ let gamePicked = false; // a voyage picked in the game is on screen
 /** The page's clock runs until the longer voyage ends. */
 const endHour = () => lanes.reduce((m, l) => Math.max(m, lastHour(l.rep)), 0);
 const status = {
+  rain: 0,
+  wet: 0,
   ready: false,
   error: "",
   file: "",
@@ -674,6 +683,13 @@ renderer.setAnimationLoop(() => {
     sunEl = sp.el;
     sunAz = sp.az;
     atmos.set(sp.el, sp.az, storm);
+    // Scene x is east, -z is north.
+    rain.update(t, camera, rainFromStorm(storm), wu, -wv, atmos.ambient);
+    status.rain = rain.amount;
+    // Wet from rain and from spray once the waves get up.
+    const wetNow = Math.min(1, rain.amount + THREE.MathUtils.smoothstep(valueAt(rep, rep.hs, hour) ?? 0, 1, 4) * 0.8);
+    wet?.set(wetNow);
+    status.wet = wetNow;
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
     hud(rep, stw, hs);
