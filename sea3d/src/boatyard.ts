@@ -35,9 +35,10 @@ import {
   type CatalogSlot,
   type Design,
 } from "./yard/design";
-import { dress } from "./yard/dress";
+import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { GridLauncher, SandboxLauncher, type LaunchResult } from "./yard/launch";
 
+const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
@@ -71,7 +72,14 @@ const motion = new BoatMotion(KAYAK_V4, place);
 let model: BoatModel | null = null;
 let contact: Contact | null = null;
 let sinkM = 0;
+let outfit: Outfit | null = null;
+let view: View = "afloat";
+let lift = 0; // m the boat is raised in the "lifted out" view
+let shapeKayak = true;
+const LIFT = 1.35;
 function build(): void {
+  outfit?.dispose();
+  outfit = null;
   if (model) {
     scene.remove(model.root);
     model.dispose();
@@ -84,6 +92,8 @@ function build(): void {
   shadowsOn(model.root);
   contact = new Contact(model.form, KAYAK, quality);
   scene.add(model.root, contact.collar, contact.spray);
+  outfit = new Outfit(model);
+  outfit.setView(view);
   if (cat) redraw();
 }
 // Port quarter, a little above the deck: the panels, the dome and the keel all show.
@@ -129,6 +139,23 @@ const status = {
   launchError: "",
   backend: "",
   frames: 0,
+  view: "afloat" as View,
+  lift: 0,
+  setView: (v: View) => setView(v),
+  /** Where the named parts are, for tests: world bounding boxes. */
+  debug: () => {
+    const out: Record<string, unknown> = {};
+    model?.root.updateMatrixWorld(true);
+    for (const n of ["hull", "bulb", "keel", "yard_bat", "thruster_port"]) {
+      const o = model?.root.getObjectByName(n);
+      if (!o) continue;
+      const bx = new THREE.Box3().setFromObject(o);
+      const mm = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if (mm && "opacity" in mm) out[n + "_mat"] = [mm.type, mm.opacity, mm.transparent];
+      out[n] = { min: bx.min.toArray().map((v) => +v.toFixed(2)), max: bx.max.toArray().map((v) => +v.toFixed(2)), visible: o.visible };
+    }
+    return out;
+  },
   /** Choose an option in a slot (tests). */
   pick: (slot: string, id: string) => choose(slot, id),
 };
@@ -226,9 +253,36 @@ function cruiseControl(): HTMLElement {
 
 function choose(slot: string, id: string): void {
   if (!cat || !cat.slots.some((s) => s.id === slot && s.opts.some((o) => o.id === id))) return;
+  const changed = design.picks[slot] !== id;
   design.picks[slot] = id;
   redraw();
+  if (changed) {
+    // Show the swap: the view that shows that part best, and a flash on it.
+    // (Taking the AIS out shows best on deck: its aerial goes.)
+    setView(id === "none" && slot === "ais" ? "afloat" : (VIEW_FOR[slot] ?? "afloat"));
+    outfit?.pulse(slot, clock.getElapsedTime());
+  }
 }
+
+// Camera framings for each view (boat frame is world here: the boat sits at the origin).
+const FRAMES: Record<View, { pos: [number, number, number]; target: [number, number, number] }> = {
+  afloat: { pos: [-4.6, 1.9, 6.6], target: [0.1, -0.15, 0] },
+  inside: { pos: [-1.9, 3.0, 3.0], target: [0.15, 0.25, 0] },
+  lifted: { pos: [-4.3, 1.0, 6.0], target: [0.15, 0.55, 0] },
+};
+let fly: { p0: THREE.Vector3; p1: THREE.Vector3; t0: THREE.Vector3; t1: THREE.Vector3; k: number } | null = null;
+function setView(v: View): void {
+  if (v !== view) {
+    const f = FRAMES[v];
+    fly = { p0: camera.position.clone(), p1: new THREE.Vector3(...f.pos), t0: controls.target.clone(), t1: new THREE.Vector3(...f.target), k: 0 };
+    controls.autoRotate = false;
+  }
+  view = v;
+  outfit?.setView(v);
+  status.view = v;
+  document.querySelectorAll<HTMLButtonElement>("#views button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+}
+document.querySelectorAll<HTMLButtonElement>("#views button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view as View)));
 
 function redraw(): void {
   if (!cat) return;
@@ -258,10 +312,11 @@ function redraw(): void {
   $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
   $("s-est").textContent = s.estimates.length ? `Includes estimates: ${s.estimates.join(", ")}.` : "";
   // The model.
-  if (model) {
+  if (outfit) {
     const lead = optionOf(cat, "lead", design);
-    const d = dress(model, s, 50 + (lead?.kg ?? 0));
+    const d = outfit.apply(design.picks, s, 50 + (lead?.kg ?? 0));
     sinkM = d.sinkMm / 1000;
+    shapeKayak = d.shape === "kayak";
     status.dressed = { ...d };
   }
   // Link and file.
@@ -397,6 +452,45 @@ function showResult(box: HTMLElement, r: LaunchResult | null): void {
   }
 }
 
+// Names on the parts inside, in the "see inside" view.
+function drawLabels(): void {
+  const a = outfit?.insideBlend ?? 0;
+  labelBox.style.opacity = String(a);
+  if (a < 0.02 || !outfit) {
+    if (labelBox.childElementCount) labelBox.replaceChildren();
+    return;
+  }
+  const shown = outfit.labels.filter((l) => {
+    let v = true;
+    l.obj.traverseAncestors((p) => (v &&= p.visible));
+    return v && l.obj.visible;
+  });
+  while (labelBox.childElementCount < shown.length) labelBox.append(document.createElement("div"));
+  while (labelBox.childElementCount > shown.length) labelBox.lastElementChild!.remove();
+  const w = renderer.domElement.clientWidth;
+  const h = renderer.domElement.clientHeight;
+  // Place each name over its part, nudged up past any name already placed there.
+  const placed: [number, number, number, number][] = [];
+  const spots = shown.map((l) => {
+    l.obj.getWorldPosition(labelP).project(camera);
+    return { l, x: ((labelP.x + 1) / 2) * w, y: ((1 - labelP.y) / 2) * h };
+  });
+  spots.sort((a, b) => b.y - a.y);
+  spots.forEach(({ l, x, y }, i) => {
+    const el = labelBox.children[i] as HTMLElement;
+    if (el.textContent !== l.text) el.textContent = l.text;
+    const half = 3.4 * l.text.length + 8;
+    let top = y - 30;
+    for (let k = 0; k < 12; k++) {
+      const hit = placed.find(([x0, x1, y0, y1]) => x - half < x1 && x + half > x0 && top < y1 && top + 20 > y0);
+      if (!hit) break;
+      top = hit[2] - 22;
+    }
+    placed.push([x - half, x + half, top, top + 20]);
+    el.style.transform = `translate(${x}px, ${top}px) translate(-50%, 0)`;
+  });
+}
+
 // ---------- start ----------
 build();
 loadDetailedModels().then((ok) => {
@@ -434,17 +528,38 @@ window.addEventListener("resize", () => {
   atmos.setSize(window.innerWidth, window.innerHeight);
 });
 
-const clock = new THREE.Clock();
 const bowW = new THREE.Vector3();
+const labelP = new THREE.Vector3();
+const labelBox = $("labels");
+let lastT = 0;
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
+  const dt = Math.min(t - lastT, 0.3);
+  lastT = t;
+  // Lifted out: the boat rises clear of the water (and the camera's aim with it), and hangs still.
+  // (See inside lifts it a little too, so the parts below the waterline show.)
+  const wantLift = view === "lifted" ? LIFT : view === "inside" ? 0.45 : 0;
+  lift += Math.sign(wantLift - lift) * Math.min(Math.abs(wantLift - lift), dt * 2.2);
+  status.lift = lift;
+  if (fly) {
+    // Glide the camera to the view's framing; the user can orbit from there.
+    fly.k = Math.min(1, fly.k + dt / 1.2);
+    const e = fly.k * fly.k * (3 - 2 * fly.k);
+    camera.position.lerpVectors(fly.p0, fly.p1, e);
+    controls.target.lerpVectors(fly.t0, fly.t1, e);
+    if (fly.k >= 1) fly = null;
+  }
+  const still = 1 - lift / LIFT;
   sea.update(comps, t);
   motion.advance(comps, t);
   if (model) {
-    model.root.position.set(0, motion.heave - KAYAK.cgBelowWaterline - sinkM, 0);
-    model.root.rotation.set(motion.roll, place.yaw, motion.pitch, "YZX");
+    model.root.position.set(0, motion.heave * still - KAYAK.cgBelowWaterline - sinkM + lift, 0);
+    model.root.rotation.set(motion.roll * still, place.yaw, motion.pitch * still, "YZX");
     model.animate(t);
+    outfit?.update(t, dt);
     if (contact) {
+      // The foam line only fits our kayak's own hull, sitting in the water.
+      contact.collar.visible = contact.spray.visible = shapeKayak && lift < 0.05;
       model.root.updateMatrixWorld();
       bowW.set(contact.bow[0], KAYAK.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
@@ -454,5 +569,6 @@ renderer.setAnimationLoop(() => {
   controls.update();
   sea.setSun(atmos.glintDir, atmos.glintLight);
   atmos.render();
+  drawLabels();
   status.frames++;
 });
