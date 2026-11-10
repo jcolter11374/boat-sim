@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import bpy
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # for blender -P
 
@@ -49,7 +48,7 @@ PAINT = HullPaint(top=0xF26A1B, deck=0xE0601A, boot=0xF4F4EE, bottom=0x2F383F, l
 
 def kit(x: float, y: float, z: float, mats) -> None:
     """AIS whip, all-round light and the yellow Globalstar beacon, standing on (x, y, z)."""
-    black, white, lamp, beacon, beacon_top = mats
+    black, white, lamp, _, _ = mats
     cylinder("ais_base", 0.012, x, y, y + 0.06, z + 0.09, black)
     cylinder("ais_whip", 0.005, x, y + 0.06, y + 0.95, z + 0.09, white, segs=12, r_top=0.003)
     cylinder("light_post", 0.008, x, y, y + 0.2, z - 0.09, black, segs=16)
@@ -59,12 +58,23 @@ def kit(x: float, y: float, z: float, mats) -> None:
 def beacon(x: float, y: float, z: float, mats) -> None:
     _, _, _, bmat, btop = mats
     rounded_box("beacon", x - 0.045, x + 0.045, y, y + 0.028, z - 0.035, z + 0.035, bmat, 0.006)
-    rounded_box("beacon_top", x - 0.035, x + 0.035, y + 0.026, y + 0.031, z - 0.028, z + 0.028, btop, 0.002)
+    rounded_box(
+        "beacon_top", x - 0.035, x + 0.035, y + 0.026, y + 0.031, z - 0.028, z + 0.028, btop, 0.002
+    )
 
 
-def thruster(name: str, x: float, y: float, z: float, mat, strut_top: float | None = None, strut=None) -> None:
+def thruster(
+    name: str, x: float, y: float, z: float, mat, strut_top: float | None = None, strut=None
+) -> None:
     """A T200 body (about 0.11 m long, 0.1 m across) lying fore and aft, on a strut."""
-    prof = [(0.0, 0.0004), (0.01, 0.03), (0.03, 0.045), (0.08, 0.05), (0.105, 0.04), (0.115, 0.0004)]
+    prof = [
+        (0.0, 0.0004),
+        (0.01, 0.03),
+        (0.03, 0.045),
+        (0.08, 0.05),
+        (0.105, 0.04),
+        (0.115, 0.0004),
+    ]
     lathe(name, prof, 32, mat, (x, y, z))
     if strut_top is not None and strut is not None:
         foil(f"{name}_strut", 0.08, 0.08, x + 0.015, x + 0.015, y + 0.03, strut_top, 0.15, strut)
@@ -125,7 +135,7 @@ def build_cat() -> list:
         rod(f"beam_{x:.2f}", (x, deck_y - 0.03, -g), (x, deck_y - 0.03, g), 0.03, alu)
     deck = material("white", base=hexcol(0xF2F2EE), rough=0.4)
     rounded_box("bridge_deck", 0.62, 2.55, deck_y, deck_y + 0.035, -g - 0.05, g + 0.05, deck, 0.01)
-    top = lambda x, z: deck_y + 0.035  # noqa: E731
+    top = lambda x, z: deck_y + 0.035
     panel("panel_fwd", 0.68, 1.28, 1.2, top, 7, 3)
     panel("panel_mid", 1.32, 1.92, 1.2, top, 7, 3)
     panel("panel_aft", 1.96, 2.5, 1.2, top, 7, 3)
@@ -138,7 +148,15 @@ def build_cat() -> list:
     beacon(0.68, deck_y + 0.035, 0, mats)
     g10 = material("g10", base=hexcol(0x2B2F33), rough=0.45)
     for side in (1, -1):
-        thruster(f"thruster_{'starboard' if side > 0 else 'port'}", 2.62, -0.07, side * g, mats[0], 0.03, g10)
+        thruster(
+            f"thruster_{'starboard' if side > 0 else 'port'}",
+            2.62,
+            -0.07,
+            side * g,
+            mats[0],
+            0.03,
+            g10,
+        )
     return [(stbd, img, rgb)]
 
 
@@ -159,12 +177,14 @@ def build_semisub() -> list:
         return 0.11 * max(1 - s / 0.18, 0) ** 2 + 0.06 * max((s - 0.88) / 0.12, 0) ** 2
 
     def dz(s: float) -> float:
-        return SEMI["depth"] - 0.05 * max(1 - s / 0.15, 0) ** 2 - 0.04 * max((s - 0.9) / 0.1, 0) ** 2
+        return (
+            SEMI["depth"] - 0.05 * max(1 - s / 0.15, 0) ** 2 - 0.04 * max((s - 0.9) / 0.1, 0) ** 2
+        )
 
     f = HullForm(L=L, n=2.0, crown=0.06, wl=SEMI["wl"], hb=hb, kz=kz, dz=dz)
     ob, img, rgb = hull(f, PAINT, rough=0.32, coat=0.5, nx=160, nt=28, nd=14)
     strakes(f, material("rubber", base=hexcol(0x2A2E33), rough=0.7), r=0.009)
-    top = lambda x, z: f.deck_y(x, z)  # noqa: E731
+    top = lambda x, z: f.deck_y(x, z)
     panel("panel_fwd", 0.55, 1.4, 0.34, top, 5, 2)
     panel("panel_aft", 1.85, 2.7, 0.34, top, 5, 2)
     # The tower: a streamlined fin standing on the deck, a cap for the antennas.
@@ -176,7 +196,15 @@ def build_semisub() -> list:
     beacon(1.58, y0 + 0.55, 0, mats)
     g10 = material("g10", base=hexcol(0x2B2F33), rough=0.45)
     for side in (1, -1):
-        thruster(f"thruster_{'starboard' if side > 0 else 'port'}", 2.9, 0.0, side * 0.15, mats[0], 0.1, g10)
+        thruster(
+            f"thruster_{'starboard' if side > 0 else 'port'}",
+            2.9,
+            0.0,
+            side * 0.15,
+            mats[0],
+            0.1,
+            g10,
+        )
     foil("rudder", 0.16, 0.13, 3.0, 3.03, 0.03, -0.18, 0.12, g10)
     return [(ob, img, rgb)]
 
@@ -205,7 +233,7 @@ def build_board() -> list:
     f = HullForm(L=L, n=6.0, crown=0.03, wl=BOARD["wl"], hb=hb, kz=kz, dz=dz)
     ob, img, rgb = hull(f, PAINT, rough=0.32, coat=0.5, nx=160, nt=20, nd=20)
     strakes(f, material("rubber", base=hexcol(0x2A2E33), rough=0.7), r=0.008)
-    top = lambda x, z: f.deck_y(x, z)  # noqa: E731
+    top = lambda x, z: f.deck_y(x, z)
     panel("panel_fwd", 0.42, 1.12, 0.62, top, 5, 4, lift=0.006)
     panel("panel_aft", 1.98, 2.62, 0.62, top, 5, 4, lift=0.006)
     # The buoyant pod: a low streamlined dome, 0.8 m long, 0.5 m wide, 0.3 m
@@ -244,7 +272,15 @@ def build_board() -> list:
     kit(2.75, f.deck_y(2.75, 0), 0, mats)
     beacon(1.62, yd + 0.29, 0, mats)
     for side in (1, -1):
-        thruster(f"thruster_{'starboard' if side > 0 else 'port'}", 2.72, -0.1, side * 0.2, mats[0], 0.01, g10)
+        thruster(
+            f"thruster_{'starboard' if side > 0 else 'port'}",
+            2.72,
+            -0.1,
+            side * 0.2,
+            mats[0],
+            0.01,
+            g10,
+        )
     return [(ob, img, rgb)]
 
 
