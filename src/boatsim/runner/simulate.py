@@ -202,6 +202,12 @@ def simulate(
                     "current_u": env.current_u,
                     "current_v": env.current_v,
                     "ghi": env.ghi,
+                    # Radios this hour (the 3D page shades silent spells from these).
+                    "iridium_ok": bool(
+                        getattr(state, "electronics_on", True)
+                        and getattr(state, "iridium_ok", True)
+                    ),
+                    "beacon_ok": bool(getattr(state, "beacon_ok", True)),
                 }
             )
 
@@ -237,7 +243,7 @@ def simulate(
 DROP_POINT = (36.65, -74.94)
 
 
-def default_mission() -> Mission:
+def default_mission(drop: tuple[float, float] | None = None) -> Mission:
     """Launch route: the drop point, then straight (great circle) to the finish target.
 
     The great circle peaks near 42.6N and passes about 250 km north of Flores and
@@ -246,10 +252,13 @@ def default_mission() -> Mission:
     Apr-Jun launches, 100 voyages) the straight route finished 72/100 against
     56/100 for the dog-leg, sign test p ~ 0.01. Base still re-plans around
     foul currents and land on the way (basestation/replan.py).
+
+    `drop` starts the route at another design's drop point (its voyage block);
+    the default is ours.
     """
     return Mission(
         waypoints=[
-            Waypoint(*DROP_POINT),
+            Waypoint(*(drop or DROP_POINT)),
             Waypoint(39.5, -13.5),  # the finish target (runner/arrival.py)
         ]
     )

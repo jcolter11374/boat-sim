@@ -150,6 +150,39 @@ def lateral_speed(p: HullParams, wind_rel_water_y: float, forward_speed: float) 
     return sign * min(max(v, 0.0), w)
 
 
+def lateral_speed_with_force(
+    p: HullParams, wind_rel_water_y: float, forward_speed: float, extra_force_y: float
+) -> float:
+    """lateral_speed() with an extra side force (N, to starboard) on the boat,
+    such as a sail's. Same balance plus the extra term, solved by bisection
+    (the net side force falls steadily as the sideways speed rises)."""
+    if extra_force_y == 0.0:
+        return lateral_speed(p, wind_rel_water_y, forward_speed)
+    w = wind_rel_water_y
+    ka = 0.5 * RHO_AIR * p.air_cd_side * p.air_side_area_m2
+    kw = 0.5 * RHO_WATER * p.lateral_cd_area_m2
+    kl = 0.5 * RHO_WATER * p.keel_lift_slope_area_m2 * abs(forward_speed)
+
+    def net(v: float) -> float:
+        r = w - v
+        return ka * r * abs(r) + extra_force_y - kw * v * abs(v) - kl * v
+
+    lo, hi = -1.0, 1.0
+    while net(lo) < 0.0 and lo > -64.0:
+        lo *= 2.0
+    while net(hi) > 0.0 and hi < 64.0:
+        hi *= 2.0
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if net(mid) > 0.0:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-7:
+            break
+    return 0.5 * (lo + hi)
+
+
 def stokes_drift(hs: float, tp: float, wave_from_deg: float) -> tuple[float, float]:
     """Surface Stokes drift (east, north) in m/s, toward where the waves go.
 

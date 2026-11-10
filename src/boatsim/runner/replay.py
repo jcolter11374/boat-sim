@@ -21,12 +21,14 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 
 from boatsim.runner.arrival import DEFAULT_TARGET, EAST_LINE, TARGET_RADIUS_M, WEST_LINE
 
 SCHEMA = 1
+DEFAULT_BOAT = "v4 kayak"
 
 # Column name in the replay -> (log row key, decimals). Positions to 1e-4 deg
 # (about 10 m); everything else to what the page can show.
@@ -46,6 +48,12 @@ COLUMNS = {
     "ghi": ("ghi", 0),
 }
 
+# Per-hour yes/no columns, written as 1/0 (null when the log lacks them).
+FLAGS = {
+    "iridium_ok": "iridium_ok",
+    "beacon_ok": "beacon_ok",
+}
+
 
 def _num(x, nd: int):
     if x is None:
@@ -61,7 +69,7 @@ def _iso(t: datetime | None) -> str | None:
     return t.isoformat(timespec="minutes") if t is not None else None
 
 
-def to_replay(log, label: str = "v4 kayak") -> dict:
+def to_replay(log, label: str = DEFAULT_BOAT) -> dict:
     """A VoyageLog as a JSON-ready dict (schema SCHEMA).
 
     Time is hours since launch. Rows the runner didn't fill (older logs without
@@ -71,6 +79,8 @@ def to_replay(log, label: str = "v4 kayak") -> dict:
     rows = log.rows
     hours = [round((r["t"] - start).total_seconds() / 3600.0, 3) for r in rows]
     cols = {name: [_num(r.get(key), nd) for r in rows] for name, (key, nd) in COLUMNS.items()}
+    for name, key in FLAGS.items():
+        cols[name] = [None if r.get(key) is None else int(bool(r[key])) for r in rows]
     events = [
         {
             "h": round((e.t - start).total_seconds() / 3600.0, 3),
@@ -115,6 +125,8 @@ def to_replay(log, label: str = "v4 kayak") -> dict:
             "current_u": "m/s eastward",
             "current_v": "m/s northward",
             "ghi": "W/m^2 sunlight",
+            "iridium_ok": "1 = Iridium can report this hour (powered, main box and comms path ok)",
+            "beacon_ok": "1 = Globalstar backup beacon still working",
         },
         "h": hours,
         **cols,
@@ -122,13 +134,32 @@ def to_replay(log, label: str = "v4 kayak") -> dict:
     }
 
 
-def replay_reduce(log) -> dict:
-    """run_many reducer: keep the replay, drop the heavy log in the worker."""
-    return to_replay(log)
+class ReplayReducer:
+    """run_many reducer: keep the replay, drop the heavy log in the worker.
+    A class (not a lambda) so it pickles into worker processes."""
+
+    def __init__(self, label: str = DEFAULT_BOAT):
+        self.label = label
+
+    def __call__(self, log) -> dict:
+        return to_replay(log, label=self.label)
+
+
+replay_reduce = ReplayReducer()
+
+
+def slug(label: str) -> str:
+    """File-name-safe boat name: 'Randolph Rev B' -> 'randolph-rev-b'."""
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
 
 
 def file_name(rep: dict) -> str:
-    return f"voyage_{rep['start'][:10]}.json"
+    """voyage_<date>.json for our kayak (kept for existing links),
+    voyage_<boat>_<date>.json for any other boat."""
+    day = rep["start"][:10]
+    if rep["boat"] == DEFAULT_BOAT:
+        return f"voyage_{day}.json"
+    return f"voyage_{slug(rep['boat'])}_{day}.json"
 
 
 def index_entry(rep: dict, name: str) -> dict:
@@ -188,11 +219,20 @@ def compare(saved: dict, fresh: dict, limit: int = 5) -> list[str]:
     return out[:limit] if limit else out
 
 
-def verify(path: Path, design: str = "configs/v4_kayak.yaml", max_days: float = 150.0) -> list[str]:
+def design_for(rep: dict) -> str:
+    """The design file a replay was made from: v4_kayak.yaml for our boat, else
+    configs/<boat name, snake_case>.yaml ('Randolph Rev B' -> randolph_rev_b.yaml)."""
+    if rep["boat"] == DEFAULT_BOAT:
+        return "configs/v4_kayak.yaml"
+    return f"configs/{slug(rep['boat']).replace('-', '_')}.yaml"
+
+
+def verify(path: Path, design: str | None = None, max_days: float = 150.0) -> list[str]:
     """Re-simulate a committed replay's launch with its seed and compare."""
     from boatsim.mc.months import MonthlyVoyage
 
     saved = json.loads(Path(path).read_text())
+    design = design or design_for(saved)
     job = MonthlyVoyage(design_path=design, max_days=max_days)
     fresh = to_replay(job(datetime.fromisoformat(saved["start"]), saved["seed"]), saved["boat"])
     # Round-trip through JSON so the fresh copy has exactly the file's types.
@@ -209,9 +249,14 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--max-days", type=float, default=150.0)
     r.add_argument("--workers", type=int, default=4)
     r.add_argument("--out", default="sea3d/public/voyages")
+    r.add_argument(
+        "--label",
+        default=None,
+        help="boat name in the replay (default: v4 kayak for our design, else the design's name)",
+    )
     v = sub.add_parser("verify", help="re-simulate committed replays and fail if they differ")
     v.add_argument("files", nargs="+")
-    v.add_argument("--design", default="configs/v4_kayak.yaml")
+    v.add_argument("--design", default=None, help="default: from the replay's boat name")
     v.add_argument("--max-days", type=float, default=150.0)
     a = p.parse_args(argv)
 
@@ -230,23 +275,29 @@ def main(argv: list[str] | None = None) -> None:
             )
         return
 
+    from boatsim.config import load_design
     from boatsim.mc.months import MonthlyVoyage, launches
     from boatsim.runner.parallel import run_many
 
     job = MonthlyVoyage(design_path=a.design, max_days=a.max_days)
+    if a.label:
+        label = a.label
+    elif Path(a.design).name == "v4_kayak.yaml":
+        label = DEFAULT_BOAT
+    else:
+        label = load_design(a.design).name
+    reducer = ReplayReducer(label)
     starts = [t for t in launches(a.year) if t.month in a.months]
     # Same seeds as the odds batch (year * 1000 + launch index over the year).
     all_starts = launches(a.year)
     first = all_starts.index(starts[0])
     if starts == all_starts[first : first + len(starts)]:  # one block of months: run in parallel
-        reps = run_many(
-            job, starts, seed=a.year * 1000 + first, workers=a.workers, reduce=replay_reduce
-        )
+        reps = run_many(job, starts, seed=a.year * 1000 + first, workers=a.workers, reduce=reducer)
     else:
         reps = []
         for t in starts:
             seed = a.year * 1000 + all_starts.index(t)
-            reps += run_many(job, [t], seed=seed, workers=1, reduce=replay_reduce)
+            reps += run_many(job, [t], seed=seed, workers=1, reduce=reducer)
     idx = write(reps, Path(a.out))
     for rep in reps:
         print(f"{rep['start']}  {rep['outcome']:<12} {rep['days']:6.1f} d  {len(rep['h'])} rows")

@@ -7,14 +7,16 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
-import { BUILDERS, type BoatModel } from "./boats/model";
+import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BOATS, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
 import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
-import { Sea, SEA_SIZE } from "./water";
+import { Contact } from "./contact";
+import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
+import { Atmosphere } from "./atmosphere";
+import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./waves";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
@@ -55,7 +57,7 @@ renderer.toneMappingExposure = 0.55;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 3000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 12000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -65,42 +67,24 @@ controls.maxPolarAngle = Math.PI * 0.495;
 controls.autoRotateSpeed = 0.35;
 
 // Late-afternoon sun low over the sea, so the glint shows the wave shapes.
-const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(80), THREE.MathUtils.degToRad(-150));
-const sky = new Sky();
-sky.scale.setScalar(SEA_SIZE * 4);
-const su = sky.material.uniforms;
-su.turbidity.value = 4;
-su.rayleigh.value = 1.4;
-su.mieCoefficient.value = 0.004;
-su.mieDirectionalG.value = 0.85;
-su.sunPosition.value.copy(sunDir);
-scene.add(sky);
-{
-  // Reflections of this sky on the water and hulls.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = new THREE.Scene();
-  env.add(sky.clone());
-  scene.environment = pmrem.fromScene(env).texture;
-  pmrem.dispose();
-}
-const horizon = new THREE.Color(0xc9dbe6);
-scene.fog = new THREE.Fog(horizon, 60, SEA_SIZE * 0.55);
-const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
-sun.position.copy(sunDir).multiplyScalar(100);
-scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x0b2a3f, 0.5));
+const atmos = new Atmosphere(renderer, scene, camera);
+atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
 const clock = new THREE.Clock();
-let quality = qualitySelect.value as Quality;
+// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
+let look: Look = startLook(qualitySelect);
+let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 scene.add(sea.mesh);
+sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 
 interface Boat {
   spec: BoatSpec;
   model: BoatModel;
   motion: Mover;
   wake: Wake;
+  contact: Contact;
   place: Placement;
   tag: HTMLDivElement;
 }
@@ -109,11 +93,11 @@ const boats: Boat[] = BOATS.map((spec) => {
   tag.className = "tag";
   tag.style.setProperty("--c", "#" + spec.colour.toString(16).padStart(6, "0"));
   tag.innerHTML = `<b></b><span></span>`;
-  tag.querySelector("b")!.textContent = spec.key === "kayak" ? "Our kayak" : "Randolph drone";
+  tag.querySelector("b")!.textContent = spec.key === "kayak" ? "Our kayak" : "Randolph boat (our model)";
   tag.querySelector("span")!.textContent = `${spec.length.toFixed(2)} m, ${spec.massKg} kg`;
   $("tags").appendChild(tag);
   const place = { x: 0, z: 0, yaw: 0 };
-  return { spec, model: null!, motion: newMotion(spec, place, 0), wake: null!, place, tag };
+  return { spec, model: null!, motion: newMotion(spec, place, 0), wake: null!, contact: null!, place, tag };
 });
 
 function buildBoats(q: Quality): void {
@@ -126,8 +110,15 @@ function buildBoats(q: Quality): void {
       scene.remove(b.wake.points);
       b.wake.dispose();
     }
+    if (b.contact) {
+      scene.remove(b.contact.collar, b.contact.spray);
+      b.contact.dispose();
+    }
     b.model = BUILDERS[b.spec.key](q);
+    b.contact = new Contact(b.model.form, b.spec, q);
+    scene.add(b.contact.collar, b.contact.spray);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
+    shadowsOn(b.model.root);
     scene.add(b.model.root, b.wake.points);
   }
 }
@@ -161,11 +152,18 @@ function placeBoats(): void {
   });
 }
 
-function setQuality(q: Quality): void {
+function setQuality(l: Look): void {
+  look = l;
+  const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
   buildBoats(q);
-  renderer.setPixelRatio(q === "high" ? Math.min(window.devicePixelRatio, 2) : 1);
+  // Low on software graphics (no graphics card) draws at half resolution to keep moving.
+  const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
+  renderer.setPixelRatio(ratio);
+  atmos.setBloom(q === "high");
+  atmos.setUltra(l === "ultra");
+  atmos.setPixelRatio(ratio);
 }
 
 // ---------- camera presets ----------
@@ -208,7 +206,7 @@ seaSelect.addEventListener("change", () => {
   setSea(seaSelect.value);
   placeBoats();
 });
-qualitySelect.addEventListener("change", () => setQuality(qualitySelect.value as Quality));
+qualitySelect.addEventListener("change", () => setQuality(qualitySelect.value as Look));
 headingSelect.addEventListener("change", () => {
   placeBoats();
   goTo(document.querySelector<HTMLButtonElement>('#shots button[aria-pressed="true"]')?.dataset.shot ?? "side");
@@ -219,9 +217,14 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  atmos.setSize(window.innerWidth, window.innerHeight);
 });
 
-setQuality(quality);
+setQuality(look);
+// The detailed (Blender) boats, when the build has them: swap them in once loaded.
+loadDetailedModels().then((ok) => {
+  if (ok) buildBoats(quality);
+});
 setSea(seaKey);
 placeBoats();
 goTo("side", true);
@@ -249,6 +252,8 @@ const status = {
 seaSelect.addEventListener("change", () => (status.maxRoll = {}));
 
 // ---------- loop ----------
+const guard = new FpsGuard();
+const bowW = new THREE.Vector3();
 const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
@@ -262,6 +267,14 @@ renderer.setAnimationLoop(() => {
     root.rotation.set(b.motion.roll, b.place.yaw, b.motion.pitch, "YZX");
     b.model.animate(t);
     b.wake.update(comps, t, b.place);
+    root.updateMatrixWorld();
+    bowW.set(b.contact.bow[0], b.spec.cgBelowWaterline, b.contact.bow[1]);
+    root.localToWorld(bowW);
+    b.contact.update(comps, t, b.place, hsOf(comps), {
+      speed: b.spec.cruiseSpeed,
+      bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t),
+      light: atmos.ambient,
+    });
     status.maxRoll[b.spec.key] = Math.max(status.maxRoll[b.spec.key] ?? 0, Math.abs(b.motion.roll));
     return {
       key: b.spec.key,
@@ -288,7 +301,17 @@ renderer.setAnimationLoop(() => {
   controls.update();
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
-  renderer.render(scene, camera);
+  sea.setSun(atmos.glintDir, atmos.glintLight);
+  // Ultra: focus where the camera looks, shadows round both boats; back to High if too slow.
+  if (atmos.ultra) {
+    atmos.setFocus(camera.position.distanceTo(controls.target));
+    atmos.shadowAround(controls.target, 6);
+  }
+  if (guard.tick(t, look === "ultra")) {
+    qualitySelect.value = "high";
+    setQuality("high");
+  }
+  atmos.render();
   // Name tags above each boat.
   const w = window.innerWidth;
   const h = window.innerHeight;

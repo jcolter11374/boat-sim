@@ -7,7 +7,7 @@
 // Run after `npm run build`. Needs the `playwright` package and Chromium.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { writeFixture } from "./fixture-voyage.mjs";
+import { writeFixture, writeRaceFixture } from "./fixture-voyage.mjs";
 import { chromium } from "playwright";
 
 const URL = "http://localhost:4173/";
@@ -25,7 +25,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
-  await page.goto(URL);
+  // Low quality throughout: CI draws with software graphics at about one frame a
+  // second, and the frame-count waits below need headroom. High is checked once.
+  await page.goto(`${URL}?quality=low`);
   await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 10, null, { timeout: 30000 });
   mkdirSync("test-output", { recursive: true });
   const log = [];
@@ -55,13 +57,14 @@ try {
   }
 
   // Quality switch rebuilds the sea mesh with a different resolution.
-  const vHigh = await page.evaluate(() => window.__sea3d.seaVertices);
-  await page.selectOption("#quality", "low");
-  await page.waitForTimeout(500);
   const vLow = await page.evaluate(() => window.__sea3d.seaVertices);
+  await page.selectOption("#quality", "high");
+  await page.waitForTimeout(500);
+  const vHigh = await page.evaluate(() => window.__sea3d.seaVertices);
   if (!(vLow > 0 && vLow < vHigh)) fail(`low quality should use fewer sea vertices (high ${vHigh}, low ${vLow})`);
-  const pngLow = await page.screenshot({ path: "test-output/sea-gale-low.png" });
-  if (pngLow.length < 20000) fail(`low-quality screenshot looks blank (${pngLow.length} bytes)`);
+  const pngHigh = await page.screenshot({ path: "test-output/sea-gale-high.png" });
+  if (pngHigh.length < 20000) fail(`high-quality screenshot looks blank (${pngHigh.length} bytes)`);
+  await page.selectOption("#quality", "low");
 
   // Every camera button works.
   for (const shot of ["kayak", "randolph", "low", "high", "side"]) await page.click(`#shots button[data-shot="${shot}"]`);
@@ -78,10 +81,15 @@ try {
   for (const [n, v] of idx.entries()) {
     const full = n < (real ? 3 : 1);
     const rep = JSON.parse(readFileSync(`dist/${dataDir}/${v.file}`, "utf8"));
-    await page.goto(`${URL}voyage.html?data=./${dataDir}&voyage=${v.file}`);
+    await page.goto(`${URL}voyage.html?quality=low&data=./${dataDir}&voyage=${v.file}`);
     await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
     const err = await page.evaluate(() => window.__replay.error);
     if (err) fail(`voyage page: ${err}`);
+    // The detailed Blender boats are used when the build has them.
+    for (const m of ["kayak", "randolph"]) {
+      if (!existsSync(`dist/models/${m}.glb`)) continue;
+      await page.waitForFunction((name) => window.__replay.models?.includes(name), m, { timeout: 30000 }).catch(() => fail(`models/${m}.glb is in the build but the page didn't load it`));
+    }
     // The page's position at every logged hour is the logged position.
     const bad = await page.evaluate((r) => {
       const out = [];
@@ -126,12 +134,72 @@ try {
     await page.waitForTimeout(1500);
     const h1 = await page.evaluate(() => window.__replay.hour);
     if (!(h1 > h0)) fail(`${v.file}: playback didn't advance (${h0} -> ${h1})`);
+    // Working equipment: each boat's moving parts exist.
+    const g0 = (await page.evaluate(() => window.__replay.gear)).parts ?? {};
+    const sailboat = /randolph/i.test(rep.boat ?? "");
+    const gearOk = sailboat ? g0.props === 0 && g0.wing && g0.vane : g0.props === 2 && !g0.wing;
+    const c0 = await page.evaluate(() => window.__replay.contact);
+    if (!(c0.collar > 0)) fail(`${v.file}: no foam where the hull meets the water: ${JSON.stringify(c0)}`);
+    if (!gearOk || !g0.rudder || !g0.light || !(g0.panels > 0)) fail(`${v.file}: gear missing: ${JSON.stringify(g0)}`);
     await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
     await page.waitForSelector("#outcome.show", { timeout: 10000 });
+    // Every part the log says broke is shown broken: a warning sign on the boat and a red chip.
+    await page.waitForTimeout(400);
+    const broke = [...new Set(rep.events.filter((e) => e.kind === "part_failed").map((e) => e.detail.split(" ")[0]))].sort();
+    const g1 = await page.evaluate(() => window.__replay.gear);
+    if (JSON.stringify([...g1.failed].sort()) !== JSON.stringify(broke)) fail(`${v.file}: gear shows broken ${JSON.stringify(g1.failed)}, log says ${JSON.stringify(broke)}`);
+    const unsigned = broke.filter((p) => !g1.now.signs.includes(p));
+    if (real && unsigned.length) fail(`${v.file}: no warning sign for ${unsigned.join(", ")}`);
     const pngV = await page.screenshot({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
     if (pngV.length < 20000) fail(`voyage screenshot looks blank (${pngV.length} bytes)`);
     log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} rows, ${whole.length} whole hours checked`);
   }
+  if (errors.length) fail(`page errors: ${errors.join("; ")}`);
+
+  // ---------- race mode: two boats, one clock ----------
+  // Real Randolph replays if the build has them, else a made-up race fixture.
+  const raceIdx = idx.filter((v) => /randolph/i.test(v.boat ?? ""));
+  const raceDate = raceIdx.map((v) => v.start.slice(0, 10)).find((d) => idx.some((v) => !/randolph/i.test(v.boat ?? "") && v.start.startsWith(d)));
+  const raceDir = raceDate ? dataDir : "voyages-race-fixture";
+  if (!raceDate) writeRaceFixture(`dist/${raceDir}`);
+  const date = raceDate ?? "2020-05-01";
+  await page.goto(`${URL}voyage.html?quality=low&data=./${raceDir}&race=${date}`);
+  await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
+  const rerr = await page.evaluate(() => window.__replay.error);
+  if (rerr) fail(`race page: ${rerr}`);
+  const boats = await page.evaluate(() => window.__replay.boats);
+  if (boats.length !== 2 || !/randolph/i.test(boats[1])) fail(`race should show our kayak then Randolph, got ${JSON.stringify(boats)}`);
+  const rIdx = JSON.parse(readFileSync(`dist/${raceDir}/index.json`, "utf8")).voyages;
+  const rFiles = [rIdx.find((v) => !/randolph/i.test(v.boat ?? "") && v.start.startsWith(date)), rIdx.find((v) => /randolph/i.test(v.boat ?? "") && v.start.startsWith(date))];
+  let maxEnd = 0;
+  for (const [lane, v] of rFiles.entries()) {
+    const r = JSON.parse(readFileSync(`dist/${raceDir}/${v.file}`, "utf8"));
+    maxEnd = Math.max(maxEnd, r.h.at(-1));
+    const off = await page.evaluate(([r, lane]) => {
+      let n = 0;
+      for (let i = 0; i < r.h.length; i++) {
+        if (r.lat[i] == null || r.lon[i] == null) continue;
+        const [la, lo] = window.__replay.lanePositionAt(lane, r.h[i]);
+        if (la !== r.lat[i] || lo !== r.lon[i]) n++;
+      }
+      return n;
+    }, [r, lane]);
+    if (off) fail(`race lane ${lane} (${v.file}): ${off} logged hours drawn off the log`);
+  }
+  const maxHour = await page.evaluate(() => window.__replay.maxHour);
+  if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+  await page.click('#focus button[data-lane="1"]');
+  await page.waitForTimeout(800);
+  if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
+  // Its moving parts: wing, wind vane, rudder, comms light; no propellers.
+  const gR = (await page.evaluate(() => window.__replay.gear)).parts ?? {};
+  if (gR.props !== 0 || !gR.wing || !gR.vane || !gR.rudder || !gR.light) fail(`Randolph gear missing: ${JSON.stringify(gR)}`);
+  await page.screenshot({ path: "test-output/voyage-race-randolph.png" });
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
+  await page.waitForSelector("#outcome.show", { timeout: 10000 });
+  const pngR = await page.screenshot({ path: "test-output/voyage-race-end.png" });
+  if (pngR.length < 20000) fail(`race screenshot looks blank (${pngR.length} bytes)`);
+  log.push(`${raceDate ? "" : "fixture "}race ${date}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();

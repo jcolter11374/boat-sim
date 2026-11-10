@@ -2,7 +2,7 @@
 
 Cheap checks that need no weather data: the files are well formed, the index
 lists exactly them, each carries the seed the odds batch gives its launch, and
-each starts at today's drop point (so a replay made before a route change
+each starts at its design's drop point (so a replay made before a route change
 fails here). The full re-simulation check is `replay verify` in the
 replay-check workflow; compare() is tested here on made-up replays.
 """
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from boatsim.config import load_design
 from boatsim.mc.months import launches
-from boatsim.runner.replay import COLUMNS, SCHEMA, compare, file_name
-from boatsim.runner.simulate import DROP_POINT
+from boatsim.runner.replay import COLUMNS, SCHEMA, compare, design_for, file_name
 
 VOYAGES = Path(__file__).resolve().parents[1] / "sea3d" / "public" / "voyages"
 FILES = sorted(VOYAGES.glob("voyage_*.json"))
@@ -57,9 +57,11 @@ def test_replay_file_is_sound(path):
     # Seed as in the odds batch: year * 1000 + launch index over the year.
     start = datetime.fromisoformat(rep["start"])
     assert rep["seed"] == start.year * 1000 + launches(start.year).index(start)
-    # Made with today's drop point, and the boat starts there.
-    assert rep["course"]["drop"] == list(DROP_POINT)
-    assert _km(DROP_POINT, (rep["lat"][0], rep["lon"][0])) < 10
+    # Made with its design's drop point as it is today, and the boat starts there.
+    voyage = load_design(Path(__file__).resolve().parents[1] / design_for(rep)).voyage
+    drop = [voyage["drop_lat"], voyage["drop_lon"]]
+    assert rep["course"]["drop"] == drop
+    assert _km(drop, (rep["lat"][0], rep["lon"][0])) < 10
     # The log covers the voyage: last row within a day of the end.
     end = datetime.fromisoformat(rep["end"])
     days = (end - start).total_seconds() / 86400

@@ -45,6 +45,8 @@ export interface Replay {
   current_u: Col;
   current_v: Col;
   ghi: Col;
+  iridium_ok?: Col; // 1/0 per hour (from PR #135); absent in older files
+  beacon_ok?: Col;
   events: ReplayEvent[];
 }
 
@@ -135,7 +137,78 @@ export function distanceKm(a: [number, number], b: [number, number]): number {
 }
 
 /** Plain words for an event, for John. */
-export function describeEvent(e: ReplayEvent): string {
+/** A part_failed event's part name ("rudder") and the log's reason ("knockdown"). */
+export function failedPart(e: ReplayEvent): { part: string; why: string } {
+  const m = /^(\w+)\s*(?:\((.*)\))?/.exec(e.detail ?? "");
+  return { part: m?.[1] ?? "", why: m?.[2] ?? "" };
+}
+
+/** Plain names for the parts that can break, for the equipment card. */
+export const PART_NAME: Record<string, string> = {
+  thruster_port: "Left motor",
+  thruster_starboard: "Right motor",
+  rudder: "Rudder",
+  sail: "Wing sail",
+  electronics_main: "Main computer",
+  electronics_safe: "Backup computer",
+  comms_silent: "Satellite radio",
+  beacon: "Backup beacon",
+  leak_main_tub: "Hull",
+  leak_safe_tub: "Hull",
+  entangled: "No snags",
+};
+
+/** Plain-English pop-up for a broken part (no sailing words). boat: the replay's boat name. */
+export function partText(e: ReplayEvent, boat = ""): string {
+  const { part, why } = failedPart(e);
+  const sailboat = /randolph/i.test(boat);
+  switch (part) {
+    case "thruster_port":
+      return "The left motor broke. The right one keeps the boat going, a bit slower.";
+    case "thruster_starboard":
+      return "The right motor broke. The left one keeps the boat going, a bit slower.";
+    case "rudder":
+      if (/knockdown/i.test(why)) return "A big wave broke the rudder. It swings loose now, so the boat can't steer well.";
+      return sailboat
+        ? "The steering motor failed. A spring holds the rudder straight, so the boat goes where wind and current take it."
+        : "The steering motor failed. A spring holds the rudder straight; the boat steers by running its two motors at different speeds.";
+    case "sail":
+      return "A big wave knocked the boat flat and tore the wing sail. It can barely sail now.";
+    case "electronics_main":
+      return sailboat
+        ? "The boat's only computer box failed. It can't steer or call home any more."
+        : "The main computer box failed. The backup box takes over.";
+    case "electronics_safe":
+      return "The backup computer box failed.";
+    case "comms_silent":
+      return sailboat
+        ? "The satellite radio stopped working. Only the small backup tracker can say where the boat is now."
+        : "The satellite radio stopped working. Only the small backup beacon can say where the boat is now.";
+    case "beacon":
+      return sailboat ? "The small backup tracker stopped working." : "The small backup beacon stopped working.";
+    case "leak_main_tub":
+    case "leak_safe_tub":
+      return "Water is getting into the hull.";
+    case "entangled":
+      return "Fishing line or seaweed got caught on the boat and slows it down.";
+    default:
+      return "Something broke" + (e.detail ? `: ${e.detail}` : "");
+  }
+}
+
+/** Parts broken by this hour, with the log's reason. */
+export function failuresAt(rep: Replay, hour: number): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const e of rep.events) {
+    if (e.h > hour) break;
+    if (e.kind !== "part_failed") continue;
+    const { part, why } = failedPart(e);
+    if (part && !out.has(part)) out.set(part, why);
+  }
+  return out;
+}
+
+export function describeEvent(e: ReplayEvent, boat = ""): string {
   const d = e.detail ? `: ${e.detail}` : "";
   switch (e.kind) {
     case "start_line":
@@ -145,9 +218,12 @@ export function describeEvent(e: ReplayEvent): string {
     case "arrived":
       return "Reached the finish target";
     case "part_failed":
-      return "Part failed" + d;
-    case "capsize":
-      return "Knocked over by a wave" + d;
+      return partText(e, boat);
+    case "capsize": {
+      const m = /(\d+) knockdown\(s\), Hs ([\d.]+) m/.exec(e.detail);
+      if (m) return `Knocked flat by a breaking wave${m[1] !== "1" ? ` (${m[1]} times)` : ""}, waves ${m[2]} m`;
+      return "Knocked flat by a breaking wave" + d;
+    }
     case "safe_mode":
       return "Backup controller took over" + d;
     case "battery_empty":
@@ -181,4 +257,15 @@ export function toneOf(e: ReplayEvent): Tone {
   if (["part_failed", "capsize", "safe_mode", "timeout"].includes(e.kind)) return "warn";
   if (/silent|iridium|comms/i.test(e.detail)) return "warn";
   return "info";
+}
+
+/** Comms at an hour: "ok", "beacon" (only the backup beacon), "silent", or null if the file doesn't say. */
+export function commsAt(rep: Replay, hour: number): "ok" | "beacon" | "silent" | null {
+  if (!rep.iridium_ok) return null;
+  const [i] = locate(rep.h, hour);
+  const ir = rep.iridium_ok[i];
+  const bc = rep.beacon_ok?.[i];
+  if (ir == null) return null;
+  if (ir) return "ok";
+  return bc ? "beacon" : "silent";
 }

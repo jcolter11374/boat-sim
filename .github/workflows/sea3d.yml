@@ -25,7 +25,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: sea3d
@@ -37,6 +37,30 @@ jobs:
           cache: npm
           cache-dependency-path: sea3d/package-lock.json
       - run: npm ci
+      # The detailed boats (blender/build_*.py): Blender as a Python module,
+      # headless. Cached on the scripts' hash, so they only rebuild when a
+      # script changes. If it fails, the page falls back to the drawn-in-code boats.
+      - name: Cache the Blender boats
+        id: kayak-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            sea3d/public/models/kayak.glb
+            sea3d/public/models/randolph.glb
+          key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
+      - uses: actions/setup-python@v5
+        if: steps.kayak-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.11"
+      - name: Build the boats with Blender
+        if: steps.kayak-cache.outputs.cache-hit != 'true'
+        continue-on-error: true # the page falls back to the drawn-in-code boats
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxrender1 libxi6 libxkbcommon0 libsm6 libgl1 > /dev/null
+          pip install -q bpy==4.2.0 pillow numpy
+          python blender/build_kayak.py public/models/kayak.glb
+          python blender/build_randolph.py public/models/randolph.glb
       - name: Type-check and build
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)

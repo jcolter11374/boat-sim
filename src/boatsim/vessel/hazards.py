@@ -157,6 +157,12 @@ class HazardParams:
     # allows for well-separated channels, because ours share far more. 1.0 gives
     # the single-box boats of the record.
     electronics_common_cause: float = 0.3
+    # Boxes fitted: 2 (ours, above), or 1 for a single-box boat such as the
+    # Randolph Rev B: one box holds autopilot and radio, so any electronics or
+    # unrecovered software failure leaves it silent and uncontrolled: a loss,
+    # unless a working backup tracker keeps reporting (then it drifts, tracked). It rolls the common-cause die, so
+    # paired runs against our kayak stay in step (hazards.SLOT).
+    electronics_boxes: int = 2
     # R2 comms_silent (new): planning 0.0011, historical 0.0022, x (1 + Hs/4),
     # x early life. The Iridium modem, its antenna or the comms power path dies;
     # the boat sails on, unheard on Iridium. The Globalstar beacon is separate.
@@ -164,6 +170,8 @@ class HazardParams:
     # Globalstar SmartOne Solar beacon dying on its own (own cell and battery).
     # Not in R2. GUESS: same as a thruster, a sealed commercial unit.
     beacon_per_day: float = 0.0007
+    # What the backup tracker is called in events (Rev B carries a YB3).
+    beacon_name: str = "Globalstar beacon"
     # R2 software hang: 0.02/day, watchdog clears 95 %. A hang that isn't
     # cleared takes out the main box (Scout's suspected failure, 2013).
     software_hang_per_day: float = 0.02
@@ -563,7 +571,8 @@ def sample_failures(
 
     # Leak into one of the two tubs
     if roll("leak", p.leak_per_day * (1.0 + (hs / 3.0) ** 2) * early):
-        tub = "leak_main_tub" if u[SLOT["leak_tub"]] < 0.5 else "leak_safe_tub"
+        one_box = p.electronics_boxes == 1  # one box, one tub that matters
+        tub = "leak_main_tub" if one_box or u[SLOT["leak_tub"]] < 0.5 else "leak_safe_tub"
         if not broken(tub):
             fail(tub, "water getting into the hull")
 
@@ -572,31 +581,44 @@ def sample_failures(
     # beta of the rate takes out both. Software hang on main.
     beta = min(max(p.electronics_common_cause, 0.0), 1.0)
     wet = any(broken(TUB_FOR_BOX[b]) for b in ELECTRONICS)
-    common = beta * p.electronics_per_day * early
-    if wet:
-        common *= p.electronics_wet_multiplier
-    if roll("electronics_common", common) and not all(broken(b) for b in ELECTRONICS):
+    if p.electronics_boxes == 1:
+        rate = p.electronics_per_day * early * (p.electronics_wet_multiplier if wet else 1.0)
+        rate += p.software_hang_per_day * (1.0 - p.watchdog_recovers)
+        if roll("electronics_common", rate) and not broken("electronics_main"):
+            fail("electronics_main", "the one electronics box: electronics or software failure")
+            out.failed_parts.append("electronics_safe")  # no second box to fall back on
+            if broken("beacon"):  # no working backup tracker (or none fitted)
+                lose("electronics box dead: silent and uncontrolled")
+                return out
+            # A backup tracker in its own compartment (Rev B's YB3) keeps reporting:
+            # the boat drifts on, uncontrolled but tracked, and the runner scores it
+            # as usual (#153). The tracker can still fail later (beacon die below).
+    else:
+        common = beta * p.electronics_per_day * early
+        if wet:
+            common *= p.electronics_wet_multiplier
+        if roll("electronics_common", common) and not all(broken(b) for b in ELECTRONICS):
+            for box in ELECTRONICS:
+                if not broken(box):
+                    fail(box, "common-cause electronics failure")
         for box in ELECTRONICS:
-            if not broken(box):
-                fail(box, "common-cause electronics failure")
-    for box in ELECTRONICS:
-        rate = (1.0 - beta) * p.electronics_per_day * early
-        if broken(TUB_FOR_BOX[box]):
-            rate *= p.electronics_wet_multiplier
-        if box == "electronics_main":
-            rate += p.software_hang_per_day * (1.0 - p.watchdog_recovers)
-        if roll(box, rate) and not broken(box):
-            fail(box, "electronics or software failure")
-    if all(broken(b) for b in ELECTRONICS):
-        lose("both electronics boxes dead: silent and uncontrolled")
-        return out
+            rate = (1.0 - beta) * p.electronics_per_day * early
+            if broken(TUB_FOR_BOX[box]):
+                rate *= p.electronics_wet_multiplier
+            if box == "electronics_main":
+                rate += p.software_hang_per_day * (1.0 - p.watchdog_recovers)
+            if roll(box, rate) and not broken(box):
+                fail(box, "electronics or software failure")
+        if all(broken(b) for b in ELECTRONICS):
+            lose("both electronics boxes dead: silent and uncontrolled")
+            return out
 
     # Comms: Iridium goes silent while the boat sails on; the beacon on its own
     comms_rate = p.comms_silent_per_day * (1.0 + hs / 4.0) * early
     if roll("comms_silent", comms_rate) and not broken("comms_silent"):
         fail("comms_silent", "Iridium modem, antenna or comms power")
     if roll("beacon", p.beacon_per_day * early) and not broken("beacon"):
-        fail("beacon", "Globalstar beacon failed")
+        fail("beacon", f"{p.beacon_name} failed")
 
     # Steering
     if roll("steering", p.steering_per_day * (1.0 + hs / 4.0) * early) and not broken("rudder"):

@@ -20,6 +20,13 @@
   #top .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
   #top .row select { width: auto; padding: 2px 4px; }
   #top a { color: #8ab4ff; }
+  #top select + select { margin-top: 6px; }
+  #focus { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
+  #focus[hidden] { display: none; }
+  #focus button { font: 600 12px system-ui, sans-serif; padding: 4px 10px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: #1b3352; color: var(--ink); }
+  #focus button[data-lane="0"][aria-pressed="true"] { background: #ff8a2a; color: #1a0d00; border-color: #ff8a2a; }
+  #focus button[data-lane="1"][aria-pressed="true"] { background: #2ec4b6; color: #002420; border-color: #2ec4b6; }
   #hud { position: fixed; top: 12px; right: 12px; display: grid; grid-template-columns: repeat(3, 134px); gap: 8px; }
   .card { padding: 8px 11px 9px; }
   .card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
@@ -28,6 +35,12 @@
   .card .s { font-size: 11px; color: var(--dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); margin-top: 5px; overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--good); border-radius: 3px; transition: width .2s; }
+  .card.wide { grid-column: 1 / -1; }
+  #eq { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 11.5px; }
+  .chip { white-space: nowrap; }
+  .chip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 4px; vertical-align: 0; }
+  .chip.bad { color: #ffb3b3; }
+  .chip.bad i { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
   .arrow { display: inline-block; transition: transform .25s; margin-left: 4px; color: var(--dim); font-size: 15px; }
   #chartbox { position: fixed; left: 12px; bottom: 86px; width: 470px; height: 255px; padding: 0; overflow: hidden;
     cursor: zoom-in; transition: all .35s ease; }
@@ -48,7 +61,7 @@
   #ticks i { position: absolute; top: 0; width: 2px; height: 6px; border-radius: 1px; }
   #when { min-width: 168px; text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12.5px; }
   #when b { color: var(--ink); font-size: 14px; }
-  #toasts { position: fixed; right: 12px; top: 190px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+  #toasts { position: fixed; right: 12px; top: 262px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
   .toast { padding: 7px 11px; border-left: 4px solid var(--c); font-size: 12.5px; animation: in .3s ease; }
   .toast b { display: block; font-size: 11px; color: var(--dim); font-weight: 500; }
   @keyframes in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
@@ -68,30 +81,40 @@
 <div id="app"></div>
 <div id="top" class="glass">
   <h1>Voyage replay</h1>
-  <p class="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
+  <p class="sub" id="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
+  <select id="boat" aria-label="Boat"></select>
   <select id="voyage" aria-label="Voyage"></select>
+  <div id="focus" role="group" aria-label="Close-up follows" hidden>
+    <span>Close-up:</span>
+    <button data-lane="0" aria-pressed="true">Our kayak</button>
+    <button data-lane="1" aria-pressed="false">Randolph (our model)</button>
+  </div>
   <div class="row">
-    <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option></select></label>
+    <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option><option value="ultra">Ultra (good graphics card)</option></select></label>
     <a href="./index.html">Both boats side by side &rarr;</a>
   </div>
 </div>
 <div id="hud">
   <div class="card glass"><div class="k">Day</div><div class="v" id="h-day">0</div><div class="s" id="h-date"></div></div>
-  <div class="card glass"><div class="k">Battery</div><div class="v" id="h-soc">-</div><div class="bar"><i id="h-socbar"></i></div></div>
+  <div class="card glass"><div class="k">Battery</div><div class="v" id="h-soc">-</div><div class="bar"><i id="h-socbar"></i></div><div class="s" id="h-charge"></div></div>
   <div class="card glass"><div class="k">Speed</div><div class="v" id="h-stw">-</div><div class="s">through the water</div></div>
   <div class="card glass"><div class="k">Wind</div><div class="v" id="h-wind">-</div><div class="s" id="h-winddir"></div></div>
   <div class="card glass"><div class="k">Waves</div><div class="v" id="h-hs">-</div><div class="s" id="h-tp"></div></div>
   <div class="card glass"><div class="k">To target</div><div class="v" id="h-dist">-</div><div class="s" id="h-sun"></div></div>
+  <div class="card glass wide"><div class="k">Equipment <span class="muted">· green working, red broken</span></div><div id="eq"></div></div>
 </div>
 <div id="toasts"></div>
 <div id="chartbox" class="glass" title="Click to enlarge">
   <canvas id="chart"></canvas>
   <div class="lbl">NORTH ATLANTIC</div>
-  <div id="legend"><i style="background:var(--orange)"></i>track<i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss</div>
+  <div id="legend"><i style="background:var(--orange)"></i><span id="lg-ours">track</span><span id="lg-theirs" hidden><i style="background:#2ec4b6"></i>Randolph (our model)</span><i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss</div>
 </div>
 <div id="transport" class="glass">
   <button id="play" aria-label="Play or pause">&#9654;</button>
   <div id="warp" role="group" aria-label="Time warp">
+    <button data-warp="0.000277778" title="Real time: one second of voyage per second">Real time</button>
+    <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
+    <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
     <button data-warp="1">1 h/s</button>
     <button data-warp="6">6 h/s</button>
     <button data-warp="24" aria-pressed="true">1 day/s</button>

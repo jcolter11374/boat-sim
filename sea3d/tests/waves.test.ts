@@ -4,11 +4,13 @@ import { test } from "node:test";
 import {
   G,
   JONSWAP_GAMMA,
+  MAX_GPU_WAVES,
   SEA_STATES,
   SPREAD_S,
   Sea,
   components,
   displace,
+  gpuWaves,
   hsOf,
   jonswapShape,
   travelFromCompass,
@@ -173,5 +175,63 @@ test("crest sharpening never folds the surface into loops", () => {
     for (const c of comps) ka += ((2 * Math.PI) / c.wavelength) * c.amplitude;
     const q = Math.min(1, 0.5 / ka);
     assert.ok(q * ka <= 0.5 + 1e-12, sea.name);
+  }
+});
+
+// The sea shader's gerstner() (water.ts), line for line in TypeScript, fed the
+// numbers gpuWaves() packs for it. If the shader or the packing drifts from
+// displace(), the drawn sea stops being the sea the boats float on.
+function shaderGerstner(p: ReturnType<typeof gpuWaves>, x: number, z: number, t: number) {
+  const d = [0, 0, 0];
+  const tx = [1, 0, 0];
+  const tz = [0, 0, 1];
+  for (let i = 0; i < p.n; i++) {
+    const [amp, k, om, ph] = p.wa.slice(i * 4, i * 4 + 4);
+    const [ux, uz] = p.wd.slice(i * 2, i * 2 + 2);
+    const th = k * (ux * x + uz * z) - om * t + ph;
+    const s = Math.sin(th);
+    const c = Math.cos(th);
+    const qa = p.q * amp;
+    d[0] += -qa * ux * s;
+    d[1] += amp * c;
+    d[2] += -qa * uz * s;
+    tx[0] += -qa * k * ux * ux * c;
+    tx[1] += -amp * k * ux * s;
+    tx[2] += -qa * k * ux * uz * c;
+    tz[0] += -qa * k * ux * uz * c;
+    tz[1] += -amp * k * uz * s;
+    tz[2] += -qa * k * uz * uz * c;
+  }
+  return { d, tx, tz };
+}
+
+test("the sea shader moves the water exactly as displace() does", () => {
+  const pts: [number, number, number][] = [
+    [0, 0, 0],
+    [3.7, -12.2, 5.5],
+    [-41, 18, 33.3],
+    [120, 75, 610],
+  ];
+  for (const key of Object.keys(SEA_STATES) as (keyof typeof SEA_STATES)[]) {
+    const comps = components(SEA_STATES[key]);
+    assert.ok(comps.length <= MAX_GPU_WAVES, `${key}: ${comps.length} trains, shader holds ${MAX_GPU_WAVES}`);
+    const p = gpuWaves(comps);
+    for (const [x, z, t] of pts) {
+      const want = displace(comps, x, z, t);
+      const { d, tx, tz } = shaderGerstner(p, x, z, t);
+      for (let a = 0; a < 3; a++) assert.ok(Math.abs(d[a] - want[a]) < 1e-9, `${key} at (${x}, ${z}, ${t}) axis ${a}`);
+      // Its slope (used for lighting) is the true slope of displace()'s surface.
+      const h = 1e-4;
+      const ax = displace(comps, x + h, z, t);
+      const bx = displace(comps, x - h, z, t);
+      const az = displace(comps, x, z + h, t);
+      const bz = displace(comps, x, z - h, t);
+      for (let a = 0; a < 3; a++) {
+        const fx = (a === 0 ? 1 : 0) + (ax[a] - bx[a]) / (2 * h);
+        const fz = (a === 2 ? 1 : 0) + (az[a] - bz[a]) / (2 * h);
+        assert.ok(Math.abs(tx[a] - fx) < 1e-5, `${key} x-slope axis ${a}`);
+        assert.ok(Math.abs(tz[a] - fz) < 1e-5, `${key} z-slope axis ${a}`);
+      }
+    }
   }
 });

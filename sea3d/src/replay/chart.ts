@@ -21,13 +21,32 @@ export const TONE_COLOUR: Record<Tone, string> = {
   info: "#8ab4ff",
 };
 
+/** Track colours per boat: reporting home, backup beacon only, glow. Silent is grey for both. */
+export interface TrackColours {
+  main: string;
+  beacon: string;
+  glow: string;
+}
+export const TRACK: Record<"kayak" | "randolph", TrackColours> = {
+  kayak: { main: "#ff8a2a", beacon: "#9cc8ff", glow: "rgba(255,140,40,0.9)" },
+  randolph: { main: "#2ec4b6", beacon: "#b4f0ea", glow: "rgba(46,196,182,0.9)" },
+};
+const SILENT = "#8a94a3";
+
+interface ChartLane {
+  rep: Replay;
+  colours: TrackColours;
+}
+
 export class Chart {
   private readonly g: CanvasRenderingContext2D;
   private base: HTMLCanvasElement | null = null;
   private w = 0;
   private h = 0;
   private dpr = 1;
-  private rep: Replay | null = null;
+  private rep: Replay | null = null; // the first lane's: course marks come from it
+  private lanes: ChartLane[] = [];
+  private focus = 0;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -38,7 +57,14 @@ export class Chart {
   }
 
   setReplay(rep: Replay): void {
-    this.rep = rep;
+    this.setLanes([{ rep, colours: TRACK.kayak }], 0);
+  }
+
+  /** One or more boats' voyages; `focus` is drawn on top with the bigger marker. */
+  setLanes(lanes: ChartLane[], focus = 0): void {
+    this.lanes = lanes;
+    this.focus = focus;
+    this.rep = lanes[0]?.rep ?? null;
     this.base = null;
   }
 
@@ -198,31 +224,55 @@ export class Chart {
     g.font = "600 10px system-ui, sans-serif";
     g.fillText("TARGET", tx + rr + 5, ty + 3);
 
+    // Other boats first, the one the close-up follows on top.
+    const order = this.lanes.map((_, k) => k).filter((k) => k !== this.focus);
+    if (this.lanes[this.focus]) order.push(this.focus);
+    for (const k of order) this.drawLane(this.lanes[k], hour, now, k === this.focus);
+  }
+
+  private drawLane({ rep, colours }: ChartLane, hour: number, now: number, focused: boolean): void {
+    const g = this.g;
     // Track so far, with a glow.
     const [i] = locate(rep.h, hour);
     const here = positionAt(rep, hour);
     g.save();
     g.lineJoin = "round";
     g.lineCap = "round";
-    g.shadowColor = "rgba(255,140,40,0.9)";
-    g.shadowBlur = 8;
-    g.strokeStyle = "#ff8a2a";
-    g.lineWidth = 2;
-    g.beginPath();
-    let started = false;
-    for (let k = 0; k <= i; k++) {
-      const la = rep.lat[k];
-      const lo = rep.lon[k];
+    g.shadowColor = colours.glow;
+    g.shadowBlur = focused ? 8 : 4;
+    g.lineWidth = focused ? 2 : 1.6;
+    // Segments coloured by comms when the file has it: orange = reporting home,
+    // pale blue = only the backup beacon, grey = silent.
+    const colourOf = (k: number) => {
+      const ir = rep.iridium_ok?.[k];
+      if (ir == null || ir) return colours.main;
+      return rep.beacon_ok?.[k] ? colours.beacon : SILENT;
+    };
+    let prev: [number, number] | null = null;
+    let colour = "";
+    for (let k = 0; k <= i + 1; k++) {
+      const atEnd = k === i + 1;
+      if (atEnd && !Number.isFinite(here[0])) break;
+      const la = atEnd ? here[0] : rep.lat[k];
+      const lo = atEnd ? here[1] : rep.lon[k];
       if (la == null || lo == null) continue;
-      const [x, y] = this.xy(la, lo);
-      if (started) g.lineTo(x, y);
-      else {
-        g.moveTo(x, y);
-        started = true;
+      const p = this.xy(la, lo);
+      const c = colourOf(Math.min(k, i));
+      if (prev) {
+        if (c !== colour) {
+          if (colour) g.stroke();
+          colour = c;
+          g.strokeStyle = c;
+          g.shadowColor = c === colours.main ? colours.glow : "rgba(150,180,220,0.5)";
+          g.setLineDash(c === SILENT ? [3, 3] : []);
+          g.beginPath();
+          g.moveTo(prev[0], prev[1]);
+        }
+        g.lineTo(p[0], p[1]);
       }
+      prev = p;
     }
-    if (started && Number.isFinite(here[0])) g.lineTo(...this.xy(here[0], here[1]));
-    g.stroke();
+    if (colour) g.stroke();
     g.restore();
 
     // Event markers up to now.
@@ -244,16 +294,18 @@ export class Chart {
     if (Number.isFinite(here[0])) {
       const [bx, by] = this.xy(here[0], here[1]);
       const p = (now / 1100) % 1;
-      g.strokeStyle = `rgba(255,170,90,${1 - p})`;
+      g.strokeStyle = colours.main;
+      g.globalAlpha = focused ? 1 - p : 0;
       g.lineWidth = 2;
       g.beginPath();
       g.arc(bx, by, 4 + p * 10, 0, Math.PI * 2);
       g.stroke();
+      g.globalAlpha = 1;
       g.fillStyle = "#fff";
-      g.strokeStyle = "#ff8a2a";
+      g.strokeStyle = colours.main;
       g.lineWidth = 2;
       g.beginPath();
-      g.arc(bx, by, 4, 0, Math.PI * 2);
+      g.arc(bx, by, focused ? 4 : 3, 0, Math.PI * 2);
       g.fill();
       g.stroke();
     }

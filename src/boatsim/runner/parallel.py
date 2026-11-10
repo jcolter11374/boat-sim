@@ -167,7 +167,11 @@ class StandardVoyage:
             ),
             link=IridiumSBDLink(),
             pinger=GlobalstarPinger(),
-            base=ForecastReplanPolicy(route=default_mission().waypoints),
+            base=ForecastReplanPolicy(
+                route=default_mission(
+                    (design.voyage["drop_lat"], design.voyage["drop_lon"])
+                ).waypoints
+            ),
             land=default_land() if self.land else None,
             finish=FinishTarget.from_voyage(design.voyage),
         )
@@ -181,7 +185,7 @@ class StandardVoyage:
             start,
             voyage["drop_lat"],
             voyage["drop_lon"],
-            default_mission(),
+            default_mission((voyage["drop_lat"], voyage["drop_lon"])),
             seed=seed,
             max_days=self.max_days,
         )

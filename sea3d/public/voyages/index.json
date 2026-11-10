@@ -2,6 +2,34 @@
  "schema": 1,
  "voyages": [
   {
+   "file": "voyage_2020-04-01.json",
+   "boat": "v4 kayak",
+   "start": "2020-04-01T12:00",
+   "outcome": "lost",
+   "days": 71.69
+  },
+  {
+   "file": "voyage_randolph-rev-b_2020-04-01.json",
+   "boat": "Randolph Rev B",
+   "start": "2020-04-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
+   "file": "voyage_2020-04-15.json",
+   "boat": "v4 kayak",
+   "start": "2020-04-15T12:00",
+   "outcome": "arrived",
+   "days": 71.4
+  },
+  {
+   "file": "voyage_randolph-rev-b_2020-04-15.json",
+   "boat": "Randolph Rev B",
+   "start": "2020-04-15T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
    "file": "voyage_2020-05-01.json",
    "boat": "v4 kayak",
    "start": "2020-05-01T12:00",
@@ -9,11 +37,53 @@
    "days": 3.92
   },
   {
+   "file": "voyage_randolph-rev-b_2020-05-01.json",
+   "boat": "Randolph Rev B",
+   "start": "2020-05-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
    "file": "voyage_2020-05-15.json",
    "boat": "v4 kayak",
    "start": "2020-05-15T12:00",
    "outcome": "disqualified",
    "days": 64.51
+  },
+  {
+   "file": "voyage_randolph-rev-b_2020-05-15.json",
+   "boat": "Randolph Rev B",
+   "start": "2020-05-15T12:00",
+   "outcome": "lost",
+   "days": 138.47
+  },
+  {
+   "file": "voyage_2020-06-01.json",
+   "boat": "v4 kayak",
+   "start": "2020-06-01T12:00",
+   "outcome": "arrived",
+   "days": 74.45
+  },
+  {
+   "file": "voyage_randolph-rev-b_2020-06-01.json",
+   "boat": "Randolph Rev B",
+   "start": "2020-06-01T12:00",
+   "outcome": "lost",
+   "days": 104.17
+  },
+  {
+   "file": "voyage_2020-06-15.json",
+   "boat": "v4 kayak",
+   "start": "2020-06-15T12:00",
+   "outcome": "arrived",
+   "days": 63.99
+  },
+  {
+   "file": "voyage_randolph-rev-b_2020-06-15.json",
+   "boat": "Randolph Rev B",
+   "start": "2020-06-15T12:00",
+   "outcome": "timeout",
+   "days": 150.0
   }
  ]
 }

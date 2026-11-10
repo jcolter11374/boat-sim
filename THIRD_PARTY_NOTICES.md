@@ -12,7 +12,12 @@ comms-silent mode, the early-life multiplier and the three rate sets (#89) come
 from their shared hazard table, `docs/Failure_Rates.md` (commit 25befa9). All
 of it is used under this licence. The Rev B righting-arm curve and roll and
 pitch inertias in `sea3d/src/motion.ts` come from their
-`docs/data/revB_gz_curve.csv` (shared on our issue #50, 9 Nov 2026), under the same licence:
+`docs/data/revB_gz_curve.csv` (shared on our issue #50, 9 Nov 2026). The wing-sail
+model in `src/boatsim/vessel/sail.py` (foil curve, wind at wing height, tacking
+rules) follows their `simulator/drone_sim/vpp.py` and `autopilot.py`, and
+`configs/randolph_rev_b.yaml` (our model of their boat) takes its numbers from
+their `simulator/drone_sim/design.py`, `failures.py`, `build-files/source/design.py`
+and docs. All under the same licence:
 
 ```
 MIT License
