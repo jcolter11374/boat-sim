@@ -1,0 +1,159 @@
+# Boatyard grid (3D roadmap item 2): every build the yard page offers, simulated
+# ahead of time (boatsim.mc.boatyard). Two parts, then one assemble job:
+#   odds    - April to June launches every 10 days, one job per year and half of
+#             the builds (same seeds for every build), real ERA5 + GLORYS12
+#   replays - the 1st/15th April to June launches of one year, slimmed for git
+#   build   - sea3d/public/boatyard/index.json plus the replays; commits them to
+#             the chosen branch when "commit" is ticked (main redeploys the page)
+# Run it by hand: Actions tab -> "Boatyard grid" -> Run workflow. Free runners only.
+# Uses the Copernicus secrets for currents; GitHub masks them in logs.
+name: Boatyard grid
+on:
+  workflow_dispatch:
+    inputs:
+      first_year:
+        description: "First odds year"
+        default: "2012"
+      last_year:
+        description: "Last odds year"
+        default: "2021"
+      replay_year:
+        description: "Replay launch year"
+        default: "2020"
+      builds:
+        description: "Builds to run (space separated ids; empty = all)"
+        default: ""
+      commit:
+        description: "Commit the grid to this branch"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: boatyard-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  BOATSIM_REQUIRE_LAND: "1"
+  BOATSIM_REQUIRE_SHIPS: "1"
+  BOATSIM_NO_FETCH: "1"  # data is pre-fetched below; a cache miss mid-run is an error
+  COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+  COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+  BUILDS: ${{ inputs.builds }}
+jobs:
+  years:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.y.outputs.list }}
+    steps:
+      - id: y
+        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year }}, ${{ inputs.last_year }}+1))))")" >> "$GITHUB_OUTPUT"
+  odds:
+    needs: years
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJson(needs.years.outputs.list) }}
+        shard: ["1/2", "2/2"]
+    env:
+      YEAR: ${{ matrix.year }}
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      # Launches run April 1 to June 30; 150 days at sea reaches late November.
+      - name: Fetch currents and weather for April to the next January
+        run: |
+          python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$((YEAR + 1))-01"
+          python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$((YEAR + 1))-01-05" --workers 4
+      - name: Run the builds over the year's April to June launches
+        run: python -m boatsim.mc.boatyard odds "$YEAR" --shard "$SHARD" --workers 4 ${BUILDS:+--builds $BUILDS} --out runs/boatyard
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boatyard-odds-${{ matrix.year }}-${{ strategy.job-index }}
+          path: runs/boatyard/odds_*.csv
+          retention-days: 90
+  replays:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/4", "2/4", "3/4", "4/4"]
+    env:
+      YEAR: ${{ inputs.replay_year }}
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Fetch currents and weather from April to 150 days after the last launch
+        run: |
+          python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-11"
+          python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$YEAR-11-25" --workers 4
+      - name: Simulate the replays
+        run: python -m boatsim.mc.boatyard replays "$YEAR" --shard "$SHARD" --workers 4 ${BUILDS:+--builds $BUILDS} --out runs/replays
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boatyard-replays-${{ strategy.job-index }}
+          path: runs/replays/
+          retention-days: 90
+  build:
+    needs: [odds, replays]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # only for the commit step
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: boatyard-odds-*
+          path: runs/odds
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: boatyard-replays-*
+          path: runs/replays
+          merge-multiple: true
+      - name: Build the index and copy the replays into the page
+        run: |
+          rm -rf sea3d/public/boatyard
+          python -m boatsim.mc.boatyard build --odds runs/odds/odds_*.csv --replays runs/replays --out sea3d/public/boatyard --commit "${GITHUB_SHA::7}"
+          du -sh sea3d/public/boatyard
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          idx = json.load(open("sea3d/public/boatyard/index.json"))
+          print("| Build | Finished | Odds (95% range) | Median days | Replays (2020) |")
+          print("|---|---|---|---|---|")
+          for b in idx["builds"]:
+              o = b["odds"] or {}
+              rng = f"{o['odds']:.0%} ({o['low95']:.0%}-{o['high95']:.0%})" if o else ""
+              reps = " ".join(r["outcome"][0].upper() for r in b["replays"])
+              print(f"| {b['label']} | {o.get('finished', '')}/{o.get('voyages', '')} | {rng} | {o.get('median_days') or ''} | {reps} |")
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boatyard
+          path: |
+            sea3d/public/boatyard/
+            runs/odds/
+          retention-days: 90
+      - name: Commit the grid
+        if: inputs.commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sea3d/public/boatyard
+          git commit -m "Boatyard grid (run ${{ github.run_id }})" || { echo "grid unchanged"; exit 0; }
+          git push

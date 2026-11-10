@@ -287,16 +287,20 @@ class SensitivityVoyage(MonthlyVoyage):
 
     variant: str = "baseline"
 
+    def spec(self) -> Variant:
+        """The variant's settings (subclasses may look them up elsewhere)."""
+        return VARIANTS[self.variant]
+
     def drop_point(self) -> tuple[float, float]:
         from boatsim.config import load_design
 
-        v = patched_design(load_design(self.design_path), VARIANTS[self.variant].design).voyage
+        v = patched_design(load_design(self.design_path), self.spec().design).voyage
         return v["drop_lat"], v["drop_lon"]
 
     def mission(self):
         from boatsim.types import Mission, Waypoint
 
-        v = VARIANTS[self.variant]
+        v = self.spec()
         if not v.route:
             return super().mission()
         return Mission(waypoints=[Waypoint(lat, lon) for lat, lon in v.route])
@@ -308,7 +312,7 @@ class SensitivityVoyage(MonthlyVoyage):
         from boatsim.runner.arrival import FinishTarget
         from boatsim.vessel import KayakVessel
 
-        v = VARIANTS[self.variant]
+        v = self.spec()
         c = super().components(seed)
         design = patched_design(load_design(self.design_path), v.design)
         if v.design:
