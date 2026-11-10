@@ -22,7 +22,7 @@ on:
         default: "2020"
       builds:
         description: "Reference builds (space separated grid ids)"
-        default: "k-p25 k-p25-brain.one-box k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-brain.one-box-beacon.none-ais.none-paint.none"
+        default: "k-p25 k-p25-brain.one-box k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none"
       publish:
         description: "Publish to the sandbox-data release"
         type: boolean

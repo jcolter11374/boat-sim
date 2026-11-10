@@ -338,3 +338,17 @@ def test_hybrid_motors_straight_upwind_where_the_wing_only_boat_tacks():
     wing = KayakVessel(C.design_for({"drive": "wing-sail"}))
     s, _ = wing.step(wing.initial_state(t, 38.0, -70.0), Command(0.0, 0.0), env, step, rng)
     assert abs(abs(((s.heading + 180) % 360) - 180) - 50.0) < 1e-9  # tacks at 50 deg
+
+
+def test_sandbox_workflow_builds_are_grid_ids():
+    """The workflow's reference builds must be real grid ids (an id goes stale
+    when an option starts to matter, as the charge controllers did)."""
+    import re
+    from pathlib import Path
+
+    text = Path(".github/workflows/sandbox.yml").read_text()
+    ids = {C.grid_id(g) for g in C.GRID}
+    found = re.findall(r"\bk-p\d+[\w.\-]*", text)
+    assert found
+    for bid in found:
+        assert bid in ids, bid
