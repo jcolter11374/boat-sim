@@ -94,6 +94,7 @@ function build(): void {
   contact = new Contact(model.form, KAYAK, quality);
   scene.add(model.root, contact.collar, contact.spray);
   outfit = new Outfit(model);
+  outfit.onShapeLoaded = () => cat && redraw();
   outfit.setView(view);
   if (cat) redraw();
 }

@@ -59,6 +59,8 @@ export interface Tracked {
   nowHour: number;
   /** Hours after nowHour are the forecast. */
   ghost: FeedGhost | null;
+  /** The replay row that holds "now" (the boat still where it last reported); moved by advanceNow. */
+  nowRow: number;
   simulated: boolean;
   fixes: Fix[]; // sorted by time
 }
@@ -148,12 +150,14 @@ export function feedToReplay(v: FeedVoyage, ghost: FeedGhost | null, course: Cou
     push(r.h, r.fix.lat, r.fix.lon, hdg, speed, r.fix.src === "iridium" ? r.fix.soc ?? null : null, ir, bc);
   });
 
-  // "Now": still where it last reported (no guessing between reports and now).
+  // "Now": still where it last reported (no guessing between reports and now). Always its own
+  // row, a moment after the report if the feed is fresh, so advanceNow can carry it on with the clock.
   const last = rows[rows.length - 1];
-  if (nowHour > lastFixHour + 1e-6) {
+  {
     const k = rep.h.length - 1;
-    push(nowHour, last.fix.lat, last.fix.lon, rep.heading[k], rep.stw[k], null, rep.iridium_ok![k]!, rep.beacon_ok![k]!);
+    push(Math.max(nowHour, lastFixHour + NOW_GAP), last.fix.lat, last.fix.lon, rep.heading[k], rep.stw[k], null, rep.iridium_ok![k]!, rep.beacon_ok![k]!);
   }
+  const nowRow = rep.h.length - 1;
 
   // The forecast after now: the ghost's middle path (comms 0: the chart draws it as a grey dashed line).
   if (ghost?.median?.length) {
@@ -168,7 +172,25 @@ export function feedToReplay(v: FeedVoyage, ghost: FeedGhost | null, course: Cou
   }
 
   rep.events = feedEvents(v, rows, t0);
-  return { rep, lastFixHour, nowHour, ghost: ghost?.median?.length ? ghost : null, simulated: !!v.voyage.replay, fixes };
+  return { rep, lastFixHour, nowHour, ghost: ghost?.median?.length ? ghost : null, simulated: !!v.voyage.replay, fixes, nowRow };
+}
+
+const NOW_GAP = 1e-3; // h
+
+/**
+ * Time keeps going after the feed was made: move "now" on to an hour (the feed's now plus the
+ * time the page has been open), so watching in real time stays live rather than tipping into
+ * the forecast. The boat stays where it last reported; "now" stops short of the forecast's next
+ * point (the page reloads the feed well before that matters).
+ */
+export function advanceNow(tr: Tracked, hour: number): void {
+  const h = tr.rep.h;
+  const k = tr.nowRow;
+  const cap = k + 1 < h.length ? h[k + 1] - NOW_GAP : Infinity;
+  const n = Math.min(Math.max(hour, h[k]), cap);
+  h[k] = n;
+  tr.nowHour = Math.max(tr.nowHour, Math.min(hour, cap));
+  tr.rep.days = Math.max(tr.rep.days, tr.nowHour / 24);
 }
 
 function feedEvents(v: FeedVoyage, rows: { h: number; fix: Fix; ir: boolean; bc: boolean }[], t0: number): ReplayEvent[] {

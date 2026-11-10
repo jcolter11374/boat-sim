@@ -122,9 +122,9 @@ test("the simulator's notes merge into the catalog without losing prices", () =>
   assert.equal(withSim(cat, null), cat);
   // Share links carry the new slots too.
   const d = plannedDesign(c);
-  d.picks.shape = "surf-ski";
-  assert.equal(decodeDesign(c, encodeDesign(c, d)).picks.shape, "surf-ski");
-  assert.equal(simChoices(d).shape, "surf-ski");
+  d.picks.shape = "cat";
+  assert.equal(decodeDesign(c, encodeDesign(c, d)).picks.shape, "cat");
+  assert.equal(simChoices(d).shape, "cat");
   assert.equal(simChoices(d).cruise_w, 25);
   // Against the planned build only the changes go to the simulator, so a slot it doesn't know yet
   // (a new part left as planned) can't stop a launch.

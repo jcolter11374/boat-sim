@@ -71,6 +71,21 @@ export async function loadDetailedModels(base = "./models"): Promise<boolean> {
   return kayakDetailed !== null || randolphDetailed !== null;
 }
 export const hasDetailedKayak = () => kayakDetailed !== null;
+
+// The Boatyard's other hull shapes (blender/build_shapes.py), loaded when first picked.
+const shapes = new Map<string, Promise<THREE.Group | null>>();
+/** A hull shape's detailed model (builder frame, finishes applied), or null if the build doesn't have it. */
+export function loadShapeModel(id: string, base = "./models"): Promise<THREE.Group | null> {
+  let p = shapes.get(id);
+  if (!p) {
+    p = loadOne(base, `shape_${id}`).then((g) => {
+      if (g) applyFinishes(g, "kayak"); // same paint and kit as our kayak
+      return g;
+    });
+    shapes.set(id, p);
+  }
+  return p;
+}
 export const hasDetailedRandolph = () => randolphDetailed !== null;
 
 // =====================================================================

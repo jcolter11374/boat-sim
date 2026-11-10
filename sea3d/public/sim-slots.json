@@ -1,5 +1,5 @@
 {
- "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, all 'no effect yet' except today's choice, until the physics lands (order: mass link, hybrid drive, materials, then surf-ski and pod). Catamaran deferred (Maya). cost and kg for the new options: Sam.",
+ "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, all 'no effect yet' except today's choice, until the physics lands (order: mass link, hybrid drive, materials, then the hull shapes). cost and kg for the new options: Sam.",
  "catalog_slots": [
   {
    "id": "thr",
@@ -506,26 +506,28 @@
      "sim": []
     },
     {
-     "id": "surf-ski",
-     "n": "Long narrow kayak, 5.2 x 0.45 m",
+     "id": "cat",
+     "n": "Small catamaran, 3.0 x 1.6 m",
      "effect": "no effect yet",
      "est": true,
-     "basis": "scaled from our kayak; drag of a narrow hull in big seas is uncertain",
-     "sim": [
-      "hull.*",
-      "hazards.critical_wave_*"
-     ]
+     "basis": "two slim hulls on a bridge deck, 140 kg; physics coming (Theo)",
+     "sim": []
     },
     {
-     "id": "pod",
-     "n": "Sealed self-righting pod, about 2 m",
+     "id": "semisub",
+     "n": "Low semi-submerged hull, 3.2 x 0.5 m",
      "effect": "no effect yet",
      "est": true,
-     "basis": "scaled from Rev B's hull; drag of a blunt body in waves has few data",
-     "sim": [
-      "hull.*",
-      "hazards.critical_wave_*"
-     ]
+     "basis": "rides almost awash, 175 kg; physics coming (Theo)",
+     "sim": []
+    },
+    {
+     "id": "board",
+     "n": "Surfboard, 3.0 x 0.85 m",
+     "effect": "no effect yet",
+     "est": true,
+     "basis": "flat wide board with a fin and a buoyant deck pod, 105 kg; physics coming (Theo)",
+     "sim": []
     }
    ]
   }

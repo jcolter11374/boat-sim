@@ -68,8 +68,9 @@ const OPTION_NAMES: Record<string, string> = {
   "plywood-epoxy": "Plywood and epoxy",
   aluminium: "Aluminium",
   kayak: "10 ft kayak (as built)",
-  "surf-ski": "Long narrow kayak, 5.2 x 0.45 m",
-  pod: "Sealed self-righting pod, about 2 m",
+  cat: "Small catamaran, 3.0 x 1.6 m",
+  semisub: "Low semi-submerged hull, 3.2 x 0.5 m",
+  board: "Surfboard, 3.0 x 0.85 m",
 };
 
 /** True when the motors and cruise power don't apply: a wing sail with no motors. */
