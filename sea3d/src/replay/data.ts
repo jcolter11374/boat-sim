@@ -223,7 +223,19 @@ export function failuresAt(rep: Replay, hour: number): Map<string, string> {
   return out;
 }
 
+/** The plain-English line for each event kind made from the feed. */
+export const FEED_EVENTS: Record<string, string> = {
+  reports_stopped: "The main box's daily reports stopped. Only the backup beacon is heard now.",
+  reports_back: "Daily reports from the main box are back.",
+  beacon_quiet: "The backup beacon has gone quiet.",
+  one_motor: "The boat reports one motor down.",
+  motors_off: "The boat switched its motors off to save the battery.",
+  safe_box_down: "The boat reports its backup box is down.",
+  lost_comms: "The boat says it hasn't heard from home for a while.",
+};
+
 export function describeEvent(e: ReplayEvent, boat = ""): string {
+  if (FEED_EVENTS[e.kind]) return FEED_EVENTS[e.kind];
   const d = e.detail ? `: ${e.detail}` : "";
   switch (e.kind) {
     case "start_line":
@@ -269,7 +281,7 @@ export type Tone = "good" | "bad" | "warn" | "info";
 export function toneOf(e: ReplayEvent): Tone {
   if (["arrived", "start_line", "finish_line"].includes(e.kind)) return "good";
   if (["lost", "aground", "disqualified", "ship_strike", "battery_empty"].includes(e.kind)) return "bad";
-  if (["part_failed", "capsize", "safe_mode", "timeout"].includes(e.kind)) return "warn";
+  if (["part_failed", "capsize", "safe_mode", "timeout", "reports_stopped", "beacon_quiet", "one_motor", "motors_off", "safe_box_down", "lost_comms"].includes(e.kind)) return "warn";
   if (/silent|iridium|comms/i.test(e.detail)) return "warn";
   return "info";
 }

@@ -258,6 +258,21 @@ try {
   if (errors.length) fail(`page errors with fog and cloud: ${errors.join("; ")}`);
   log.push("water off the deck, fog and cloud");
 
+  // Live tracker on the sample feed (Sam's replay mode, day 30: main box down, beacon only):
+  // the banner, "now" at the latest report, and the forecast look past it.
+  await page.goto(`${URL}voyage.html?live&feed=feed-sample/&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 })
+    .catch(async () => fail(`live tracker didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const lv = await page.evaluate(() => ({ ...window.__replay.live, hour: window.__replay.hour, banner: !document.getElementById("simbanner").hidden }));
+  if (!lv.simulated || !lv.banner) fail(`simulated feed without its banner: ${JSON.stringify(lv)}`);
+  if (Math.abs(lv.hour - lv.now) > 0.01 || lv.now < lv.lastFix || lv.fixes < 50) fail(`live tracker not at now: ${JSON.stringify(lv)}`);
+  await page.evaluate((h) => window.__replay.setHour(h), lv.now + 24 * 5);
+  await page.waitForFunction(() => window.__replay.live.forecast === true, null, { timeout: 30000 }).catch(() => fail("no forecast look past now"));
+  await page.evaluate(() => window.__replay.goNow());
+  await page.waitForFunction(() => window.__replay.live.forecast === false, null, { timeout: 30000 }).catch(() => fail("Now didn't come back from the forecast"));
+  if (errors.length) fail(`page errors in the live tracker: ${errors.join("; ")}`);
+  log.push(`live tracker: ${lv.fixes} fixes, now day ${(lv.now / 24).toFixed(1)}, banner on`);
+
   // Boatyard: the catalog loads, a swap changes the totals, the model and the share link.
   await page.goto(`${URL}boatyard.html?quality=low`);
   await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });

@@ -132,6 +132,14 @@
   #skylabels span { position: absolute; transform: translate(-50%, -100%); margin-top: -10px; font-size: 11.5px; color: #e9f1fb;
     text-shadow: 0 1px 3px rgba(0,0,0,.9); white-space: nowrap; }
   #skylabels span::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 7px; background: rgba(233,241,251,.6); }
+  [hidden] { display: none !important; }
+  /* Live tracker (?live): the simulated-feed banner, and the forecast look past "now". */
+  #simbanner { position: fixed; top: 100px; left: 50%; transform: translateX(-50%); z-index: 5; padding: 7px 16px; border-radius: 8px;
+    background: #c2410c; color: #fff; font: 700 13px system-ui, sans-serif; letter-spacing: .6px; box-shadow: 0 4px 18px rgba(0,0,0,.35); white-space: nowrap; }
+  #simbanner small { display: block; font-weight: 500; letter-spacing: 0; opacity: .9; text-align: center; }
+  #forecasttag { position: fixed; top: 46%; left: 50%; transform: translate(-50%, -120px); padding: 4px 12px; border-radius: 999px;
+    background: rgba(200,220,255,.18); border: 1px dashed rgba(220,232,255,.8); color: #e8f0ff; font: 700 12px system-ui, sans-serif; letter-spacing: 1px; pointer-events: none; }
+  body.live #c-wind, body.live #c-waves, body.live #playlink, body.live #livelink, body.game #livelink, body.live #top a[href="./index.html"] { display: none !important; }
   #lookup { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; padding: 5px 12px;
     border-radius: 8px; border: 1px solid var(--line); background: var(--glass); color: var(--ink); cursor: pointer; }
   #lookup[hidden] { display: none; }
@@ -158,6 +166,7 @@
   </div>
   <div class="row">
     <a href="?mode=game" id="playlink">&#127922; Play: pick your launch day</a>
+    <a href="?live" id="livelink">&#128225; Live tracker</a>
     <a href="./voyage.html" id="quitlink" hidden>Leave the game</a>
   </div>
 </div>
@@ -165,8 +174,10 @@
   <div class="card glass"><div class="k">Day</div><div class="v" id="h-day">0</div><div class="s" id="h-date"></div></div>
   <div class="card glass"><div class="k">Battery</div><div class="v" id="h-soc">-</div><div class="bar"><i id="h-socbar"></i></div><div class="s" id="h-charge"></div></div>
   <div class="card glass"><div class="k">Speed</div><div class="v" id="h-stw">-</div><div class="s">through the water</div></div>
-  <div class="card glass"><div class="k">Wind</div><div class="v" id="h-wind">-</div><div class="s" id="h-winddir"></div></div>
-  <div class="card glass"><div class="k">Waves</div><div class="v" id="h-hs">-</div><div class="s" id="h-tp"></div></div>
+  <div class="card glass" id="c-report" hidden><div class="k">Last report</div><div class="v" id="l-age">-</div><div class="s" id="l-src"></div></div>
+  <div class="card glass" id="c-eta" hidden><div class="k">Forecast arrival</div><div class="v" id="l-eta">-</div><div class="s" id="l-range"></div></div>
+  <div class="card glass" id="c-wind"><div class="k">Wind</div><div class="v" id="h-wind">-</div><div class="s" id="h-winddir"></div></div>
+  <div class="card glass" id="c-waves"><div class="k">Waves</div><div class="v" id="h-hs">-</div><div class="s" id="h-tp"></div></div>
   <div class="card glass"><div class="k">To target</div><div class="v" id="h-dist">-</div><div class="s" id="h-sun"></div></div>
   <div class="card glass wide"><div class="k">Equipment <span class="muted">· green working, red broken</span></div><div id="eq"></div></div>
 </div>
@@ -174,6 +185,8 @@
 <div id="skylabels"></div>
 <button id="lookup" aria-pressed="false" title="Tilt the view up to see the moon and stars">&#11014; Look up at the sky</button>
 <div id="toasts"></div>
+<div id="simbanner" hidden>SIMULATED VOYAGE, not the real boat<small>A test run of the tracker: the boat hasn't launched yet</small></div>
+<div id="forecasttag" hidden>FORECAST</div>
 <div id="chartbox" class="glass" title="Click to enlarge">
   <canvas id="chart"></canvas>
   <div class="lbl">NORTH ATLANTIC</div>
@@ -181,6 +194,7 @@
 </div>
 <div id="transport" class="glass">
   <button id="play" aria-label="Play or pause">&#9654;</button>
+  <button id="now" hidden title="Back to the latest report">Now</button>
   <div id="warp" role="group" aria-label="Time warp">
     <button data-warp="0.000277778" title="Real time: one second of voyage per second" aria-pressed="true">Real time</button>
     <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>

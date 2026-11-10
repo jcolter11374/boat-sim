@@ -47,6 +47,8 @@ export class Chart {
   private rep: Replay | null = null; // the first lane's: course marks come from it
   private lanes: ChartLane[] = [];
   private focus = 0;
+  /** The live tracker's forecast: middle path and spread (lat, lon, radius km). */
+  private ghost: { median: [number, number][]; spread: [number, number, number][] } | null = null;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -66,6 +68,42 @@ export class Chart {
     this.focus = focus;
     this.rep = lanes[0]?.rep ?? null;
     this.base = null;
+  }
+
+  /** The simulator's forecast from the latest report, drawn as a fuzzy tube with a dashed middle. */
+  setGhost(g: { median: [string, number, number][]; spread: [string, number, number, number][] } | null): void {
+    this.ghost = g ? { median: g.median.map(([, la, lo]) => [la, lo]), spread: g.spread.map(([, la, lo, r]) => [la, lo, r]) } : null;
+  }
+
+  private drawGhost(): void {
+    const gh = this.ghost;
+    if (!gh) return;
+    const g = this.g;
+    g.save();
+    // The spread: where most of the forecast runs are, one soft disc per day.
+    // One path of all the discs, filled once, so overlaps don't pile up into a blob.
+    g.fillStyle = "rgba(200,220,255,0.16)";
+    g.strokeStyle = "rgba(200,220,255,0.35)";
+    g.lineWidth = 0.8;
+    g.beginPath();
+    for (const [la, lo, r] of gh.spread) {
+      const [x, y] = this.xy(la, lo);
+      const rr = Math.max(this.kmToPx(r), 1.5);
+      g.moveTo(x + rr, y);
+      g.arc(x, y, rr, 0, Math.PI * 2);
+    }
+    g.fill("nonzero");
+    g.strokeStyle = "rgba(220,232,255,0.85)";
+    g.lineWidth = 1.4;
+    g.setLineDash([4, 4]);
+    g.beginPath();
+    gh.median.forEach(([la, lo], k) => {
+      const [x, y] = this.xy(la, lo);
+      if (k) g.lineTo(x, y);
+      else g.moveTo(x, y);
+    });
+    g.stroke();
+    g.restore();
   }
 
   /** Canvas pixels for a lat, lon. */
@@ -224,6 +262,7 @@ export class Chart {
     g.font = "600 10px system-ui, sans-serif";
     g.fillText("TARGET", tx + rr + 5, ty + 3);
 
+    this.drawGhost();
     // Other boats first, the one the close-up follows on top.
     const order = this.lanes.map((_, k) => k).filter((k) => k !== this.focus);
     if (this.lanes[this.focus]) order.push(this.focus);
