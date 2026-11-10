@@ -9,6 +9,9 @@ import {
   KAYAK_MASS_ITEMS,
   KAYAK_V4,
   RANDOLPH_REVB,
+  RANDOLPH_REVC,
+  REVC_GM,
+  REVC_MASS_ITEMS,
   REVB_GM,
   derive,
   gmOf,
@@ -20,7 +23,7 @@ import { G, SEA_STATES, components, type WaveComponent } from "../src/waves";
 
 const D2R = Math.PI / 180;
 const CALM: WaveComponent[] = [];
-const BOATS: HullParams[] = [KAYAK_V4, RANDOLPH_REVB];
+const BOATS: HullParams[] = [KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC];
 
 function run(m: BoatMotion, comps: WaveComponent[], seconds: number, every = 0.01) {
   const out: { t: number; heave: number; pitch: number; roll: number }[] = [];
@@ -84,6 +87,22 @@ test("Rev B uses the Randolph team's own GZ curve and inertias (#50)", () => {
   assert.ok(gz(RANDOLPH_REVB, 100 * D2R) > 2 * gz(RANDOLPH_REVB, 90 * D2R));
   assert.equal(RANDOLPH_REVB.rollInertia, 2.487);
   assert.equal(RANDOLPH_REVB.pitchInertia, 4.117);
+});
+
+test("Rev C uses the Randolph team's own GZ curve, and its masses add up to 25.2 kg (#179)", () => {
+  // spot values from their docs/data/revC_gz_curve.csv
+  for (const [a, g] of [[25, 0.0798], [90, 0.1791], [105, 0.3782], [150, 0.171]]) {
+    assert.ok(Math.abs(gz(RANDOLPH_REVC, a * D2R) - g) < 1e-9, `GZ at ${a} deg`);
+  }
+  assert.ok(Math.abs(gmOf(RANDOLPH_REVC) - REVC_GM) < 0.002, `GM ${gmOf(RANDOLPH_REVC)}`);
+  // their heel-limit moment in randolph_rev_c.yaml: 25.2 kg x g x GZ(25 deg) = 19.7 N m
+  assert.ok(Math.abs(25.2 * 9.81 * gz(RANDOLPH_REVC, 25 * D2R) - 19.7) < 0.05);
+  const mp = massProperties(REVC_MASS_ITEMS);
+  assert.ok(Math.abs(mp.mass - RANDOLPH_REVC.mass) < 0.1, `mass ${mp.mass}`);
+  // heavier bulb and more mass aloft: a bit more inertia than Rev B, and a
+  // slightly lower GM (0.187 vs 0.201 m), so it rolls a little slower
+  assert.ok(RANDOLPH_REVC.rollInertia > RANDOLPH_REVB.rollInertia && RANDOLPH_REVC.rollInertia < 3.5);
+  assert.ok(derive(RANDOLPH_REVC).periodRoll > derive(RANDOLPH_REVB).periodRoll);
 });
 
 test("both curves are positive all the way to 180 deg (no stable upside-down position)", () => {

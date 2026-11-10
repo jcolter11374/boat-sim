@@ -20,7 +20,7 @@ import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./boats/specs";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import {
   angleAt,
@@ -99,7 +99,7 @@ type Rev = "kayak" | "randolph" | "randolph_c";
 const MODEL: Record<Rev, BoatKey> = { kayak: "kayak", randolph: "randolph", randolph_c: "randolph" };
 const SPEC: Record<BoatKey, BoatSpec> = { kayak: KAYAK, randolph: RANDOLPH };
 // Rev C rolls on Rev B's numbers until Theo's Rev C righting curve (their revC_gz_curve.csv) lands.
-const HULL: Record<Rev, HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB, randolph_c: RANDOLPH_REVB };
+const HULL: Record<Rev, HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB, randolph_c: RANDOLPH_REVC };
 const LABEL: Record<Rev, string> = {
   kayak: "Our kayak",
   randolph: "Our model of the Randolph Rev B boat (not their own simulator)",

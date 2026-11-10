@@ -1,10 +1,12 @@
-"""Our model of the Randolph team's Rev B (configs/randolph_rev_b.yaml) and the
-wing-sail physics it needs (vessel/sail.py)."""
+"""Our models of the Randolph team's Rev B (configs/randolph_rev_b.yaml) and Rev C
+(configs/randolph_rev_c.yaml, written by them), and the wing-sail physics they
+need (vessel/sail.py). Every test runs on both revisions."""
 
 import math
 from datetime import datetime, timedelta
 
 import numpy as np
+import pytest
 
 from boatsim.config import load_design
 from boatsim.runner.simulate import DROP_POINT, default_mission
@@ -14,11 +16,25 @@ from boatsim.vessel import sail as S
 from boatsim.vessel.kayak import solve_speed
 
 REV_B = "configs/randolph_rev_b.yaml"
+REV_C = "configs/randolph_rev_c.yaml"
+NAMES = {REV_B: "Randolph Rev B", REV_C: "Randolph Rev C"}
+_rev = REV_B
+
+
+@pytest.fixture(params=[REV_B, REV_C], ids=["revB", "revC"], autouse=True)
+def rev(request):
+    """Run every test in this file on both revisions."""
+    global _rev
+    _rev = request.param
+    yield request.param
+    _rev = REV_B
+
+
 KN = 0.5144
 
 
 def _vessel():
-    return KayakVessel(load_design(REV_B))
+    return KayakVessel(load_design(_rev))
 
 
 def _speed(v, heading, tws=6.0, hs=1.0, alpha_max=20.0):
@@ -31,8 +47,8 @@ def _speed(v, heading, tws=6.0, hs=1.0, alpha_max=20.0):
 
 
 def test_config_loads_as_a_sailboat_with_no_thrusters_and_a_backup_tracker():
-    d = load_design(REV_B)
-    assert d.name == "Randolph Rev B"
+    d = load_design(_rev)
+    assert d.name == NAMES[_rev]
     v = KayakVessel(d)
     assert v.sail is not None and v.sail.area_m2 == 0.30
     assert v.thrusters.count == 0
