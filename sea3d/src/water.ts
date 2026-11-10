@@ -47,6 +47,7 @@ uniform vec3 uGlow;
 uniform float uRough;
 uniform float uCover;
 uniform vec2 uWind;
+uniform float uChop;
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
@@ -77,6 +78,19 @@ vec2 rippleSlope(vec2 p, float t, float fp, float far) {
   g += ripple(p, 2.71, 1.2, 0.025, t) * smoothstep(1.5, 5.0, 2.71 / fp);
   g += ripple(p, 4.30, 4.6, 0.022, t) * smoothstep(1.5, 5.0, 4.30 / fp);
   g *= patchy * uRough;
+  // Wind chop (High and up): short-crested waves a few metres long, spread
+  // round the wind, so the swell's long regular lines break up like real sea.
+  if (uChop > 0.0) {
+    float wa = atan(uWind.y, uWind.x);
+    vec2 c = ripple(p, 2.3, wa + 0.35, 0.05, t) * smoothstep(1.5, 5.0, 2.3 / fp)
+           + ripple(p, 3.1, wa - 0.62, 0.05, t) * smoothstep(1.5, 5.0, 3.1 / fp)
+           + ripple(p, 4.4, wa + 0.95, 0.045, t)
+           + ripple(p, 5.9, wa - 0.18, 0.045, t)
+           + ripple(p, 7.7, wa + 1.25, 0.04, t)
+           + ripple(p, 9.6, wa - 1.05, 0.04, t);
+    float gust = 0.6 + 0.8 * vnoise(p * 0.02 + uWind * t * 0.03); // patches of stronger wind
+    g += c * uChop * gust * (1.0 - far);
+  }
   vec2 s = ripple(p, 13.0, 0.9, 0.05, t) + ripple(p, 23.0, 2.6, 0.045, t) + ripple(p, 41.0, 5.6, 0.04, t);
   return g + s * far * uRough;
 }
@@ -146,7 +160,9 @@ export class Sea {
     uAmp: { value: 0.5 },
     uCover: { value: 0 },
     uWind: { value: new THREE.Vector2(1, 0) },
+    uChop: { value: 0 },
   };
+  private detail = 0; // wind chop on (High) or off (Low)
 
   constructor(quality: Quality) {
     const material = new THREE.MeshPhysicalMaterial({
@@ -169,7 +185,7 @@ export class Sea {
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v2";
+    material.customProgramCacheKey = () => "boatsim-sea-v3";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
@@ -180,6 +196,8 @@ export class Sea {
    *  x = a u + b u^3 + c u^25 for u in [-1, 1]. */
   setQuality(quality: Quality): void {
     const { n, centre } = GRID[quality];
+    this.detail = quality === "high" ? 1 : 0;
+    this.uniforms.uChop.value = this.detail * this.chopFor(this.wind);
     const half = SEA_SIZE / 2;
     const a = (centre * n) / 2;
     const b = half - a;
@@ -224,6 +242,14 @@ export class Sea {
     // Share of the sea covered by whitecaps (Monahan & O'Muircheartaigh 1980).
     this.uniforms.uCover.value = THREE.MathUtils.clamp(3.84e-6 * u ** 3.41, 0, 0.2);
     if (towards && towards.lengthSq() > 0) this.uniforms.uWind.value.copy(towards).normalize();
+    this.wind = u;
+    this.uniforms.uChop.value = this.detail * this.chopFor(u);
+  }
+
+  private wind = 6;
+  /** Chop strength from the wind (m/s): faint in a light air, full in a gale. */
+  private chopFor(u: number): number {
+    return THREE.MathUtils.clamp(0.25 + u / 14, 0.25, 1.3); // GUESS display tuning
   }
 
   setSeeThrough(on: boolean): void {

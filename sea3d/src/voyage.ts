@@ -38,6 +38,7 @@ import {
 import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Atmosphere, sunPosition } from "./atmosphere";
+import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Sea } from "./water";
 import { heightAt, Sea as LiveSea } from "./waves";
 
@@ -72,14 +73,12 @@ const keyOf = (boat: string | undefined): BoatKey => (/randolph/i.test(boat ?? "
 let boatKey: BoatKey = "kayak";
 
 // ---------- sea and boat ----------
-// ?quality=low|high picks the starting quality (the smoke test runs Low on software graphics).
-{
-  const q = params.get("quality");
-  if (q === "low" || q === "high") $<HTMLSelectElement>("quality").value = q;
-}
-let quality = ($<HTMLSelectElement>("quality").value as Quality) ?? "high";
+// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
+let look: Look = startLook($<HTMLSelectElement>("quality"));
+let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 scene.add(sea.mesh);
+sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
@@ -96,9 +95,12 @@ function buildBoat(q: Quality): void {
   const spec = SPEC[boatKey];
   model = BUILDERS[boatKey](q);
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
+  shadowsOn(model.root);
   scene.add(model.root, wake.points);
 }
-function setQuality(q: Quality): void {
+function setQuality(l: Look): void {
+  look = l;
+  const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
   buildBoat(q);
@@ -111,7 +113,9 @@ function setQuality(q: Quality): void {
   const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
   renderer.setPixelRatio(ratio);
   atmos.setBloom(q === "high");
+  atmos.setUltra(l === "ultra");
   atmos.setPixelRatio(ratio);
+  status.look = l;
 }
 
 // ---------- the sea of a voyage hour ----------
@@ -175,6 +179,8 @@ const status = {
   /** True once a detailed Blender model is in use; models names which ones. */
   detailed: false,
   models: [] as string[],
+  /** low, high or ultra. */
+  look: "high" as string,
   /** The close-up boat's moving parts and what they show now. */
   gear: {} as Record<string, unknown>,
   focus: 0,
@@ -381,7 +387,7 @@ $<HTMLSelectElement>("boat").addEventListener("change", (e) => {
 document.querySelectorAll<HTMLButtonElement>("#focus button").forEach((b) =>
   b.addEventListener("click", () => setFocus(Number(b.dataset.lane))),
 );
-$<HTMLSelectElement>("quality").addEventListener("change", (e) => setQuality((e.target as HTMLSelectElement).value as Quality));
+$<HTMLSelectElement>("quality").addEventListener("change", (e) => setQuality((e.target as HTMLSelectElement).value as Look));
 $("o-again").addEventListener("click", () => {
   seek(0);
   setPlaying(true);
@@ -426,7 +432,7 @@ function fillVoyages(mode: string): void {
 }
 
 // ---------- start ----------
-setQuality(quality);
+setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
 loadDetailedModels().then((ok) => {
   status.detailed = ok;
@@ -471,6 +477,7 @@ controls.target.set(0, 0.2, 0);
 })();
 
 // ---------- loop ----------
+const guard = new FpsGuard();
 const clock = new THREE.Clock();
 let last = 0;
 let rigHeave = 0;
@@ -575,6 +582,16 @@ renderer.setAnimationLoop(() => {
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;
+  }
+  // Ultra: focus on the boat, shadows round it; back to High if this computer can't keep up.
+  if (atmos.ultra) {
+    atmos.setFocus(camera.position.distanceTo(controls.target));
+    atmos.shadowAround(controls.target, 4);
+  }
+  if (guard.tick(t, look === "ultra")) {
+    $<HTMLSelectElement>("quality").value = "high";
+    setQuality("high");
+    toast("Switched to High quality: Ultra was running slowly on this computer.", "Quality", "#8ab4ff");
   }
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
