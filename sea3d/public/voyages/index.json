@@ -82,8 +82,8 @@
    "file": "voyage_randolph-rev-b_2020-06-15.json",
    "boat": "Randolph Rev B",
    "start": "2020-06-15T12:00",
-   "outcome": "aground",
-   "days": 2.72
+   "outcome": "timeout",
+   "days": 150.0
   }
  ]
 }
