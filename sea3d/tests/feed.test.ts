@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { commsAt, positionAt, valueAt, type Course } from "../src/replay/data";
-import { feedToReplay, reportAt, type FeedGhost, type FeedVoyage } from "../src/replay/feed";
+import { advanceNow, feedToReplay, reportAt, type FeedGhost, type FeedVoyage } from "../src/replay/feed";
 
 const course: Course = { drop: null, west_line: [], east_line: [], target: [0, 0], target_radius_m: 0 };
 const T = (h: number) => new Date(Date.UTC(2020, 4, 1, 12) + h * 3600e3).toISOString().replace(".000", "");
@@ -62,4 +62,27 @@ test("the forecast follows the ghost's middle path after now", () => {
   assert.deepEqual(positionAt(tr.rep, 72), [38, -70]);
   assert.equal(commsAt(tr.rep, 60), "silent"); // drawn as a dashed forecast, not as reports
   assert.ok(tr.ghost);
+});
+
+test("now moves on with the clock: the boat waits at its last report and the forecast isn't reached early", () => {
+  const v = voyage([ir(0, 36.65, -74.94, 0.9), ir(24, 37, -74, 0.8)], 2);
+  const ghost: FeedGhost = {
+    schema: 1, from_fix: T(24), made: T(26), runs: 10,
+    median: [[T(48), 37.5, -72], [T(72), 38, -70]],
+    spread: [[T(48), 37.5, -72, 30], [T(72), 38, -70, 60]],
+    eta: { p10: "2020-06-20", p50: "2020-06-30", p90: "2020-07-10" }, p_finish: 0.9,
+  };
+  const tr = feedToReplay(v, ghost, course);
+  advanceNow(tr, 26.5); // the page has been open half an hour
+  assert.equal(tr.nowHour, 26.5);
+  assert.deepEqual(positionAt(tr.rep, 26.5), [37, -74]); // still where it last reported
+  advanceNow(tr, 26.2); // never back
+  assert.equal(tr.nowHour, 26.5);
+  advanceNow(tr, 60); // long after: stops short of the forecast's next point
+  assert.ok(tr.nowHour < 48 && tr.nowHour > 47.99);
+  // A feed made right at a report still has its own "now" row to move.
+  const fresh = feedToReplay(voyage([ir(0, 36.65, -74.94, 0.9), ir(24, 37, -74, 0.8)], 0), null, course);
+  advanceNow(fresh, 25);
+  assert.equal(fresh.nowHour, 25);
+  assert.deepEqual(positionAt(fresh.rep, 25), [37, -74]);
 });
