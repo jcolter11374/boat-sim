@@ -74,3 +74,25 @@ def test_stokes_drift_size_and_direction():
 def test_from_config_ignores_non_physics_keys():
     p = H.HullParams.from_config({"model": "kayak", "wetted_area_m2": 2.0})
     assert p.wetted_area_m2 == 2.0
+
+
+def test_mass_link_leaves_the_reference_weight_alone_and_drags_more_when_heavier():
+    from boatsim.config import load_design
+
+    for path in ("configs/v4_kayak.yaml", "configs/randolph_rev_b.yaml"):
+        hull = load_design(path).hull
+        assert hull["mass_kg"] == hull["displacement_ref_kg"]
+        at_ref = H.HullParams.from_config(hull)
+        off = H.HullParams.from_config(
+            {k: v for k, v in hull.items() if k != "displacement_ref_kg"}
+        )
+        assert at_ref == off  # baselines don't move
+        heavy = H.HullParams.from_config({**hull, "mass_kg": hull["mass_kg"] * 1.1})
+        light = H.HullParams.from_config({**hull, "mass_kg": hull["mass_kg"] * 0.9})
+        assert light.wetted_area_m2 < at_ref.wetted_area_m2 < heavy.wetted_area_m2
+        assert H.calm_drag(light, 0.8) < H.calm_drag(at_ref, 0.8) < H.calm_drag(heavy, 0.8)
+    # Kayak +10 kg (big batteries): ~6.5 mm deeper, ~+2 % wetted area, ~+3 % drag.
+    k = load_design("configs/v4_kayak.yaml").hull
+    p0, p1 = H.HullParams.from_config(k), H.HullParams.from_config({**k, "mass_kg": 133})
+    assert p1.wetted_area_m2 == pytest.approx(1.9 + 2.1 * 2.9 * 10 / (1025 * 1.5))
+    assert H.calm_drag(p1, 0.85) / H.calm_drag(p0, 0.85) == pytest.approx(1.028, abs=0.004)

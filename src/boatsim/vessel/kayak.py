@@ -283,7 +283,10 @@ class KayakVessel:
         on = was_on or (cap > 0 and state.battery_wh / cap >= self.battery.restart_soc)
         working = self.working_thrusters(state)
         frac = min(max(cmd.thrust_fraction, 0.0), 1.0)
-        drive_req = frac * self.thrusters.max_power_each_w * working if on else 0.0
+        # No working electronics box at all (a one-box boat whose box died, kept
+        # afloat and tracked by its beacon): nothing drives the motors.
+        brain = not (state.damage.get("electronics_main") and state.damage.get("electronics_safe"))
+        drive_req = frac * self.thrusters.max_power_each_w * working if on and brain else 0.0
         hotel_req = 0.0
         if on:
             hotel_req = self.base_hotel_w + (self.nav_light_w if env.ghi < self.dark_ghi else 0.0)

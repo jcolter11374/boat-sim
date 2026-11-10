@@ -19,3 +19,6 @@ data/traffic/*
 !data/land/
 data/land/*
 !data/land/land_mask_v1.npz
+# Pyodide reference runner (tools/pyodide)
+tools/pyodide/node_modules/
+tools/pyodide/package-lock.json

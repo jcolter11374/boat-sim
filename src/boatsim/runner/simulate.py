@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 import numpy as np
-import pandas as pd
 
 from boatsim.autonomy.base import Autopilot
 from boatsim.basestation.base import BasePolicy
@@ -47,7 +46,9 @@ class VoyageLog:
         end = self.end or (self.rows[-1]["t"] if self.rows else self.start)
         return (end - self.start).total_seconds() / 86400.0
 
-    def to_dataframe(self) -> pd.DataFrame:
+    def to_dataframe(self):
+        import pandas as pd  # lazy: the in-browser sandbox has no pandas
+
         return pd.DataFrame(self.rows)
 
 
@@ -261,4 +262,35 @@ def default_mission(drop: tuple[float, float] | None = None) -> Mission:
             Waypoint(*(drop or DROP_POINT)),
             Waypoint(39.5, -13.5),  # the finish target (runner/arrival.py)
         ]
+    )
+
+
+def standard_components(
+    design, env, forecast_env, seed: int = 0, forecast_error: float = 1.0, land=None
+) -> Components:
+    """The team's current components for one voyage of `design` (a config.Design)
+    in `env`. Every voyage gets fresh vessel, autopilot, link and base objects
+    (they keep per-voyage state such as the airtime ledger). Shared by the batch
+    runs (runner.parallel) and the browser sandbox (boatsim.sandbox)."""
+    from boatsim.autonomy import SafeModeAutopilot
+    from boatsim.basestation import ForecastReplanPolicy
+    from boatsim.comms import GlobalstarPinger, IridiumSBDLink
+    from boatsim.oceandata.forecast import ErrorForecast
+    from boatsim.vessel import KayakVessel
+
+    prop = design.propulsion
+    drop = (design.voyage["drop_lat"], design.voyage["drop_lon"])
+    return Components(
+        env=env,
+        forecast=ErrorForecast(forecast_env, seed=seed, scale=forecast_error),
+        vessel=KayakVessel(design),
+        autopilot=SafeModeAutopilot(
+            cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
+            thruster_count=int(prop.get("thruster_count", 2)),
+        ),
+        link=IridiumSBDLink(),
+        pinger=GlobalstarPinger(),
+        base=ForecastReplanPolicy(route=default_mission(drop).waypoints),
+        land=land,
+        finish=FinishTarget.from_voyage(design.voyage),
     )

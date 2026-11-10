@@ -6,7 +6,7 @@ should be marked `# GUESS` in the YAML, so we know what to calibrate.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -30,3 +30,10 @@ def load_design(path: str | Path) -> Design:
         raw = yaml.safe_load(f)
     known = {k: raw.get(k, {}) for k in Design.__dataclass_fields__ if k != "name"}
     return Design(name=raw["name"], **known)
+
+
+def patched_design(design: Design, changes) -> Design:
+    """The design with (section, key, value) changes applied."""
+    for section, key, value in changes:
+        design = replace(design, **{section: {**getattr(design, section), key: value}})
+    return design
