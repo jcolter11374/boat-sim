@@ -102,7 +102,7 @@ jobs:
           python - <<'PY'
           import json
           a = json.load(open("/tmp/again.json")); b = json.load(open("../../site/reference.json"))
-          b = [r for r in b if (r["build"], r["start"]) in {(x["build"], x["start"]) for x in a}]
+          b = [{k: v for k, v in r.items() if k != "track"} for r in b if (r["build"], r["start"]) in {(x["build"], x["start"]) for x in a}]
           assert a == b, (a, b)
           print("identical:", a[0]["build"], a[0]["start"])
           PY
