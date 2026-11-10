@@ -67,10 +67,10 @@ def test_every_slot_has_its_default_and_a_badge():
         C.normalise({"sails": "big"})
 
 
-def test_odds_grid_is_twenty_catalog_builds_and_nearest_finds_them():
+def test_odds_grid_is_the_catalog_builds_and_nearest_finds_them():
     ids = [C.grid_id(g) for g in C.GRID]
-    assert len(set(ids)) == len(ids) == 19
-    assert len(Y.BUILDS) == 21 and Y.CURRENT in Y.BUILDS
+    assert len(set(ids)) == len(ids) == 25
+    assert len(Y.BUILDS) == 27 and Y.CURRENT in Y.BUILDS
     for g in C.GRID:
         assert C.nearest(g) == (C.grid_id(g), True)
     assert C.nearest({"ais": "none", "cruise_w": 20}) in (
@@ -294,3 +294,47 @@ def test_forecast_key_ignores_local_timezone():
         else:
             os.environ["TZ"] = old
         time.tzset()
+
+
+def test_drive_and_material_options():
+    base = load_design(C.KAYAK)
+    hy = C.design_for({"drive": "hybrid"})
+    assert hy.sail["area_m2"] == C.KAYAK_WING["area_m2"]
+    assert hy.propulsion["thruster_count"] == 2
+    assert hy.hazards["p_part"] == {**base.hazards["p_part"], "sail": C.WING_P_BREAK}
+    assert hy.hull["mass_kg"] == base.hull["mass_kg"] + C.WING_KG
+    hotel = base.electronics["hotel_load_wh_per_day"]
+    assert hy.electronics["hotel_load_wh_per_day"] == hotel + C.WING_WH
+    # Wing only: no thrusters, and the thruster and power choices don't apply.
+    w = C.design_for({"drive": "wing-sail", "thr": "one-t200", "cruise_w": 15})
+    assert w.propulsion["thruster_count"] == 0 and w.propulsion["cruise_drive_w"] == 0
+    assert C.grid_id({"drive": "wing-sail", "thr": "one-t200"}) == "k-p0-drive.wing-sail"
+    assert w.hull["mass_kg"] == round(base.hull["mass_kg"] + C.WING_KG - 2 * C.T200_KG, 3)
+    carbon = C.design_for({"material": "carbon"})
+    assert carbon.hull["mass_kg"] < base.hull["mass_kg"]
+    assert carbon.hazards["leak_per_day"] > C.LEAK
+    alu = C.design_for({"material": "aluminium"})
+    assert alu.hull["fouling_frac_per_day"] > base.hull["fouling_frac_per_day"]
+    for slot in ("drive", "material"):
+        assert C.SLOTS[slot][C.DEFAULTS[slot]].changes == ()
+
+
+def test_hybrid_motors_straight_upwind_where_the_wing_only_boat_tacks():
+    from boatsim.types import Command, EnvState
+    from boatsim.vessel import KayakVessel
+
+    env = EnvState(wind_v=-7.0, hs=1.0, tp=6.0, wave_dir=0.0, ghi=300.0)  # northerly
+    t = datetime(2020, 5, 1)
+    rng = np.random.default_rng(0)
+    step = timedelta(minutes=10)
+    hy = KayakVessel(C.design_for({"drive": "hybrid"}))
+    s, _ = hy.step(hy.initial_state(t, 38.0, -70.0), Command(0.0, 0.25), env, step, rng)
+    assert s.heading == 0.0 and s.drive_w > 0  # straight into the wind on the motors
+    # Reaching, the wing adds drive: faster than the kayak at the same power.
+    kayak = KayakVessel(load_design(C.KAYAK))
+    a, _ = hy.step(hy.initial_state(t, 38.0, -70.0), Command(90.0, 0.25), env, step, rng)
+    b, _ = kayak.step(kayak.initial_state(t, 38.0, -70.0), Command(90.0, 0.25), env, step, rng)
+    assert a.speed_through_water > b.speed_through_water + 0.1
+    wing = KayakVessel(C.design_for({"drive": "wing-sail"}))
+    s, _ = wing.step(wing.initial_state(t, 38.0, -70.0), Command(0.0, 0.0), env, step, rng)
+    assert abs(abs(((s.heading + 180) % 360) - 180) - 50.0) < 1e-9  # tacks at 50 deg

@@ -15,7 +15,7 @@ from boatsim.vessel.hazards import HazardParams
 
 
 def test_grid_is_catalog_builds_and_two_rev_b_builds():
-    assert len(Y.BUILDS) == 19 + 2
+    assert len(Y.BUILDS) == 25 + 2
     assert {"k-p25", "k-p10", "k-p25-brain.one-box", "revb", "revb-spar"} <= set(Y.BUILDS)
     assert Y.BUILDS["k-p25"].options["thr"] == "two-t200"
 

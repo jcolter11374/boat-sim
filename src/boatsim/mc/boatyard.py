@@ -64,7 +64,8 @@ class Build:
 def _label(choices: dict) -> str:
     picked, cruise = catalog.normalise(choices)
     diffs = [f"{catalog.SLOT_NAMES[s]}: {o}" for s, o in picked.items() if o != catalog.DEFAULTS[s]]
-    return f"{cruise} W cruise" + (", " + ", ".join(diffs) if diffs else ", kayak as it stands")
+    power = f"{cruise} W cruise" if cruise else "sail only"
+    return power + (", " + ", ".join(diffs) if diffs else ", kayak as it stands")
 
 
 def _kayak(choices: dict) -> Build:
