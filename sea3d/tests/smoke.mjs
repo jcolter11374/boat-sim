@@ -236,10 +236,11 @@ try {
   log.push(`game ${game.beats.join("/")} -> ${game.result}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
-  // Weather: rain and a wet hull in the 42 kt blow of 13 Apr 2020 (hour 297), dry and clear on day 2.
+  // Weather: rain and a wet hull in the wettest hour of the log (hour 573, 7 mm/h of ERA5 rain in
+  // 5 m seas), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
   await page.goto(`${URL}voyage.html?voyage=voyage_2020-04-01.json&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready, null, { timeout: 60000 });
-  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(297); });
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(573); });
   await page.waitForFunction(() => window.__replay.rain > 0.5 && window.__replay.wet > 0.5, null, { timeout: 30000 })
     .catch(async () => fail(`no rain in the blow: ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
   await page.evaluate(() => window.__replay.setHour(30));
