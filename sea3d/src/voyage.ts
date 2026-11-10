@@ -90,13 +90,27 @@ const atmos = new Atmosphere(renderer, scene, camera);
 
 // ---------- the boats ----------
 type BoatKey = BoatSpec["key"];
+/**
+ * Which boat a replay is: ours, or one revision of our model of the Randolph boat
+ * (#179: Rev B and Rev C each get their own menu entry, colour and roll).
+ */
+type Rev = "kayak" | "randolph" | "randolph_c";
+/** The 3D model each one is drawn with (the Randolph revisions share one hull model). */
+const MODEL: Record<Rev, BoatKey> = { kayak: "kayak", randolph: "randolph", randolph_c: "randolph" };
 const SPEC: Record<BoatKey, BoatSpec> = { kayak: KAYAK, randolph: RANDOLPH };
-const HULL: Record<BoatKey, HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB };
-const LABEL: Record<BoatKey, string> = { kayak: "Our kayak", randolph: "Our model of the Randolph boat (not their own simulator)" };
-const SHORT: Record<BoatKey, string> = { kayak: "Our kayak", randolph: "Randolph (our model)" };
-/** Which 3D model a replay's boat name gets. Anything not Randolph is ours. */
-const keyOf = (boat: string | undefined): BoatKey => (/randolph/i.test(boat ?? "") ? "randolph" : "kayak");
+// Rev C rolls on Rev B's numbers until Theo's Rev C righting curve (their revC_gz_curve.csv) lands.
+const HULL: Record<Rev, HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB, randolph_c: RANDOLPH_REVB };
+const LABEL: Record<Rev, string> = {
+  kayak: "Our kayak",
+  randolph: "Our model of the Randolph Rev B boat (not their own simulator)",
+  randolph_c: "Our model of the Randolph Rev C boat (not their own simulator)",
+};
+const SHORT: Record<Rev, string> = { kayak: "Our kayak", randolph: "Randolph Rev B (our model)", randolph_c: "Randolph Rev C (our model)" };
+/** Which boat a replay's boat name is. Anything not Randolph is ours; a Randolph boat is Rev B unless it says Rev C. */
+const keyOf = (boat: string | undefined): Rev =>
+  !/randolph/i.test(boat ?? "") ? "kayak" : /rev[\s_-]*c\b/i.test(boat ?? "") ? "randolph_c" : "randolph";
 let boatKey: BoatKey = "kayak";
+let laneRev: Rev = "kayak";
 
 // ---------- sea and boat ----------
 // ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
@@ -115,7 +129,7 @@ const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
-let motion = new BoatMotion(HULL[boatKey], place);
+let motion = new BoatMotion(HULL[laneRev], place);
 let wet: Wetness | null = null;
 let drain: Drain | null = null;
 function buildBoat(q: Quality): void {
@@ -191,7 +205,7 @@ chartBox.addEventListener("click", () => chartBox.classList.toggle("big"));
 // ---------- state ----------
 /** One boat's voyage on the page; a race has two. */
 interface Lane {
-  key: BoatKey;
+  key: Rev;
   file: string;
   rep: Replay;
   shown: number; // events already announced
@@ -239,7 +253,7 @@ const status = {
   pause: () => setPlaying(false),
   select: (f: string) => selectVoyage(f),
   /** Race both boats from this launch date (YYYY-MM-DD). */
-  race: (date: string) => selectRace(date),
+  race: (date: string, rev: "randolph" | "randolph_c" = "randolph") => selectRace(date, rev),
   /** Boat names of the voyages on screen, and which one the close-up follows. */
   boats: [] as string[],
   /** True once a detailed Blender model is in use; models names which ones. */
@@ -380,11 +394,18 @@ function showOutcome(): void {
 async function selectVoyage(f: string, autoplay = true): Promise<void> {
   await load([f], f, autoplay);
 }
-/** Race: both boats' voyages from the same launch date. */
-async function selectRace(date: string): Promise<void> {
-  const pair = [byKey.kayak.get(date), byKey.randolph.get(date)].filter((v): v is IndexEntry => !!v);
+/** Race: our kayak and one Randolph revision from the same launch date. */
+const RACE_PREFIX: Record<"randolph" | "randolph_c", string> = { randolph: "race:", randolph_c: "race-c:" };
+async function selectRace(date: string, rev: "randolph" | "randolph_c" = "randolph"): Promise<void> {
+  const pair = [byKey.kayak.get(date), byKey[rev].get(date)].filter((v): v is IndexEntry => !!v);
   if (pair.length < 2) return fail(`no race for ${date}: both boats need a voyage from that day`);
-  await load(pair.map((v) => v.file), `race:${date}`);
+  await load(pair.map((v) => v.file), `${RACE_PREFIX[rev]}${date}`);
+}
+/** A voyage menu value: a replay file, or a race ("race:DATE" with Rev B, "race-c:DATE" with Rev C). */
+function choose(v: string): void {
+  if (v.startsWith("race:")) selectRace(v.slice(5), "randolph");
+  else if (v.startsWith("race-c:")) selectRace(v.slice(7), "randolph_c");
+  else selectVoyage(v);
 }
 async function load(files: string[], pick = files[0], autoplay = true): Promise<void> {
   try {
@@ -397,7 +418,7 @@ async function load(files: string[], pick = files[0], autoplay = true): Promise<
     status.shown = [];
     // In the game the bar always spans the longest possible voyage, so it can't give the ending away.
     $<HTMLInputElement>("scrub").max = String(GAME ? Math.max(endHour(), 150 * 24) : endHour());
-    const mode = lanes.length > 1 ? "race" : lanes[0].key;
+    const mode = lanes.length > 1 ? (lanes[1].key === "randolph_c" ? "race_c" : "race") : lanes[0].key;
     $<HTMLSelectElement>("boat").value = mode;
     fillVoyages(mode);
     $<HTMLSelectElement>("voyage").value = pick;
@@ -405,11 +426,15 @@ async function load(files: string[], pick = files[0], autoplay = true): Promise<
     const race = lanes.length > 1;
     $("lg-ours").textContent = race ? "our kayak" : "track";
     $("lg-theirs").hidden = !race;
+    if (race) {
+      $("lg-theirs-name").textContent = `${lanes[1].key === "randolph_c" ? "Randolph Rev C" : "Randolph Rev B"} (our model)`;
+      $("lg-theirs-dot").style.background = TRACK[lanes[1].key].main;
+    }
     $("sub").textContent =
       lanes.length > 1
-        ? "Both boats launched the same day into the same weather. Orange is our kayak; teal is our own model of the Randolph boat, not their own simulator, so their real odds may differ. Pick which one the close-up follows."
-        : lanes[0].key === "randolph"
-          ? "Our own model of the Randolph boat (built from their published design), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ."
+        ? `Both boats launched the same day into the same weather. Orange is our kayak; ${lanes[1].key === "randolph_c" ? "purple is our own model of the Randolph team's Rev C" : "teal is our own model of the Randolph team's Rev B"}, not their own simulator, so their real odds may differ. Pick which one the close-up follows.`
+        : lanes[0].key !== "kayak"
+          ? `Our own model of the Randolph ${lanes[0].key === "randolph_c" ? "Rev C" : "Rev B"} boat (${lanes[0].key === "randolph_c" ? "from the config the Randolph team wrote in our format" : "built from their published design"}), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ.`
           : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
     setFocus(0, true);
     ticks();
@@ -507,11 +532,12 @@ function setFocus(i: number, force = false): void {
   status.focus = i;
   rep = lanes[i].rep;
   chart?.setLanes(lanes.map((l) => ({ rep: l.rep, colours: TRACK[l.key] })), i);
-  if (boatKey !== lanes[i].key || !model) {
-    boatKey = lanes[i].key;
+  laneRev = lanes[i].key;
+  if (boatKey !== MODEL[laneRev] || !model) {
+    boatKey = MODEL[laneRev];
     buildBoat(quality);
   }
-  motion = new BoatMotion(HULL[boatKey], place);
+  motion = new BoatMotion(HULL[laneRev], place);
   wake?.reset();
   smoothYaw = null;
   seaTarget(rep, hour);
@@ -558,9 +584,7 @@ document.querySelectorAll<HTMLButtonElement>("#warp button").forEach((b) =>
 const scrub = $<HTMLInputElement>("scrub");
 scrub.addEventListener("input", () => seek(Number(scrub.value)));
 $<HTMLSelectElement>("voyage").addEventListener("change", (e) => {
-  const v = (e.target as HTMLSelectElement).value;
-  if (v.startsWith("race:")) selectRace(v.slice(5));
-  else selectVoyage(v);
+  choose((e.target as HTMLSelectElement).value);
 });
 $<HTMLSelectElement>("boat").addEventListener("change", (e) => {
   const mode = (e.target as HTMLSelectElement).value;
@@ -571,9 +595,7 @@ $<HTMLSelectElement>("boat").addEventListener("change", (e) => {
   const date = lanes[0] ? lanes[0].rep.start.slice(0, 10) : "";
   const opts = Array.from($<HTMLSelectElement>("voyage").options).map((o) => o.value);
   const same = opts.find((v) => v.endsWith(date) || (date && v.includes(`_${date}`)) || v === `voyage_${date}.json`);
-  const v = same ?? first;
-  if (v.startsWith("race:")) selectRace(v.slice(5));
-  else selectVoyage(v);
+  choose(same ?? first);
 });
 document.querySelectorAll<HTMLButtonElement>("#focus button").forEach((b) =>
   b.addEventListener("click", () => setFocus(Number(b.dataset.lane))),
@@ -611,23 +633,25 @@ if (!location.pathname.endsWith("voyage.html")) document.querySelector<HTMLEleme
 
 // ---------- voyage list ----------
 /** Index entries by boat, keyed by launch date. */
-const byKey: Record<BoatKey, Map<string, IndexEntry>> = { kayak: new Map(), randolph: new Map() };
-const raceDates = () => [...byKey.kayak.keys()].filter((d) => byKey.randolph.has(d)).sort();
+const byKey: Record<Rev, Map<string, IndexEntry>> = { kayak: new Map(), randolph: new Map(), randolph_c: new Map() };
+const raceDates = (rev: "randolph" | "randolph_c" = "randolph") => [...byKey.kayak.keys()].filter((d) => byKey[rev].has(d)).sort();
 const OUT: Record<string, string> = { arrived: "finished", lost: "lost", aground: "aground", disqualified: "disqualified", timeout: "still at sea" };
 const fmtDay = (iso: string) =>
   new Date(utc(iso)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 function fillVoyages(mode: string): void {
   const sel = $<HTMLSelectElement>("voyage");
   sel.innerHTML = "";
-  if (mode === "race") {
-    for (const d of raceDates()) {
+  if (mode === "race" || mode === "race_c") {
+    const rev = mode === "race" ? "randolph" : "randolph_c";
+    for (const d of raceDates(rev)) {
       const a = byKey.kayak.get(d)!;
-      const b = byKey.randolph.get(d)!;
-      sel.add(new Option(`Launch ${fmtDay(a.start)}: kayak ${OUT[a.outcome] ?? a.outcome}, Randolph (our model) ${OUT[b.outcome] ?? b.outcome}`, `race:${d}`));
+      const b = byKey[rev].get(d)!;
+      const name = rev === "randolph" ? "Rev B" : "Rev C";
+      sel.add(new Option(`Launch ${fmtDay(a.start)}: kayak ${OUT[a.outcome] ?? a.outcome}, Randolph ${name} (our model) ${OUT[b.outcome] ?? b.outcome}`, `${RACE_PREFIX[rev]}${d}`));
     }
     return;
   }
-  const list = [...byKey[mode as BoatKey].values()].sort((a, b) => a.start.localeCompare(b.start));
+  const list = [...byKey[mode as Rev].values()].sort((a, b) => a.start.localeCompare(b.start));
   for (const v of list) sel.add(new Option(`Launch ${fmtDay(v.start)}: ${OUT[v.outcome] ?? v.outcome}, ${v.days.toFixed(0)} days`, v.file));
 }
 
@@ -657,8 +681,10 @@ controls.target.set(0, 0.2, 0);
     for (const v of index) byKey[keyOf(v.boat)].set(v.start.slice(0, 10), v);
     const boatSel = $<HTMLSelectElement>("boat");
     const modes: [string, string][] = [["kayak", "Our kayak"]];
-    if (byKey.randolph.size) modes.push(["randolph", "Randolph boat (our model, not their simulator)"]);
-    if (raceDates().length) modes.push(["race", "Race: our kayak vs our model of Randolph"]);
+    if (byKey.randolph.size) modes.push(["randolph", "Randolph Rev B (our model, not their simulator)"]);
+    if (byKey.randolph_c.size) modes.push(["randolph_c", "Randolph Rev C (our model, not their simulator)"]);
+    if (raceDates().length) modes.push(["race", "Race: our kayak vs our model of Randolph Rev B"]);
+    if (raceDates("randolph_c").length) modes.push(["race_c", "Race: our kayak vs our model of Randolph Rev C"]);
     for (const [value, text] of modes) boatSel.add(new Option(text, value));
     boatSel.disabled = modes.length < 2;
     const wantRace = params.get("race");
@@ -676,7 +702,7 @@ controls.target.set(0, 0.2, 0);
       const first = [...byKey.kayak.values()].sort((a, b) => a.start.localeCompare(b.start))[0] ?? index[0];
       await selectVoyage(first.file, false);
       openPicker();
-    } else if (wantRace) await selectRace(wantRace);
+    } else if (wantRace) await selectRace(wantRace, params.get("rev") === "c" ? "randolph_c" : "randolph");
     else {
       // Default: our longest voyage, which has the most to watch.
       const ours = [...byKey.kayak.values()];
@@ -902,7 +928,7 @@ $("b-next").addEventListener("click", () => {
   if (hour < endHour()) setPlaying(true);
 });
 
-let pickBoat: BoatKey = "kayak";
+let pickBoat: Rev = "kayak";
 let pickDate = "";
 let pickGuess: boolean | null = null;
 function pickButton(label: string, sub: string, pressed: boolean, onClick: () => void): HTMLButtonElement {
@@ -918,8 +944,9 @@ function pickButton(label: string, sub: string, pressed: boolean, onClick: () =>
 function drawPicker(): void {
   const boats = $("g-boats");
   boats.replaceChildren();
-  const choices: [BoatKey, string, string][] = [["kayak", "Our kayak", "3 m, solar-electric motors"]];
-  if (byKey.randolph.size) choices.push(["randolph", "Randolph boat", "our model of it · a small sailboat"]);
+  const choices: [Rev, string, string][] = [["kayak", "Our kayak", "3 m, solar-electric motors"]];
+  if (byKey.randolph.size) choices.push(["randolph", "Randolph Rev B", "our model of it · a small sailboat"]);
+  if (byKey.randolph_c.size) choices.push(["randolph_c", "Randolph Rev C", "our model of their newer design"]);
   for (const [k, label, sub] of choices)
     boats.append(
       pickButton(label, sub, pickBoat === k, () => {
