@@ -108,6 +108,8 @@ try {
     const g0 = (await page.evaluate(() => window.__replay.gear)).parts ?? {};
     const sailboat = /randolph/i.test(rep.boat ?? "");
     const gearOk = sailboat ? g0.props === 0 && g0.wing && g0.vane : g0.props === 2 && !g0.wing;
+    const c0 = await page.evaluate(() => window.__replay.contact);
+    if (!(c0.collar > 0)) fail(`${v.file}: no foam where the hull meets the water: ${JSON.stringify(c0)}`);
     if (!gearOk || !g0.rudder || !g0.light || !(g0.panels > 0)) fail(`${v.file}: gear missing: ${JSON.stringify(g0)}`);
     await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
     await page.waitForSelector("#outcome.show", { timeout: 10000 });

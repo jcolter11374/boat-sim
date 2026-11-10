@@ -37,6 +37,7 @@ import {
 } from "./replay/data";
 import type { Placement } from "./standin";
 import { Wake } from "./wake";
+import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Sea } from "./water";
@@ -82,6 +83,7 @@ sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
+let contact: Contact | null = null;
 let motion = new BoatMotion(HULL[boatKey], place);
 function buildBoat(q: Quality): void {
   if (model) {
@@ -92,8 +94,14 @@ function buildBoat(q: Quality): void {
     scene.remove(wake.points);
     wake.dispose();
   }
+  if (contact) {
+    scene.remove(contact.collar, contact.spray);
+    contact.dispose();
+  }
   const spec = SPEC[boatKey];
   model = BUILDERS[boatKey](q);
+  contact = new Contact(model.form, spec, q);
+  scene.add(contact.collar, contact.spray);
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
@@ -183,6 +191,8 @@ const status = {
   look: "high" as string,
   /** The close-up boat's moving parts and what they show now. */
   gear: {} as Record<string, unknown>,
+  /** Foam collar strength and live spray drops. */
+  contact: { collar: 0, spray: 0 },
   focus: 0,
   setFocus: (i: number) => setFocus(i),
   /** positionAt for any lane (0 = first boat, 1 = second in a race). */
@@ -478,6 +488,7 @@ controls.target.set(0, 0.2, 0);
 
 // ---------- loop ----------
 const guard = new FpsGuard();
+const bowW = new THREE.Vector3();
 const clock = new THREE.Clock();
 let last = 0;
 let rigHeave = 0;
@@ -537,6 +548,15 @@ renderer.setAnimationLoop(() => {
       model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);
+    if (model && contact) {
+      // Foam where the hull meets the water, spray when the bow drops into a wave.
+      model.root.updateMatrixWorld();
+      bowW.set(contact.bow[0], SPEC[boatKey].cgBelowWaterline, contact.bow[1]);
+      model.root.localToWorld(bowW);
+      const clear = bowW.y - heightAt(comps, bowW.x, bowW.z, t);
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: clear, light: atmos.ambient });
+      status.contact = { ...contact.shown };
+    }
     if (model) {
       // Working equipment from the log: props with speed, rudder with the turn,
       // wing and vane with the apparent wind, panels with the sun, the comms light.

@@ -13,6 +13,7 @@ import { BOATS, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
 import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
+import { Contact } from "./contact";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Atmosphere } from "./atmosphere";
 import { Sea } from "./water";
@@ -83,6 +84,7 @@ interface Boat {
   model: BoatModel;
   motion: Mover;
   wake: Wake;
+  contact: Contact;
   place: Placement;
   tag: HTMLDivElement;
 }
@@ -95,7 +97,7 @@ const boats: Boat[] = BOATS.map((spec) => {
   tag.querySelector("span")!.textContent = `${spec.length.toFixed(2)} m, ${spec.massKg} kg`;
   $("tags").appendChild(tag);
   const place = { x: 0, z: 0, yaw: 0 };
-  return { spec, model: null!, motion: newMotion(spec, place, 0), wake: null!, place, tag };
+  return { spec, model: null!, motion: newMotion(spec, place, 0), wake: null!, contact: null!, place, tag };
 });
 
 function buildBoats(q: Quality): void {
@@ -108,7 +110,13 @@ function buildBoats(q: Quality): void {
       scene.remove(b.wake.points);
       b.wake.dispose();
     }
+    if (b.contact) {
+      scene.remove(b.contact.collar, b.contact.spray);
+      b.contact.dispose();
+    }
     b.model = BUILDERS[b.spec.key](q);
+    b.contact = new Contact(b.model.form, b.spec, q);
+    scene.add(b.contact.collar, b.contact.spray);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
     shadowsOn(b.model.root);
     scene.add(b.model.root, b.wake.points);
@@ -245,6 +253,7 @@ seaSelect.addEventListener("change", () => (status.maxRoll = {}));
 
 // ---------- loop ----------
 const guard = new FpsGuard();
+const bowW = new THREE.Vector3();
 const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
@@ -258,6 +267,14 @@ renderer.setAnimationLoop(() => {
     root.rotation.set(b.motion.roll, b.place.yaw, b.motion.pitch, "YZX");
     b.model.animate(t);
     b.wake.update(comps, t, b.place);
+    root.updateMatrixWorld();
+    bowW.set(b.contact.bow[0], b.spec.cgBelowWaterline, b.contact.bow[1]);
+    root.localToWorld(bowW);
+    b.contact.update(comps, t, b.place, hsOf(comps), {
+      speed: b.spec.cruiseSpeed,
+      bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t),
+      light: atmos.ambient,
+    });
     status.maxRoll[b.spec.key] = Math.max(status.maxRoll[b.spec.key] ?? 0, Math.abs(b.motion.roll));
     return {
       key: b.spec.key,

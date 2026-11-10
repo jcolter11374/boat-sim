@@ -7,10 +7,16 @@
 // what the grid is too coarse to carry: small ripples and sun glitter, long
 // swell texture in the distance, light glowing through the wave tops, and
 // patchy whitecap foam. All of that is looks only; the physics reads waves.ts.
+//
+// The waves are moved on the graphics card (vertex shader), with the same
+// Gerstner maths as waves.ts displace(): the page used to do it in JavaScript
+// for every vertex every frame, which made High stutter.
 
 import * as THREE from "three";
 import type { Quality } from "./boats/parts";
-import { displace, type WaveComponent } from "./waves";
+import { G, type WaveComponent } from "./waves";
+
+const MAX_WAVES = 48; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
 export const HORIZON = 3000; // m, half-width of the whole sea out to the horizon
@@ -27,16 +33,62 @@ const DEEP = new THREE.Color(0x041d33);
 const SHALLOW = new THREE.Color(0x135a7e);
 
 const VERT_HEAD = /* glsl */ `
-attribute float foam;
-uniform float uAmp;
+attribute float fade;      // 1 inside the moving patch, 0 on the flat far sea
+uniform float uAmp;        // Hs / 2
+uniform float uFoamAmt;    // crest foam, 0..1
+uniform float uTime;
+uniform int uN;            // wave trains in use
+uniform float uQ;          // sideways (trochoidal) scale so crests never fold
+uniform vec4 uWa[${MAX_WAVES}]; // amplitude, k, omega, phase
+uniform vec2 uWd[${MAX_WAVES}]; // direction of travel (x, z)
+uniform vec3 uDeep;
+uniform vec3 uShallow;
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
+vec3 gDisp;
+vec3 gNorm;
+// Same as waves.ts displace(), plus the surface slope for the normal.
+void gerstner(vec2 p, float w) {
+  vec3 d = vec3(0.0);
+  vec3 tx = vec3(1.0, 0.0, 0.0);
+  vec3 tz = vec3(0.0, 0.0, 1.0);
+  if (w > 0.0) {
+    for (int i = 0; i < ${MAX_WAVES}; i++) {
+      if (i >= uN) break;
+      vec4 a = uWa[i];
+      vec2 u = uWd[i];
+      float th = a.y * dot(u, p) - a.z * uTime + a.w;
+      float s = sin(th), c = cos(th);
+      float qa = uQ * a.x;
+      d += vec3(-qa * u.x * s, a.x * c, -qa * u.y * s);
+      float k = a.y;
+      tx += vec3(-qa * k * u.x * u.x * c, -a.x * k * u.x * s, -qa * k * u.x * u.y * c);
+      tz += vec3(-qa * k * u.x * u.y * c, -a.x * k * u.y * s, -qa * k * u.y * u.y * c);
+    }
+  }
+  gDisp = d * w;
+  tx = mix(vec3(1.0, 0.0, 0.0), tx, w);
+  tz = mix(vec3(0.0, 0.0, 1.0), tz, w);
+  gNorm = normalize(cross(tz, tx));
+}
+`;
+const VERT_NORMAL = /* glsl */ `
+gerstner(position.xz, fade);
+objectNormal = gNorm;
+`;
+const VERT_POS = /* glsl */ `
+transformed += gDisp;
 `;
 const VERT_BODY = /* glsl */ `
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-vFoam = foam;
-vCrest = clamp(transformed.y / max(uAmp, 0.05), -1.0, 1.5);
+float hRel = uAmp > 0.0 ? gDisp.y / uAmp : 0.0; // about -2..2
+vCrest = clamp(gDisp.y / max(uAmp, 0.05), -1.0, 1.5);
+vFoam = uFoamAmt > 0.0 ? uFoamAmt * smoothstep(0.4, 1.3, hRel) : 0.0;
+#ifdef USE_COLOR
+  // Deep in the troughs, lighter on the faces.
+  vColor.rgb = mix(uDeep, uShallow, clamp(0.5 + 0.3 * hRel, 0.0, 1.0));
+#endif
 `;
 
 const FRAG_HEAD = /* glsl */ `
@@ -144,9 +196,7 @@ const FRAG_GLOW = /* glsl */ `
 export class Sea {
   readonly mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>;
   private base = new Float32Array();
-  private fade = new Float32Array();
   private colours = new Float32Array();
-  private foams = new Float32Array();
   private foamAmount = 0;
   private hs = 1;
   readonly steepness = 0.5;
@@ -161,6 +211,13 @@ export class Sea {
     uCover: { value: 0 },
     uWind: { value: new THREE.Vector2(1, 0) },
     uChop: { value: 0 },
+    uFoamAmt: { value: 0 },
+    uN: { value: 0 },
+    uQ: { value: 0 },
+    uWa: { value: Array.from({ length: MAX_WAVES }, () => new THREE.Vector4()) },
+    uWd: { value: Array.from({ length: MAX_WAVES }, () => new THREE.Vector2()) },
+    uDeep: { value: new THREE.Vector3(DEEP.r, DEEP.g, DEEP.b) },
+    uShallow: { value: new THREE.Vector3(SHALLOW.r, SHALLOW.g, SHALLOW.b) },
   };
   private detail = 0; // wind chop on (High) or off (Low)
 
@@ -178,14 +235,19 @@ export class Sea {
     });
     material.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.uniforms);
-      sh.vertexShader = VERT_HEAD + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n" + VERT_BODY);
+      sh.vertexShader =
+        VERT_HEAD +
+        sh.vertexShader
+          .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\n" + VERT_NORMAL)
+          .replace("#include <begin_vertex>", "#include <begin_vertex>\n" + VERT_POS)
+          .replace("#include <project_vertex>", "#include <project_vertex>\n" + VERT_BODY);
       sh.fragmentShader = (FRAG_HEAD + sh.fragmentShader)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v3";
+    material.customProgramCacheKey = () => "boatsim-sea-v4";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
@@ -215,11 +277,9 @@ export class Sea {
       fade[i / 3] = 1 - THREE.MathUtils.smoothstep(r, FADE_IN, FADE_OUT);
     }
     this.base = Float32Array.from(p);
-    this.fade = fade;
     this.colours = new Float32Array(p.length);
-    this.foams = new Float32Array(p.length / 3);
     geo.setAttribute("color", new THREE.BufferAttribute(this.colours, 3));
-    geo.setAttribute("foam", new THREE.BufferAttribute(this.foams, 1));
+    geo.setAttribute("fade", new THREE.BufferAttribute(fade, 1));
     this.mesh.geometry.dispose();
     this.mesh.geometry = geo;
     this.paintFlat();
@@ -272,36 +332,24 @@ export class Sea {
     }
   }
 
+  /** Move the waves: hands this frame's wave trains to the shader. */
   update(comps: WaveComponent[], t: number): void {
-    this.uniforms.uTime.value = t;
-    const geo = this.mesh.geometry;
-    const pos = geo.attributes.position;
-    const arr = pos.array as Float32Array;
-    const col = this.colours;
-    const foams = this.foams;
-    const amp = this.hs / 2;
-    const foam = this.foamAmount;
-    for (let i = 0, j = 0; i < arr.length; i += 3, j++) {
-      const w = this.fade[j];
-      if (w <= 0) continue; // flat far sea, already in place
-      const x0 = this.base[i];
-      const z0 = this.base[i + 2];
-      const [dx, y, dz] = displace(comps, x0, z0, t, this.steepness);
-      arr[i] = x0 + dx * w;
-      arr[i + 1] = y * w;
-      arr[i + 2] = z0 + dz * w;
-      // Colour: deep in the troughs, lighter on the faces; foam on high crests.
-      const h = amp > 0 ? (y * w) / amp : 0; // about -2..2
-      const lift = THREE.MathUtils.clamp(0.5 + 0.3 * h, 0, 1);
-      col[i] = DEEP.r + (SHALLOW.r - DEEP.r) * lift;
-      col[i + 1] = DEEP.g + (SHALLOW.g - DEEP.g) * lift;
-      col[i + 2] = DEEP.b + (SHALLOW.b - DEEP.b) * lift;
-      foams[j] = foam > 0 ? foam * THREE.MathUtils.smoothstep(h, 0.4, 1.3) : 0;
+    const u = this.uniforms;
+    u.uTime.value = t;
+    const n = Math.min(comps.length, MAX_WAVES);
+    // Same sideways scaling as waves.ts displace(): sum(k a) never passes the steepness.
+    let ka = 0;
+    for (let i = 0; i < n; i++) ka += ((2 * Math.PI) / comps[i].wavelength) * comps[i].amplitude;
+    u.uQ.value = ka > 0 ? Math.min(1, this.steepness / ka) : 0;
+    for (let i = 0; i < n; i++) {
+      const c = comps[i];
+      const k = (2 * Math.PI) / c.wavelength;
+      u.uWa.value[i].set(c.amplitude, k, Math.sqrt(G * k), c.phase);
+      u.uWd.value[i].set(Math.cos(c.direction), Math.sin(c.direction));
     }
-    pos.needsUpdate = true;
-    geo.attributes.color.needsUpdate = true;
-    geo.attributes.foam.needsUpdate = true;
-    geo.computeVertexNormals();
+    u.uN.value = n;
+    u.uAmp.value = this.hs / 2;
+    u.uFoamAmt.value = this.foamAmount;
   }
 
   dispose(): void {
