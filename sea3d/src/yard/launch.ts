@@ -192,6 +192,18 @@ export class SandboxLauncher implements Launcher {
     }
   }
   async launch(d: Design, _s: Summary, progress: Progress = () => {}): Promise<LaunchResult | null> {
+    try {
+      return await this.sail(d, progress);
+    } catch (e) {
+      // The published simulator can lag the page (a new part the page knows and it doesn't
+      // yet answers "unknown slot"): fall back to the grid rather than fail the launch.
+      console.warn("browser simulator failed, using the grid:", e);
+      const r = await this.grid.launch(d);
+      if (r) r.note = `${r.note} (The simulator in your browser can't sail this design yet; coming soon.)`;
+      return r;
+    }
+  }
+  private async sail(d: Design, progress: Progress): Promise<LaunchResult | null> {
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
     this.pool ??= new Pool(Math.max(1, Math.min(3, cores - 1)));
     const pool = this.pool;

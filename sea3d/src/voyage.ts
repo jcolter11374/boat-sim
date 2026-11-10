@@ -12,6 +12,8 @@
 
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { Wetness } from "./boats/wet";
+import { Drain } from "./drain";
+import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
@@ -92,6 +94,9 @@ scene.add(sea.mesh);
 // Rain in a blow (cosmetic: the log has wind, not rain).
 const rain = new Rain();
 scene.add(rain.mesh);
+// Low cloud (cover read from the logged sunlight) and fog banks (cosmetic).
+const clouds = new Clouds();
+scene.add(clouds.group);
 sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
@@ -99,6 +104,7 @@ let wake: Wake | null = null;
 let contact: Contact | null = null;
 let motion = new BoatMotion(HULL[boatKey], place);
 let wet: Wetness | null = null;
+let drain: Drain | null = null;
 function buildBoat(q: Quality): void {
   if (model) {
     scene.remove(model.root);
@@ -112,6 +118,10 @@ function buildBoat(q: Quality): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  if (drain) {
+    scene.remove(drain.group);
+    drain.dispose();
+  }
   const spec = SPEC[boatKey];
   model = BUILDERS[boatKey](q);
   contact = new Contact(model.form, spec, q);
@@ -120,6 +130,8 @@ function buildBoat(q: Quality): void {
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
   wet = new Wetness(model.root);
+  drain = new Drain(model.form, spec);
+  scene.add(drain.group);
 }
 function setQuality(l: Look): void {
   look = l;
@@ -188,7 +200,10 @@ let gamePicked = false; // a voyage picked in the game is on screen
 const endHour = () => lanes.reduce((m, l) => Math.max(m, lastHour(l.rep)), 0);
 const status = {
   rain: 0,
+  cloud: 0,
+  fog: 0,
   wet: 0,
+  drains: 0,
   ready: false,
   error: "",
   file: "",
@@ -237,6 +252,10 @@ const status = {
   sky: {} as Record<string, number>,
   /** Make the postcard; returns the PNG as a data URL (for tests). */
   postcard: (): string => (rep ? postcard().toDataURL("image/png") : ""),
+  /** Pour the deck off now, as after a knockdown (for tests and pictures). */
+  pour: (): void => drain?.pour(),
+  /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
+  force: { cloud: -1, fog: -1 },
 };
 (window as unknown as { __replay: typeof status }).__replay = status;
 
@@ -267,6 +286,7 @@ function seek(h: number): void {
   ended = false; // the loop shows the outcome card if this is the end
   seaTarget(rep, hour);
   live.snap();
+  clouds.snap();
   $("outcome").classList.remove("show");
 }
 
@@ -589,6 +609,8 @@ renderer.setAnimationLoop(() => {
         // A knockdown: give the boat a hard shove so the physics rolls it over and
         // rights it again (the keel and dome do the righting, as designed).
         if (e.kind === "capsize" && warp <= 24 && li === focus) motion.rollRate += (Math.random() < 0.5 ? -1 : 1) * 7;
+        // Too fast to see the roll: just show the water running off afterwards.
+        else if (e.kind === "capsize" && li === focus && warp <= 600) drain?.pour();
         const who = lanes.length > 1 ? `${SHORT[l.key]} · ` : "";
         toast(describeEvent(e, l.rep.boat), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
       }
@@ -643,6 +665,10 @@ renderer.setAnimationLoop(() => {
       contact.update(comps, t, place, hs, { speed: stw, bowClearance: clear, light: atmos.ambient });
       status.contact = { ...contact.shown };
     }
+    if (model && drain) {
+      drain.update(dt, motion.roll, model.root, atmos.ambient, renderer.domElement.clientHeight);
+      status.drains = drain.count;
+    }
     if (model) {
       // Working equipment from the log: props with speed, rudder with the turn,
       // wing and vane with the apparent wind, panels with the sun, the comms light.
@@ -683,13 +709,32 @@ renderer.setAnimationLoop(() => {
     sunEl = sp.el;
     sunAz = sp.az;
     atmos.set(sp.el, sp.az, storm);
+    const when = utc(rep.start) / 86400e3 + hour / 24; // calendar day, so a given day is foggy in every replay
+    clouds.update(
+      t,
+      dt,
+      camera,
+      status.force.cloud >= 0 ? status.force.cloud : cloudFromSun(valueAt(rep, rep.ghi, hour), sp.el),
+      storm,
+      status.force.fog >= 0 ? status.force.fog : fogChance(lat, lon, Math.hypot(wu, wv) * 1.94384, when),
+      wu,
+      -wv,
+      atmos.sunDir,
+      atmos.fog.color,
+      atmos.ambient,
+    );
+    clouds.closeIn(atmos.fog);
+    status.cloud = clouds.cover;
+    status.fog = clouds.fog;
     // Scene x is east, -z is north.
     // The logged rain when the replay has it; older replays only have wind, so rain follows the storm.
     const rate = rep.rain ? valueAt(rep, rep.rain, hour) : null;
     rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
     status.rain = rain.amount;
     // Wet from rain and from spray once the waves get up.
-    const wetNow = Math.min(1, rain.amount + THREE.MathUtils.smoothstep(valueAt(rep, rep.hs, hour) ?? 0, 1, 4) * 0.8);
+    // Soaked for a while after a knockdown, drying off over a minute or so.
+    const dunked = drain ? 1 - THREE.MathUtils.smoothstep(drain.sinceDrain, 20, 80) : 0;
+    const wetNow = Math.min(1, Math.max(dunked, rain.amount + THREE.MathUtils.smoothstep(valueAt(rep, rep.hs, hour) ?? 0, 1, 4) * 0.8));
     wet?.set(wetNow);
     status.wet = wetNow;
     sea.setSun(atmos.glintDir, atmos.glintLight);

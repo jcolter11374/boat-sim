@@ -246,6 +246,17 @@ try {
   await page.evaluate(() => window.__replay.setHour(30));
   await page.waitForFunction(() => window.__replay.rain < 0.05, null, { timeout: 30000 }).catch(() => fail("rain on a calm day"));
   log.push("rain in the blow, dry on a calm day");
+  // Water pours off the deck after a knockdown, and the boat stays soaked for a while.
+  await page.evaluate(() => window.__replay.pour());
+  await page.waitForFunction(() => window.__replay.drains >= 1 && window.__replay.wet > 0.9, null, { timeout: 30000 })
+    .catch(async () => fail(`no water off the deck: ${JSON.stringify(await page.evaluate(() => [window.__replay.drains, window.__replay.wet]))}`));
+  // Fog banks and low cloud draw without errors when they're in.
+  await page.evaluate(() => { window.__replay.force.fog = 1; window.__replay.force.cloud = 0.8; window.__replay.setHour(31); });
+  await page.waitForFunction(() => window.__replay.fog > 0.9 && window.__replay.cloud > 0.7, null, { timeout: 30000 })
+    .catch(async () => fail(`no fog or cloud: ${JSON.stringify(await page.evaluate(() => [window.__replay.fog, window.__replay.cloud]))}`));
+  await page.evaluate(() => { window.__replay.force.fog = -1; window.__replay.force.cloud = -1; });
+  if (errors.length) fail(`page errors with fog and cloud: ${errors.join("; ")}`);
+  log.push("water off the deck, fog and cloud");
 
   // Boatyard: the catalog loads, a swap changes the totals, the model and the share link.
   await page.goto(`${URL}boatyard.html?quality=low`);
