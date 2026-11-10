@@ -293,6 +293,34 @@ export function displace(
   return [dx, y, dz];
 }
 
+/** Wave trains the sea shader can carry (water.ts). */
+export const MAX_GPU_WAVES = 48;
+
+/**
+ * The wave trains packed the way the sea shader reads them: per train
+ * (amplitude, k, omega, phase) and its direction (x, z), plus the sideways
+ * scale q. Same numbers displace() uses, so the drawn sea is the one the
+ * boats float on (tests/waves.test.ts checks the two agree).
+ */
+export function gpuWaves(
+  comps: WaveComponent[],
+  steepness = 0.5,
+): { n: number; q: number; wa: number[]; wd: number[] } {
+  const n = Math.min(comps.length, MAX_GPU_WAVES);
+  let ka = 0;
+  for (const c of comps) ka += ((2 * Math.PI) / c.wavelength) * c.amplitude;
+  const q = ka > 0 ? Math.min(1, steepness / ka) : 0;
+  const wa: number[] = [];
+  const wd: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const c = comps[i];
+    const k = (2 * Math.PI) / c.wavelength;
+    wa.push(c.amplitude, k, Math.sqrt(G * k), c.phase);
+    wd.push(Math.cos(c.direction), Math.sin(c.direction));
+  }
+  return { n, q, wa, wd };
+}
+
 /**
  * Sea surface height at a fixed world point (x, z) at time t.
  *
