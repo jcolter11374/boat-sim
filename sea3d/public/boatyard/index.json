@@ -1,0 +1,1740 @@
+{
+ "schema": 2,
+ "slots": {
+  "thr": [
+   "two-t200",
+   "one-t200"
+  ],
+  "sol": [
+   "solar-250",
+   "solar-200",
+   "solar-300"
+  ],
+  "bat": [
+   "two-50ah",
+   "one-50ah",
+   "two-100ah"
+  ],
+  "mppt": [
+   "two-mppt",
+   "one-mppt"
+  ],
+  "brain": [
+   "two-box",
+   "one-box"
+  ],
+  "sat": [
+   "rockblock-9603n"
+  ],
+  "beacon": [
+   "smartone-solar",
+   "none"
+  ],
+  "ais": [
+   "emtrak-b921",
+   "dy-ait1500",
+   "none"
+  ],
+  "radar": [
+   "echomax-230br",
+   "davis-echomaster"
+  ],
+  "light": [
+   "hella-naviled-360"
+  ],
+  "lead": [
+   "lead-50-new",
+   "lead-50-scrap",
+   "lead-40"
+  ],
+  "paint": [
+   "micron-csc",
+   "none"
+  ],
+  "spares": [
+   "spares-full",
+   "spares-no-pixhawk",
+   "none"
+  ]
+ },
+ "defaults": {
+  "thr": "two-t200",
+  "sol": "solar-250",
+  "bat": "two-50ah",
+  "mppt": "two-mppt",
+  "brain": "two-box",
+  "sat": "rockblock-9603n",
+  "beacon": "smartone-solar",
+  "ais": "emtrak-b921",
+  "radar": "echomax-230br",
+  "light": "hella-naviled-360",
+  "lead": "lead-50-new",
+  "paint": "micron-csc",
+  "spares": "spares-full",
+  "cruise_w": 25
+ },
+ "current": "k-p25",
+ "stride_h": 6,
+ "units": {
+  "h": "hours since launch",
+  "lat": "deg N",
+  "lon": "deg E",
+  "heading": "deg true",
+  "stw": "m/s through the water",
+  "soc": "battery state of charge, 0-1",
+  "wind_u": "m/s eastward",
+  "wind_v": "m/s northward",
+  "hs": "m significant wave height",
+  "tp": "s peak wave period",
+  "wave_dir": "deg, waves come FROM",
+  "iridium_ok": "1 = Iridium can report this hour (powered, main box and comms path ok)",
+  "beacon_ok": "1 = Globalstar backup beacon still working"
+ },
+ "odds_source": {
+  "years": [
+   2012,
+   2021
+  ],
+  "months": [
+   4,
+   5,
+   6
+  ],
+  "voyages_per_build": 100,
+  "note": "April to June launches every 10 days, real weather and currents, same seeds for every build; unknown failure off (odds_unknown_10 puts a 10% chance by day 60 back in). Microtransat finish on our target."
+ },
+ "commit": "97ba16e",
+ "builds": [
+  {
+   "id": "k-p25",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, kayak as it stands",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": true,
+   "odds": {
+    "voyages": 100,
+    "finished": 78,
+    "odds": 0.78,
+    "low95": 0.689,
+    "high95": 0.85,
+    "within_150": 78,
+    "median_days": 72.0,
+    "odds_unknown_10": 0.695,
+    "endings": {
+     "arrived": 78,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 5,
+     "taken or snagged by fishermen [near land]": 3,
+     "disqualified: silent too long": 2,
+     "stuck inverted or keel lost [open ocean]": 2
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 71.69
+    },
+    {
+     "file": "k-p25/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 71.4
+    },
+    {
+     "file": "k-p25/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 74.45
+    },
+    {
+     "file": "k-p25/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.99
+    }
+   ]
+  },
+  {
+   "id": "k-p10",
+   "boat": "v4 kayak",
+   "label": "10 W cruise, kayak as it stands",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 10
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 67,
+    "odds": 0.67,
+    "low95": 0.573,
+    "high95": 0.754,
+    "within_150": 67,
+    "median_days": 108.4,
+    "odds_unknown_10": 0.582,
+    "endings": {
+     "arrived": 67,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
+     "still at sea": 10,
+     "taken or snagged by fishermen [near land]": 3,
+     "ran aground before the finish": 2,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
+     "disqualified: silent too long": 2,
+     "stuck inverted or keel lost [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p10/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 125.95
+    },
+    {
+     "file": "k-p10/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "k-p10/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p10/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.26
+    },
+    {
+     "file": "k-p10/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 106.75
+    },
+    {
+     "file": "k-p10/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 98.52
+    }
+   ]
+  },
+  {
+   "id": "k-p15",
+   "boat": "v4 kayak",
+   "label": "15 W cruise, kayak as it stands",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 15
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 74,
+    "odds": 0.74,
+    "low95": 0.646,
+    "high95": 0.816,
+    "within_150": 74,
+    "median_days": 84.6,
+    "odds_unknown_10": 0.652,
+    "endings": {
+     "arrived": 74,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
+     "still at sea": 4,
+     "disqualified: silent too long": 3,
+     "taken or snagged by fishermen [near land]": 3,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
+     "ran aground before the finish": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p15/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 124.66
+    },
+    {
+     "file": "k-p15/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 105.51
+    },
+    {
+     "file": "k-p15/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p15/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p15/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 76.82
+    },
+    {
+     "file": "k-p15/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 91.7
+    }
+   ]
+  },
+  {
+   "id": "k-p20",
+   "boat": "v4 kayak",
+   "label": "20 W cruise, kayak as it stands",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 20
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 76,
+    "odds": 0.76,
+    "low95": 0.668,
+    "high95": 0.833,
+    "within_150": 76,
+    "median_days": 75.6,
+    "odds_unknown_10": 0.675,
+    "endings": {
+     "arrived": 76,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "still at sea": 6,
+     "disqualified: silent too long": 3,
+     "ran aground before the finish": 2,
+     "taken or snagged by fishermen [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p20/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 117.27
+    },
+    {
+     "file": "k-p20/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 80.32
+    },
+    {
+     "file": "k-p20/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p20/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.26
+    },
+    {
+     "file": "k-p20/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 63.17
+    },
+    {
+     "file": "k-p20/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 87.53
+    }
+   ]
+  },
+  {
+   "id": "k-p30",
+   "boat": "v4 kayak",
+   "label": "30 W cruise, kayak as it stands",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 30
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 66.4,
+    "odds_unknown_10": 0.751,
+    "endings": {
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 2,
+     "disqualified: silent too long": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p30/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 86.39
+    },
+    {
+     "file": "k-p30/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 79.91
+    },
+    {
+     "file": "k-p30/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p30/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.26
+    },
+    {
+     "file": "k-p30/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 67.26
+    },
+    {
+     "file": "k-p30/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 64.36
+    }
+   ]
+  },
+  {
+   "id": "k-p25-thr.one-t200",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Thrusters: one-t200",
+   "options": {
+    "thr": "one-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 57,
+    "odds": 0.57,
+    "low95": 0.472,
+    "high95": 0.663,
+    "within_150": 57,
+    "median_days": 73.3,
+    "odds_unknown_10": 0.507,
+    "endings": {
+     "arrived": 57,
+     "still at sea": 25,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "disqualified: silent too long": 3,
+     "ran aground before the finish": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-thr.one-t200/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 84.2
+    },
+    {
+     "file": "k-p25-thr.one-t200/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 136.79
+    },
+    {
+     "file": "k-p25-thr.one-t200/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-thr.one-t200/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-thr.one-t200/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "k-p25-thr.one-t200/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 73.77
+    }
+   ]
+  },
+  {
+   "id": "k-p25-sol.solar-200",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Solar panels: solar-200",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-200",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 78,
+    "odds": 0.78,
+    "low95": 0.689,
+    "high95": 0.85,
+    "within_150": 78,
+    "median_days": 72.4,
+    "odds_unknown_10": 0.695,
+    "endings": {
+     "arrived": 78,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 6,
+     "taken or snagged by fishermen [near land]": 3,
+     "disqualified: silent too long": 2,
+     "stuck inverted or keel lost [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-sol.solar-200/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 71.69
+    },
+    {
+     "file": "k-p25-sol.solar-200/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 76.64
+    },
+    {
+     "file": "k-p25-sol.solar-200/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-sol.solar-200/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-sol.solar-200/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 57.68
+    },
+    {
+     "file": "k-p25-sol.solar-200/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 95.83
+    }
+   ]
+  },
+  {
+   "id": "k-p25-sol.solar-300",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Solar panels: solar-300",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-300",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 81,
+    "odds": 0.81,
+    "low95": 0.722,
+    "high95": 0.875,
+    "within_150": 81,
+    "median_days": 69.9,
+    "odds_unknown_10": 0.722,
+    "endings": {
+     "arrived": 81,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 3,
+     "ran aground before the finish": 2,
+     "taken or snagged by fishermen [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "disqualified: silent too long": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-sol.solar-300/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 87.89
+    },
+    {
+     "file": "k-p25-sol.solar-300/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 75.19
+    },
+    {
+     "file": "k-p25-sol.solar-300/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-sol.solar-300/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-sol.solar-300/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 68.5
+    },
+    {
+     "file": "k-p25-sol.solar-300/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.74
+    }
+   ]
+  },
+  {
+   "id": "k-p25-bat.one-50ah",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Batteries: one-50ah",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "one-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 79,
+    "odds": 0.79,
+    "low95": 0.7,
+    "high95": 0.858,
+    "within_150": 79,
+    "median_days": 71.7,
+    "odds_unknown_10": 0.703,
+    "endings": {
+     "arrived": 79,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "still at sea": 4,
+     "disqualified: silent too long": 2,
+     "stuck inverted or keel lost [open ocean]": 2,
+     "taken or snagged by fishermen [near land]": 2,
+     "ran aground before the finish": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-bat.one-50ah/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 89.82
+    },
+    {
+     "file": "k-p25-bat.one-50ah/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 71.57
+    },
+    {
+     "file": "k-p25-bat.one-50ah/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-bat.one-50ah/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-bat.one-50ah/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 66.38
+    },
+    {
+     "file": "k-p25-bat.one-50ah/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 69.65
+    }
+   ]
+  },
+  {
+   "id": "k-p25-bat.two-100ah",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Batteries: two-100ah",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-100ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 82,
+    "odds": 0.82,
+    "low95": 0.733,
+    "high95": 0.883,
+    "within_150": 82,
+    "median_days": 68.8,
+    "odds_unknown_10": 0.731,
+    "endings": {
+     "arrived": 82,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "still at sea": 3,
+     "stuck inverted or keel lost [open ocean]": 2,
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-bat.two-100ah/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 116.62
+    },
+    {
+     "file": "k-p25-bat.two-100ah/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 73.45
+    },
+    {
+     "file": "k-p25-bat.two-100ah/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-bat.two-100ah/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-bat.two-100ah/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 78.65
+    },
+    {
+     "file": "k-p25-bat.two-100ah/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 86.4
+    }
+   ]
+  },
+  {
+   "id": "k-p25-brain.one-box",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Autopilot: one-box",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "one-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 66,
+    "odds": 0.66,
+    "low95": 0.563,
+    "high95": 0.745,
+    "within_150": 66,
+    "median_days": 71.2,
+    "odds_unknown_10": 0.588,
+    "endings": {
+     "arrived": 66,
+     "still at sea": 22,
+     "disqualified: silent too long": 4,
+     "ran aground before the finish": 4,
+     "taken or snagged by fishermen [near land]": 3,
+     "stuck inverted or keel lost [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-brain.one-box/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "k-p25-brain.one-box/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 70.95
+    },
+    {
+     "file": "k-p25-brain.one-box/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "k-p25-brain.one-box/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "arrived",
+     "days": 74.92
+    },
+    {
+     "file": "k-p25-brain.one-box/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "k-p25-brain.one-box/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.7
+    }
+   ]
+  },
+  {
+   "id": "k-p25-beacon.none",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Backup beacon: none",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "none",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 59,
+    "odds": 0.59,
+    "low95": 0.492,
+    "high95": 0.681,
+    "within_150": 59,
+    "median_days": 71.2,
+    "odds_unknown_10": 0.525,
+    "endings": {
+     "arrived": 59,
+     "disqualified: silent too long": 28,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "ran aground before the finish": 1,
+     "still at sea": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-beacon.none/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 71.69
+    },
+    {
+     "file": "k-p25-beacon.none/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 70.97
+    },
+    {
+     "file": "k-p25-beacon.none/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-beacon.none/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 47.01
+    },
+    {
+     "file": "k-p25-beacon.none/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 58.0
+    },
+    {
+     "file": "k-p25-beacon.none/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.7
+    }
+   ]
+  },
+  {
+   "id": "k-p25-ais.none",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, AIS: none",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "none",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 79,
+    "odds": 0.79,
+    "low95": 0.7,
+    "high95": 0.858,
+    "within_150": 79,
+    "median_days": 69.0,
+    "odds_unknown_10": 0.705,
+    "endings": {
+     "arrived": 79,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 5,
+     "taken or snagged by fishermen [near land]": 3,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "disqualified: silent too long": 1,
+     "ran aground before the finish": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-ais.none/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 82.58
+    },
+    {
+     "file": "k-p25-ais.none/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 72.81
+    },
+    {
+     "file": "k-p25-ais.none/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-ais.none/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.26
+    },
+    {
+     "file": "k-p25-ais.none/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 57.68
+    },
+    {
+     "file": "k-p25-ais.none/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.67
+    }
+   ]
+  },
+  {
+   "id": "k-p25-paint.none",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Antifouling paint: none",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "none",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 76,
+    "odds": 0.76,
+    "low95": 0.668,
+    "high95": 0.833,
+    "within_150": 76,
+    "median_days": 76.7,
+    "odds_unknown_10": 0.674,
+    "endings": {
+     "arrived": 76,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "still at sea": 6,
+     "disqualified: silent too long": 2,
+     "taken or snagged by fishermen [near land]": 2,
+     "ship strike": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "ran aground before the finish": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-paint.none/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 117.26
+    },
+    {
+     "file": "k-p25-paint.none/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 80.08
+    },
+    {
+     "file": "k-p25-paint.none/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-paint.none/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-paint.none/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 85.06
+    },
+    {
+     "file": "k-p25-paint.none/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 92.49
+    }
+   ]
+  },
+  {
+   "id": "k-p25-lead.lead-40",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Keel bulb: lead-40",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-40",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 83,
+    "odds": 0.83,
+    "low95": 0.745,
+    "high95": 0.891,
+    "within_150": 83,
+    "median_days": 68.7,
+    "odds_unknown_10": 0.74,
+    "endings": {
+     "arrived": 83,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "still at sea": 4,
+     "stuck inverted or keel lost [open ocean]": 2,
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-lead.lead-40/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 86.06
+    },
+    {
+     "file": "k-p25-lead.lead-40/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 71.22
+    },
+    {
+     "file": "k-p25-lead.lead-40/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-lead.lead-40/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-lead.lead-40/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 73.93
+    },
+    {
+     "file": "k-p25-lead.lead-40/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.73
+    }
+   ]
+  },
+  {
+   "id": "k-p25-brain.one-box-beacon.none",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Autopilot: one-box, Backup beacon: none",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "one-box",
+    "sat": "rockblock-9603n",
+    "beacon": "none",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 59,
+    "odds": 0.59,
+    "low95": 0.492,
+    "high95": 0.681,
+    "within_150": 59,
+    "median_days": 71.2,
+    "odds_unknown_10": 0.526,
+    "endings": {
+     "arrived": 59,
+     "electronics box dead: silent and uncontrolled [open ocean]": 26,
+     "disqualified: silent too long": 12,
+     "still at sea": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-brain.one-box-beacon.none/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 12.94
+    },
+    {
+     "file": "k-p25-brain.one-box-beacon.none/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 73.47
+    },
+    {
+     "file": "k-p25-brain.one-box-beacon.none/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-brain.one-box-beacon.none/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "arrived",
+     "days": 83.15
+    },
+    {
+     "file": "k-p25-brain.one-box-beacon.none/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 17.12
+    },
+    {
+     "file": "k-p25-brain.one-box-beacon.none/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 63.69
+    }
+   ]
+  },
+  {
+   "id": "k-p25-sol.solar-300-bat.two-100ah",
+   "boat": "v4 kayak",
+   "label": "25 W cruise, Solar panels: solar-300, Batteries: two-100ah",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-300",
+    "bat": "two-100ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 82,
+    "odds": 0.82,
+    "low95": 0.733,
+    "high95": 0.883,
+    "within_150": 82,
+    "median_days": 69.4,
+    "odds_unknown_10": 0.731,
+    "endings": {
+     "arrived": 82,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "still at sea": 3,
+     "disqualified: silent too long": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-sol.solar-300-bat.two-100ah/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 91.85
+    },
+    {
+     "file": "k-p25-sol.solar-300-bat.two-100ah/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 69.83
+    },
+    {
+     "file": "k-p25-sol.solar-300-bat.two-100ah/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-sol.solar-300-bat.two-100ah/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.51
+    },
+    {
+     "file": "k-p25-sol.solar-300-bat.two-100ah/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 80.4
+    },
+    {
+     "file": "k-p25-sol.solar-300-bat.two-100ah/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 73.81
+    }
+   ]
+  },
+  {
+   "id": "k-p30-sol.solar-300-bat.two-100ah",
+   "boat": "v4 kayak",
+   "label": "30 W cruise, Solar panels: solar-300, Batteries: two-100ah",
+   "options": {
+    "thr": "two-t200",
+    "sol": "solar-300",
+    "bat": "two-100ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 30
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 81,
+    "odds": 0.81,
+    "low95": 0.722,
+    "high95": 0.875,
+    "within_150": 81,
+    "median_days": 65.2,
+    "odds_unknown_10": 0.725,
+    "endings": {
+     "arrived": 81,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "disqualified: silent too long": 3,
+     "still at sea": 3,
+     "stuck inverted or keel lost [open ocean]": 2,
+     "taken or snagged by fishermen [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p30-sol.solar-300-bat.two-100ah/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 79.44
+    },
+    {
+     "file": "k-p30-sol.solar-300-bat.two-100ah/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 70.66
+    },
+    {
+     "file": "k-p30-sol.solar-300-bat.two-100ah/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p30-sol.solar-300-bat.two-100ah/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "disqualified",
+     "days": 64.26
+    },
+    {
+     "file": "k-p30-sol.solar-300-bat.two-100ah/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 93.22
+    },
+    {
+     "file": "k-p30-sol.solar-300-bat.two-100ah/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 61.03
+    }
+   ]
+  },
+  {
+   "id": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none",
+   "boat": "v4 kayak",
+   "label": "15 W cruise, Thrusters: one-t200, Solar panels: solar-200, Batteries: one-50ah, Solar charge controllers: one-mppt, Autopilot: one-box, Backup beacon: none, AIS: none, Antifouling paint: none",
+   "options": {
+    "thr": "one-t200",
+    "sol": "solar-200",
+    "bat": "one-50ah",
+    "mppt": "one-mppt",
+    "brain": "one-box",
+    "sat": "rockblock-9603n",
+    "beacon": "none",
+    "ais": "none",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "none",
+    "spares": "spares-full",
+    "cruise_w": 15
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.4,
+    "odds_unknown_10": 0.234,
+    "endings": {
+     "electronics box dead: silent and uncontrolled [open ocean]": 34,
+     "arrived": 27,
+     "disqualified: silent too long": 20,
+     "still at sea": 11,
+     "taken or snagged by fishermen [near land]": 4,
+     "electronics box dead: silent and uncontrolled [near land]": 2,
+     "ran aground before the finish": 1,
+     "stuck inverted or keel lost [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 12.94
+    },
+    {
+     "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 78.88
+    },
+    {
+     "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "arrived",
+     "days": 90.85
+    },
+    {
+     "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 17.12
+    },
+    {
+     "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 103.9
+    }
+   ]
+  },
+  {
+   "id": "revb",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B as published (our model)",
+   "options": {
+    "wing": "published"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 5,
+    "odds": 0.05,
+    "low95": 0.022,
+    "high95": 0.112,
+    "within_150": 5,
+    "median_days": 117.6,
+    "odds_unknown_10": 0.043,
+    "endings": {
+     "still at sea": 75,
+     "taken or snagged by fishermen [near land]": 8,
+     "stuck inverted or keel lost [open ocean]": 5,
+     "arrived": 5,
+     "disqualified: silent too long": 4,
+     "electronics box dead: silent and uncontrolled [open ocean]": 2,
+     "ran aground before the finish": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "revb/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 138.47
+    },
+    {
+     "file": "revb/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 104.17
+    },
+    {
+     "file": "revb/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    }
+   ]
+  },
+  {
+   "id": "revb-spar",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B with a stronger wing spar (our GUESS: a tenth of the wing damage)",
+   "options": {
+    "wing": "stronger spar"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 18,
+    "odds": 0.18,
+    "low95": 0.117,
+    "high95": 0.267,
+    "within_150": 18,
+    "median_days": 127.7,
+    "odds_unknown_10": 0.155,
+    "endings": {
+     "still at sea": 63,
+     "arrived": 18,
+     "taken or snagged by fishermen [near land]": 6,
+     "stuck inverted or keel lost [open ocean]": 5,
+     "disqualified: silent too long": 3,
+     "ran aground before the finish": 3,
+     "electronics box dead: silent and uncontrolled [open ocean]": 2
+    }
+   },
+   "replays": [
+    {
+     "file": "revb-spar/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb-spar/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 78.88
+    },
+    {
+     "file": "revb-spar/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb-spar/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 138.47
+    },
+    {
+     "file": "revb-spar/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 104.17
+    },
+    {
+     "file": "revb-spar/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    }
+   ]
+  }
+ ]
+}
