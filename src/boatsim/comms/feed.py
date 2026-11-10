@@ -444,6 +444,12 @@ def record_replay(
 # ---------------------------------------------------------------------- ghost
 
 
+def ahead_of(waypoints: list, lon: float, margin_deg: float = 0.05) -> list:
+    """Waypoints still east of the boat (the route runs west to east); at
+    least the last one, the finish."""
+    return [w for w in waypoints if w.lon > lon + margin_deg] or [waypoints[-1]]
+
+
 def ghost(
     tape: Tape,
     feed: dict,
@@ -474,6 +480,10 @@ def ghost(
     t0 = _dt(fix["t"])
     route = next((r for r in feed["routes"] if r["kind"] == "route"), None)
     wps = [Waypoint(a, b) for a, b in route["waypoints"]] if route else default_mission().waypoints
+    # A route sent days ago can start with a detour point the boat has since
+    # passed; the autopilot would turn back for it. Drop points behind the
+    # boat, as base does (ForecastReplanPolicy._ahead).
+    wps = ahead_of(wps, fix["lon"])
     tracks, arrivals = [], []
     for k in range(runs):
         truth = SyntheticWeather(7919 * (k + 1), t0) if tape.weather == "synthetic" else None

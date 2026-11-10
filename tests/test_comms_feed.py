@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from boatsim.comms.feed import (
     Tape,
+    ahead_of,
     build_feed,
     decode_uplink,
     ghost,
@@ -138,3 +139,11 @@ def test_replay_voyage_feeds_reports_pings_and_a_ghost():
     g = ghost(tape, feed, now, runs=2, days=2)
     assert g["from_fix"] == feed["fixes"][-1]["t"] and len(g["median"]) >= 1
     assert all(len(p) == 4 for p in g["spread"])
+
+
+def test_ghost_skips_route_points_the_boat_has_passed():
+    from boatsim.types import Waypoint
+
+    route = [Waypoint(40.0, -56.0), Waypoint(40.5, -50.0), Waypoint(39.5, -13.5)]
+    assert ahead_of(route, -53.6) == route[1:]
+    assert ahead_of(route, -10.0) == route[-1:]
