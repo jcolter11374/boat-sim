@@ -256,6 +256,8 @@ const page = {
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
   arrival: false,
+  /** "arrival" while the finish scene plays, before the results card (for tests). */
+  scene: "",
   /** Look the given compass bearing past the boat (for pictures and tests). */
   aim: (bearing: number) => aimAt(bearing),
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
@@ -1045,8 +1047,10 @@ async function refreshForecast(): Promise<void> {
 
 async function finish(): Promise<void> {
   const c = await game.result();
-  page.card = c;
   chartDirty = true;
+  // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
+  if (c.boat.outcome === "arrived" && finishesOffLisbon() && !shared) await arrivalScene(c);
+  page.card = c;
   const me = c.boat;
   const gh = c.ghost;
   const head =
@@ -1113,10 +1117,7 @@ async function finish(): Promise<void> {
   bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
   if (me.outcome === "arrived" && finishesOffLisbon()) {
-    const L = PLACES.lisbon;
-    arrival = [L.lat, L.lon];
-    page.arrival = true;
-    aimAt(L.look);
+    showArrival();
     bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   $("r-notes").textContent = bits.join(" ");
@@ -1139,6 +1140,44 @@ async function showStanding(build: string): Promise<void> {
 }
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
+function showArrival(): void {
+  const L = PLACES.lisbon;
+  if (!arrival) aimAt(L.look);
+  arrival = [L.lat, L.lon];
+  page.arrival = true;
+}
+
+/** The finish scene: the view cuts to the coast the finish points at, the camera
+ *  swings slowly round the boat, and a banner says so. The results follow after a
+ *  few seconds, or at once on a click or key. */
+async function arrivalScene(c: Card): Promise<void> {
+  showArrival();
+  page.scene = "arrival";
+  const ahead = c.margin_days !== null && c.margin_days > 0;
+  $("arrivehead").textContent = `You made it, after ${c.boat.days.toFixed(1)} days at sea${ahead ? `, ${c.margin_days!.toFixed(1)} days ahead of the ghost` : ""}!`;
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  controls.autoRotate = !still;
+  controls.autoRotateSpeed = 0.5;
+  const banner = $("arrive");
+  banner.hidden = false;
+  document.body.classList.add("arriving"); // the panels step aside for the view
+  await new Promise<void>((done) => {
+    const end = () => {
+      clearTimeout(timer);
+      removeEventListener("keydown", end);
+      $("arrivego").removeEventListener("click", end);
+      done();
+    };
+    const timer = setTimeout(end, 8000);
+    addEventListener("keydown", end);
+    $("arrivego").addEventListener("click", end);
+  });
+  banner.hidden = true;
+  document.body.classList.remove("arriving");
+  controls.autoRotate = false;
+  page.scene = "";
+}
+
 function finishesOffLisbon(): boolean {
   const t = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
   return kmTo(t, [39.5, -13.5]) < 100;
