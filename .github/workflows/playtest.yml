@@ -30,12 +30,11 @@ jobs:
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.event != 'pull_request')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, firefox]
-        check: [index, helm-play, helm-norfolk, helm-drone, helm-rower, helm-cruiser, helm-until, helm-base-order, helm-cinematic, voyage-cinematic, boatyard, race, leaderboard]
     env:
       SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
       BROWSER: ${{ matrix.browser }}
@@ -51,10 +50,12 @@ jobs:
           timeout 120 npx playwright install --with-deps ${{ matrix.browser }} || npx playwright install ${{ matrix.browser }}
       - if: github.event_name == 'workflow_run'
         run: sleep 90
-      - run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs ${{ matrix.check }}
+      # One job per browser, every check in turn (2 runners per deploy, not 26); each
+      # check prints its own PASS/FAIL line and its row in the run summary.
+      - run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: play-${{ matrix.browser }}-${{ matrix.check }}
+          name: play-${{ matrix.browser }}
           path: play-*.png
           if-no-files-found: ignore
