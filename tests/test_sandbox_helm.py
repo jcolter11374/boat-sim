@@ -112,3 +112,64 @@ def test_results_card(env):
     assert r["build"] == "k-p25" and r["launch"] == "2020-05-01T12:00"
     assert r["orders"][0]["heading"] == "finish" and 0 < r["boat"]["battery_low"] <= 1
     json.dumps(r)
+
+
+# --- Real base station mode, the 3-day cap, save and resume -------------------
+
+
+def test_until_something_happens_stops_within_three_days(env):
+    g = Game(env, launch_index=MAY1, max_days=3.5)
+    g.order("finish", 0.3)
+    out = g.run(ghost_passes=False, land_within_km=None, breakdown=False)
+    assert out["stopped"] in ("time", "over")
+    assert g.mine.state.t <= g.start + timedelta(hours=72, minutes=10)
+
+
+def test_base_mode_order_arrives_with_the_next_daily_report(env):
+    g = Game(env, launch_index=MAY1, mode="base", max_days=2.5)
+    assert g.helm.safe  # the boat's own safe mode acts between orders
+    g.run(hours=2, ghost_passes=False, land_within_km=None)  # just missed the launch report
+    first = g.order("finish", 0.6)
+    assert first["accepted"] and first["from_report"] == "2020-05-01T12:00"
+    due = datetime.fromisoformat(first["arrives"])
+    assert timedelta(hours=20) < due - g.start <= timedelta(hours=26)
+    again = g.order(200, 0.1)
+    assert not again["accepted"] and again["next_allowed"] == "2020-05-02T14:00"
+    assert g.status()["base"]["waiting"] == [{"due": first["arrives"], "power": 0.6}]
+    out = g.run(ghost_passes=False, land_within_km=None, breakdown=False)
+    assert out["stopped"] == "order_arrived" and g.mine.state.t >= due
+    assert g.mine.mission.power == 0.6  # delivered; the autopilot takes it next step
+    assert g.mine.mission.waypoints[-1].lon == pytest.approx(-13.5)
+    g.run(hours=1, ghost_passes=False, land_within_km=None, breakdown=False)
+    assert g.helm.heading == "route" and g.helm.power == 0.6
+    assert g.status()["base"]["waiting"] == []
+
+
+def test_save_and_resume_gives_the_same_game(env):
+    for mode in ("hands_on", "base"):
+        g = Game(env, launch_index=MAY1, mode=mode, max_days=2.0)
+        g.order("finish", 0.5)
+        g.run(hours=25, ghost_passes=False, land_within_km=None, breakdown=False)
+        g.order(120, 0.2)
+        g.run(hours=7, ghost_passes=False, land_within_km=None, breakdown=False)
+        code = g.save()
+        assert len(code) < 400 and code.isascii() and "/" not in code and "+" not in code
+        h = Game.load(env, code)
+        assert h.mode == mode and h.mine.state.t == g.mine.state.t
+        assert (h.mine.state.lat, h.mine.state.lon, h.mine.state.soc) == (
+            g.mine.state.lat,
+            g.mine.state.lon,
+            g.mine.state.soc,
+        )
+        assert h.orders == g.orders
+        a = g.run(hours=6, ghost_passes=False, land_within_km=None)
+        b = h.run(hours=6, ghost_passes=False, land_within_km=None)
+        assert a == b  # and they carry on identically
+    with pytest.raises(ValueError):
+        Game.load(env, "not-a-game")
+
+
+def test_forecast_stops_at_the_end_of_the_bundle(env):
+    g = Game(env, launch_index=MAY1, max_days=0.5)
+    f = g.forecast(hours=240)
+    assert 0 < len(f) < 41 and f[-1]["t"] <= "2020-05-04T18:00"
