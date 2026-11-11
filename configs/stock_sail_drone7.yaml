@@ -118,6 +118,11 @@ voyage:
   drop_lon: -74.94
   finish_lat: 39.5
   finish_lon: -13.5
+  # Base routes with the 5-day isochrone weather router on the drone's own speed
+  # table (basestation/isochrone.py). Ravi's 2012-21 gate with the tactician:
+  # 80 finishes against 76 for the fan planner, 1 grounding each, about 10 days
+  # faster; Maya made it the drone's default (11 Nov 2026).
+  routing: isochrone
 
 hazards:
   enabled: true

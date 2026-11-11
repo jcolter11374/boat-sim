@@ -66,7 +66,7 @@ export async function pixels(page) {
     const region = (y0, y1) => {
       let n = 0, s = 0, s2 = 0, black = 0, white = 0, magenta = 0, blue = 0, warm = 0;
       // "Warm-ish" (a looser orange) for the failure report: how much, where, and what colour.
-      let wn = 0, wr = 0, wg = 0, wb = 0, x0 = W, x1 = -1, y0b = H, y1b = -1;
+      let wn = 0, wr = 0, wg = 0, wb = 0, x0 = W, x1 = -1, y0b = H, y1b = -1, sx = 0, sy = 0, sxx = 0, syy = 0;
       for (let y = Math.floor(y0 * H); y < y1 * H; y += 2)
         for (let x = 0; x < W; x += 2) {
           const i = (y * W + x) * 4, r = d[i], gr = d[i + 1], b = d[i + 2];
@@ -78,14 +78,17 @@ export async function pixels(page) {
           if (b > r + 10) blue++;
           if (r > b + 60 && r > gr + 20) warm++; // the kayak's orange hull
           if (r > b + 25 && r > gr + 8) {
-            wn++; wr += r; wg += gr; wb += b;
+            wn++; wr += r; wg += gr; wb += b; sx += x; sy += y; sxx += x * x; syy += y * y;
             if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0b) y0b = y; if (y > y1b) y1b = y;
           }
         }
       const mean = s / n;
       // density: how much of the warm-ish box is warm-ish (samples are every 2nd pixel each way).
       const warmish = wn ? { share: wn / n, rgb: [wr, wg, wb].map((v) => Math.round(v / wn)), box: [x0, y0b, x1, y1b],
-        density: wn / (((x1 - x0) / 2 + 1) * ((y1b - y0b) / 2 + 1)) } : { share: 0, density: 0 };
+        density: wn / (((x1 - x0) / 2 + 1) * ((y1b - y0b) / 2 + 1)),
+        // spread: root-mean-square distance (px) of the warm-ish pixels from their centre. Unlike
+        // the box, one stray glint far away barely moves it.
+        spread: Math.sqrt(Math.max(0, sxx / wn - (sx / wn) ** 2 + syy / wn - (sy / wn) ** 2)) } : { share: 0, density: 0, spread: Infinity };
       return { mean, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)), black: black / n, white: white / n, magenta: magenta / n, blue: blue / n, warm: warm / n, warmish };
     };
     return { all: region(0, 1), sky: region(0, 0.2), sea: region(0.8, 1), size: [W, H] };
@@ -100,7 +103,7 @@ export function describe(px) {
   const w = px.all.warmish;
   const f = (v) => v.toFixed(4);
   return `[picture ${px.size?.join("x")}, canvases ${px.canvases?.join(", ")}; orange ${f(px.all.warm)}, warm-ish ${f(w.share)}` +
-    (w.share ? ` rgb(${w.rgb.join(",")}) in box ${w.box.join(",")}` : "") +
+    (w.share ? ` rgb(${w.rgb.join(",")}) in box ${w.box.join(",")}, density ${w.density.toFixed(2)}, spread ${w.spread.toFixed(0)} px` : "") +
     `; mean brightness ${px.all.mean.toFixed(0)}, sky ${px.sky.mean.toFixed(0)}, sea blue ${f(px.sea.blue)}]`;
 }
 
@@ -111,13 +114,20 @@ export function describe(px) {
  * misses strict orange. "Compact" (a small box, mostly filled) keeps a warm sunset sky
  * or scattered glints from passing for a boat. Healthy: Chromium voyage warm-ish 0.0032
  * at density 0.59; Firefox 0.0009 at 0.31.
+ *
+ * "Compact" is judged by spread (how far the warm-ish pixels sit from their centre), with
+ * a loose density floor: the old rule (density >= 0.15 in a box <= 30% of the picture)
+ * failed a real Firefox boat at density 0.13 (warm-ish 0.0008 in a 36x80 px box at
+ * 960x540, #336), a coin flip on PRs that touch no page. That boat's spread is about
+ * 25 px; the limit is 6% of the picture width (58 px at 960), so about 2x margin either
+ * way, while a sunset sky or glints across the sea spread over hundreds of pixels.
  */
 export function boatInView(px) {
   const a = px.all, w = a.warmish;
   if (a.warm >= 0.001) return true;
-  if (!w || !(w.share >= 0.0004) || !(w.density >= 0.15) || !px.size) return false;
+  if (!w || !(w.share >= 0.0004) || !(w.density >= 0.06) || !px.size) return false;
   const [W, H] = px.size;
-  return w.box[2] - w.box[0] <= 0.3 * W && w.box[3] - w.box[1] <= 0.3 * H;
+  return w.spread <= 0.06 * W && w.box[2] - w.box[0] <= 0.5 * W && w.box[3] - w.box[1] <= 0.5 * H;
 }
 
 /** What's wrong with these pixel statistics ([] = looks right). */
