@@ -74,6 +74,7 @@ MODES = ("hands_on", "base")
 ORDER_EVERY = timedelta(hours=24)  # "Real base station": one order a day
 COMPASS_LEG_M = 2_000_000.0  # GUESS: a compass order is a waypoint this far along the bearing
 SAVE_VERSION = 1
+ESTIMATE_MAX_H = 48.0  # GUESS: base stops extrapolating a silent boat after this
 LAUNCH_MONTHS = (4, 5, 6)  # the target window (John, 8 Nov): April to June
 LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the bundle
 SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
@@ -134,9 +135,33 @@ class PlayerBase:
 
     def __init__(self, t0: datetime, lat: float, lon: float):
         self.last = {"t": _iso(t0), "lat": lat, "lon": lon}
+        self.reports = [dict(self.last)]  # every report that reached base, the drop first
 
     def on_report(self, report, forecast):
         self.last = dict(report)
+        self.reports.append(dict(report))
+
+    def estimate(self, t: datetime) -> dict:
+        """Where base guesses the boat is at `t`: the last report carried on at
+        the speed and direction between the last two (dead reckoning), for at
+        most ESTIMATE_MAX_H. What the page shows as the faint "estimated" boat."""
+        a = self.reports[-1]
+        ta = datetime.fromisoformat(a["t"])
+        lat, lon = float(a["lat"]), float(a["lon"])
+        ahead_s = min(max((t - ta).total_seconds(), 0.0), ESTIMATE_MAX_H * 3600.0)
+        if len(self.reports) >= 2 and ahead_s > 0:
+            b = self.reports[-2]
+            span = (ta - datetime.fromisoformat(b["t"])).total_seconds()
+            if span > 0:
+                k = ahead_s / span
+                lat += (lat - float(b["lat"])) * k
+                lon += (lon - float(b["lon"])) * k
+        return {
+            "lat": lat,
+            "lon": lon,
+            "from_report": a["t"],
+            "age_h": (t - ta).total_seconds() / 3600.0,
+        }
 
 
 def _iso(t: datetime) -> str:
@@ -425,11 +450,21 @@ class Game:
             "ghost": self._boat(self.ghost),
             "lead_km": self.lead_km(),
             "mode": self.mode,
+            "show_true_position": True,
             "order": {"heading": self.helm.heading, "power": self.helm.power},
             "power_w": self.helm.power * self.max_drive_w,
         }
         if self.mode == "base":
-            out["base"] = {"last_report": dict(self.base.last), "waiting": self.waiting()}
+            # What steering from home looks like (Maya, 11 Nov): the page shows
+            # the last report and a faint estimate, not the true boat; the true
+            # track goes on the results card.
+            out["base"] = {
+                "last_report": dict(self.base.last),
+                "estimate": self.base.estimate(self.mine.state.t),
+                "reports": [dict(r) for r in self.base.reports],
+                "waiting": self.waiting(),
+            }
+            out["show_true_position"] = False
         if e is not None:
             out["weather"] = {
                 "wind_u": e.wind_u,
