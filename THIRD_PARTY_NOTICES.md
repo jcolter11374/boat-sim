@@ -21,7 +21,9 @@ and docs. `configs/randolph_rev_c.yaml` was written by the Randolph team in our
 format (their `designs/boat-sim/randolph_rev_c.yaml`, 10 Nov 2026, shared on #50) and is
 kept as they wrote it; the Rev C righting-arm curve and point masses in
 `sea3d/src/motion.ts` come from their `docs/data/revC_gz_curve.csv` and
-`simulator/drone_sim/design.py`. All under the same licence:
+`simulator/drone_sim/design.py`. The Boatyard's Randolph Rev B and Rev C
+starting designs (`sea3d/src/yard/bases.ts`) take their parts, prices and weights
+from the parts table in their `docs/Build_Plan.md` (Nov 2026). All under the same licence:
 
 ```
 MIT License

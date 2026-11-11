@@ -320,3 +320,59 @@ export class SandboxLauncher implements Launcher {
     };
   }
 }
+
+// ---------- a boat we can't vary yet: its as-built voyages ----------
+/** Wilson 95% interval for k of n. */
+export function wilson(k: number, n: number): [number, number] {
+  if (!n) return [0, 1];
+  const z = 1.96;
+  const p = k / n;
+  const den = 1 + (z * z) / n;
+  const mid = (p + (z * z) / (2 * n)) / den;
+  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / den;
+  return [Math.max(0, mid - half), Math.min(1, mid + half)];
+}
+
+/**
+ * The Randolph boats: until Theo's simulations of their parts land, a launch
+ * plays the boat's existing voyage replays as built (public/voyages), with the
+ * grid's odds when the grid has the boat (Rev B), else the count of those voyages.
+ * It says so plainly when the design differs from as built.
+ */
+export class AsBuiltLauncher implements Launcher {
+  readonly name = "replays of the boat as built";
+  constructor(
+    private boat: string, // the replays' boat name, e.g. "Randolph Rev C"
+    private long: string, // "our model of the Randolph team's Rev C"
+    private asBuilt: (d: Design) => boolean,
+    private grid: GridLauncher,
+    private gridId: string | null,
+    private voyages = "./voyages",
+  ) {}
+  async launch(d: Design): Promise<LaunchResult | null> {
+    const idx = await fetch(`${this.voyages}/index.json`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ voyages: { file: string; boat: string; start: string; outcome: string; days: number }[] }>) : null))
+      .catch(() => null);
+    const mine = (idx?.voyages ?? []).filter((v) => v.boat === this.boat).sort((a, b) => a.start.localeCompare(b.start));
+    if (!mine.length) return null;
+    const replays = mine.map((v) => ({ url: `${this.voyages}/${v.file}`, start: v.start, outcome: v.outcome, days: v.days }));
+    const g = this.gridId ? await this.grid.build(this.gridId) : null;
+    let odds = g?.odds ?? null;
+    if (!odds) {
+      const fin = mine.filter((v) => v.outcome === "arrived");
+      const [lo, hi] = wilson(fin.length, mine.length);
+      const days = fin.map((v) => v.days).sort((a, b) => a - b);
+      odds = { voyages: mine.length, finished: fin.length, odds: fin.length / mine.length, low95: lo, high95: hi, median_days: days.length ? days[Math.floor(days.length / 2)] : null };
+    }
+    const n = mine.length;
+    const what = `${n} spring 2020 launches of ${this.long} as built${g?.odds ? `; odds over ${g.odds.voyages} simulated voyages` : ""}.`;
+    return {
+      exact: this.asBuilt(d),
+      note: this.asBuilt(d)
+        ? `Simulated as built: ${what}`
+        : `Your part changes aren't simulated for this boat yet (Theo is adding them), so these are ${what}`,
+      odds,
+      replays,
+    };
+  }
+}

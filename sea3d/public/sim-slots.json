@@ -599,5 +599,357 @@
     }
    ]
   }
- ]
+ ],
+ "bases": {
+  "revc": {
+   "design": "configs/randolph_rev_c.yaml",
+   "defaults": {
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "twin",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-9kg",
+    "tracker": "yb3"
+   },
+   "shared_slots": [
+    "brain",
+    "sat",
+    "light",
+    "paint",
+    "spares"
+   ],
+   "slots": [
+    {
+     "id": "drive",
+     "name": "Drive",
+     "opts": [
+      {
+       "id": "wing",
+       "n": "Wing sail, 1.0 x 0.30 m (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "their design.py",
+       "sim": []
+      },
+      {
+       "id": "wing-thruster",
+       "n": "Wing sail plus their 35 W thruster",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "design.py thruster_w; run like our hybrid",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "brain",
+     "name": "Electronics boxes",
+     "opts": [
+      {
+       "id": "one-box",
+       "n": "One box (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "their Build_Plan.md",
+       "sim": []
+      },
+      {
+       "id": "two-box",
+       "n": "Two boxes, separate safe-mode box",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "our design; GUESS for their boat",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "rudder",
+     "name": "Rudder",
+     "opts": [
+      {
+       "id": "twin",
+       "n": "Twin rudders, separate servos (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "Rev C",
+       "sim": []
+      },
+      {
+       "id": "single",
+       "n": "Single rudder",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "Rev B",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "rsol",
+     "name": "Solar panels",
+     "opts": [
+      {
+       "id": "deck-40w",
+       "n": "2 x 20 W deck panels (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "design.py",
+       "sim": []
+      },
+      {
+       "id": "deck-60w",
+       "n": "60 W on deck",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "GUESS: what fits",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "rbat",
+     "name": "Battery",
+     "opts": [
+      {
+       "id": "lfp-192wh",
+       "n": "192 Wh LiFePO4 (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "design.py",
+       "sim": []
+      },
+      {
+       "id": "lfp-384wh",
+       "n": "384 Wh LiFePO4",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "GUESS: double",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "keel",
+     "name": "Keel bulb",
+     "opts": [
+      {
+       "id": "bulb-9kg",
+       "n": "9 kg bulb (Rev C, D72)",
+       "effect": "wired",
+       "est": false,
+       "basis": "Rev C yaml",
+       "sim": []
+      },
+      {
+       "id": "bulb-8kg",
+       "n": "8.2 kg bulb (Rev B)",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "their README",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "tracker",
+     "name": "Backup tracker",
+     "opts": [
+      {
+       "id": "yb3",
+       "n": "YB3 backup tracker (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "Backup_Tracker.md",
+       "sim": []
+      },
+      {
+       "id": "none",
+       "n": "None",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "one box dead = lost, silent",
+       "sim": []
+      }
+     ]
+    }
+   ]
+  },
+  "revb": {
+   "design": "configs/randolph_rev_b.yaml",
+   "defaults": {
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "single",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-8kg",
+    "tracker": "yb3"
+   },
+   "shared_slots": [
+    "brain",
+    "sat",
+    "light",
+    "paint",
+    "spares"
+   ],
+   "slots": [
+    {
+     "id": "drive",
+     "name": "Drive",
+     "opts": [
+      {
+       "id": "wing",
+       "n": "Wing sail, 1.0 x 0.30 m (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "their design.py",
+       "sim": []
+      },
+      {
+       "id": "wing-thruster",
+       "n": "Wing sail plus their 35 W thruster",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "design.py thruster_w; run like our hybrid",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "brain",
+     "name": "Electronics boxes",
+     "opts": [
+      {
+       "id": "one-box",
+       "n": "One box (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "their Build_Plan.md",
+       "sim": []
+      },
+      {
+       "id": "two-box",
+       "n": "Two boxes, separate safe-mode box",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "our design; GUESS for their boat",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "rudder",
+     "name": "Rudder",
+     "opts": [
+      {
+       "id": "twin",
+       "n": "Twin rudders, separate servos",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "Rev C",
+       "sim": []
+      },
+      {
+       "id": "single",
+       "n": "Single rudder (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "Rev B",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "rsol",
+     "name": "Solar panels",
+     "opts": [
+      {
+       "id": "deck-40w",
+       "n": "2 x 20 W deck panels (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "design.py",
+       "sim": []
+      },
+      {
+       "id": "deck-60w",
+       "n": "60 W on deck",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "GUESS: what fits",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "rbat",
+     "name": "Battery",
+     "opts": [
+      {
+       "id": "lfp-192wh",
+       "n": "192 Wh LiFePO4 (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "design.py",
+       "sim": []
+      },
+      {
+       "id": "lfp-384wh",
+       "n": "384 Wh LiFePO4",
+       "effect": "no effect yet",
+       "est": true,
+       "basis": "GUESS: double",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "keel",
+     "name": "Keel bulb",
+     "opts": [
+      {
+       "id": "bulb-9kg",
+       "n": "9 kg bulb (Rev C, D72)",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "Rev C yaml",
+       "sim": []
+      },
+      {
+       "id": "bulb-8kg",
+       "n": "8.2 kg bulb (Rev B)",
+       "effect": "wired",
+       "est": false,
+       "basis": "their README",
+       "sim": []
+      }
+     ]
+    },
+    {
+     "id": "tracker",
+     "name": "Backup tracker",
+     "opts": [
+      {
+       "id": "yb3",
+       "n": "YB3 backup tracker (as built)",
+       "effect": "wired",
+       "est": false,
+       "basis": "Backup_Tracker.md",
+       "sim": []
+      },
+      {
+       "id": "none",
+       "n": "None",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "one box dead = lost, silent",
+       "sim": []
+      }
+     ]
+    }
+   ]
+  }
+ }
 }
