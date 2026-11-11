@@ -83,6 +83,11 @@
   .card select { max-width: 100%; }
   @media (max-width: 480px), (max-height: 480px) { .card { padding: 14px 16px; } .card h1 { font-size: 19px; } }
   .card h1 { margin: 0 0 6px; font-size: 22px; }
+  #r-next { border-top: 1px solid var(--line); margin: 10px 0; padding-top: 6px; }
+  #r-next .standing { color: var(--ink); font-weight: 600; }
+  #r-next .next { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+  #r-next .next a { color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; background: rgba(27,51,82,.6); }
+  #r-next .next a:hover, #r-next .next a:focus-visible { background: rgba(27,51,82,.95); }
   .card p { color: #d4e1f0; margin: 8px 0; }
   .card label { display: block; margin: 8px 0; }
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
@@ -186,7 +191,8 @@
     <table id="r-table"></table>
     <div id="r-ends"></div>
     <p class="muted" id="r-notes"></p>
-    <button id="again" class="go">Play again</button> <a href="./boatyard.html">Boatyard</a> · <a href="./voyage.html">Voyage replays</a>
+    <div id="r-next"></div>
+    <button id="again" class="go">Play again</button> <a href="./voyage.html">Voyage replays</a>
   </div>
 </div>
 
