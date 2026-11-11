@@ -241,6 +241,10 @@ test("Randolph designs name their base for the simulator, and only match their o
   assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc" }), rc, plan), [0, 0]);
   assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc", rudder: "single" }), rc, d), [0, 0]);
   assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc" }), rc, d), [1, 0]);
+  // A part the simulator doesn't sail is the same voyage either way: the grid's Rev C
+  // ran with full spares, their boat as built has none, and that still matches (#315).
+  assert.equal(plan.picks.spares, "none");
+  assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc", spares: "spares-full" }), rc, plan), [0, 0]);
   // Never a kayak build, another base, or an older Randolph build without a base.
   assert.equal(gridDistance(b("v4 kayak", { cruise_w: 25 }), rc, plan)[0], Infinity);
   assert.equal(gridDistance(b("Randolph Rev B", { base: "revb" }), rc, plan)[0], Infinity);
