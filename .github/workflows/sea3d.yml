@@ -142,7 +142,7 @@ jobs:
       - name: Install headless browser for the smoke test
         run: |
           npm install --no-save playwright@1
-          npx playwright install --with-deps chromium || npx playwright install chromium
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Smoke test (animates, wave heights right, not blank)
         run: npm test
       - uses: actions/upload-artifact@v4
