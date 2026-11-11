@@ -72,6 +72,22 @@ The 3D pages' other ships come from the same map: `sea3d/public/ships.bin` is
 this file on a log scale with near-all-land cells cleared (built by
 `sea3d/scripts/ships.py`), so it carries the same two credits and licence.
 
+## Wildlife map (`sea3d/public/wildlife.json`)
+
+Built by `sea3d/scripts/wildlife.py` (workflow "Build wildlife map"), which
+counts records of dolphins and porpoises, baleen and sperm whales, and birds
+since 1990 and scales them by one survey. We binned, smoothed and rescaled
+them.
+
+- **OBIS**, the Ocean Biodiversity Information System, Intergovernmental
+  Oceanographic Commission of UNESCO (https://obis.org), via its public API.
+  The records come from many datasets, each under CC0, CC BY or CC BY-NC as
+  OBIS lists them; we use only per-cell counts.
+- **AMAPPS Northeast Shipboard Cruise, Summer 2016**, NOAA Northeast
+  Fisheries Science Center (GBIF/OBIS dataset
+  5d89b3ba-fad9-4481-9a4e-d1303f776a65): its sighting totals and trackline
+  length set the scale.
+
 ## Weather and ocean data
 
 The weather and current files in `data/era5/`, the voyage replays in

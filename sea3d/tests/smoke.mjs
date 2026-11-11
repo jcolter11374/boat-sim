@@ -463,6 +463,7 @@ try {
     .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
   if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
   log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+  if (!(await page.evaluate(() => window.__helm.wildlife.known))) fail("helm: no wildlife map (wildlife.json not loaded?)");
   // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
   await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });

@@ -213,6 +213,11 @@ export class Traffic {
     }
   }
 
+  /** False on land (by the traffic map's land cells); true when the map isn't loaded. */
+  water(lat: number, lon: number): boolean {
+    return !this.grid || densityAt(this.grid, lat, lon) > 0;
+  }
+
   /** For tests: a Traffic on a grid already in hand. */
   static from(grid: ShipGrid): Traffic {
     return new Traffic(grid);
@@ -220,9 +225,11 @@ export class Traffic {
 
   /**
    * Each frame, with our boat at the scene's origin at (lat, lon), at time t (s, UTC).
-   * `seeing` is how far you can see (m, the fog's far edge); hs the wave height (m).
+   * `seeing` is how far you can see (m, the fog's far edge); hs the wave height (m);
+   * `clock` the page's running time (s), so they ride the swell even when the voyage's
+   * own time stands still.
    */
-  update(lat: number, lon: number, t: number, seeing: number, hs: number): void {
+  update(lat: number, lon: number, t: number, seeing: number, hs: number, clock = t): void {
     const g = this.grid;
     if (!g || !Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(t)) return;
     // A dark hull shows through haze that hides the paler sea (as the rain curtains do), and a
@@ -269,11 +276,11 @@ export class Traffic {
       const { length: L, beam: B } = SHIP_SIZE[s.kind];
       const w = 2 * Math.PI * (0.08 + 0.04 * s.seed);
       const a = s.seed * 50;
-      obj.position.set(x, -(d * d) / (2 * R_EARTH) + (s.kind === "fishing" ? 0.25 * hs * Math.sin(w * t + a) : 0), z);
+      obj.position.set(x, -(d * d) / (2 * R_EARTH) + (s.kind === "fishing" ? 0.25 * hs * Math.sin(w * clock + a) : 0), z);
       obj.rotation.set(
-        Math.min(0.15, (0.6 * hs) / B) * Math.sin(w * t * 0.8 + a), // roll
+        Math.min(0.15, (0.6 * hs) / B) * Math.sin(w * clock * 0.8 + a), // roll
         -THREE.MathUtils.degToRad(s.heading + 90), // bow (builder -x) to the heading
-        Math.min(0.08, (0.8 * hs) / L) * Math.sin(w * t * 1.1 + a + 1), // pitch
+        Math.min(0.08, (0.8 * hs) / L) * Math.sin(w * clock * 1.1 + a + 1), // pitch
       );
     }
     Object.assign(this.shown, { ships: this.live.size, inSight, nearest, bearing });
