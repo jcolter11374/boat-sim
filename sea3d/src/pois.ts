@@ -18,6 +18,9 @@ export interface Poi {
   text: string;
   source: string;
   url: string;
+  /** Wrecks: how deep it lies (m) and its hull's length and beam (m). */
+  depth_m?: number;
+  size_m?: [number, number];
 }
 
 /** A track passing a point: when, how far off, and where the boat was. */
@@ -59,6 +62,31 @@ export function kmBetween(a: [number, number], b: [number, number]): number {
   const dlon = (b[1] - a[1]) * RAD;
   const s = Math.sin(dlat / 2) ** 2 + Math.cos(a[0] * RAD) * Math.cos(b[0] * RAD) * Math.sin(dlon / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** Clear ocean water shows the bottom down to about this depth (m), and only just. */
+export const SEE_DEPTH = 30;
+
+/**
+ * A wreck shallow enough to see through the water, near enough to be under the boat's
+ * view: where it lies from (lat, lon) in metres east (x) and south (z), and how clearly
+ * it could show (0..1, fading with depth). null when there's none.
+ */
+export function wreckBelow(pois: Poi[], lat: number, lon: number, withinM = 400): { poi: Poi; x: number; z: number; clear: number } | null {
+  let best: { poi: Poi; x: number; z: number; clear: number } | null = null;
+  let bestD = Infinity;
+  for (const p of pois) {
+    if (p.kind !== "wreck" || p.depth_m == null || !p.size_m || p.depth_m > SEE_DEPTH) continue;
+    const [la, lo] = p.at[0];
+    const x = (lo - lon) * 111320 * Math.cos(lat * RAD);
+    const z = -(la - lat) * 110950;
+    const d = Math.hypot(x, z);
+    if (d > withinM + p.size_m[0] / 2 || d >= bestD) continue;
+    bestD = d;
+    const t = Math.min(Math.max((p.depth_m - 10) / (SEE_DEPTH - 10), 0), 1);
+    best = { poi: p, x, z, clear: 1 - t * t * (3 - 2 * t) * 0.55 };
+  }
+  return best;
 }
 
 /** Initial bearing from a to b, degrees clockwise from north. */
