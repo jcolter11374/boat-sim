@@ -237,6 +237,10 @@ class KayakVessel:
         # No independent beacon fitted (comms.beacon: false): count it as failed
         # from the start, so a silent main radio means a silent boat.
         self.has_beacon = bool(design.comms.get("beacon", True))
+        # No rudder fitted (propulsion.rudder: false, a catamaran steering by
+        # differential thrust): it starts as if the rudder were gone, so it needs
+        # both thrusters to steer.
+        self.has_rudder = bool(design.propulsion.get("rudder", True))
 
     def initial_state(self, t, lat: float, lon: float) -> KayakState:
         cap = self.battery.capacity_wh
@@ -245,6 +249,8 @@ class KayakVessel:
         )
         if not self.has_beacon:
             state.damage["beacon"] = True
+        if not self.has_rudder:
+            state.damage["rudder"] = True
         return state
 
     def extra_drag_mult(self, state: BoatState) -> float:

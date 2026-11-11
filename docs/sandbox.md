@@ -164,6 +164,7 @@ change nothing until the physics for them lands; they stay visible.
 | Antifouling | micron-csc, none | `hull.fouling_frac_per_day` (none: x2, GUESS) | wired (est) |
 | Drive | solar-electric, wing-sail, hybrid | wing: a `sail:` block (vessel/sail.py) scaled up from Rev B; wing-sail: no thrusters, cruise 0 W | wired (est) |
 | Hull material | polyethylene, fibreglass, carbon, plywood-epoxy, aluminium | weight; `leak_per_day`, `p_lost_given_strike`; aluminium also fouling | wired (est) |
+| Hull shape | kayak, cat, semisub, board | the shape's own mass, drag, windage and hazards; cat: no rudder, not self-righting | wired (est) |
 | Spares | three sets | none | no effect yet (trials only) |
 
 **Drive.** The wing (all GUESSes, `catalog.KAYAK_WING`): 1.0 m^2, 2.0 m span,
@@ -186,6 +187,28 @@ Every other material keeps the foam. GUESSes, no fleet data per material:
 | Carbon | -11 kg | x1.5 | 0.9 | |
 | Plywood and epoxy | -4 kg | x1.5 | 0.85 | |
 | Aluminium | -2 kg | x0.7 | 0.7 | fouls 1.5x (no copper antifouling) |
+
+**Hull shape.** Sizes agreed with Iris so the 3D models match. Each shape
+carries today's kit, and every drag, windage and hazard number is a GUESS scaled
+from the kayak by area and shape (`catalog.SHAPES`). Each shape's drag is for its
+own weight, so only the other options' weight goes through the mass link.
+
+| Shape | Size, mass | What changes | Catch |
+|---|---|---|---|
+| Kayak (default) | 3.05 x 0.79 m, 123 kg | nothing | |
+| Cat (two hulls) | 3.0 x 1.6 m, 140 kg | low drag per hull, more leeway (no keel), very stiff; a ~1.9 m breaker to roll it | no rudder, so it steers on the two motors and needs both; not self-righting: half the rolls leave it upside down for good (new hazard field `p_capsize_stays_over`, GUESS 0.5) |
+| Semisub (rides low) | 3.2 x 0.5 m, 175 kg, 35 kg lead | little windage, waves wash over rather than lift it | deck panels awash give 60 % solar; hatches under water leak 1.5x |
+| Board (surfboard) | 3.0 x 0.85 m, 105 kg, 25 kg bulb | light, same fin as the kayak | a flat bottom slams in waves; half the bulb, so 4x more often stuck upside down |
+
+The cat's 0.5 drives its odds, so the odds grid also runs it at 0.2 and 0.8
+(`mc.boatyard.CAT_STAYS_OVER`). A design never snaps to those two; they are
+there to show how much the answer hangs on that one number.
+
+Two quirks: the semisub sets its own leak rate, which replaces the hull
+material's leak setting if both are picked (the material's weight and strike
+numbers still apply). The cat's missing rudder comes from a new design flag,
+`propulsion.rudder: false`, which starts the voyage with the rudder marked broken,
+so it steers by differential thrust only.
 
 The hotel load is the design's 85 Wh/day with the default autopilot (31 Wh)
 and AIS (36 Wh) swapped for the chosen ones' catalog figures.

@@ -69,8 +69,8 @@ def test_every_slot_has_its_default_and_a_badge():
 
 def test_odds_grid_is_the_catalog_builds_and_nearest_finds_them():
     ids = [C.grid_id(g) for g in C.GRID]
-    assert len(set(ids)) == len(ids) == 25
-    assert len(Y.BUILDS) == 27 and Y.CURRENT in Y.BUILDS
+    assert len(set(ids)) == len(ids) == 28
+    assert len(Y.BUILDS) == 32 and Y.CURRENT in Y.BUILDS
     for g in C.GRID:
         assert C.nearest(g) == (C.grid_id(g), True)
     assert C.nearest({"ais": "none", "cruise_w": 20}) in (
@@ -352,3 +352,48 @@ def test_sandbox_workflow_builds_are_grid_ids():
     assert found
     for bid in found:
         assert bid in ids, bid
+
+
+def test_hull_shapes_carry_their_own_weight_and_quirks():
+    base = load_design(C.KAYAK)
+    for s, kg in (("cat", 140.0), ("semisub", 175.0), ("board", 105.0)):
+        d = C.design_for({"shape": s})
+        # each shape's drag numbers are for its own weight: no mass-link change
+        assert d.hull["mass_kg"] == d.hull["displacement_ref_kg"] == kg
+        # other options' weight still goes through the mass link
+        assert C.design_for({"shape": s, "bat": "two-100ah"}).hull["mass_kg"] == kg + 10
+    cat = C.design_for({"shape": "cat"})
+    assert cat.propulsion["rudder"] is False and cat.hazards["p_capsize_stays_over"] > 0
+    assert cat.hazards["p_part"]["ais_whip"] == base.hazards["p_part"]["ais_whip"]
+    semi = C.design_for({"shape": "semisub"})
+    assert semi.power["mounting_mismatch"] == round(base.power["mounting_mismatch"] * 0.6, 3)
+
+
+def test_a_rudderless_cat_needs_both_thrusters_and_stays_over_when_rolled():
+    from boatsim.types import Command, EnvState
+    from boatsim.vessel import KayakVessel
+    from boatsim.vessel.hazards import K_DICE, SLOT, HazardParams, sample_hazards
+
+    v = KayakVessel(C.design_for({"shape": "cat"}))
+    t = datetime(2020, 5, 1)
+    s0 = v.initial_state(t, 38.0, -70.0)
+    assert s0.damage.get("rudder")  # no rudder fitted
+    env = EnvState(wind_v=-7.0, hs=1.0, tp=6.0, wave_dir=0.0, ghi=300.0)
+    rng = np.random.default_rng(0)
+    step = timedelta(minutes=10)
+    s, _ = v.step(s0, Command(90.0, 0.25), env, step, rng)
+    assert s.heading == 90.0  # steers on differential thrust
+    one = v.initial_state(t, 38.0, -70.0)
+    one.damage["thruster_starboard"] = True
+    s, _ = v.step(one, Command(90.0, 0.25), env, step, rng)
+    assert s.heading != 90.0  # one thruster, no rudder: it can't steer
+    # a knockdown that a self-righting boat shrugs off ends the cat half the time
+    p = HazardParams.from_config(C.design_for({"shape": "cat"}).hazards)
+    dice = np.full(K_DICE, 0.99)
+    dice[SLOT["knockdown_count"]] = 0.999999  # at least one knockdown
+    dice[SLOT["knockdown_inverted"]] = 0.4
+    storm = EnvState(wind_u=25.0, hs=6.0, tp=10.0)
+    out = sample_hazards(p, storm, 1.0, {}, t, dice)
+    assert out.lost and "not self-righting" in out.events[-1].detail
+    kayak = HazardParams.from_config(load_design(C.KAYAK).hazards)
+    assert not sample_hazards(kayak, storm, 1.0, {}, t, dice).lost
