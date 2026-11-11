@@ -4,7 +4,7 @@
 
 import type { Replay } from "../replay/data";
 
-export type Heading = number | "finish" | "route";
+export type Heading = number | "finish" | "route" | "auto";
 export type Mode = "hands_on" | "base";
 export interface Report {
   t: string;

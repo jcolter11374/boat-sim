@@ -66,6 +66,8 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+import numpy as np
+
 from boatsim.autonomy.sphere import destination
 from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.oceandata.base import Environment
@@ -117,16 +119,34 @@ def _off_wind(line_deg: float, wind_u: float, wind_v: float) -> float:
     return abs((line_deg - wind_from + 180.0) % 360.0 - 180.0)
 
 
+_COS = [math.cos(math.radians(d)) for d in range(181)]
+_COS_ROWS: dict[tuple[int, int], np.ndarray] = {}
+
+
 def vmc_table(polar, tws: float, min_twa_deg: float, max_twa_deg: float) -> list[float]:
-    """Best speed made good (m/s) for a line 0, 1, ... 180 deg off the wind."""
+    """Best speed made good (m/s) for a line 0, 1, ... 180 deg off the wind.
+
+    Kept per polar and wind speed (the polar never changes), so the player's
+    boat, the ghost and every replan share one table (#322). The products are
+    the same doubles as one by one, so the table is bit for bit the same."""
     lo, hi = max(math.ceil(min_twa_deg), 1), min(math.floor(max_twa_deg), 180)
-    angles = range(lo, hi + 1)
-    v = [polar.speed_ms(tws, float(a)) for a in angles]
-    cos = [math.cos(math.radians(d)) for d in range(181)]
-    return [
-        max([0.0, *(s * cos[abs(a - off)] for a, s in zip(angles, v, strict=True))])
-        for off in range(181)
-    ]
+    cache = getattr(polar, "__dict__", {}).setdefault("_vmc_tables", {})
+    key = (tws, lo, hi)
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    v = np.array([polar.speed_ms(tws, float(a)) for a in range(lo, hi + 1)])
+    rows = _COS_ROWS.get((lo, hi))
+    if rows is None:
+        # cos of each line's angle off each sailing angle: rows[off, k] = cos(|lo + k - off|)
+        cos = np.array(_COS)
+        rows = _COS_ROWS[(lo, hi)] = cos[
+            np.abs(np.arange(lo, hi + 1)[None, :] - np.arange(181)[:, None])
+        ]
+    best = (rows * v).max(axis=1) if len(v) else np.zeros(181)
+    out = [max(0.0, x) for x in best.tolist()]
+    cache[key] = out
+    return out
 
 
 def _ground_velocity(heading_deg: float, speed: float, ce: float, cn: float) -> tuple[float, float]:
