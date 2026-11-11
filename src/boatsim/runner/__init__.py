@@ -5,12 +5,13 @@ The process-pool helpers (runner.parallel) load on first use, so importing the
 runner works where there is no multiprocessing (the in-browser sandbox)."""
 
 from boatsim.runner.arrival import FinishTarget
-from boatsim.runner.simulate import Components, VoyageLog, simulate
+from boatsim.runner.simulate import Components, Voyage, VoyageLog, simulate
 
 __all__ = [
     "Components",
     "FinishTarget",
     "StandardVoyage",
+    "Voyage",
     "VoyageLog",
     "run_many",
     "simulate",

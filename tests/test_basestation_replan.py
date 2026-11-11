@@ -210,3 +210,30 @@ def test_uses_the_shared_land_map_not_just_the_azores():
     fallback = ForecastReplanPolicy(route=[GOAL], land=None)
     assert not fallback.crosses_keep_out(32.3, -66.0, 32.3, -63.5)
     assert fallback.crosses_keep_out(38.5, -35.0, 38.5, -20.0)
+
+
+def test_keep_out_precheck_gives_the_same_answers_as_probing_every_point():
+    """crosses_keep_out with the coarse precheck agrees with the plain 5 km walk."""
+    import random
+
+    p = ForecastReplanPolicy(route=[Waypoint(39.5, -13.5)])
+    mask = p._mask()
+    if mask is None:
+        return
+
+    class Plain:  # the mask without its precheck
+        def on_land(self, lat, lon):
+            return mask.on_land(lat, lon)
+
+    q = ForecastReplanPolicy(route=[Waypoint(39.5, -13.5)], land=Plain())
+    rng = random.Random(11)
+    hits = 0
+    for _ in range(150):
+        lat1, lon1 = rng.uniform(30, 50), rng.uniform(-78, -10)
+        lat2, lon2 = destination(lat1, lon1, rng.uniform(0, 360), rng.uniform(5e3, 8e5))
+        for margin in (None, 0.0, 5_000.0):
+            got = p.crosses_keep_out(lat1, lon1, lat2, lon2, margin)
+            assert got == q.crosses_keep_out(lat1, lon1, lat2, lon2, margin)
+            assert p._inside(lat1, lon1, margin) == q._inside(lat1, lon1, margin)
+            hits += got
+    assert 0 < hits < 450  # both answers occur
