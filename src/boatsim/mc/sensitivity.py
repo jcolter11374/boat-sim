@@ -78,6 +78,8 @@ class Variant:
     # only; None keeps the policy default, 6 h). Land and keep-out detours
     # ignore it.
     min_gain_h: float | None = None
+    # WaypointAutopilot keyword overrides (e.g. steer="pursuit"), under safe mode.
+    guidance: tuple[tuple[str, object], ...] = ()
 
 
 BAY_MOUTH = DROP_POINT  # first waypoint of every route, as in default_mission (the drop)
@@ -270,6 +272,17 @@ VARIANTS: dict[str, Variant] = {
         "Never slow down on low battery; only stop at 15%",
         safemode=(("throttle_steps", ((0.15, 1.0),)),),
     ),
+    "pursuit": Variant(
+        "steering",
+        "Far from land, aim straight at the next waypoint and let the current carry "
+        "the boat sideways (crab at most 20 degrees); hold the track line near land",
+        guidance=(("steer", "pursuit"),),
+    ),
+    "pursuit_nocrab": Variant(
+        "steering",
+        "As pursuit, but never crab into the current far from land",
+        guidance=(("steer", "pursuit"), ("pursuit_crab_deg", 0.0)),
+    ),
 }
 
 FIRST_BATCH = tuple(VARIANTS)
@@ -318,11 +331,14 @@ class SensitivityVoyage(MonthlyVoyage):
                     inner.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days
                 )
             c.vessel = MeteredVessel(inner)
-        if v.design or v.safemode:
+        if v.design or v.safemode or v.guidance:
+            from boatsim.autonomy import WaypointAutopilot
+
             prop = design.propulsion
             c.autopilot = SafeModeAutopilot(
                 cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
                 thruster_count=int(prop.get("thruster_count", 2)),
+                guidance=WaypointAutopilot(**dict(v.guidance)) if v.guidance else None,
                 **dict(v.safemode),
             )
         route = self.mission().waypoints

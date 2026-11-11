@@ -210,3 +210,65 @@ def test_resent_identical_route_keeps_place_and_track():
     cmd = ap.update(Sensors(t2, *past, 90.0, 1.0), ack, t2)
     assert ack.active_index == 1 and ap._origin == origin
     assert 60.0 < cmd.heading < 120.0  # still east, not back to wp1
+
+
+# ------------------------------------------------------- pursuit steering (option)
+
+OPEN_SEA = (38.0, -50.0)  # mid-Atlantic, far from any coast
+
+
+def test_pursuit_is_off_by_default_and_checks_its_name():
+    assert WaypointAutopilot().steer == "track"
+    import pytest
+
+    with pytest.raises(ValueError):
+        WaypointAutopilot(steer="zigzag")
+
+
+def test_pursuit_far_from_land_aims_at_the_waypoint_with_a_capped_crab():
+    dest = destination(*OPEN_SEA, 90.0, 400_000.0)
+    env = EnvState(ghi=1000.0, current_v=0.3)
+    for cap in (0.0, 10.0):
+        ap = WaypointAutopilot(steer="pursuit", pursuit_crab_deg=cap)
+        log = simulate(_components(env, ap), T0, *OPEN_SEA, Mission([Waypoint(*dest)]), max_days=2)
+        assert ap.pursuing and ap.cross_track_m == 0.0
+        r = log.rows[-1]
+        aim = bearing_deg(r["lat"], r["lon"], *dest)
+        off = (r["heading"] - aim + 180.0) % 360.0 - 180.0
+        assert abs(off) <= cap + 1.0  # the vessel's heading lags the command a little
+    # Pure pursuit lets the current carry the boat off the line; track holding doesn't.
+    held = simulate(_components(env, WaypointAutopilot()), T0, *OPEN_SEA,
+                    Mission([Waypoint(*dest)]), max_days=2)  # fmt: skip
+    drift = simulate(_components(env, WaypointAutopilot(steer="pursuit", pursuit_crab_deg=0.0)),
+                     T0, *OPEN_SEA, Mission([Waypoint(*dest)]), max_days=2)  # fmt: skip
+    assert _max_cross_track_km(drift, OPEN_SEA, dest, 0.5) > 3 * _max_cross_track_km(
+        held, OPEN_SEA, dest, 0.5
+    )
+
+
+def test_pursuit_holds_the_track_near_land_exactly_as_before():
+    """Within track_near_land_km of a coast (here, just off Virginia) pursuit
+    mode steers exactly like track mode."""
+    dest = destination(*START, 90.0, 400_000.0)
+    env = EnvState(ghi=1000.0, current_v=0.3)
+    a = simulate(_components(env, WaypointAutopilot()), T0, *START, Mission([Waypoint(*dest)]),
+                 max_days=0.5)  # fmt: skip
+    ap = WaypointAutopilot(steer="pursuit", track_near_land_km=10_000.0)  # "near land" everywhere
+    b = simulate(_components(env, ap), T0, *START, Mission([Waypoint(*dest)]), max_days=0.5)
+    assert not ap.pursuing
+    assert [(r["lat"], r["lon"], r["heading"]) for r in a.rows] == [
+        (r["lat"], r["lon"], r["heading"]) for r in b.rows
+    ]
+
+
+def test_coming_back_near_land_starts_a_fresh_track_line_from_the_boat():
+    ap = WaypointAutopilot(steer="pursuit")
+    mission = Mission([Waypoint(39.5, -13.5)])
+    s = Sensors(T0, *OPEN_SEA, 90.0, 0.9)
+    ap.update(s, mission, T0)
+    assert ap.pursuing
+    ap.track_near_land_km = 10_000.0  # now everything counts as near land
+    near = Sensors(T0 + timedelta(hours=1), 38.2, -49.0, 90.0, 0.9)
+    ap.update(near, mission, near.t)
+    assert not ap.pursuing and ap._origin == (38.2, -49.0)
+    assert abs(ap.cross_track_m) < 1.0
