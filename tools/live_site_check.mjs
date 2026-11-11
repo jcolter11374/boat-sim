@@ -9,7 +9,7 @@
 //
 // Each check prints one PASS/FAIL line plus its evidence, and writes
 // live-<check>.png. The exit code is the number of failed checks (capped at 1).
-import { chromium } from "playwright";
+import * as pw from "playwright";
 import { appendFileSync } from "node:fs";
 import { PAGES, checkPage } from "./live_visual_checks.mjs";
 
@@ -271,6 +271,13 @@ CHECKS["helm-small-window"] = {
   },
 };
 
+/** First line of a Playwright error plus the last steps of its call log (why a click waited: hidden, disabled, covered, off screen). */
+function whyStuck(e) {
+  const lines = String(e).split("\n");
+  const log = lines.filter((l) => /^\s+-\s/.test(l)).slice(-3).map((l) => l.trim().replace(/^-\s*/, ""));
+  return lines[0] + (log.length ? ` [${log.join(" / ")}]` : "");
+}
+
 async function runCheck(browser, name) {
   const c = CHECKS[name];
   const t0 = Date.now();
@@ -289,7 +296,7 @@ async function runCheck(browser, name) {
     }
     result = await c.run(o.page);
   } catch (e) {
-    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${String(e).split("\n")[0]}`;
+    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${whyStuck(e)}`;
   }
   let notices = [];
   if (o) {
@@ -304,14 +311,23 @@ async function runCheck(browser, name) {
 
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
 for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
-const browser = await chromium.launch();
+// BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
+// Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
+// headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.
+const LAUNCH = {
+  headless: !process.env.HEADED,
+  ...((process.env.BROWSER ?? "chromium") === "firefox"
+    ? { firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false, "webgl.enable-webgl2": true } }
+    : {}),
+};
+const browser = await pw[process.env.BROWSER ?? "chromium"].launch(LAUNCH);
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);
   results.push(r);
   const detail = Array.isArray(r.detail) ? r.detail.map((d) => `\n    - ${d}`).join("") : ` ${r.detail}`;
   console.log(`${r.status} ${n} (${r.secs} s):${detail}`);
-  for (const x of r.notes.slice(0, 15)) console.log(`    (${x})`);
+  for (const x of (r.notes ?? []).slice(0, 15)) console.log(`    (${x})`);
 }
 await browser.close();
 if (process.env.GITHUB_STEP_SUMMARY) {
