@@ -243,3 +243,24 @@ direction.
   it into `public/seastate/`. Locally: `python -m boatsim.oceandata.seastate
   seastate 2020 --months 4` (about a minute per month with 8 workers; one time
   step reads ~15 MB of global chunks, 2 s).
+
+## Land for the 3D views (landviews.py)
+
+Display only. Two places the 3D pages can show from the water, in the formats
+Iris's land spikes read:
+
+- **Pico and Faial (Azores)**: `pico_meta.json`, `pico_height.bin` (int16
+  metres, about 30 m spacing, row 0 north) and `pico_colour.jpg` (Sentinel-2
+  median of 12 clear summer passes, clouds masked, gaps filled from
+  surroundings). Terrain is zoom-12 tiles, so peaks come out a little low:
+  Pico's summit reads about 2,290 m against its real 2,351 m.
+- **Annapolis waterfront**: `annapolis.json` (buildings with height and roof
+  type, piers, in metres from the harbour mouth, x east and z south) and
+  `annapolis_height.bin` (int16 decimetres, about 3 m spacing). Buildings come
+  from Overture Maps. Where Overture has no height or floor count, the height
+  is a GUESS from the footprint size (7, 10 or 13 m). `annapolis.json` is a
+  derived database under the ODbL and carries that notice.
+- Run: Actions -> "Land data" (no secrets). Tick publish to update the
+  `land-data` release; the 3D page's build copies it into `public/land/`.
+  Locally: `python -m boatsim.oceandata.landviews annapolis --out site/land`
+  (about 40 s; Pico takes a few minutes for the Sentinel reads).
