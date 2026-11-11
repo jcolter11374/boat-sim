@@ -14,7 +14,9 @@
 # It also runs on every push to main that changes the sandbox, which refreshes
 # the currents cache. Pull requests run sandbox-pr.yml instead: the same run on
 # the cached currents, with no secrets (secret-using workflows never run on
-# pull_request). The steps live in sandbox-run.yml. Free runners only.
+# pull_request). The steps live in sandbox-run.yml. A weekly warm-only run
+# restores the cache (refetching it if it was evicted) so a quiet week doesn't
+# turn the PR gate red. Free runners only.
 name: Sandbox data
 on:
   workflow_dispatch:
@@ -29,6 +31,8 @@ on:
         description: "Publish to the sandbox-data release"
         type: boolean
         default: false
+  schedule:
+    - cron: "23 5 * * 1"  # Mondays: keep the currents cache warm for PR runs (warm only)
   push:
     branches: [main]
     paths:
@@ -51,6 +55,7 @@ jobs:
       builds: ${{ inputs.builds || 'k-p25 revc k-p25-brain.one-box' }}
       publish: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
       currents: fetch
+      warm_only: ${{ github.event_name == 'schedule' }}
     secrets:
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}

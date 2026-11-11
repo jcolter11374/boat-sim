@@ -9,6 +9,7 @@ on:
     inputs:
       files: {type: string, default: ""}
       currents: {type: string, required: true}  # fetch | cache
+      warm_only: {type: boolean, default: false}  # just keep the currents cache alive
     secrets:
       COPERNICUSMARINE_SERVICE_USERNAME: {required: false}
       COPERNICUSMARINE_SERVICE_PASSWORD: {required: false}
@@ -49,29 +50,32 @@ jobs:
               print(f"glorys_from={t0:%Y-%m}\nglorys_to={t1:%Y-%m}")
           EOF
           cat "$GITHUB_OUTPUT"
+      # A restore also counts as use, so the weekly warm-only run keeps the cache
+      # from being evicted (GitHub drops caches unused for 7 days).
       - name: Restore that window's currents (cached by a main or hand-started run)
-        if: steps.pick.outputs.files != '' && inputs.currents == 'cache'
+        id: cur
+        if: steps.pick.outputs.files != ''
         uses: actions/cache/restore@v4
         with:
           path: data/glorys
           key: glorys-${{ steps.pick.outputs.glorys_from }}-${{ steps.pick.outputs.glorys_to }}
-          fail-on-cache-miss: true  # run "Replay check" by hand on main to fill it
+          fail-on-cache-miss: ${{ inputs.currents == 'cache' }}  # PRs: run "Replay check" on main to fill it
       - name: Fetch that window's currents
-        if: steps.pick.outputs.files != '' && inputs.currents == 'fetch'
+        if: steps.pick.outputs.files != '' && inputs.currents == 'fetch' && steps.cur.outputs.cache-hit != 'true'
         env:
           COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
           COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
         run: python -m boatsim.oceandata fetch-glorys ${{ steps.pick.outputs.glorys_from }} ${{ steps.pick.outputs.glorys_to }}
       - name: Save the currents for pull-request runs
-        if: steps.pick.outputs.files != '' && inputs.currents == 'fetch'
+        if: steps.pick.outputs.files != '' && inputs.currents == 'fetch' && steps.cur.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
-        continue-on-error: true  # already saved under this key
+        continue-on-error: true  # another run may have saved it first
         with:
           path: data/glorys
           key: glorys-${{ steps.pick.outputs.glorys_from }}-${{ steps.pick.outputs.glorys_to }}
       - name: Fetch that window's weather (public ERA5, no login)
-        if: steps.pick.outputs.files != ''
+        if: steps.pick.outputs.files != '' && !inputs.warm_only
         run: python -m boatsim.oceandata fetch-era5 ${{ steps.pick.outputs.era5_from }} ${{ steps.pick.outputs.era5_to }} --workers 4
       - name: Re-simulate and compare
-        if: steps.pick.outputs.files != ''
+        if: steps.pick.outputs.files != '' && !inputs.warm_only
         run: python -m boatsim.runner.replay verify ${{ steps.pick.outputs.files }}

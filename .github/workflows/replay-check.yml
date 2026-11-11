@@ -8,7 +8,9 @@
 # This file runs on pushes to main and by hand, with the Copernicus secrets, and
 # caches the currents it fetched. Pull requests run replay-check-pr.yml: the
 # same check on those cached currents, with no secrets (secret-using workflows
-# never run on pull_request). The steps live in replay-check-run.yml.
+# never run on pull_request). The steps live in replay-check-run.yml. A weekly
+# warm-only run restores the cache (refetching it if it was evicted) so a quiet
+# week doesn't turn the PR gate red.
 name: Replay check
 on:
   push:
@@ -19,6 +21,8 @@ on:
       - "configs/**"
       - "sea3d/public/voyages/**"
       - ".github/workflows/replay-check*.yml"
+  schedule:
+    - cron: "17 5 * * 1"  # Mondays: keep the currents cache warm for PR runs (warm only)
   workflow_dispatch:
     inputs:
       files:
@@ -35,6 +39,7 @@ jobs:
     with:
       files: ${{ inputs.files }}
       currents: fetch
+      warm_only: ${{ github.event_name == 'schedule' }}
     secrets:
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
