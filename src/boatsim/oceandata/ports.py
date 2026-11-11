@@ -216,7 +216,7 @@ PORTS_JSON = "sea3d/public/ports.json"  # also in the browser pack (sandbox PACK
 def load(path: str | Path | None = None) -> dict[str, dict]:
     """The published ports by id. Looked for from the working directory (the
     browser pack's root, or the repo) and then from the repo this file is in.
-    Read once: each new or shared game asks."""
+    Read once (each new or shared game asks) and shared: callers must not change it."""
     return _load(str(path) if path else None)
 
 
