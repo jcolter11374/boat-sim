@@ -404,19 +404,27 @@ DEFAULTS = {
 
 
 def normalise(choices: dict | None) -> tuple[dict, int]:
-    """Fill unchosen slots with the defaults and check every id. Returns
-    (slot -> option, cruise W); the cruise power may be given as "cruise_w"."""
-    choices = dict(choices or {})
+    """Fill unchosen slots with the base's defaults and check every id. Returns
+    (slot -> option, cruise W); the cruise power may be given as "cruise_w", and
+    the base (kayak, revc, revb) as "base". A Randolph base sails, so its cruise
+    power is 0 W, or the thruster's when it has one; "cruise_w" doesn't apply."""
+    base = base_of(choices)
+    choices = {k: v for k, v in (choices or {}).items() if k != "base"}
     cruise = int(choices.pop("cruise_w", DEFAULT_CRUISE_W))
     if not 5 <= cruise <= 50:
         raise ValueError(f"cruise_w {cruise} W is outside 5 to 50 W")
-    out = dict(DEFAULTS)
+    slots = slots_for(base)
+    out = dict(defaults_for(base))
     for slot, opt in choices.items():
-        if slot not in SLOTS:
-            raise ValueError(f"unknown slot {slot!r}")
-        if opt not in SLOTS[slot]:
+        if slot not in slots:
+            raise ValueError(
+                f"unknown slot {slot!r}" + ("" if base == "kayak" else f" for base {base!r}")
+            )
+        if opt not in slots[slot]:
             raise ValueError(f"unknown option {opt!r} for slot {slot!r}")
         out[slot] = opt
+    if base != "kayak":
+        return out, RAND_THRUSTER_CRUISE_W if out["drive"] == "wing-thruster" else 0
     # A wing-only boat has no thrusters, so the thruster and cruise power
     # choices don't apply (cruise 0 W, as Rev B).
     if out["drive"] == "wing-sail":
@@ -425,26 +433,31 @@ def normalise(choices: dict | None) -> tuple[dict, int]:
 
 
 def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
-    """(section, key, value) changes from the kayak for these choices."""
-    base = base or load_design(KAYAK)
+    """(section, key, value) changes from the base design for these choices."""
+    which = base_of(choices)
+    base = base or load_design(BASES[which])
+    slots = slots_for(which)
     picked, cruise = normalise(choices)
     changes = []
     for slot, opt in picked.items():
-        for sec, key, val in SLOTS[slot][opt].changes:
+        for sec, key, val in slots[slot][opt].changes:
             if isinstance(val, dict):  # merge into the design's table (e.g. p_part)
                 val = {**getattr(base, sec).get(key, {}), **val}
             changes.append((sec, key, val))
     changes.append(("propulsion", "cruise_drive_w", cruise))
-    brain, ais = SLOTS["brain"][picked["brain"]], SLOTS["ais"][picked["ais"]]
-    d_wh = (brain.wh - BASE_BRAIN_WH) + (ais.wh - BASE_AIS_WH)
-    d_wh += sum(SLOTS[slot][opt].hotel_wh for slot, opt in picked.items())
+    if which == "kayak":
+        brain, ais = SLOTS["brain"][picked["brain"]], SLOTS["ais"][picked["ais"]]
+        d_wh = (brain.wh - BASE_BRAIN_WH) + (ais.wh - BASE_AIS_WH)
+    else:
+        d_wh = 0.0
+    d_wh += sum(slots[slot][opt].hotel_wh for slot, opt in picked.items())
     if d_wh:
         hotel = base.electronics["hotel_load_wh_per_day"] + d_wh
         changes.append(("electronics", "hotel_load_wh_per_day", hotel))
-    d_kg = sum(SLOTS[slot][opt].kg for slot, opt in picked.items())
+    d_kg = sum(slots[slot][opt].kg for slot, opt in picked.items())
     if d_kg:  # the mass link (vessel/hull.py) turns weight into draft and drag
         changes.append(("hull", "mass_kg", round(base.hull["mass_kg"] + d_kg, 3)))
-    # Leave out changes that set what the kayak already has, so the default build
+    # Leave out changes that set what the base already has, so the default build
     # is the design file untouched.
     return tuple((s, k, v) for s, k, v in changes if getattr(base, s).get(k, _MISSING) != v)
 
@@ -453,18 +466,183 @@ _MISSING = object()
 
 
 def design_for(choices: dict | None) -> Design:
-    base = load_design(KAYAK)
+    base = load_design(BASES[base_of(choices)])
     return patched_design(base, design_changes(choices, base))
 
 
 def effects(choices: dict | None) -> dict[str, dict]:
     """Per slot: the option chosen, what it does in the simulator, and its badge."""
     picked, _ = normalise(choices)
+    slots = slots_for(base_of(choices))
     return {
         slot: {"option": opt, "effect": o.effect, "est": o.est, "basis": o.basis}
         for slot, opt in picked.items()
-        for o in (SLOTS[slot][opt],)
+        for o in (slots[slot][opt],)
     }
+
+
+# --- Randolph bases: their boat as a starting design --------------------------
+# The Randolph team's wing-sail drone (configs/randolph_rev_c.yaml, rev_b.yaml; MIT,
+# THIRD_PARTY_NOTICES.md) as a Boatyard base, with its own slots (ids agreed with
+# Iris, 11 Nov 2026). The as-built option in each slot is the yaml untouched; the
+# others are changes from it. A choice "base": "revc" picks the base; the kayak's
+# slots then don't apply. brain, sat, light, paint and spares share the kayak's ids.
+REV_B = "configs/randolph_rev_b.yaml"
+REV_C = "configs/randolph_rev_c.yaml"
+BASES = {"kayak": KAYAK, "revc": REV_C, "revb": REV_B}
+RAND_THRUSTER_CRUISE_W = (
+    5  # GUESS: about what 40 W of deck panels leave after the 33 Wh/day hotel load
+)
+_SHARED_NO_EFFECT = "not modelled on the Randolph boat"
+
+
+def _rudder(n: int, base: str) -> Option:
+    # One rudder 0.055 m^2 wetted; its broadside drag and lift as in the Rev C yaml
+    # (two rudders: wetted +0.055, lateral +0.045, lift +0.10 over Rev B's one).
+    ref = 2 if base == "revc" else 1
+    d = n - ref
+    yaml = {
+        "revc": {"wetted": 0.77, "lat": 0.235, "lift": 0.52},
+        "revb": {"wetted": 0.68, "lat": 0.19, "lift": 0.42},
+    }[base]
+    return Option(
+        (
+            ("hull", "wetted_area_m2", round(yaml["wetted"] + 0.055 * d, 3)),
+            ("hull", "lateral_cd_area_m2", round(yaml["lat"] + 0.045 * d, 3)),
+            ("hull", "keel_lift_slope_area_m2", round(yaml["lift"] + 0.10 * d, 3)),
+            # twin: either servo steers alone (Rev C 0.0021/day); single: Rev B 0.004/day
+            ("hazards", "steering_per_day", 0.0021 if n == 2 else 0.004),
+        ),
+        est=n != ref,
+        basis="Rev C (twin) and Rev B (single) yamls"
+        if n == ref
+        else "the other revision's rudder, scaled (GUESS)",
+        kg=0.35 * d,  # GUESS: a rudder, stock and servo
+    )
+
+
+def _bulb(kg: float, base: str) -> Option:
+    ref = {"revc": 9.0, "revb": 8.2}[base]
+    heel = {"revc": 19.7, "revb": 17.4}[base]
+    mass = {"revc": 25.2, "revb": 20.8}[base]
+    # GUESS: righting moment goes with the bulb's share of the weight; staying upside
+    # down after a knockdown with the square of the shortfall (the kayak's bulb rule).
+    p_stuck = 4.0e-5 * max(1.0, (ref / kg) ** 2)
+    return Option(
+        (
+            ("hull", "keel_bulb_kg", kg),
+            ("sail", "max_heel_moment_nm", round(heel * (mass - ref + kg) / mass * kg / ref, 2)),
+            ("hazards", "p_inverted_stuck", round(p_stuck, 9)),
+        ),
+        est=kg != ref,
+        basis="the yaml's bulb"
+        if kg == ref
+        else "the other revision's bulb; righting moment scaled (GUESS)",
+        kg=round(kg - ref, 2),
+    )
+
+
+def _rslots(base: str) -> dict[str, dict[str, Option]]:
+    shared = {
+        slot: {oid: _no_effect(_SHARED_NO_EFFECT) for oid in SLOTS[slot]}
+        for slot in ("sat", "light", "paint", "spares")
+    }
+    return {
+        "drive": {
+            "wing": Option(basis="their design.py: 1.0 x 0.30 m free-rotating wing"),
+            "wing-thruster": Option(
+                (
+                    ("propulsion", "thrusters", "1 x 35 W thruster"),
+                    ("propulsion", "thruster_count", 1),
+                    ("propulsion", "max_drive_w", 35),
+                    ("propulsion", "min_steer_w", 1.0),
+                ),
+                est=True,
+                basis="their design.py thruster_w 35 W, switched on and run like our hybrid; "
+                f"{RAND_THRUSTER_CRUISE_W} W cruise (GUESS)",
+                kg=0.6,  # GUESS: thruster and ESC
+            ),
+        },
+        "brain": {
+            "one-box": Option(basis="their Build_Plan.md: one box"),
+            "two-box": Option(
+                (("hazards", "electronics_boxes", 2),),
+                est=True,
+                basis="our separate safe-mode box (GUESS for their boat)",
+                kg=0.3,  # GUESS
+                hotel_wh=5.0,  # GUESS: an ESP32-class box
+            ),
+        },
+        "rudder": {"twin": _rudder(2, base), "single": _rudder(1, base)},
+        "rsol": {
+            "deck-40w": Option(basis="their design.py: 2 x 20 W"),
+            "deck-60w": Option(
+                (
+                    ("power", "solar_wp", 60),
+                    ("power", "panels_w", {"panel_fwd": 30, "panel_aft": 30}),
+                ),
+                est=True,
+                basis="GUESS: what fits on the deck",
+                kg=0.5,
+            ),
+        },
+        "rbat": {
+            "lfp-192wh": Option(basis="their design.py, LiFePO4"),
+            "lfp-384wh": Option(
+                (("power", "battery_wh", 384),), est=True, basis="GUESS: double the pack", kg=1.6
+            ),
+        },
+        "keel": {"bulb-9kg": _bulb(9.0, base), "bulb-8kg": _bulb(8.2, base)},
+        "tracker": {
+            "yb3": Option(basis="their Backup_Tracker.md"),
+            "none": Option((("comms", "beacon", False),), basis="no backup tracker", kg=-0.3),
+        },
+        **shared,
+    }
+
+
+RSLOT_NAMES = {
+    "drive": "Drive",
+    "brain": "Electronics boxes",
+    "rudder": "Rudder",
+    "rsol": "Solar panels",
+    "rbat": "Battery",
+    "keel": "Keel bulb",
+    "tracker": "Backup tracker",
+    "sat": "Satellite modem",
+    "light": "Navigation light",
+    "paint": "Antifouling",
+    "spares": "Spares",
+}
+RSLOTS = {b: {k: v for k, v in _rslots(b).items() if v} for b in ("revc", "revb")}
+RDEFAULTS = {
+    b: {
+        "drive": "wing",
+        "brain": "one-box",
+        "rudder": "twin" if b == "revc" else "single",
+        "rsol": "deck-40w",
+        "rbat": "lfp-192wh",
+        "keel": "bulb-9kg" if b == "revc" else "bulb-8kg",
+        "tracker": "yb3",
+        **{s: DEFAULTS[s] for s in ("sat", "light", "paint", "spares")},
+    }
+    for b in ("revc", "revb")
+}
+
+
+def base_of(choices: dict | None) -> str:
+    b = (choices or {}).get("base", "kayak")
+    if b not in BASES:
+        raise ValueError(f"unknown base {b!r}")
+    return b
+
+
+def slots_for(base: str) -> dict[str, dict[str, Option]]:
+    return SLOTS if base == "kayak" else RSLOTS[base]
+
+
+def defaults_for(base: str) -> dict[str, str]:
+    return DEFAULTS if base == "kayak" else RDEFAULTS[base]
 
 
 # --- The precomputed odds grid -------------------------------------------------
@@ -493,6 +671,19 @@ GRID: tuple[dict, ...] = (
     {"brain": "one-box", "beacon": "none"},
     {"sol": "solar-300", "bat": "two-100ah"},
     {"sol": "solar-300", "bat": "two-100ah", "cruise_w": 30},
+    # Randolph bases: as built, then one change each (a handful per base, Maya)
+    *(
+        {"base": b, **g}
+        for b in ("revc", "revb")
+        for g in (
+            {},
+            {"drive": "wing-thruster"},
+            {"brain": "two-box"},
+            {"rudder": "single" if b == "revc" else "twin"},
+            {"rsol": "deck-60w", "rbat": "lfp-384wh"},
+            {"tracker": "none"},
+        )
+    ),
     {  # everything cheapest
         "thr": "one-t200",
         "sol": "solar-200",
@@ -507,10 +698,11 @@ GRID: tuple[dict, ...] = (
 )
 
 
-def matters(slot: str, opt: str) -> bool:
+def matters(slot: str, opt: str, base: str = "kayak") -> bool:
     """Does this option run differently from the slot's default?"""
-    o, d = SLOTS[slot][opt], SLOTS[slot][DEFAULTS[slot]]
-    return opt != DEFAULTS[slot] and (
+    slots, defaults = slots_for(base), defaults_for(base)
+    o, d = slots[slot][opt], slots[slot][defaults[slot]]
+    return opt != defaults[slot] and (
         o.changes != d.changes
         or o.kg != d.kg
         or (o.wh or 0) != (d.wh or 0)
@@ -519,26 +711,33 @@ def matters(slot: str, opt: str) -> bool:
 
 
 def grid_id(choices: dict | None) -> str:
-    """Stable id of a kayak build: 'k-p25' plus each choice that runs differently
-    from the default, e.g. 'k-p15-thr.one-t200'. Builds that run the same have
+    """Stable id of a build: 'k-p25' plus each choice that runs differently
+    from the default, e.g. 'k-p15-thr.one-t200'; a Randolph base starts with its
+    name, e.g. 'revc' or 'revc-drive.wing-thruster'. Builds that run the same have
     the same id."""
+    base = base_of(choices)
     picked, cruise = normalise(choices)
-    parts = [f"{slot}.{opt}" for slot, opt in picked.items() if matters(slot, opt)]
-    return "-".join([f"k-p{cruise}", *parts])
+    parts = [f"{slot}.{opt}" for slot, opt in picked.items() if matters(slot, opt, base)]
+    return "-".join([f"k-p{cruise}" if base == "kayak" else base, *parts])
 
 
 def nearest(choices: dict | None) -> tuple[str, bool]:
-    """(grid id, exact) of the grid build closest to these choices: fewest
-    slots that run differently, then the closest cruise power."""
+    """(grid id, exact) of the grid build closest to these choices: same base,
+    then fewest slots that run differently, then the closest cruise power."""
+    base = base_of(choices)
     picked, cruise = normalise(choices)
     want = grid_id(choices)
 
     def dist(g):
+        if base_of(g) != base:
+            return (1, 0, 0)
         p, c = normalise(g)
         slots = sum(
-            1 for s in SLOTS if p[s] != picked[s] and (matters(s, p[s]) or matters(s, picked[s]))
+            1
+            for s in slots_for(base)
+            if p[s] != picked[s] and (matters(s, p[s], base) or matters(s, picked[s], base))
         )
-        return (slots, abs(c - cruise))
+        return (0, slots, abs(c - cruise))
 
     best = min(GRID, key=dist)
     return grid_id(best), grid_id(best) == want
@@ -572,3 +771,37 @@ def slot_table() -> list[dict]:
         }
         for slot, opts in SLOTS.items()
     ]
+
+
+def base_table() -> dict[str, dict]:
+    """The Randolph bases for the page (sim-slots.json "bases"): per base its design
+    file, defaults, which slots it shares with the kayak, and its slots in
+    slot_table()'s shape."""
+    return {
+        b: {
+            "design": BASES[b],
+            "defaults": RDEFAULTS[b],
+            "shared_slots": ["brain", "sat", "light", "paint", "spares"],
+            "slots": [
+                {
+                    "id": slot,
+                    "name": RSLOT_NAMES[slot],
+                    "opts": [
+                        {
+                            "id": oid,
+                            "effect": o.effect,
+                            "est": o.est,
+                            "basis": o.basis,
+                            "sim": [f"{s}.{k}" for s, k, _ in o.changes]
+                            + (["electronics.hotel_load_wh_per_day"] if o.hotel_wh else [])
+                            + (["hull.mass_kg"] if o.kg else []),
+                            "kg": o.kg,
+                        }
+                        for oid, o in opts.items()
+                    ],
+                }
+                for slot, opts in RSLOTS[b].items()
+            ],
+        }
+        for b in RSLOTS
+    }
