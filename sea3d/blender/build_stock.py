@@ -3,6 +3,8 @@
     python sea3d/blender/build_stock.py cruiser sea3d/public/models/stock_cruiser.glb
     python sea3d/blender/build_stock.py dinghy  sea3d/public/models/stock_dinghy.glb
     python sea3d/blender/build_stock.py beachcat sea3d/public/models/stock_beachcat.glb
+    python sea3d/blender/build_stock.py drone   sea3d/public/models/stock_drone.glb
+    python sea3d/blender/build_stock.py rower   sea3d/public/models/stock_rower.glb
 
 (one boat per run: export() ends the process). Same frame and helpers as
 build_kayak.py: x aft from the bow, y up from the bottom of the hull (the
@@ -17,12 +19,23 @@ insignia (Maya, 11 Nov):
 - dinghy: a 13 ft 9 in (4.2 m) lateen-rigged board boat, the kind people learn
   on: a flat deck, a little footwell, a daggerboard and a kick-up rudder;
 - beachcat: a 16 ft (4.9 m) beach catamaran, two hulls, a trampoline, a tall
-  rotating mast with a fully battened main and a jib, a rudder on each hull.
+  rotating mast with a fully battened main and a jib, a rudder on each hull;
+- drone: a 7 m wind-powered ocean drone (configs/stock_sail_drone7.yaml): a
+  narrow hull on a deep keel, a 5 m rigid wing that turns freely on its mast
+  and is set to the wind by a small tail flap on two booms, solar panels and
+  a sensor mast. Generic colours, no maker's look;
+- rower: an 8.64 m ocean rowing boat for four (configs/stock_ocean_rower45.yaml):
+  cabins at both ends, two rowing stations with sliding seats and outriggers,
+  a daggerboard and a transom rudder.
 
 Sails sit under empties the page can find by name and turn with the sheet:
 "main_pivot" (on the mast) and "jib_pivot" (on the forestay), so trimming
 them later is a rotation, not a rebuild. Rudders and tillers sit under
 "rudder_pivot" (one per hull on the cat: "rudder_pivot_s" / "rudder_pivot_p").
+The drone's whole wing, booms and tail flap hang under "wing_pivot", which
+the page turns to the wind (boats/gear.ts), as on Randolph's Rev B.
+The rower's oars hang under "oar_<station>_<s|p>" at their gates and its
+seats under "seat_<station>", so the page can row them.
 """
 
 from __future__ import annotations
@@ -50,6 +63,7 @@ from common import (
     lathe,
     material,
     mesh_object,
+    panel,
     pivot,
     reset,
     rod,
@@ -122,7 +136,7 @@ def stanchions(f: HullForm, xs, height, inset, mat_post, mat_wire, ends=None):
             z = side * (f.hb(s) - inset)
             y0 = f.deck_y(x, z)
             rod(
-                f"stanchion_{x:.2f}_{'s' if side > 0 else 'p'}",
+                f"stanchion_{x:.2f}_{'p' if side > 0 else 's'}",
                 (x, y0, z),
                 (x, y0 + height, z),
                 0.012,
@@ -135,8 +149,8 @@ def stanchions(f: HullForm, xs, height, inset, mat_post, mat_wire, ends=None):
             for pts in (top, mid):
                 pts.insert(0, (ends[0], pts[0][1], pts[0][2] * 0.85))
                 pts.append((ends[1], pts[-1][1], pts[-1][2]))
-        tube(f"lifeline_top_{'s' if side > 0 else 'p'}", top, 0.003, mat_wire, segs=8)
-        tube(f"lifeline_mid_{'s' if side > 0 else 'p'}", mid, 0.003, mat_wire, segs=8)
+        tube(f"lifeline_top_{'p' if side > 0 else 's'}", top, 0.003, mat_wire, segs=8)
+        tube(f"lifeline_mid_{'p' if side > 0 else 's'}", mid, 0.003, mat_wire, segs=8)
 
 
 def mats():
@@ -225,7 +239,7 @@ def build_cruiser() -> list:
     for side in (1, -1):
         for k, (a, b) in enumerate(((3.55, 4.45), (4.6, 5.6))):
             rounded_box(
-                f"window_{k}_{'s' if side > 0 else 'p'}",
+                f"window_{k}_{'p' if side > 0 else 's'}",
                 a,
                 b,
                 yt - 0.3,
@@ -241,7 +255,7 @@ def build_cruiser() -> list:
     rounded_box("cockpit_sole", 6.15, 8.75, cy + 0.005, cy + 0.03, -0.75, 0.75, M["teak"], 0.01)
     for side in (1, -1):
         rounded_box(
-            f"coaming_{'s' if side > 0 else 'p'}",
+            f"coaming_{'p' if side > 0 else 's'}",
             6.05,
             8.6,
             cy,
@@ -252,7 +266,7 @@ def build_cruiser() -> list:
             0.02,
         )
         rounded_box(
-            f"bench_{'s' if side > 0 else 'p'}",
+            f"bench_{'p' if side > 0 else 's'}",
             6.3,
             8.4,
             cy,
@@ -312,7 +326,7 @@ def build_cruiser() -> list:
     cylinder("masthead_light", 0.04, mx, ym + mh, ym + mh + 0.08, 0, M["lamp"], segs=16)
     for side in (1, -1):
         rod(
-            f"spreader_{'s' if side > 0 else 'p'}",
+            f"spreader_{'p' if side > 0 else 's'}",
             (mx, ym + 6.4, 0),
             (mx + 0.1, ym + 6.4, side * 1.05),
             0.022,
@@ -321,7 +335,7 @@ def build_cruiser() -> list:
         )
         chain = (mx + 0.15, y_deck(mx + 0.15), side * (hb((mx + 0.15) / L) - 0.08))
         rod(
-            f"shroud_{'s' if side > 0 else 'p'}",
+            f"shroud_{'p' if side > 0 else 's'}",
             chain,
             (mx + 0.1, ym + 6.4, side * 1.05),
             0.005,
@@ -329,7 +343,7 @@ def build_cruiser() -> list:
             segs=6,
         )
         rod(
-            f"shroud_up_{'s' if side > 0 else 'p'}",
+            f"shroud_up_{'p' if side > 0 else 's'}",
             (mx + 0.1, ym + 6.4, side * 1.05),
             (mx, ym + mh - 0.1, 0),
             0.005,
@@ -363,7 +377,7 @@ def build_cruiser() -> list:
     # Winches by the cockpit.
     for side in (1, -1):
         cylinder(
-            f"winch_{'s' if side > 0 else 'p'}",
+            f"winch_{'p' if side > 0 else 's'}",
             0.07,
             6.3,
             cy + 0.32,
@@ -510,7 +524,7 @@ def build_beachcat() -> list:
     )
     for side in (1, -1):
         rod(
-            f"tramp_edge_{'s' if side > 0 else 'p'}",
+            f"tramp_edge_{'p' if side > 0 else 's'}",
             (1.47, yd, side * (g - 0.12)),
             (3.63, yd, side * (g - 0.12)),
             0.02,
@@ -528,7 +542,7 @@ def build_beachcat() -> list:
     rod("forestay", bridle, hound, 0.004, M["wire"], segs=6)
     for side in (1, -1):
         rod(
-            f"shroud_{'s' if side > 0 else 'p'}",
+            f"shroud_{'p' if side > 0 else 's'}",
             (1.6, yd, side * g),
             hound,
             0.004,
@@ -573,7 +587,457 @@ def build_beachcat() -> list:
     return [(port, img, rgb)]
 
 
-BUILD = {"cruiser": build_cruiser, "dinghy": build_dinghy, "beachcat": build_beachcat}
+# ------------------------------------------------------------ ocean drone ----
+# 7 m long, 0.9 m beam, about 2 m draft on a fin keel with a bulb; a 5 m wing
+# about 1.1 m in chord stepped 2.6 m from the bow. Slate topsides, a yellow
+# stripe to be seen by ships, a white wing with a yellow tip.
+DRONE = {"L": 7.0, "B": 0.45, "wl": 0.34, "wing_x": 2.6, "wing_h": 5.0}
+DRONE_PAINT = HullPaint(top=0x3A4756, deck=0xDADDE0, boot=0xF2B33D, bottom=0x262A2F, lettering=None)
+
+
+def build_drone() -> list:
+    L, B = DRONE["L"], DRONE["B"]
+    M = mats()
+
+    def hb(s: float) -> float:
+        # A fine, knife-like bow, parallel sides, a narrow transom.
+        if s <= 0.45:
+            return B * max(1 - (1 - s / 0.45) ** 2, 0) ** 0.95
+        return B - (B - 0.3) * ((s - 0.45) / 0.55) ** 2
+
+    def kz(s: float) -> float:
+        return 0.3 * max(1 - s / 0.25, 0) ** 2 + 0.12 * max((s - 0.85) / 0.15, 0) ** 2
+
+    def dz(s: float) -> float:
+        return 0.72 - 0.08 * s + 0.1 * max(1 - s / 0.12, 0) ** 2
+
+    f = HullForm(L=L, n=2.6, crown=0.06, wl=DRONE["wl"], hb=hb, kz=kz, dz=dz)
+    ob, img, rgb = hull(f, DRONE_PAINT, rough=0.3, coat=0.4, nx=180, nt=28, nd=18)
+    yd = lambda x: f.deck_y(x, 0)
+
+    # Deep fin keel with a long lead bulb (draft about 2 m), a spade rudder aft.
+    foil("keel", 1.0, 0.7, 2.3, 2.55, 0.15, -1.45, 0.1, M["lead"], n_span=10)
+    lathe("keel_bulb", bulb_profile(1.5, 0.3, 0.4), 40, M["lead"], (2.15, -1.55, 0))
+    rp = pivot("rudder_pivot", (6.55, 0.2, 0))
+    foil("rudder", 0.5, 0.36, 6.45, 6.55, 0.2, -0.9, 0.12, M["g10"], parent=rp)
+
+    # Solar panels fore and aft of the wing, a hatch, a low deck fairing at the step.
+    panel("panel_fwd", 0.9, 2.05, 0.62, lambda x, z: f.deck_y(x, z), 5, 2)
+    panel("panel_aft", 3.25, 5.6, 0.56, lambda x, z: f.deck_y(x, z), 10, 2)
+    rounded_box("hatch", 5.75, 6.2, yd(6.0) - 0.01, yd(6.0) + 0.05, -0.18, 0.18, M["g10"], 0.012)
+    dark = material("fairing", base=hexcol(0x2B3036), rough=0.45)
+    wx = DRONE["wing_x"]
+    cylinder("wing_step", 0.2, wx, yd(wx) - 0.02, yd(wx) + 0.12, 0, dark, r_top=0.13)
+    # Sensor mast at the stern: a light, an antenna dome and a little weather vane mount.
+    sx = 6.25
+    cylinder("sensor_mast", 0.03, sx, yd(sx), yd(sx) + 1.1, 0, M["alu"], segs=16)
+    rod("sensor_arm", (sx - 0.18, yd(sx) + 0.95, 0), (sx + 0.18, yd(sx) + 0.95, 0), 0.015, M["alu"])
+    dome = material("dome", base=hexcol(0xF2F2EE), rough=0.4)
+    cylinder("antenna_dome", 0.09, sx, yd(sx) + 1.1, yd(sx) + 1.2, 0, dome, r_top=0.04)
+    cylinder("masthead_light", 0.028, sx + 0.18, yd(sx) + 0.95, yd(sx) + 1.02, 0, M["lamp"])
+    # Bow: a small sensor pod on the stem.
+    lathe("bow_pod", bulb_profile(0.4, 0.12, 0.35), 20, dark, (0.3, yd(0.5) + 0.04, 0))
+
+    # The wing: one rigid foil turning freely on a mast. Two booms reach aft
+    # from it to a small tail flap that sets its angle to the wind, and a
+    # counterweight forward balances it. All of it turns about wing_pivot.
+    wp = pivot("wing_pivot", (wx, 0, 0))
+    wing_mat = material("wing", base=hexcol(0xF5F5F1), rough=0.4, coat=0.3)
+    tip_mat = material("wing_tip", base=hexcol(0xF2B33D), rough=0.45)
+    y0 = yd(wx) + 0.25
+    y1 = y0 + DRONE["wing_h"]
+    foil(
+        "wing", 1.15, 0.85, wx - 0.3, wx - 0.2, y0, y1 - 0.35, 0.14, wing_mat, n_span=12, parent=wp
+    )
+    foil(
+        "wing_tip",
+        0.85,
+        0.7,
+        wx - 0.2,
+        wx - 0.17,
+        y1 - 0.35,
+        y1,
+        0.14,
+        tip_mat,
+        n_span=3,
+        parent=wp,
+    )
+    cylinder("wing_mast", 0.05, wx, yd(wx) - 0.05, y0 + 0.1, 0, dark, segs=20, parent=wp)
+    by = y0 + 0.55
+    tx = wx + 2.6  # tail flap hinge
+    for z in (0.09, -0.09):
+        rod(
+            f"tail_boom_{'p' if z > 0 else 's'}",
+            (wx + 0.75, by, z),
+            (tx, by, z * 0.4),
+            0.022,
+            M["alu"],
+            parent=wp,
+        )
+    foil(
+        "tail_flap",
+        0.42,
+        0.34,
+        tx - 0.04,
+        tx - 0.02,
+        by - 0.55,
+        by + 0.75,
+        0.12,
+        wing_mat,
+        n_span=3,
+        parent=wp,
+    )
+    rod(
+        "counter_arm",
+        (wx - 0.25, by - 0.25, 0),
+        (wx - 0.95, by - 0.25, 0),
+        0.025,
+        M["alu"],
+        parent=wp,
+    )
+    lathe(
+        "counterweight",
+        bulb_profile(0.36, 0.12, 0.45),
+        24,
+        M["lead"],
+        (wx - 1.15, by - 0.25, 0),
+        parent=wp,
+    )
+    return [(ob, img, rgb)]
+
+
+# ----------------------------------------------------------------- rower ----
+# An 8.64 m ocean rowing boat for four (configs/stock_ocean_rower45.yaml; Theo's
+# stats card, from the published specs of a Rannoch R45; our own generic model,
+# no maker's look). Cabins at both ends, an open rowing deck between them with
+# two rowing stations, a daggerboard, and a transom rudder. x is metres aft of the
+# bow tip; layout GUESSES as on the card.
+ROWER = {"L": 8.64, "B": 0.87, "wl": 0.35}
+ROWER_PAINT = HullPaint(top=0xF4F4F1, deck=0x8E949A, boot=0x2F6FA8, bottom=0xE4E6E6, lettering=None)
+#: Rowing stations: (seat travel from, to, oar gate x, footplate x). Rowers face aft.
+ROWER_STATIONS = ((2.45, 3.25, 3.3, 3.55), (3.75, 4.55, 4.6, 4.85))
+
+
+def cabin(name, f: HullForm, rings, inset, mat, sq=3.0):
+    """A cabin top lofted along the hull: rings of (x, height above the deck, width
+    fraction of the deck at x). Superelliptic sections (flat-ish sides, a rounded
+    roof); flat bulkheads close both ends. Returns the roof height function."""
+    nz = 24
+    verts, faces = [], []
+
+    def sec(x, h, wf):
+        w = max((f.hb(x / f.L) - inset) * wf, 0.02)
+        pts = []
+        for k in range(nz + 1):
+            a = math.pi * k / nz  # from starboard deck edge over the top to port
+            cz, sy = math.cos(a), math.sin(a)
+            z = w * math.copysign(abs(cz) ** (2 / sq), cz)
+            y = h * abs(sy) ** (2 / sq)
+            pts.append((x, f.deck_y(x, z) - 0.02 + y, z))
+        return pts
+
+    n = len(rings)
+    for x, h, wf in rings:
+        verts += sec(x, h, wf)
+    m = nz + 1
+    for i in range(n - 1):
+        for k in range(nz):
+            a = i * m + k
+            faces.append((a, a + 1, a + m + 1, a + m))
+    for i in (0, n - 1):  # bulkheads
+        faces.append(tuple(i * m + k for k in range(m)))
+    mesh_object(name, verts, faces, mat=mat)
+    xs = [r[0] for r in rings]
+
+    def top(x, z):
+        x = min(max(x, xs[0]), xs[-1])
+        h = float(np.interp(x, xs, [r[1] for r in rings]))
+        wf = float(np.interp(x, xs, [r[2] for r in rings]))
+        w = max((f.hb(x / f.L) - inset) * wf, 0.02)
+        u = min(abs(z) / w, 1)
+        return f.deck_y(x, z) - 0.02 + h * (1 - u**sq) ** (1 / sq)
+
+    return top
+
+
+def oar(name, gate, length, inboard, out_dir, mat_shaft, mat_blade, parent):
+    """An oar resting in its gate: shaft from the handle through the gate, blade at
+    the end. out_dir: unit vector from the gate towards the blade."""
+    g = np.array(gate, float)
+    d = np.array(out_dir, float)
+    d /= np.linalg.norm(d)
+    handle = g - d * inboard
+    tip = g + d * (length - inboard)
+    neck = tip - d * 0.5
+    rod(f"{name}_shaft", tuple(handle), tuple(neck), 0.02, mat_shaft, segs=10, parent=parent)
+    rod(
+        f"{name}_grip",
+        tuple(handle),
+        tuple(handle + d * 0.3),
+        0.026,
+        M_BLACK(),
+        segs=10,
+        parent=parent,
+    )
+    # Blade: a flat spoon, wider at the tip, standing on edge.
+    up = np.array([0.0, 1.0, 0.0])
+    side = np.cross(d, up)
+    side /= np.linalg.norm(side)
+    verts = []
+    for t, w in ((0.0, 0.03), (0.15, 0.08), (0.5, 0.11), (1.0, 0.1)):
+        c = neck + d * (0.5 * t)
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                verts.append(tuple(c + up * (w * sy) + side * (0.007 * sz)))
+    faces = []
+    for i in range(3):
+        a = i * 4
+        b = a + 4
+        faces += [
+            (a, a + 1, b + 1, b),
+            (a + 2, b + 2, b + 3, a + 3),
+            (a, b, b + 2, a + 2),
+            (a + 1, a + 3, b + 3, b + 1),
+        ]
+    faces += [(0, 2, 3, 1), (12, 13, 15, 14)]
+    mesh_object(f"{name}_blade", verts, faces, mat=mat_blade, smooth=False, parent=parent)
+
+
+_black = None
+
+
+def M_BLACK():
+    global _black
+    if _black is None:
+        _black = material("grip", base=hexcol(0x1E2124), rough=0.6)
+    return _black
+
+
+def build_rower() -> list:
+    L, B = ROWER["L"], ROWER["B"]
+    M = mats()
+
+    def hb(s: float) -> float:
+        # A fine bow, long straight sides, a broad transom.
+        if s <= 0.33:
+            return B * max(1 - (1 - s / 0.33) ** 2, 0) ** 0.75
+        if s <= 0.78:
+            return B
+        return B - (B - 0.62) * ((s - 0.78) / 0.22) ** 1.6
+
+    def kz(s: float) -> float:
+        return 0.24 * max(1 - s / 0.2, 0) ** 2 + 0.06 * max((s - 0.9) / 0.1, 0) ** 2
+
+    def dz(s: float) -> float:
+        return 0.7 + 0.14 * max(1 - s / 0.22, 0) ** 2 + 0.04 * max((s - 0.88) / 0.12, 0)
+
+    f = HullForm(L=L, n=3.2, crown=0.03, wl=ROWER["wl"], hb=hb, kz=kz, dz=dz)
+    ob, img, rgb = hull(f, ROWER_PAINT, rough=0.3, coat=0.5, nx=180, nt=28, nd=18)
+    yd = lambda x: f.deck_y(x, 0)
+    gel = material("gelcoat", base=hexcol(0xF6F6F3), rough=0.28, coat=0.5)
+    dark = material("trim", base=hexcol(0x2B3036), rough=0.5)
+    seat_m = material("seat", base=hexcol(0x30353B), rough=0.55)
+
+    # Bow cabin: low, for one or two. Stern cabin: the main one, taller.
+    bow_top = cabin(
+        "bow_cabin",
+        f,
+        [
+            (0.35, 0.1, 0.55),
+            (0.7, 0.42, 0.8),
+            (1.2, 0.7, 0.92),
+            (2.2, 0.75, 0.94),
+            (2.3, 0.72, 0.93),
+        ],
+        0.07,
+        gel,
+    )
+    stern_top = cabin(
+        "stern_cabin",
+        f,
+        [
+            (5.0, 0.95, 0.93),
+            (5.12, 1.0, 0.94),
+            (7.3, 1.0, 0.94),
+            (7.9, 0.82, 0.92),
+            (8.25, 0.55, 0.88),
+        ],
+        0.07,
+        gel,
+    )
+    # Hatches onto the rowing deck, and small side windows.
+    rounded_box("bow_hatch", 2.29, 2.33, yd(2.3) + 0.12, yd(2.3) + 0.6, -0.26, 0.26, dark, 0.02)
+    rounded_box("stern_hatch", 4.97, 5.01, yd(5.0) + 0.14, yd(5.0) + 0.8, -0.28, 0.28, dark, 0.02)
+    for side in (1, -1):
+        for x0, x1, y in ((5.5, 6.1, 0.55), (6.4, 7.0, 0.55)):
+            z = side * ((B - 0.07) * 0.94 - 0.01)
+            rounded_box(
+                f"window_{x0:.1f}_{'p' if side > 0 else 's'}",
+                x0,
+                x1,
+                yd(x0) + y,
+                yd(x0) + y + 0.16,
+                z - 0.012,
+                z + 0.012,
+                M["glass"],
+                0.01,
+            )
+    # Solar panels on both cabin roofs (the bow one is in the listings).
+    panel("panel_bow", 0.95, 2.1, 0.62, bow_top, 4, 2)
+    panel("panel_stern", 5.35, 7.35, 0.95, stern_top, 7, 3)
+
+    # The rowing deck: two stations, each a sliding seat on rails, a footplate
+    # (the stroke seat's steers the rudder) and outriggers carrying the oar gates.
+    for n, (s0, s1, gx, fx) in enumerate(ROWER_STATIONS, 1):
+        y = yd((s0 + s1) / 2)
+        for z in (0.13, -0.13):
+            rod(
+                f"rail_{n}_{'p' if z > 0 else 's'}",
+                (s0 - 0.05, y + 0.13, z),
+                (s1 + 0.25, y + 0.13, z),
+                0.012,
+                M["alu"],
+                segs=8,
+            )
+            rod(
+                f"rail_leg_{n}_{'p' if z > 0 else 's'}_a",
+                (s0 - 0.03, y, z),
+                (s0 - 0.03, y + 0.13, z),
+                0.01,
+                M["alu"],
+                segs=8,
+            )
+            rod(
+                f"rail_leg_{n}_{'p' if z > 0 else 's'}_b",
+                (s1 + 0.23, y, z),
+                (s1 + 0.23, y + 0.13, z),
+                0.01,
+                M["alu"],
+                segs=8,
+            )
+        sp = pivot(f"seat_{n}", (s0 + 0.2, y + 0.15, 0))
+        rounded_box(
+            f"seat_{n}_pad",
+            s0 + 0.03,
+            s0 + 0.37,
+            y + 0.15,
+            y + 0.2,
+            -0.17,
+            0.17,
+            seat_m,
+            0.02,
+            parent=sp,
+        )
+        # Footplate, raked back towards the rower.
+        verts = [
+            (fx, y + 0.05, -0.17),
+            (fx, y + 0.05, 0.17),
+            (fx - 0.12, y + 0.38, 0.17),
+            (fx - 0.12, y + 0.38, -0.17),
+        ]
+        mesh_object(f"footplate_{n}", verts, [(0, 1, 2, 3)], mat=dark, smooth=False)
+        for side in (1, -1):
+            zg = side * 1.0
+            zb = side * (B - 0.02)
+            yg = y + 0.3
+            rod(
+                f"rigger_{n}_{'p' if side > 0 else 's'}_a",
+                (gx - 0.35, yd(gx) + 0.02, zb),
+                (gx, yg, zg),
+                0.016,
+                M["alu"],
+                segs=10,
+            )
+            rod(
+                f"rigger_{n}_{'p' if side > 0 else 's'}_b",
+                (gx + 0.3, yd(gx) + 0.02, zb),
+                (gx, yg, zg),
+                0.016,
+                M["alu"],
+                segs=10,
+            )
+            cylinder(
+                f"gate_{n}_{'p' if side > 0 else 's'}",
+                0.03,
+                gx,
+                yg - 0.02,
+                yg + 0.1,
+                zg,
+                dark,
+                segs=12,
+            )
+            # Oars at rest: square across the boat, blades just clear of the water.
+            op = pivot(f"oar_{n}_{'p' if side > 0 else 's'}", (gx, yg + 0.05, zg))
+            out = np.array([0.0, -0.18, side * 1.0])
+            oar(
+                f"oar_{n}_{'p' if side > 0 else 's'}",
+                (gx, yg + 0.05, zg),
+                3.15,
+                0.92,
+                out,
+                M["alu"],
+                gel,
+                op,
+            )
+    # Flush deck lockers (food and water ballast), the daggerboard case and the board.
+    for k, x in enumerate((2.62, 3.95, 4.3)):
+        cylinder(
+            f"locker_{k}",
+            0.16,
+            x,
+            yd(x) - 0.01,
+            yd(x) + 0.015,
+            0.0 if k != 1 else 0.3,
+            dark,
+            segs=24,
+        )
+    rounded_box("board_case", 3.95, 4.35, yd(4.1) - 0.01, yd(4.1) + 0.18, -0.03, 0.03, gel, 0.01)
+    foil("daggerboard", 0.32, 0.28, 3.98, 4.0, -0.55, 0.05, 0.1, M["g10"], n_span=4)
+
+    # Stern: a transom-hung rudder with a tiller autopilot, a grab handle, a light pole.
+    rp = pivot("rudder_pivot", (L - 0.02, 0.3, 0))
+    foil("rudder", 0.36, 0.3, L - 0.05, L - 0.02, -0.25, 0.42, 0.1, M["g10"], n_span=6, parent=rp)
+    rod("tiller", (L - 0.02, 0.46, 0), (L - 0.4, 0.56, 0), 0.016, M["alu"], segs=10, parent=rp)
+    rounded_box("autopilot", 8.05, 8.25, yd(8.1) + 0.4, yd(8.1) + 0.5, 0.1, 0.22, dark, 0.01)
+    tube(
+        "grab_handle",
+        [
+            (L - 0.01, 0.62, -0.25),
+            (L + 0.1, 0.66, -0.2),
+            (L + 0.12, 0.68, 0.0),
+            (L + 0.1, 0.66, 0.2),
+            (L - 0.01, 0.62, 0.25),
+        ],
+        0.014,
+        M["steel"],
+    )
+    px = 7.7
+    pole_y = stern_top(px, 0.25)
+    cylinder("light_pole", 0.02, px, pole_y - 0.02, pole_y + 0.9, 0.25, M["alu"], segs=12)
+    cylinder("masthead_light", 0.03, px, pole_y + 0.9, pole_y + 0.98, 0.25, M["lamp"])
+    cylinder("ais_antenna", 0.012, px, pole_y - 0.02, pole_y + 0.7, -0.25, M["black"], segs=8)
+    # Low guard rails of webbing along the rowing deck, and a jackstay down the middle.
+    stanchions(
+        f,
+        [2.4, 3.0, 3.65, 4.3, 4.9],
+        0.32,
+        0.04,
+        M["steel"],
+        material("webbing", base=hexcol(0x3A3F45), rough=0.8),
+    )
+    tube(
+        "jackstay", [(2.35, yd(2.35) + 0.03, 0.42), (4.95, yd(4.95) + 0.03, 0.42)], 0.006, M["wire"]
+    )
+    return [(ob, img, rgb)]
+
+
+BUILD = {
+    "cruiser": build_cruiser,
+    "dinghy": build_dinghy,
+    "beachcat": build_beachcat,
+    "drone": build_drone,
+    "rower": build_rower,
+}
 
 
 def main() -> None:

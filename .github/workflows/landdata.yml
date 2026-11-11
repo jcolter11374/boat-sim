@@ -1,7 +1,7 @@
 # Land for the 3D views (src/boatsim/oceandata/landviews.py): coasts (Pico and
-# Faial, the Chesapeake Bay mouth, Lisbon) and the Annapolis waterfront. Heights from AWS Terrain Tiles,
-# colour from a Sentinel-2 median, buildings and piers from Overture Maps
-# (ODbL). Display only: nothing in the simulator reads them.
+# Faial, the Chesapeake Bay mouth, Lisbon, Annapolis and around it) and the
+# Annapolis waterfront. Heights from AWS Terrain Tiles, colour from a Sentinel-2
+# median, buildings, piers, land cover and trees from Overture Maps (ODbL). Display only: nothing in the simulator reads them.
 # Run it by hand: Actions tab -> "Land data" -> Run workflow. Tick "publish" to
 # put the files on the land-data release; the 3D page's build (sea3d.yml) copies
 # them into public/land/ when the release exists.
@@ -12,7 +12,7 @@ on:
     inputs:
       places:
         description: "Places (space separated)"
-        default: "pico baymouth lisbon annapolis"
+        default: "pico baymouth lisbon annapolisbay annapolis"
       overture_release:
         description: "Overture Maps release"
         default: "2026-10-21.0"

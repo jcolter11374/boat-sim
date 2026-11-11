@@ -381,4 +381,6 @@ export const BUILDERS: Record<BoatSpec["key"], (q: Quality) => BoatModel> = {
   stock_cruiser31: (q) => buildStock("stock_cruiser31", q),
   stock_dinghy14: (q) => buildStock("stock_dinghy14", q),
   stock_beachcat16: (q) => buildStock("stock_beachcat16", q),
+  stock_sail_drone7: (q) => buildStock("stock_sail_drone7", q),
+  stock_ocean_rower45: (q) => buildStock("stock_ocean_rower45", q),
 };

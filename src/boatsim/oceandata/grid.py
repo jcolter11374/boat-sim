@@ -46,11 +46,12 @@ ROUTE_BOX = Box(lat_min=25.0, lat_max=60.0, lon_min=-82.0, lon_max=5.0)
 
 
 def to_datetime64(t: datetime | np.datetime64) -> np.datetime64:
-    """Naive UTC datetime (the simulator's convention) to datetime64[s]."""
+    """Naive UTC datetime (the simulator's convention) to datetime64[s]. An aware
+    datetime is converted to UTC first."""
     if isinstance(t, np.datetime64):
         return t.astype("datetime64[s]")
     if t.tzinfo is not None:
-        t = t.replace(tzinfo=None) - (t.utcoffset() or 0)
+        t = t.replace(tzinfo=None) - t.utcoffset()
     return np.datetime64(t, "s")
 
 

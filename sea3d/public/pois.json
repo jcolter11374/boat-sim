@@ -61,6 +61,134 @@
    "url": "https://monitor.noaa.gov/shipwrecks/uss_monitor.html"
   },
   {
+   "id": "sandy-hook-light",
+   "kind": "history",
+   "title": "Sandy Hook Lighthouse, 1764",
+   "at": [
+    [
+     40.4618,
+     -74.0019
+    ]
+   ],
+   "radius_km": 70,
+   "text": "At the mouth of New York harbour stands the oldest lighthouse still working in the United States. It was first lit on 11 June 1764, paid for by a lottery after 43 New York merchants asked for it. The tower is about 103 feet (31 m) tall and its light carries about 19 miles.",
+   "source": "US National Park Service",
+   "url": "https://www.nps.gov/places/000/sandy-hook-lighthouse.htm"
+  },
+  {
+   "id": "block-island-wind",
+   "kind": "history",
+   "title": "Block Island Wind Farm",
+   "at": [
+    [
+     41.12,
+     -71.51
+    ]
+   ],
+   "radius_km": 75,
+   "text": "Off Block Island, five turbines make up the first offshore wind farm in the United States. Together they make 30 megawatts, and they began commercial operation in December 2016.",
+   "source": "Rhode Island Coastal Resources Management Council",
+   "url": "https://www.crmc.ri.gov/windenergy/blockislandwind.html"
+  },
+  {
+   "id": "ss-portland",
+   "kind": "wreck",
+   "title": "Steamship Portland, 1898",
+   "at": [
+    [
+     42.37,
+     -70.35
+    ]
+   ],
+   "radius_km": 60,
+   "text": "The night steamer Portland left Boston for Portland, Maine on 26 November 1898 and sailed into a storm now called the Portland Gale. Nobody survived: 192 or 193 people died. The wreck lies upright in over 400 feet (120 m) of water in the Stellwagen Bank sanctuary. Found in 1989 and confirmed in 2002, it is called the Titanic of New England.",
+   "source": "NOAA Stellwagen Bank National Marine Sanctuary",
+   "url": "https://stellwagen.noaa.gov/maritime/portland.html"
+  },
+  {
+   "id": "fundy-tides",
+   "kind": "ocean",
+   "title": "The Gulf of Maine and the Bay of Fundy",
+   "at": [
+    [
+     42.8,
+     -68.6
+    ],
+    [
+     43.6,
+     -66.1
+    ],
+    [
+     44.6,
+     -66.4
+    ]
+   ],
+   "radius_km": 75,
+   "text": "This gulf and the Bay of Fundy north of it slosh back and forth about every 13 hours, close to the 12.4 hour beat of the ocean tide, so the tide builds up here. At the head of the bay it can rise more than 16 m (16.1 m was measured at Burntcoat Head). At full flood 25 million cubic metres of water a second pour into the Gulf, about 2,000 times what the St Lawrence river carries.",
+   "source": "The Canadian Encyclopedia",
+   "url": "https://thecanadianencyclopedia.ca/en/article/bay-of-fundy-and-gulf-of-maine"
+  },
+  {
+   "id": "birchtown",
+   "kind": "history",
+   "title": "Birchtown, 1783",
+   "at": [
+    [
+     43.74,
+     -65.37
+    ]
+   ],
+   "radius_km": 75,
+   "text": "In 1783 about 3,000 Black Loyalists, people who had sided with the British in the American War of Independence, sailed from New York to Nova Scotia. Many settled at Birchtown near Shelburne, then the largest free Black community in British North America. In 1792 about 1,200 of them sailed on to Sierra Leone and founded Freetown.",
+   "source": "The Canadian Encyclopedia",
+   "url": "https://thecanadianencyclopedia.ca/en/article/black-loyalists-in-british-north-america"
+  },
+  {
+   "id": "halifax-explosion",
+   "kind": "history",
+   "title": "Halifax Explosion, 1917",
+   "at": [
+    [
+     44.67,
+     -63.6
+    ]
+   ],
+   "radius_km": 60,
+   "text": "Soon after 9 a.m. on 6 December 1917 the French ship Mont-Blanc, loaded with explosives for the war in Europe, collided with the Norwegian ship Imo in the narrowest part of Halifax harbour. The blast destroyed the north end of the city and raised a tsunami. About 2,000 people died, 9,000 were hurt and 25,000 lost their homes.",
+   "source": "The Canadian Encyclopedia",
+   "url": "https://www.thecanadianencyclopedia.ca/en/article/halifax-explosion-plain-language-summary"
+  },
+  {
+   "id": "sable-island",
+   "kind": "wreck",
+   "title": "Sable Island",
+   "at": [
+    [
+     43.93,
+     -59.91
+    ]
+   ],
+   "radius_km": 60,
+   "text": "A thin crescent of sand 42 km long and at most 1.3 km wide, 290 km south-east of Halifax. More than 350 ships have been wrecked on and around it, which is why it is called the Graveyard of the Atlantic. Wild horses live there (between 374 and 590 in recent counts), and up to about 80,000 grey seal pups are born on it each winter. It became a national park in 2013.",
+   "source": "The Canadian Encyclopedia",
+   "url": "https://thecanadianencyclopedia.ca/en/article/sable-island-national-park-reserve"
+  },
+  {
+   "id": "louisbourg",
+   "kind": "history",
+   "title": "Louisbourg",
+   "at": [
+    [
+     45.89,
+     -59.98
+    ]
+   ],
+   "radius_km": 120,
+   "text": "France founded Louisbourg in 1713 to guard its fishing and trade in North America. British forces besieged and took the fortified town twice, in 1745 and 1758. From 1961 to 1981 Parks Canada rebuilt about a quarter of it, the largest rebuilt 18th century French fortified town in North America.",
+   "source": "Parks Canada",
+   "url": "https://www.pc.gc.ca/apps/dfhd/page_nhs_eng.aspx?id=303"
+  },
+  {
    "id": "gulf-stream",
    "kind": "ocean",
    "title": "The Gulf Stream",

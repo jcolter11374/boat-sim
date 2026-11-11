@@ -247,7 +247,8 @@ upside down more likely.
 
 **Stock boats and the joke fleet.** `"base"` can also name a ready-made boat,
 sailed as designed with no slots to change (`catalog.STOCK_BASES`):
-`stock_cruiser31`, `stock_dinghy14`, `stock_beachcat16`, `joke_robot_kayak`,
+`stock_cruiser31`, `stock_dinghy14`, `stock_beachcat16`, `stock_sail_drone7`,
+`stock_ocean_rower45`, `joke_robot_kayak`,
 `joke_canoe`, `joke_pedalo`, `joke_bathtub`, `joke_flamingo`,
 `joke_wheelie_bin`. Its grid id is the base name. These boats aren't in the
 odds grid, so `nearest()` returns `(id, False)`. Their configs and polars are

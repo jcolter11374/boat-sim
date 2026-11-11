@@ -41,7 +41,7 @@ from datetime import datetime
 
 from boatsim.autonomy.guidance import WaypointAutopilot
 from boatsim.autonomy.safemode import SafeModeAutopilot
-from boatsim.autonomy.sailing import Tactician
+from boatsim.autonomy.sailing import Tactician, open_water_km
 from boatsim.geo import bearing_deg
 from boatsim.types import Command, Mission, Sensors
 from boatsim.vessel.keelboat import DOWN
@@ -163,10 +163,17 @@ class HelmAutopilot:
             and sensors.wind_speed_ms is not None
         ):
             to_mark = bearing_deg(sensors.lat, sensors.lon, *mark)
+            lat, lon = sensors.lat, sensors.lon
             heading = self.tactician.heading(
-                to_mark, heading, sensors.wind_from_deg, sensors.wind_speed_ms, sensors.heading, t
+                to_mark,
+                heading,
+                sensors.wind_from_deg,
+                sensors.wind_speed_ms,
+                sensors.heading,
+                t,
+                open_water=lambda h: open_water_km(lat, lon, h),
             )
-            tacking = self.tactician.mode != "reach"
+            tacking = self.tactician.mode != "reach" or self.tactician.escaping
         self.guidance.tacking = tacking
         frac = self.power
         if self.safe:

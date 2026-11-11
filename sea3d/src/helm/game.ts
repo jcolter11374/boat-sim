@@ -12,6 +12,8 @@ export interface Report {
   lon: number;
   soc?: number;
   hdg?: number;
+  /** Where it came from: the daily Iridium report, or a 6-hourly backup-beacon fix while Iridium is down. The drop has none. */
+  source?: "iridium" | "beacon";
 }
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
@@ -36,7 +38,20 @@ export interface Status {
   boat: BoatNow;
   ghost: BoatNow;
   lead_km: number;
-  order: { heading: Heading; power: number };
+  order: { heading: Heading; power: number; sails?: string | null; engine?: boolean | null };
+  /** True for a boat with sails (#242): it also takes sail and engine orders. */
+  sailboat?: boolean;
+  /** A sailboat's state and what may be ordered (#242). */
+  sailing?: {
+    plans: string[];
+    has_engine: boolean;
+    plan: string | null;
+    heel_deg: number | null;
+    engine_on: boolean | null;
+    fuel_l: number | null;
+    tactic: "beat" | "run" | "reach" | null;
+    tacks: number;
+  };
   power_w: number;
   /** "hands_on" or "base" (older simulators leave it out: hands on). */
   mode?: Mode;
@@ -49,6 +64,8 @@ export interface Status {
     /** Base's dead-reckoned guess at where the boat is now (#214). */
     estimate?: { lat: number; lon: number; from_report: string; age_h: number };
   };
+  /** How long the boat has gone unheard, against the race's limits (older simulators leave it out). */
+  silence?: { days_in_a_row: number; days_total: number; limit_in_a_row: number; limit_total: number };
   /** False in base mode: the page shows what base knows, not the true boat (#214). */
   show_true_position?: boolean;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
@@ -62,19 +79,27 @@ export interface ForecastRow {
   current_v: number;
   ghi: number;
 }
+/** How a voyage ended, in the boat's own words (sandbox/endings.py, #234). */
+export interface Ending {
+  headline: string;
+  words: string;
+  where: string | null;
+  day: number | null;
+  boat: string | null;
+}
 export interface Card {
   build: string;
   launch: string;
   seed: number;
   breakdowns_on: boolean;
-  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[] };
-  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[] };
+  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
+  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
   margin_days: number | null;
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
 }
-export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
+export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "silence" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
   hours?: number;
   max_hours?: number;
@@ -90,6 +115,8 @@ export class HelmGame {
   ghost: Replay | null = null;
   status: Status | null = null;
   launches: string[] = [];
+  /** The boat being sailed: "" for our kayak, else a ready-made boat's id ("stock_cruiser31"). */
+  boatBase = "";
   onProgress: (text: string) => void = () => {};
   private worker: Worker;
   private next = 1;
@@ -133,15 +160,18 @@ export class HelmGame {
     return p;
   }
 
-  private take(v: { status?: Status; boat?: Replay; ghost?: Replay }): void {
+  private take(v: { status?: Status; boat?: Replay; ghost?: Replay; base?: string }): void {
     if (v.status) this.status = v.status;
+    if (v.base !== undefined) this.boatBase = v.base;
     if (v.boat) this.boat = v.boat;
     if (v.ghost) this.ghost = v.ghost;
   }
 
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
-   *  its weather (left out when it's the 2020 bundle). */
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }): Promise<Status> {
+   *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
+   *  boat (e.g. "stock_cruiser31"); left out, it's our kayak. `startPort`: a port id
+   *  from ports.json to start from instead of the usual drop. */
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string, startPort?: string): Promise<Status> {
     const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
       type: "new",
       launch,
@@ -150,6 +180,8 @@ export class HelmGame {
       mode,
       challenge: challenge?.id,
       bundle: challenge?.bundle,
+      choices: boat ? { base: boat } : undefined,
+      start_port: startPort || undefined,
     });
     this.launches = v.launches;
     this.take(v);
@@ -169,8 +201,10 @@ export class HelmGame {
     return this.ask<string>({ type: "save" });
   }
 
-  async order(heading: Heading, power: number): Promise<OrderResult> {
-    const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power });
+  /** sails and engine: sailboats only; null or left out lets the boat decide. */
+  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null): Promise<OrderResult> {
+    const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+    const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power, ...extra });
     this.status = v.status;
     return v.order;
   }
@@ -207,7 +241,13 @@ export function stopText(s: Stop, st: Status | null): string {
     case "wind":
       return "The wind is getting up.";
     case "land":
-      return "Land is within 50 km.";
+      return "Land is getting close.";
+    case "silence": {
+      const q = st?.silence;
+      return q
+        ? `Nothing has heard from the boat for ${q.days_in_a_row.toFixed(1)} days (${q.days_total} silent days in all). The race disqualifies a boat silent more than ${q.limit_in_a_row} days in a row or ${q.limit_total} in total.`
+        : "The boat has gone quiet; the race disqualifies a boat that stays silent too long.";
+    }
     case "breakdown":
       return "Something went wrong on board (see the note on the right).";
     case "ghost_passed":

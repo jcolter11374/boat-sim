@@ -36,6 +36,13 @@ helm-sail-engine-orders.md):
   (engine_resist_n at full, falling as f^(2/3)). The wind on the hull and rig
   (air_front_area_m2, air_cd_front, the true wind's head-on part) uses some of
   that thrust up, so a head wind slows the boat and a gale stops it.
+* The engine's alternator charges the house battery (alternator_w, GUESS
+  500 W into the bank) whenever it runs. Below charge_below_soc (GUESS 0.35)
+  the autopilot computer starts it out of gear (a separate start battery
+  turns it over) and idles it until the bank reaches charge_until_soc
+  (GUESS 0.8), as a short-handed boat does. Out of gear it needs no rudder,
+  but it needs the computer alive, and it never burns into the last
+  fuel_reserve_l litres (GUESS 5). Idle burn is engine_idle_frac of full.
 
 Overcanvassed. Each plan is cut for a wind range: flown so hard that it heels
 past reef_heel_deg, the sails are overloaded by x = heel / reef_heel_deg - 1.
@@ -84,7 +91,14 @@ from boatsim.config import Design
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
 from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT
-from boatsim.vessel.kayak import KayakState, KayakVessel, SpeedSolution, _boat_axes, solve_speed
+from boatsim.vessel.kayak import (
+    KayakState,
+    KayakVessel,
+    SpeedSolution,
+    _boat_axes,
+    has_brain,
+    solve_speed,
+)
 
 KNOT = 0.514444
 CONFIGS = Path(__file__).resolve().parents[3] / "configs"
@@ -106,6 +120,7 @@ class KeelboatState(KayakState):
     sail_plan: str = "full"
     heel_deg: float = 0.0  # positive = leaning to starboard
     engine_on: bool = False
+    charging: bool = False  # engine idling out of gear to charge the battery
     # The masthead wind vane's last reading, relative to the water (for the
     # sailing tactician, autonomy/sailing.py): where the wind comes from (deg)
     # and its speed (m/s). None before the first step.
@@ -213,6 +228,10 @@ class KeelboatVessel(KayakVessel):
         self.engine_resist_n = float(prop.get("engine_resist_n", 1.0))
         self.engine_below_wind_kn = float(prop.get("engine_below_wind_kn", 5.0))
         self.engine_idle_frac = float(prop.get("engine_idle_frac", 0.2))  # GUESS
+        self.alternator_w = float(prop.get("alternator_w", 0.0))
+        self.charge_below_soc = float(prop.get("charge_below_soc", 0.35))  # GUESS
+        self.charge_until_soc = float(prop.get("charge_until_soc", 0.8))  # GUESS
+        self.fuel_reserve_l = float(prop.get("fuel_reserve_l", 5.0))  # GUESS
         self.sail_overload_per_h = float(v.get("sail_overload_per_h", 1.0))  # GUESS
         self.fuel_l = float(prop.get("fuel_l", 0.0))
         self.p_sink_given_leak = float(v.get("p_sink_given_leak", 0.0))
@@ -266,6 +285,21 @@ class KeelboatVessel(KayakVessel):
         sigma = self.gust_sigma_at(rain_mm_h)
         p = 0.5 * math.erfc((g - 1.0) / (sigma * math.sqrt(2.0)))
         return 1.0 - (1.0 - p) ** (self.gusts_per_hour * hours)
+
+    def wants_charge(self, state: BoatState, fuel: float) -> bool:
+        """Does the autopilot computer run the engine to charge the battery?"""
+        if self.alternator_w <= 0.0 or state.damage.get("engine"):
+            return False
+        alive = getattr(state, "electronics_on", True) and state.battery_wh > 0.0
+        if not has_brain(state.damage) or not alive:
+            return False  # no computer left to start it (either box can: GUESS)
+        if fuel <= self.fuel_reserve_l:
+            return False
+        cap = state.battery_capacity_wh
+        soc = state.battery_wh / cap if cap > 0 else 1.0
+        if getattr(state, "charging", False):
+            return soc < self.charge_until_soc
+        return soc < self.charge_below_soc
 
     # --- hooks into KayakVessel.step ---------------------------------------
     def _motoring(
@@ -341,15 +375,26 @@ class KeelboatVessel(KayakVessel):
             frac = max(frac, self.engine_idle_frac)  # a diesel never runs below idle
         engine = frac if wanted and fuel > 0.0 and not state.damage.get("engine") else 0.0
         self._step = {"engine": engine, "asked": cmd.sail_plan, "plan": DOWN, "heel": 0.0}
+        charging = self.wants_charge(state, fuel)
         new, events = super().step(state, cmd, env, dt, rng)
+        hours = dt.total_seconds() / 3600.0
         used = self._step.get("engine_used", False) or self._step.get("motoring", False)
-        burn = self.engine_l_per_h * engine * dt.total_seconds() / 3600.0 if used else 0.0
+        in_gear = used and engine > 0.0
+        burn = self.engine_l_per_h * engine * hours if used else 0.0
+        if charging and not in_gear:  # idling out of gear
+            burn = self.engine_l_per_h * self.engine_idle_frac * hours
+        running = in_gear or charging
+        if running and self.alternator_w > 0.0:
+            cap = new.battery_capacity_wh
+            put = self.alternator_w * hours * self.battery.charge_eff
+            new.battery_wh = min(new.battery_wh + put, cap)
         out = KeelboatState(
             **{f.name: getattr(new, f.name) for f in fields(new)},
             fuel_l=max(fuel - burn, 0.0),
             sail_plan=self._step["plan"],
             heel_deg=self._step["heel"],
-            engine_on=bool(used and engine > 0.0),
+            engine_on=running,
+            charging=charging,
             wind_from_deg=_wind_from(env),
             wind_speed_ms=math.hypot(env.wind_u - env.current_u, env.wind_v - env.current_v),
         )
@@ -360,7 +405,6 @@ class KeelboatVessel(KayakVessel):
                 why = "flooded: the bilge pump lost power" if pump_dead else "flooded and sank"
                 events.append(Event(out.t, EventKind.LOST, why))
                 out.alive = False
-        hours = dt.total_seconds() / 3600.0
         dice = self._last_dice
         x = self._step.get("overload", 0.0)
         if out.alive and x > 0.0 and self.sail_overload_per_h > 0.0:

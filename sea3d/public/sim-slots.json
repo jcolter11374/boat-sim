@@ -1,5 +1,5 @@
 {
- "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, wired (est) since #174 and #183. cost and kg for the new options: Sam.",
+ "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, wired (est) since #174 and #183. cost and kg for the new options: Sam. stock: the stock boats' addable parts (boatsim.sandbox.catalog.stock_table()), with cost in USD against the default from the parts list.",
  "catalog_slots": [
   {
    "id": "thr",
@@ -1222,6 +1222,152 @@
        "basis": "not modelled on the Randolph boat",
        "sim": [],
        "kg": 0.0
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "stock": {
+  "stock_cruiser31": {
+   "design": "configs/stock_cruiser31.yaml",
+   "defaults": {
+    "spare": "none"
+   },
+   "slots": [
+    {
+     "id": "spare",
+     "name": "Spare autopilot",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as the boat comes: one autopilot",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "spare-autopilot",
+       "effect": "wired",
+       "est": true,
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.4,
+       "cost": 83.0
+      }
+     ]
+    }
+   ]
+  },
+  "stock_dinghy14": {
+   "design": "configs/stock_dinghy14.yaml",
+   "defaults": {
+    "spare": "none"
+   },
+   "slots": [
+    {
+     "id": "spare",
+     "name": "Spare autopilot",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as the boat comes: one autopilot",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "spare-autopilot",
+       "effect": "wired",
+       "est": true,
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.4,
+       "cost": 83.0
+      }
+     ]
+    }
+   ]
+  },
+  "stock_beachcat16": {
+   "design": "configs/stock_beachcat16.yaml",
+   "defaults": {
+    "spare": "none"
+   },
+   "slots": [
+    {
+     "id": "spare",
+     "name": "Spare autopilot",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as the boat comes: one autopilot",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "spare-autopilot",
+       "effect": "wired",
+       "est": true,
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.4,
+       "cost": 83.0
+      }
+     ]
+    }
+   ]
+  },
+  "stock_sail_drone7": {
+   "design": "configs/stock_sail_drone7.yaml",
+   "defaults": {
+    "spare": "none"
+   },
+   "slots": [
+    {
+     "id": "spare",
+     "name": "Spare autopilot",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as the boat comes: one autopilot",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "spare-autopilot",
+       "effect": "wired",
+       "est": true,
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.4,
+       "cost": 83.0
       }
      ]
     }

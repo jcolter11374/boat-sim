@@ -29,6 +29,37 @@ def test_launch_point_follows_the_water_out_of_the_bay(monkeypatch):
     assert km > 250
 
 
+def test_launch_point_moves_out_until_its_route_clears_land():
+    """A headland across the way to the finish: the nearest open water would send
+    the launch route over it (Placentia Bay, #246), so the launch point moves out
+    along the water until the straight route to the finish misses it."""
+    m = np.zeros((100, 100), bool)
+    m[:, :20] = True  # the coast at 68W
+    m[40:52, 20:45] = True  # a headland east along 34-35.2N to 65.5W
+    mask = LandMask(m, 30.0, -70.0, 0.1)
+    ocean = P.open_ocean(mask, seed=(31.0, -61.0))
+    target = (35.6, -60.0)  # east-north-east, past the headland
+    plain = P.launch_point(mask, ocean, 33.5, -67.9, clear_km=20.0)
+    near = P.land_km(mask)
+    assert not P.route_clear(mask, near, plain[0], plain[1], target)  # straight over it
+
+    def ok(la, lo):
+        return P.route_clear(mask, near, la, lo, target)
+
+    la, lo, km = P.launch_point(mask, ocean, 33.5, -67.9, clear_km=20.0, route_ok=ok)
+    assert ok(la, lo) and km > plain[2]
+
+
+def test_great_circle_points():
+    la, lo = P.great_circle((36.65, -74.94), P.FINISH)
+    assert (la[0], lo[0]) == pytest.approx((36.65, -74.94)) and (la[-1], lo[-1]) == pytest.approx(
+        P.FINISH
+    )
+    assert la.max() > 41.5  # it bows north (peaks near 42.6N)
+    step = np.hypot(np.diff(la), np.diff(lo) * np.cos(np.radians(la[1:]))) * P.KM_PER_DEG
+    assert step.max() <= P.ROUTE_STEP_KM * 1.01
+
+
 def test_no_launch_point_for_a_lake():
     m = np.zeros((100, 100), bool)
     m[:, :40] = True
@@ -52,6 +83,17 @@ def test_corridor_and_duplicates(tmp_path, monkeypatch):
     ports = P.build(g, _bay(), log=lambda *_: None)
     assert len(ports) == 1 and ports[0].in_corridor
     assert not P.in_corridor(49.0, -5.0) and P.in_corridor(36.6, -74.9)
+    assert not P.in_corridor(49.5, -60.0)  # inside the bundles, but on their last weather cell
+    assert not P.in_corridor(47.8, -52.5)  # off St John's: drifts north out of the weather
+    assert P.route_inside(36.65, -74.94) and not P.route_inside(
+        36.65, -74.94, box=(28, 40, -78, -8)
+    )
+
+
+def test_finish_is_the_race_target():
+    from boatsim.runner.arrival import DEFAULT_TARGET
+
+    assert P.FINISH == tuple(DEFAULT_TARGET)
 
 
 def test_start_line_and_ids():
@@ -67,6 +109,15 @@ def test_published_list():
     assert {"Norfolk", "Baltimore", "Lisboa", "Horta"} <= names
     assert len({p["id"] for p in d["ports"]}) == len(d["ports"])
     for p in d["ports"]:
-        assert P.in_corridor(p["launch_lat"], p["launch_lon"]) == p["in_corridor"]
+        inside = P.in_corridor(p["launch_lat"], p["launch_lon"])
+        assert (inside and P.route_inside(p["launch_lat"], p["launch_lon"])) == p["in_corridor"]
         assert P.crosses_start(p["launch_lat"], p["launch_lon"]) == p["crosses_start"]
         assert 0 <= p["launch_km"] <= P.SEARCH_KM + 50
+
+
+def test_published_launch_routes_clear_land():
+    d = json.loads((P.Path(__file__).resolve().parents[1] / "sea3d/public/ports.json").read_text())
+    mask = LandMask.load()
+    near = P.land_km(mask)
+    for p in d["ports"]:
+        assert P.route_clear(mask, near, p["launch_lat"], p["launch_lon"]), p["id"]
