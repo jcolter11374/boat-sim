@@ -230,25 +230,48 @@ class Boost:
     tp: float
 
 
-def vortex(fx: Fix, lat: float, lon: float) -> Boost | None:
+@dataclass(frozen=True)
+class Shape:
+    """The knobs the buoy check sweeps (module constants are the defaults)."""
+
+    core: float = 1.0  # vortex Rmax = core x best-track Rmax
+    inner: float = 1.0  # full vortex inside inner x best-track Rmax
+    outer: float = 2.0  # ERA5 alone beyond outer x best-track Rmax
+    peak: float = 1.0  # x the 10-minute best-track wind
+
+
+SHAPE = Shape(inner=INNER, outer=OUTER)
+# Shapes the buoy check also scores (round 2, Maya: smaller core, blend inside
+# 1.5 Rmax, no worse than ERA5 in any band). Names: c<core>_o<outer>_p<peak>.
+SWEEP = {
+    f"c{c:g}_o{o:g}_p{pk:g}": Shape(core=c, inner=1.0, outer=o, peak=pk)
+    for c in (1.0, 0.8, 0.65)
+    for o in (2.0, 1.5)
+    for pk in (1.0, 0.9, 0.8)
+}
+
+
+def vortex(fx: Fix, lat: float, lon: float, shape: Shape | None = None) -> Boost | None:
     """The parametric storm's wind and waves at (lat, lon), or None beyond OUTER Rmax."""
+    sh = shape or SHAPE
     dy = (lat - fx.lat) * 111.0
     dx = (lon - fx.lon) * 111.0 * math.cos(math.radians(fx.lat))
     r = math.hypot(dx, dy)
-    if r >= OUTER * fx.rmax_km:
+    if r >= sh.outer * fx.rmax_km:
         return None
-    w = 1.0 if r <= INNER * fx.rmax_km else (OUTER - r / fx.rmax_km) / (OUTER - INNER)
+    w = 1.0 if r <= sh.inner * fx.rmax_km else (sh.outer - r / fx.rmax_km) / (sh.outer - sh.inner)
     r = max(r, 0.5)
+    rmax = sh.core * fx.rmax_km
     c = math.hypot(fx.cu, fx.cv)
     v10max = ONE_TO_TEN_MIN * fx.vmax
-    vs = max(v10max - MOTION_SHARE * c, 0.0)
+    vs = max(sh.peak * v10max - MOTION_SHARE * c, 0.0)
     if PROFILE == "holland":
-        x = (fx.rmax_km / r) ** fx.b
+        x = (rmax / r) ** fx.b
         speed = vs * math.sqrt(x * math.exp(1.0 - x))
-    elif r <= fx.rmax_km:
-        speed = vs * r / fx.rmax_km
+    elif r <= rmax:
+        speed = vs * r / rmax
     else:
-        speed = vs * (fx.rmax_km / r) ** DECAY
+        speed = vs * (rmax / r) ** DECAY
     # Northern hemisphere: anticlockwise, spiralling in by the inflow angle.
     a = math.radians(INFLOW_DEG)
     tu, tv = -dy / r, dx / r  # tangential (anticlockwise)
@@ -283,7 +306,9 @@ class StormTracks:
     def from_csv(cls, csv_path=DEFAULT_TRACKS, first_year: int = 1980, last_year: int = 2100):
         return cls(load_storms(csv_path, first_year, last_year))
 
-    def boost(self, t: datetime, lat: float, lon: float) -> Boost | None:
+    def boost(
+        self, t: datetime, lat: float, lon: float, shape: Shape | None = None
+    ) -> Boost | None:
         """The strongest-weighted storm's boost at (t, lat, lon), or None."""
         secs = (t.replace(tzinfo=None) - _EPOCH).total_seconds()
         best = None
@@ -291,7 +316,7 @@ class StormTracks:
             fx = storm_at(s, secs)
             if fx is None:
                 continue
-            b = vortex(fx, lat, lon)
+            b = vortex(fx, lat, lon, shape)
             if b is not None and (best is None or b.weight > best.weight):
                 best = b
         return best
@@ -385,6 +410,11 @@ def pair_case(storm: Storm, buoy_hours, src, lat: float, lon: float, station: st
         r = math.hypot(dx, dy)
         e = _sample(src, t, lat, lon)
         b = apply(e, tracks.boost(t, lat, lon))
+        sweep = {
+            f"sweep_{k}_ws10": math.hypot(bb.wind_u, bb.wind_v)
+            for k, sh in SWEEP.items()
+            for bb in [apply(e, tracks.boost(t, lat, lon, sh))]
+        }
         rows.append(
             {
                 "station": station,
@@ -399,6 +429,7 @@ def pair_case(storm: Storm, buoy_hours, src, lat: float, lon: float, station: st
                 "buoy_hs": hs,
                 "era5_hs": e.hs,
                 "boost_hs": b.hs,
+                **sweep,
             }
         )
     return rows
@@ -437,6 +468,17 @@ def summarise_check(rows: list[dict], log=print) -> list[dict]:
                 f"{lo:g}-{hi:g} Rmax  {what:4s} {n:4d}  {eb:+6.2f} / {er:5.2f} {unit:3s}"
                 f"   {bb:+6.2f} / {br:5.2f} {unit}"
             )
+    sweep_keys = [k for k in SWEEP if rows and f"sweep_{k}_ws10" in rows[0]]
+    if sweep_keys:
+        log("wind RMS (bias) by band for other shapes; ERA5 first:")
+        log("shape" + "".join(f"  {lo:g}-{hi:g} Rmax     " for lo, hi in BANDS))
+        for name, col in [("ERA5", "era5_ws10")] + [(k, f"sweep_{k}_ws10") for k in sweep_keys]:
+            cells = []
+            for lo, hi in BANDS:
+                band = [r for r in rows if lo <= r["dist_rmax"] < hi]
+                _, b, rms = _bias_rms([r["buoy_ws10"] for r in band], [r[col] for r in band])
+                cells.append(f"  {rms:5.2f} ({b:+5.2f})  ")
+            log(f"{name:5s}" + "".join(cells))
     for st in sorted({r["station"] for r in rows}):
         s = [r for r in rows if r["station"] == st]
 

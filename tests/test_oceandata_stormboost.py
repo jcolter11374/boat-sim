@@ -147,3 +147,34 @@ def test_check_pairs_and_summarises(tracks):
     out = SB.summarise_check(rows, log=lambda *_: None)
     near = [r for r in out if r["band_rmax"] == "0-1" and r["field"] == "ws10"]
     assert near and near[0]["n"] >= 1 and near[0]["boost_rms"] < near[0]["era5_rms"]
+
+
+def test_shape_knobs_shrink_the_core_and_the_blend(tracks):
+    a = tracks.storms[0]
+    fx = SB.storm_at(a, (T - SB._EPOCH).total_seconds())
+    dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
+    at = (fx.lat, fx.lon + 1.2 * dlon)
+    base = SB.vortex(fx, *at)
+    assert base == SB.vortex(fx, *at, SB.Shape())  # the default shape is today's boost
+    small = SB.vortex(fx, *at, SB.Shape(core=0.65))
+    weak = SB.vortex(fx, *at, SB.Shape(peak=0.8))
+    for b in (small, weak):
+        assert math.hypot(b.wind_u, b.wind_v) < math.hypot(base.wind_u, base.wind_v)
+    tight = SB.Shape(outer=1.5)
+    assert SB.vortex(fx, *at, tight).weight == pytest.approx(0.6)
+    assert SB.vortex(fx, fx.lat, fx.lon + 1.6 * dlon, tight) is None
+    assert all(s.inner == 1.0 for s in SB.SWEEP.values())
+
+
+def test_check_scores_every_swept_shape(tracks):
+    a = tracks.storms[0]
+
+    class Fake:
+        def sample(self, t, lat, lon):
+            return {"wind_u": 10.0, "wind_v": 0.0, "hs": 3.0, "tp": 9.0, "wave_dir": 270.0}
+
+    rows = SB.pair_case(a, [(datetime(2020, 9, 1, 3), 35.0, 9.0)], Fake(), 30.5, -59.8, "x:1")
+    assert all(f"sweep_{k}_ws10" in rows[0] for k in SB.SWEEP)
+    lines = []
+    SB.summarise_check(rows, log=lines.append)
+    assert any(line.startswith("c0.65_o1.5_p0.8") for line in lines)
