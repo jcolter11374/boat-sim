@@ -12,10 +12,13 @@ How many: one cited survey fixes the scale. NOAA's AMAPPS northeast shipboard
 survey, summer 2016 (NEFSC; GBIF/OBIS dataset 5d89b3ba-fad9-4481-9a4e-
 d1303f776a65), logged over 1,200 cetacean groups and 1,977 seabird groups on
 about 5,354 km of track between 36 and 42N, 65 and 74W, offshore of the 100 m
-depth contour. With an effective search half-width of HALF_WIDTH_KM either
-side of the track (GUESS: an observer low on a small boat, without the
-survey's big binoculars), that's groups per km^2 there; elsewhere scales with
-OBIS records against that box, between FLOOR and CEILING times it (GUESS).
+depth contour. Seabirds were counted in a 300 m strip to one side of the
+ship (the survey's protocol), so their groups per km^2 there follow directly.
+Cetaceans are seen much further off; we take an effective search half-width
+of CETACEAN_HALF_WIDTH_KM either side of the track for each kind (GUESS:
+dolphins at sea level, whales' blows further), split by the kinds' shares of
+OBIS records in the survey box. Elsewhere scales with OBIS records against
+that box, between FLOOR and CEILING times it (GUESS).
 
 Thread sandboxes can't reach OBIS; the "Build wildlife map" workflow runs this
 on GitHub's runners and commits the result.
@@ -49,7 +52,8 @@ GROUPS = {
 SURVEY_BOX = (36.0, 42.0, -74.0, -65.0)
 SURVEY_KM = 5354.0
 SURVEY_GROUPS = {"cetaceans": 1200.0, "birds": 1977.0}
-HALF_WIDTH_KM = 1.5  # GUESS
+BIRD_STRIP_KM = 0.3  # the survey's seabird strip, one side
+CETACEAN_HALF_WIDTH_KM = {"dolphins": 1.5, "whales": 3.0}  # GUESS
 FLOOR = 0.02  # GUESS: even the least-watched open ocean has some life
 CEILING = 3.0  # GUESS
 
