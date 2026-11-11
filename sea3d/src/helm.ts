@@ -910,6 +910,15 @@ async function wheelEnded(r: WheelResult): Promise<void> {
   showOrder();
   setRate(wheelRate);
 }
+/** The results card's line on the wheel spells (Sam's trim_watches / trim_gain_km). */
+function trimLine(c: Card): string {
+  const n = c.trim_watches ?? 0;
+  if (!n || c.trim_gain_km == null) return "";
+  const km = Math.abs(c.trim_gain_km);
+  const amount = km < 0.05 ? "about nothing" : `about ${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+  const way = km < 0.05 ? "" : c.trim_gain_km > 0 ? " gained" : " lost";
+  return `Your trimming at the wheel was worth ${amount}${way} over ${n} watch${n > 1 ? "es" : ""}, against the autopilot's own trim.`;
+}
 function wheelOffered(): boolean {
   return page.ready && !page.status?.over && mode === "hands_on" && canTakeWheel(spec.key) && !cine.on;
 }
@@ -1204,6 +1213,7 @@ async function finish(): Promise<void> {
           ? "A draw: within a day of each other, which is down to the weather's luck."
           : "Neither boat finished.";
   $("r-head").textContent = head;
+  $("r-trim").textContent = trimLine(c);
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
   const line = (who: string, x: Card["boat"]) => {
     const tr = document.createElement("tr");

@@ -122,6 +122,9 @@ export interface Card {
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
+  /** Take the wheel spells (phase 2): watches a spell set, and what they were worth through the water vs the autopilot's trim (km). */
+  trim_watches?: number;
+  trim_gain_km?: number;
 }
 export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "silence" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
