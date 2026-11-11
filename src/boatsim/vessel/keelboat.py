@@ -27,8 +27,14 @@ there is fuel, and the boat goes at whichever is faster, motor or sail. With
 the sails down and no engine, the boat drifts with the kayak model's
 windage and current (the hull block).
 
-Gusts. The wind is never steady: gusts run about gust_sigma (GUESS 0.11,
-open-sea turbulence) of the mean, gusts_per_hour independent ones. The
+Gusts. The wind is never steady. We treat 3-second gusts as independent
+draws (gusts_per_hour 1200) with spread gust_sigma 0.085 of the mean, which
+puts the strongest gust in 10 minutes at about 1.23 x the mean: the WMO's
+at-sea gust factor (WMO/TD-1555, 2010). A small boat answers a gust within
+a few seconds, so 3-second gusts are the ones that count (GUESS). Rain
+marks showers and squalls, whose downdrafts gust far harder: the spread
+rises by squall_sigma_per_mm_h per mm/h of rain, up to squall_sigma_max
+(GUESS 0.03 and 0.17, so heavy rain doubles it). The
 autopilot trims for the mean wind, so a gust g times the mean pushes the
 heeling moment up by g^2 (heel moment = m0 cos^3(heel), m0 from the polar).
 If no heel below capsize_heel_deg balances it, the boat is knocked flat.
@@ -174,8 +180,10 @@ class KeelboatVessel(KayakVessel):
         self.engine_resist_n = float(prop.get("engine_resist_n", 1.0))
         self.engine_below_wind_kn = float(prop.get("engine_below_wind_kn", 5.0))
         self.fuel_l = float(prop.get("fuel_l", 0.0))
-        self.gust_sigma = float(v.get("gust_sigma", 0.11))  # GUESS
-        self.gusts_per_hour = float(v.get("gusts_per_hour", 30.0))  # GUESS
+        self.gust_sigma = float(v.get("gust_sigma", 0.085))  # WMO gust factor, see above
+        self.gusts_per_hour = float(v.get("gusts_per_hour", 1200.0))  # 3-second gusts
+        self.squall_sigma_per_mm_h = float(v.get("squall_sigma_per_mm_h", 0.03))  # GUESS
+        self.squall_sigma_max = float(v.get("squall_sigma_max", 0.17))  # GUESS
         cap = min(float(v.get("capsize_heel_deg", 90.0)), 89.0)
         phi = np.radians(np.arange(0.0, cap + 0.01, 1.0))
         gz = np.interp(np.degrees(phi), self.polar.gz_deg, self.polar.gz_m)
@@ -208,13 +216,19 @@ class KeelboatVessel(KayakVessel):
         head = 0.5 * (1.0 + math.cos(math.radians(wave_rel_deg)))
         return self.polar.waves_k * self.polar.disp_kg * H.G * hs * hs * (0.15 + 0.85 * head)
 
-    def gust_capsize_p(self, m0_nm: float, hours: float) -> float:
+    def gust_sigma_at(self, rain_mm_h: float) -> float:
+        """Gust spread (share of the mean wind), higher in showers and squalls."""
+        extra = self.squall_sigma_per_mm_h * max(rain_mm_h, 0.0)
+        return min(self.gust_sigma + extra, max(self.squall_sigma_max, self.gust_sigma))
+
+    def gust_capsize_p(self, m0_nm: float, hours: float, rain_mm_h: float = 0.0) -> float:
         """Chance that a gust knocks the boat flat in `hours` with the sails
         trimmed for a mean-wind heeling moment m0_nm (upright)."""
         if m0_nm <= 0.0 or not math.isfinite(self.max_m0_nm):
             return 0.0
         g = math.sqrt(self.max_m0_nm / m0_nm)  # gust ratio that capsizes it
-        p = 0.5 * math.erfc((g - 1.0) / (self.gust_sigma * math.sqrt(2.0)))
+        sigma = self.gust_sigma_at(rain_mm_h)
+        p = 0.5 * math.erfc((g - 1.0) / (sigma * math.sqrt(2.0)))
         return 1.0 - (1.0 - p) ** (self.gusts_per_hour * hours)
 
     # --- hooks into KayakVessel.step ---------------------------------------
@@ -291,7 +305,8 @@ class KeelboatVessel(KayakVessel):
             engine_on=bool(used and engine > 0.0),
         )
         if out.alive:
-            p = self.gust_capsize_p(self._step.get("m0", 0.0), dt.total_seconds() / 3600.0)
+            hours = dt.total_seconds() / 3600.0
+            p = self.gust_capsize_p(self._step.get("m0", 0.0), hours, env.rain)
             dice = self._last_dice
             if p > 0.0 and dice[GUST_SLOT] < p:
                 t = out.t

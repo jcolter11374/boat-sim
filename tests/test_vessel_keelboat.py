@@ -161,3 +161,55 @@ def test_a_voyage_runs_end_to_end():
     last = log.rows[-1]
     made_km = math.hypot((last["lon"] + 74.94) * 89.0, (last["lat"] - 36.65) * 111.0)
     assert 200 < made_km < 300  # about 5.6 kn, 250 km a day
+
+
+# --- the joke fleet's small boats: a crewless dinghy and beach cat --------------------
+
+SMALL = ("configs/stock_dinghy14.yaml", "configs/stock_beachcat16.yaml")
+
+
+@pytest.mark.parametrize("cfg", SMALL)
+def test_small_boats_load_with_generic_labels_and_sources(cfg):
+    d = load_design(cfg)
+    assert d.stock["label"] and d.stock["based_on"].startswith("published class specs of")
+    assert d.stock["sources"] and isinstance(make_vessel(d), KeelboatVessel)
+
+
+@pytest.mark.parametrize("cfg", SMALL)
+def test_squalls_flip_small_boats_but_never_the_cruiser(cfg, boat):
+    v = make_vessel(load_design(cfg))
+    m0 = v.polar.at(v.choose_plan(12, 90, None), 12, 90).m0_nm
+    dry, squall = v.gust_capsize_p(m0, 1.0, 0.0), v.gust_capsize_p(m0, 1.0, 4.0)
+    assert dry < 0.001 and squall > 0.2
+    cm0 = boat.polar.at("full", 16, 60).m0_nm
+    assert boat.gust_capsize_p(cm0, 24.0, 10.0) == 0.0  # ballast: wind alone can't flip it
+
+
+@pytest.mark.parametrize("cfg", SMALL)
+def test_once_over_it_stays_over(cfg, monkeypatch):
+    v = make_vessel(load_design(cfg))
+    monkeypatch.setattr(v, "gust_capsize_p", lambda *a: 1.0)
+    env = EnvState(wind_u=0.0, wind_v=5.0, hs=0.8, tp=5, wave_dir=0, rain=4.0)
+    s = v.initial_state(T0, 36.65, -74.94)
+    s2, ev = v.step(s, Command(90, 0.0), env, timedelta(minutes=10), np.random.default_rng(0))
+    kinds = [e.kind.name for e in ev]
+    assert "CAPSIZE" in kinds and "LOST" in kinds and not s2.alive
+
+
+def test_breaking_seas_roll_a_dinghy_long_before_a_yacht(boat):
+    from boatsim.vessel.hazards import knockdown_rate_per_hour
+
+    dinghy = make_vessel(load_design(SMALL[0]))
+    r_dinghy = knockdown_rate_per_hour(dinghy.hazards, 3.0, 7.0, 12.0)
+    r_yacht = knockdown_rate_per_hour(boat.hazards, 3.0, 7.0, 12.0)
+    assert r_dinghy > 1000 * r_yacht and r_dinghy > 0.005
+
+
+def test_a_cat_is_fast_and_a_dinghy_has_no_engine():
+    cat = Polar.load("configs/polars/beachcat16.json")
+    cruiser = Polar.load("configs/polars/cruiser31.json")
+    assert cat.speed_ms(14 * KNOT, 135) > cruiser.speed_ms(14 * KNOT, 135)  # downwind flyer
+    dinghy = make_vessel(load_design(SMALL[0]))
+    calm = EnvState(wind_u=1.0, wind_v=0.0, hs=0.2, tp=5, wave_dir=270)
+    s = _run(dinghy, calm, Command(90, 1.0))
+    assert not s.engine_on and s.speed_through_water < 1.0 * KNOT

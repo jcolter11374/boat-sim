@@ -407,25 +407,29 @@ def main(argv=None) -> None:
     a = ap.parse_args(argv)
     raw = yaml.safe_load(Path(a.design).read_text())
     v = raw["vpp"]
-    ref = v["orc"]
-    crewed = replace(VPPParams.from_config(v), crew_kg=ref["crew_kg"], crew_arm_m=ref["crew_arm_m"])
-    if a.fit:
-        crewed = fit(crewed, ref)
-    print("With the certificate's crew on the rail (fit, 8-20 kn):")
-    worst = report(compare(crewed, ref, 8, 20))
-    print(f"worst {worst:.1%}")
-    solo = replace(crewed, crew_kg=0.0)
-    print("Autopilot, nobody on the rail:")
-    rows = compare(solo, ref, 6, 20)
-    report(rows)
-    ratios = [r["model"] / r["ref"] for r in rows if r["what"] in ("beat", 52, 75, 90)]
-    print(f"crew factor upwind and reaching: {np.mean(ratios):.3f} (min {min(ratios):.3f})")
+    ref = v.get("orc")
+    solo = VPPParams.from_config(v)
+    source = f"boatsim.vessel.vpp on {a.design}: no published polar to fit, all GUESS inputs"
+    if ref:
+        crewed = replace(solo, crew_kg=ref["crew_kg"], crew_arm_m=ref["crew_arm_m"])
+        if a.fit:
+            crewed = fit(crewed, ref)
+        print("With the certificate's crew on the rail (fit, 8-20 kn):")
+        worst = report(compare(crewed, ref, 8, 20))
+        print(f"worst {worst:.1%}")
+        solo = replace(crewed, crew_kg=0.0)
+        print("Autopilot, nobody on the rail:")
+        rows = compare(solo, ref, 6, 20)
+        report(rows)
+        ratios = [r["model"] / r["ref"] for r in rows if r["what"] in ("beat", 52, 75, 90)]
+        print(f"crew factor upwind and reaching: {np.mean(ratios):.3f} (min {min(ratios):.3f})")
+        source = (
+            f"boatsim.vessel.vpp on {a.design}: fitted to the ORC certificate with its crew, "
+            "then sailed with nobody on the rail (autopilot)"
+        )
     out = Path(a.out or Path(a.design).parent / v["polar_file"])
     table = polar(solo)
-    table["source"] = (
-        f"boatsim.vessel.vpp on {a.design}: fitted to the ORC certificate with its crew, "
-        "then sailed with nobody on the rail (autopilot)"
-    )
+    table["source"] = source
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(table, separators=(",", ":")) + "\n")
     print(f"wrote {out}")
