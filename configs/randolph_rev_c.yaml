@@ -2,6 +2,7 @@
 # written by the Randolph team (MIT, see THIRD_PARTY_NOTICES.md) and is kept as they
 # wrote it. Like configs/randolph_rev_b.yaml, it is a model of their boat run in OUR
 # simulator, not their simulator; their own simulator is the authority on Rev C.
+# Matches their file as of 11 Nov 2026 17:35 UTC (Rev C4: new mast bearings only, sha256 33972a888f51...).
 #
 # Randolph Rev C in boat-sim's config format, written by the Randolph team (sheltonr2/drone-boat,
 # designs/boat-sim/randolph_rev_c.yaml, 10 Nov 2026) from boat-sim's own randolph_rev_b.yaml (MIT).
