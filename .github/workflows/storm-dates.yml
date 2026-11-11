@@ -1,0 +1,36 @@
+# Weather-challenge list: check the draft's storm dates and places against NOAA's
+# best tracks (IBTrACS). Small: one 58 MB download, no weather data, no secrets.
+# Runs by hand (Actions tab -> "Challenge storm dates") and on PRs that change it.
+name: Challenge storm dates
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/storm-dates.yml"
+      - "src/boatsim/oceandata/storm_dates.py"
+permissions:
+  contents: read
+jobs:
+  dates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Download IBTrACS North Atlantic (about 58 MB)
+        run: |
+          curl -sSL --retry 3 --max-time 600 \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" -o ibtracs.csv
+      - name: Check the dates
+        run: |
+          mkdir -p out
+          python -m boatsim.oceandata.storm_dates ibtracs.csv --json out/challenge_storm_dates.json | tee out/challenge_storm_dates.txt
+          { echo '```'; cat out/challenge_storm_dates.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: challenge-storm-dates
+          path: out/
+          retention-days: 90

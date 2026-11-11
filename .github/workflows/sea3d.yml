@@ -84,6 +84,16 @@ jobs:
           gh release download seastate-data -R "$GITHUB_REPOSITORY" -D public/seastate \
             -p 'seastate_*' -p 'depth_*' \
             && ls -l public/seastate || echo "no seastate-data release yet: the sea uses the replays' waves"
+      # Land for the 3D views (landdata.yml, display only): Pico and Annapolis.
+      # Optional: without the release the pages show no land.
+      - name: Fetch the land files
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download land-data -R "$GITHUB_REPOSITORY" -D public/land \
+            -p 'pico_*' -p 'annapolis*' \
+            && ls -l public/land || echo "no land-data release yet: no land in the 3D views"
       - name: Type-check and build
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)
