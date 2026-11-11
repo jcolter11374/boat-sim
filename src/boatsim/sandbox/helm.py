@@ -168,10 +168,14 @@ class PlayerBase:
         }
 
 
-def port_start(port_id: str) -> tuple[float, float]:
+PORT_EDGE_DEG = 1.0  # a launch point at least one weather cell inside the bundle
+
+
+def port_start(port_id: str, env=None) -> tuple[float, float]:
     """A port's launch point (oceandata/ports.py): where a support boat drops the
     boat when it sails from that port. Only ports whose voyage crosses the race
-    start line and that the browser's weather covers."""
+    start line, with the launch point inside the weather actually loaded (a
+    challenge's own bundle included) and clear of its edge."""
     from boatsim.oceandata import ports
 
     p = ports.load().get(port_id)
@@ -181,7 +185,13 @@ def port_start(port_id: str) -> tuple[float, float]:
         raise ValueError(
             f"can't sail from {p['name']}: its voyage wouldn't cross the start line here"
         )
-    return float(p["launch_lat"]), float(p["launch_lon"])
+    lat, lon = float(p["launch_lat"]), float(p["launch_lon"])
+    w = getattr(env, "weather", None)  # a bundle's weather grid; full data has no edge to check
+    if w is not None:
+        e = PORT_EDGE_DEG
+        if not (w.lats[0] + e <= lat <= w.lats[-1] - e and w.lons[0] + e <= lon <= w.lons[-1] - e):
+            raise ValueError(f"can't sail from {p['name']}: this weather doesn't reach it")
+    return lat, lon
 
 
 def _iso(t: datetime) -> str:
@@ -235,7 +245,7 @@ class Game:
         # route (and base's "route" orders) start there too; the finish is unchanged.
         self.start_port = start_port
         self.drop = (
-            port_start(start_port) if start_port else (voyage["drop_lat"], voyage["drop_lon"])
+            port_start(start_port, env) if start_port else (voyage["drop_lat"], voyage["drop_lon"])
         )
         land = default_land()
         self.breakdowns = breakdowns
@@ -643,7 +653,6 @@ class Game:
             "l": self.launch_index,
             "day": self.day,
             "ch": self.challenge,
-            "sp": self.start_port,
             "m": self.mode,
             "s": self.safe,
             "b": self.breakdowns,
@@ -652,6 +661,8 @@ class Game:
             "at": round((self.mine.state.t - self.start).total_seconds() / 60),
             "p": [round(self.mine.state.lat, 4), round(self.mine.state.lon, 4)],
         }
+        if self.start_port:
+            payload["sp"] = self.start_port  # only when set, so other codes stay as they were
         raw = zlib.compress(json.dumps(payload, separators=(",", ":")).encode(), 9)
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 

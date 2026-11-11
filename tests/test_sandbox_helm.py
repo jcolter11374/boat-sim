@@ -373,3 +373,26 @@ def test_a_port_start_still_logs_the_start_line(env, monkeypatch):
     g.order(90.0, 1.0)  # due east, across the line at 40N 65W
     g.run(hours=12)
     assert g.mine.log.t_start_line is not None
+
+
+def test_a_port_must_be_inside_the_weather_loaded(env, monkeypatch):
+    """Checked against the bundle in use (a challenge brings its own), not only
+    the precomputed corridor flag: no drop on or past the grid's edge."""
+    from boatsim.oceandata import ports
+
+    lats, lons = env.weather.lats, env.weather.lons
+    edge = {"id": "edge", "name": "Edge", "in_corridor": True, "crosses_start": True}
+    edge |= {"launch_lat": float(lats[0]) + 0.5, "launch_lon": float(lons[0]) + 5}
+    inside = edge | {"id": "in", "launch_lat": float(lats[0]) + 2}
+    monkeypatch.setattr(ports, "load", lambda path=None: {"edge": edge, "in": inside})
+    with pytest.raises(ValueError, match="doesn't reach"):
+        Game(env, launch_index=MAY1, start_port="edge")
+    assert (
+        Game(env, launch_index=MAY1, start_port="in", max_days=0.5).drop[0] == inside["launch_lat"]
+    )
+
+
+def test_ports_file_is_read_once():
+    from boatsim.oceandata import ports
+
+    assert ports.load() is ports.load()

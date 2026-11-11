@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -214,7 +215,13 @@ PORTS_JSON = "sea3d/public/ports.json"  # also in the browser pack (sandbox PACK
 
 def load(path: str | Path | None = None) -> dict[str, dict]:
     """The published ports by id. Looked for from the working directory (the
-    browser pack's root, or the repo) and then from the repo this file is in."""
+    browser pack's root, or the repo) and then from the repo this file is in.
+    Read once: each new or shared game asks."""
+    return _load(str(path) if path else None)
+
+
+@lru_cache(maxsize=4)
+def _load(path: str | None) -> dict[str, dict]:
     tries = (
         [Path(path)]
         if path
