@@ -46,6 +46,7 @@ uniform vec3 uShallow;
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
+varying float vFade;
 vec3 gDisp;
 vec3 gNorm;
 // Same as waves.ts displace(), plus the surface slope for the normal.
@@ -82,6 +83,7 @@ transformed += gDisp;
 `;
 const VERT_BODY = /* glsl */ `
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+vFade = fade;
 float hRel = uAmp > 0.0 ? gDisp.y / uAmp : 0.0; // about -2..2
 vCrest = clamp(gDisp.y / max(uAmp, 0.05), -1.0, 1.5);
 vFoam = uFoamAmt > 0.0 ? uFoamAmt * smoothstep(0.4, 1.3, hRel) : 0.0;
@@ -100,9 +102,14 @@ uniform float uRough;
 uniform float uCover;
 uniform vec2 uWind;
 uniform float uChop;
+uniform int uN;
+uniform float uQ;
+uniform vec4 uWa[${MAX_WAVES}];
+uniform vec2 uWd[${MAX_WAVES}];
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
+varying float vFade;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -143,8 +150,25 @@ vec2 rippleSlope(vec2 p, float t, float fp, float far) {
     float gust = 0.6 + 0.8 * vnoise(p * 0.02 + uWind * t * 0.03); // patches of stronger wind
     g += c * uChop * gust * (1.0 - far);
   }
-  vec2 s = ripple(p, 13.0, 0.9, 0.05, t) + ripple(p, 23.0, 2.6, 0.045, t) + ripple(p, 41.0, 5.6, 0.04, t);
-  return g + s * far * uRough;
+  return g;
+}
+// Out where the grid is flat, the same wave trains the near sea moves with,
+// carried on in the shading only: their slopes, each faded out once it is too
+// short for the pixel. So the sea keeps its real, irregular pattern to the
+// horizon instead of a few regular bands, and there is no seam where the
+// moving patch ends. Wave groups: the trains beat against each other already;
+// a slow patchiness on top keeps big stretches from looking the same.
+vec2 swellSlope(vec2 p, float t, float fp) {
+  vec2 g = vec2(0.0);
+  for (int i = 0; i < ${MAX_WAVES}; i++) {
+    if (i >= uN) break;
+    vec4 a = uWa[i];
+    vec2 u = uWd[i];
+    float th = a.y * dot(u, p) - a.z * t + a.w;
+    float L = 6.2831853 / a.y;
+    g -= u * (a.x * a.y * sin(th)) * smoothstep(1.5, 6.0, L / fp);
+  }
+  return g * (0.75 + 0.5 * vnoise(p * 0.004 + t * 0.003));
 }
 `;
 
@@ -172,6 +196,7 @@ const FRAG_NORMAL = /* glsl */ `
 {
   float fp = max(length(fwidth(vWPos.xz)), 1e-4);
   vec2 s = rippleSlope(vWPos.xz, uTime, fp, farMix) * (1.0 - 0.7 * foamMask);
+  if (vFade < 0.999) s += swellSlope(vWPos.xz, uTime, fp) * (1.0 - vFade);
   vec3 nW = (vec4(normal, 0.0) * viewMatrix).xyz; // view -> world
   nW = normalize(nW + vec3(-s.x, 0.0, -s.y));
   normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
@@ -247,7 +272,7 @@ export class Sea {
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v4";
+    material.customProgramCacheKey = () => "boatsim-sea-v5";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
