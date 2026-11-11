@@ -268,6 +268,53 @@ def report(board: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def summary(board: dict, reference: str = "k-p25") -> dict:
+    """What the leaderboard page draws, worked out here so the page does no
+    statistics: fairness problems, tiers, each design's paired verdict against
+    the reference (the kayak as planned) and its holdout rate."""
+    by = {e["design"]: e for e in board["entries"]}
+    ref = by.get(reference)
+    flags = holdout_flags(board)
+    rows = []
+    for r in rank(board):
+        e = by[r["design"]]
+        row = {
+            **r,
+            "label": e.get("label", r["design"]),
+            "class": e.get("class", DRONE_CLASS),
+            "finished": sum(_finished(x) for x in e["launches"]),
+        }
+        if (e.get("holdout") or {}).get("launches"):
+            h, hlo, hhi = finish_rate(e, "holdout")
+            row["holdout"] = {
+                "finish_rate": h,
+                "ci95": [hlo, hhi],
+                "launches": len(e["holdout"]["launches"]),
+                "flag": any(f.startswith(f"{r['design']}:") for f in flags),
+            }
+        if ref is not None and r["design"] != reference:
+            pr = paired(e, ref)
+            row["vs_reference"] = {
+                "gap": pr.gap,
+                "ci95": [pr.lo, pr.hi],
+                "gained": pr.a_only,
+                "lost": pr.b_only,
+                "p": pr.p,
+                "clear": pr.clear,
+                "words": pr.words(),
+            }
+        rows.append(row)
+    problems = check_board(board)
+    return {
+        "fair": not problems,
+        "problems": problems,
+        "reference": reference if ref is not None else None,
+        "reference_label": ref.get("label", reference) if ref is not None else None,
+        "rows": rows,
+        "holdout_flags": flags,
+    }
+
+
 # --- Building a board (data side; the leaderboard workflow) -------------------
 
 KAYAK_BADGE = "3.05 m hull: breaks the race's 2.4 m cap"
@@ -393,7 +440,7 @@ def assemble(public, holdout, every_days: int, public_years, holdout_years) -> d
         if holdout is not None:
             e["holdout"] = {"launches": rows(holdout, bid)}
         entries.append(e)
-    return {
+    board = {
         "board": {
             "launch_set": launch_set_id(public_years, every_days),
             "holdout_set": launch_set_id(holdout_years, every_days) if holdout_years else None,
@@ -402,6 +449,8 @@ def assemble(public, holdout, every_days: int, public_years, holdout_years) -> d
         },
         "entries": entries,
     }
+    board["summary"] = summary(board)
+    return board
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -422,12 +471,15 @@ def main(argv: list[str] | None = None) -> None:
     b.add_argument("--every-days", type=int, default=7)
     b.add_argument("--out", required=True)
     b.add_argument("--strict", action="store_true", help="exit 1 if any fairness rule fails")
+    m = sub.add_parser("summarise", help="add the page's summary to an existing board JSON")
+    m.add_argument("board")
+    m.add_argument("--out", help="default: rewrite the board file")
     argv = list(argv) if argv is not None else None
     # Old form: `python -m boatsim.mc.leaderboard board.json [--strict]`.
     import sys
 
     raw = argv if argv is not None else sys.argv[1:]
-    if raw and raw[0] not in ("report", "score-year", "assemble", "-h", "--help"):
+    if raw and raw[0] not in ("report", "score-year", "assemble", "summarise", "-h", "--help"):
         raw = ["report", *raw]
     a = p.parse_args(raw)
     if not enabled():
@@ -439,6 +491,11 @@ def main(argv: list[str] | None = None) -> None:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(a.out, index=False)
         print(f"{len(df)} voyages, {df['build'].nunique()} builds, year {a.year}")
+        return
+    if a.cmd == "summarise":
+        board = json.loads(Path(a.board).read_text())
+        board["summary"] = summary(board)
+        Path(a.out or a.board).write_text(json.dumps(board, indent=1))
         return
     if a.cmd == "assemble":
         import pandas as pd
