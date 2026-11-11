@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -42,6 +42,7 @@ KM_PER_DEG = 111.2
 
 @dataclass(frozen=True)
 class Port:
+    id: str  # the name as a slug; "-37n-76w" added where two ports share a name
     name: str
     lat: float
     lon: float
@@ -49,6 +50,10 @@ class Port:
     launch_lon: float
     launch_km: float  # port to launch point by water (roughly: 8-way steps on the mask)
     in_corridor: bool  # the launch point is inside the browser bundles
+    # The straight line from the launch point to the finish target crosses the
+    # race's western start line (runner/arrival.py), so a voyage from here can
+    # start under the Microtransat rules. False for the Azores, Iberia and Bermuda.
+    crosses_start: bool
 
 
 def read_ports(geojson: str | Path, box) -> list[tuple[str, float, float]]:
@@ -118,6 +123,20 @@ def launch_point(mask, ocean: np.ndarray, lat: float, lon: float, clear_km=CLEAR
     return float(la[k]), float(lo[k]), float(max(km, d[k]))
 
 
+def crosses_start(lat: float, lon: float) -> bool:
+    from boatsim.runner.arrival import DEFAULT_TARGET, WEST_LINE, crosses
+
+    return crosses(WEST_LINE, (lat, lon), DEFAULT_TARGET)
+
+
+def slug(name: str) -> str:
+    import re
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", plain.lower()).strip("-")
+
+
 def in_corridor(lat: float, lon: float) -> bool:
     a, b, c, d = CORRIDOR
     return a <= lat <= b and c <= lon <= d
@@ -140,12 +159,32 @@ def build(geojson: str | Path, mask=None, log=print) -> list[Port]:
             skipped.append(name)
             continue
         la, lo, km = lp
+        la, lo = round(la, 3), round(lo, 3)
         ports.append(
-            Port(name, lat, lon, round(la, 3), round(lo, 3), round(km, 1), in_corridor(la, lo))
+            Port(
+                slug(name),
+                name,
+                lat,
+                lon,
+                la,
+                lo,
+                round(km, 1),
+                in_corridor(la, lo),
+                crosses_start(la, lo),
+            )
         )
+    # Unique ids: a shared name gets its whole-degree position.
+    names = [p.id for p in ports]
+    ports = [
+        replace(p, id=f"{p.id}-{abs(p.lat):.0f}{'ns'[p.lat < 0]}-{abs(p.lon):.0f}{'ew'[p.lon < 0]}")
+        if names.count(p.id) > 1
+        else p
+        for p in ports
+    ]
     log(
         f"{len(ports)} ports with open Atlantic within {SEARCH_KM:.0f} km by water "
-        f"({sum(p.in_corridor for p in ports)} inside the browser corridor); "
+        f"({sum(p.in_corridor for p in ports)} inside the browser corridor, "
+        f"{sum(p.in_corridor and p.crosses_start for p in ports)} of them west of the start line); "
         f"left out {len(skipped)}: {', '.join(skipped)}"
     )
     return ports
@@ -159,7 +198,9 @@ def dumps(ports: list[Port]) -> str:
                 "clear_km": CLEAR_KM,
                 "source": "Natural Earth 1:10m ports (public domain), " + SOURCE_URL,
                 "notes": "launch_*: nearest open-Atlantic point at least clear_km from land "
-                "on the simulator's land mask; in_corridor: inside the browser bundles.",
+                "on the simulator's land mask; in_corridor: inside the browser bundles; "
+                "crosses_start: the line from the launch point to the finish crosses the "
+                "race start line.",
             },
             indent=1,
             ensure_ascii=False,

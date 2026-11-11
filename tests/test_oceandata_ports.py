@@ -54,10 +54,19 @@ def test_corridor_and_duplicates(tmp_path, monkeypatch):
     assert not P.in_corridor(49.0, -5.0) and P.in_corridor(36.6, -74.9)
 
 
+def test_start_line_and_ids():
+    assert P.crosses_start(36.65, -74.94)  # our drop, off the Bay mouth
+    assert not P.crosses_start(38.51, -9.45)  # off Lisbon: east of the start line
+    assert not P.crosses_start(37.57, -25.67)  # off the Azores
+    assert P.slug("Saint-John's") == "saint-john-s" and P.slug("A Coruña") == "a-coruna"
+
+
 def test_published_list():
     d = json.loads((P.Path(__file__).resolve().parents[1] / "sea3d/public/ports.json").read_text())
     names = {p["name"] for p in d["ports"]}
     assert {"Norfolk", "Baltimore", "Lisboa", "Horta"} <= names
+    assert len({p["id"] for p in d["ports"]}) == len(d["ports"])
     for p in d["ports"]:
         assert P.in_corridor(p["launch_lat"], p["launch_lon"]) == p["in_corridor"]
+        assert P.crosses_start(p["launch_lat"], p["launch_lon"]) == p["crosses_start"]
         assert 0 <= p["launch_km"] <= P.SEARCH_KM + 50
