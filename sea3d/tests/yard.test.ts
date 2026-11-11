@@ -205,7 +205,7 @@ test("the Randolph bases build from Theo's slot table, as built by default", () 
     assert.equal(plan.base, key);
     const s = summarise(rc!, plan);
     // As built: their published weight, 40 W of panels, 192 Wh, no motor, the YB3 as backup tracker.
-    assert.equal(s.massKg, key === "revc" ? 25.2 : 20.8);
+    assert.equal(s.massKg, key === "revc" ? 26.9 : 20.8); // Rev C3 (11 Nov 2026)
     assert.equal(s.solarW, 40);
     assert.equal(s.batteryWh, 192);
     assert.equal(s.thrusters, 0);

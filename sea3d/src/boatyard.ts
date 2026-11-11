@@ -406,7 +406,7 @@ const INTRO: Record<BaseKey, string> = {
   kayak:
     "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ESTIMATE marks figures nobody has measured or quoted yet.",
   revc:
-    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ESTIMATE marks our guesses.",
+    "Our model of the Randolph team's Rev C3 (11 Nov 2026): a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ESTIMATE marks our guesses.",
   revb:
     "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ESTIMATE marks our guesses.",
 };

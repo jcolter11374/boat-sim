@@ -276,7 +276,8 @@ export function buildKayak(quality: Quality): BoatModel {
 }
 
 // =====================================================================
-// RANDOLPH DRONE, Rev B. Every number from their build-files/source/design.py (mm -> m).
+// RANDOLPH DRONE. Every number from their build-files/source/design.py (mm -> m); Rev C3
+// (11 Nov 2026): fibreglass stern post and counterweight arm, YB3 off the post (Boatyard dress).
 // =====================================================================
 export function buildRandolph(quality: Quality): BoatModel {
   const kit = new Kit(quality);
@@ -321,6 +322,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     const pvc = kit.std(0xe9ecee);
     const dark = kit.std(0x26292c);
     const spar = kit.std(0x2a2d31, { metalness: 0.4 });
+    const glass = kit.std(0xd6d3bd, { roughness: 0.5 }); // pultruded fibreglass (Rev C3)
     kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
     kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
     // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.
@@ -333,11 +335,11 @@ export function buildRandolph(quality: Quality): BoatModel {
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
     kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
     kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot).name = "tail_flap";
-    kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]);
+    kit.rod(pivot, glass, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]); // 12 mm solid fibreglass rod
     kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
     // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
     kit.box(g, dark, 1.49, 1.545, 0.15, 0.2, -0.02, 0.02);
-    kit.cyl(g, spar, 0.01, 1.53, 0.15, 0.65);
+    kit.cyl(g, glass, 0.01, 1.53, 0.15, 0.65); // 20 x 2 mm fibreglass tube
     kit.cyl(g, pvc, 0.04, 1.53, 0.553, 0.567);
     kit.cyl(g, dark, 0.018, 1.53, 0.65, 0.69);
     const vane = new THREE.Group();
@@ -360,7 +362,7 @@ export function buildRandolph(quality: Quality): BoatModel {
       entangled: V(0.62, -0.26, 0),
       electronics_main: V(0.43, 0.42, 0), // under the hatch
       leak_main_tub: V(0.43, 0.2, 0.24),
-      beacon: V(1.45, 0.47, 0),
+      beacon: V(0.18, 0.27, 0), // the YB3's foredeck well (Rev C3)
       comms_silent: V(1.53, 0.76, 0),
     },
     smoky: ["electronics_main"],

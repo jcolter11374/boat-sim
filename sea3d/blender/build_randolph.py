@@ -138,7 +138,9 @@ def build(out: Path) -> None:
     rod("boom", (x, 0.276, 0), (x + 0.6, 0.276, 0), 0.006, spar, parent=wp)
     cylinder("flap_hinge", 0.016, x + 0.6, 0.255, 0.3, 0, dark, segs=20, parent=wp)
     foil("tail_flap", 0.12, 0.12, x + 0.576, x + 0.576, 0.3, 0.5, 0.12, teal, n_span=2, parent=wp)
-    rod("counter_arm", (x, 0.276, 0), (x - 0.3, 0.276, 0), 0.006, spar, parent=wp)
+    # Rev C3: the counterweight arm and the stern post are fibreglass (Structural_Review.md).
+    glass = material("fibreglass", base=hexcol(0xD6D3BD), rough=0.5)
+    rod("counter_arm", (x, 0.276, 0), (x - 0.3, 0.276, 0), 0.006, glass, parent=wp)
     cylinder(
         "counterweight",
         0.032,
@@ -152,7 +154,7 @@ def build(out: Path) -> None:
 
     # Stern pole: transom bracket, antenna platform at 560 mm, wind vane at 650 mm.
     rounded_box("bracket", 1.49, 1.545, 0.15, 0.2, -0.02, 0.02, dark, 0.003)
-    cylinder("stern_pole", 0.01, 1.53, 0.15, 0.65, 0, spar, segs=16)
+    cylinder("stern_pole", 0.01, 1.53, 0.15, 0.65, 0, glass, segs=16)
     cylinder("antenna_disc", 0.04, 1.53, 0.553, 0.567, 0, pvc)
     cylinder("vane_bearing", 0.018, 1.53, 0.65, 0.69, 0, dark, segs=20)
     vp = pivot("vane_pivot", VANE_AT)
