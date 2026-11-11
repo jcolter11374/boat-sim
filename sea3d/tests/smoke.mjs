@@ -674,6 +674,18 @@ try {
     if (vb.join() !== "kayak,randolph") fail(`race 3D views show ${vb.join()}`);
     await page.screenshot({ path: "test-output/race.png", fullPage: true });
     log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
+    // My boat is boat A to start with, and the race sails its own parts.
+    await page.evaluate(() => localStorage.setItem("boatsim.myboat.v1", JSON.stringify({ v: 1, kind: "yard", base: "kayak", hash: "#thr=one-t200", name: "One motor", choices: { thr: "one-t200", cruise_w: 25 }, saved: "2026-11-11T00:00:00.000Z" })));
+    await page.goto(`${URL}race.html`);
+    const selA = await page.evaluate(() => ({ v: document.getElementById("baseA").value, text: document.getElementById("baseA").selectedOptions[0]?.textContent }));
+    if (selA.v !== "mine" || selA.text !== "My boat: One motor") fail(`race: my boat isn't boat A: ${JSON.stringify(selA)}`);
+    await page.selectOption("#launch", "4");
+    await page.click("#go");
+    await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
+    const rm = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, names: window.__race.status?.boats.map((b) => b.name) }));
+    if (!rm.ready || rm.err) fail(`race with my boat: ${JSON.stringify(rm)}`);
+    await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
+    log.push(`race with my boat: ${rm.names.join(" vs ")}`);
   } else {
     // No files: the page checks before loading Python (a preview server answers the
     // missing zip with HTML, which Pyodide would choke on). An old simulator: NO_RACE.
