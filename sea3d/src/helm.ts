@@ -5,6 +5,7 @@
 // the results card. Display only: the physics is all in the simulator.
 
 import * as THREE from "three";
+import { NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea } from "./water";
@@ -137,6 +138,32 @@ function buildBoat(): void {
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
+  placeDeckLight();
+}
+
+// Night (Leo's review, #334): the sky stays as dark as the night really is, but the boat's
+// own light (its all-round or masthead lantern) falls on its deck and on the foam beside it,
+// so you can still see your boat. Only your boat: a light per ship would cost every
+// material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
+const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
+deckLight.name = "deck_light";
+/** Candela at full night, and the foam's floor of light: tuned on the kayak at 1 AM, moonless. */
+const DECK_CD = 3.2;
+const FOAM_AT_NIGHT = 0.3;
+function placeDeckLight(): void {
+  if (!model) return;
+  deckLight.removeFromParent();
+  const nav = model.root.getObjectByName("nav_lights");
+  const lamp = nav?.children[0];
+  if (nav && lamp) {
+    deckLight.position.copy(lamp.position);
+    nav.add(deckLight);
+  } else {
+    const box = new THREE.Box3().setFromObject(model.root);
+    deckLight.position.set(0, box.max.y + 0.1, 0);
+    model.root.add(deckLight);
+  }
+  deckLight.distance = 6 * Math.max(1, spec.length / KAYAK.length);
 }
 /** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
@@ -1635,11 +1662,12 @@ renderer.setAnimationLoop(() => {
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
+    deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
-      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: Math.max(atmos.ambient, FOAM_AT_NIGHT * NAV_NIGHT.value) });
     }
     model.gear.update(
       {
