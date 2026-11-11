@@ -437,8 +437,8 @@ try {
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
   // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
-  const boats = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
-  if (boats.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(boats)}`);
+  const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
+  if (picks.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
   // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
   // so a whole game fits in the smoke test.
   await page.selectOption("#launch", "2");
