@@ -27,7 +27,7 @@ export interface TrackColours {
   beacon: string;
   glow: string;
 }
-export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7", TrackColours> = {
+export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45", TrackColours> = {
   kayak: { main: "#ff8a2a", beacon: "#9cc8ff", glow: "rgba(255,140,40,0.9)" },
   randolph: { main: "#2ec4b6", beacon: "#b4f0ea", glow: "rgba(46,196,182,0.9)" },
   randolph_c: { main: "#b78cff", beacon: "#e0d0ff", glow: "rgba(183,140,255,0.9)" },
@@ -35,6 +35,7 @@ export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser3
   stock_dinghy14: { main: "#ffd84a", beacon: "#fff0b0", glow: "rgba(255,216,74,0.9)" },
   stock_beachcat16: { main: "#ff5d6c", beacon: "#ffc4ca", glow: "rgba(255,93,108,0.9)" },
   stock_sail_drone7: { main: "#f2d03d", beacon: "#fff2b8", glow: "rgba(242,208,61,0.9)" },
+  stock_ocean_rower45: { main: "#5aa9e6", beacon: "#d4ecff", glow: "rgba(90,169,230,0.9)" },
 };
 const SILENT = "#8a94a3";
 

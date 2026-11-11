@@ -56,6 +56,7 @@ from boatsim.autonomy.sailing import tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
 from boatsim.geo import distance_m
+from boatsim.runner import arrival
 from boatsim.runner.simulate import (
     Voyage,
     default_mission,
@@ -70,6 +71,18 @@ from boatsim.types import EventKind, Message, Outcome, Waypoint
 BREAKDOWNS = {EventKind.PART_FAILED, EventKind.CAPSIZE, EventKind.SHIP_STRIKE}
 DRAW_DAYS = 1.0  # a margin under this is "a draw, within the weather's luck" (docs/sandbox.md)
 LAND_WARN_KM = 50.0
+# A nearer ring, so a boat that starts inside LAND_WARN_KM (a port launch point
+# is ~20 km out) still gets a "land" stop before it runs ashore (Ravi, 11 Nov:
+# from Yarmouth on "finish", aground in 0.3 days with no stop). It fires the
+# first time the boat closes inside LAND_CLOSE_KM, and re-arms only once the boat
+# is back out past LAND_REARM_KM, so hugging the 10 km line doesn't stop every step.
+LAND_CLOSE_KM = 10.0
+LAND_REARM_KM = 15.0
+# The race's silence rule (runner/arrival.py SilenceClock, which ends the voyage
+# as disqualified): a "silence" stop warns the player first, once each, when
+# the boat has gone this long without a position reaching anyone.
+SILENCE_WARN_ROW_D = 7.0  # GUESS: 3 days before the 10-in-a-row limit
+SILENCE_WARN_TOTAL_D = 12  # GUESS: 3 days before the 15-in-total limit
 TRACK_STRIDE_H = 6.0
 UNTIL_CAP_H = 72.0  # "until something happens" stops by this at the latest (Maya, 11 Nov)
 MODES = ("hands_on", "base")
@@ -142,8 +155,17 @@ class PlayerBase:
         self.reports = [dict(self.last)]  # every report that reached base, the drop first
 
     def on_report(self, report, forecast):
-        self.last = dict(report)
-        self.reports.append(dict(report))
+        """A daily Iridium report reached base."""
+        self.last = {**report, "source": "iridium"}
+        self.reports.append(dict(self.last))
+
+    def on_ping(self, t: datetime, lat: float, lon: float) -> None:
+        """A Globalstar backup-beacon position reached base while the main
+        Iridium link was down (Game._hear_beacon). The beacon has its own solar
+        cell and pings every 6 hours, so when the main box is dead or flat it is
+        all base hears."""
+        self.last = {"t": _iso(t), "lat": round(lat, 4), "lon": round(lon, 4), "source": "beacon"}
+        self.reports.append(dict(self.last))
 
     def estimate(self, t: datetime) -> dict:
         """Where base guesses the boat is at `t`: the last report carried on at
@@ -300,6 +322,11 @@ class Game:
         # leader is a pass, including the first one away from the drop.
         self.leader: str | None = None
         self.last_pass: str | None = None
+        self.close_armed = self._land_km() > LAND_CLOSE_KM
+        self.last_close = False
+        self._events_seen = 0  # mine's log events already looked at (_step)
+        self.silence_warned: set[str] = set()  # "row" and/or "total": warned already
+        self.last_silence: str | None = None
         self._route = default_mission(self.drop).waypoints
 
     # ---------------------------------------------------------------- orders
@@ -418,6 +445,74 @@ class Game:
         self._advance(self.mine)
         self._advance(self.ghost, self.mine.state.t)
         self.last_pass = self._update_leader()
+        self.last_close = self._update_close()
+        self._hear_beacon()
+        self.last_silence = self._update_silence()
+
+    def _hear_beacon(self) -> None:
+        """Real base station mode: hand base the beacon positions that got
+        through this step while the main Iridium link is down (flat battery,
+        dead box), so base falls back to the beacon's 6-hourly fixes only when
+        it is the one thing still talking. While Iridium works, its daily
+        report is what base plans from. simulate() logs pings as events
+        without a position; a ping uses the position at the step it was sent,
+        which is this one. Hands on: nothing to do, base doesn't steer."""
+        events = self.mine.log.events
+        new, self._events_seen = events[self._events_seen :], len(events)
+        if self.mode != "base":
+            return
+        s = self.mine.state
+        if getattr(s, "electronics_on", True) and getattr(s, "iridium_ok", True):
+            return
+        for e in new:
+            if e.kind == EventKind.MESSAGE_RECEIVED and e.detail == "globalstar ping":
+                self.base.on_ping(e.t, s.lat, s.lon)
+
+    def silence(self) -> dict:
+        """How long the boat has gone unheard, against the race's limits
+        (runner/arrival.py: more than 10 days in a row or 15 in total ends the
+        voyage as disqualified). Iridium reports and beacon pings both count."""
+        clock, t = self.mine.silence, self.mine.state.t
+        return {
+            "days_in_a_row": (t - clock.last_tx).total_seconds() / 86400.0,
+            "days_total": clock.silent_total(t),
+            "limit_in_a_row": arrival.SILENT_DAYS_IN_A_ROW,
+            "limit_total": arrival.SILENT_DAYS_TOTAL,
+        }
+
+    def _update_silence(self) -> str | None:
+        """'silence' on the step the boat first goes SILENCE_WARN_ROW_D days
+        unheard (warned again only after it has been heard since), or first
+        reaches SILENCE_WARN_TOTAL_D silent days in total (once)."""
+        if self.mine.done:
+            return None
+        s = self.silence()
+        if s["days_in_a_row"] < SILENCE_WARN_ROW_D:
+            self.silence_warned.discard("row")
+        elif "row" not in self.silence_warned:
+            self.silence_warned.add("row")
+            return "silence"
+        if s["days_total"] >= SILENCE_WARN_TOTAL_D and "total" not in self.silence_warned:
+            self.silence_warned.add("total")
+            return "silence"
+        return None
+
+    def _land_km(self) -> float:
+        from boatsim.vessel.coast import distance_to_land_km
+
+        return distance_to_land_km(self.mine.state.lat, self.mine.state.lon)
+
+    def _update_close(self) -> bool:
+        """True on the step the boat first closes inside LAND_CLOSE_KM; armed
+        again once it is back past LAND_REARM_KM. Kept per step (not per run
+        call) so Game.load replays it the same way."""
+        km = self._land_km()
+        if self.close_armed and km <= LAND_CLOSE_KM:
+            self.close_armed = False
+            return True
+        if not self.close_armed and km >= LAND_REARM_KM:
+            self.close_armed = True
+        return False
 
     def _update_leader(self) -> str | None:
         """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
@@ -442,6 +537,7 @@ class Game:
         breakdown: bool = True,
         ghost_passes: bool = True,
         order_arrives: bool = True,
+        silence: bool = True,
         max_hours: float = UNTIL_CAP_H,
     ) -> dict:
         """Let time run until `hours` pass or a stop condition fires. With
@@ -449,10 +545,15 @@ class Game:
         ("time"), so a quiet ocean never swallows weeks of the voyage at once.
         Returns why it stopped, the status, and both boats' new 6-hourly rows.
 
-        Stop reasons: time, battery, wind, land, breakdown, ghost_passed,
-        passed_ghost, order_arrived (Real base station mode), over. A pass
+        Stop reasons: time, battery, wind, land, breakdown, silence,
+        ghost_passed, passed_ghost, order_arrived (Real base station mode), over. A pass
         means the lead changed hands by more than PASS_MARGIN_KM, after the
-        first PASS_QUIET_H (see _update_leader)."""
+        first PASS_QUIET_H (see _update_leader). "land" fires on entering
+        land_within_km, and also the first time the boat closes inside
+        LAND_CLOSE_KM (see _update_close), so a start near land still warns.
+        "silence" warns before the race's silence limits disqualify the boat
+        (see _update_silence and silence()).
+        land_within_km=None turns both off."""
         from boatsim.vessel.coast import distance_to_land_km
 
         v = self.mine
@@ -494,9 +595,11 @@ class Game:
                 stopped = "wind"
             elif land_within_km is not None:
                 now_near = distance_to_land_km(v.state.lat, v.state.lon) <= land_within_km
-                if now_near and not near:
+                if (now_near and not near) or self.last_close:
                     stopped = "land"
                 near = now_near
+            if stopped is None and silence and self.last_silence:
+                stopped = self.last_silence
             if stopped is None and ghost_passes and self.last_pass:
                 stopped = self.last_pass
         return {"stopped": stopped, "status": self.status(), "track": self.track(since=t0)}
@@ -529,6 +632,7 @@ class Game:
             "order": {"heading": self.helm.heading, "power": self.helm.power},
             "power_w": self.helm.power * self.max_drive_w,
             "sailboat": self.sailboat,
+            "silence": self.silence(),
         }
         if self.sailboat:
             st, tac = v.state, self.helm.tactician

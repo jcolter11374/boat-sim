@@ -412,6 +412,20 @@ try {
   if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
   log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
 
+  // Annapolis: the town stands on the land, and its waterfront lights reach the water.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&place=annapolis&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.land !== undefined, null, { timeout: 120000 })
+    .catch(async () => fail(`Annapolis didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const ann = await page.evaluate(() => ({ land: window.__replay.land, town: window.__replay.town, trees: window.__replay.trees, mirror: window.__replay.mirror, credit: /ODbL/.test(document.getElementById("credits").textContent) }));
+  // The page reports how strongly the sea mirrors the town and the boat (mirror.ts).
+  if (!(ann.mirror >= 0 && ann.mirror <= 1)) fail(`Annapolis: no mirror strength (${ann.mirror})`);
+  if (!ann.credit) fail("Annapolis: no ODbL credit on the page");
+  if (ann.town && !(ann.town.buildings > 1000 && ann.town.lights > 100 && ann.town.moorings > 10)) fail(`Annapolis: a thin town ${JSON.stringify(ann.town)}`);
+  if (errors.length) fail(`page errors off Annapolis: ${errors.join("; ")}`);
+  log.push(
+    ann.town ? `Annapolis: ${ann.town.buildings} buildings, ${ann.town.lights} lights on the water, ${ann.town.moorings} moorings, ${ann.trees} trees, mirror ${ann.mirror.toFixed(2)}, land ${ann.land}` : "Annapolis: no town files",
+  );
+
   // A stock boat: the cruiser's voyage, when the replays have one. It leans by the
   // replay's heel, and its sails follow the logged sail plan and the wind.
   const cruiser = await page.evaluate(async () => {
@@ -432,6 +446,17 @@ try {
     if (errors.length) fail(`page errors with the stock cruiser: ${errors.join("; ")}`);
     log.push(`stock cruiser: ${st.rig.plan}, heel ${st.rig.heel.toFixed(1)}`);
   } else log.push("stock cruiser: no replay yet");
+
+  // Take the helm near land: off Cascais, the Lisbon coast loads and the view reaches out to it.
+  await page.goto(`${URL}helm.html?quality=low&spot=38.668,-9.42`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.landKnown >= 0, null, { timeout: 60000 });
+  if (await page.evaluate(() => window.__helm.landKnown > 0)) {
+    await page.waitForFunction(() => window.__helm.land.place === "lisbon" && window.__helm.reach > 50000, null, { timeout: 120000 })
+      .catch(async () => fail(`helm: no Lisbon land off Cascais (${await page.evaluate(() => JSON.stringify({ land: window.__helm.land, reach: window.__helm.reach }))})`));
+    if (!(await page.evaluate(() => /Sentinel/.test(document.getElementById("landcredit").textContent)))) fail("helm: no land credit off Cascais");
+    if (errors.length) fail(`page errors at the helm off Cascais: ${errors.join("; ")}`);
+    log.push(`helm near land: ${await page.evaluate(() => JSON.stringify(window.__helm.land))}`);
+  } else log.push("helm near land: no land files");
 
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
@@ -456,14 +481,14 @@ try {
     // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
     // hits the same stops): then it must be a known reason, before hour 6.
     const six = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error }));
-    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
+    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
     if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
     if (await page.evaluate(() => !document.getElementById("sailrow").hidden)) fail("helm: sail and engine buttons show for the kayak");
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
     // stop a known reason, and the game ends in a results card that follows the draw rule.
-    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "passed_ghost", "over", "order_arrived"];
+    const STOPS = ["time", "battery", "wind", "land", "breakdown", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"];
     const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
     let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
     if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
@@ -522,7 +547,7 @@ try {
       await page.click("#s6");
       await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
       const s = await page.evaluate(() => ({ st: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
-      const known = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "passed_ghost", "over", "order_arrived"];
+      const known = ["time", "battery", "wind", "land", "breakdown", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"];
       if (s.err || !known.includes(s.stop) || !(s.st.day > 0 && s.st.day <= 0.25 + 1e-6)) fail(`helm challenge ${chFile.id}: 6 hours went wrong: ${JSON.stringify({ day: s.st?.day, stop: s.stop, err: s.err })}`);
       // Its own weather, not 2020's: the boat's clock is on the challenge's start day.
       if (s.st.boat.t.slice(0, 10) !== chFile.start.slice(0, 10)) fail(`helm challenge ${chFile.id}: boat clock ${s.st.boat.t}, challenge starts ${chFile.start}`);
@@ -564,6 +589,12 @@ try {
     if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
       || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
       fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
+    // The 3D views: each boat on its own sea, drawing, and the right boat in each.
+    await page.locator("#views").scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => window.__race.views.length === 2 && window.__race.views.every((v) => v.frames > 3), null, { timeout: 60000 })
+      .catch(async () => fail(`race 3D views: ${JSON.stringify(await page.evaluate(() => window.__race.views))}`));
+    const vb = await page.evaluate(() => window.__race.views.map((v) => v.boat));
+    if (vb.join() !== "kayak,randolph") fail(`race 3D views show ${vb.join()}`);
     await page.screenshot({ path: "test-output/race.png", fullPage: true });
     log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
   } else {

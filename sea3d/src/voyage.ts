@@ -19,9 +19,9 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
-import { BEACHCAT, CRUISER, DINGHY, KAYAK, RANDOLPH, SAIL_DRONE, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
+import { BEACHCAT, CRUISER, DINGHY, KAYAK, OCEAN_ROWER, RANDOLPH, SAIL_DRONE, STOCK, STOCK_HULL, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
-import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, SAIL_DRONE7, type HullParams } from "./motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import {
   angleAt,
@@ -48,8 +48,11 @@ import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
-import { PLACE, PLACES } from "./land/place";
+import { PLACE, PLACES, fetchSea } from "./land/place";
 import { Island } from "./land/island";
+import { Mirror, reflectable } from "./mirror";
+import { Town } from "./land/town";
+import { Trees } from "./land/trees";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, MixedSea as LiveSea } from "./waves";
@@ -113,6 +116,7 @@ const MODEL: Record<Rev, BoatKey> = {
   stock_dinghy14: "stock_dinghy14",
   stock_beachcat16: "stock_beachcat16",
   stock_sail_drone7: "stock_sail_drone7",
+  stock_ocean_rower45: "stock_ocean_rower45",
 };
 const SPEC: Record<BoatKey, BoatSpec> = {
   kayak: KAYAK,
@@ -121,16 +125,14 @@ const SPEC: Record<BoatKey, BoatSpec> = {
   stock_dinghy14: DINGHY,
   stock_beachcat16: BEACHCAT,
   stock_sail_drone7: SAIL_DRONE,
+  stock_ocean_rower45: OCEAN_ROWER,
 };
 // Rev C rolls on Rev B's numbers until Theo's Rev C righting curve (their revC_gz_curve.csv) lands.
 const HULL: Record<Rev, HullParams> = {
   kayak: KAYAK_V4,
   randolph: RANDOLPH_REVB,
   randolph_c: RANDOLPH_REVC,
-  stock_cruiser31: CRUISER31,
-  stock_dinghy14: DINGHY14,
-  stock_beachcat16: BEACHCAT16,
-  stock_sail_drone7: SAIL_DRONE7,
+  ...STOCK_HULL,
 };
 const LABEL: Record<Rev, string> = {
   kayak: "Our kayak",
@@ -140,6 +142,7 @@ const LABEL: Record<Rev, string> = {
   stock_dinghy14: "A 14 ft dinghy (stock boat)",
   stock_beachcat16: "A 16 ft beach cat (stock boat)",
   stock_sail_drone7: "A wind-powered ocean drone (stock boat)",
+  stock_ocean_rower45: "An ocean rowing boat for four (stock boat)",
 };
 const SHORT: Record<Rev, string> = {
   kayak: "Our kayak",
@@ -149,6 +152,7 @@ const SHORT: Record<Rev, string> = {
   stock_dinghy14: "14 ft dinghy",
   stock_beachcat16: "16 ft beach cat",
   stock_sail_drone7: "Ocean drone",
+  stock_ocean_rower45: "Ocean rowing boat",
 };
 /** What the voyage menu calls each stock boat, with what it is in plain words. */
 const STOCK_MENU: Record<StockKey, string> = {
@@ -156,6 +160,16 @@ const STOCK_MENU: Record<StockKey, string> = {
   stock_dinghy14: "14 ft dinghy (a stock sailing dinghy, nobody aboard)",
   stock_beachcat16: "16 ft beach cat (a stock catamaran, nobody aboard)",
   stock_sail_drone7: "Wind-powered ocean drone (a stock 7 m sailing drone with a rigid wing)",
+  stock_ocean_rower45: "Ocean rowing boat (a stock 8.6 m boat, a crew of four taking turns at the oars)",
+};
+/** One more line about each stock boat for the replay's intro. */
+const STOCK_ABOUT: Record<StockKey, string> = {
+  stock_cruiser31: "Its autopilot reefs (makes the sails smaller) as the wind rises and runs the engine in a calm.",
+  stock_dinghy14: "With nobody aboard to right it, a squall or a breaking sea can turn it over for good.",
+  stock_beachcat16: "With nobody aboard to right it, a squall or a breaking sea can turn it over for good.",
+  stock_sail_drone7: "Its deep keel rights it from any angle; the wing sail turns itself to the wind.",
+  stock_ocean_rower45:
+    "Two row while two rest, around the clock. In a strong head wind or a gale they put out a sea anchor (a parachute in the water) and wait below.",
 };
 /** Which boat a replay's boat name is. The stock boats go by their names ("31 ft cruiser");
  * otherwise anything not Randolph is ours, and a Randolph boat is Rev B unless it says Rev C. */
@@ -171,6 +185,9 @@ let laneRev: Rev = "kayak";
 let look: Look = startLook($<HTMLSelectElement>("quality"));
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
+// The land, town and boats mirrored in calm water.
+const mirror = new Mirror(quality === "high" ? 0.5 : 0.35);
+const bufSize = new THREE.Vector2();
 scene.add(sea.mesh);
 // Rain in a blow (cosmetic: the log has wind, not rain).
 const rain = new Rain();
@@ -224,6 +241,7 @@ function buildBoat(q: Quality): void {
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
+  reflectable(model.root);
   wet = new Wetness(model.root);
   drain = new Drain(model.form, spec);
   drain.group.visible = !model.twinHull;
@@ -234,6 +252,7 @@ function setQuality(l: Look): void {
   const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
+  mirror.scale = q === "high" ? 0.5 : 0.35;
   buildBoat(q);
   live = new LiveSea(undefined, { n: N_COMP[q], smoothing: 0.4 });
   if (rep) {
@@ -262,6 +281,15 @@ const seaFeed = new SeaStateFeed();
 void seaFeed.init();
 let seaNow: Systems | null = null; // what the Waves card describes
 function seaTarget(rep: Replay, hour: number): number {
+  if (PLACE?.fetch) {
+    // A sheltered harbour: only the local wind's chop, running downwind.
+    seaNow = null;
+    const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
+    const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+    const chop = fetchSea(Math.hypot(wu, wv), PLACE.fetch);
+    live.setSeaState(chop.hs, chop.tp, (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360);
+    return chop.hs;
+  }
   const [lat, lon] = positionAt(rep, hour);
   seaNow = LIVE ? null : seaFeed.at(new Date(utc(rep.start) + hour * 3600e3), lat, lon);
   if (seaNow) {
@@ -372,6 +400,8 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   force: { cloud: -1, fog: -1 },
+  /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
+  mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
   live: { on: LIVE, lastFix: 0, now: 0, simulated: false, forecast: false, banner: false, fixes: 0 },
   /** Jump to the latest report (the Now button). */
@@ -544,7 +574,7 @@ async function load(files: string[], pick = files[0], autoplay = true): Promise<
       lanes.length > 1
         ? `Both boats launched the same day into the same weather. Orange is our kayak; ${lanes[1].key === "randolph_c" ? "purple is our own model of the Randolph team's Rev C" : "teal is our own model of the Randolph team's Rev B"}, not their own simulator, so their real odds may differ. Pick which one the close-up follows.`
         : isStock(lanes[0].key)
-          ? `${LABEL[lanes[0].key]}, built from published specs of a common boat of its kind, sailing one simulated voyage in real weather and currents for that year. ${lanes[0].key === "stock_cruiser31" ? "Its autopilot reefs (makes the sails smaller) as the wind rises and runs the engine in a calm." : "With nobody aboard to right it, a squall or a breaking sea can turn it over for good."}`
+          ? `${LABEL[lanes[0].key]}, built from published specs of a common boat of its kind, on one simulated voyage in real weather and currents for that year. ${STOCK_ABOUT[lanes[0].key as StockKey]}`
           : lanes[0].key !== "kayak"
           ? `Our own model of the Randolph ${lanes[0].key === "randolph_c" ? "Rev C" : "Rev B"} boat (${lanes[0].key === "randolph_c" ? "from the config the Randolph team wrote in our format" : "built from their published design"}), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ.`
           : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
@@ -761,6 +791,7 @@ const byKey: Record<Rev, Map<string, IndexEntry>> = {
   stock_dinghy14: new Map(),
   stock_beachcat16: new Map(),
   stock_sail_drone7: new Map(),
+  stock_ocean_rower45: new Map(),
 };
 const raceDates = (rev: "randolph" | "randolph_c" = "randolph") => [...byKey.kayak.keys()].filter((d) => byKey[rev].has(d)).sort();
 const OUT: Record<string, string> = { arrived: "finished", lost: "lost", aground: "aground", disqualified: "disqualified", timeout: "still at sea" };
@@ -790,7 +821,7 @@ loadDetailedModels().then((ok) => {
   status.detailed = ok;
   status.models = [hasDetailedKayak() && "kayak", hasDetailedRandolph() && "randolph"].filter((m): m is string => !!m);
   (status as unknown as { stockModels: () => string[] }).stockModels = () =>
-    (["stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7"] as StockKey[]).filter(hasDetailedStock);
+    (Object.keys(STOCK) as StockKey[]).filter(hasDetailedStock);
   if (ok) buildBoat(quality);
 });
 camera.position.set(-5.6, 2.0, 4.6);
@@ -814,18 +845,38 @@ controls.target.set(0, 0.2, 0);
   });
 }
 let island: Island | null = null;
+let town: Town | null = null;
+let trees: Trees | null = null;
 if (PLACE) {
   // Look past the boat towards the land.
   const a = THREE.MathUtils.degToRad(PLACE.look);
   camera.position.set(-Math.sin(a) * 6.5, 1.6, Math.cos(a) * 6.5);
   controls.maxDistance = 120;
   $("credits").prepend(document.createTextNode(`${PLACE.credit} · `));
-  void Island.load(PLACE, quality).then((isl) => {
+  const shown = status as unknown as { land: boolean; surf: number; town: Town["shown"] | null; trees: number };
+  void Promise.all([Island.load(PLACE, quality), Town.load(PLACE, quality)]).then(async ([isl, tn]) => {
     island = isl;
-    if (isl) scene.add(isl.group);
+    town = tn;
+    if (isl) {
+      scene.add(isl.group);
+      reflectable(isl.group.getObjectByName("island")!);
+    }
     else toast("The land files aren't published on this copy of the site yet, so there's only sea here.", PLACE!.name, "#8ab4ff");
-    (status as unknown as { land: boolean; surf: number }).land = !!isl;
-    (status as unknown as { land: boolean; surf: number }).surf = isl?.surfTriangles ?? 0;
+    if (tn) {
+      scene.add(tn.group);
+      tn.mirrored();
+    }
+    shown.town = tn?.shown ?? null;
+    if (isl?.grid) {
+      trees = await Trees.load(PLACE!, quality, isl.grid, tn ? (x, z) => tn.blocked(x, z) : undefined);
+      if (trees) {
+        scene.add(trees.group);
+        reflectable(trees.group);
+      }
+    }
+    shown.trees = trees?.count ?? 0;
+    shown.surf = isl?.surfTriangles ?? 0;
+    shown.land = !!isl; // last: the smoke test waits for it
   });
 }
 (async () => {
@@ -1079,6 +1130,8 @@ renderer.setAnimationLoop(() => {
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
     island?.update(t, atmos.fog.color, atmos.ambient, hs, storm);
+    town?.update(t, sp.el, hs, wu, wv);
+    trees?.update(t, Math.hypot(wu, wv), atmos.fog.color, storm);
     // The live cards overwrite some of the replay's, so they must update in the same frame:
     // drawn a frame apart, the battery, its bar and the captions flicker between the two.
     const fresh = hud(rep, stw, hs);
@@ -1111,6 +1164,11 @@ renderer.setAnimationLoop(() => {
     toast("Switched to High quality: Ultra was running slowly on this computer.", "Quality", "#8ab4ff");
   }
   skyGuide();
+  renderer.getDrawingBufferSize(bufSize);
+  mirror.setSize(bufSize.x, bufSize.y);
+  mirror.update(renderer, scene, camera, sea.waveHeight);
+  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
+  status.mirror = mirror.strength;
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
   status.frames++;
@@ -1352,6 +1410,7 @@ const EQUIPMENT: Record<BoatKey, string[]> = {
   stock_dinghy14: ["sail", "rudder", "electronics_main", "comms", "beacon"],
   stock_beachcat16: ["sail", "rudder", "electronics_main", "comms", "beacon"],
   stock_sail_drone7: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
+  stock_ocean_rower45: ["rudder", "electronics_main", "comms", "beacon", "leak"],
 };
 let lastEquip = "";
 function equipment(r: Replay, failed: Map<string, string>): void {

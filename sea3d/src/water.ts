@@ -109,6 +109,9 @@ uniform int uN;
 uniform float uQ;
 uniform vec4 uWa[${MAX_WAVES}];
 uniform vec2 uWd[${MAX_WAVES}];
+uniform sampler2D tMirror;
+uniform mat4 uMirrorM;
+uniform float uMirror;
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
@@ -221,6 +224,21 @@ const FRAG_GLOW = /* glsl */ `
 }
 `;
 
+// The land, town and boats mirrored in calm water (mirror.ts): looked up where this
+// pixel of flat sea is, pushed about by the wave slopes, stronger at grazing angles.
+const FRAG_MIRROR = /* glsl */ `
+if (uMirror > 0.001) {
+  vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
+  vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
+  vec2 uv = pc.xy / pc.w + nWm.xz * (0.03 + 0.25 * (1.0 - uMirror));
+  vec4 m = texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)));
+  vec3 Vm = normalize(cameraPosition - vWPos);
+  float fres = 0.02 + 0.98 * pow(1.0 - max(dot(nWm, Vm), 0.0), 5.0);
+  float k = m.a * uMirror * clamp(0.25 + fres, 0.0, 0.95) * (1.0 - foamMask);
+  outgoingLight = mix(outgoingLight, m.rgb, k);
+}
+`;
+
 export class Sea {
   readonly mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>;
   private base = new Float32Array();
@@ -246,8 +264,13 @@ export class Sea {
     uWd: { value: Array.from({ length: MAX_WAVES }, () => new THREE.Vector2()) },
     uDeep: { value: new THREE.Vector3(DEEP.r, DEEP.g, DEEP.b) },
     uShallow: { value: new THREE.Vector3(SHALLOW.r, SHALLOW.g, SHALLOW.b) },
+    tMirror: { value: null as THREE.Texture | null },
+    uMirrorM: { value: new THREE.Matrix4() },
+    uMirror: { value: 0 },
   };
   private detail = 0; // wind chop on (High) or off (Low)
+  private quality: Quality;
+  private reach = HORIZON;
 
   constructor(quality: Quality) {
     const material = new THREE.MeshPhysicalMaterial({
@@ -273,25 +296,40 @@ export class Sea {
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
-        .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW);
+        .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
+        .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>");
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v6";
+    material.customProgramCacheKey = () => "boatsim-sea-v7";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
+    this.quality = quality;
     this.setQuality(quality);
+  }
+
+  /** How far the sea reaches from the boat (m). */
+  get horizon(): number {
+    return this.reach;
+  }
+
+  /** Reach out to h metres, as when real land comes into view (rebuilds the grid, so not every frame). */
+  setHorizon(h: number): void {
+    if (h === this.reach) return;
+    this.reach = h;
+    this.setQuality(this.quality);
   }
 
   /** Grid that is fine near the middle and reaches the horizon at the edge:
    *  x = a u + b u^3 + c u^25 for u in [-1, 1]. */
   setQuality(quality: Quality): void {
     const { n, centre } = GRID[quality];
+    this.quality = quality;
     this.detail = quality === "high" ? 1 : 0;
     this.uniforms.uChop.value = this.detail * this.chopFor(this.wind);
     const half = SEA_SIZE / 2;
     const a = (centre * n) / 2;
     const b = half - a;
-    const c = HORIZON - half;
+    const c = this.reach - half;
     const geo = new THREE.PlaneGeometry(2, 2, n, n);
     geo.rotateX(-Math.PI / 2);
     const p = geo.attributes.position.array as Float32Array;
@@ -311,6 +349,11 @@ export class Sea {
     this.mesh.geometry.dispose();
     this.mesh.geometry = geo;
     this.paintFlat();
+  }
+
+  /** The sea's significant wave height now (m), as last set. */
+  get waveHeight(): number {
+    return this.hs;
   }
 
   get vertexCount(): number {
@@ -342,6 +385,13 @@ export class Sea {
 
   setSeeThrough(on: boolean): void {
     this.mesh.material.opacity = on ? 0.45 : 0.95;
+  }
+
+  /** Mirror the land and boats (mirror.ts): its texture, world-to-texture matrix and strength (0 off). */
+  setMirror(tex: THREE.Texture | null, m: THREE.Matrix4, strength: number): void {
+    this.uniforms.tMirror.value = tex;
+    this.uniforms.uMirrorM.value.copy(m);
+    this.uniforms.uMirror.value = tex ? strength : 0;
   }
 
   /** Point the glitter and the glow at the scene's sun (world direction towards it). */
