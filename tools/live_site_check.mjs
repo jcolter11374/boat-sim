@@ -381,7 +381,7 @@ for (const n of all) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known:
 const shard = /^(\d+)\/(\d+)$/.exec(process.env.SHARD ?? "");
 if (process.env.SHARD && !(shard && +shard[1] >= 1 && +shard[1] <= +shard[2])) throw new Error(`SHARD must be k/n with 1 <= k <= n, got ${process.env.SHARD}`);
 const names = shard ? all.filter((_, i) => i % +shard[2] === +shard[1] - 1) : all;
-if (shard) console.log(`shard ${shard[0]}: ${names.join(" ")}`);
+if (shard) console.log(`shard ${shard[0]}: ${names.length} of ${all.length} checks (shards split by position before any check runs, so a SKIP never moves one): ${names.join(" ")}`);
 // BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
 // Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
 // headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.
