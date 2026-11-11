@@ -14,6 +14,7 @@ export default defineConfig({
         index: resolve(__dirname, "index.html"),
         voyage: resolve(__dirname, "voyage.html"),
         boatyard: resolve(__dirname, "boatyard.html"),
+        helm: resolve(__dirname, "helm.html"),
       },
     },
   },
