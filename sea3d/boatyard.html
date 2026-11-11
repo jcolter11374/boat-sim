@@ -67,6 +67,16 @@
   .row.chance { font-size: 15px; align-items: baseline; }
   .row.chance b { font-size: 20px; color: var(--good); }
   .row.chance b.untested { font-size: 14px; color: var(--dim); font-weight: 600; }
+  .row.chance b.estimate { color: var(--ink); }
+  .row.chance b.up { animation: flash-up 0.9s ease-out; }
+  .row.chance b.down { animation: flash-down 0.9s ease-out; }
+  @keyframes flash-up { from { color: #fff; text-shadow: 0 0 12px var(--good); } }
+  @keyframes flash-down { from { color: var(--bad); text-shadow: 0 0 12px var(--bad); } }
+  .opt .delta { margin-left: 6px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .opt .delta.up { color: var(--good); }
+  .opt .delta.down { color: var(--bad); }
+  .opt .delta.same, .opt .delta.none { color: var(--dim); font-weight: 500; }
+  @media (prefers-reduced-motion: reduce) { .row.chance b.up, .row.chance b.down { animation: none; } }
   #s-odds-note { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .row.total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; font-size: 15px; }
   #sum .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
