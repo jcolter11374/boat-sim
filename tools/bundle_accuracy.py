@@ -74,6 +74,37 @@ def sail_full_nudged(
     return r["outcome"], float(r["days"])
 
 
+SWAPS = {
+    "sun": ("ghi",),
+    "currents": ("current_u", "current_v"),
+    "wind and waves": ("wind_u", "wind_v", "hs", "tp", "wave_dir"),
+    "air and rain": ("air_temp", "rain", "cloud_fraction"),
+}
+
+
+class Hybrid:
+    """The bundle's environment, with some fields taken from the full data instead."""
+
+    def __init__(self, bundle, full, fields):
+        self.bundle, self.full, self.fields = bundle, full, fields
+
+    def __getattr__(self, name):
+        return getattr(self.bundle, name)
+
+    def sample(self, t, lat, lon):
+        from dataclasses import replace
+
+        b = self.bundle.sample(t, lat, lon)
+        f = self.full.sample(t, lat, lon)
+        return replace(b, **{k: getattr(f, k) for k in self.fields})
+
+
+def full_env(design_path: str, seed: int):
+    from boatsim.mc.months import MonthlyVoyage
+
+    return MonthlyVoyage(design_path=design_path).components(seed).env
+
+
 def score(rows: list[dict]) -> dict:
     both = [
         abs(r["days"] - r["ref_days"])
@@ -103,6 +134,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--control", action="store_true", help="also the full-data 1e-9 deg nudge control"
     )
+    p.add_argument(
+        "--swap",
+        nargs="*",
+        default=[],
+        help=f"on the first cut, also sail with these fields from the full data: {list(SWAPS)}",
+    )
+    p.add_argument("--boat", default=None, help="only replays of this boat (e.g. 'v4 kayak')")
     p.add_argument("--out", default="runs/bundle-accuracy")
     a = p.parse_args(argv)
     out = Path(a.out)
@@ -113,6 +151,8 @@ def main(argv: list[str] | None = None) -> None:
     from boatsim.sandbox.run import open_bundle
 
     reps = [r for r in replays() if r["start"].startswith(str(a.year))]
+    if a.boat:
+        reps = [r for r in reps if r["boat"] == a.boat]
     table: list[dict] = []
     rows_all: dict[str, list[dict]] = {}
 
@@ -165,6 +205,26 @@ def main(argv: list[str] | None = None) -> None:
                 "per_boat": boats,
             }
         )
+        for name in a.swap if cut == a.cuts[0] else []:
+            rows, secs = run(
+                f"bundle {res}deg/{step}h, {name} from full data",
+                lambda d, s, seed, env=env, name=name: sail_on_bundle(
+                    Hybrid(env, full_env(d, seed), SWAPS[name]), d, s, seed, a.max_days
+                ),
+            )
+            table.append(
+                {
+                    "cut": f"{res} deg, every {step} h, currents {cur} deg, {name} from full data",
+                    "download_mb": None,
+                    "zip_mb": None,
+                    "secs": round(secs),
+                    **score(rows),
+                    "per_boat": {
+                        b: score([r for r in rows if r["boat"] == b])
+                        for b in sorted({r["boat"] for r in rows})
+                    },
+                }
+            )
         path.unlink()  # keep the runner's disk free; the size is recorded
 
     if a.control:
