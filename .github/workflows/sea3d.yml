@@ -120,6 +120,16 @@ jobs:
           gh release download forecast-data -R "$GITHUB_REPOSITORY" -D public/forecast \
             -p 'forecast_*' \
             && ls -l public/forecast || echo "no forecast-data release yet: no 'now' weather"
+      # Design leaderboard (leaderboard.yml, published only when fair). Optional:
+      # without the release the page says no board is published yet.
+      - name: Fetch the leaderboard board
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download leaderboard-data -R "$GITHUB_REPOSITORY" -D public/leaderboard \
+            -p board.json \
+            && ls -l public/leaderboard || echo "no leaderboard-data release yet: the page says so"
       - name: Type-check and build
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)

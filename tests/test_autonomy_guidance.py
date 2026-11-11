@@ -212,13 +212,14 @@ def test_resent_identical_route_keeps_place_and_track():
     assert 60.0 < cmd.heading < 120.0  # still east, not back to wp1
 
 
-# ------------------------------------------------------- pursuit steering (option)
+# ------------------------------------------------------- pursuit steering (default)
 
 OPEN_SEA = (38.0, -50.0)  # mid-Atlantic, far from any coast
 
 
-def test_pursuit_is_off_by_default_and_checks_its_name():
-    assert WaypointAutopilot().steer == "track"
+def test_pursuit_is_the_default_and_checks_its_name():
+    assert WaypointAutopilot().steer == "pursuit"  # Ravi's gate, 11 Nov 2026
+    assert WaypointAutopilot(steer="track").steer == "track"
     import pytest
 
     with pytest.raises(ValueError):

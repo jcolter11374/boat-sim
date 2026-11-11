@@ -104,6 +104,7 @@ def _fake_sources():
             "cloud_fraction": base * 0.5,
             "air_temp": base * 20.0 + hh / 24,
             "ghi": base * 300.0,
+            "rain": base * hh / 10,  # mm/h over the hour ending at each stamp
         }
         return GridSeries(t, lats, lons, f)
 
@@ -460,3 +461,24 @@ def test_cut_takes_a_window_across_new_year():
     assert len(env.weather.times) == 4 * 4 and len(env.currents.times) == 4
     s = env.sample(datetime(2014, 1, 1, 12), 40.0, -60.0)
     assert s.wind_v == pytest.approx(-2.0, abs=0.1)
+
+
+def test_bundle_carries_hourly_rain_like_the_full_runs(bundle):
+    """Rain stays hourly (squalls), sampled half an hour on as ERA5Source does."""
+    env = F.BundleEnvironment(bundle)
+    assert len(env.rain.times) == 4 * 24  # 1-4 May, every hour
+    assert env.sample(datetime(2020, 5, 2, 10), 40.0, -60.0).rain == pytest.approx(1.05, abs=0.01)
+    assert env.sample(datetime(2020, 5, 2, 23, 30), 40.0, -60.0).rain == pytest.approx(
+        2.4, abs=0.01
+    )
+
+
+def test_a_bundle_without_rain_reads_dry(bundle):
+    z = dict(np.load(io.BytesIO(bundle)))
+    del z["rain"], z["t_rain"]
+    buf = io.BytesIO()
+    np.savez_compressed(buf, **z)
+    assert (
+        F.BundleEnvironment(buf.getvalue()).sample(datetime(2020, 5, 2, 10), 40.0, -60.0).rain
+        == 0.0
+    )

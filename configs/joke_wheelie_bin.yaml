@@ -1,0 +1,89 @@
+# JOKE FLEET: "wheelie bin with a kite". A generic 240 L wheelie bin, ballasted to float
+# upright, flying a 2 m2 power kite, nobody aboard. Our own numbers (stock-vessels design
+# note, joke-fleet sidebar). The kite only pulls downwind. The first lull drops it in the
+# sea and nobody can relaunch it; after that it's a drifting bin that slowly fills
+# through its lid. Anything unreferenced is a GUESS.
+name: wheelie bin with a kite
+
+stock:
+  label: wheelie bin with a kite
+  kind: ballasted 240 L wheelie bin, power kite on a line, nobody aboard
+  spec_card:
+    size_m: 0.58 x 0.74 x 1.07  # a common 240 L bin
+    bin_kg: 12               # GUESS
+    ballast_kg: 40           # GUESS: keeps it upright
+    kite_m2: 2.0             # GUESS: a small power kite
+  odd:
+    kite_cda_m2: 1.6         # GUESS: a 2 m2 kite at drag coefficient ~0.8, pulling downwind
+    kite_min_ms: 4.0         # GUESS: below ~8 kn of wind a small kite falls out of the sky
+    p_kite_drop_per_lull_h: 0.5  # GUESS: half the time an hour's lull drops it
+    freeboard_m: 0.25        # GUESS: lid seam above the water, floating upright
+    ship_l: 0.05             # GUESS: the lid flaps; a cupful gets in per crest over it
+    bail_l_per_h: 0
+    swamp_l: 180             # GUESS: three-quarters full and it sinks to the rim
+    loss_words:
+      stuck inverted or keel lost: rolled over and filled
+      electronics box dead: the tracker taped to the lid died
+
+hull:
+  model: 240 L wheelie bin with a kite (joke fleet)
+  length_m: 0.74
+  beam_m: 0.58
+  mass_kg: 60                # bin, ballast, kite, tracker
+  displacement_ref_kg: 60
+  waterline_length_m: 0.74
+  wetted_area_m2: 1.6        # GUESS: it floats deep
+  form_factor: 3.0           # GUESS: a box, drag coefficient ~1 on ~0.4 m2 (design note)
+  wave_making_frac: 0.8      # GUESS
+  waterplane_area_m2: 0.4
+  air_side_area_m2: 0.4      # GUESS: bin top above the water
+  air_front_area_m2: 0.3
+  air_cd_side: 1.0
+  air_cd_front: 1.0
+  lateral_cd_area_m2: 0.6    # GUESS: a box in the water slides as hard as it moves forward
+  keel_lift_slope_area_m2: 0.05
+  fouling_onset_days: 5
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 0  # GUESS: a kite on a bridle tows it end-on downwind
+  stokes_drift: true
+
+power:
+  solar_wp: 0                # the tracker has its own solar cell
+  panels_w: {}
+  battery_wh: 10
+propulsion:
+  thruster_count: 0
+  cruise_drive_w: 0
+  max_drive_w: 1
+
+electronics:
+  autopilot: none
+  hotel_load_wh_per_day: 0
+  nav_light_w: 0
+  nav_light_hours_per_day: 0
+
+comms:
+  one_way: standalone solar satellite tracker (GUESS fit)
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 0.74
+  hull_beam_m: 0.58
+  # GUESS: ballast low down makes it a stubby buoy; breakers knock it about but it
+  # stays up. Rolling it needs a breaker about 1.5 m.
+  critical_wave_frac_of_length: 2.0
+  critical_wave_frac_of_beam: 2.6
+  p_inverted_stuck: 0.01
+  damage_ref_hs_m: 3.0
+  p_part: {}
+  rate_set: planning
+  failures_enabled: true
+  electronics_boxes: 1       # the tracker
+  steering_per_day: 0
+  capture_per_day: 0.005

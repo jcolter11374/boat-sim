@@ -22,6 +22,20 @@ PACK_FILES = (
     "configs/v4_kayak.yaml",
     "configs/randolph_rev_b.yaml",
     "configs/randolph_rev_c.yaml",
+    # Stock vessels and the joke fleet (sandbox/catalog.py STOCK_BASES) and the
+    # keelboats' polars.
+    "configs/stock_cruiser31.yaml",
+    "configs/stock_dinghy14.yaml",
+    "configs/stock_beachcat16.yaml",
+    "configs/polars/cruiser31.json",
+    "configs/polars/dinghy14.json",
+    "configs/polars/beachcat16.json",
+    "configs/joke_robot_kayak.yaml",
+    "configs/joke_canoe.yaml",
+    "configs/joke_pedalo.yaml",
+    "configs/joke_bathtub.yaml",
+    "configs/joke_flamingo.yaml",
+    "configs/joke_wheelie_bin.yaml",
     "data/land/land_mask_v1.npz",
 )
 

@@ -244,3 +244,21 @@ wave-making grows with displacement. At the design weight
 are exactly as before. The big batteries (+10 kg) add about 3 % calm-water drag;
 the 40 kg bulb takes about 3 % off but makes a knockdown that leaves the boat
 upside down more likely.
+
+**Stock boats and the joke fleet.** `"base"` can also name a ready-made boat,
+sailed as designed with no slots to change (`catalog.STOCK_BASES`):
+`stock_cruiser31`, `stock_dinghy14`, `stock_beachcat16`, `joke_robot_kayak`,
+`joke_canoe`, `joke_pedalo`, `joke_bathtub`, `joke_flamingo`,
+`joke_wheelie_bin`. Its grid id is the base name. These boats aren't in the
+odds grid, so `nearest()` returns `(id, False)`. Their configs and polars are
+packed into `boatsim.zip`.
+
+**How it ends.** Each boat on the helm results card (`result()["boat"]` and
+`["ghost"]`) carries `ending`: `{"headline", "words", "where", "day", "boat"}`
+(`sandbox/endings.py`). `headline` is short for the card ("Swamped",
+"Burst", "Rolled over", "Ran ashore", "Finished", "Still at sea"). `words` is
+the cause in the boat's own words, from the joke fleet's `loss_words`.
+`where` is "near the coast" or "out in the open ocean", and `day` is the day
+it happened. `boat` is the design's `stock.label`, or null for the kayak and
+the Randolph boats. For example, the canoe gives
+`{"headline": "Swamped", "words": "swamped: waves over a 0.3 m edge filled it", "where": "near the coast", "day": 0.2}`.
