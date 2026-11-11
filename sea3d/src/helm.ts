@@ -257,24 +257,47 @@ function bearing(a: [number, number], b: [number, number]): number {
 
 const compassWord = (deg: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 
+/** Base mode (#214): the page shows what base knows, not the true boat, until the end. */
+const hidden = () => page.status?.show_true_position === false && !page.card;
+
+function kmTo(a: [number, number], b: [number, number]): number {
+  const r = Math.PI / 180;
+  const h = Math.sin(((b[0] - a[0]) * r) / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(((b[1] - a[1]) * r) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
 function showStatus(): void {
   const s = page.status;
   if (!s) return;
   const b = s.boat;
-  const finish = game.boat?.course.target ?? [39.5, -13.5];
-  const fb = bearing([b.lat, b.lon], finish as [number, number]);
+  const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
+  const est = hidden() ? s.base?.estimate : undefined;
+  const last = s.base?.last_report;
+  // Where the page believes the boat is: the truth, or base's estimate.
+  const here: [number, number] = est ? [est.lat, est.lon] : [b.lat, b.lon];
+  const fb = bearing(here, finish);
   $("day").textContent = `Day ${s.day.toFixed(1)}`;
   $("when").textContent = new Date(utc(b.t)).toUTCString().slice(5, 22) + " UTC";
-  $("local").textContent = localTime(utc(b.t), b.lat, b.lon);
-  $("tofinish").textContent = `${Math.round(b.km_to_finish).toLocaleString()} km to the finish`;
-  const lead = s.lead_km;
-  $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${Math.round(lead)} km ahead of the ghost` : `${Math.round(-lead)} km behind the ghost`;
+  $("local").textContent = localTime(utc(b.t), here[0], here[1]);
+  let toGo = b.km_to_finish;
+  let lead = s.lead_km;
+  if (est) {
+    const radius = (game.boat?.course.target_radius_m ?? 25000) / 1000;
+    toGo = Math.max(kmTo(here, finish) - radius, 0);
+    lead = s.ghost.km_to_finish - toGo;
+  }
+  $("tofinish").textContent = est
+    ? `About ${Math.round(toGo).toLocaleString()} km to go (base's guess, ${Math.round(est.age_h)} h old)`
+    : `${Math.round(toGo).toLocaleString()} km to the finish`;
+  const about = est ? "About " : "";
+  $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
   $("lead").className = lead >= 0 ? "good" : "bad";
-  const soc = Math.round(b.soc * 100);
-  $("battext").textContent = `Battery ${soc}%`;
+  const socNow = est ? last?.soc ?? null : b.soc;
+  const soc = socNow == null ? 0 : Math.round(socNow * 100);
+  $("battext").textContent = socNow == null ? "Battery: no report yet" : est ? `Battery ${soc}% at last report` : `Battery ${soc}%`;
   $("batbar").style.width = `${soc}%`;
   $("batbar").style.background = soc < 15 ? "var(--bad)" : soc < 35 ? "var(--warn)" : "var(--good)";
-  $("speed").textContent = `${(b.stw * KN).toFixed(1)} kn through the water`;
+  $("speed").textContent = est ? "speed unknown" : `${(b.stw * KN).toFixed(1)} kn through the water`;
   const w = s.weather;
   let windTo: number | null = null;
   let kn = 0;
@@ -285,7 +308,7 @@ function showStatus(): void {
     const cur = Math.hypot(w.current_u, w.current_v) * KN;
     $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
   }
-  compass.set({ heading: b.heading, finish: fb, windTo, windKn: kn });
+  compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
   if (s.mode === "base" && s.base) {
     const last = dayOf(s.base.last_report.t);
     const w = s.base.waiting;
@@ -546,6 +569,37 @@ const landImg = new Image();
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
 })().catch((e) => console.warn("chart:", e));
 
+/**
+ * Base mode: the chart's own boat is what base knows. The reports that reached it
+ * (a track) and a faint dashed leg out to its estimate of where the boat is now.
+ */
+function knownLanes(): { rep: Replay; colours: { main: string; beacon: string; glow: string } }[] | null {
+  const st = page.status;
+  const r = game.boat;
+  const reps = st?.base?.reports;
+  if (!r || !st || !reps?.length) return null;
+  const t0 = utc(r.start);
+  const lane = (pts: { t: string; lat: number; lon: number }[]): Replay => ({
+    ...r,
+    h: pts.map((p) => (utc(p.t) - t0) / 3600e3),
+    lat: pts.map((p) => p.lat),
+    lon: pts.map((p) => p.lon),
+    iridium_ok: undefined,
+    beacon_ok: undefined,
+    events: [],
+  });
+  const out = [{ rep: lane(reps), colours: TRACK.kayak }];
+  const est = st.base?.estimate;
+  if (est && est.age_h > 0.5) {
+    const a = reps[reps.length - 1];
+    out.push({
+      rep: lane([a, { t: new Date(utc(a.t) + est.age_h * 3600e3).toISOString(), lat: est.lat, lon: est.lon }]),
+      colours: { main: "rgba(255,170,100,0.45)", beacon: "rgba(255,170,100,0.45)", glow: "rgba(255,170,100,0.2)" },
+    });
+  }
+  return out;
+}
+
 // ---------- cinematic mode and sound ----------
 let heldHour: number | null = null;
 const cine = new Cinema({
@@ -667,8 +721,11 @@ renderer.setAnimationLoop(() => {
   // The other boat: a tag on the horizon in its direction, with the distance.
   const other = rep(watch === "boat" ? "ghost" : "boat");
   if (r && other && page.ready) {
-    const me = positionAt(r, h);
-    const it = positionAt(other, Math.min(h, lastHour(other)));
+    // Base mode: our boat is where base guesses it is, whichever end of the tag it's on.
+    const est = hidden() ? page.status?.base?.estimate : undefined;
+    const guess = (p: [number, number]): [number, number] => (est ? [est.lat, est.lon] : p);
+    const me = watch === "boat" ? guess(positionAt(r, h)) : positionAt(r, h);
+    const it = watch === "ghost" ? guess(positionAt(other, Math.min(h, lastHour(other)))) : positionAt(other, Math.min(h, lastHour(other)));
     const km = Math.hypot((it[0] - me[0]) * 111, (it[1] - me[1]) * 111 * Math.cos((me[0] * Math.PI) / 180));
     const b = bearing(me, it);
     const a = THREE.MathUtils.degToRad(b);
@@ -684,12 +741,15 @@ renderer.setAnimationLoop(() => {
   atmos.render();
   if (chart && game.boat && game.ghost) {
     if (chartDirty) {
+      const known = hidden() ? knownLanes() : null;
       chart.setLanes(
-        [
-          { rep: game.boat, colours: TRACK.kayak },
-          { rep: game.ghost, colours: GHOST },
-        ],
-        watch === "boat" ? 0 : 1,
+        known
+          ? [...known, { rep: game.ghost, colours: GHOST }]
+          : [
+              { rep: game.boat, colours: TRACK.kayak },
+              { rep: game.ghost, colours: GHOST },
+            ],
+        watch === "boat" ? 0 : known ? known.length : 1,
       );
       chartDirty = false;
     }

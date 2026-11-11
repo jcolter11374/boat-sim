@@ -6,6 +6,13 @@ import type { Replay } from "../replay/data";
 
 export type Heading = number | "finish" | "route";
 export type Mode = "hands_on" | "base";
+export interface Report {
+  t: string;
+  lat: number;
+  lon: number;
+  soc?: number;
+  hdg?: number;
+}
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
   accepted: boolean;
@@ -34,7 +41,16 @@ export interface Status {
   /** "hands_on" or "base" (older simulators leave it out: hands on). */
   mode?: Mode;
   /** Real base station: the last report base has, and orders still on their way. */
-  base?: { last_report: { t: string; lat: number; lon: number; soc?: number }; waiting: { due: string; power: number }[] };
+  base?: {
+    last_report: Report;
+    waiting: { due: string; power: number }[];
+    /** Every report that reached base, the drop first (#214). */
+    reports?: Report[];
+    /** Base's dead-reckoned guess at where the boat is now (#214). */
+    estimate?: { lat: number; lon: number; from_report: string; age_h: number };
+  };
+  /** False in base mode: the page shows what base knows, not the true boat (#214). */
+  show_true_position?: boolean;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
 }
 export interface ForecastRow {
