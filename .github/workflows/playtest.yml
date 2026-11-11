@@ -1,0 +1,59 @@
+# Nina's playtest, after each deploy: plays the deployed pages in Chrome and Firefox the way a
+# person does (cinematic mode, "sail until something happens", base-station
+# orders, Boatyard launch, race, leaderboard). Beside Ravi's live-site check.
+# Read-only: it only visits the public site. Screenshots are in the artifacts.
+name: Playtest
+on:
+  workflow_run:
+    workflows: ["3D sea page"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Site to play"
+        default: "https://jcolter11374.github.io/boat-sim/"
+  pull_request:
+    paths:
+      - ".github/workflows/playtest.yml"
+      - "tools/playtest/**"
+permissions:
+  contents: read
+concurrency:
+  group: playtest-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+jobs:
+  play:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+        check: [index, helm-play, helm-norfolk, helm-drone, helm-rower, helm-cruiser, helm-until, helm-base-order, helm-cinematic, voyage-cinematic, boatyard, race, leaderboard]
+    env:
+      SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
+      BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # The runner image already has the browsers' system libraries; --with-deps only adds
+      # fonts from the Ubuntu mirrors, which can fail or hang on DNS (deploy 43047737622). Give it 2 min, then fall back.
+      - run: |
+          npm install --no-save playwright@1.49.1
+          timeout 120 npx playwright install --with-deps ${{ matrix.browser }} || npx playwright install ${{ matrix.browser }}
+      - if: github.event_name == 'workflow_run'
+        run: sleep 90
+      - run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs ${{ matrix.check }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: play-${{ matrix.browser }}-${{ matrix.check }}
+          path: play-*.png
+          if-no-files-found: ignore
