@@ -645,3 +645,48 @@ def test_a_game_with_no_orders_sails_the_ghosts_voyage(env):
     assert Game.load(env, code).orders[-1]["heading"] == "auto"
     with pytest.raises(ValueError):
         Game(env, launch_index=0, mode="base").order("auto", 0.25)
+
+
+def test_preview_shows_an_order_without_changing_the_game(env):
+    """#330: the live preview sails a copy in the forecast; the game itself, its dice and forecasts included, is untouched."""
+    a, b = Game(env, launch_index=MAY1, max_days=3), Game(env, launch_index=MAY1, max_days=3)
+    for g in (a, b):
+        g.order("finish", 0.25)
+        g.run(hours=6)
+    fc = a.forecast()
+    fast, slow = a.preview("finish", 1.0, hours=12), a.preview("finish", 0.05, hours=12)
+    assert fast["hours"] > 0 and slow["hours"] > 0
+    assert fast["soc"] < slow["soc"]  # more power, more battery spent
+    assert a.preview(270, 0.25, hours=12)["km"] < a.preview("finish", 0.25, hours=12)["km"]  # sailing west makes less progress
+    a.preview("auto", 0)
+    assert a.forecast() == fc  # previews don't disturb the forecasts
+    for g in (a, b):
+        g.run(hours=24)
+    assert a.status() == b.status()
+    assert a.mine.log.events == b.mine.log.events
+    assert _rngs(a) == _rngs(b)
+    with pytest.raises(ValueError):
+        a.preview("north", 0.5)
+    with pytest.raises(ValueError):
+        a.preview("auto", 0, sails="full")
+
+
+def _rngs(g):
+    return [r.bit_generator.state for r in (g.mine.hull_rng, g.mine.sense_rng, g.mine.link_rng, g.mine.ping_rng)]
+
+
+def test_preview_while_on_autopilot(env):
+    """#330: every game starts on the ghost's autopilot (#327); previews from there leave it there, and untouched."""
+    a, b = Game(env, launch_index=MAY1, max_days=3), Game(env, launch_index=MAY1, max_days=3)
+    for g in (a, b):
+        g.run(hours=6)
+    assert a.on_auto
+    fc = a.forecast()
+    for h, p in (("finish", 0.5), (200, 0.25), ("route", 0.1), ("auto", 0)):
+        assert a.preview(h, p, hours=12)["hours"] > 0
+    assert a.on_auto and a.forecast() == fc
+    for g in (a, b):
+        g.run(hours=24)
+    assert a.status() == b.status()
+    assert a.mine.log.events == b.mine.log.events
+    assert _rngs(a) == _rngs(b)

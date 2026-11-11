@@ -258,6 +258,12 @@ if kw.get("hours") is None and UNTIL_CAP == 240.0:
 out = run_until(kw)
 json.dumps({"stopped": out["stopped"], "status": out["status"], **voyages()}, default=_f)
 `;
+    } else if (m.type === "preview") {
+      // What an order would do over the next day, from a copy of the boat (#330). Older simulators: null.
+      code = `
+m = json.loads(msg_json)
+json.dumps(G.preview(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []), hours=m.get("hours", 24.0)) if hasattr(G, "preview") and G.mode == "hands_on" and not G.status()["over"] else None, default=_f)
+`;
     } else if (m.type === "forecast") {
       code = `json.dumps(G.forecast(hours=120), default=_f)`;
     } else {

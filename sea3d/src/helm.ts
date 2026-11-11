@@ -30,7 +30,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
 import { copyText } from "./helm/share";
-import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
@@ -217,6 +217,8 @@ let power = 0.25; // the autopilot cruises at 25 W of its 100
 let maxW = 100; // full drive power, W (the simulator says, once there is an order)
 /** A sailboat's own orders (#242): a sail plan and the engine; null lets the boat decide. */
 let sailOrder: string | null = null;
+let previewKey = ""; // the order the live preview shows (#330)
+let previewTimer = 0;
 let engineOrder: boolean | null = null;
 let lastForecast: Awaited<ReturnType<HelmGame["forecast"]>> | null = null;
 let chart: Chart | null = null;
@@ -235,6 +237,8 @@ const page = {
   /** Base mode orders sent (accepted or not), and the last share link (for tests). */
   orders: [] as OrderResult[],
   share: "",
+  /** The last live order preview shown (#330), for tests. */
+  preview: null as Preview | null,
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
   /** The port the game started from ("" = the usual drop), and how many the picker offers. */
@@ -424,6 +428,45 @@ function showOrder(): void {
     $("send").textContent = draft ? "Send this order from base" : "Sent";
     ($("send") as HTMLButtonElement).disabled = !draft || busy;
   }
+  schedulePreview();
+}
+
+// ---------- live order preview (#330) ----------
+// Under the controls: what this order would do over the next day. A copy of your boat
+// sails it in today's forecast (never the true weather: the ghost only sees forecasts)
+// and is thrown away (Game.preview): the simulator's own numbers, no breakdowns or knockdowns. Hands on only. While time
+// runs it updates when the order changes; paused, also as the days go by.
+function schedulePreview(): void {
+  const el = $("preview");
+  if (mode !== "hands_on" || !page.ready || page.status?.over) {
+    el.hidden = true;
+    previewKey = "";
+    return;
+  }
+  const key = `${order}|${power.toFixed(2)}|${sailOrder}|${engineOrder}|${rate > 0 ? "" : Math.floor((page.status?.day ?? 0) * 4)}`;
+  if (key === previewKey) return;
+  previewKey = key;
+  clearTimeout(previewTimer);
+  previewTimer = window.setTimeout(async () => {
+    const p = await game.preview(order, power, sailOrder, engineOrder).catch(() => null);
+    if (key !== previewKey) return; // the order changed again meanwhile
+    page.preview = p;
+    el.hidden = !p;
+    if (p) el.textContent = previewText(p);
+  }, 250);
+}
+
+function previewText(p: Preview): string {
+  const kn = p.stw * 1.943844;
+  const km = Math.round(p.km);
+  const soc = Math.round(p.soc * 100);
+  const when = p.hours >= 23.5 ? "On today's forecast, a day of this order" : `On today's forecast, in ${Math.round(p.hours)} hours of this order`;
+  const end: Record<string, string> = { arrived: "you would reach the finish", aground: "you would run aground", left_data_box: "you would sail off our weather map" };
+  if (p.outcome !== "at_sea" && end[p.outcome]) return `${when}, ${end[p.outcome]}.`;
+  const prog = km > 0 ? `${km.toLocaleString()} km closer to the finish` : km < 0 ? `${(-km).toLocaleString()} km further from the finish` : "no closer to the finish";
+  const left = page.status?.boat.km_to_finish ?? 0;
+  const pace = km > 5 && p.hours >= 23.5 ? ` (about ${Math.round(left / km)} days to go at that pace)` : "";
+  return `${when}: about ${kn.toFixed(1)} knots (${(kn * 1.852).toFixed(1)} km/h), battery ${soc > 0 ? "+" : soc < 0 ? "−" : "±"}${Math.abs(soc)}%, ${prog}${pace}.`;
 }
 
 function bearing(a: [number, number], b: [number, number]): number {
