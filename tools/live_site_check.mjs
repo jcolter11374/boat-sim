@@ -25,7 +25,8 @@ const must = (ok, msg) => {
   if (!ok) throw new CheckFail(msg);
 };
 
-/** Open a page in a brand-new browser context, collecting console errors, page errors and failed loads. */
+/** Open a page in a brand-new browser context, collecting console errors, page errors and failed loads.
+ *  path null leaves it blank, for a check that loads the page itself. */
 async function open(browser, path, viewport = { width: 1400, height: 900 }) {
   const ctx = await browser.newContext({ viewport, bypassCSP: false, serviceWorkers: "block" });
   const page = await ctx.newPage();
@@ -39,7 +40,7 @@ async function open(browser, path, viewport = { width: 1400, height: 900 }) {
   page.on("response", (r) => {
     if (r.status() >= 400) notes.push(`HTTP ${r.status()}: ${r.request().method()} ${r.url()}`);
   });
-  await page.goto(SITE + path, { waitUntil: "load", timeout: 2 * MIN });
+  if (path !== null) await page.goto(SITE + path, { waitUntil: "load", timeout: 2 * MIN });
   return { ctx, page, errors, notes };
 }
 
@@ -304,7 +305,10 @@ const VISUAL = { "visual-sea": "sea (index)", "visual-voyage": "voyage replay", 
 for (const [name, pageName] of Object.entries(VISUAL)) {
   const p = PAGES.find((x) => x.name === pageName);
   CHECKS[name] = {
-    path: p.path,
+    // checkPage loads the page itself. Opening it here first meant a second
+    // load cut off the first one's downloads (the 3D models), and Firefox logs
+    // each cut-off download as a console error (#299).
+    path: null,
     viewport: { width: 960, height: 540 },
     run: async (page) => {
       const problems = await checkPage(page, SITE, p);
