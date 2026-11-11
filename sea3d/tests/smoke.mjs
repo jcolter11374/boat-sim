@@ -246,13 +246,20 @@ try {
   log.push(`game ${game.beats.join("/")} -> ${game.result}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
-  // Weather: rain and a wet hull in the wettest hour of the log (hour 573, 7 mm/h of ERA5 rain in
-  // 5 m seas), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
+  // Weather: rain and a wet hull in the wettest hour of the log (found from the file, since the
+  // track and so the weather it meets change whenever the autopilot does; about 7 mm/h of ERA5
+  // rain), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
   await page.goto(`${URL}voyage.html?voyage=voyage_2020-04-01.json&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready, null, { timeout: 60000 });
-  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(573); });
+  const wettest = await page.evaluate(async () => {
+    const r = await (await fetch("voyages/voyage_2020-04-01.json")).json();
+    let i = 0;
+    r.rain.forEach((v, k) => { if ((v ?? 0) > (r.rain[i] ?? 0)) i = k; });
+    return Math.floor(r.h[i]);
+  });
+  await page.evaluate((h) => { window.__replay.pause(); window.__replay.setHour(h); }, wettest);
   await page.waitForFunction(() => window.__replay.rain > 0.5 && window.__replay.wet > 0.5, null, { timeout: 30000 })
-    .catch(async () => fail(`no rain in the blow: ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
+    .catch(async () => fail(`no rain in the blow (hour ${wettest}): ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
   await page.evaluate(() => window.__replay.setHour(30));
   await page.waitForFunction(() => window.__replay.rain < 0.05, null, { timeout: 30000 }).catch(() => fail("rain on a calm day"));
   log.push("rain in the blow, dry on a calm day");
