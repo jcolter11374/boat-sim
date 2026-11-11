@@ -23,6 +23,7 @@ import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, posit
 import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
+import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { localTime } from "./replay/localtime";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -105,6 +106,18 @@ let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
 const shared = params.get("g");
+// Weather challenges (challenge-data release, copied to public/challenges/).
+const challengesBase = new URL(params.get("challenges") ?? "./challenges/", location.href).href;
+let challenges: Challenge[] = [];
+const challengesReady = loadChallenges(challengesBase).then((list) => {
+  challenges = list;
+  showChallenges();
+});
+/** The chosen challenge, if any (a shared link names it with ?c=). */
+function chosenChallenge(): Challenge | undefined {
+  const id = shared ? params.get("c") : $<HTMLSelectElement>("challenge").value;
+  return challenges.find((c) => c.id === id);
+}
 let power = 0.25; // the autopilot cruises at 25 W of its 100
 let maxW = 100; // full drive power, W (the simulator says, once there is an order)
 let lastForecast: Awaited<ReturnType<HelmGame["forecast"]>> | null = null;
@@ -122,6 +135,8 @@ const page = {
   /** Base mode orders sent (accepted or not), and the last share link (for tests). */
   orders: [] as OrderResult[],
   share: "",
+  /** The challenge being sailed, if any (for tests and share links). */
+  challenge: "",
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -208,6 +223,7 @@ async function shareLink(): Promise<void> {
     const url = new URL(location.href);
     url.search = "";
     url.searchParams.set("g", code);
+    if (page.challenge) url.searchParams.set("c", page.challenge); // so the link opens the right weather
     page.share = url.href;
     let copied = false;
     try {
@@ -414,12 +430,38 @@ async function finish(): Promise<void> {
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
-  bits.push(`${c.orders.length} orders given. Launch ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
+  const ch = challenges.find((x) => x.id === page.challenge);
+  bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
 }
 
 // ---------- start ----------
+/** Fill the challenge picker once challenges.json has loaded (hidden without it). */
+function showChallenges(): void {
+  if (!challenges.length) return;
+  const sel = $<HTMLSelectElement>("challenge");
+  for (const c of challenges) {
+    const o = document.createElement("option");
+    o.value = c.id;
+    o.textContent = `${c.n ? `${c.n}.` : "Bonus:"} ${c.title} (${startLabel(c)})`;
+    sel.append(o);
+  }
+  $("chpick").hidden = !!shared;
+  showChallenge();
+}
+
+/** The chosen challenge's story replaces the launch day. */
+function showChallenge(): void {
+  const c = chosenChallenge();
+  $<HTMLSelectElement>("launch").disabled = !!c || !!shared;
+  $("chstory").hidden = !c;
+  $("chnote").hidden = !c?.weather_note;
+  if (!c) return;
+  $("chstory").textContent = `${c.story} The drop is at noon UTC on ${startLabel(c)}.`;
+  // Storm boost (#117) is ignored for now: storms sail on plain ERA5, so say so.
+  $("chnote").textContent = c.weather_note;
+}
 /** True when the page was published with the simulator files (as the Boatyard checks). */
 async function sandboxThere(): Promise<boolean> {
   try {
@@ -439,17 +481,25 @@ async function begin(): Promise<void> {
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
     return;
   }
+  await challengesReady;
+  const ch = chosenChallenge();
+  if (shared && params.get("c") && !ch) {
+    page.error = "no challenge files";
+    $("startmsg").textContent = "That link is for a weather challenge whose weather isn't on this copy of the site. Try the live site.";
+    return;
+  }
+  page.challenge = ch?.id ?? "";
   $("start").hidden = true;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
   try {
     if (shared) {
-      const v = await game.load(shared);
+      const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
     } else {
-      page.status = await game.start(launch, safe, breakdowns, mode);
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) });
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
@@ -479,7 +529,11 @@ async function begin(): Promise<void> {
     if (page.status?.over) await finish();
   } catch (e) {
     const err = String(e);
-    if (/NO_HELM/.test(err)) {
+    if (/NO_CHALLENGES/.test(err)) {
+      page.error = "no challenges in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site doesn't know the weather challenges yet; it's being updated. Pick a 2020 launch for now.";
+    } else if (/NO_HELM/.test(err)) {
       page.error = "no helm in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site doesn't have the helm game yet; it's being updated. Try again later.";
@@ -521,6 +575,7 @@ if (shared) {
   $("go").textContent = "Carry on from where they left it";
 }
 $("again").addEventListener("click", () => location.reload());
+$<HTMLSelectElement>("challenge").addEventListener("change", () => showChallenge());
 for (const w of ["boat", "ghost"] as const)
   $(`w-${w}`).addEventListener("click", () => {
     watch = w;

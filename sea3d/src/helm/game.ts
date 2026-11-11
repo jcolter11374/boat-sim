@@ -123,16 +123,26 @@ export class HelmGame {
     if (v.ghost) this.ghost = v.ghost;
   }
 
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on"): Promise<Status> {
-    const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({ type: "new", launch, safe, breakdowns, mode });
+  /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
+   *  its weather (left out when it's the 2020 bundle). */
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }): Promise<Status> {
+    const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
+      type: "new",
+      launch,
+      safe,
+      breakdowns,
+      mode,
+      challenge: challenge?.id,
+      bundle: challenge?.bundle,
+    });
     this.launches = v.launches;
     this.take(v);
     return v.status;
   }
 
   /** A shared game, sailed back to where it was saved. */
-  async load(code: string): Promise<{ status: Status; orders: { heading: Heading; power: number }[]; launch: number }> {
-    const v = await this.ask<{ launches: string[]; status: Status; orders: { heading: Heading; power: number }[]; launch: number; boat: Replay; ghost: Replay }>({ type: "load", code });
+  async load(code: string, bundle?: string): Promise<{ status: Status; orders: { heading: Heading; power: number }[]; launch: number }> {
+    const v = await this.ask<{ launches: string[]; status: Status; orders: { heading: Heading; power: number }[]; launch: number; boat: Replay; ghost: Replay }>({ type: "load", code, bundle });
     this.launches = v.launches;
     this.take(v);
     return v;

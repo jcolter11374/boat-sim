@@ -110,6 +110,23 @@ def launch_days(
     return out
 
 
+def challenge_start(env, cid: str) -> tuple[datetime, int]:
+    """A weather challenge's drop time and seed (oceandata.challenges), checked
+    against the bundle: the page must open that challenge's own bundle."""
+    from boatsim.oceandata.challenges import by_id
+
+    try:
+        c = by_id(cid)
+    except KeyError:
+        raise ValueError(f"no challenge called {cid!r}") from None
+    start = datetime(c.start.year, c.start.month, c.start.day, 12)
+    first = datetime.fromisoformat(env.meta["first"])
+    last = datetime.fromisoformat(env.meta["last"]) + timedelta(days=1)
+    if not first <= start < last:
+        raise ValueError(f"challenge {cid} needs its own weather ({c.bundle})")
+    return start, c.seed
+
+
 class PlayerBase:
     """Base station in "Real base station" mode: it only listens. It keeps the
     last report that reached it, which is all it knows about the boat when the
@@ -141,6 +158,7 @@ class Game:
         max_days: float = MAX_DAYS,
         mode: str = "hands_on",
         day: str | None = None,
+        challenge: str | None = None,
     ):
         from boatsim.runner.land import default_land
 
@@ -149,12 +167,14 @@ class Game:
         if safe is None:
             safe = mode == "base"  # the boat's own safe mode acts between base orders
         self.mode, self.safe, self.max_days = mode, safe, max_days
-        if day is not None and launch_index is not None:
-            raise ValueError("give a launch day or a launch index, not both")
-        self.launch_index, self.day = launch_index, day
+        if sum(x is not None for x in (day, launch_index, challenge)) > 1:
+            raise ValueError("give one of a launch day, a launch index or a challenge")
+        self.launch_index, self.day, self.challenge = launch_index, day, challenge
         self.choices = choices
         self.design = catalog.design_for(choices)
-        if day is not None:
+        if challenge is not None:
+            self.start, self.seed = challenge_start(env, challenge)
+        elif day is not None:
             self.start = datetime.fromisoformat(day).replace(hour=12)
             # Any April to June noon inside the bundle; a voyage that later
             # sails past its end stops as "left_data_box", as in run_voyage.
@@ -510,6 +530,7 @@ class Game:
         return {
             "build": catalog.grid_id(self.choices),
             "launch": _iso(self.start),
+            "challenge": self.challenge,
             "seed": self.seed,
             "breakdowns_on": self.breakdowns,
             "mode": self.mode,
@@ -534,6 +555,7 @@ class Game:
             "c": self.choices,
             "l": self.launch_index,
             "day": self.day,
+            "ch": self.challenge,
             "m": self.mode,
             "s": self.safe,
             "b": self.breakdowns,
@@ -564,6 +586,7 @@ class Game:
                 choices=p["c"],
                 launch_index=p["l"],
                 day=p.get("day"),
+                challenge=p.get("ch"),
                 safe=p["s"],
                 breakdowns=p["b"],
                 max_days=p["d"],
