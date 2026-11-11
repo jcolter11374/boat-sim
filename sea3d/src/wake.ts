@@ -57,9 +57,11 @@ const frag = /* glsl */ `
   // two points are almost the same distance away.
   float lace(vec2 q, float age) {
     // Warped, so the bubbles are irregular, not a honeycomb.
-    q += vec2(vnoise(q * 1.7), vnoise(q * 1.7 + 9.2)) * 0.9 - 0.45;
+    // Two octaves: a broad swirl, then a finer wobble that bends each bubble wall.
+    q += (vec2(vnoise(q * 0.9), vnoise(q * 0.9 + 9.2)) - 0.5) * 1.6;
+    q += (vec2(vnoise(q * 3.1 + 4.4), vnoise(q * 3.1 + 1.7)) - 0.5) * 0.55;
     vec2 c1 = cells(q * 3.6);
-    vec2 c2 = cells(q * 8.5 + 3.1);
+    vec2 c2 = cells(q * 8.5 + 3.1 + (vec2(vnoise(q * 6.0), vnoise(q * 6.0 + 2.3)) - 0.5) * 0.8);
     float w = mix(0.35, 0.07, age); // fresh foam is nearly solid; old foam is thin threads
     float l1 = 1.0 - smoothstep(0.0, w, c1.y - c1.x);
     float l2 = 1.0 - smoothstep(0.0, w * 0.8, c2.y - c2.x);
