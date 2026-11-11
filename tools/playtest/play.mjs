@@ -137,6 +137,38 @@ const CHECKS = {
       return `stops: ${stops.join(", ")}`;
     },
   },
+  // Maya, 11 Nov: the paths the stale simulator bundle blocked.
+  "helm-norfolk": {
+    path: "helm.html",
+    run: async (page) => {
+      await helmStart(page, async (p) => {
+        await p.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN }).catch(() => {
+          throw new CheckFail("the port picker never appeared");
+        });
+        await p.selectOption("#port", "norfolk");
+      });
+      const st = await hop(page, "#sday");
+      must(!(st.stop === "land" && st.day < 0.05), `an instant "land" stop at day ${st.day}`);
+      return `from Norfolk to day ${st.day.toFixed(2)} (stop ${st.stop}, ${st.secs} s)`;
+    },
+  },
+  ...Object.fromEntries(
+    [["helm-drone", "stock_sail_drone7"], ["helm-rower", "stock_ocean_rower45"], ["helm-cruiser", "stock_cruiser31"]].map(([n, b]) => [
+      n,
+      {
+        path: "helm.html",
+        run: async (page) => {
+          await helmStart(page, async (p) => {
+            const r = p.locator(`input[name="boat"][value="${b}"]`);
+            must((await r.count()) === 1, `the boat picker doesn't offer ${b}`);
+            await r.check();
+          });
+          const st = await hop(page, "#sday");
+          return `${b} to day ${st.day.toFixed(2)} (stop ${st.stop}, ${st.secs} s)`;
+        },
+      },
+    ]),
+  ),
   "helm-cinematic": {
     path: "helm.html",
     run: async (page) => {

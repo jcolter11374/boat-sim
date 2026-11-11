@@ -36,7 +36,7 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, firefox]
-        check: [index, helm-play, helm-until, helm-base-order, helm-cinematic, voyage-cinematic, boatyard, race, leaderboard]
+        check: [index, helm-play, helm-norfolk, helm-drone, helm-rower, helm-cruiser, helm-until, helm-base-order, helm-cinematic, voyage-cinematic, boatyard, race, leaderboard]
     env:
       SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
       BROWSER: ${{ matrix.browser }}
