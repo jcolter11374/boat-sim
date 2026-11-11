@@ -26,7 +26,7 @@ stock:
     bail_l_per_h: 60         # GUESS: one person with a bailer, between strokes
     swamp_l: 300             # GUESS: about 0.3 t of water and it's awash
     loss_words:
-      stuck inverted or keel lost: rolled over by a breaking wave; an open canoe fills and stays down
+      capsized and stayed upside down: rolled over by a breaking wave; an open canoe fills and stays down
       early-life defect or unknown failure: something gave out (a split seam, a lost paddle)
 
 hull:

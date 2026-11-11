@@ -11,15 +11,22 @@ things the kayak never needed, all set in the design's `odd:` block:
   first; the autopilot only steers.
 * Swamping. An open boat fills when wave crests top its freeboard (the
   height of its edge above the water). A small boat rides up and down long
-  waves, so only the water moving relative to it counts: about pi L / lambda
-  of the wave height for a boat of length L on waves lambda long, but never
-  less than rel_floor (GUESS 0.35: the short chop riding on the big waves).
-  Crests are Rayleigh distributed, about 0.6 x that relative height, so a
-  share exp(-2 (freeboard / (0.6 rel Hs))^2) of waves top it; each ships
-  ship_l litres (GUESS). A crew bails bail_l_per_h while awake (awake_hours a day, from
-  crew_start_hour). When the water reaches
-  swamp_l the boat is swamped: it floats (most do) but nobody can paddle or
-  steer it any more. That ends the voyage, and the event says why.
+  waves and tilts to follow them, so only the water moving relative to its
+  ends counts: (k L)^2 / 12 of the wave for a boat of length L on waves of
+  wavenumber k = 2 pi / lambda (fit a straight line to a cosine along the
+  boat; what is left at the ends), at most all of it. ERA5 gives one Hs for
+  swell and local wind sea together, so we split it: the wind sea is at most
+  a fully developed Pierson-Moskowitz sea for the wind, Hs 0.21 U^2/g with
+  peak period 0.73 U (s); the rest is swell at the given period. The wind
+  sea's factor is never less than rel_floor (GUESS 0.3: short steep chop
+  that a small boat can't ride, set so an open canoe swamps at about 15 kn
+  of wind offshore, as the design note says). Crests are Rayleigh
+  distributed, about 0.6 x the relative height, so a share exp(-2 (freeboard
+  / (0.6 h_rel))^2) of wind-sea crests top it; each ships ship_l litres
+  (GUESS). A crew bails bail_l_per_h while awake (awake_hours a day from
+  crew_start_hour). When the water reaches swamp_l the boat is swamped: it
+  floats (most do) but nobody can paddle or steer it any more. That ends the
+  voyage, and the event says why.
 * A kite. Pulls downwind only: it adds kite_cda_m2 of drag area to the
   windage (a kite is a drag device on a string). Each hour the wind is
   below kite_min_ms, it falls in the sea with p_kite_drop_per_lull_h and
@@ -73,7 +80,7 @@ class OddBoatVessel(KayakVessel):
         self.fatigue_floor = float(o.get("fatigue_floor", 1.0))
         self.freeboard_m = o.get("freeboard_m")  # None = closed deck, never swamps
         self.ship_l = float(o.get("ship_l", 0.0))
-        self.rel_floor = float(o.get("rel_floor", 0.35))
+        self.rel_floor = float(o.get("rel_floor", 0.3))
         self.bail_l_per_h = float(o.get("bail_l_per_h", 0.0))
         self.swamp_l = float(o.get("swamp_l", math.inf))
         self.kite_cda_m2 = float(o.get("kite_cda_m2", 0.0))
@@ -114,13 +121,29 @@ class OddBoatVessel(KayakVessel):
         days = (state.t - t0).total_seconds() / 86400.0
         return self.crew_w * max(1.0 - self.fatigue_per_day * days, self.fatigue_floor)
 
-    def topping_share(self, hs: float, tp: float) -> float:
-        """Share of waves whose crest tops the freeboard, relative to the boat."""
+    def relative_wave_m(self, hs: float, tp: float, wind_ms: float) -> tuple[float, float]:
+        """(height of the water moving relative to the boat, m; wind-sea period, s)."""
+        hs_ws = min(hs, 0.21 * wind_ms**2 / G)
+        tp_ws = max(min(tp, 0.73 * wind_ms), 1.0)
+        hs_sw = math.sqrt(max(hs * hs - hs_ws * hs_ws, 0.0))
+        lwl = self.hull.waterline_length_m
+
+        def follow(period: float) -> float:  # share of the wave the boat doesn't ride
+            kl = (2.0 * math.pi) ** 2 / (G * period**2) * lwl
+            return min(kl * kl / 12.0, 1.0)
+
+        rel_ws = max(follow(tp_ws), self.rel_floor) * hs_ws
+        rel_sw = follow(max(tp, 1.0)) * hs_sw
+        return math.hypot(rel_ws, rel_sw), tp_ws
+
+    def topping_share(self, hs: float, tp: float, wind_ms: float) -> float:
+        """Share of crests that top the freeboard, relative to the boat."""
         if self.freeboard_m is None or hs <= 0.05:
             return 0.0
-        wavelength = G * max(tp, 1.0) ** 2 / (2.0 * math.pi)  # deep water
-        rel = min(max(math.pi * self.hull.waterline_length_m / wavelength, self.rel_floor), 1.0)
-        return math.exp(-2.0 * (float(self.freeboard_m) / (CREST_PER_HS * rel * hs)) ** 2)
+        h_rel, _ = self.relative_wave_m(hs, tp, wind_ms)
+        if h_rel <= 1e-6:
+            return 0.0
+        return math.exp(-2.0 * (float(self.freeboard_m) / (CREST_PER_HS * h_rel)) ** 2)
 
     def step(
         self,
@@ -148,8 +171,9 @@ class OddBoatVessel(KayakVessel):
             kite = False
             new.damage["kite"] = True
             events.append(Event(new.t, EventKind.PART_FAILED, "kite (fell in the sea in a lull)"))
-        waves = 3600.0 / max(env.tp, 1.0) * hours
-        shipped = self.ship_l * waves * self.topping_share(env.hs, env.tp)
+        _, tp_ws = self.relative_wave_m(env.hs, env.tp, tws)
+        crests = 3600.0 / tp_ws * hours
+        shipped = self.ship_l * crests * self.topping_share(env.hs, env.tp, tws)
         bailed = self.bail_l_per_h * hours if self.crew_awake(state) and state.alive else 0.0
         water = max(water + shipped - bailed, 0.0)
         out = OddState(

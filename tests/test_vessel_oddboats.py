@@ -57,11 +57,14 @@ def test_the_whole_fleet_loads_as_odd_boats_and_moves():
 
 
 def test_closed_boats_never_take_water_and_open_boats_fill_faster_in_bigger_seas():
-    assert boat("flamingo").topping_share(4.0, 9.0) == 0.0
+    assert boat("flamingo").topping_share(4.0, 9.0, 12.0) == 0.0
     canoe = boat("canoe")
-    shares = [canoe.topping_share(hs, 4 * math.sqrt(hs) + 2) for hs in (0.5, 1.0, 1.5, 2.5)]
+    seas = [(0.5, 4.0), (1.0, 6.0), (1.5, 8.0), (2.5, 11.0)]  # (Hs, wind) pairs
+    shares = [canoe.topping_share(hs, 4 * math.sqrt(hs) + 2, u) for hs, u in seas]
     assert shares == sorted(shares) and shares[0] < 1e-3 < shares[-1] < 1.0
-    assert canoe.topping_share(0.0, 5.0) == 0.0
+    assert canoe.topping_share(0.0, 5.0, 5.0) == 0.0
+    # A long swell with no wind: the canoe rides it, almost nothing comes in.
+    assert canoe.topping_share(2.0, 12.0, 0.0) < 1e-6
 
 
 def test_the_crew_paddles_by_day_and_rests_by_night():
