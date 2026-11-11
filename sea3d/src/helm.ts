@@ -28,6 +28,7 @@ import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
+import { copyText } from "./helm/share";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
@@ -320,8 +321,12 @@ async function sendOrder(): Promise<void> {
   }
 }
 
+let sharing = false;
+
 async function shareLink(): Promise<void> {
-  if (busy || !page.ready) return;
+  if (busy || !page.ready || sharing) return;
+  sharing = true;
+  $("sharetext").textContent = "Making the link...";
   try {
     const code = await game.save();
     const url = new URL(location.href);
@@ -329,20 +334,23 @@ async function shareLink(): Promise<void> {
     url.searchParams.set("g", code);
     if (page.challenge) url.searchParams.set("c", page.challenge); // so the link opens the right weather
     page.share = url.href;
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(url.href);
-      copied = true;
-    } catch {
-      // no clipboard (an older browser, or no permission): show the link instead
-    }
-    const a = document.createElement("a");
-    a.href = url.href;
-    a.textContent = copied ? "Link copied" : "Here's the link";
-    a.title = url.href;
-    $("sharetext").replaceChildren(a, document.createTextNode(`: it opens this game at day ${page.status!.day.toFixed(1)}, same weather and luck.`));
+    // Show the link at once, as text to select and copy by hand; the clipboard
+    // only gets a moment and can't keep the player waiting (#293).
+    const field = document.createElement("input");
+    field.id = "sharelink";
+    field.readOnly = true;
+    field.value = url.href;
+    field.addEventListener("focus", () => field.select());
+    const label = document.createElement("span");
+    label.textContent = "Here's the link";
+    const tail = document.createTextNode(`: it opens this game at day ${page.status!.day.toFixed(1)}, same weather and luck. `);
+    $("sharetext").replaceChildren(label, tail, field);
+    if (await copyText(url.href, navigator.clipboard)) label.textContent = "Link copied";
   } catch (e) {
+    $("sharetext").textContent = "";
     fail(e);
+  } finally {
+    sharing = false;
   }
 }
 
