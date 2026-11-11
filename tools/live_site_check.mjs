@@ -9,7 +9,7 @@
 //
 // Each check prints one PASS/FAIL line plus its evidence, and writes
 // live-<check>.png. The exit code is the number of failed checks (capped at 1).
-import { chromium } from "playwright";
+import * as pw from "playwright";
 import { appendFileSync } from "node:fs";
 import { PAGES, checkPage } from "./live_visual_checks.mjs";
 
@@ -52,11 +52,48 @@ async function visibleNotices(page) {
     .filter((l) => l && NOTICE.test(l));
 }
 
+/** Median and 90th-percentile time between animation frames over `secs`, in ms (the page's main-thread cadence). */
+async function frameTimes(page, secs = 3) {
+  return page.evaluate(
+    (ms) =>
+      new Promise((done) => {
+        const gaps = [];
+        let last = performance.now();
+        const t0 = last;
+        const tick = (now) => {
+          gaps.push(now - last);
+          last = now;
+          if (now - t0 < ms) requestAnimationFrame(tick);
+          else {
+            gaps.sort((a, b) => a - b);
+            const q = (f) => Math.round(gaps[Math.min(gaps.length - 1, Math.floor(f * gaps.length))]);
+            done({ median: q(0.5), p90: q(0.9), n: gaps.length });
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+    secs * 1000,
+  );
+}
+
+/** Click, and if it gets stuck say which control it was and why (Maya, #293). */
+async function clickNamed(page, selector, what, opts = {}) {
+  try {
+    await page.click(selector, opts);
+  } catch (e) {
+    throw new CheckFail(`clicking ${what} (${selector}) got stuck: ${whyStuck(e)}`);
+  }
+}
+
 // ---------- helm ----------
+// The functional helm checks run on Low quality, as the smoke test does: on the
+// runner's software graphics, High spends the frame in the browser's own raster work
+// (Sam's profile, #293), which starved clicks. visual-helm keeps the default look.
+const HELM = "helm.html?quality=low";
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   await setup(page);
-  await page.click("#go");
+  await clickNamed(page, "#go", "Take the helm");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
   const s = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
@@ -67,7 +104,7 @@ async function helmSailADay(page) {
   let st;
   for (let hop = 0; hop < 8; hop++) {
     const t0 = Date.now();
-    await page.click("#sday");
+    await clickNamed(page, "#sday", "Sail 1 day");
     await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 8 * MIN });
     st = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error, over: window.__helm.status?.over }));
     st.secs = Math.round((Date.now() - t0) / 1000);
@@ -81,10 +118,25 @@ async function helmSailADay(page) {
   throw new CheckFail(`still short of a day after 8 hops: day ${st?.day}, last stop ${st?.stop}`);
 }
 
+// A page that slows down as the voyage goes on (Sam measured 300-430 ms frames after a
+// day, #293). Runners draw on software graphics, so this compares the page with itself:
+// after a day it may be at most 3x slower than just after the start (plus 100 ms slack).
+const SLOWDOWN = 3;
+async function framesAfterADay(page, before) {
+  const after = await frameTimes(page);
+  must(
+    after.median <= SLOWDOWN * before.median + 100,
+    `the page slowed down after a day of sailing: frames ${before.median} ms at the start, ${after.median} ms after a day (90th percentile ${after.p90} ms)`,
+  );
+  return `; frames ${before.median} -> ${after.median} ms`;
+}
+
 const helm = (setup, extra = async () => "") => async (page) => {
   await helmStart(page, setup);
+  const before = await frameTimes(page);
   const st = await helmSailADay(page);
-  return `sailed to day ${st.day.toFixed(2)} (last stop: ${st.stop}; the last hop took ${st.secs} s)${await extra(page)}`;
+  const frames = await framesAfterADay(page, before);
+  return `sailed to day ${st.day.toFixed(2)} (last stop: ${st.stop}; the last hop took ${st.secs} s${frames})${await extra(page)}`;
 };
 
 const pickBoat = (value) => async (page) => {
@@ -101,9 +153,9 @@ const CHECKS = {
       return `${await page.evaluate(() => window.__sea3d.frames)} frames drawn`;
     },
   },
-  "helm-drop": { path: "helm.html", run: helm(async (p) => p.selectOption("#launch", "0")) },
+  "helm-drop": { path: HELM, run: helm(async (p) => p.selectOption("#launch", "0")) },
   "helm-port": {
-    path: "helm.html",
+    path: HELM,
     run: helm(async (p) => {
       await p.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN }).catch(() => {
         throw new CheckFail("the port picker never appeared");
@@ -113,7 +165,7 @@ const CHECKS = {
     }),
   },
   "helm-challenge": {
-    path: "helm.html",
+    path: HELM,
     run: helm(
       async (p) => {
         await p.waitForFunction(() => !document.querySelector("#chpick").hidden, null, { timeout: MIN }).catch(() => {
@@ -129,14 +181,17 @@ const CHECKS = {
   },
   // Sam's fragile spot 1: a fresh share link reopens the game at the same spot, in a fresh profile.
   "helm-share": {
-    path: "helm.html",
+    path: HELM,
     run: async (page) => {
       await helmStart(page, async (p) => p.selectOption("#launch", "1"));
+      const before = await frameTimes(page);
       const st = await helmSailADay(page);
-      await page.click("#share");
+      const after = await frameTimes(page);
+      console.log(`    (helm-share frames: ${before.median} ms at the start, ${after.median} ms after a day, p90 ${after.p90} ms)`);
+      await clickNamed(page, "#share", "Copy a share link");
       await page.waitForFunction(() => !!window.__helm.share, null, { timeout: 2 * MIN });
       const link = await page.evaluate(() => window.__helm.share);
-      const o = await open(page.context().browser(), link.slice(SITE.length));
+      const o = await open(page.context().browser(), `${link.slice(SITE.length)}&quality=low`);
       try {
         await o.page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
         if (!(await o.page.evaluate(() => window.__helm.ready))) {
@@ -155,19 +210,19 @@ const CHECKS = {
       }
     },
   },
-  "helm-base": { path: "helm.html", run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
+  "helm-base": { path: HELM, run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
 };
 
 // One helm check per boat the live picker offers (our kayak is helm-drop).
 const STOCK_BOATS = ["stock_cruiser31", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14", "stock_beachcat16"];
 for (const b of STOCK_BOATS)
   CHECKS[`helm-${b}`] = {
-    path: "helm.html",
+    path: HELM,
     optional: true, // only if the live picker offers it; the list of offered boats is checked in helm-boats
     run: helm(pickBoat(b)),
   };
 CHECKS["helm-boats"] = {
-  path: "helm.html",
+  path: HELM,
   run: async (page) => {
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
     const offered = await page.evaluate(() => [...document.querySelectorAll('input[name="boat"]')].map((r) => r.value || "kayak"));
@@ -271,6 +326,13 @@ CHECKS["helm-small-window"] = {
   },
 };
 
+/** First line of a Playwright error plus the last steps of its call log (why a click waited: hidden, disabled, covered, off screen). */
+function whyStuck(e) {
+  const lines = String(e).split("\n");
+  const log = lines.filter((l) => /^\s+-\s/.test(l)).slice(-3).map((l) => l.trim().replace(/^-\s*/, ""));
+  return lines[0] + (log.length ? ` [${log.join(" / ")}]` : "");
+}
+
 async function runCheck(browser, name) {
   const c = CHECKS[name];
   const t0 = Date.now();
@@ -289,7 +351,7 @@ async function runCheck(browser, name) {
     }
     result = await c.run(o.page);
   } catch (e) {
-    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${String(e).split("\n")[0]}`;
+    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${whyStuck(e)}`;
   }
   let notices = [];
   if (o) {
@@ -304,14 +366,23 @@ async function runCheck(browser, name) {
 
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
 for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
-const browser = await chromium.launch();
+// BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
+// Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
+// headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.
+const LAUNCH = {
+  headless: !process.env.HEADED,
+  ...((process.env.BROWSER ?? "chromium") === "firefox"
+    ? { firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false, "webgl.enable-webgl2": true } }
+    : {}),
+};
+const browser = await pw[process.env.BROWSER ?? "chromium"].launch(LAUNCH);
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);
   results.push(r);
   const detail = Array.isArray(r.detail) ? r.detail.map((d) => `\n    - ${d}`).join("") : ` ${r.detail}`;
   console.log(`${r.status} ${n} (${r.secs} s):${detail}`);
-  for (const x of r.notes.slice(0, 15)) console.log(`    (${x})`);
+  for (const x of (r.notes ?? []).slice(0, 15)) console.log(`    (${x})`);
 }
 await browser.close();
 if (process.env.GITHUB_STEP_SUMMARY) {

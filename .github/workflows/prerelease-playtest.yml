@@ -1,0 +1,103 @@
+# Pre-release playtest: the blocking gate before anything reaches the live site.
+# Builds the WHOLE site from the pull request's own commit, the way the Pages
+# deploy does (page + simulator boatsim.zip packed from the same commit + the
+# published data releases), serves it on localhost on the runner, and plays it
+# in Chrome and Firefox: Ravi's live-site checks (tools/live_site_check.mjs) and
+# Nina's playtest (tools/playtest/play.mjs). A red run means the PR would break
+# the live game. The post-deploy "Live site check" is the second gate.
+# No secrets: it only reads public releases and serves on the runner itself.
+name: Pre-release playtest
+on:
+  pull_request:
+    paths:
+      - "sea3d/**"
+      - "src/boatsim/**"
+      - "tools/playtest/**"
+      - "tools/live_site_check.mjs"
+      - ".github/workflows/prerelease-playtest.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: prerelease-playtest-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sea3d/package-lock.json
+      # The detailed Blender boats, from the deploy's cache when the scripts are
+      # unchanged. On a miss the page uses its drawn-in-code boats (as the deploy
+      # does when Blender fails), which is fine for a playtest.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            sea3d/public/models/kayak.glb
+            sea3d/public/models/randolph.glb
+            sea3d/public/models/shape_*.glb
+            sea3d/public/models/stock_*.glb
+          key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
+      - name: Build the site from this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/playtest/build_site.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: sea3d/dist
+          retention-days: 3
+  play:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+        suite: [live-check, playtest]
+    env:
+      SITE: http://localhost:4173/
+      BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # The runner image already has the browsers' system libraries; --with-deps only adds
+      # fonts from the Ubuntu mirrors, which can fail or hang on DNS (deploy 43047737622). Give it 2 min, then fall back.
+      - run: |
+          npm install --no-save playwright@1.49.1
+          timeout 120 npx playwright install --with-deps ${{ matrix.browser }} || npx playwright install ${{ matrix.browser }}
+      - name: Serve the site on localhost
+        run: |
+          (cd site && python3 -m http.server 4173 > ../server.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf "$SITE" > /dev/null && break; sleep 1; done
+          curl -sf "$SITE" > /dev/null
+      - name: Ravi's live-site checks
+        if: matrix.suite == 'live-check'
+        run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/live_site_check.mjs
+      - name: Nina's playtest
+        if: matrix.suite == 'playtest'
+        run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens-${{ matrix.browser }}-${{ matrix.suite }}
+          path: |
+            live-*.png
+            play-*.png
+          if-no-files-found: ignore

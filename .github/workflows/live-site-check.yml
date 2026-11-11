@@ -23,7 +23,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: live-site-check-${{ github.event_name == 'pull_request' && github.ref || 'live' }}
+  # A deploy of a pull request's page (skipped below) gets its own group, so it can't
+  # cancel the real post-deploy check (it did at 16:45 on 11 Nov).
+  group: live-site-check-${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch != 'main' || github.event.workflow_run.event == 'pull_request') && format('skip-{0}', github.run_id) || github.event_name == 'pull_request' && github.ref || 'live' }}
   cancel-in-progress: true
 jobs:
   check:
@@ -69,7 +71,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
+      # The runner image already has the browsers' system libraries; --with-deps only adds
+      # fonts from the Ubuntu mirrors, which can fail or hang on DNS (deploy 43047737622). Give it 2 min, then fall back.
+      - run: |
+          npm install --no-save playwright@1.49.1
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
       # Pages takes a minute to serve a fresh deploy everywhere.
       - if: github.event_name == 'workflow_run'
         run: sleep 90
