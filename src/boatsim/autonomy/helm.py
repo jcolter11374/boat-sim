@@ -13,7 +13,16 @@ gybe with the sailing tactician (sailing.py) when the mark is upwind or dead
 downwind. A compass number is steered as given; if it points into the wind
 the boat sails as close as it can on the nearer tack (the vessel's limit).
 
-Power is a fraction of the motors' full drive power (0 to 1).
+Power is a fraction of the motors' full drive power (0 to 1). On a keelboat
+that is the engine's power.
+
+Sailboats with a polar also take two optional orders (None = the boat decides):
+
+* ``sails``: a sail plan, "full", "reef1", "reef2", "storm" (smallest sails)
+  or "down" (bare poles). Left to itself the boat reefs to stay under its heel
+  limit.
+* ``engine``: True to motor at `power`, False to keep it off. Left to itself
+  it motors only in a calm.
 
 Safe mode is off by default, so the battery is the player's to manage. The
 hardware still cuts out at empty (the vessel model turns the electronics off
@@ -36,6 +45,7 @@ from boatsim.geo import bearing_deg
 from boatsim.types import Command, Mission, Sensors
 
 HEADING_MODES = ("finish", "route")
+SAIL_PLANS = ("full", "reef1", "reef2", "storm", "down")  # vessel/keelboat.py's plan names
 
 
 @dataclass
@@ -45,6 +55,8 @@ class OrderMission(Mission):
     power; the boat follows the waypoints and runs the motors at `power`."""
 
     power: float = 0.0
+    sails: str | None = None
+    engine: bool | None = None
 
 
 class HelmAutopilot:
@@ -58,6 +70,8 @@ class HelmAutopilot:
         heading: float | str = "route",
         power: float = 0.0,
         tactician: Tactician | None = None,
+        sails: str | None = None,
+        engine: bool | None = None,
     ):
         self.finish = finish
         self.safe = safe
@@ -68,11 +82,23 @@ class HelmAutopilot:
         )
         self.heading: float | str = "route"
         self.power = 0.0
-        self.set_order(heading, power)
+        self.sails: str | None = None
+        self.engine: bool | None = None
+        self.set_order(heading, power, sails, engine)
         self.last: Command | None = None
         self._mission_seen: Mission | None = None
 
-    def set_order(self, heading: float | str, power: float) -> None:
+    def set_order(
+        self,
+        heading: float | str,
+        power: float,
+        sails: str | None = None,
+        engine: bool | None = None,
+    ) -> None:
+        if sails is not None and sails not in SAIL_PLANS:
+            raise ValueError(f"sails must be one of {SAIL_PLANS} (or None: the boat decides)")
+        if engine is not None and not isinstance(engine, bool):
+            raise ValueError("engine must be True, False or None (the boat decides)")
         if isinstance(heading, str):
             if heading not in HEADING_MODES:
                 raise ValueError(f"heading must be degrees or one of {HEADING_MODES}")
@@ -81,6 +107,7 @@ class HelmAutopilot:
         if not 0.0 <= power <= 1.0:
             raise ValueError("power is a fraction of full drive power, 0 to 1")
         self.heading, self.power = heading, float(power)
+        self.sails, self.engine = sails, engine
 
     def on_message_received(self, t: datetime) -> None:
         self._rules.on_message_received(t)
@@ -90,7 +117,7 @@ class HelmAutopilot:
             # An order delivered by satellite: follow its route at its power.
             self._mission_seen = mission
             if isinstance(mission, OrderMission):
-                self.set_order("route", mission.power)
+                self.set_order("route", mission.power, mission.sails, mission.engine)
         # Keep the waypoint follower's crab estimate current even when it isn't
         # steering, so switching to "route" mid-voyage starts from a good guess.
         self.guidance.hold_crab = self.last is not None and self.last.thrust_fraction <= 0.0
@@ -126,5 +153,7 @@ class HelmAutopilot:
                 * self._rules.throttle_scale(sensors.soc)
                 * self._rules.thruster_scale(sensors),
             )
-        self.last = Command(heading=heading, thrust_fraction=frac)
+        self.last = Command(
+            heading=heading, thrust_fraction=frac, sail_plan=self.sails, engine=self.engine
+        )
         return self.last
