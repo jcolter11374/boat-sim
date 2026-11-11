@@ -32,7 +32,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
-import { WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame } from "./helm/wheelSession";
+import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { askedChallenge } from "./sailLink";
@@ -597,6 +597,11 @@ function sailText(s: Status): string {
   // A sailboat can't sail straight into the wind, or well dead downwind: it zigzags.
   if (g.tactic === "beat") bits.push("zigzagging upwind");
   else if (g.tactic === "run") bits.push("zigzagging downwind");
+  // A watch you trimmed at the wheel (phase 2): how it compares with the autopilot, and how long it lasts.
+  if (s.trim) {
+    const left = (utc(s.trim.until) - utc(s.boat.t)) / 3600e3;
+    if (left > 0) bits.push(`your trim ${Math.round(s.trim.share * 100)}% (autopilot ${Math.round(s.trim.factor * 100)}%) for ${left.toFixed(1)} h more`);
+  }
   return bits.join(" · ");
 }
 
@@ -975,15 +980,31 @@ addEventListener("blur", () => {
 let wheelRate = 0; // the clock's speed before the spell, to carry on at
 let wheelNow: WheelFrame | null = null;
 const wheel = new WheelSession({
-  ended: (r) => {
-    wheelNow = null;
-    note(wheelSummary(r), "At the wheel", r.reached ? TONE_COLOUR.good : TONE_COLOUR.info);
-    showOrder();
-    setRate(wheelRate);
-  },
+  ended: (r) => void wheelEnded(r),
   note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
 });
 (window as unknown as { __wheel: WheelSession }).__wheel = wheel;
+/** Phase 2 (Sam, Theo, Maya): a spell of a minute or more sets how well the boat is trimmed
+ * for the next watch, as an order the simulator sails (clamped there), never by moving the boat here. */
+async function wheelEnded(r: WheelResult): Promise<void> {
+  wheelNow = null;
+  let counts: { hours: number } | null = null;
+  const st = page.status;
+  if (r.sailedSecs >= COUNTS_AFTER_S && st?.sailboat && st.trim !== undefined && mode === "hands_on") {
+    try {
+      if (inFlight) await inFlight;
+      const o = await game.order(order, power, sailOrder, engineOrder, r.share);
+      page.status = game.status;
+      if (o.trim_until) counts = { hours: Math.round((utc(o.trim_until) - utc(page.status!.boat.t)) / 3600e3) };
+      present();
+    } catch (e) {
+      console.warn("the simulator didn't take the spell's trim", e);
+    }
+  }
+  note(wheelSummary(r, counts), "At the wheel", r.reached ? TONE_COLOUR.good : TONE_COLOUR.info);
+  showOrder();
+  setRate(wheelRate);
+}
 function wheelOffered(): boolean {
   return page.ready && !page.status?.over && mode === "hands_on" && canTakeWheel(spec.key) && !cine.on;
 }

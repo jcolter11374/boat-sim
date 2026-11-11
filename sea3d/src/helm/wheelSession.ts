@@ -50,6 +50,8 @@ export interface WheelResult {
   metres: number;
   seconds: number;
   share: number;
+  /** Seconds the share was measured over (under sail, with a speed to compare). */
+  sailedSecs: number;
   autopilot: number;
   best: number | null;
   reached: boolean;
@@ -184,6 +186,7 @@ export class WheelSession {
       metres: Math.hypot(w.s.x, w.s.y),
       seconds: w.s.t,
       share,
+      sailedSecs: w.s.sumSecs,
       autopilot: w.table.autopilot_factor,
       best,
       reached,
@@ -339,7 +342,11 @@ export class WheelSession {
 }
 
 /** The spell's payoff line (Leo: the summary is the reward). */
-export function summary(r: WheelResult): string {
+/** A spell counts in the voyage (phase 2) after a minute under sail (GUESS, Theo/Sam). */
+export const COUNTS_AFTER_S = 60;
+
+/** counts: the simulator took the spell's trim for the next watch (null: it can't, or it was too short). */
+export function summary(r: WheelResult, counts: { hours: number } | null = null): string {
   const km = r.metres >= 1000 ? `${(r.metres / 1000).toFixed(2)} km` : `${Math.round(r.metres)} m`;
   const mins = Math.floor(r.seconds / 60);
   const secs = Math.round(r.seconds % 60);
@@ -348,5 +355,11 @@ export function summary(r: WheelResult): string {
   const vs = pct > ap ? `better than the autopilot's ${ap}%` : pct === ap ? `level with the autopilot's ${ap}%` : `the autopilot manages ${ap}%`;
   const pb = r.best && r.seconds > 20 ? (r.share > r.best ? " A new personal best!" : ` Your best: ${Math.round(r.best * 100)}%.`) : "";
   const extra = [r.tacks ? `${r.tacks} tack${r.tacks > 1 ? "s" : ""}` : "", r.roundUps ? `rounded up ${r.roundUps} time${r.roundUps > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ");
-  return `${r.reached ? "Mark reached!" : "Handed back."} You sailed ${km} in ${mins} min ${secs} s at ${pct}% of the boat's best speed (${vs}).${extra ? ` ${extra[0].toUpperCase()}${extra.slice(1)}.` : ""}${pb} Your voyage waits while you sail; for now a spell doesn't change it.`;
+  return `${r.reached ? "Mark reached!" : "Handed back."} You sailed ${km} in ${mins} min ${secs} s at ${pct}% of the boat's best speed (${vs}).${extra ? ` ${extra[0].toUpperCase()}${extra.slice(1)}.` : ""}${pb} ${
+    counts
+      ? `For the next ${counts.hours} hours of the voyage your boat sails trimmed like that, instead of the autopilot's ${ap}%.`
+      : r.sailedSecs < COUNTS_AFTER_S
+        ? "Sail at least a minute and your trimming counts in the voyage for the next watch."
+        : "Your voyage waited while you sailed; this simulator can't count a spell yet."
+  }`;
 }
