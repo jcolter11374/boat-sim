@@ -162,3 +162,13 @@ def test_the_drone_gets_a_speed_table_from_its_own_physics():
     assert (iso.min_twa_deg, iso.max_twa_deg) == (50.0, 165.0)
     # The default planner is unchanged for the drone: no polar, as before.
     assert standard_components(d, env, env, land=None).base.polar is None
+
+
+def test_a_hybrid_wing_and_motor_boat_is_still_costed_as_a_motorboat():
+    from boatsim.oceandata import ConstantEnvironment
+    from boatsim.runner.simulate import standard_components
+
+    d = load_design("configs/stock_sail_drone7.yaml")
+    d.propulsion.update(thruster_count=2, cruise_drive_w=25, max_drive_w=50)  # add motors
+    env = ConstantEnvironment(EnvState())
+    assert standard_components(d, env, env, land=None, routing="isochrone").base.polar is None

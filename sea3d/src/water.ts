@@ -16,6 +16,7 @@ import * as THREE from "three";
 import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, type WaveComponent } from "./waves";
 import { PLACE } from "./land/place";
+import { foamStreaks, whitecaps } from "./storm";
 
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
@@ -103,6 +104,9 @@ uniform float uSunI;
 uniform vec3 uGlow;
 uniform float uRough;
 uniform float uCover;
+uniform float uStreak;
+uniform vec4 uWreck;      // a wreck on the bottom: x, z, half its length, half its beam (m)
+uniform vec2 uWreckK;     // how clearly it shows (0 = not at all), how deep it lies (m)
 uniform vec2 uWind;
 uniform float uChop;
 uniform int uN;
@@ -180,17 +184,50 @@ vec2 swellSlope(vec2 p, float t, float fp) {
 
 const FRAG_COLOUR = /* glsl */ `
 float distXZ = length(vWPos.xz - cameraPosition.xz);
+// A wreck on the bottom, seen as a dark shape through clear, calm water; the
+// surface's movement makes it waver, and the deeper it lies the softer it is.
+float wreckShade = 0.0;
+float wreckRim = 0.0;
+if (uWreckK.x > 0.001) {
+  vec2 pw = vWPos.xz - uWreck.xy;
+  pw += (vec2(vnoise(vWPos.xz * 0.15 + uTime * 0.4), vnoise(vWPos.xz * 0.15 - uTime * 0.35 + 3.0)) - 0.5) * (0.4 + 0.02 * uWreckK.y);
+  vec2 aw = abs(pw);
+  // A hull: a long rounded shape, lying north-south (its real heading isn't in our sources).
+  float dw = length(max(aw - vec2(0.0, uWreck.z - uWreck.w), 0.0)) - uWreck.w;
+  float soft = 0.4 + 0.03 * uWreckK.y;
+  float inside = 1.0 - smoothstep(-soft, soft, dw);
+  float rim = 1.0 - smoothstep(0.0, soft, abs(dw - soft));
+  wreckShade = uWreckK.x * 0.6 * inside;
+  wreckRim = uWreckK.x * rim;
+}
 float farMix = smoothstep(${FADE_IN.toFixed(1)}, ${FADE_OUT.toFixed(1)}, length(vWPos.xz)) ;
 // Whitecaps: scattered by the wind everywhere (uCover is the share of sea
 // that is white), more on high crests (vFoam), drawn out into streaks along
 // the wind.
 vec2 wd = uWind;
 vec2 q = vec2(dot(vWPos.xz, wd), dot(vWPos.xz, vec2(-wd.y, wd.x)));
+// Each octave gives way to its average once its blobs are smaller than the pixel, so
+// a wide white sea far off is an even white, not a shimmer of speckles.
+float fpF = max(length(fwidth(vWPos.xz)), 1e-4);
+float o2 = smoothstep(0.08, 0.3, fpF);
+float o3 = smoothstep(0.02, 0.1, fpF);
 float fn = vnoise(vec2(q.x * 0.5, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
-         + vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08) * 0.3
-         + vnoise(vWPos.xz * 7.0 + uTime * 0.2) * 0.2;
+         + mix(vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08), 0.5, o2) * 0.3
+         + mix(vnoise(vWPos.xz * 7.0 + uTime * 0.2), 0.5, o3) * 0.2;
 float thr = 0.8 - 1.4 * uCover - 0.35 * vFoam;
 float foamMask = smoothstep(thr, thr + 0.1, fn) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+// Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
+// downwind; where they're finer than a pixel, their average whiteness instead.
+if (uStreak > 0.001) {
+  vec2 qs = q - vec2(uTime * 1.2, 0.0);
+  // Wander the lanes sideways a little, so they meander and split instead of running as ruled bars.
+  qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
+  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 0.9)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 2.3) + 17.0), 0.5, smoothstep(0.1, 0.4, fpF)) * 0.4;
+  float thrS = 0.5 + 0.51 * (0.5 - uStreak); // that share of the noise is over it
+  float lanes = smoothstep(thrS - 0.03, thrS + 0.07, ns) * (0.7 + 0.3 * fn);
+  float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
+  foamMask = max(foamMask, 0.9 * streak);
+}
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.98), foamMask);
 `;
 
@@ -227,6 +264,15 @@ const FRAG_GLOW = /* glsl */ `
 // The land, town and boats mirrored in calm water (mirror.ts): looked up where this
 // pixel of flat sea is, pushed about by the wave slopes, stronger at grazing angles.
 const FRAG_MIRROR = /* glsl */ `
+// The wreck darkens the light coming up out of the water, not the sky's reflection
+// off the top, so it shows looking down and fades at a glancing angle.
+if (wreckShade > 0.0) {
+  vec3 Vw = normalize(cameraPosition - vWPos);
+  float up = clamp(Vw.y, 0.0, 1.0);
+  outgoingLight *= 1.0 - wreckShade * (0.35 + 0.65 * up) * (1.0 - foamMask);
+  // Its edge catches a little light from above: a faint paler outline against the deep blue.
+  outgoingLight += vec3(0.05, 0.1, 0.1) * wreckRim * up * (1.0 - foamMask);
+}
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
@@ -255,6 +301,9 @@ export class Sea {
     uRough: { value: 1 },
     uAmp: { value: 0.5 },
     uCover: { value: 0 },
+    uStreak: { value: 0 },
+    uWreck: { value: new THREE.Vector4() },
+    uWreckK: { value: new THREE.Vector2() },
     uWind: { value: new THREE.Vector2(1, 0) },
     uChop: { value: 0 },
     uFoamAmt: { value: 0 },
@@ -269,6 +318,8 @@ export class Sea {
     uMirror: { value: 0 },
   };
   private detail = 0; // wind chop on (High) or off (Low)
+  private quality: Quality;
+  private reach = HORIZON;
 
   constructor(quality: Quality) {
     const material = new THREE.MeshPhysicalMaterial({
@@ -297,23 +348,37 @@ export class Sea {
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
         .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>");
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v7";
+    material.customProgramCacheKey = () => "boatsim-sea-v9";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
+    this.quality = quality;
     this.setQuality(quality);
+  }
+
+  /** How far the sea reaches from the boat (m). */
+  get horizon(): number {
+    return this.reach;
+  }
+
+  /** Reach out to h metres, as when real land comes into view (rebuilds the grid, so not every frame). */
+  setHorizon(h: number): void {
+    if (h === this.reach) return;
+    this.reach = h;
+    this.setQuality(this.quality);
   }
 
   /** Grid that is fine near the middle and reaches the horizon at the edge:
    *  x = a u + b u^3 + c u^25 for u in [-1, 1]. */
   setQuality(quality: Quality): void {
     const { n, centre } = GRID[quality];
+    this.quality = quality;
     this.detail = quality === "high" ? 1 : 0;
     this.uniforms.uChop.value = this.detail * this.chopFor(this.wind);
     const half = SEA_SIZE / 2;
     const a = (centre * n) / 2;
     const b = half - a;
-    const c = HORIZON - half;
+    const c = this.reach - half;
     const geo = new THREE.PlaneGeometry(2, 2, n, n);
     geo.rotateX(-Math.PI / 2);
     const p = geo.attributes.position.array as Float32Array;
@@ -354,8 +419,9 @@ export class Sea {
     this.uniforms.uAmp.value = hs / 2;
     this.uniforms.uRough.value = THREE.MathUtils.clamp(0.6 + hs / 5, 0.6, 1.4); // GUESS display tuning
     const u = windMs ?? Math.sqrt(hs / 0.0246);
-    // Share of the sea covered by whitecaps (Monahan & O'Muircheartaigh 1980).
-    this.uniforms.uCover.value = THREE.MathUtils.clamp(3.84e-6 * u ** 3.41, 0, 0.2);
+    // Share of the sea white with breaking crests, and under blown foam (storm.ts, Beaufort).
+    this.uniforms.uCover.value = whitecaps(u);
+    this.uniforms.uStreak.value = foamStreaks(u);
     if (towards && towards.lengthSq() > 0) this.uniforms.uWind.value.copy(towards).normalize();
     this.wind = u;
     this.uniforms.uChop.value = this.detail * this.chopFor(u);
@@ -376,6 +442,16 @@ export class Sea {
     this.uniforms.tMirror.value = tex;
     this.uniforms.uMirrorM.value.copy(m);
     this.uniforms.uMirror.value = tex ? strength : 0;
+  }
+
+  /**
+   * A wreck on the bottom to show through the water (pois.ts wreckBelow): where it lies
+   * from the boat (m east, m south), its length and beam (m), its depth (m), and how
+   * clearly it shows (0 hides it).
+   */
+  setWreck(x: number, z: number, length: number, beam: number, depth: number, clear: number): void {
+    this.uniforms.uWreck.value.set(x, z, length / 2, beam / 2);
+    this.uniforms.uWreckK.value.set(clear, depth);
   }
 
   /** Point the glitter and the glow at the scene's sun (world direction towards it). */
