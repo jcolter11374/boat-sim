@@ -269,6 +269,8 @@ export class Sea {
     uMirror: { value: 0 },
   };
   private detail = 0; // wind chop on (High) or off (Low)
+  private quality: Quality;
+  private reach = HORIZON;
 
   constructor(quality: Quality) {
     const material = new THREE.MeshPhysicalMaterial({
@@ -301,19 +303,33 @@ export class Sea {
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
+    this.quality = quality;
     this.setQuality(quality);
+  }
+
+  /** How far the sea reaches from the boat (m). */
+  get horizon(): number {
+    return this.reach;
+  }
+
+  /** Reach out to h metres, as when real land comes into view (rebuilds the grid, so not every frame). */
+  setHorizon(h: number): void {
+    if (h === this.reach) return;
+    this.reach = h;
+    this.setQuality(this.quality);
   }
 
   /** Grid that is fine near the middle and reaches the horizon at the edge:
    *  x = a u + b u^3 + c u^25 for u in [-1, 1]. */
   setQuality(quality: Quality): void {
     const { n, centre } = GRID[quality];
+    this.quality = quality;
     this.detail = quality === "high" ? 1 : 0;
     this.uniforms.uChop.value = this.detail * this.chopFor(this.wind);
     const half = SEA_SIZE / 2;
     const a = (centre * n) / 2;
     const b = half - a;
-    const c = HORIZON - half;
+    const c = this.reach - half;
     const geo = new THREE.PlaneGeometry(2, 2, n, n);
     geo.rotateX(-Math.PI / 2);
     const p = geo.attributes.position.array as Float32Array;

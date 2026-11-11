@@ -447,6 +447,17 @@ try {
     log.push(`stock cruiser: ${st.rig.plan}, heel ${st.rig.heel.toFixed(1)}`);
   } else log.push("stock cruiser: no replay yet");
 
+  // Take the helm near land: off Cascais, the Lisbon coast loads and the view reaches out to it.
+  await page.goto(`${URL}helm.html?quality=low&spot=38.668,-9.42`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.landKnown >= 0, null, { timeout: 60000 });
+  if (await page.evaluate(() => window.__helm.landKnown > 0)) {
+    await page.waitForFunction(() => window.__helm.land.place === "lisbon" && window.__helm.reach > 50000, null, { timeout: 120000 })
+      .catch(async () => fail(`helm: no Lisbon land off Cascais (${await page.evaluate(() => JSON.stringify({ land: window.__helm.land, reach: window.__helm.reach }))})`));
+    if (!(await page.evaluate(() => /Sentinel/.test(document.getElementById("landcredit").textContent)))) fail("helm: no land credit off Cascais");
+    if (errors.length) fail(`page errors at the helm off Cascais: ${errors.join("; ")}`);
+    log.push(`helm near land: ${await page.evaluate(() => JSON.stringify(window.__helm.land))}`);
+  } else log.push("helm near land: no land files");
+
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
