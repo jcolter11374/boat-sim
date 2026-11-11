@@ -224,6 +224,13 @@ const CHECKS = {
   },
 };
 
+/** First line of a Playwright error plus the last steps of its call log (why a click waited: hidden, disabled, covered, off screen). */
+function whyStuck(e) {
+  const lines = String(e).split("\n");
+  const log = lines.filter((l) => /^\s+-\s/.test(l)).slice(-3).map((l) => l.trim().replace(/^-\s*/, ""));
+  return lines[0] + (log.length ? ` [${log.join(" / ")}]` : "");
+}
+
 async function runCheck(browser, name) {
   const t0 = Date.now();
   let o;
@@ -237,7 +244,7 @@ async function runCheck(browser, name) {
       await o?.ctx.close().catch(() => {});
       return { name, ok: true, skip: true, detail: [`skipped: ${e.message}`], notes: [], secs: Math.round((Date.now() - t0) / 1000) };
     }
-    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${String(e).split("\n")[0]}`;
+    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${whyStuck(e)}`;
   }
   let notices = [];
   if (o) {

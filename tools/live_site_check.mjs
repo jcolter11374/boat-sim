@@ -271,6 +271,13 @@ CHECKS["helm-small-window"] = {
   },
 };
 
+/** First line of a Playwright error plus the last steps of its call log (why a click waited: hidden, disabled, covered, off screen). */
+function whyStuck(e) {
+  const lines = String(e).split("\n");
+  const log = lines.filter((l) => /^\s+-\s/.test(l)).slice(-3).map((l) => l.trim().replace(/^-\s*/, ""));
+  return lines[0] + (log.length ? ` [${log.join(" / ")}]` : "");
+}
+
 async function runCheck(browser, name) {
   const c = CHECKS[name];
   const t0 = Date.now();
@@ -289,7 +296,7 @@ async function runCheck(browser, name) {
     }
     result = await c.run(o.page);
   } catch (e) {
-    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${String(e).split("\n")[0]}`;
+    failure = e instanceof CheckFail ? e.message : `stuck or crashed: ${whyStuck(e)}`;
   }
   let notices = [];
   if (o) {
