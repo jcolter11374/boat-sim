@@ -12,6 +12,7 @@
 
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
+import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { Wetness } from "./boats/wet";
@@ -197,6 +198,12 @@ const rain = new Rain();
 scene.add(rain.mesh);
 const bands = new RainBands();
 scene.add(bands.mesh);
+// Other ships, where the real traffic is (loaded in the background; none until it is).
+let traffic: Traffic | null = null;
+void Traffic.load().then((tr) => {
+  traffic = tr;
+  scene.add(tr.root);
+});
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
@@ -362,6 +369,7 @@ const status = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
+  ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } } as Traffic["shown"],
   /** The wreck showing through the water below, if any (its id), and the catalogue stars in the sky. */
   wreck: "",
   stars: 0,
@@ -1168,6 +1176,8 @@ renderer.setAnimationLoop(() => {
     rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
     status.bands = bands.shown;
     status.bandNear = bands.nearest;
+    traffic?.update(lat, lon, (utc(rep.start) + hour * 3600e3) / 1000, atmos.fog.far, sea.waveHeight);
+    if (traffic) status.ships = traffic.shown;
     renderer.getDrawingBufferSize(sprayBuf);
     spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
     status.spindrift = spray.amount;
