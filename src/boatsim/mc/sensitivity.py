@@ -320,6 +320,12 @@ VARIANTS: dict[str, Variant] = {
         forecast_error=2.0,
         against="fan_forecast_x2",
     ),
+    "no_tactician": Variant(
+        "steering",
+        "Wing-sail drone without the tactician (#279): the wing picks its own tacks, "
+        "with no look-ahead for land (the drone before 11 Nov 2026)",
+        design=(("electronics", "tactician", False),),
+    ),
     "pursuit_nocrab": Variant(
         "steering",
         "As pursuit, but never crab into the current far from land",
@@ -606,6 +612,39 @@ def _endings(df: pd.DataFrame) -> list[str]:
     return list(df["ending"].value_counts().index)
 
 
+def trace_lines(log, every_hours: float = 12.0) -> list[str]:
+    """One voyage as plain text for a job log: its events (not the routine
+    messages), then a row every `every_hours` with position, heading, speed
+    through the water, the wind it sails in, the current and the distance left
+    to the target. For chasing one launch (the trace subcommand)."""
+    from boatsim.geo import distance_m
+    from boatsim.runner.arrival import DEFAULT_TARGET
+
+    start = log.start
+    routine = {"message_sent", "message_received"}
+    out = [f"outcome {getattr(log.outcome, 'value', log.outcome)} after {log.days:.1f} days"]
+    for e in log.events:
+        kind = getattr(e.kind, "value", str(e.kind))
+        if kind not in routine:
+            out.append(f"  day {(e.t - start).total_seconds() / 86400:6.2f}  {kind}  {e.detail}")
+    out.append("   day     lat      lon  hdg   stw  wind_from  m/s   cur_e  cur_n  soc  target_km")
+    next_h = 0.0
+    for r in log.rows:
+        h = (r["t"] - start).total_seconds() / 3600.0
+        if h + 1e-6 < next_h:
+            continue
+        next_h = h + every_hours
+        wu, wv = r.get("wind_u") or 0.0, r.get("wind_v") or 0.0
+        wind_from = math.degrees(math.atan2(-wu, -wv)) % 360.0
+        left = distance_m(r["lat"], r["lon"], *DEFAULT_TARGET) / 1000.0
+        out.append(
+            f"{h / 24:6.2f} {r['lat']:7.3f} {r['lon']:8.3f} {r['heading']:4.0f} {r['stw']:5.2f}"
+            f"  {wind_from:9.0f} {math.hypot(wu, wv):5.1f}  {r.get('current_u') or 0.0:6.2f}"
+            f" {r.get('current_v') or 0.0:6.2f} {r.get('soc') or 0.0:4.2f} {left:10.0f}"
+        )
+    return out
+
+
 # --- CLI --------------------------------------------------------------------
 
 
@@ -623,6 +662,15 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--unknown-p", type=float, default=0.0, help="0 = off, swept in the report")
     r.add_argument("--no-currents", action="store_true", help="try-out only: zero current")
     r.add_argument("--constant", action="store_true", help="test only: constant made-up weather")
+    t = sub.add_parser("trace", help="one launch, step by step, printed to the log")
+    t.add_argument("start", help="launch day, YYYY-MM-DD (noon UTC, as in run)")
+    t.add_argument("--variants", nargs="*", default=["baseline"], choices=list(VARIANTS))
+    t.add_argument("--every-days", type=int, default=10, help="as in run: sets the seed")
+    t.add_argument("--design", default="configs/v4_kayak.yaml")
+    t.add_argument("--max-days", type=float, default=MAX_DAYS)
+    t.add_argument("--every-hours", type=float, default=12.0)
+    t.add_argument("--out", default="runs/sensitivity")
+    t.add_argument("--constant", action="store_true", help="test only: constant made-up weather")
     s = sub.add_parser("report", help="combine per-year CSVs into the sensitivity report")
     s.add_argument("csvs", nargs="+")
     s.add_argument("--out", default="runs/sensitivity")
@@ -630,6 +678,27 @@ def main(argv: list[str] | None = None) -> None:
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
+    if a.cmd == "trace":
+        start = datetime.fromisoformat(a.start).replace(hour=12)
+        starts = window_launches(start.year, a.every_days)
+        if start not in starts:
+            raise SystemExit(
+                f"{a.start} is not a launch day every {a.every_days} days from 1 April"
+            )
+        seed = start.year * 1000 + starts.index(start)  # the same seed as run gives it
+        if "baseline" not in a.variants:  # as in run: always the baseline to compare with
+            a.variants = ["baseline", *a.variants]
+        for name in a.variants:
+            job = SensitivityVoyage(
+                variant=name,
+                design_path=a.design,
+                weather="constant" if a.constant else "reanalysis",
+                max_days=a.max_days,
+                unknown_p_by_60_days=0.0,
+            )
+            print(f"== {name}: {a.design}, launch {start:%Y-%m-%d %H:%M}, seed {seed}")
+            print("\n".join(trace_lines(job(start, seed), a.every_hours)), flush=True)
+        return
     if a.cmd == "run":
         if "baseline" not in a.variants:
             a.variants = ["baseline", *a.variants]
