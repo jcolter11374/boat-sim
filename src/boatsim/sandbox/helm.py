@@ -78,6 +78,8 @@ ESTIMATE_MAX_H = 48.0  # GUESS: base stops extrapolating a silent boat after thi
 LAUNCH_MONTHS = (4, 5, 6)  # the target window (John, 8 Nov): April to June
 LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the bundle
 SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
+PASS_MARGIN_KM = 1.0  # a lead change counts once the other boat is this far clear (Maya, 11 Nov)
+PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 11 Nov)
 
 
 def day_seed(start: datetime) -> int:
@@ -233,6 +235,11 @@ class Game:
         )
         self.orders: list[dict] = []
         self.left_data: set[int] = set()
+        # Who is ahead, with hysteresis: None while level (as at the drop), then
+        # "me" or "ghost" once that boat is PASS_MARGIN_KM clear. Each change of
+        # leader is a pass, including the first one away from the drop.
+        self.leader: str | None = None
+        self.last_pass: str | None = None
         self._route = default_mission(self.drop).waypoints
 
     # ---------------------------------------------------------------- orders
@@ -335,6 +342,21 @@ class Game:
     def _step(self) -> None:
         self._advance(self.mine)
         self._advance(self.ghost, self.mine.state.t)
+        self.last_pass = self._update_leader()
+
+    def _update_leader(self) -> str | None:
+        """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
+        None. A lead of a few metres flips back and forth with every wave, so a
+        pass needs the other boat PASS_MARGIN_KM clear, and none counts in the
+        first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in)."""
+        if self.mine.state.t < self.start + timedelta(hours=PASS_QUIET_H):
+            return None
+        lead = self.lead_km()
+        now = "me" if lead > PASS_MARGIN_KM else "ghost" if lead < -PASS_MARGIN_KM else None
+        if now is None or now == self.leader:
+            return None
+        self.leader = now
+        return "ghost_passed" if now == "ghost" else "passed_ghost"
 
     def run(
         self,
@@ -353,7 +375,9 @@ class Game:
         Returns why it stopped, the status, and both boats' new 6-hourly rows.
 
         Stop reasons: time, battery, wind, land, breakdown, ghost_passed,
-        order_arrived (Real base station mode), over."""
+        passed_ghost, order_arrived (Real base station mode), over. A pass
+        means the lead changed hands by more than PASS_MARGIN_KM, after the
+        first PASS_QUIET_H (see _update_leader)."""
         from boatsim.vessel.coast import distance_to_land_km
 
         v = self.mine
@@ -364,7 +388,6 @@ class Game:
             land_within_km is not None
             and distance_to_land_km(v.state.lat, v.state.lon) <= land_within_km
         )
-        ahead = self.lead_km() >= 0.0
         stopped = None
         while stopped is None:
             if v.done:
@@ -399,11 +422,8 @@ class Game:
                 if now_near and not near:
                     stopped = "land"
                 near = now_near
-            if stopped is None and ghost_passes:
-                now_ahead = self.lead_km() >= 0.0
-                if ahead and not now_ahead:
-                    stopped = "ghost_passed"
-                ahead = now_ahead
+            if stopped is None and ghost_passes and self.last_pass:
+                stopped = self.last_pass
         return {"stopped": stopped, "status": self.status(), "track": self.track(since=t0)}
 
     # -------------------------------------------------------------- reading

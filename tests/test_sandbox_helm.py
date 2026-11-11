@@ -86,7 +86,8 @@ def test_stop_conditions(env):
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order(270, 0.0)  # drifting, motors off: the autopilot pulls ahead
     out = g.run(land_within_km=None, breakdown=False)
-    assert out["stopped"] == "ghost_passed" and out["status"]["lead_km"] < 0
+    assert out["stopped"] == "ghost_passed" and out["status"]["lead_km"] < -1.0
+    assert g.mine.state.t >= g.start + timedelta(hours=1)
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order("finish", 1.0)
     out = g.run(soc_below=0.99, ghost_passes=False, land_within_km=None)
@@ -261,3 +262,29 @@ def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
     stale = distance_m(s.lat, s.lon, b["last_report"]["lat"], b["last_report"]["lon"])
     guess = distance_m(s.lat, s.lon, est["lat"], est["lon"])
     assert guess < stale
+
+
+def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
+    """Ravi, 1 May 2020: 'finish' at 25% stopped on a 2 m lead change 20 minutes in."""
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.order("finish", 0.25)
+    out = g.run(land_within_km=None, breakdown=False)
+    assert out["stopped"] == "passed_ghost" and out["status"]["lead_km"] > 1.0
+    assert g.mine.state.t >= g.start + timedelta(hours=1)
+
+    # Hysteresis: a lead wobbling inside +-1 km never stops the clock again.
+    leads = iter([1.5, 0.2, -0.9, 0.4, -0.99, -1.2, 0.5, 0.9, 1.1])
+    g.leader = None
+    g.lead_km = lambda: next(leads)
+    seen = [g._update_leader() for _ in range(9)]
+    assert seen == [
+        "passed_ghost",
+        None,
+        None,
+        None,
+        None,
+        "ghost_passed",
+        None,
+        None,
+        "passed_ghost",
+    ]
