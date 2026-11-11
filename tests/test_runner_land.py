@@ -85,3 +85,32 @@ def test_build_keeps_small_islands(tmp_path):
 @pytest.mark.parametrize(("bbox", "name"), ISLAND_CHECKS)
 def test_committed_mask_has_small_islands(bbox, name):
     assert land_cells(LandMask.load(DEFAULT_PATH), bbox) > 0, name
+
+
+@pytest.mark.skipif(not DEFAULT_PATH.exists(), reason="land mask not built yet")
+def test_clear_of_never_clears_a_point_with_land_in_reach():
+    """The coarse precheck (Maya's speed-up) may only say 'clear' when probing
+    finds no land: checked densely around random points near coasts."""
+    import random
+
+    from boatsim.autonomy.sphere import destination
+
+    m = LandMask.load(DEFAULT_PATH)
+    li, lj = np.nonzero(m.mask)
+    rng = random.Random(7)
+    cleared = 0
+    for _ in range(400):
+        k = rng.randrange(len(li))
+        lat = m.lat0 + (li[k] + 0.5) * m.res + rng.uniform(-3, 3)
+        lon = m.lon0 + (lj[k] + 0.5) * m.res + rng.uniform(-5, 5)
+        reach = rng.choice([5_000.0, 20_000.0, 100_000.0])
+        if not m.clear_of(lat, lon, reach):
+            continue
+        cleared += 1
+        for r in np.linspace(0, reach, 21):
+            assert not any(
+                m.on_land(*destination(lat, lon, float(b), float(r))) for b in range(0, 360, 10)
+            )
+    assert cleared > 10  # the test exercises the precheck
+    assert not m.clear_of(36.85, -76.29, 0.0)  # Norfolk: on land
+    assert m.clear_of(40.0, -50.0, 20_000.0)  # mid Atlantic

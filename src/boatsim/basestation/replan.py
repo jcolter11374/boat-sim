@@ -137,6 +137,11 @@ class ForecastReplanPolicy:
         if mask is None:
             extra = margin - self.land_margin_m  # circles already include the default margin
             return any(distance_m(lat, lon, a, b) < r + extra for a, b, r in self.keep_out)
+        # Far from any land (coarse block grid): every probe below would say water.
+        # Same answer, without the 17 lookups (Maya's profile: 93 % of voyage time).
+        clear = getattr(mask, "clear_of", None)
+        if clear is not None and clear(lat, lon, max(margin, 0.0)):
+            return False
         if mask.on_land(lat, lon):
             return True
         if margin <= 0:
@@ -156,9 +161,31 @@ class ForecastReplanPolicy:
         d = distance_m(lat1, lon1, lat2, lon2)
         brg = bearing_deg(lat1, lon1, lat2, lon2)
         n = max(1, math.ceil(d / 5_000.0))
-        return any(
-            self._inside(*destination(lat1, lon1, brg, d * k / n), margin) for k in range(n + 1)
-        )
+        mask = self._mask()
+        clear = getattr(mask, "clear_of", None)
+        if clear is None:
+            return any(
+                self._inside(*destination(lat1, lon1, brg, d * k / n), margin) for k in range(n + 1)
+            )
+        # The same points k = 0..n as above, but a stretch of them whose midpoint is
+        # far from any land (coarse block grid: every point in the stretch lies
+        # within its half-length of the midpoint) is cleared in one check, halving
+        # stretches near land. Same answer as checking every point.
+        m = max(self.land_margin_m if margin is None else margin, 0.0)
+        stack = [(0, n)]
+        while stack:
+            a, b = stack.pop()
+            if b - a > 4:
+                mid = destination(lat1, lon1, brg, d * (a + b) / (2 * n))
+                if clear(*mid, d * (b - a) / (2 * n) + m + 1.0):
+                    continue
+                c = (a + b) // 2
+                stack += [(c + 1, b), (a, c)]
+                continue
+            for k in range(a, b + 1):
+                if self._inside(*destination(lat1, lon1, brg, d * k / n), margin):
+                    return True
+        return False
 
     def _route_after(self, lat: float, lon: float) -> tuple[float, Waypoint]:
         """Distance from a point to the goal along the planned route, and the first

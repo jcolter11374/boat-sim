@@ -18,11 +18,14 @@ separate piece.
 
 from __future__ import annotations
 
+import math
 import os
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+
+from boatsim.geo import EARTH_RADIUS_M
 
 DEFAULT_PATH = Path("data/land/land_mask_v1.npz")
 BOX = (25.0, 62.0, -82.0, 5.0)  # lat_min, lat_max, lon_min, lon_max
@@ -55,6 +58,63 @@ class LandMask:
             lon0=self.lon0,
             res=self.res,
         )
+
+    # --- A coarse precheck: "no land anywhere near" without probing (Maya, speed) ---
+    # Blocks of BLOCK x BLOCK cells; for each, the Chebyshev distance in blocks to
+    # the nearest block holding any land cell (capped at FAR). A point whose block
+    # is more than (reach in blocks + 1) from any land block can't have land within
+    # that reach, so clear_of() answers exactly what probing would: no land.
+    BLOCK = 10
+    FAR = 40
+
+    def _blocks(self) -> np.ndarray:
+        d = getattr(self, "_block_dist", None)
+        if d is not None:
+            return d
+        b = self.BLOCK
+        nb_i, nb_j = -(-self.nlat // b), -(-self.nlon // b)
+        pad = np.zeros((nb_i * b, nb_j * b), dtype=bool)
+        pad[: self.nlat, : self.nlon] = self.mask
+        land = pad.reshape(nb_i, b, nb_j, b).any(axis=(1, 3))
+        d = np.full(land.shape, self.FAR, dtype=np.int16)
+        cur = land
+        for k in range(self.FAR):
+            d[cur & (d > k)] = k
+            grown = np.pad(cur, 1)
+            cur = np.zeros_like(cur)
+            for di in (0, 1, 2):
+                for dj in (0, 1, 2):
+                    cur |= grown[di : di + land.shape[0], dj : dj + land.shape[1]]
+        self._block_dist = d
+        return d
+
+    def clear_of(self, lat: float, lon: float, reach_m: float) -> bool:
+        """True only if no land cell lies within reach_m (great circle) of the
+        point, so on_land is False at it and everywhere within reach_m. False
+        means "can't tell cheaply", not "land is near"."""
+        i = int((lat - self.lat0) // self.res)
+        j = int((lon - self.lon0) // self.res)
+        if not (0 <= i < self.nlat and 0 <= j < self.nlon):
+            return False
+        reach_blocks = self._reach_blocks(math.ceil(abs(lat)), reach_m)
+        if reach_blocks is None:
+            return False
+        return int(self._blocks()[i // self.BLOCK, j // self.BLOCK]) > reach_blocks
+
+    @lru_cache(maxsize=4096)  # noqa: B019 - one mask per process; keys are few
+    def _reach_blocks(self, lat_ceil: int, reach_m: float) -> int | None:
+        """Blocks a great circle of length reach_m can stray from a point at any
+        latitude up to lat_ceil degrees (None: too far to tell cheaply)."""
+        d = reach_m / EARTH_RADIUS_M  # angular reach (rad)
+        phi = math.radians(lat_ceil)
+        if d >= math.pi / 2 - phi - 1e-3:
+            return None
+        # Widest the great circle strays in latitude and longitude, with slack.
+        dlat = math.degrees(d) * 1.05 + 1e-6
+        dlon = math.degrees(math.asin(min(1.0, math.sin(d) / math.cos(phi)))) * 1.05 + 1e-6
+        # fine cells the reach spans (+1 for where in its cell the point sits), in blocks
+        n = math.ceil((max(dlat, dlon) / self.res + 1) / self.BLOCK) + 1
+        return n if n < self.FAR else None
 
     def on_land(self, lat: float, lon: float) -> bool:
         i = int((lat - self.lat0) // self.res)
