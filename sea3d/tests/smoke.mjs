@@ -421,13 +421,13 @@ try {
     // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
     // hits the same stops): then it must be a known reason, before hour 6.
     const six = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error }));
-    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
+    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
     if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
     // stop a known reason, and the game ends in a results card that follows the draw rule.
-    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "over", "order_arrived"];
+    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "passed_ghost", "over", "order_arrived"];
     const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
     let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
     if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
