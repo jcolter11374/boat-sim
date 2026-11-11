@@ -1,0 +1,82 @@
+# Today's weather for the 3D view (src/boatsim/oceandata/gfs.py): the newest
+# NOAA GFS and GFS-Wave forecast over the sandbox corridor, 1 deg, 3-hourly,
+# 0-120 h, in the sea state file layout. Display only: nothing in the
+# simulator reads it.
+# Runs about 5 h 20 min after each GFS cycle (00/06/12/18 UTC), when the 120 h
+# files are out. If the newest cycle is already on the forecast-data release it
+# stops there; otherwise it publishes and asks "3D sea page" to redeploy, so the
+# site carries the new forecast. No secrets: NOAA's AWS bucket is public.
+# Free runners only. GitHub pauses schedules after 60 days without commits.
+name: Today's weather
+on:
+  schedule:
+    - cron: "20 5,11,17,23 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: forecast
+  cancel-in-progress: false
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write  # only for the release upload
+    outputs:
+      new: ${{ steps.bake.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . eccodes
+      - name: Issue time already published
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ISSUED=$(gh release download forecast-data -p forecast_index.json -O - 2>/dev/null \
+            | python -c "import json,sys; print(json.load(sys.stdin)['issued'])" 2>/dev/null || true)
+          echo "issued=$ISSUED" >> "$GITHUB_OUTPUT"
+          echo "published: ${ISSUED:-none}"
+      - name: Bake the newest GFS forecast
+        id: bake
+        run: |
+          python -m boatsim.oceandata.gfs --out site --previous "${{ steps.prev.outputs.issued }}"
+          if [ -f site/forecast_index.json ]; then echo "new=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Publish to the forecast-data release
+        if: steps.bake.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ISSUED=$(python -c "import json; print(json.load(open('site/forecast_index.json'))['issued'])")
+          cat > NOTES.md <<NOTES
+          Today's weather for the 3D view: NOAA GFS forecast issued $ISSUED, 0-120 h, 3-hourly,
+          1 deg over the corridor (wind, cloud, rain, wind sea, two swells). A forecast, not
+          observations. Display only. Rebuilt every 6 h by the Today's weather workflow; format
+          in src/boatsim/oceandata/gfs.py.
+
+          Source: NOAA Global Forecast System (GFS) and GFS-Wave (WAVEWATCH III), NOAA/NWS/NCEP,
+          public domain, via the NOAA Open Data Dissemination program on AWS. Thinned and
+          quantised by us.
+          NOTES
+          gh release view forecast-data >/dev/null 2>&1 || gh release create forecast-data \
+            --title "Today's weather for the 3D view" --notes-file NOTES.md
+          gh release edit forecast-data --notes-file NOTES.md
+          gh release upload forecast-data site/forecast_* --clobber
+          echo "Published GFS $ISSUED" >> "$GITHUB_STEP_SUMMARY"
+  # Its own job, so the token that can start workflows can do nothing else.
+  # sea3d.yml queues rather than cancels, so this never cuts off a merge deploy.
+  redeploy:
+    needs: bake
+    if: needs.bake.outputs.new == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Redeploy the 3D sea page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run sea3d.yml -R "$GITHUB_REPOSITORY" --ref main
