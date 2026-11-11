@@ -37,6 +37,11 @@
   #power { width: 100%; accent-color: var(--orange); }
   #runs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
   #runs #sevent { grid-column: 1 / 3; }
+  #modes { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; padding: 2px 10px; }
+  #modes legend { color: var(--dim); font-size: 12px; padding: 0 4px; }
+  #sendrow { margin-top: 8px; } #sendrow button { width: 100%; } #sendtext { font-size: 11.5px; margin-top: 3px; }
+  #sharerow { margin-top: 8px; font-size: 11.5px; } #sharerow button { padding: 4px 9px; font-size: 12px; }
+  #baseline:empty { display: none; }
   #busy { display: none; margin-top: 6px; font-size: 12px; color: var(--warn); }
   body.busy #busy { display: block; }
   #fcbox { position: fixed; left: 356px; right: 376px; bottom: 12px; padding: 8px 10px 6px; }
@@ -83,6 +88,7 @@
   <div id="bat"><div id="batbar"></div></div>
   <div class="row muted" id="weather"></div>
   <div class="row muted" id="ghostline"></div>
+  <div class="row muted" id="baseline"></div>
 </section>
 
 <section id="orders" class="glass">
@@ -104,7 +110,9 @@
     <button id="sday" class="needs-idle">Sail 1 day</button>
     <button id="sevent" class="needs-idle go">Sail until something happens</button>
   </div>
+  <div id="sendrow" hidden><button id="send" class="needs-idle go">Send this order from base</button><div class="muted" id="sendtext"></div></div>
   <div id="busy"><span id="busytext">Sailing...</span></div>
+  <div id="sharerow"><button id="share" class="needs-idle" title="A link that opens this game where it is now, for someone else to carry on">Copy a share link</button> <span class="muted" id="sharetext"></span></div>
 </section>
 
 <section id="fcbox" class="glass"><div class="muted" style="font-size:10.5px;margin-bottom:2px">Forecast at the boat for the next 5 days (it can be wrong): wind in knots and where it blows to, wave height, sunshine</div><canvas id="fc"></canvas></section>
@@ -125,6 +133,11 @@
     <label>Launch day <select id="launch">
       <option value="0">1 April 2020</option><option value="1">15 April 2020</option><option value="2">1 May 2020</option>
       <option value="3">15 May 2020</option><option value="4">1 June 2020</option><option value="5">15 June 2020</option></select></label>
+    <fieldset id="modes"><legend>How you steer</legend>
+      <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: your orders reach the boat at once.</label>
+      <label><input type="radio" name="mode" value="base"> <b>Real base station</b>: what steering from home is really like. One order a day, sent by satellite; it waits until the boat's next daily check-in, so it gets there about a day later, and base only knows where the boat was at its last report. In between, the boat's own battery guard looks after it.</label>
+    </fieldset>
+    <p id="sharedmsg" class="muted" hidden></p>
     <label><input type="checkbox" id="breakdowns" checked> Things can break (the same luck for both boats)</label>
     <label><input type="checkbox" id="safe"> Battery guard: ease off on a low battery, like the autopilot does</label>
     <button id="go" class="go">Take the helm</button> <span id="startmsg" class="muted"></span>

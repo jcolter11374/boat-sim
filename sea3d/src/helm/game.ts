@@ -5,6 +5,14 @@
 import type { Replay } from "../replay/data";
 
 export type Heading = number | "finish" | "route";
+export type Mode = "hands_on" | "base";
+/** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
+export interface OrderResult {
+  accepted: boolean;
+  next_allowed?: string;
+  arrives?: string | null;
+  from_report?: string;
+}
 export interface BoatNow {
   t: string;
   lat: number;
@@ -23,6 +31,10 @@ export interface Status {
   lead_km: number;
   order: { heading: Heading; power: number };
   power_w: number;
+  /** "hands_on" or "base" (older simulators leave it out: hands on). */
+  mode?: Mode;
+  /** Real base station: the last report base has, and orders still on their way. */
+  base?: { last_report: { t: string; lat: number; lon: number; soc?: number }; waiting: { due: string; power: number }[] };
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
 }
 export interface ForecastRow {
@@ -49,6 +61,7 @@ export interface Card {
 export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "ghost_passed" | "over" | "order_arrived";
 export interface RunOptions {
   hours?: number;
+  max_hours?: number;
   soc_below?: number;
   wind_above?: number;
   breakdown?: boolean;
@@ -110,16 +123,30 @@ export class HelmGame {
     if (v.ghost) this.ghost = v.ghost;
   }
 
-  async start(launch: number, safe: boolean, breakdowns: boolean): Promise<Status> {
-    const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({ type: "new", launch, safe, breakdowns });
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on"): Promise<Status> {
+    const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({ type: "new", launch, safe, breakdowns, mode });
     this.launches = v.launches;
     this.take(v);
     return v.status;
   }
 
-  async order(heading: Heading, power: number): Promise<Status> {
-    this.status = await this.ask<Status>({ type: "order", heading, power });
-    return this.status;
+  /** A shared game, sailed back to where it was saved. */
+  async load(code: string): Promise<{ status: Status; orders: { heading: Heading; power: number }[]; launch: number }> {
+    const v = await this.ask<{ launches: string[]; status: Status; orders: { heading: Heading; power: number }[]; launch: number; boat: Replay; ghost: Replay }>({ type: "load", code });
+    this.launches = v.launches;
+    this.take(v);
+    return v;
+  }
+
+  /** A short code for a share link. */
+  save(): Promise<string> {
+    return this.ask<string>({ type: "save" });
+  }
+
+  async order(heading: Heading, power: number): Promise<OrderResult> {
+    const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power });
+    this.status = v.status;
+    return v.order;
   }
 
   async run(o: RunOptions): Promise<Stop> {
@@ -148,7 +175,7 @@ export function stopText(s: Stop, st: Status | null): string {
   const lead = st ? Math.abs(st.lead_km) : 0;
   switch (s) {
     case "time":
-      return "Ten days passed without anything worth stopping for.";
+      return "Three days passed without anything worth stopping for.";
     case "battery":
       return `The battery is down to ${st ? Math.round(st.boat.soc * 100) : "?"}%.`;
     case "wind":
