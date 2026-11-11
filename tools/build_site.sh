@@ -51,8 +51,9 @@ echo "Data releases:"
 # The 2020 weather bundle for the in-browser simulator (sandbox.yml). Without it
 # the Boatyard launches from the precomputed grid and the helm says so.
 fetch sandbox-data sandbox 'forcing_2020.npz'
-# Swell and depth for the 3D sea (seastate.yml, display only).
-fetch seastate-data seastate 'seastate_*' 'depth_*'
+# Swell for the 3D sea (seastate.yml, display only). The Chesapeake depth
+# files on the same release are left out until a page reads them (#287).
+fetch seastate-data seastate 'seastate_*'
 # Land for the 3D views (landdata.yml, display only).
 fetch land-data land 'pico_*' 'baymouth_*' 'lisbon_*' 'annapolis*'
 # Weather challenges for the helm page's picker (challenges.yml).

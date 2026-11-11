@@ -32,7 +32,7 @@ on:
 permissions:
   contents: read
 # Deploys queue: a run on main never cancels another (a merge deploy and the
-# forecast redeploy from forecast.yml must not cut each other off halfway).
+# hand-started redeploy must not cut each other off halfway).
 # Only superseded pull-request checks are cancelled.
 concurrency:
   group: sea3d-${{ github.ref }}
