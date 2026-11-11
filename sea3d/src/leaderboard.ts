@@ -148,6 +148,13 @@ function draw(b: Board): void {
   }
 
   const tbody = document.getElementById("rows")!;
+  // leaderboard.html#<design> (from a Results card) marks that build's row.
+  let mine = "";
+  try {
+    mine = decodeURIComponent(location.hash.slice(1));
+  } catch {
+    // a mangled link: mark nothing
+  }
   let lastTier = 0;
   for (const r of s.rows) {
     const tr = el("tr");
@@ -168,8 +175,10 @@ function draw(b: Board): void {
     const fin = el("td");
     fin.append(el("span", "rate", pct(r.finish_rate)), el("span", "muted", ` ${r.finished} of ${r.launches}`), bar(r.finish_rate, r.ci95));
     tr.append(fin, verdictCell(r, s), holdoutCell(r));
+    if (mine && r.design === mine) tr.classList.add("mine");
     tbody.append(tr);
   }
+  tbody.querySelector("tr.mine")?.scrollIntoView({ block: "center" });
 }
 
 declare global {
