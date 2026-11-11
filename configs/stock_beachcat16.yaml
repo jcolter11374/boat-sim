@@ -1,0 +1,135 @@
+# STOCK VESSEL (joke fleet): "16 ft beach catamaran", based on published class specs of
+# the Hobie 16. Our own model and code: no logos, no brand styling, not official.
+# Sailed with NOBODY aboard, by an autopilot. A beach cat is very stiff at first (its two
+# hulls are far apart), but its stability comes from weight on the windward hull, usually
+# two crew on trapezes. With nobody there its autopilot has to sail it gently, keeping the
+# windward hull down; a squall's gust then lifts the hull and flips it, and a catamaran
+# stays upside down.
+# Sources:
+#   wiki  = https://en.wikipedia.org/wiki/Hobie_16 (length, beam, weight, sail areas, mast)
+#   class = Hobie Class Association class rules, hobieclass.com
+# No published polar for a crewless Hobie 16: every VPP input is a GUESS; sail physics
+# reuse the 31 ft cruiser's fit (configs/stock_cruiser31.yaml).
+name: 16 ft beach cat
+
+stock:
+  label: 16 ft beach catamaran
+  based_on: published class specs of the Hobie 16
+  kind: catamaran, nobody aboard, autopilot
+  sources:
+    - https://en.wikipedia.org/wiki/Hobie_16
+    - Hobie Class Association class rules (hobieclass.com)
+  spec_card:
+    length_overall_m: 5.04   # wiki: 16 ft 7 in
+    beam_m: 2.41             # wiki: 7 ft 11 in
+    weight_kg: 145           # wiki: 320 lb
+    main_m2: 13.6            # wiki: 146 sq ft
+    jib_m2: 6.7              # wiki: 72 sq ft
+    mast_m: 8.08             # wiki: 26 ft 6 in
+    crew: 2 on trapezes (none here)
+
+vpp:
+  polar_file: polars/beachcat16.json
+  disp_kg: 170               # 145 kg boat (wiki) + autopilot, battery and solar 25 kg (GUESS)
+  lwl_m: 4.9                 # GUESS
+  wetted_m2: 3.6             # GUESS: two slim hulls 1.6 m^2 each + rudders 0.4
+  main_m2: 13.6              # wiki
+  jib_m2: 6.7                # wiki
+  rig_height_m: 8.5          # GUESS: mast 8.08 m (wiki) on the trampoline
+  ce_height_m: 3.4           # GUESS
+  clr_depth_m: 0.25          # GUESS: no daggerboards, the hulls' skegs grip
+  keel_te_m: 0.5             # GUESS: asymmetric hulls and rudders make a poor keel
+  keel_slope_area_m2: 2.0    # GUESS
+  form_factor: 1.1           # GUESS
+  rr_at_fn04: 0.012          # GUESS: slim hulls make little wave drag
+  rr_exp: 3.0                # GUESS
+  heel_drag_k: 0.2           # GUESS
+  waves_k: 0.03              # GUESS: a light boat is thrown about, and buries its bows
+  cl_max: 1.3                # GUESS: sail physics as the cruiser's fit (1.36), a little less
+  cd0: 0.015
+  cd_max: 1.3
+  alpha_stall_deg: 20
+  sheet_min_deg: 10
+  windage_cda_m2: 0.8        # GUESS: trampoline, beams, mast
+  heel_max_deg: 2            # GUESS: the autopilot keeps about half the righting moment in hand
+  autopilot_factor: 0.85     # GUESS: no crew moving fore and aft, set-and-forget trim
+  reef_heel_deg: 2
+  capsize_heel_deg: 30       # GUESS: past this the windward hull is high and it goes over
+  # GZ: GUESS for nobody aboard. It rises fast until the windward hull lifts (about 5 deg),
+  # then falls as the weight swings over the lee hull: zero near 64 deg (hull centres
+  # 2.1 m apart, centre of gravity about 0.5 m up); stable upside down.
+  gz:
+    deg: [0, 2, 4, 6, 10, 20, 30, 40, 50, 60, 70, 90, 120, 150, 180]
+    m: [0, 0.45, 0.85, 0.98, 0.97, 0.84, 0.67, 0.49, 0.30, 0.08, -0.13, -0.5, -0.6, -0.4, 0]
+  plans:
+    - {name: full, main: 1.0, jib: 1.0}
+    - {name: main_only, main: 1.0, jib: 0.0}
+
+hull:
+  model: 16 ft beach catamaran (stock vessel)
+  length_m: 5.04
+  beam_m: 2.41
+  mass_kg: 170
+  waterline_length_m: 4.9
+  wetted_area_m2: 3.6
+  form_factor: 1.1
+  wave_making_frac: 0.05
+  air_side_area_m2: 2.0      # GUESS
+  air_front_area_m2: 1.2     # GUESS
+  air_cd_side: 0.9
+  air_cd_front: 0.7
+  lateral_cd_area_m2: 1.5    # GUESS
+  keel_lift_slope_area_m2: 2.0
+  fouling_onset_days: 10
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+sail:
+  area_m2: 20.3
+  max_alpha_deg: 20
+  storm_wind_ms: 13          # GUESS: above about 25 kn the autopilot drops the sails
+  storm_run_twa_deg: 150
+  min_upwind_twa_deg: 45
+  min_downwind_twa_deg: 160
+  tack_hysteresis_deg: 20
+  unsteered_twa_deg: 90
+
+power:
+  solar_wp: 100              # GUESS: a panel on the trampoline
+  panels_w: {panel_tramp: 100}
+  battery_wh: 500            # GUESS
+  mounting_mismatch: 0.7
+
+propulsion:
+  thruster_count: 0
+  cruise_drive_w: 0
+  max_drive_w: 1
+
+electronics:
+  autopilot: tiller-bar ram with its own controller
+  hotel_load_wh_per_day: 150 # GUESS
+  nav_light_w: 1.0
+  nav_light_hours_per_day: 10
+
+comms:
+  two_way: Iridium
+  one_way: personal locator beacon
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 5.04
+  hull_beam_m: 2.41
+  critical_wave_frac_of_length: 0.35  # GUESS: wide but light, rolled sooner than a yacht
+  critical_wave_frac_of_beam: 0.8
+  p_capsize_stays_over: 1.0  # a catamaran stays upside down, and there is nobody to right it
+  damage_ref_hs_m: 3.0
+  p_part: {panel_tramp: 4.0e-5, rudder: 1.5e-5, sail: 2.0e-4}
+  rate_set: planning
+  failures_enabled: true

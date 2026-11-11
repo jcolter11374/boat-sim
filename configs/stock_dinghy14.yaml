@@ -1,0 +1,130 @@
+# STOCK VESSEL (joke fleet): "14 ft board-boat dinghy", based on published class specs of
+# the Sunfish. Our own model and code: no logos, no brand styling, not official.
+# Sailed with NOBODY aboard, by an autopilot: a dinghy normally stays upright because its
+# sailor sits out on the high side. With nobody aboard, an autopilot that eases the sheet
+# keeps it going in steady wind, but the first squall or breaking sea rolls it, and with
+# nobody to right it, it stays over. That is the honest physics, and the joke.
+# Sources:
+#   wiki  = https://en.wikipedia.org/wiki/Sunfish_(sailboat) (length, beam, hull weight, sail)
+#   class = International Sunfish Class Association class specifications, sunfishclass.org
+# No published polar exists for a crewless Sunfish, so every VPP input is a GUESS; sail
+# physics reuse the 31 ft cruiser's fit (configs/stock_cruiser31.yaml).
+name: 14 ft dinghy
+
+stock:
+  label: 14 ft board-boat dinghy
+  based_on: published class specs of the Sunfish
+  kind: single-sail dinghy, nobody aboard, autopilot
+  sources:
+    - https://en.wikipedia.org/wiki/Sunfish_(sailboat)
+    - International Sunfish Class Association class specifications (sunfishclass.org)
+  spec_card:
+    length_overall_m: 4.19   # wiki: 13 ft 9 in
+    beam_m: 1.24             # wiki: 4 ft 1 in
+    hull_kg: 54              # wiki: 120 lb
+    sail_m2: 7.0             # wiki: 75 sq ft lateen sail
+    rig: lateen (one sail on two spars)
+
+vpp:
+  polar_file: polars/dinghy14.json
+  disp_kg: 75                # hull 54 kg (wiki) + autopilot, battery and solar 21 kg (GUESS)
+  lwl_m: 3.9                 # GUESS
+  wetted_m2: 3.7             # GUESS: hull 3.2 + daggerboard and rudder 0.5
+  main_m2: 7.0               # wiki
+  jib_m2: 0.0                # one sail
+  rig_height_m: 5.5          # GUESS: top of the upper spar above the water
+  ce_height_m: 2.0           # GUESS
+  clr_depth_m: 0.35          # GUESS
+  keel_te_m: 0.6             # GUESS: daggerboard
+  keel_slope_area_m2: 1.0    # GUESS
+  form_factor: 1.1           # GUESS
+  rr_at_fn04: 0.02           # GUESS: a light, flat hull makes less wave drag for its weight
+  rr_exp: 4.0                # GUESS: and starts to plane instead of hitting a wall
+  heel_drag_k: 1.0           # GUESS
+  waves_k: 0.02              # GUESS: a light boat is thrown about by waves
+  cl_max: 1.25               # GUESS: a lateen sail is less efficient than a sloop
+  cd0: 0.02                  # GUESS
+  cd_max: 1.2                # GUESS
+  alpha_stall_deg: 20
+  sheet_min_deg: 10
+  windage_cda_m2: 0.4        # GUESS
+  heel_max_deg: 25           # GUESS: the autopilot eases the sheet to keep it under this
+  autopilot_factor: 0.9      # GUESS: an autopilot on a dinghy is clumsy
+  reef_heel_deg: 25
+  capsize_heel_deg: 55       # GUESS: past this the sail hits the water and it goes over
+  gz:                        # GUESS: form stability only, nobody aboard; turtles past ~75 deg
+    deg: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 120, 150, 180]
+    m: [0, 0.18, 0.27, 0.27, 0.22, 0.16, 0.10, 0.04, -0.02, -0.06, -0.10, -0.06, 0]
+  plans:
+    - {name: full, main: 1.0, jib: 0.0}
+
+hull:
+  model: 14 ft board-boat dinghy (stock vessel)
+  length_m: 4.19
+  beam_m: 1.24
+  mass_kg: 75
+  waterline_length_m: 3.9
+  wetted_area_m2: 3.7
+  form_factor: 1.1
+  wave_making_frac: 0.1
+  air_side_area_m2: 1.2      # GUESS
+  air_front_area_m2: 0.5     # GUESS
+  air_cd_side: 0.9
+  air_cd_front: 0.7
+  lateral_cd_area_m2: 1.5    # GUESS
+  keel_lift_slope_area_m2: 1.0
+  fouling_onset_days: 10     # GUESS: no antifouling on a dinghy
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+sail:
+  area_m2: 7.0
+  max_alpha_deg: 20
+  storm_wind_ms: 15          # GUESS: above about 30 kn the autopilot drops the sail
+  storm_run_twa_deg: 150
+  min_upwind_twa_deg: 45     # GUESS
+  min_downwind_twa_deg: 165  # GUESS
+  tack_hysteresis_deg: 20
+  unsteered_twa_deg: 90
+
+power:
+  solar_wp: 50               # GUESS: one small panel on the deck
+  panels_w: {panel_deck: 50}
+  battery_wh: 300            # GUESS
+  mounting_mismatch: 0.7     # GUESS: flat on the deck, shaded by the sail
+
+propulsion:
+  thruster_count: 0
+  cruise_drive_w: 0
+  max_drive_w: 1
+
+electronics:
+  autopilot: tiller pilot with its own controller
+  hotel_load_wh_per_day: 120 # GUESS: tiller pilot about 4 W averaged, tracker, light
+  nav_light_w: 1.0
+  nav_light_hours_per_day: 10
+
+comms:
+  two_way: Iridium
+  one_way: personal locator beacon
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 4.19
+  hull_beam_m: 1.24
+  # GUESS: with no ballast and no crew, a breaking crest about 30 % of its length (or
+  # 80 % of its beam) rolls it, far less than the 55 % a ballasted yacht takes (Wolfson).
+  critical_wave_frac_of_length: 0.30
+  critical_wave_frac_of_beam: 0.8
+  p_capsize_stays_over: 1.0  # nobody aboard to right it: once over, it stays over
+  damage_ref_hs_m: 3.0
+  p_part: {panel_deck: 4.0e-5, rudder: 1.5e-5, sail: 2.0e-4}
+  rate_set: planning
+  failures_enabled: true
