@@ -131,8 +131,15 @@ hazards:
   # sealed boxes: when it dies the boat drifts, tracked by its standalone tracker.
   electronics_boxes: 1
   electronics_per_day: 0.0025  # GUESS: about one autopilot failure per 400 days at sea
-  capture_per_day: 0.005     # GUESS: near land an unmanned yacht gets reported and towed in
+  # GUESS: within 150 km of land an empty yacht gets reported and towed in at least as
+  # often as the kayak, so it keeps the kayak's 1 % a day (Ravi, docs/qa/stock-cruiser31-fairness.md).
+  capture_per_day: 0.01
   leak_per_day: 0.0025       # GUESS: as the kayak; see vpp.p_sink_given_leak
+  # GUESS: a ship that hits a 4 t yacht usually holes or dismasts it, as it does the
+  # kayak. A hit it survives leaves a leak (p_leak_given_strike), which can then sink it
+  # (vpp.p_sink_given_leak), so about 86 % of strikes end the voyage.
+  p_lost_given_strike: 0.8
+  p_leak_given_strike: 1.0
 
 vpp:
   polar_file: polars/cruiser31.json   # written by python -m boatsim.vessel.vpp
