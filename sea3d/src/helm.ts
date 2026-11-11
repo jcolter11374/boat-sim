@@ -176,7 +176,7 @@ let hour = 0; // shown voyage hour
 let shownTo = 0; // hour the animation is heading for
 let watch: "boat" | "ghost" = "boat";
 let busy = false;
-let order: Heading = "finish";
+let order: Heading = "auto"; // every game starts on the ghost's own autopilot (#327)
 let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
@@ -372,15 +372,25 @@ async function shareLink(): Promise<void> {
 function showOrder(): void {
   compass.set({ order });
   $("ordertext").textContent =
-    order === "finish" ? "Straight at the finish" : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+    order === "auto"
+      ? "Autopilot steering, like the ghost"
+      : order === "finish"
+        ? "Straight at the finish"
+        : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+  $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
+  $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
   $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
+  // On autopilot the autopilot sets its own power, as it does for the ghost.
+  $<HTMLInputElement>("power").disabled = order === "auto";
   $("b-route").setAttribute("aria-pressed", String(order === "route"));
   const s = page.status;
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
   const yacht = isStock(spec.key); // a stock boat: the power is its engine's
   $("powerlabel").textContent = yacht ? "Engine power" : "Motor power";
-  $("powerhint").textContent = yacht
+  $("powerhint").textContent = order === "auto"
+    ? "The autopilot sets its own power, as it does for the ghost. Pick another order to set yours."
+    : yacht
     ? "On Auto the boat motors only in a calm. The tank holds about 15 hours of diesel; once it's empty the boat waits for wind."
     : "The autopilot cruises at 25%. More is faster, but the sun has to refill the battery, and at empty the motors stop until it does.";
   const pct = `${Math.round(power * 100)}%`;
@@ -478,7 +488,8 @@ async function setSails(sails: string | null, engine: boolean | null): Promise<v
   if (busy) return;
   sailOrder = sails;
   engineOrder = engine;
-  await setOrder(order, power);
+  // The autopilot sets its own sails; choosing them takes over, on its route.
+  await setOrder(order === "auto" ? "route" : order, power);
 }
 /** One plain line on what the sails and engine are doing now. */
 function sailText(s: Status): string {
@@ -763,6 +774,9 @@ async function begin(): Promise<void> {
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
   mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as Mode) ?? "hands_on";
+  // Hands on starts on the ghost's autopilot (#327); "auto" is a hands-on
+  // order, so base keeps its old first draft, straight at the finish.
+  order = mode === "base" ? "finish" : "auto";
   if (!(await sandboxThere(sandboxBase))) {
     page.error = "no simulator files";
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
@@ -787,6 +801,7 @@ async function begin(): Promise<void> {
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
+      else order = mode === "base" ? "finish" : "auto";
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
     } else {
@@ -826,6 +841,9 @@ async function begin(): Promise<void> {
       note(`You have the helm of ${loadMyBoat()?.name ?? "your boat"}. Its wing sail trims itself: pick a heading, then let time run. Power only matters if you fitted motors in the Boatyard.`, d, TONE_COLOUR.info);
     else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies, then let time run.`, d, TONE_COLOUR.info);
     else note("You have the helm. Pick a heading and a power, then let time run.", d, TONE_COLOUR.info);
+    // #327: say why an untouched game stays level with the ghost.
+    if (!shared && mode === "hands_on" && order === "auto")
+      note("For now the autopilot is steering, exactly as it steers the ghost, so change nothing and the two boats stay level. Pick a heading on the dial, or Aim at the finish, to take over.", d, TONE_COLOUR.info);
     if (page.status?.over) await finish();
   } catch (e) {
     const err = String(e);
@@ -864,7 +882,7 @@ async function begin(): Promise<void> {
 
 const GHOST = { main: "#c8d4e6", beacon: "#e0e8f4", glow: "rgba(200,212,230,0.7)" };
 
-for (const [id, h] of [["b-finish", "finish"], ["b-route", "route"]] as const) $(id).addEventListener("click", () => void setOrder(h));
+for (const [id, h] of [["b-auto", "auto"], ["b-finish", "finish"], ["b-route", "route"]] as const) $(id).addEventListener("click", () => void setOrder(h));
 $<HTMLInputElement>("power").addEventListener("input", (e) => {
   power = Number((e.target as HTMLInputElement).value) / 100;
   showOrder();
