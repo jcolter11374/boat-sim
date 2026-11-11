@@ -52,11 +52,44 @@ async function visibleNotices(page) {
     .filter((l) => l && NOTICE.test(l));
 }
 
+/** Median and 90th-percentile time between animation frames over `secs`, in ms (the page's main-thread cadence). */
+async function frameTimes(page, secs = 3) {
+  return page.evaluate(
+    (ms) =>
+      new Promise((done) => {
+        const gaps = [];
+        let last = performance.now();
+        const t0 = last;
+        const tick = (now) => {
+          gaps.push(now - last);
+          last = now;
+          if (now - t0 < ms) requestAnimationFrame(tick);
+          else {
+            gaps.sort((a, b) => a - b);
+            const q = (f) => Math.round(gaps[Math.min(gaps.length - 1, Math.floor(f * gaps.length))]);
+            done({ median: q(0.5), p90: q(0.9), n: gaps.length });
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+    secs * 1000,
+  );
+}
+
+/** Click, and if it gets stuck say which control it was and why (Maya, #293). */
+async function clickNamed(page, selector, what, opts = {}) {
+  try {
+    await page.click(selector, opts);
+  } catch (e) {
+    throw new CheckFail(`clicking ${what} (${selector}) got stuck: ${whyStuck(e)}`);
+  }
+}
+
 // ---------- helm ----------
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   await setup(page);
-  await page.click("#go");
+  await clickNamed(page, "#go", "Take the helm");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
   const s = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
@@ -67,7 +100,7 @@ async function helmSailADay(page) {
   let st;
   for (let hop = 0; hop < 8; hop++) {
     const t0 = Date.now();
-    await page.click("#sday");
+    await clickNamed(page, "#sday", "Sail 1 day");
     await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 8 * MIN });
     st = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error, over: window.__helm.status?.over }));
     st.secs = Math.round((Date.now() - t0) / 1000);
@@ -81,10 +114,25 @@ async function helmSailADay(page) {
   throw new CheckFail(`still short of a day after 8 hops: day ${st?.day}, last stop ${st?.stop}`);
 }
 
+// A page that slows down as the voyage goes on (Sam measured 300-430 ms frames after a
+// day, #293). Runners draw on software graphics, so this compares the page with itself:
+// after a day it may be at most 3x slower than just after the start (plus 100 ms slack).
+const SLOWDOWN = 3;
+async function framesAfterADay(page, before) {
+  const after = await frameTimes(page);
+  must(
+    after.median <= SLOWDOWN * before.median + 100,
+    `the page slowed down after a day of sailing: frames ${before.median} ms at the start, ${after.median} ms after a day (90th percentile ${after.p90} ms)`,
+  );
+  return `; frames ${before.median} -> ${after.median} ms`;
+}
+
 const helm = (setup, extra = async () => "") => async (page) => {
   await helmStart(page, setup);
+  const before = await frameTimes(page);
   const st = await helmSailADay(page);
-  return `sailed to day ${st.day.toFixed(2)} (last stop: ${st.stop}; the last hop took ${st.secs} s)${await extra(page)}`;
+  const frames = await framesAfterADay(page, before);
+  return `sailed to day ${st.day.toFixed(2)} (last stop: ${st.stop}; the last hop took ${st.secs} s${frames})${await extra(page)}`;
 };
 
 const pickBoat = (value) => async (page) => {
@@ -132,8 +180,11 @@ const CHECKS = {
     path: "helm.html",
     run: async (page) => {
       await helmStart(page, async (p) => p.selectOption("#launch", "1"));
+      const before = await frameTimes(page);
       const st = await helmSailADay(page);
-      await page.click("#share");
+      const after = await frameTimes(page);
+      console.log(`    (helm-share frames: ${before.median} ms at the start, ${after.median} ms after a day, p90 ${after.p90} ms)`);
+      await clickNamed(page, "#share", "Copy a share link");
       await page.waitForFunction(() => !!window.__helm.share, null, { timeout: 2 * MIN });
       const link = await page.evaluate(() => window.__helm.share);
       const o = await open(page.context().browser(), link.slice(SITE.length));
