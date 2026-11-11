@@ -58,7 +58,7 @@ export interface Card {
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
 }
-export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "ghost_passed" | "over" | "order_arrived";
+export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
   hours?: number;
   max_hours?: number;
@@ -196,6 +196,8 @@ export function stopText(s: Stop, st: Status | null): string {
       return "Something went wrong on board (see the note on the right).";
     case "ghost_passed":
       return `The autopilot ghost has just passed you; it's ${lead.toFixed(0)} km closer to the finish now.`;
+    case "passed_ghost":
+      return `You've just passed the autopilot ghost; you're ${lead.toFixed(0)} km closer to the finish now.`;
     case "over":
       return "The voyage is over.";
     case "order_arrived":

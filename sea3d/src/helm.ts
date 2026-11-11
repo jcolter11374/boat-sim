@@ -363,7 +363,7 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
       const e = game.boat!.events.filter(isNotable).at(-1);
       note(e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, TONE_COLOUR.warn);
     } else if (!(kind !== "event" && stopped === "time"))
-      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" ? TONE_COLOUR.warn : TONE_COLOUR.info);
+      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
     if (page.status?.over) await finish();
   } catch (e) {
