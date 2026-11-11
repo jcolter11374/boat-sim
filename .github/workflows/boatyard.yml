@@ -8,9 +8,9 @@
 # Run it by hand: Actions tab -> "Boatyard grid" -> Run workflow. With "builds"
 # set it is a partial regrid: those builds are merged into the grid already on
 # the branch (mc.boatyard build --merge) and every other build is kept as it was.
-# On a pull request that changes the grid code it runs the whole grid as a check
-# and uploads it as an artifact, but never commits: a PR run used to push bot
-# commits onto PR branches, even after the PR had merged. Free runners only.
+# Hand-started only: it uses the Copernicus secrets, and secret-using workflows
+# never run on pull_request (standing rule). Grid code changes are checked by
+# CI's unit tests; regrid by dispatch after merging. Free runners only.
 # Uses the Copernicus secrets for currents; GitHub masks them in logs.
 name: Boatyard grid
 on:
@@ -32,11 +32,6 @@ on:
         description: "Commit the grid to this branch"
         type: boolean
         default: false
-  pull_request:
-    paths:
-      - ".github/workflows/boatyard.yml"
-      - "src/boatsim/mc/boatyard.py"
-      - "src/boatsim/sandbox/catalog.py"
 permissions:
   contents: read
 concurrency:
@@ -123,7 +118,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+          ref: ${{ github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -140,7 +135,7 @@ jobs:
           merge-multiple: true
       - name: Build the index and copy the replays into the page
         env:
-          CODE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CODE_SHA: ${{ github.sha }}
         run: |
           shopt -s nullglob
           odds=(runs/odds/odds_*.csv)
@@ -172,7 +167,7 @@ jobs:
             runs/odds/
           retention-days: 90
       - name: Commit the grid
-        # Only from a hand-started run with "commit" ticked; never from a pull request.
+        # Only when "commit" is ticked.
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit }}
         run: |
           git config user.name "github-actions[bot]"
