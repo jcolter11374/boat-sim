@@ -246,13 +246,20 @@ try {
   log.push(`game ${game.beats.join("/")} -> ${game.result}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
-  // Weather: rain and a wet hull in the wettest hour of the log (hour 573, 7 mm/h of ERA5 rain in
-  // 5 m seas), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
+  // Weather: rain and a wet hull in the wettest hour of the log (found from the file, since the
+  // track and so the weather it meets change whenever the autopilot does; about 7 mm/h of ERA5
+  // rain), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
   await page.goto(`${URL}voyage.html?voyage=voyage_2020-04-01.json&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready, null, { timeout: 60000 });
-  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(573); });
+  const wettest = await page.evaluate(async () => {
+    const r = await (await fetch("voyages/voyage_2020-04-01.json")).json();
+    let i = 0;
+    r.rain.forEach((v, k) => { if ((v ?? 0) > (r.rain[i] ?? 0)) i = k; });
+    return Math.floor(r.h[i]);
+  });
+  await page.evaluate((h) => { window.__replay.pause(); window.__replay.setHour(h); }, wettest);
   await page.waitForFunction(() => window.__replay.rain > 0.5 && window.__replay.wet > 0.5, null, { timeout: 30000 })
-    .catch(async () => fail(`no rain in the blow: ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
+    .catch(async () => fail(`no rain in the blow (hour ${wettest}): ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
   await page.evaluate(() => window.__replay.setHour(30));
   await page.waitForFunction(() => window.__replay.rain < 0.05, null, { timeout: 30000 }).catch(() => fail("rain on a calm day"));
   log.push("rain in the blow, dry on a calm day");
@@ -414,13 +421,13 @@ try {
     // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
     // hits the same stops): then it must be a known reason, before hour 6.
     const six = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error }));
-    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
+    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
     if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
     // stop a known reason, and the game ends in a results card that follows the draw rule.
-    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "over", "order_arrived"];
+    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "passed_ghost", "over", "order_arrived"];
     const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
     let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
     if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);

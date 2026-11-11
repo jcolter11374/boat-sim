@@ -273,10 +273,17 @@ VARIANTS: dict[str, Variant] = {
         "Never slow down on low battery; only stop at 15%",
         safemode=(("throttle_steps", ((0.15, 1.0),)),),
     ),
+    "track": Variant(
+        "steering",
+        "Hold the track line everywhere, crabbing up to 60 degrees into the current "
+        "(the default until 11 Nov 2026)",
+        guidance=(("steer", "track"),),
+    ),
     "pursuit": Variant(
         "steering",
         "Far from land, aim straight at the next waypoint and let the current carry "
-        "the boat sideways (crab at most 20 degrees); hold the track line near land",
+        "the boat sideways (crab at most 20 degrees); hold the track line near land "
+        "(now the default, so this row matches the design as it stands)",
         guidance=(("steer", "pursuit"),),
     ),
     "pursuit_nocrab": Variant(
@@ -550,8 +557,10 @@ def main(argv: list[str] | None = None) -> None:
             "last_report_day",
             "last_heard_day",
             "ending",
+            "end_lat",
+            "end_lon",
         ]
-        print(df[cols].to_string())
+        print(df[[c for c in cols if c in df.columns]].to_string())
     else:
         df = pd.concat([pd.read_csv(x, parse_dates=["start"]) for x in a.csvs], ignore_index=True)
         df.to_csv(out / "sensitivity_all.csv", index=False)
