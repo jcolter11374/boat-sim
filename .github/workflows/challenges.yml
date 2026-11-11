@@ -1,0 +1,123 @@
+# Weather challenge bundles (src/boatsim/oceandata/challenges.py): for each
+# challenge outside the 2020 Boatyard season, the same forcing bundle as
+# sandbox.yml cuts (1 deg 6-hourly ERA5, 0.25 deg daily GLORYS12 currents,
+# ships) over its own window, start - 1 day to start + 155 days.
+# Run it by hand: Actions tab -> "Challenge data" -> Run workflow. Leave "ids"
+# empty for all of them. Tick "publish" to put challenge_<id>.npz and
+# challenges.json on the challenge-data release.
+# Copernicus secrets for GLORYS (masked in logs). Free runners only.
+name: Challenge data
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "Challenge ids (space separated; empty = all)"
+        default: ""
+      publish:
+        description: "Publish to the challenge-data release"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: challenges
+  cancel-in-progress: false
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - id: m
+        env:
+          IDS: ${{ inputs.ids }}
+        run: |
+          M=$(python -m boatsim.oceandata.challenges matrix | python -c "
+          import json, os, sys
+          ids = os.environ['IDS'].split()
+          print(json.dumps([c for c in json.load(sys.stdin) if not ids or c['id'] in ids]))")
+          echo "matrix=$M" >> "$GITHUB_OUTPUT"
+          echo "$M"
+  bake:
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        c: ${{ fromJSON(needs.list.outputs.matrix) }}
+    env:
+      BOATSIM_REQUIRE_LAND: "1"
+      BOATSIM_REQUIRE_SHIPS: "1"
+      BOATSIM_NO_FETCH: "1"
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+      ID: ${{ matrix.c.id }}
+      FIRST: ${{ matrix.c.first }}
+      LAST: ${{ matrix.c.last }}
+      M0: ${{ matrix.c.months[0] }}
+      M1: ${{ matrix.c.months[1] }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      # ERA5 runs one day past the window: a day's daily values use hour 24.
+      - name: Fetch currents and weather
+        run: |
+          python -m boatsim.oceandata fetch-glorys "$M0" "$M1"
+          python -m boatsim.oceandata fetch-era5 "$FIRST" "$(date -I -d "$LAST + 1 day")" --workers 4
+      - name: Cut the bundle
+        run: |
+          mkdir -p site
+          python -m boatsim.sandbox cut "${FIRST:0:4}" --start "$FIRST" --end "$LAST" --out "site/challenge_$ID.npz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: challenge-${{ matrix.c.id }}
+          path: site/
+          retention-days: 90
+  publish:
+    needs: bake
+    if: always() && inputs.publish && needs.bake.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # only for the release upload
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: challenge-*
+          path: site
+          merge-multiple: true
+      - name: Publish to the challenge-data release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -m boatsim.oceandata.challenges catalog --out site/challenges.json
+          ls -l site
+          cat > NOTES.md <<EOF
+          Weather challenges: forcing bundles for famous stretches of real weather, in the
+          Boatyard bundle format (src/boatsim/sandbox/forcing.py), plus challenges.json.
+          The 2020 spring challenges use forcing_2020.npz on the sandbox-data release.
+          Rebuilt by the Challenge data workflow.
+
+          Data sources (thinned and quantised by us):
+          - ERA5: Contains modified Copernicus Climate Change Service information 2012-2023. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains.
+          - GLORYS12 currents (GLOBAL_MULTIYEAR_PHY_001_030): E.U. Copernicus Marine Service Information.
+          - Ship density: EMODnet Human Activities Vessel Density Map (Cogea Srl) and World Bank Global Shipping Traffic Density (dataset 0037580), CC BY 4.0, modified.
+          EOF
+          gh release view challenge-data >/dev/null 2>&1 || gh release create challenge-data \
+            --title "Weather challenge data" --notes-file NOTES.md
+          gh release edit challenge-data --notes-file NOTES.md
+          gh release upload challenge-data site/* --clobber

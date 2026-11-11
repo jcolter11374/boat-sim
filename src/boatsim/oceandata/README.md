@@ -268,6 +268,23 @@ re-run every 6 hours (a "cycle"), and GFS-Wave runs the sea alongside it.
   `python -m boatsim.oceandata.gfs --out /tmp/fc` (needs `pip install eccodes`;
   about 40 s).
 
+## Weather challenges (challenges.py)
+
+Nine famous stretches of real weather to sail the kayak into (roadmap: weather
+challenges), checked against NOAA's hurricane best tracks and ERA5
+(`/mnt/project-files/simulator/weather-challenges-draft.md`). Each has a start
+date (the drop, at noon UTC), a plain-words story and a fixed seed.
+
+- The two 2020 spring challenges use the Boatyard bundle `forcing_2020.npz`.
+- The rest get their own bundle in the same format, `challenge_<id>.npz`, over
+  start - 1 day to start + 155 days, cut by `python -m boatsim.sandbox cut
+  YEAR --start ... --end ...`.
+- Run: Actions -> "Challenge data" (Copernicus secrets for the currents). Tick
+  publish to put the bundles and `challenges.json` on the `challenge-data`
+  release.
+- Hurricanes (challenges 3-7) are flagged `hurricane: true`: ERA5's hurricane
+  winds are about 40-65% of real (#117).
+
 ## Land for the 3D views (landviews.py)
 
 Display only. Two places the 3D pages can show from the water, in the formats

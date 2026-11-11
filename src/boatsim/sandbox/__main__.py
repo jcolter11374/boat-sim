@@ -15,6 +15,7 @@ import argparse
 import json
 import sys
 import zipfile
+from datetime import date
 from pathlib import Path
 
 PACK_FILES = (
@@ -152,6 +153,8 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("year", type=int)
     c.add_argument("--out", required=True)
     c.add_argument("--no-currents", action="store_true")
+    c.add_argument("--start", type=date.fromisoformat, help="window start instead of 1 April")
+    c.add_argument("--end", type=date.fromisoformat, help="window end instead of 20 November")
     k = sub.add_parser("pack")
     k.add_argument("--out", required=True)
     r = sub.add_parser("reference")
@@ -175,7 +178,7 @@ def main(argv: list[str] | None = None) -> None:
 
         out = Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        cut(a.year, out, glorys=False if a.no_currents else None)
+        cut(a.year, out, glorys=False if a.no_currents else None, start=a.start, end=a.end)
         print(f"{out}: {out.stat().st_size / 1e6:.1f} MB")
     elif a.cmd == "pack":
         n = pack(Path(a.out))

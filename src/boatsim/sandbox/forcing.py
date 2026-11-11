@@ -225,10 +225,21 @@ def _idx(axis: np.ndarray, lo: float, hi: float, res: float) -> np.ndarray:
 
 
 def cut(
-    year: int, out, era5=None, glorys=None, ships=None, log=print, first=FIRST, last=LAST
+    year: int,
+    out,
+    era5=None,
+    glorys=None,
+    ships=None,
+    log=print,
+    first=FIRST,
+    last=LAST,
+    start: date | None = None,
+    end: date | None = None,
 ) -> dict:
     """Cut one season's bundle from the cached full data and save it to `out`
     (path or file). glorys=False / ships=False leave currents / ships out.
+    start/end (dates) replace the season for any other window, e.g. a weather
+    challenge that runs into the next year.
     Returns the stored arrays' sizes in bytes."""
     from boatsim.oceandata import ERA5Source, GlorysSource
     from boatsim.oceandata.traffic import default_source
@@ -239,7 +250,7 @@ def cut(
     if ships is None:
         ships = default_source()
     box = CORRIDOR
-    d0, d1 = date(year, *first), date(year, *last)
+    d0, d1 = start or date(year, *first), end or date(year, *last)
     days = [d0 + timedelta(days=i) for i in range((d1 - d0).days + 1)]
 
     weather = {k: [] for k in ("wind_u", "wind_v", "hs", "tp", "wave_dir", "cloud_fraction")}
