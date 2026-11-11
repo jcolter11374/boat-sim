@@ -91,6 +91,9 @@ propulsion:
 
 electronics:
   autopilot: Pixhawk-class + ESP32 (their Build_Plan.md)
+  # Steer the way their published autopilot does (drone_sim/autopilot.py), not with
+  # our tactician, so the numbers shared with their team stay stable (Maya, 11 Nov 2026).
+  tactician: false
   hotel_load_wh_per_day: 33  # design.py: 0.25 W asleep + 1.1 W autopilot ~ 1.35 W ("under 1.5 W", README)
   nav_light_w: 0             # not in their power budget
   nav_light_hours_per_day: 0

@@ -217,6 +217,46 @@ def solve_speed(
     )
 
 
+class SteadyPolar:
+    """A speed table for a wing-sail boat with no VPP polar (the wind-powered
+    drone, a KayakVessel with a sail): its steady speed through the water at
+    each wind speed and angle, from the boat's own force balance
+    (vessel.kayak.solve_speed), so base plans with the physics the boat sails
+    with. Waves come from the wind with the height of a fully developed sea,
+    Hs = 0.0214 U^2 (Pierson & Moskowitz 1964, doi:10.1029/JZ069i024p05181),
+    capped at 6 m: a GUESS, since the planner asks by wind alone. No current,
+    no fouling (polar_factor covers both). Above the storm wind the wing is
+    feathered and the boat only runs off, so it counts as making no way."""
+
+    def __init__(self, vessel):
+        self.vessel = vessel
+        self._cache: dict[tuple[int, int], float] = {}
+
+    def speed_ms(self, tws_ms: float, twa_deg: float) -> float:
+        key = (round(tws_ms * 4), round(twa_deg))
+        got = self._cache.get(key)
+        if got is not None:
+            return got
+        v, sail = self.vessel, self.vessel.sail
+        tws, twa = key[0] / 4, math.radians(key[1])
+        if tws <= 0.0 or tws > sail.storm_wind_ms:
+            speed = 0.0
+        else:
+            env = EnvState(
+                wind_u=-tws * math.sin(twa),
+                wind_v=-tws * math.cos(twa),
+                hs=min(0.0214 * tws * tws, 6.0),
+                wave_dir=float(key[1]),
+            )
+            sol = solve_speed(
+                v.hull, v.thrusters, 0.0, 0.0, 0, env, 0.0, 0.0, 0.0,
+                sail=sail, sail_alpha_max_deg=sail.max_alpha_deg,
+            )  # fmt: skip
+            speed = max(sol.surge, 0.0)
+        self._cache[key] = speed
+        return speed
+
+
 class KayakVessel:
     """Physics for the v4 kayak. Drop-in for the Vessel protocol."""
 
@@ -233,6 +273,9 @@ class KayakVessel:
         self.base_hotel_w = (hotel_wh - self.nav_light_w * dark_hours) / 24.0
         self.dark_ghi = float(e.get("nav_light_on_below_ghi", 5.0))
         self.min_steer_w = float(design.propulsion.get("min_steer_w", 1.0))  # GUESS
+        # electronics.tactician: false keeps a design on its plain waypoint
+        # autopilot (Randolph's Rev B/C: their own autopilot's behaviour).
+        self.tactician_ok = bool(e.get("tactician", True))
         self.hazards = HazardParams.from_config(design.hazards)
         self.thruster_parts = thruster_parts(self.thrusters.count)
         self.panels_w = dict(design.power.get("panels_w", DEFAULT_PANELS_W))
@@ -388,6 +431,11 @@ class KayakVessel:
             steering = es.drive_w >= self.min_steer_w and can_steer
             sailing = False
         tws = math.hypot(env.wind_u, env.wind_v)
+        if self.sail is not None:
+            # The wing's wind vane (truth for now, like the GPS), relative to
+            # the water as the boat feels it; sense() reports it so the
+            # tactician can beat and run (autonomy/sailing.py).
+            self._vane = (wind_from, math.hypot(we, wn))
         feather = False
         if motoring:
             heading = cmd.heading % 360.0
@@ -492,6 +540,7 @@ class KayakVessel:
 
     def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
         # Truth for now; GPS and compass noise belong with the sensor-failure work.
+        vane = getattr(self, "_vane", None) if self.sail is not None else None
         return Sensors(
             t=state.t,
             lat=state.lat,
@@ -499,7 +548,18 @@ class KayakVessel:
             heading=state.heading,
             soc=state.soc,
             thrusters_ok=self.working_thrusters(state),
+            wind_from_deg=None if vane is None else vane[0],
+            wind_speed_ms=None if vane is None else vane[1],
         )
+
+    def steady_polar(self) -> SteadyPolar | None:
+        """A speed table for a sail-only design (a wing and no motors), else
+        None: a hybrid holds any course under power, a kayak has no sail."""
+        if self.sail is None or self.thrusters.count > 0:
+            return None
+        if getattr(self, "_polar", None) is None:
+            self._polar = SteadyPolar(self)
+        return self._polar
 
 
 def with_damage(state: KayakState, part: str) -> KayakState:
