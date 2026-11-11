@@ -251,6 +251,12 @@ try {
   // rain), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
   await page.goto(`${URL}voyage.html?voyage=voyage_2020-04-01.json&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready, null, { timeout: 60000 });
+  // Points of interest: the card for the Bay mouth is up at the drop, with an https source link.
+  await page.waitForFunction(() => window.__replay.pois.shown.includes("cape-henry") && document.querySelector(".poi-card a"), null, { timeout: 30000 })
+    .catch(async () => fail(`no point-of-interest card at the drop: ${JSON.stringify(await page.evaluate(() => window.__replay.pois))}`));
+  const poiLink = await page.evaluate(() => document.querySelector(".poi-card a").href);
+  if (!poiLink.startsWith("https://")) fail(`point-of-interest link isn't https: ${poiLink}`);
+  log.push(`points of interest: ${await page.evaluate(() => window.__replay.pois.shown.join("/"))}`);
   const wettest = await page.evaluate(async () => {
     const r = await (await fetch("voyages/voyage_2020-04-01.json")).json();
     let i = 0;
