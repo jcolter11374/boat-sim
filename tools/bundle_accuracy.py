@@ -94,7 +94,10 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--year", type=int, default=2020)
     p.add_argument(
-        "--cuts", nargs="+", default=["1.0:6", "1.0:3", "0.5:6"], help="ERA5 degrees:hours"
+        "--cuts",
+        nargs="+",
+        default=["1.0:6", "1.0:3", "0.5:6"],
+        help="ERA5 degrees:hours[:current degrees] (currents default 0.25)",
     )
     p.add_argument("--max-days", type=float, default=150.0)
     p.add_argument(
@@ -136,15 +139,17 @@ def main(argv: list[str] | None = None) -> None:
         return rows, time.time() - t0
 
     for cut in a.cuts:
-        res, step = cut.split(":")
+        res, step, *cur = cut.split(":")
+        cur = cur[0] if cur else "0.25"
         forcing.ERA5_RES, forcing.ERA5_STEP_H = float(res), int(step)
-        path = out / f"forcing_{a.year}_{res}deg_{step}h.npz"
+        forcing.CURRENT_RES = float(cur)
+        path = out / f"forcing_{a.year}_{res}deg_{step}h_{cur}cur.npz"
         forcing.cut(a.year, path)
         mb = os.path.getsize(path) / 1e6
         weather_mb = sum(i.compress_size for i in zipfile.ZipFile(path).infolist()) / 1e6
         env = open_bundle(path)
         rows, secs = run(
-            f"bundle {res}deg/{step}h",
+            f"bundle {res}deg/{step}h cur {cur}deg",
             lambda d, s, seed, env=env: sail_on_bundle(env, d, s, seed, a.max_days),
         )
         boats = {}
@@ -152,7 +157,7 @@ def main(argv: list[str] | None = None) -> None:
             boats[b] = score([r for r in rows if r["boat"] == b])
         table.append(
             {
-                "cut": f"{res} deg, every {step} h",
+                "cut": f"{res} deg, every {step} h, currents {cur} deg",
                 "download_mb": round(mb, 1),
                 "zip_mb": round(weather_mb, 1),
                 "secs": round(secs),

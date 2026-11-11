@@ -36,7 +36,7 @@ jobs:
       - name: Fetch weather (public ERA5, no login)
         run: python -m boatsim.oceandata fetch-era5 2020-04-01 2020-11-21 --workers 4
       - name: Measure
-        run: python tools/bundle_accuracy.py --year 2020 --cuts 1.0:6 1.0:3 0.5:6 --control --out runs/bundle-accuracy
+        run: python tools/bundle_accuracy.py --year 2020 --cuts 1.0:6:0.25 1.0:6:0.083 0.25:1:0.083 --out runs/bundle-accuracy
       - uses: actions/upload-artifact@v4
         if: always()
         with:
