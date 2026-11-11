@@ -27,13 +27,15 @@ export interface CinemaHost {
   sunDir(): THREE.Vector3;
   /** A time-lapse starts (true) or ends (false): the page pauses its own clock, then puts it back. */
   hold(on: boolean): void;
+  /** Compass bearing to land worth filming (a place like Pico), or null at sea. */
+  landmark?(): number | null;
   /** Cloud cover now, 0..1: no night-sky time-lapse under a thick overcast. */
   cloud?(): number;
   /** The sound toggle, for the M key. */
   toggleSound?(): void;
 }
 
-type ShotKind = "orbit" | "dolly" | "track" | "skim" | "wide" | "drone" | "sunset" | "stars";
+type ShotKind = "orbit" | "dolly" | "track" | "skim" | "wide" | "drone" | "vista" | "sunset" | "stars";
 
 interface Shot {
   kind: ShotKind;
@@ -186,6 +188,8 @@ export class Cinema {
   private pick(): Shot {
     const prev = this.shot?.kind;
     const pool: ShotKind[] = ["orbit", "dolly", "track", "skim", "wide", "drone"];
+    // Off real land, the land gets its own shots: twice as likely as the others.
+    if (this.host.landmark?.() != null) pool.push("vista", "vista");
     // A time-lapse every third cut or so, when there's one to show.
     const lapseKinds: ("sunset" | "stars")[] = Math.random() < 0.5 ? ["sunset", "stars"] : ["stars", "sunset"];
     if (this.cuts > 0 && this.cuts % 3 === 2 && prev !== "sunset" && prev !== "stars") {
@@ -331,6 +335,21 @@ export class Cinema {
         camera.position.set(tg.x - bx * lerp(3, 14, k) + px * 2, tg.y + lerp(4, 26, k), tg.z - bz * lerp(3, 14, k) + pz * 2);
         this.look.set(tg.x + bx * 2, tg.y, tg.z + bz * 2);
         fov = 48;
+        break;
+      }
+      case "vista": {
+        // From behind the boat, up a little, looking past it at the shore and the mountain.
+        const b = THREE.MathUtils.degToRad(this.host.landmark?.() ?? 0);
+        const dx = Math.sin(b);
+        const dz = -Math.cos(b);
+        const k = ease(u);
+        const side = s.side * (0.25 + s.seed * 0.3);
+        const cx = dx * Math.cos(side) - dz * Math.sin(side);
+        const cz = dx * Math.sin(side) + dz * Math.cos(side);
+        const back = lerp(26, 16, k);
+        camera.position.set(tg.x - cx * back, tg.y + lerp(7, 4, k), tg.z - cz * back);
+        this.look.set(tg.x + dx * 600, tg.y + 22, tg.z + dz * 600);
+        fov = 42;
         break;
       }
       case "sunset": {

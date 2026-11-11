@@ -227,3 +227,27 @@ def test_stock_vessels_never_rank_against_the_drones(monkeypatch):
     assert L.check_board(board) == []
     board["entries"][1]["class"] = L.STOCK_CLASS
     assert any("rule 7" in p for p in L.check_board(board))
+
+
+def test_summary_has_what_the_page_draws(tmp_path, monkeypatch):
+    _fixed_run(monkeypatch)
+    builds = ["k-p25", "k-p20", "revc"]
+    years = [2015, 2016, 2017, 2018, 2019]
+    board = L.assemble(_rows(builds, years), _rows(builds, [2021]), 7, years, [2021])
+    s = board["summary"]
+    assert s["fair"] and s["problems"] == [] and s["reference"] == "k-p25"
+    rows = {r["design"]: r for r in s["rows"]}
+    assert set(rows) == set(builds)
+    assert "vs_reference" not in rows["k-p25"]
+    v = rows["revc"]["vs_reference"]
+    assert v["ci95"][0] <= v["gap"] <= v["ci95"][1] and isinstance(v["clear"], bool)
+    assert rows["revc"]["badges"] == ["our model of Randolph Rev C"]
+    assert rows["k-p25"]["holdout"]["launches"] == 13
+    assert all(r["tier"] >= 1 for r in s["rows"])
+    # The CLI adds a summary to a board built before summaries existed.
+    monkeypatch.setenv(L.FLAG, "1")
+    del board["summary"]
+    f = tmp_path / "board.json"
+    f.write_text(json.dumps(board))
+    L.main(["summarise", str(f)])
+    assert json.loads(f.read_text())["summary"]["rows"]

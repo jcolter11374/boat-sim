@@ -389,6 +389,16 @@ try {
   if (errors.length) fail(`page errors in cinematic mode: ${errors.join("; ")}`);
   log.push(`cinematic: ${shots.join(", ")}, ${back.sound}`);
 
+  // Off Pico: real land when the land files are there (the Pages build fetches them), sea only otherwise.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&place=pico&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.land !== undefined, null, { timeout: 120000 })
+    .catch(async () => fail(`Pico didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const pico = await page.evaluate(() => ({ land: window.__replay.land, surf: window.__replay.surf, credit: /Sentinel/.test(document.getElementById("credits").textContent) }));
+  if (!pico.credit) fail("Pico: no Sentinel credit on the page");
+  if (pico.land && !(pico.surf > 1000)) fail(`Pico: land but no surf (${pico.surf})`);
+  if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
+  log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
+
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
@@ -437,6 +447,26 @@ try {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");
   }
+  // Design leaderboard: the published board if there is one, else it says so; the
+  // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
+  await page.goto(`${URL}leaderboard.html`);
+  await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 30000 });
+  const lb0 = await page.evaluate(() => ({ ...window.__leaderboard, banner: document.querySelector("#banner").textContent }));
+  if (lb0.error ? lb0.error !== "NO_BOARD" || !/No board published yet/.test(lb0.banner) : lb0.rows < 2 || lb0.sample) fail(`leaderboard: ${JSON.stringify(lb0)}`);
+  await page.goto(`${URL}leaderboard.html?board=leaderboard-sample/board.json`);
+  await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 30000 });
+  const lb = await page.evaluate(() => ({
+    ...window.__leaderboard,
+    banner: document.querySelector("#banner").textContent,
+    tiers: [...document.querySelectorAll("#rows tr")].map((r) => Number(r.dataset.tier)),
+    ref: document.querySelectorAll("#rows tr.ref").length,
+    model: [...document.querySelectorAll(".chip.model")].map((c) => c.textContent),
+  }));
+  const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
+  if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^our model of Randolph/.test(t)))
+    fail(`leaderboard sample: ${JSON.stringify(lb)}`);
+  await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
+  log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();

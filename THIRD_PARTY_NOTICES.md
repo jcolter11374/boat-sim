@@ -173,6 +173,8 @@ stored in git. Resampled by us.
   https://github.com/tilezen/joerd/blob/master/docs/attribution.md.
 - Colour of Pico and Faial: contains modified Copernicus Sentinel data 2023-2024
   (Sentinel-2 L2A, via the Registry of Open Data on AWS).
+  Shown at voyage.html?place=pico ("Off Pico, Azores"), with both credits on the
+  page's credit line.
 - Annapolis buildings and piers (`annapolis.json`): contains information from
   OpenStreetMap and Overture Maps Foundation, available under the Open Database
   License (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/). The file
