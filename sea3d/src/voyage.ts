@@ -48,7 +48,8 @@ import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Sea } from "./water";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
-import { heightAt, Sea as LiveSea } from "./waves";
+import { heightAt, MixedSea as LiveSea } from "./waves";
+import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -183,11 +184,23 @@ function setQuality(l: Look): void {
 
 // ---------- the sea of a voyage hour ----------
 // Theo's live sea (#133): realistic JONSWAP wave trains that ease toward each
-// hour's logged Hs, Tp and wave direction without jumps. The inputs are already
-// interpolated between logged hours, so only a short easing is needed.
+// hour's sea without jumps. Where the sea-state files are deployed
+// (public/seastate/, from Priya's "Sea state data" workflow) it is the real
+// mix: the local wind sea plus up to two swells from distant storms, each with
+// its own height, period and direction. Elsewhere (no files, a month not
+// loaded yet, the tracker) it is the replay's one combined sea.
 const N_COMP = { low: 16, high: 24 } as const;
 let live = new LiveSea(undefined, { n: N_COMP[quality], smoothing: 0.4 });
+const seaFeed = new SeaStateFeed();
+void seaFeed.init();
+let seaNow: Systems | null = null; // what the Waves card describes
 function seaTarget(rep: Replay, hour: number): number {
+  const [lat, lon] = positionAt(rep, hour);
+  seaNow = LIVE ? null : seaFeed.at(new Date(utc(rep.start) + hour * 3600e3), lat, lon);
+  if (seaNow) {
+    live.setSystems(seaNow.ws, seaNow.s1, seaNow.s2);
+    return Math.max(Math.hypot(seaNow.ws?.hs ?? 0, seaNow.s1?.hs ?? 0, seaNow.s2?.hs ?? 0), 0.05);
+  }
   // The tracker doesn't report the sea: a moderate one, and the cards say it isn't reported.
   const hs = Math.max(valueAt(rep, rep.hs, hour) ?? (LIVE ? 1.2 : 0.3), 0.05);
   const tp = Math.max(valueAt(rep, rep.tp, hour) ?? 3 + 2.5 * Math.sqrt(hs), 2);
@@ -1226,7 +1239,12 @@ function hud(r: Replay, stw: number, hs: number): boolean {
   $("h-hs").innerHTML = `${hs.toFixed(1)}<small>m</small>`;
   const tp = valueAt(r, r.tp, hour);
   const wd = angleAt(r, r.wave_dir, hour);
-  $("h-tp").textContent = (tp != null ? `${tp.toFixed(0)} s apart` : "") + (wd != null ? `, from the ${compass(wd)}` : "");
+  // With the real mix: the swell is what the boat feels most, so name it.
+  const sw = seaNow?.s1 && seaNow.s1.hs >= 0.3 ? seaNow.s1 : null;
+  $("h-tp").textContent =
+    (tp != null ? `${tp.toFixed(0)} s apart` : "") +
+    (wd != null ? `, from the ${compass(wd)}` : "") +
+    (sw ? `; swell ${sw.hs.toFixed(1)} m from the ${compass(sw.dirFrom)}` : "");
   const here = positionAt(r, hour);
   if (Number.isFinite(here[0])) {
     const km = Math.max(distanceKm(here, r.course.target) - r.course.target_radius_m / 1000, 0);
