@@ -104,7 +104,7 @@ const CHECKS = {
   },
   // The default helm game: start, sail 6 hours, sail a day.
   "helm-play": {
-    path: "helm.html",
+    path: "helm.html?quality=low",
     run: async (page) => {
       await helmStart(page);
       const a = await hop(page, "#s6");
@@ -115,7 +115,7 @@ const CHECKS = {
   },
   // Sam's spot 5: "Sail until something happens" stops within 72 h.
   "helm-until": {
-    path: "helm.html",
+    path: "helm.html?quality=low",
     run: async (page) => {
       await helmStart(page);
       const st = await hop(page, "#sevent");
@@ -125,7 +125,7 @@ const CHECKS = {
   },
   // Sam's spot 3: real base station, an order takes about a day to arrive.
   "helm-base-order": {
-    path: "helm.html",
+    path: "helm.html?quality=low",
     run: async (page) => {
       await helmStart(page, async (p) => p.locator('input[name="mode"][value="base"]').check());
       const visible = await page.isVisible("#send");
@@ -142,7 +142,7 @@ const CHECKS = {
   },
   // Maya, 11 Nov: the paths the stale simulator bundle blocked.
   "helm-norfolk": {
-    path: "helm.html",
+    path: "helm.html?quality=low",
     run: async (page) => {
       await helmStart(page, async (p) => {
         await p.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN }).catch(() => {
@@ -159,7 +159,7 @@ const CHECKS = {
     [["helm-drone", "stock_sail_drone7"], ["helm-rower", "stock_ocean_rower45"], ["helm-cruiser", "stock_cruiser31"]].map(([n, b]) => [
       n,
       {
-        path: "helm.html",
+        path: "helm.html?quality=low",
         run: async (page) => {
           await helmStart(page, async (p) => {
             const r = p.locator(`input[name="boat"][value="${b}"]`);
@@ -174,7 +174,7 @@ const CHECKS = {
     ]),
   ),
   "helm-cinematic": {
-    path: "helm.html",
+    path: "helm.html?quality=low",
     run: async (page) => {
       await helmStart(page);
       await hop(page, "#s6");
