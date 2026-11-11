@@ -59,6 +59,7 @@
   #timestate:empty, #timestate[hidden] { display: none; }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
+  #decide[hidden] { display: none; } /* display:flex above would otherwise beat [hidden] */
   #decide .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb84d; }
   #fcbox.lit { outline: 2px solid #ffb84d; }
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
