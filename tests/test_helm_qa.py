@@ -127,6 +127,7 @@ def _fake_game(me_days, gh_days, me="arrived", gh="arrived"):
 
     g = Game.__new__(Game)
     g.choices, g.seed, g.breakdowns, g.orders, g.left_data = None, 1, True, [], set()
+    g.mode = "hands_on"  # #202 added modes; the stub predates it
     g.start = start
     g.mine, g.ghost = voyage(me_days, me), voyage(gh_days, gh)
     g._advance = lambda v, until=None: None
