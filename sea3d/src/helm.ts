@@ -931,7 +931,15 @@ async function wheelEnded(r: WheelResult): Promise<void> {
       if (inFlight) await inFlight;
       const o = await game.order(order, power, sailOrder, engineOrder, r.share);
       page.status = game.status;
-      if (o.trim_until) counts = { hours: Math.round((utc(o.trim_until) - utc(page.status!.boat.t)) / 3600e3) };
+      if (o.trim_until) {
+        counts = { hours: Math.round((utc(o.trim_until) - utc(page.status!.boat.t)) / 3600e3) };
+        // The chart draws this watch brighter (Leo). A new watch cuts the last one short.
+        const from = (utc(page.status!.boat.t) - startMs) / 3600e3;
+        const last = trimWatches.at(-1);
+        if (last && last[1] > from) last[1] = from;
+        trimWatches.push([from, (utc(o.trim_until) - startMs) / 3600e3]);
+        chartDirty = true;
+      }
       present();
     } catch (e) {
       console.warn("the simulator didn't take the spell's trim", e);
@@ -940,6 +948,11 @@ async function wheelEnded(r: WheelResult): Promise<void> {
   note(wheelSummary(r, counts), "At the wheel", r.reached ? TONE_COLOUR.good : TONE_COLOUR.info);
   showOrder();
   setRate(wheelRate);
+}
+/** Hand-trimmed watches this game, as hours from the start, for the chart. */
+const trimWatches: [number, number][] = [];
+function trimRanges(): [number, number][] | undefined {
+  return trimWatches.length ? trimWatches : undefined;
 }
 /** The results card's line on the wheel spells (Sam's trim_watches / trim_gain_km). */
 function trimLine(c: Card): string {
@@ -1887,7 +1900,7 @@ renderer.setAnimationLoop(() => {
         known
           ? [...known, { rep: game.ghost, colours: GHOST }]
           : [
-              { rep: game.boat, colours: TRACK.kayak },
+              { rep: game.boat, colours: TRACK.kayak, bright: trimRanges() },
               { rep: game.ghost, colours: GHOST },
             ],
         watch === "boat" ? 0 : known ? known.length : 1,
