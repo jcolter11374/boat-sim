@@ -11,11 +11,23 @@ on:
     paths:
       - "sea3d/**"
       - ".github/workflows/sea3d.yml"
+      # The simulator the pages run in the browser is packed here too, from the
+      # same commit, so a simulator-only change redeploys the pages.
+      - "src/boatsim/**"
+      - "configs/**"
+      - "data/land/**"
+      - "tools/build_site.sh"
   push:
     branches: [main]
     paths:
       - "sea3d/**"
       - ".github/workflows/sea3d.yml"
+      # The simulator the pages run in the browser is packed here too, from the
+      # same commit, so a simulator-only change redeploys the pages.
+      - "src/boatsim/**"
+      - "configs/**"
+      - "data/land/**"
+      - "tools/build_site.sh"
   workflow_dispatch:
 permissions:
   contents: read
@@ -68,71 +80,24 @@ jobs:
           python blender/build_randolph.py public/models/randolph.glb
           for s in cat semisub board; do python blender/build_shapes.py $s public/models/shape_$s.glb; done
           for b in cruiser dinghy beachcat drone rower; do python blender/build_stock.py $b public/models/stock_$b.glb; done
-      # The Boatyard's simulator in the browser (docs/sandbox.md): Theo's
-      # boatsim.zip and the 2020 weather, served from this site so the page can
-      # fetch them (a release download can't be read from a browser page). If
-      # the release isn't there, the yard launches from the precomputed grid.
-      - name: Fetch the Boatyard sandbox files
-        continue-on-error: true
+      # The whole site from this commit, in one script shared with Nina's
+      # pre-release playtest (tools/build_site.sh), so the gate plays exactly what
+      # deploys: the data releases, the simulator (boatsim.zip) packed from THIS
+      # commit, the page, and check-page, which fails before anything deploys if
+      # the zip can't do what the pages ask or was packed from another commit.
+      # boatsim.zip used to come from the sandbox-data release, which only a
+      # hand-started run updated, and the pages got ahead of it three times
+      # ("can't start from a port yet"). Numpy and PyYAML only, as in Pyodide.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the site from this commit
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download sandbox-data -R "$GITHUB_REPOSITORY" -D public/sandbox -p boatsim.zip -p forcing_2020.npz \
-            && ls -l public/sandbox || echo "no sandbox-data release yet: the yard uses the grid"
-      # Swell for the 3D sea (seastate.yml, display only). The Chesapeake depth
-      # files on the same release are left out until a page reads them. Optional:
-      # without the release the page keeps the waves from the voyage replays.
-      - name: Fetch the sea state files
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download seastate-data -R "$GITHUB_REPOSITORY" -D public/seastate \
-            -p 'seastate_*' \
-            && ls -l public/seastate || echo "no seastate-data release yet: the sea uses the replays' waves"
-      # Land for the 3D views (landdata.yml, display only): Pico and Annapolis.
-      # Optional: without the release the pages show no land.
-      - name: Fetch the land files
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download land-data -R "$GITHUB_REPOSITORY" -D public/land \
-            -p 'pico_*' -p 'baymouth_*' -p 'lisbon_*' -p 'annapolis*' \
-            && ls -l public/land || echo "no land-data release yet: no land in the 3D views"
-      # Weather challenges (challenges.yml): challenges.json and each challenge's
-      # own weather bundle, for the helm page's picker. Optional: without the
-      # release the picker stays hidden.
-      - name: Fetch the challenge files
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download challenge-data -R "$GITHUB_REPOSITORY" -D public/challenges \
-            -p 'challenge*' \
-            && ls -l public/challenges || echo "no challenge-data release yet: no challenge picker"
-      # Today's weather (forecast.yml, display only): the newest GFS forecast.
-      # Optional: without the release the page has no "now" weather.
-      - name: Fetch the forecast files
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download forecast-data -R "$GITHUB_REPOSITORY" -D public/forecast \
-            -p 'forecast_*' \
-            && ls -l public/forecast || echo "no forecast-data release yet: no 'now' weather"
-      # Design leaderboard (leaderboard.yml, published only when fair). Optional:
-      # without the release the page says no board is published yet.
-      - name: Fetch the leaderboard board
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download leaderboard-data -R "$GITHUB_REPOSITORY" -D public/leaderboard \
-            -p board.json \
-            && ls -l public/leaderboard || echo "no leaderboard-data release yet: the page says so"
-      - name: Type-check and build
-        run: npm run build
+          pip install -q numpy pyyaml
+          tools/build_site.sh
       - name: Wave-motion gate (roll period, righting curves, self-righting)
         run: npm run test:unit
       # --with-deps also apt-installs fonts and libraries, which fails whenever
@@ -168,3 +133,26 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+      # On the live site: the page's commit (version.json) and the simulator's
+      # (boatsim.json beside the zip, and boatsim_build.json inside it) are the
+      # same. Deploys queue, so a later one may already be live; what matters is
+      # that page and simulator match. Pages' cache can lag a few minutes.
+      - name: Live check - the deployed page and simulator are one commit
+        env:
+          SITE: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          for i in $(seq 1 20); do
+            q="?t=$(date +%s)"
+            page=$(curl -fsS "${SITE}version.json$q" | jq -r .commit || true)
+            beside=$(curl -fsS "${SITE}sandbox/boatsim.json$q" | jq -r .commit || true)
+            curl -fsS -o boatsim.zip "${SITE}sandbox/boatsim.zip$q" || true
+            inside=$(unzip -p boatsim.zip boatsim_build.json 2>/dev/null | jq -r .commit || true)
+            echo "try $i: page $page, boatsim.json $beside, in the zip $inside (this run: $GITHUB_SHA)"
+            if [ -n "$page" ] && [ "$page" = "$beside" ] && [ "$page" = "$inside" ]; then
+              [ "$page" = "$GITHUB_SHA" ] || echo "::notice::a later deploy ($page) is already live; it matches its simulator"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::the live page and its simulator are from different commits"
+          exit 1
