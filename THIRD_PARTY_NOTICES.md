@@ -68,6 +68,10 @@ between the two maps.
   World Seaborne Trade Monitoring System (Cerdeiro, Komaromi, Liu and Saeed,
   2020). Licence: CC BY 4.0.
 
+The 3D pages' other ships come from the same map: `sea3d/public/ships.bin` is
+this file on a log scale with near-all-land cells cleared (built by
+`sea3d/scripts/ships.py`), so it carries the same two credits and licence.
+
 ## Weather and ocean data
 
 The weather and current files in `data/era5/`, the voyage replays in
