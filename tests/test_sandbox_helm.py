@@ -4,6 +4,7 @@ stop conditions, the ghost and fairness."""
 import io
 import json
 from datetime import datetime, timedelta
+from itertools import pairwise
 
 import pytest
 from test_sandbox import _fake_sources
@@ -529,3 +530,70 @@ def test_the_near_ring_rearms_only_once_clear(env):
     # Saving and loading replays the ring the same way.
     back = Game.load(env, g.save())
     assert back.close_armed == g.close_armed and back.mine.state == g.mine.state
+
+
+def _base_game(env, **kw):
+    g = Game(env, launch_index=MAY1, mode="base", breakdowns=False, max_days=2.5, **kw)
+    g.order("finish", 0.5)
+    return g
+
+
+def test_base_hears_only_the_daily_report_while_iridium_works(env):
+    g = _base_game(env)
+    g.run(hours=30, ghost_passes=False, land_within_km=None, breakdown=False)
+    b = g.status()["base"]
+    assert [r.get("source") for r in b["reports"]] == [None, "iridium"]  # drop, then day 1
+    assert g.status()["silence"]["days_in_a_row"] < 1.0
+
+
+def test_with_iridium_dead_base_gets_the_beacons_six_hourly_fixes(env):
+    g = _base_game(env)
+    g.mine.state.damage["comms_silent"] = True  # the main link is gone
+    g.run(hours=30, ghost_passes=False, land_within_km=None, breakdown=False)
+    b = g.status()["base"]
+    beacon = [r for r in b["reports"] if r.get("source") == "beacon"]
+    assert all(r.get("source") != "iridium" for r in b["reports"])
+    assert 4 <= len(beacon) <= 6 and b["last_report"] == beacon[-1]
+    ts = [datetime.fromisoformat(r["t"]) for r in beacon]
+    assert all(abs((b2 - a).total_seconds() / 3600 - 6.0) < 0.5 for a, b2 in pairwise(ts))
+    # Base's guess runs on from the beacon fix, and the boat still counts as heard.
+    assert b["estimate"]["from_report"] == beacon[-1]["t"]
+    assert g.status()["silence"]["days_in_a_row"] < 0.3
+
+
+def _silent_game(env, monkeypatch, warn_d=0.5):
+    import boatsim.sandbox.helm as H
+
+    monkeypatch.setattr(H, "SILENCE_WARN_ROW_D", warn_d)
+    g = _base_game(env)
+    g.mine.state.damage.update(comms_silent=True, beacon=True)  # nothing gets out
+    return g
+
+
+def test_a_silent_boat_warns_once_before_the_limit(env, monkeypatch):
+    g = _silent_game(env, monkeypatch)
+    r = g.run(hours=24, ghost_passes=False, land_within_km=None, breakdown=False)
+    assert r["stopped"] == "silence"
+    sil = r["status"]["silence"]
+    assert 0.5 <= sil["days_in_a_row"] < 0.6 and sil["limit_in_a_row"] == 10.0
+    assert sil["limit_total"] == 15
+    # No second warning while it stays silent.
+    r = g.run(hours=12, ghost_passes=False, land_within_km=None, breakdown=False)
+    assert r["stopped"] == "time"
+
+
+def test_silence_past_the_race_limit_disqualifies_the_run(env, monkeypatch):
+    from boatsim.runner import arrival
+
+    monkeypatch.setattr(arrival, "SILENT_DAYS_IN_A_ROW", 1.0)  # the rule itself, not a copy
+    g = _silent_game(env, monkeypatch)
+    assert g.run(ghost_passes=False, land_within_km=None, breakdown=False)["stopped"] == "silence"
+    r = g.run(ghost_passes=False, land_within_km=None, breakdown=False)
+    assert r["stopped"] == "over" and r["status"]["silence"]["limit_in_a_row"] == 1.0
+    assert g.result()["boat"]["outcome"] == "disqualified"
+
+
+def test_the_silence_warning_can_be_turned_off(env, monkeypatch):
+    g = _silent_game(env, monkeypatch)
+    r = g.run(hours=24, silence=False, ghost_passes=False, land_within_km=None, breakdown=False)
+    assert r["stopped"] == "time"
