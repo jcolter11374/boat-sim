@@ -74,6 +74,16 @@ jobs:
         run: |
           gh release download sandbox-data -R "$GITHUB_REPOSITORY" -D public/sandbox -p boatsim.zip -p forcing_2020.npz \
             && ls -l public/sandbox || echo "no sandbox-data release yet: the yard uses the grid"
+      # Swell and depth for the 3D sea (seastate.yml, display only). Optional:
+      # without the release the page keeps the waves from the voyage replays.
+      - name: Fetch the sea state files
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download seastate-data -R "$GITHUB_REPOSITORY" -D public/seastate \
+            -p 'seastate_*' -p 'depth_*' \
+            && ls -l public/seastate || echo "no seastate-data release yet: the sea uses the replays' waves"
       - name: Type-check and build
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)
