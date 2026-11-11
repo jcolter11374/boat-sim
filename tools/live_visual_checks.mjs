@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+
 // Visual checks for the live-site test (Iris, for Ravi). What "working" looks like
 // on each 3D page, as assertions a Playwright run can make against the live site.
 //
@@ -37,6 +39,11 @@ export async function pixels(page) {
     const area = (c) => { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)); };
     const big = [...document.querySelectorAll("canvas")].sort((a, b) => area(b) - area(a))[0];
     if (big) big.dataset.livecheck = "1";
+    // For the failure report (#298): every canvas, and which one we judged.
+    window.__livecheckCanvases = [...document.querySelectorAll("canvas")].map((c) => {
+      const r = c.getBoundingClientRect();
+      return `${c === big ? "*" : ""}${c.id || c.parentElement?.id || "canvas"} ${Math.round(r.width)}x${Math.round(r.height)}css/${c.width}x${c.height}px`;
+    });
     const s = document.createElement("style");
     s.id = "livecheck-hide";
     s.textContent = "*{visibility:hidden!important;backdrop-filter:none!important} canvas[data-livecheck]{visibility:visible!important}";
@@ -48,7 +55,7 @@ export async function pixels(page) {
   } finally {
     await page.evaluate(() => document.getElementById("livecheck-hide")?.remove());
   }
-  return page.evaluate(async (b64) => {
+  const stats = await page.evaluate(async (b64) => {
     const img = new Image();
     img.src = "data:image/png;base64," + b64;
     await img.decode();
@@ -58,6 +65,8 @@ export async function pixels(page) {
     const d = g.getImageData(0, 0, W, H).data;
     const region = (y0, y1) => {
       let n = 0, s = 0, s2 = 0, black = 0, white = 0, magenta = 0, blue = 0, warm = 0;
+      // "Warm-ish" (a looser orange) for the failure report: how much, where, and what colour.
+      let wn = 0, wr = 0, wg = 0, wb = 0, x0 = W, x1 = -1, y0b = H, y1b = -1;
       for (let y = Math.floor(y0 * H); y < y1 * H; y += 2)
         for (let x = 0; x < W; x += 2) {
           const i = (y * W + x) * 4, r = d[i], gr = d[i + 1], b = d[i + 2];
@@ -68,12 +77,29 @@ export async function pixels(page) {
           if (r > 200 && b > 200 && gr < 60) magenta++;
           if (b > r + 10) blue++;
           if (r > b + 60 && r > gr + 20) warm++; // the kayak's orange hull
+          if (r > b + 25 && r > gr + 8) {
+            wn++; wr += r; wg += gr; wb += b;
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0b) y0b = y; if (y > y1b) y1b = y;
+          }
         }
       const mean = s / n;
-      return { mean, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)), black: black / n, white: white / n, magenta: magenta / n, blue: blue / n, warm: warm / n };
+      const warmish = wn ? { share: wn / n, rgb: [wr, wg, wb].map((v) => Math.round(v / wn)), box: [x0, y0b, x1, y1b] } : { share: 0 };
+      return { mean, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)), black: black / n, white: white / n, magenta: magenta / n, blue: blue / n, warm: warm / n, warmish };
     };
-    return { all: region(0, 1), sky: region(0, 0.2), sea: region(0.8, 1) };
+    return { all: region(0, 1), sky: region(0, 0.2), sea: region(0.8, 1), size: [W, H] };
   }, png.toString("base64"));
+  stats.canvases = await page.evaluate(() => window.__livecheckCanvases ?? []);
+  stats.png = png;
+  return stats;
+}
+
+/** One line on what the judged picture held, for a failure report (#298). */
+export function describe(px) {
+  const w = px.all.warmish;
+  const f = (v) => v.toFixed(4);
+  return `[picture ${px.size?.join("x")}, canvases ${px.canvases?.join(", ")}; orange ${f(px.all.warm)}, warm-ish ${f(w.share)}` +
+    (w.share ? ` rgb(${w.rgb.join(",")}) in box ${w.box.join(",")}` : "") +
+    `; mean brightness ${px.all.mean.toFixed(0)}, sky ${px.sky.mean.toFixed(0)}, sea blue ${f(px.sea.blue)}]`;
 }
 
 /** What's wrong with these pixel statistics ([] = looks right). */
@@ -155,7 +181,7 @@ export const PAGES = [
 ];
 
 /** Run every check on one page. Returns a list of problems ([] = working). */
-export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300000 } = {}) {
+export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300000, shots = true } = {}) {
   const problems = [];
   const errors = [];
   const onErr = (e) => errors.push(String(e));
@@ -173,7 +199,14 @@ export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300
       await page.waitForTimeout(3000);
       if (!((await page.evaluate(p.frames)) > f0)) problems.push("the picture froze (no new frames in 3 s)");
     }
-    if (p.canvas !== false) problems.push(...judge(await pixels(page)));
+    if (p.canvas !== false) {
+      const px = await pixels(page);
+      // The exact picture judged, panels hidden (uploaded with the gate's live-*.png).
+      if (shots) await writeFile(`live-judged-${p.name.replace(/\W+/g, "-")}.png`, px.png).catch(() => {});
+      const bad = judge(px);
+      if (bad.length) bad.push(describe(px));
+      problems.push(...bad);
+    }
     const was = p.before ? await page.evaluate(p.before) : undefined;
     try {
       await p.act(page, { timeout: 15000 });
