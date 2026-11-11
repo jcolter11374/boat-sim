@@ -27,7 +27,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-04-01T12:00",
    "outcome": "aground",
-   "days": 29.3
+   "days": 32.87
   },
   {
    "file": "voyage_2020-04-15.json",
@@ -55,7 +55,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 16.78
+   "days": 17.07
   },
   {
    "file": "voyage_2020-05-01.json",
@@ -110,8 +110,8 @@
    "file": "voyage_31-ft-cruiser_2020-05-15.json",
    "boat": "31 ft cruiser",
    "start": "2020-05-15T12:00",
-   "outcome": "aground",
-   "days": 18.67
+   "outcome": "arrived",
+   "days": 22.42
   },
   {
    "file": "voyage_2020-06-01.json",
@@ -138,8 +138,8 @@
    "file": "voyage_31-ft-cruiser_2020-06-01.json",
    "boat": "31 ft cruiser",
    "start": "2020-06-01T12:00",
-   "outcome": "timeout",
-   "days": 150.0
+   "outcome": "aground",
+   "days": 43.83
   },
   {
    "file": "voyage_2020-06-15.json",
@@ -167,7 +167,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-06-15T12:00",
    "outcome": "arrived",
-   "days": 21.37
+   "days": 22.07
   }
  ]
 }
