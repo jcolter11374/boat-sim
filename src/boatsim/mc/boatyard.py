@@ -62,13 +62,17 @@ class Build:
 
 
 BOAT_NAMES = {"kayak": "v4 kayak", "revc": "Randolph Rev C", "revb": "Randolph Rev B"}
-# The names a player reads (docs/glossary.md): "our kayak", "Rev C (our model)".
-LABEL_NAMES = {"kayak": "Our kayak", "revc": "Rev C (our model)", "revb": "Rev B (our model)"}
+# The names a player reads (docs/glossary.md): "our kayak", "Randolph's Rev C (our model)".
+LABEL_NAMES = {
+    "kayak": "Our kayak",
+    "revc": "Randolph's Rev C (our model)",
+    "revb": "Randolph's Rev B (our model)",
+}
 
 
 def _label(choices: dict) -> str:
     """Plain words for a build: what it starts from, then only what differs, e.g.
-    "Our kayak", "Our kayak, 15 W cruise, Thrusters: one-t200", "Rev C as built (our model)"."""
+    "Our kayak", "Our kayak, 15 W cruise, Thrusters: one-t200", "Randolph's Rev C as built (our model)"."""
     base = catalog.base_of(choices)
     picked, cruise = catalog.normalise(choices)
     if base != "kayak":

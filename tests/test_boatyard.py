@@ -28,7 +28,8 @@ def test_builds_patch_the_design_as_labelled():
     # The glossary's names (docs/glossary.md): "our kayak", never "the kayak as it stands".
     assert Y.BUILDS["k-p25"].label == "Our kayak"
     assert Y.BUILDS["k-p15"].label == "Our kayak, 15 W cruise"
-    assert Y.BUILDS["revc"].label == "Rev C as built (our model)"
+    assert Y.BUILDS["revc"].label == "Randolph's Rev C as built (our model)"
+    assert Y.BUILDS["revb-rudder.twin"].label.startswith("Randolph's Rev B (our model), ")
     assert all(
         "as it stands" not in b.label and "published" not in b.label for b in Y.BUILDS.values()
     )

@@ -32,13 +32,16 @@ export interface Versus {
 
 const per100 = (x: number) => Math.abs(Math.round(x * 100));
 const signed = (x: number) => `${x >= 0 ? "+" : "−"}${per100(x)}`;
+/** A clear result's range end, rounded away from zero, so it never reads "−0" or "+0" (Ravi). */
+const awayFromZero = (x: number) => `${x >= 0 ? "+" : "−"}${Math.max(1, Math.ceil(Math.abs(x) * 100 - 1e-9))}`;
 
 /** A design against our kayak: a plain headline ("good", "bad" or "" for its colour) and a statistics line. */
 export function versusWords(v: Versus): { head: string; tone: "good" | "bad" | ""; detail: string } {
   const n = per100(v.gap);
   const launches = (k: number) => `${k} launch${k === 1 ? "" : "es"}`;
+  const end = v.clear ? awayFromZero : signed;
   const detail =
-    `Likely range ${signed(v.ci95[0])} to ${signed(v.ci95[1])} finishes per 100. ` +
+    `Likely range ${end(v.ci95[0])} to ${end(v.ci95[1])} finishes per 100. ` +
     `It finished ${launches(v.gained)} our kayak didn't, and missed ${launches(v.lost)} our kayak made.`;
   if (v.clear && n > 0) {
     const better = v.gap > 0;
@@ -48,7 +51,14 @@ export function versusWords(v: Versus): { head: string; tone: "good" | "bad" | "
       detail,
     };
   }
-  return { head: "About the same as our kayak: the difference could be luck", tone: "", detail };
+  // Not clear: we can't tell them apart, which isn't the same as equal (Ravi). "About
+  // the same" only when the gap itself is small too.
+  if (n < 3) return { head: "About the same as our kayak on these launches", tone: "", detail };
+  return {
+    head: `Can't tell apart from our kayak on these launches: about ${n} ${v.gap > 0 ? "more" : "fewer"} per 100, which could be luck`,
+    tone: "",
+    detail,
+  };
 }
 
 /** Badges on every kayak row ("k-..." designs) and on no other row: say them once above the table. */

@@ -19,9 +19,15 @@ test("against our kayak, without statistician's notation", () => {
   assert.equal(better.head, "Clearly better: about 12 more finishes per 100 launches");
   assert.match(better.detail, /missed 1 launch our kayak made\.$/);
   const close = versusWords({ gap: 0.0, ci95: [-0.09, 0.09], gained: 3, lost: 3, clear: false });
-  assert.equal(close.head, "About the same as our kayak: the difference could be luck");
+  assert.equal(close.head, "About the same as our kayak on these launches");
   assert.equal(close.tone, "");
-  for (const w of [worse, better, close]) assert.doesNotMatch(w.head, /95%|points|\+0/);
+  const unsure = versusWords({ gap: -0.06, ci95: [-0.15, 0.03], gained: 2, lost: 6, clear: false });
+  assert.equal(unsure.head, "Can't tell apart from our kayak on these launches: about 6 fewer per 100, which could be luck");
+  assert.match(versusWords({ gap: 0.04, ci95: [-0.05, 0.13], gained: 5, lost: 2, clear: false }).head, /about 4 more per 100/);
+  for (const w of [worse, better, close, unsure]) assert.doesNotMatch(w.head, /95%|points|\+0/);
+  // A clear result's range ends round away from zero: never "−0".
+  const edge = versusWords({ gap: -0.12, ci95: [-0.231, -0.004], gained: 1, lost: 9, clear: true });
+  assert.match(edge.detail, /^Likely range −24 to −1 finishes per 100\./);
 });
 
 test("the kayak's length note is said once, not on every row", () => {
