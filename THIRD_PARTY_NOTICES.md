@@ -23,10 +23,10 @@ kept as they wrote it; the Rev C righting-arm curve and point masses in
 `sea3d/src/motion.ts` come from their `docs/data/revC_gz_curve.csv` and
 `simulator/drone_sim/design.py`. The Boatyard's Randolph Rev B and Rev C
 starting designs (`sea3d/src/yard/bases.ts`) take their parts, prices and weights
-from the parts table in their `docs/Build_Plan.md` (Nov 2026); its Rev C4 refresh (26.9 kg, acetal mast bearings,
+from the parts table in their `docs/Build_Plan.md` (Nov 2026); its Rev C5 refresh (26.9 kg, a shorter, wider wing, acetal mast bearings,
 the YB3 in a foredeck well, fibreglass stern post and counterweight arm, servo-savers, a
-stronger fin and spar) follows their Rev C4 `randolph_rev_c.yaml`, `docs/Design_RevC.md` and
-`docs/Structural_Review.md` (11 Nov 2026). All under the same licence:
+stronger fin and spar) follows their Rev C5 `randolph_rev_c.yaml`, `docs/data/revC_gz_curve.csv`, `docs/Design_RevC.md`,
+`docs/Structural_Review.md` and `docs/Wing_Shape_Study.md` (11 Nov 2026). All under the same licence:
 
 ```
 MIT License

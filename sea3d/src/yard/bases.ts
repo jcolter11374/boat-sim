@@ -14,13 +14,13 @@ export type BaseKey = "kayak" | "revc" | "revb";
 export const BASE_KEYS: BaseKey[] = ["kayak", "revc", "revb"];
 export const BASE_NAMES: Record<BaseKey, string> = {
   kayak: "Our v4 kayak",
-  revc: "Randolph Rev C4 (our model)",
+  revc: "Randolph Rev C5 (our model)",
   revb: "Randolph Rev B (our model)",
 };
 /** The long name, for wherever the boat is described. */
 export const BASE_LONG: Record<BaseKey, string> = {
   kayak: "our v4 kayak",
-  revc: "our model of the Randolph team's Rev C4",
+  revc: "our model of the Randolph team's Rev C5",
   revb: "our model of the Randolph team's Rev B",
 };
 
@@ -37,7 +37,7 @@ type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" |
  */
 const FIGURES: Record<string, Record<string, Figures>> = {
   drive: {
-    wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a 30 x 22 mm carbon spar (Rev C3: stronger, bearings 130 mm apart; Rev C4: acetal ball bearings with glass balls, which can't rust, and plain lands that take a wave's load), balanced by a weight on a solid fibreglass arm." },
+    wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a 30 x 22 mm carbon spar (Rev C3: stronger, bearings 130 mm apart; Rev C4: acetal ball bearings with glass balls, which can't rust, and plain lands that take a wave's load), balanced by a weight on a solid fibreglass arm. Rev C5: shorter and wider, 0.80 m tall by 0.375 m across, with the same area: it heels the boat less." },
     // Their design.py has a 35 W thruster; no price in the build plan. GUESS: one of our T200s.
     "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Price and weight are our guess." },
   },
@@ -71,8 +71,8 @@ const FIGURES: Record<string, Record<string, Figures>> = {
 
 /** Their parts not in any slot (autopilot, sensors, charge controller, bearings, glands, radar reflector, hull, wiring, lake prototype). */
 const REST: Record<"revc" | "revb", { cost: number; kg: number; label: string }> = {
-  // Frozen to their designs/boat-sim/randolph_rev_c.yaml as of 11 Nov 2026 17:35 UTC (Rev C4,
-  // sha256 33972a888f51...; C4 changed the mast bearings only, not the mass or the yaml).
+  // Frozen to their designs/boat-sim/randolph_rev_c.yaml as of 11 Nov 2026 20:40 UTC (Rev C5,
+  // sha256 23cd0c98dc1d...; C4 changed the mast bearings and C5 the wing's shape, not the mass).
   // 177 + 37 + 18 + 20 + 10 + 35 + 104 + 93 + 55 + 78 + 38 + 350 + 55 + 85 + 100. Rev C3 (11 Nov 2026):
   // 26.9 kg all up (their randolph_rev_c.yaml; C2 fin +1.1, C3 structural changes +0.5). Their
   // build plan prices no C2/C3 parts yet, so the cost stays at Rev C's.

@@ -2,7 +2,7 @@
 # written by the Randolph team (MIT, see THIRD_PARTY_NOTICES.md) and is kept as they
 # wrote it. Like configs/randolph_rev_b.yaml, it is a model of their boat run in OUR
 # simulator, not their simulator; their own simulator is the authority on Rev C.
-# Matches their file as of 11 Nov 2026 17:35 UTC (Rev C4: new mast bearings only, sha256 33972a888f51...).
+# Matches their file as of 11 Nov 2026 20:40 UTC (Rev C5: shorter, wider wing, sha256 23cd0c98dc1d...).
 #
 # Randolph Rev C in boat-sim's config format, written by the Randolph team (sheltonr2/drone-boat,
 # designs/boat-sim/randolph_rev_c.yaml, 10 Nov 2026) from boat-sim's own randolph_rev_b.yaml (MIT).
@@ -13,6 +13,7 @@
 #   Rev C2 (11 Nov 2026): hardwood-cored keel fin with carbon strips and keel-box floors, +1.1 kg.
 #   Rev C3 (11 Nov 2026): YB3 in a foredeck well (off the stern post), fibreglass stern post and counterweight arm,
 #   servo-savers on both rudders, 30 x 22 spar on bearings 130 mm apart, +0.5 kg. docs/Structural_Review.md.
+#   Rev C5 (11 Nov 2026): wing 0.80 x 0.375 m (was 1.00 x 0.30), same area. docs/Wing_Shape_Study.md.
 #   All-up ~26.9 kg, DWL z 102 mm.
 # Numbers marked "# Rev C" come from our simulator (simulator/drone_sim, default_design() = Rev C) and
 # our build files (build-files/source/design.py). Lines marked "# GUESS" are still guesses, as before.
@@ -57,13 +58,13 @@ hull:
 
 # Wing sail (vessel/sail.py). Free-rotating NACA 0015 wing with a tail flap.
 sail:
-  area_m2: 0.30              # design.py wing 1.00 m span x 0.30 m chord
-  aspect_ratio: 5.33         # vpp: 1.6 x span / chord (deck acts as an end plate)
+  area_m2: 0.30              # Rev C5: wing 0.80 m span x 0.375 m chord
+  aspect_ratio: 3.41         # Rev C5 (was 5.33): vpp: 1.6 x span / chord (deck acts as an end plate)
   cd0: 0.012                 # vpp
   max_alpha_deg: 20          # vpp: wing angles tried 0-20 deg
-  ce_height_m: 0.65          # vpp: root 0.30 m + 0.45 span, less the 0.10 m Rev C waterline
+  ce_height_m: 0.56          # Rev C5: root 0.30 m + 0.45 x 0.80 m span, less the 0.10 m Rev C waterline
   heel_arm_m: 0.9            # GUESS: centre of effort to centre of lateral resistance
-  max_heel_moment_nm: 20.5   # Rev C3: 26.9 kg x g x GZ 0.078 m at the 25 deg heel limit (docs/data/revC_gz_curve.csv)
+  max_heel_moment_nm: 21.2   # Rev C5: 26.9 kg x g x GZ 0.080 m at the 25 deg heel limit (docs/data/revC_gz_curve.csv)
   storm_wind_ms: 20          # design.py autopilot.storm_tws_ms: feather and run off
   storm_run_twa_deg: 140     # autopilot.py
   min_upwind_twa_deg: 50     # design.py autopilot

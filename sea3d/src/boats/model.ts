@@ -330,8 +330,10 @@ export function buildRandolph(quality: Quality): BoatModel {
     pivot.name = "wing_pivot";
     pivot.position.set(0.6, 0, 0);
     g.add(pivot);
-    kit.mesh(kit.foil(0.3, 0.3, -0.066, -0.066, 0.3, 1.3, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
-    kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.31);
+    // Rev C5 wing (Wing_Shape_Study.md): 0.80 m span x 0.375 m chord, same area as the old 1.00 x 0.30,
+    // on the spar at 22% chord as before. GUESS: the spar now stops just above the shorter wing.
+    kit.mesh(kit.foil(0.375, 0.375, -0.0825, -0.0825, 0.3, 1.1, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
+    kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.11);
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
     kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
     kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot).name = "tail_flap";
@@ -372,7 +374,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     spec: RANDOLPH,
     root,
     stern: new THREE.Vector3(RANDOLPH.cgX - R.L, RANDOLPH.cgBelowWaterline, 0),
-    tagHeight: 1.6 + RANDOLPH.cgBelowWaterline,
+    tagHeight: 1.4 + RANDOLPH.cgBelowWaterline, // just above the Rev C5 wing
     gear,
     form: R,
     animate: (t) => gear.update(idleGear(t), t),

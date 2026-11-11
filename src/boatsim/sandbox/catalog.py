@@ -546,7 +546,7 @@ def _rudder(n: int, base: str) -> Option:
 
 def _bulb(kg: float, base: str) -> Option:
     ref = {"revc": 9.0, "revb": 8.2}[base]
-    heel = {"revc": 20.5, "revb": 17.4}[base]
+    heel = {"revc": 21.2, "revb": 17.4}[base]
     mass = {"revc": 26.9, "revb": 20.8}[base]
     # GUESS: righting moment goes with the bulb's share of the weight; staying upside
     # down after a knockdown with the square of the shortfall (the kayak's bulb rule).
@@ -572,7 +572,11 @@ def _rslots(base: str) -> dict[str, dict[str, Option]]:
     }
     return {
         "drive": {
-            "wing": Option(basis="their design.py: 1.0 x 0.30 m free-rotating wing"),
+            "wing": Option(
+                basis="their Rev C5: 0.80 x 0.375 m free-rotating wing"
+                if base == "revc"
+                else "their design.py: 1.0 x 0.30 m free-rotating wing"
+            ),
             "wing-thruster": Option(
                 (
                     ("propulsion", "thrusters", "1 x 35 W thruster"),

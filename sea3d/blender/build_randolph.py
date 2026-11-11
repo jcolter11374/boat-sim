@@ -121,20 +121,22 @@ def build(out: Path) -> None:
     # Numbers below are relative to the pivot, as in model.ts.
     wp = pivot("wing_pivot", (WING_X, 0, 0))
     x = WING_X
+    # Rev C5 wing (Wing_Shape_Study.md): 0.80 m span x 0.375 m chord, same area as the
+    # old 1.00 x 0.30, spar at 22% chord. GUESS: the spar stops just above the wing.
     foil(
         "wing",
+        0.375,
+        0.375,
+        x - 0.0825,
+        x - 0.0825,
         0.3,
-        0.3,
-        x - 0.066,
-        x - 0.066,
-        0.3,
-        1.3,
+        1.1,
         0.15,
         material("wing", base=hexcol(0xFBFBF7), rough=0.45),
         n_span=4,
         parent=wp,
     )
-    cylinder("wing_spar", 0.0125, x, 0.05, 1.31, 0, spar, segs=20, parent=wp)
+    cylinder("wing_spar", 0.0125, x, 0.05, 1.11, 0, spar, segs=20, parent=wp)
     rod("boom", (x, 0.276, 0), (x + 0.6, 0.276, 0), 0.006, spar, parent=wp)
     cylinder("flap_hinge", 0.016, x + 0.6, 0.255, 0.3, 0, dark, segs=20, parent=wp)
     foil("tail_flap", 0.12, 0.12, x + 0.576, x + 0.576, 0.3, 0.5, 0.12, teal, n_span=2, parent=wp)
