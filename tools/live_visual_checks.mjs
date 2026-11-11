@@ -83,7 +83,9 @@ export async function pixels(page) {
           }
         }
       const mean = s / n;
-      const warmish = wn ? { share: wn / n, rgb: [wr, wg, wb].map((v) => Math.round(v / wn)), box: [x0, y0b, x1, y1b] } : { share: 0 };
+      // density: how much of the warm-ish box is warm-ish (samples are every 2nd pixel each way).
+      const warmish = wn ? { share: wn / n, rgb: [wr, wg, wb].map((v) => Math.round(v / wn)), box: [x0, y0b, x1, y1b],
+        density: wn / (((x1 - x0) / 2 + 1) * ((y1b - y0b) / 2 + 1)) } : { share: 0, density: 0 };
       return { mean, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)), black: black / n, white: white / n, magenta: magenta / n, blue: blue / n, warm: warm / n, warmish };
     };
     return { all: region(0, 1), sky: region(0, 0.2), sea: region(0.8, 1), size: [W, H] };
@@ -102,6 +104,22 @@ export function describe(px) {
     `; mean brightness ${px.all.mean.toFixed(0)}, sky ${px.sky.mean.toFixed(0)}, sea blue ${f(px.sea.blue)}]`;
 }
 
+/**
+ * Is the boat in the picture? Either plenty of strict orange (the hull in good light),
+ * or a compact patch of warm-ish colour: Firefox's software graphics draw the voyage
+ * hull paler and pinker (rgb 168,122,104 against Chromium's 148,82,57, #298), which
+ * misses strict orange. "Compact" (a small box, mostly filled) keeps a warm sunset sky
+ * or scattered glints from passing for a boat. Healthy: Chromium voyage warm-ish 0.0032
+ * at density 0.59; Firefox 0.0009 at 0.31.
+ */
+export function boatInView(px) {
+  const a = px.all, w = a.warmish;
+  if (a.warm >= 0.001) return true;
+  if (!w || !(w.share >= 0.0004) || !(w.density >= 0.15) || !px.size) return false;
+  const [W, H] = px.size;
+  return w.box[2] - w.box[0] <= 0.3 * W && w.box[3] - w.box[1] <= 0.3 * H;
+}
+
 /** What's wrong with these pixel statistics ([] = looks right). */
 export function judge(px, { boat = true } = {}) {
   const bad = [];
@@ -113,7 +131,7 @@ export function judge(px, { boat = true } = {}) {
   if (px.sky.white > 0.5) bad.push("blank sky: white");
   if (px.sky.sd < 1.5 && px.sky.blue < 0.1) bad.push(`blank sky: flat (sd ${px.sky.sd.toFixed(1)}) and not sky-coloured`);
   if (px.sea.blue < 0.5) bad.push(`no sea: only ${f(px.sea.blue)} of the bottom is blue`);
-  if (boat && px.all.warm < 0.001) bad.push(`no boat in view: ${f(px.all.warm)} orange`);
+  if (boat && !boatInView(px)) bad.push(`no boat in view: ${f(px.all.warm)} orange`);
   return bad;
 }
 
