@@ -125,7 +125,7 @@
   "voyages_per_build": 100,
   "note": "April to June launches every 10 days, real weather and currents, same seeds for every build; unknown failure off (odds_unknown_10 puts a 10% chance by day 60 back in). Microtransat finish on our target."
  },
- "commit": "cbb9dbf",
+ "commit": "19bd6c1",
  "builds": [
   {
    "id": "k-p25",
@@ -234,17 +234,17 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 65,
-    "odds": 0.65,
-    "low95": 0.553,
-    "high95": 0.736,
-    "within_150": 65,
-    "median_days": 106.6,
-    "odds_unknown_10": 0.565,
+    "finished": 66,
+    "odds": 0.66,
+    "low95": 0.563,
+    "high95": 0.745,
+    "within_150": 66,
+    "median_days": 107.5,
+    "odds_unknown_10": 0.573,
     "endings": {
-     "arrived": 65,
+     "arrived": 66,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
-     "still at sea": 12,
+     "still at sea": 11,
      "taken or snagged by fishermen [near land]": 3,
      "ran aground before the finish": 2,
      "both electronics boxes dead: silent and uncontrolled [near land]": 2,
@@ -322,7 +322,7 @@
     "low95": 0.646,
     "high95": 0.816,
     "within_150": 74,
-    "median_days": 84.6,
+    "median_days": 84.9,
     "odds_unknown_10": 0.652,
     "endings": {
      "arrived": 74,
@@ -857,7 +857,7 @@
      "file": "k-p25-bat.one-50ah/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 66.38
+     "days": 74.42
     },
     {
      "file": "k-p25-bat.one-50ah/2020-06-15.json",
@@ -1717,7 +1717,7 @@
     "low95": 0.689,
     "high95": 0.85,
     "within_150": 78,
-    "median_days": 70.8,
+    "median_days": 70.1,
     "odds_unknown_10": 0.695,
     "endings": {
      "arrived": 78,
@@ -1798,7 +1798,7 @@
     "low95": 0.711,
     "high95": 0.867,
     "within_150": 80,
-    "median_days": 74.8,
+    "median_days": 74.0,
     "odds_unknown_10": 0.711,
     "endings": {
      "arrived": 80,
@@ -1964,7 +1964,7 @@
     "low95": 0.625,
     "high95": 0.799,
     "within_150": 72,
-    "median_days": 86.8,
+    "median_days": 87.9,
     "odds_unknown_10": 0.633,
     "endings": {
      "arrived": 72,
@@ -2041,21 +2041,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 73,
-    "odds": 0.73,
-    "low95": 0.636,
-    "high95": 0.807,
-    "within_150": 73,
-    "median_days": 78.9,
-    "odds_unknown_10": 0.646,
+    "finished": 74,
+    "odds": 0.74,
+    "low95": 0.646,
+    "high95": 0.816,
+    "within_150": 74,
+    "median_days": 79.4,
+    "odds_unknown_10": 0.655,
     "endings": {
-     "arrived": 73,
+     "arrived": 74,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
      "still at sea": 8,
      "disqualified: silent too long": 3,
-     "taken or snagged by fishermen [near land]": 3,
      "both electronics boxes dead: silent and uncontrolled [near land]": 2,
-     "stuck inverted or keel lost [open ocean]": 2
+     "stuck inverted or keel lost [open ocean]": 2,
+     "taken or snagged by fishermen [near land]": 2
     }
    },
    "replays": [
@@ -2295,9 +2295,9 @@
     "endings": {
      "arrived": 81,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 4,
      "disqualified: silent too long": 3,
-     "still at sea": 3,
-     "stuck inverted or keel lost [open ocean]": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
      "taken or snagged by fishermen [near land]": 1
     }
    },
