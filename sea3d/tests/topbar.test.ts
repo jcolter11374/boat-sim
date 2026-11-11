@@ -34,12 +34,13 @@ test("page names come from the file name", () => {
 });
 
 test("the boat chip offers to build one, or names my boat safely", () => {
-  assert.match(boatChip(null).html, /build one/);
+  assert.equal(boatChip(null).name, "build one");
   assert.equal(boatChip(null).href, "./boatyard.html");
   const c = boatChip({ name: 'Rev C <b>"x"</b> & co', href: "./boatyard.html#base=revc" });
   assert.equal(c.href, "./boatyard.html#base=revc");
-  assert.ok(!c.html.includes("<b>\"x\""));
-  assert.match(c.html, /Rev C &lt;b&gt;&quot;x&quot;&lt;\/b&gt; &amp; co/);
+  // the name is passed through untouched; mountTopbar only ever sets it as textContent
+  assert.equal(c.name, 'Rev C <b>"x"</b> & co');
+  assert.equal(c.prefix, "My boat: ");
 });
 
 test("the title screen shows unless dismissed or ?title=0", () => {

@@ -61,11 +61,10 @@ export function pageName(pathname: string): string {
   return file === "" ? "index" : file.replace(/\.html?$/, "");
 }
 
-/** The "my boat" chip's text and where it goes. */
-export function boatChip(boat: { name: string; href: string } | null): { html: string; href: string; title: string } {
-  if (!boat) return { html: '<span class="p">No boat yet: </span><b>build one</b>', href: "./boatyard.html", title: "Design a boat in the Boatyard" };
-  const esc = boat.name.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-  return { html: `<span class="p">My boat: </span><b>${esc}</b>`, href: boat.href, title: "Open my boat in the Boatyard" };
+/** The "my boat" chip's words and where it goes. The name is player data, so it is only ever set as text. */
+export function boatChip(boat: { name: string; href: string } | null): { prefix: string; name: string; href: string; title: string } {
+  if (!boat) return { prefix: "No boat yet: ", name: "build one", href: "./boatyard.html", title: "Design a boat in the Boatyard" };
+  return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }
 
 export function mountTopbar(doc: Document = document): HTMLElement | null {
@@ -94,7 +93,12 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   const chip = bar.querySelector<HTMLAnchorElement>("#topbar-boat")!;
   const draw = () => {
     const c = boatChip(currentBoat());
-    chip.innerHTML = c.html;
+    const p = doc.createElement("span");
+    p.className = "p";
+    p.textContent = c.prefix;
+    const b = doc.createElement("b");
+    b.textContent = c.name;
+    chip.replaceChildren(p, b);
     chip.href = c.href;
     chip.title = c.title;
   };
