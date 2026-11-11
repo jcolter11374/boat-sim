@@ -39,18 +39,54 @@ const frag = /* glsl */ `
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
   }
+  // Cell noise: distance to the nearest and second-nearest scattered point.
+  vec2 cells(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    float d1 = 8.0, d2 = 8.0;
+    for (int y = -1; y <= 1; y++)
+      for (int x = -1; x <= 1; x++) {
+        vec2 g = vec2(float(x), float(y));
+        vec2 o = vec2(hash(i + g), hash(i + g + 17.3));
+        float d = length(g + o - f);
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+      }
+    return vec2(d1, d2);
+  }
+  // Sea foam is a lace: thin white walls between bubbles, with dark holes
+  // that open up as it ages. Two scales of cells, the walls where the nearest
+  // two points are almost the same distance away.
+  float lace(vec2 q, float age) {
+    // Warped, so the bubbles are irregular, not a honeycomb.
+    q += vec2(vnoise(q * 1.7), vnoise(q * 1.7 + 9.2)) * 0.9 - 0.45;
+    vec2 c1 = cells(q * 3.6);
+    vec2 c2 = cells(q * 8.5 + 3.1);
+    float w = mix(0.35, 0.07, age); // fresh foam is nearly solid; old foam is thin threads
+    float l1 = 1.0 - smoothstep(0.0, w, c1.y - c1.x);
+    float l2 = 1.0 - smoothstep(0.0, w * 0.8, c2.y - c2.x);
+    float speck = 0.55 + 0.45 * vnoise(q * 14.0); // threads break and thin out
+    return max(l1, 0.6 * l2) * speck;
+  }
   void main() {
     // Pattern fixed to the water: a parcel d metres aft left the stern (odo - d) metres ago.
     float d = vUV.x * uLen;
     vec2 q = vec2(uOdo - d, vUV.y * (0.6 + d * ${SPREAD.toFixed(2)}));
-    float n = vnoise(q * vec2(3.2, 6.0)) * 0.5 + vnoise(q * vec2(9.0, 14.0) + uTime * 0.15) * 0.32 + vnoise(q * 23.0) * 0.18;
     float age = vUV.x;                                   // 0 fresh .. 1 old
-    float centre = (1.0 - smoothstep(0.15, 0.75, abs(vUV.y))) * (1.0 - smoothstep(0.0, 0.55, age));
+    // Big patches, so the foam breaks up into islands as it spreads.
+    float n = vnoise(q * vec2(1.6, 3.0)) * 0.6 + vnoise(q * vec2(4.5, 7.0) + uTime * 0.1) * 0.4;
+    float centre = (1.0 - smoothstep(0.1, 0.8, abs(vUV.y))) * (1.0 - smoothstep(0.0, 0.6, age));
     float edges = smoothstep(0.55, 0.85, abs(vUV.y)) * (1.0 - smoothstep(0.92, 1.0, abs(vUV.y))) * (1.0 - smoothstep(0.1, 1.0, age));
     float body = max(centre, 0.75 * edges);
-    float a = smoothstep(0.62 - 0.4 * body, 0.8, n) * body * uI;
+    float patches = smoothstep(0.75 - 0.55 * body, 0.95 - 0.3 * body, n + 0.25 * body);
+    float foam = lace(q + vec2(0.0, uTime * 0.02), age) * patches * body;
+    // Fresh foam under the stern is a churned white mass.
+    float fresh = (1.0 - smoothstep(0.0, 0.22, age)) * (1.0 - smoothstep(0.25, 0.75, abs(vUV.y)));
+    foam = max(foam, fresh * smoothstep(0.25, 0.6, lace(q * 1.3 + 5.7, 0.0) + 0.3 * n));
+    float a = foam * uI;
     a *= smoothstep(0.0, 0.04, age);                     // soft start under the stern
-    gl_FragColor = vec4(vec3(0.95, 0.97, 1.0) * uLight, clamp(a, 0.0, 0.85));
+    // Bubbles just under the surface turn the water a pale turquoise around the foam.
+    float bub = centre * (0.4 + 0.6 * patches) * uI * 0.22;
+    vec3 col = mix(vec3(0.35, 0.75, 0.78), vec3(0.95, 0.97, 1.0), clamp(a / max(a + bub, 1e-3), 0.0, 1.0));
+    gl_FragColor = vec4(col * uLight, clamp(max(a, bub), 0.0, 0.9));
   }
 `;
 
