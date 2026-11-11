@@ -5,6 +5,7 @@
 // textContent, never innerHTML.
 
 import { sandboxThere } from "./sandbox";
+import { loadMyBoat } from "./myboat";
 import { BoatView, boatFor, type ViewState } from "./race/view3d";
 import { loadDetailedModels } from "./boats/model";
 
@@ -92,7 +93,16 @@ const msg = (t: string, cls = "muted") => {
   m.textContent = t;
 };
 
-/** A Boatyard share link's choices (the part after #), checked word by word. */
+// "My boat" (saved in the Boatyard or sailed at the helm) is boat A to start with.
+const MINE = "mine";
+const mine = loadMyBoat();
+if (mine) {
+  const sel = $<HTMLSelectElement>("baseA");
+  sel.prepend(new Option(`My boat: ${mine.name}`, MINE)); // an option's text is plain text, never markup
+  sel.value = MINE;
+}
+
+/** A Boatyard share link's choices (the part after #), checked word by word; else the boat picked. */
 function choicesFrom(baseSel: string, share: string): Choices | null {
   const hash = share.includes("#") ? share.slice(share.indexOf("#") + 1) : share.trim();
   if (hash) {
@@ -105,6 +115,7 @@ function choicesFrom(baseSel: string, share: string): Choices | null {
     if (bad) return null;
     return out;
   }
+  if (baseSel === MINE && mine) return Object.fromEntries(Object.entries(mine.choices).map(([k, v]) => [k, String(v)]));
   return baseSel === "kayak" ? {} : { base: baseSel };
 }
 
