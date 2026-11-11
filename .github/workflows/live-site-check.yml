@@ -69,7 +69,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
+      # The runner image already has the browsers' system libraries; --with-deps only adds
+      # fonts from the Ubuntu mirrors, which can fail (deploy 43047737622). Fall back without.
+      - run: |
+          npm install --no-save playwright@1.49.1
+          npx playwright install --with-deps chromium || npx playwright install chromium
       # Pages takes a minute to serve a fresh deploy everywhere.
       - if: github.event_name == 'workflow_run'
         run: sleep 90
