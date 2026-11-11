@@ -23,6 +23,13 @@
    "days": 150.0
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-04-01.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-04-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
    "file": "voyage_2020-04-15.json",
    "boat": "v4 kayak",
    "start": "2020-04-15T12:00",
@@ -44,6 +51,13 @@
    "days": 150.0
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-04-15.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-04-15T12:00",
+   "outcome": "arrived",
+   "days": 22.88
+  },
+  {
    "file": "voyage_2020-05-01.json",
    "boat": "v4 kayak",
    "start": "2020-05-01T12:00",
@@ -60,6 +74,13 @@
   {
    "file": "voyage_randolph-rev-c_2020-05-01.json",
    "boat": "Randolph Rev C",
+   "start": "2020-05-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
+   "file": "voyage_31-ft-cruiser_2020-05-01.json",
+   "boat": "31 ft cruiser",
    "start": "2020-05-01T12:00",
    "outcome": "timeout",
    "days": 150.0
@@ -86,6 +107,13 @@
    "days": 11.92
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-05-15.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-05-15T12:00",
+   "outcome": "arrived",
+   "days": 27.12
+  },
+  {
    "file": "voyage_2020-06-01.json",
    "boat": "v4 kayak",
    "start": "2020-06-01T12:00",
@@ -107,6 +135,13 @@
    "days": 113.35
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-06-01.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-06-01T12:00",
+   "outcome": "lost",
+   "days": 28.56
+  },
+  {
    "file": "voyage_2020-06-15.json",
    "boat": "v4 kayak",
    "start": "2020-06-15T12:00",
@@ -126,6 +161,13 @@
    "start": "2020-06-15T12:00",
    "outcome": "aground",
    "days": 1.88
+  },
+  {
+   "file": "voyage_31-ft-cruiser_2020-06-15.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-06-15T12:00",
+   "outcome": "arrived",
+   "days": 23.91
   }
  ]
 }
