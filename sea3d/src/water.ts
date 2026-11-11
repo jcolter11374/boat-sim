@@ -213,7 +213,7 @@ const FRAG_GLOW = /* glsl */ `
   float back = max(dot(vh, sh), 0.0);
   float crest = smoothstep(-0.2, 1.2, vCrest);
   float lowSun = 1.0 - 0.6 * smoothstep(0.3, 0.9, uSunDir.y);
-  totalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * foamMask * (0.06 + 0.25 * uSunI);
+  totalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * foamMask * (0.06 * smoothstep(0.0, 0.25, uSunI) + 0.25 * uSunI); // no glow on a moonless night
   totalEmissiveRadiance += uGlow * uSunI * crest * (0.35 + 0.65 * back * back) * lowSun * (1.0 - foamMask) * (1.0 - farMix);
 }
 `;
@@ -272,7 +272,7 @@ export class Sea {
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v5";
+    material.customProgramCacheKey = () => "boatsim-sea-v6";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;

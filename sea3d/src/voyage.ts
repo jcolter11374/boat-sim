@@ -51,6 +51,7 @@ import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
+import { localTime } from "./replay/localtime";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -479,10 +480,9 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
     status.shown = [];
     status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: tracked.simulated, fixes: tracked.fixes.length };
     $<HTMLInputElement>("scrub").max = String(endHour());
-    $("simbanner").hidden = !tracked.simulated;
     $("boat").hidden = $("voyage").hidden = true;
     $("now").hidden = $("c-report").hidden = $("c-eta").hidden = false;
-    $("h1").textContent = tracked.simulated ? "Live tracker (test run)" : "Live tracker";
+    $("h1").textContent = tracked.simulated ? "Live tracker (simulated voyage)" : "Live tracker";
     $("sub").textContent =
       "Where the kayak last reported (the main box's daily satellite report and the backup beacon's pings), then the simulator's forecast from that report: the dashed line on the chart, with the shaded band showing where most forecast runs end up. Wind and waves aren't reported, so the sea here is a stand-in.";
     $("lg-ours").textContent = "reported track";
@@ -1219,6 +1219,8 @@ function hud(r: Replay, stw: number, hs: number): boolean {
   $("h-date").textContent = fmtDate(r, hour);
   $("w-day").textContent = GAME ? `Day ${day.toFixed(1)}` : `Day ${day.toFixed(1)} of ${(endHour() / 24).toFixed(1)}`;
   $("w-date").textContent = fmtDate(r, hour);
+  const [plat, plon] = positionAt(r, hour);
+  $("h-local").textContent = $("w-local").textContent = localTime(utc(r.start) + hour * 3600e3, plat, plon, warp < 1 / 60);
   if (document.activeElement !== scrub) scrub.value = String(hour);
   const soc = valueAt(r, r.soc, hour);
   $("h-soc").innerHTML = soc == null ? "-" : `${Math.round(soc * 100)}<small>%</small>`;

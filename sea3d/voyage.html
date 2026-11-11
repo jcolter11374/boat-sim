@@ -134,10 +134,7 @@
     text-shadow: 0 1px 3px rgba(0,0,0,.9); white-space: nowrap; }
   #skylabels span::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 7px; background: rgba(233,241,251,.6); }
   [hidden] { display: none !important; }
-  /* Live tracker (?live): the simulated-feed banner, and the forecast look past "now". */
-  #simbanner { position: fixed; top: 100px; left: 50%; transform: translateX(-50%); z-index: 5; padding: 7px 16px; border-radius: 8px;
-    background: #c2410c; color: #fff; font: 700 13px system-ui, sans-serif; letter-spacing: .6px; box-shadow: 0 4px 18px rgba(0,0,0,.35); white-space: nowrap; }
-  #simbanner small { display: block; font-weight: 500; letter-spacing: 0; opacity: .9; text-align: center; }
+  /* Live tracker (?live): the forecast look past "now". */
   #forecasttag { position: fixed; top: 46%; left: 50%; transform: translate(-50%, -120px); padding: 4px 12px; border-radius: 999px;
     background: rgba(200,220,255,.18); border: 1px dashed rgba(220,232,255,.8); color: #e8f0ff; font: 700 12px system-ui, sans-serif; letter-spacing: 1px; pointer-events: none; }
   body.live #c-wind, body.live #c-waves, body.live #playlink, body.live #livelink, body.game #livelink, body.live #top a[href="./index.html"] { display: none !important; }
@@ -172,7 +169,7 @@
   </div>
 </div>
 <div id="hud">
-  <div class="card glass"><div class="k">Day</div><div class="v" id="h-day">0</div><div class="s" id="h-date"></div></div>
+  <div class="card glass"><div class="k">Day</div><div class="v" id="h-day">0</div><div class="s" id="h-date"></div><div class="s" id="h-local"></div></div>
   <div class="card glass"><div class="k">Battery</div><div class="v" id="h-soc">-</div><div class="bar"><i id="h-socbar"></i></div><div class="s" id="h-charge"></div></div>
   <div class="card glass"><div class="k">Speed</div><div class="v" id="h-stw">-</div><div class="s">through the water</div></div>
   <div class="card glass" id="c-report" hidden><div class="k">Last report</div><div class="v" id="l-age">-</div><div class="s" id="l-src"></div></div>
@@ -186,7 +183,6 @@
 <div id="skylabels"></div>
 <button id="lookup" aria-pressed="false" title="Tilt the view up to see the moon and stars">&#11014; Look up at the sky</button>
 <div id="toasts"></div>
-<div id="simbanner" hidden>SIMULATED VOYAGE, not the real boat<small>A test run of the tracker: the boat hasn't launched yet</small></div>
 <div id="forecasttag" hidden>FORECAST</div>
 <div id="chartbox" class="glass" title="Click to enlarge">
   <canvas id="chart"></canvas>
@@ -206,7 +202,7 @@
     <button data-warp="96">4 days/s</button>
   </div>
   <div id="scrubwrap"><div id="ticks"></div><input id="scrub" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the voyage"></div>
-  <div id="when"><b id="w-day">Day 0</b><br><span id="w-date"></span></div>
+  <div id="when"><b id="w-day">Day 0</b><br><span id="w-date"></span><br><span id="w-local"></span></div>
 </div>
 <div id="outcome" class="glass">
   <div class="muted" id="o-kicker">Voyage over</div>

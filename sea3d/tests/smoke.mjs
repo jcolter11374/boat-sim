@@ -269,19 +269,20 @@ try {
   log.push("water off the deck, fog and cloud");
 
   // Live tracker on the sample feed (Sam's replay mode, day 30: main box down, beacon only):
-  // the banner, "now" at the latest report, and the forecast look past it.
+  // the "simulated voyage" label, "now" at the latest report, and the forecast look past it.
   await page.goto(`${URL}voyage.html?live&feed=feed-sample/&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 })
     .catch(async () => fail(`live tracker didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
-  const lv = await page.evaluate(() => ({ ...window.__replay.live, hour: window.__replay.hour, banner: !document.getElementById("simbanner").hidden }));
-  if (!lv.simulated || !lv.banner) fail(`simulated feed without its banner: ${JSON.stringify(lv)}`);
+  const lv = await page.evaluate(() => ({ ...window.__replay.live, hour: window.__replay.hour, label: /simulated voyage/.test(document.getElementById("h1").textContent), local: document.getElementById("w-local").textContent }));
+  if (!lv.simulated || !lv.label) fail(`simulated feed without its label: ${JSON.stringify(lv)}`);
+  if (!/^\d+:\d\d(:\d\d)? [AP]M local \(UTC/.test(lv.local)) fail(`no local time under the clock: ${JSON.stringify(lv)}`);
   if (Math.abs(lv.hour - lv.now) > 0.01 || lv.now < lv.lastFix || lv.fixes < 50) fail(`live tracker not at now: ${JSON.stringify(lv)}`);
   await page.evaluate((h) => window.__replay.setHour(h), lv.now + 24 * 5);
   await page.waitForFunction(() => window.__replay.live.forecast === true, null, { timeout: 30000 }).catch(() => fail("no forecast look past now"));
   await page.evaluate(() => window.__replay.goNow());
   await page.waitForFunction(() => window.__replay.live.forecast === false, null, { timeout: 30000 }).catch(() => fail("Now didn't come back from the forecast"));
   if (errors.length) fail(`page errors in the live tracker: ${errors.join("; ")}`);
-  log.push(`live tracker: ${lv.fixes} fixes, now day ${(lv.now / 24).toFixed(1)}, banner on`);
+  log.push(`live tracker: ${lv.fixes} fixes, now day ${(lv.now / 24).toFixed(1)}, labelled, ${lv.local}`);
 
   // Boatyard: the catalog loads, a swap changes the totals, the model and the share link.
   await page.goto(`${URL}boatyard.html?quality=low`);
@@ -378,6 +379,8 @@ try {
     await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
     const day = await page.evaluate(() => window.__helm.status?.day);
     if (!(Math.abs(day - 0.25) < 0.01) || (await page.evaluate(() => window.__helm.error))) fail(`helm: 6 hours sailed to day ${day}`);
+    const local = await page.evaluate(() => document.getElementById("local").textContent);
+    if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
     // stop a known reason, and the game ends in a results card that follows the draw rule.
     const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "over", "order_arrived"];
@@ -402,7 +405,7 @@ try {
     if (both && (Math.abs(card.margin_days) < 1) !== (card.verdict === "draw")) fail(`helm card: draw rule broken (${card.margin_days} d, ${card.verdict})`);
     if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
     await page.screenshot({ path: "test-output/helm-result.png" });
-    log.push(`helm sailed 6 h, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
+    log.push(`helm sailed 6 h, ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
   } else {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");

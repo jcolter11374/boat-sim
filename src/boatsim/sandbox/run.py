@@ -49,9 +49,12 @@ def run_voyage(
     max_days: float = MAX_DAYS,
     stride_h: float = 6,
     drop_nudge_deg: float = 0.0,
+    drop: tuple[float, float] | None = None,
 ) -> dict:
     """One voyage of a build: {"result": summary, "replay": slim replay}.
-    drop_nudge_deg moves the drop north by that much: a sensitivity test only."""
+    drop: where the boat is let go (default the design's own drop point; the
+    race view puts both boats at one spot). drop_nudge_deg moves the drop north
+    by that much: a sensitivity test only."""
     from boatsim.oceandata.grid import OutsideCoverage
     from boatsim.runner.land import default_land
     from boatsim.runner.parallel import summarize
@@ -59,7 +62,8 @@ def run_voyage(
     from boatsim.runner.simulate import default_mission, simulate, standard_components
 
     design = catalog.design_for(choices)
-    drop = (design.voyage["drop_lat"] + drop_nudge_deg, design.voyage["drop_lon"])
+    lat, lon = drop if drop is not None else (design.voyage["drop_lat"], design.voyage["drop_lon"])
+    drop = (lat + drop_nudge_deg, lon)
     c = standard_components(design, env, env, seed=seed, land=default_land())
     try:
         log = simulate(c, start, *drop, default_mission(drop), seed=seed, max_days=max_days)

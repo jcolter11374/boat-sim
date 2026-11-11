@@ -20,9 +20,10 @@ import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
-import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
+import { localTime } from "./replay/localtime";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -100,6 +101,10 @@ let shownTo = 0; // hour the animation is heading for
 let watch: "boat" | "ghost" = "boat";
 let busy = false;
 let order: Heading = "finish";
+let mode: Mode = "hands_on";
+/** Base mode: the dial and slider make a draft until it's sent. */
+let draft = false;
+const shared = params.get("g");
 let power = 0.25; // the autopilot cruises at 25 W of its 100
 let maxW = 100; // full drive power, W (the simulator says, once there is an order)
 let lastForecast: Awaited<ReturnType<HelmGame["forecast"]>> | null = null;
@@ -114,6 +119,9 @@ const page = {
   status: null as Status | null,
   frames: 0,
   error: "",
+  /** Base mode orders sent (accepted or not), and the last share link (for tests). */
+  orders: [] as OrderResult[],
+  share: "",
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -148,11 +156,71 @@ function fail(e: unknown): void {
 async function setOrder(h: Heading, p = power): Promise<void> {
   order = h;
   power = p;
+  if (mode === "base" && page.ready) {
+    // From base an order is a satellite message, one a day: draft it, then send.
+    draft = true;
+    showOrder();
+    return;
+  }
   showOrder();
   if (!page.ready) return;
   try {
-    page.status = await game.order(h, p);
+    await game.order(h, p);
+    page.status = game.status;
     showStatus();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+const dayOf = (iso: string) => (utc(iso) - startMs) / 86400e3;
+
+/** Base mode: send the drafted order. */
+async function sendOrder(): Promise<void> {
+  if (busy || !page.ready) return;
+  try {
+    const r = await game.order(order, power);
+    page.status = game.status;
+    page.orders.push(r);
+    const d = page.status!.day;
+    if (!r.accepted) {
+      note(`Base can send one order a day. The next can go on day ${dayOf(r.next_allowed!).toFixed(1)}; your draft is kept until then.`, `Day ${d.toFixed(1)}`, TONE_COLOUR.warn);
+    } else {
+      draft = false;
+      note(
+        r.arrives
+          ? `Order sent from base. It waits for the boat's next check-in and reaches it on day ${dayOf(r.arrives).toFixed(1)}, planned from where the boat was at its last report.`
+          : "Order sent from base, but the satellite link didn't get it through. Try again tomorrow.",
+        `Day ${d.toFixed(1)}`,
+        TONE_COLOUR.info,
+      );
+    }
+    showStatus();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+async function shareLink(): Promise<void> {
+  if (busy || !page.ready) return;
+  try {
+    const code = await game.save();
+    const url = new URL(location.href);
+    url.search = "";
+    url.searchParams.set("g", code);
+    page.share = url.href;
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(url.href);
+      copied = true;
+    } catch {
+      // no clipboard (an older browser, or no permission): show the link instead
+    }
+    const a = document.createElement("a");
+    a.href = url.href;
+    a.textContent = copied ? "Link copied" : "Here's the link";
+    a.title = url.href;
+    $("sharetext").replaceChildren(a, document.createTextNode(`: it opens this game at day ${page.status!.day.toFixed(1)}, same weather and luck.`));
   } catch (e) {
     fail(e);
   }
@@ -168,6 +236,13 @@ function showOrder(): void {
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
   $("powertext").textContent = power === 0 ? "Motors off: drifting" : `${Math.round(power * 100)}% power, about ${w} W`;
+  $("sendrow").hidden = !(mode === "base" && page.ready);
+  if (mode === "base") {
+    const sent = page.status?.order;
+    $("sendtext").textContent = draft ? "Not sent yet: base sends one order a day." : sent ? "This is the last order base sent." : "";
+    $("send").textContent = draft ? "Send this order from base" : "Sent";
+    ($("send") as HTMLButtonElement).disabled = !draft || busy;
+  }
 }
 
 function bearing(a: [number, number], b: [number, number]): number {
@@ -188,6 +263,7 @@ function showStatus(): void {
   const fb = bearing([b.lat, b.lon], finish as [number, number]);
   $("day").textContent = `Day ${s.day.toFixed(1)}`;
   $("when").textContent = new Date(utc(b.t)).toUTCString().slice(5, 22) + " UTC";
+  $("local").textContent = localTime(utc(b.t), b.lat, b.lon);
   $("tofinish").textContent = `${Math.round(b.km_to_finish).toLocaleString()} km to the finish`;
   const lead = s.lead_km;
   $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${Math.round(lead)} km ahead of the ghost` : `${Math.round(-lead)} km behind the ghost`;
@@ -208,6 +284,11 @@ function showStatus(): void {
     $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
   }
   compass.set({ heading: b.heading, finish: fb, windTo, windKn: kn });
+  if (s.mode === "base" && s.base) {
+    const last = dayOf(s.base.last_report.t);
+    const w = s.base.waiting;
+    $("baseline").textContent = `Base last heard from the boat on day ${last.toFixed(1)}.${w.length ? ` Order on its way: it reaches the boat on day ${dayOf(w[0].due).toFixed(1)}.` : ""}`;
+  } else $("baseline").textContent = "";
   $("ghostline").textContent = `Ghost: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
   showOrder();
 }
@@ -274,13 +355,14 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
   setBusy(false);
 }
 
-/** "Until something happens": a big change from now, at most 10 days. */
+/** "Until something happens": a big change from now, or an order arriving, at most 3 days. */
 function untilOptions(): Record<string, number | boolean> {
   const st = page.status;
   const soc = st?.boat.soc ?? 1;
   const w = st?.weather;
   const wind = w ? Math.hypot(w.wind_u, w.wind_v) : 0;
-  const o: Record<string, number | boolean> = { hours: 240, breakdown: true };
+  // No hours: the simulator stops by itself after 3 days of quiet sailing.
+  const o: Record<string, number | boolean> = { breakdown: true };
   if (soc > 0.2) o.soc_below = Math.max(0.1, soc - 0.3); // a big drop, or the reserve
   if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
   return o;
@@ -308,9 +390,27 @@ async function finish(): Promise<void> {
           : "Neither boat finished.";
   $("r-head").textContent = head;
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
-  const line = (who: string, x: Card["boat"]) =>
-    `<tr><th>${who}</th><td>${OUTCOME[x.outcome] ?? x.outcome}</td><td>${x.days.toFixed(1)} days</td><td>${Math.round(x.battery_low * 100)}%</td><td>${x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none"}</td></tr>`;
-  $("r-table").innerHTML = `<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>${line("You", me)}${line("Autopilot ghost", gh)}`;
+  const line = (who: string, x: Card["boat"]) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.textContent = who;
+    tr.append(th);
+    const cells = [
+      OUTCOME[x.outcome] ?? x.outcome,
+      `${x.days.toFixed(1)} days`,
+      `${Math.round(x.battery_low * 100)}%`,
+      x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none",
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.append(td);
+    }
+    return tr;
+  };
+  const table = $("r-table");
+  table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>";
+  table.append(line("You", me), line("Autopilot ghost", gh));
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
@@ -333,6 +433,7 @@ async function begin(): Promise<void> {
   const launch = Number($<HTMLSelectElement>("launch").value);
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
+  mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as Mode) ?? "hands_on";
   if (!(await sandboxThere())) {
     page.error = "no simulator files";
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
@@ -341,30 +442,58 @@ async function begin(): Promise<void> {
   $("start").hidden = true;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
   try {
-    page.status = await game.start(launch, safe, breakdowns);
+    if (shared) {
+      const v = await game.load(shared);
+      page.status = v.status;
+      mode = v.status.mode ?? "hands_on";
+      const o = v.orders.at(-1);
+      if (o) [order, power] = [o.heading, o.power];
+    } else {
+      page.status = await game.start(launch, safe, breakdowns, mode);
+      if (mode !== (page.status.mode ?? "hands_on")) {
+        mode = "hands_on";
+        note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
+      }
+      // Hands on: the first order goes at once. From base, the boat sails the launch route until base sends one.
+      if (mode === "hands_on") await game.order(order, power);
+      else draft = true; // ready to send
+      page.status = game.status;
+    }
     startMs = utc(game.boat!.start);
     page.ready = true;
-    await game.order(order, power);
-    page.status = await game.order(order, power);
-    hour = shownTo = 0;
+    shownTo = shared ? lastHour(game.boat!) : 0;
+    hour = shownTo;
     showStatus();
+    newEvents();
     await refreshForecast();
     chart?.setLanes([
       { rep: game.boat!, colours: TRACK.kayak },
       { rep: game.ghost!, colours: GHOST },
     ]);
-    note("You have the helm. Pick a heading and a power, then let time run.", "Day 0", TONE_COLOUR.info);
+    chartDirty = true;
+    const d = `Day ${page.status!.day.toFixed(1)}`;
+    if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
+    else if (mode === "base")
+      note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
+    else note("You have the helm. Pick a heading and a power, then let time run.", d, TONE_COLOUR.info);
+    if (page.status?.over) await finish();
   } catch (e) {
-    const old = /NO_HELM/.test(String(e));
-    if (old) {
+    const err = String(e);
+    if (/NO_HELM/.test(err)) {
       page.error = "no helm in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site doesn't have the helm game yet; it's being updated. Try again later.";
+    } else if (/BAD_CODE/.test(err)) {
+      page.error = "bad share link";
+      setBusy(false);
+      $("startmsg").textContent = `That share link didn't open: ${err.replace(/^.*BAD_CODE\s*/, "")}. Start a new game instead.`;
+      history.replaceState(null, "", location.pathname);
     } else fail(e);
     $("start").hidden = false;
     return;
   }
   setBusy(false);
+  showOrder();
 }
 
 const GHOST = { main: "#c8d4e6", beacon: "#e0e8f4", glow: "rgba(200,212,230,0.7)" };
@@ -379,6 +508,18 @@ $("s6").addEventListener("click", () => void sail("6h"));
 $("sday").addEventListener("click", () => void sail("day"));
 $("sevent").addEventListener("click", () => void sail("event"));
 $("go").addEventListener("click", () => void begin());
+$("send").addEventListener("click", () => void sendOrder());
+$("share").addEventListener("click", () => void shareLink());
+// Base mode turns the boat's own battery guard on by default, as the simulator does.
+for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="mode"]')))
+  r.addEventListener("change", () => ($<HTMLInputElement>("safe").checked = r.value === "base" && r.checked));
+if (shared) {
+  $("modes").hidden = true;
+  for (const id of ["launch", "breakdowns", "safe"]) $<HTMLInputElement>(id).disabled = true;
+  $("sharedmsg").hidden = false;
+  $("sharedmsg").textContent = "Someone shared this game with you: it opens where they left it, with the same weather and luck.";
+  $("go").textContent = "Carry on from where they left it";
+}
 $("again").addEventListener("click", () => location.reload());
 for (const w of ["boat", "ghost"] as const)
   $(`w-${w}`).addEventListener("click", () => {

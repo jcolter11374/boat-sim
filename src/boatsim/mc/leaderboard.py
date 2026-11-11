@@ -43,8 +43,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 
-from boatsim.mc.months import wilson
-from boatsim.mc.sensitivity import sign_test
+from boatsim.mc.stats import sign_test, wilson
 
 FLAG = "BOATSIM_LEADERBOARD"
 MIN_LAUNCHES = 60
