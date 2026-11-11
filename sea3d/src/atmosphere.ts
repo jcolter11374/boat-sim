@@ -169,6 +169,10 @@ export class Atmosphere {
   readonly glintDir = new THREE.Vector3(0, 1, 0);
   glintLight = 1;
   exposure = 0.55;
+  /** Cloud cover 0..1 (the clouds' own reading, from the logged sunlight): dims the day under it. */
+  cloud = 0;
+  /** How far you can see through flying spray (m); Infinity in anything less than a severe gale. */
+  sprayFar = Infinity;
   /** Overall light level for unlit things like foam particles, 0..1. */
   ambient = 1;
 
@@ -305,7 +309,12 @@ export class Atmosphere {
     const day = smooth(elDeg, -5, 6); // 0 night .. 1 day
     const dusk = day * (1 - smooth(elDeg, 2, 22)); // low-sun warmth
     const night = 1 - smooth(elDeg, -10, -2);
-    this.sunLight = day * (1 - 0.6 * storm);
+    // Under thick cloud the sun is blocked and the day goes grey and dim (overcast light is a
+    // third or so of a clear day's); a gale's own murk counts the same way, whichever is darker.
+    // Broken cloud leaves the sun out most of the time; only a closing sky shades the day.
+    const overcast = smooth(this.cloud, 0.35, 0.95);
+    const shade = Math.max(0.6 * storm, 0.75 * overcast);
+    this.sunLight = day * (1 - shade);
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;
     this.sun.position.copy(this.sunDir).multiplyScalar(100);
@@ -316,19 +325,22 @@ export class Atmosphere {
     this.moonlight = moonlight;
     this.moon.intensity = 0.9 * night * moonlight;
     // Starlight alone is very dim: a moonless night at sea is nearly black.
-    this.hemi.intensity = (0.022 + 0.1 * moonlight) * (1 - day) + 0.5 * day;
+    this.hemi.intensity = (0.022 + 0.1 * moonlight) * (1 - day) + 0.5 * day * (1 - 0.3 * overcast);
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
     for (const m of this.starMats) m.opacity = night * (1 - storm);
     this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day));
     this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
     const dark = 0.05 + 0.13 * moonlight; // what the night leaves, moonless .. full moon
-    this.ambient = dark + (1 - dark) * day * (1 - 0.4 * storm);
+    this.ambient = dark + (1 - dark) * day * (1 - Math.max(0.4 * storm, 0.35 * overcast));
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = this.horizon * (0.9 - 0.77 * storm);
+    // Spindrift in a severe gale closes the view in further (storm.ts sprayVisibility).
+    this.fog.far = Math.min(this.fog.far, this.sprayFar);
+    this.fog.near = Math.min(this.fog.near, 0.1 * this.sprayFar);
     // Eyes adjust a little to the dark, more so by moonlight.
     this.exposure = (0.55 - 0.17 * storm) * (1 + (1 - day) * (0.15 + 0.35 * moonlight));
     this.renderer.toneMappingExposure = this.exposure;
@@ -409,7 +421,7 @@ export class Atmosphere {
     this.reach = h;
     this.sky.scale.setScalar(h * 3);
     this.overcast.scale.setScalar(h / HORIZON);
-    this.fog.far = h * (0.9 - 0.77 * this.storm);
+    this.fog.far = Math.min(h * (0.9 - 0.77 * this.storm), this.sprayFar);
   }
 
   private placeMoon(): void {

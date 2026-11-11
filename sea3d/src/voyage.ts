@@ -10,6 +10,9 @@
 // the close-up sea runs in real time, so the waves always move naturally while
 // their size and direction follow the voyage hour by hour.
 
+import { Spindrift } from "./spindrift";
+import { RainBands } from "./rainbands";
+import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { Wetness } from "./boats/wet";
 import { Drain } from "./drain";
@@ -192,6 +195,11 @@ scene.add(sea.mesh);
 // Rain in a blow (cosmetic: the log has wind, not rain).
 const rain = new Rain();
 scene.add(rain.mesh);
+const bands = new RainBands();
+scene.add(bands.mesh);
+const spray = new Spindrift(quality === "high" ? 5000 : 2000);
+scene.add(spray.points);
+const sprayBuf = new THREE.Vector2();
 // Low cloud (cover read from the logged sunlight) and fog banks (cosmetic).
 const clouds = new Clouds();
 scene.add(clouds.group);
@@ -280,6 +288,15 @@ let live = new LiveSea(undefined, { n: N_COMP[quality], smoothing: 0.4 });
 const seaFeed = new SeaStateFeed();
 void seaFeed.init();
 let seaNow: Systems | null = null; // what the Waves card describes
+/** The logged wind (m/s towards east, north), or its speed forced for pictures and tests (status.force.wind). */
+function windAt(rep: Replay, hour: number): [number, number] {
+  const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
+  const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+  const f = status.force.wind;
+  if (f < 0) return [wu, wv];
+  const w = Math.hypot(wu, wv);
+  return w > 0.01 ? [(wu * f) / w, (wv * f) / w] : [f, 0];
+}
 function seaTarget(rep: Replay, hour: number): number {
   if (PLACE?.fetch) {
     // A sheltered harbour: only the local wind's chop, running downwind.
@@ -342,6 +359,10 @@ let gamePicked = false; // a voyage picked in the game is on screen
 const endHour = () => lanes.reduce((m, l) => Math.max(m, lastHour(l.rep)), 0);
 const status = {
   rain: 0,
+  /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
+  spindrift: 0,
+  bands: 0,
+  bandNear: { m: Infinity, bearing: 0 },
   cloud: 0,
   fog: 0,
   wet: 0,
@@ -399,7 +420,8 @@ const status = {
   /** Pour the deck off now, as after a knockdown (for tests and pictures). */
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
-  force: { cloud: -1, fog: -1 },
+  /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
+  force: { cloud: -1, fog: -1, wind: -1 },
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
@@ -1006,8 +1028,7 @@ renderer.setAnimationLoop(() => {
     const hs = seaTarget(rep, hour);
     const comps = live.advance(t);
     {
-      const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
-      const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+      const [wu, wv] = windAt(rep, hour);
       sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv)); // north = -z
     }
     sea.update(comps, t);
@@ -1087,8 +1108,7 @@ renderer.setAnimationLoop(() => {
     controls.target.y += dy;
     // Weather mood from the logged wind: greyer, darker and closer in a blow;
     // the sun where it really was for this hour and place.
-    const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
-    const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+    const [wu, wv] = windAt(rep, hour);
     const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * 1.94384 - 15) / 20, 0, 1);
     storm += (target - storm) * Math.min(1, dt * 1.5);
     // Off real land the sky is the place's own (the replay still brings the weather).
@@ -1098,6 +1118,8 @@ renderer.setAnimationLoop(() => {
     if (Number.isFinite(lat)) atmos.setCelestial(utc(rep.start) + hour * 3600e3, lat, lon);
     sunEl = sp.el;
     sunAz = sp.az;
+    atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
+    atmos.cloud = clouds.cover; // last frame's, which is close enough
     atmos.set(sp.el, sp.az, storm);
     const when = utc(rep.start) / 86400e3 + hour / 24; // calendar day, so a given day is foggy in every replay
     clouds.update(
@@ -1119,7 +1141,14 @@ renderer.setAnimationLoop(() => {
     // Scene x is east, -z is north.
     // The logged rain when the replay has it; older replays only have wind, so rain follows the storm.
     const rate = rep.rain ? valueAt(rep, rep.rain, hour) : null;
-    rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
+    // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
+    bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
+    rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+    status.bands = bands.shown;
+    status.bandNear = bands.nearest;
+    renderer.getDrawingBufferSize(sprayBuf);
+    spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
+    status.spindrift = spray.amount;
     status.rain = rain.amount;
     // Wet from rain and from spray once the waves get up.
     // Soaked for a while after a knockdown, drying off over a minute or so.
