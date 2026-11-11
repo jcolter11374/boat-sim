@@ -12,8 +12,8 @@
    "file": "voyage_randolph-rev-b_2020-04-01.json",
    "boat": "Randolph Rev B",
    "start": "2020-04-01T12:00",
-   "outcome": "timeout",
-   "days": 150.0
+   "outcome": "lost",
+   "days": 13.12
   },
   {
    "file": "voyage_randolph-rev-c_2020-04-01.json",
@@ -76,7 +76,7 @@
    "boat": "Randolph Rev B",
    "start": "2020-05-15T12:00",
    "outcome": "lost",
-   "days": 138.47
+   "days": 28.14
   },
   {
    "file": "voyage_randolph-rev-c_2020-05-15.json",
@@ -97,7 +97,7 @@
    "boat": "Randolph Rev B",
    "start": "2020-06-01T12:00",
    "outcome": "lost",
-   "days": 104.17
+   "days": 73.58
   },
   {
    "file": "voyage_randolph-rev-c_2020-06-01.json",
