@@ -14,13 +14,13 @@ export type BaseKey = "kayak" | "revc" | "revb";
 export const BASE_KEYS: BaseKey[] = ["kayak", "revc", "revb"];
 export const BASE_NAMES: Record<BaseKey, string> = {
   kayak: "Our v4 kayak",
-  revc: "Randolph Rev C (our model)",
+  revc: "Randolph Rev C5 (our model)",
   revb: "Randolph Rev B (our model)",
 };
 /** The long name, for wherever the boat is described. */
 export const BASE_LONG: Record<BaseKey, string> = {
   kayak: "our v4 kayak",
-  revc: "our model of the Randolph team's Rev C",
+  revc: "our model of the Randolph team's Rev C5",
   revb: "our model of the Randolph team's Rev B",
 };
 
@@ -37,7 +37,7 @@ type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" |
  */
 const FIGURES: Record<string, Record<string, Figures>> = {
   drive: {
-    wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a carbon spar." },
+    wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a 30 x 22 mm carbon spar (Rev C3: stronger, bearings 130 mm apart; Rev C4: acetal ball bearings with glass balls, which can't rust, and plain lands that take a wave's load), balanced by a weight on a solid fibreglass arm. Rev C5: shorter and wider, 0.80 m tall by 0.375 m across, with the same area: it heels the boat less." },
     // Their design.py has a 35 W thruster; no price in the build plan. GUESS: one of our T200s.
     "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Price and weight are our guess." },
   },
@@ -48,7 +48,7 @@ const FIGURES: Record<string, Record<string, Figures>> = {
     "two-box": { cost: 40 + 83, kg: 0.4, wh: 32, boxes: 2, est: 1, d: "A second, separate safe-mode box, like ours. Our guess for their boat." },
   },
   rudder: {
-    twin: { cost: 186, kg: 0, d: "Two spade rudders, each with its own servo: either one can steer alone." },
+    twin: { cost: 186, kg: 0, d: "Two spade rudders, each with its own servo: either one can steer alone. Rev C3: a spring servo-saver on each and stops at ±40°, so a wave can push a blade over without breaking its servo." },
     single: { cost: 93, kg: -0.5, d: "One rudder and one servo, as on Rev B." },
   },
   rsol: {
@@ -60,20 +60,24 @@ const FIGURES: Record<string, Record<string, Figures>> = {
     "lfp-384wh": { cost: 300, kg: 1.9, bat: 384, est: 1, d: "Two of the same packs. Our guess." },
   },
   keel: {
-    "bulb-9kg": { cost: 67, kg: 0, d: "About 9 kg of lead cast into the keel bulb (Rev C, design D72). Makes it right itself from upside down." },
+    "bulb-9kg": { cost: 67, kg: 0, d: "About 9 kg of lead cast into the keel bulb (Rev C, design D72), on a hardwood-cored fin set in a keel box (Rev C2: about ten times stronger). Makes it right itself from upside down." },
     "bulb-8kg": { cost: 60, kg: -0.8, d: "8.2 kg bulb, as on Rev B." },
   },
   tracker: {
-    yb3: { cost: 630, kg: 0.3, beacon: 1, d: "Yellowbrick YB3: its own battery, GPS and satellite modem, so it keeps reporting if the main box dies." },
+    yb3: { cost: 630, kg: 0.3, beacon: 1, d: "Yellowbrick YB3: its own battery, GPS and satellite modem, so it keeps reporting if the main box dies. Rev C3 sets it in a well in the foredeck, away from the main antenna on the stern post." },
     none: { cost: 0, kg: 0, beacon: 0, d: "No backup tracker." },
   },
 };
 
 /** Their parts not in any slot (autopilot, sensors, charge controller, bearings, glands, radar reflector, hull, wiring, lake prototype). */
 const REST: Record<"revc" | "revb", { cost: number; kg: number; label: string }> = {
-  // 177 + 37 + 18 + 20 + 10 + 35 + 104 + 93 + 55 + 78 + 38 + 350 + 55 + 85 + 100
-  revc: { cost: 1255, kg: 25.2, label: "Rest of their boat (foam-filled hull, autopilot and sensors, charge controller, wiring)" },
-  // As Rev C without the hull fill and battery box (55).
+  // Frozen to their designs/boat-sim/randolph_rev_c.yaml as of 11 Nov 2026 20:40 UTC (Rev C5,
+  // sha256 23cd0c98dc1d...; C4 changed the mast bearings and C5 the wing's shape, not the mass).
+  // 177 + 37 + 18 + 20 + 10 + 35 + 104 + 93 + 55 + 78 + 38 + 350 + 55 + 85 + 100. Rev C3 (11 Nov 2026):
+  // 26.9 kg all up (their randolph_rev_c.yaml; C2 fin +1.1, C3 structural changes +0.5). Their
+  // build plan prices no C2/C3 parts yet, so the cost stays at Rev C's.
+  revc: { cost: 1255, kg: 26.9, label: "Rest of their boat (foam-filled hull, hardwood keel fin, autopilot and sensors, charge controller, wiring)" },
+  // As the first Rev C (25.2 kg) without the hull fill and battery box (55).
   revb: { cost: 1200, kg: 20.8, label: "Rest of their boat (hull, autopilot and sensors, charge controller, wiring)" },
 };
 /** The shared kayak slots on their boat, and what it has in them. */
