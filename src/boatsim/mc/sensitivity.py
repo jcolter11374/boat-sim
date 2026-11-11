@@ -332,6 +332,15 @@ VARIANTS: dict[str, Variant] = {
         "with no look-ahead for land (the drone before 11 Nov 2026)",
         design=(("electronics", "tactician", False),),
     ),
+    # #327 study (Maya, 11 Nov): the coastal stall. Within 150 km of land the
+    # autopilot holds its track line; on 1 Apr 2020 a gale pushes the kayak south
+    # of the drop and it heads almost north into wind and current for ~5 days.
+    # Study only: on 2020 this helped the kayak and drone but put Rev C aground.
+    "near75": Variant(
+        "steering",
+        "Hold the track line only within 75 km of land, not 150 km (#327 study)",
+        guidance=(("track_near_land_km", 75.0),),
+    ),
     "pursuit_nocrab": Variant(
         "steering",
         "As pursuit, but never crab into the current far from land",
