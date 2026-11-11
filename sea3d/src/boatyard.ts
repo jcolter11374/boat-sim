@@ -170,7 +170,7 @@ const status = {
   summary: {} as Record<string, unknown>,
   dressed: {} as Record<string, unknown>,
   share: "",
-  /** The chance of finishing "Your boat" shows (#315). */
+  /** The odds "Your build" shows (#315). */
   chance: null as Chance | null,
   /** The player's saved boat ("my boat"), as this page last drew it. */
   mine: null as MyBoat | null,
@@ -415,7 +415,7 @@ function redraw(): void {
 }
 
 // ---------- chance of finishing (#315 item 12) ----------
-/** "Your boat": the grid's chance of finishing when this design is a tested build, else "not tested yet". */
+/** "Your build": the grid's odds when this design is a tested build, else "not tested yet". */
 async function drawChance(): Promise<void> {
   if (!cat) return;
   const turn = ++chanceTurn;

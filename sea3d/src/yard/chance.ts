@@ -1,4 +1,4 @@
-// "Your boat" shows the chance of finishing as you swap parts (#315 item 12,
+// "Your build" shows its odds (docs/glossary.md) as you swap parts (#315 item 12,
 // Nina's first-time pass): the precomputed grid's odds when the design is one
 // of the tested builds, else "not tested yet". Never the nearest build's odds
 // under this design's name: a near miss can be far off (one motor vs two is
@@ -32,6 +32,6 @@ export function chanceFor(
   return {
     tested: true,
     value: pct(o.odds),
-    note: `Likely ${pct(o.low95)} to ${pct(o.high95)}. The simulator's autopilot sailed this exact build from ${o.voyages} launches${when}.`,
+    note: `The share of ${o.voyages} launches${when} this exact build finished in the simulator. Likely range ${pct(o.low95)} to ${pct(o.high95)}.`,
   };
 }

@@ -12,10 +12,10 @@ test("a tested build shows its own odds, with the launches behind them", () => {
   assert.deepEqual(c, {
     tested: true,
     value: "78%",
-    note: "Likely 69% to 85%. The simulator's autopilot sailed this exact build from 100 launches (Apr to Jun, 2012 to 2021).",
+    note: "The share of 100 launches (Apr to Jun, 2012 to 2021) this exact build finished in the simulator. Likely range 69% to 85%.",
   });
-  assert.match(chanceFor({ build: build(odds), exact: true }, { years: [2012, 2021] }).note, /100 launches \(2012 to 2021\)\.$/);
-  assert.match(chanceFor({ build: build(odds), exact: true }, null).note, /100 launches\.$/);
+  assert.match(chanceFor({ build: build(odds), exact: true }, { years: [2012, 2021] }).note, /100 launches \(2012 to 2021\) this exact/);
+  assert.match(chanceFor({ build: build(odds), exact: true }, null).note, /100 launches this exact/);
 });
 
 test("a near miss never borrows the nearest build's odds", () => {
