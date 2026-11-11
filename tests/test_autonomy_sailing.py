@@ -218,3 +218,35 @@ def test_beats_round_an_island_on_the_first_tack():
     took, _, _ = _sail_to(mark, wind, 12 * KN, land_km=land_km, track=seen)
     assert closest(seen) >= LAND_CLEAR_KM - 1.0  # ...with one it keeps clear
     assert took < timedelta(hours=30)
+
+
+@pytest.mark.parametrize(
+    ("width_km", "max_tacks"), [(80.0, 7), (40.0, 8), (20.0, 14), (12.0, None)]
+)
+def test_beats_up_a_channel_without_dithering(width_km, max_tacks):
+    """Ravi's check of #252: up a channel, both tacks see land inside the
+    look-ahead, and "the other side is clearer" flipped almost every step (71
+    tacks in 12 h at 40 km). Now only land within LAND_URGENT_KM tacks early."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 3.0)  # ~270 km up the channel, dead upwind
+    wind = bearing_deg(*start, *mark)
+
+    def land_km(lat, lon):
+        off_axis = distance_m(lat, start[1], *start) / 1000.0  # km north or south
+        return max(0.0, width_km / 2.0 - off_axis)
+
+    track: list = []
+    with pytest.raises(AssertionError, match="never reached"):  # 12 h is not enough
+        _sail_to(mark, wind, 12 * KN, hours=12, land_km=land_km, track=track)
+    assert min(land_km(*p) for p in track) >= LAND_CLEAR_KM - 1.0  # never ashore
+    tacks = sum(
+        1
+        for a, b, c in zip(track, track[1:], track[2:], strict=False)
+        if (b[0] - a[0]) * (c[0] - b[0]) < 0  # north-south direction reverses
+    )
+    # Wide water: the normal tack every min_switch_h. 20 km: wall to wall,
+    # about an hour a board. Narrower than ~2 x LAND_URGENT_KM of beat plus
+    # the margins, the tacks come as fast as the walls force them, but it
+    # still never touches land.
+    if max_tacks is not None:
+        assert tacks <= max_tacks

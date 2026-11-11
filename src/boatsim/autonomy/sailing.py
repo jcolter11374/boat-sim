@@ -27,8 +27,9 @@ or a navigator with a polar does.
   narrows as the boat closes on it, so the tacks get shorter near the mark.
 * **Land ahead.** Before holding a tack or gybe, it looks `LAND_LOOKAHEAD_KM`
   along that heading. If land is that close and the other side is clearer,
-  it switches now, whatever the minimum interval says (15 May 2020 replay: a
-  healthy cruiser beat straight onto Pico in the Azores on one long tack).
+  it switches: at once if the land is within `LAND_URGENT_KM`, otherwise at
+  the next normal switch (15 May 2020 replay: a healthy cruiser beat straight
+  onto Pico in the Azores on one long tack).
 * While beating or running, the waypoint follower's current (crab) estimate
   is frozen: the boat zig-zags on purpose, so its course over the ground says
   nothing about the current.
@@ -61,6 +62,7 @@ from boatsim.types import Command, Mission, Sensors
 KN = 0.514444  # m/s per knot
 LAND_LOOKAHEAD_KM = 30.0  # GUESS: about 3-4 h of sailing; more than one min_switch_h leg
 LAND_STEP_KM = 2.0
+LAND_URGENT_KM = 5.0  # GUESS: ~30 min of sailing; land this close ahead tacks at once
 LAND_CLEAR_KM = 2.0  # a point this close to the coast counts as land ahead
 
 
@@ -234,17 +236,22 @@ class Tactician:
             # Just started beating or running: take the side the mark is on,
             # which is also the side nearer the course being sailed.
             side = mark_side
-        elif side != mark_side and past > self.switch_deg:
-            settled = self.last_switch is None or t - self.last_switch >= timedelta(
-                hours=self.min_switch_h
-            )
-            if settled:
-                side = mark_side
+        settled = self.last_switch is None or t - self.last_switch >= timedelta(
+            hours=self.min_switch_h
+        )
+        if self.mode == mode and side != mark_side and past > self.switch_deg and settled:
+            side = mark_side
         if open_water is not None:
-            # Never hold a tack or gybe onto land when the other side is clearer.
+            # Don't hold a tack or gybe onto land when the other side is clearer
+            # (by at least a step). Land close ahead (LAND_URGENT_KM) switches
+            # at once; further off, only at a normal switch (min_switch_h), or
+            # in a channel both sides see land and it would tack every step
+            # (Ravi's check of #252: 71 tacks in 12 h up a 40 km channel).
             here = open_water((wind_from + side * angle) % 360.0)
-            if here < LAND_LOOKAHEAD_KM and open_water((wind_from - side * angle) % 360.0) > here:
-                side = -side
+            if here < LAND_LOOKAHEAD_KM and (here <= LAND_URGENT_KM or settled):
+                there = open_water((wind_from - side * angle) % 360.0)
+                if there >= here + LAND_STEP_KM:
+                    side = -side
         if self.side and side != self.side and self.mode == mode:
             self.last_switch = t
             self.switches += 1
