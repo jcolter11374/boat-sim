@@ -240,3 +240,24 @@ def test_a_shared_early_loss_says_so_plainly(env):
     assert r["note"] == (
         "An electronics failure no one could steer around: both boats lost. Try another day."
     )
+
+
+def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
+    g = Game(env, launch_index=MAY1, mode="base", max_days=2.5)
+    assert Game(env, launch_index=MAY1, max_days=0.5).status()["show_true_position"]
+    st = g.status()
+    assert st["show_true_position"] is False
+    assert st["base"]["reports"] == [st["base"]["last_report"]]  # just the drop
+    g.run(hours=30, ghost_passes=False, land_within_km=None, breakdown=False)
+    b = g.status()["base"]
+    assert len(b["reports"]) == 2 and b["last_report"] == b["reports"][-1]
+    est = b["estimate"]
+    assert est["from_report"] == b["last_report"]["t"] and 5.0 < est["age_h"] < 7.0
+    # Carried on along the last day's track, so it lands nearer the true boat
+    # than the stale report does.
+    from boatsim.geo import distance_m
+
+    s = g.mine.state
+    stale = distance_m(s.lat, s.lon, b["last_report"]["lat"], b["last_report"]["lon"])
+    guess = distance_m(s.lat, s.lon, est["lat"], est["lon"])
+    assert guess < stale
