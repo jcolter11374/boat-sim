@@ -22,7 +22,17 @@ try {
     await new Promise((r) => setTimeout(r, 200));
   }
   const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  // Thread sandboxes can't reach the Pyodide CDN: PYODIDE_DIR=<unpacked pyodide release>
+  // serves it from disk (CI reaches the CDN and leaves this unset).
+  if (process.env.PYODIDE_DIR) {
+    await context.route("https://cdn.jsdelivr.net/pyodide/v0.27.7/full/**", (route) => {
+      const name = new globalThis.URL(route.request().url()).pathname.split("/").pop();
+      const type = name.endsWith(".mjs") || name.endsWith(".js") ? "text/javascript" : name.endsWith(".wasm") ? "application/wasm" : name.endsWith(".json") ? "application/json" : "application/octet-stream";
+      route.fulfill({ body: readFileSync(`${process.env.PYODIDE_DIR}/${name}`), contentType: type, headers: { "access-control-allow-origin": "*" } });
+    });
+  }
+  const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   // Low quality throughout: CI draws with software graphics at about one frame a
@@ -357,6 +367,9 @@ try {
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
+  // so a whole game fits in the smoke test.
+  await page.selectOption("#launch", "2");
   await page.click("#go");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
   const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
@@ -365,7 +378,31 @@ try {
     await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
     const day = await page.evaluate(() => window.__helm.status?.day);
     if (!(Math.abs(day - 0.25) < 0.01) || (await page.evaluate(() => window.__helm.error))) fail(`helm: 6 hours sailed to day ${day}`);
-    log.push(`helm sailed 6 h`);
+    // Ravi's gates in the page: the ghost never ahead of the player's clock, every
+    // stop a known reason, and the game ends in a results card that follows the draw rule.
+    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "over", "order_arrived"];
+    const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
+    let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
+    if (st.stop !== "time" || ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
+    let hops = 0;
+    for (; hops < 40 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+      await page.click("#sevent");
+      await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
+      st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
+      if (st.err) fail(`helm hop ${hops}: ${st.err}`);
+      if (!STOPS.includes(st.stop)) fail(`helm hop ${hops}: unknown stop ${JSON.stringify(st.stop)}`);
+      if (ahead(st.s)) fail(`helm hop ${hops}: the ghost is ahead of the player's clock (${st.s.ghost.t} > ${st.s.boat.t})`);
+      if (st.stop === "over") await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 240000 });
+    }
+    const card = await page.evaluate(() => window.__helm.card);
+    if (!card) fail(`helm: no results card after ${hops} hops of "until something happens"`);
+    if (!["won", "lost", "draw", "neither_finished"].includes(card.verdict)) fail(`helm card verdict ${card.verdict}`);
+    const both = card.boat.outcome === "arrived" && card.ghost.outcome === "arrived";
+    if (both !== (card.margin_days !== null)) fail(`helm card: margin ${card.margin_days} with outcomes ${card.boat.outcome}/${card.ghost.outcome}`);
+    if (both && (Math.abs(card.margin_days) < 1) !== (card.verdict === "draw")) fail(`helm card: draw rule broken (${card.margin_days} d, ${card.verdict})`);
+    if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
+    await page.screenshot({ path: "test-output/helm-result.png" });
+    log.push(`helm sailed 6 h, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
   } else {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");
