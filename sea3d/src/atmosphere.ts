@@ -5,6 +5,7 @@
 // sunrise and sunset, stars and a dim moonlight at night, and grey, close haze
 // in a blow. Reflections on the water and hulls follow the sky as it changes.
 
+import { NAV_NIGHT } from "./boats/navlights";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
@@ -14,7 +15,7 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { HORIZON } from "./water";
-import { BRIGHT_STARS, equatorialVector, moonEquatorial, moonPhase, sunEquatorial, toHorizon } from "./sky";
+import { BRIGHT_STARS, decodeStars, equatorialVector, moonEquatorial, moonPhase, nakedEyeLimit, starColour, sunEquatorial, toHorizon } from "./sky";
 
 const rad = THREE.MathUtils.degToRad;
 const smooth = THREE.MathUtils.smoothstep;
@@ -41,6 +42,36 @@ const STORM_HAZE = new THREE.Color(0x7d8a94);
 const NOON_SUN = new THREE.Color(0xfff1dc);
 const LOW_SUN = new THREE.Color(0xff9a5a);
 const MOON = new THREE.Color(0x9fb6e8);
+
+// The catalogue's stars: brighter ones bigger and stronger (a magnitude is 2.5 times
+// in light), the faintest fading out at the eye's limit for the sky now, and all of
+// them dimmed low down, where their light crosses the most air.
+const STAR_VERT = /* glsl */ `
+attribute float aMag;
+uniform float uLimit, uScale;
+varying vec3 vCol;
+varying float vA;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vec3 dir = normalize(wp.xyz - cameraPosition);
+  float bright = pow(2.512, uLimit - aMag);            // how many times over the limit
+  float seen = smoothstep(0.0, 1.0, bright - 1.0);     // fades out right at the limit
+  float air = smoothstep(-0.02, 0.25, dir.y);          // extinction near the horizon
+  vA = clamp(0.3 * sqrt(bright), 0.0, 1.0) * seen * mix(0.35, 1.0, air) * step(-0.05, dir.y);
+  vCol = color;
+  gl_PointSize = clamp(1.0 + 0.55 * log2(max(bright, 1.0)), 1.0, 4.5) * uScale;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+const STAR_FRAG = /* glsl */ `
+uniform float uOpacity;
+varying vec3 vCol;
+varying float vA;
+void main() {
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  float a = vA * uOpacity * (1.0 - smoothstep(0.3, 1.0, dot(p, p)));
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(vCol * a, 1.0);
+}`;
 
 const VERT = "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }";
 
@@ -146,6 +177,10 @@ export class Atmosphere {
   /** The night sky, turned to the real time and place by setCelestial(): faint stars plus the bright named ones. */
   readonly stars = new THREE.Group();
   private starMats: THREE.PointsMaterial[] = [];
+  /** The real night sky (Yale Bright Star Catalogue), once loaded; until then a stand-in field. */
+  private catalogue: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial> | null = null;
+  /** Stars in the catalogue field (0 until loaded; for tests). */
+  starCount = 0;
   /** The moon's disc, lit on the side facing the sun (so it shows its real phase). */
   readonly moonDisc: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   /** Unit vector towards the moon, its elevation (degrees) and how much of it is lit (0..1). */
@@ -252,6 +287,7 @@ export class Atmosphere {
       );
     }
     this.stars.matrixAutoUpdate = false;
+    void this.loadStars();
     this.moonDisc = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.ShaderMaterial({
@@ -328,6 +364,12 @@ export class Atmosphere {
     this.hemi.intensity = (0.022 + 0.1 * moonlight) * (1 - day) + 0.5 * day * (1 - 0.3 * overcast);
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
     for (const m of this.starMats) m.opacity = night * (1 - storm);
+    NAV_NIGHT.value = 1 - smooth(elDeg, -6, 2); // boats' lights show from dusk
+    if (this.catalogue) {
+      const u = this.catalogue.material.uniforms;
+      u.uOpacity.value = night * (1 - storm);
+      u.uLimit.value = nakedEyeLimit(elDeg, moonlight);
+    }
     this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day));
     this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
@@ -408,6 +450,60 @@ export class Atmosphere {
   }
 
   /** Keep the moon's disc in its place in the sky as the camera moves, lit from the sun's side. */
+  /**
+   * Swap the stand-in stars for the real sky: every star the eye can see, each at its
+   * catalogue place, brightness and colour (public/stars.bin from scripts/stars.py).
+   * Quietly keeps the stand-in when the file isn't there.
+   */
+  async loadStars(url = "./stars.bin"): Promise<void> {
+    let list;
+    try {
+      const r = await fetch(url);
+      if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return;
+      list = decodeStars(await r.arrayBuffer());
+    } catch {
+      return;
+    }
+    const R = HORIZON * 2.5;
+    const pos = new Float32Array(list.length * 3);
+    const col = new Float32Array(list.length * 3);
+    const mag = new Float32Array(list.length);
+    list.forEach((st, i) => {
+      const v = equatorialVector(st.ra, st.dec);
+      pos.set([v[0] * R, v[1] * R, v[2] * R], i * 3);
+      col.set(starColour(st.k), i * 3);
+      mag[i] = st.mag;
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.setAttribute("aMag", new THREE.BufferAttribute(mag, 1));
+    const m = new THREE.ShaderMaterial({
+      uniforms: { uOpacity: { value: 0 }, uLimit: { value: 6.5 }, uScale: { value: this.renderer.getPixelRatio() } },
+      vertexShader: STAR_VERT,
+      fragmentShader: STAR_FRAG,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: false,
+    });
+    const pts = new THREE.Points(g, m);
+    pts.renderOrder = -1;
+    pts.frustumCulled = false;
+    // The catalogue has the named stars too: it replaces the whole stand-in field.
+    for (const c of [...this.stars.children]) {
+      this.stars.remove(c);
+      const p = c as THREE.Points;
+      p.geometry.dispose();
+      (p.material as THREE.Material).dispose();
+    }
+    this.starMats = [];
+    this.stars.add(pts);
+    this.catalogue = pts;
+    this.starCount = list.length;
+  }
+
   /** How far the view reaches (m): the haze, the sky and the moon go with it. */
   get horizon(): number {
     return this.reach;

@@ -96,6 +96,16 @@ and quantised it.
   Natural Earth. Free vector and raster map data @ naturalearthdata.com. It is
   in the public domain.
 
+## Stars (`sea3d/public/stars.bin`)
+
+The night sky in the 3D pages is the Yale Bright Star Catalogue, 5th revised
+edition (D. Hoffleit and W. H. Warren Jr., 1991; NASA Astronomical Data Center,
+CDS catalogue V/50): every star to about magnitude 6.5, with its J2000 position,
+visual magnitude and colour temperature. The catalogue is freely distributed for
+any use. We read it from the JSON copy at
+https://github.com/brettonw/YaleBrightStarCatalog (`bsc5-short.json`) and pack it
+with `sea3d/scripts/stars.py`.
+
 ## Software that ships in, or is loaded by, the 3D pages
 
 - **three.js** (MIT, Copyright 2010-2024 Three.js Authors). It is bundled into

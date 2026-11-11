@@ -362,8 +362,9 @@ const status = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
-  /** The wreck showing through the water below, if any (its id). */
+  /** The wreck showing through the water below, if any (its id), and the catalogue stars in the sky. */
   wreck: "",
+  stars: 0,
   bandNear: { m: Infinity, bearing: 0 },
   cloud: 0,
   fog: 0,
@@ -1141,6 +1142,7 @@ renderer.setAnimationLoop(() => {
     atmos.cloud = clouds.cover; // last frame's, which is close enough
     atmos.set(sp.el, sp.az, storm);
     showWreck(lat, lon);
+    status.stars = atmos.starCount;
     const when = utc(rep.start) / 86400e3 + hour / 24; // calendar day, so a given day is foggy in every replay
     clouds.update(
       t,

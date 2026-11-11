@@ -11,6 +11,7 @@
 // reef with the logged sail plan, swing out to leeward with the apparent wind,
 // and the belly of each sail sits on the side away from the wind.
 
+import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Gear, idleGear } from "./gear";
@@ -379,6 +380,8 @@ const FORM: Record<StockKey, HullForm> = {
   stock_ocean_rower45: ROWER_FORM,
 };
 /** Name tag height above the waterline: the masthead (the drone's wing tip, the rower's light pole). */
+/** Where the masthead lantern stands along the boat (builder x, m from the bow): the mast (the drone's sensor mast, the rower's light pole). */
+const LANTERN_X: Record<StockKey, number> = { stock_cruiser31: 3.35, stock_dinghy14: 1.05, stock_beachcat16: 1.45, stock_sail_drone7: 2.6, stock_ocean_rower45: 7.7 };
 const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5, stock_sail_drone7: 5.8, stock_ocean_rower45: 2.4 };
 
 /** A stock boat as a BoatModel (boats/model.ts), with its rig. */
@@ -397,6 +400,16 @@ export function buildStock(key: StockKey, quality: Quality) {
   else DRAW[key](kit, g);
   const rig = new StockRig(key, g);
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // Navigation lights: a tricolour lantern at the masthead (or the rower's light pole).
+  // The detailed models name the lamp; the drawn-in-code ones use the mast's place.
+  const lamp = g.getObjectByName("masthead_light");
+  let at: THREE.Vector3;
+  if (lamp) {
+    g.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(lamp);
+    at = g.worldToLocal(box.getCenter(new THREE.Vector3()).setY(box.max.y)).add(V(0, 0.04, 0));
+  } else at = V(LANTERN_X[key], MAST_TOP[key] + form.wl, key === "stock_ocean_rower45" ? 0.25 : 0);
+  addNavLights(g, "tricolour", at);
   const deck = form.dz(0.5) + 0.3;
   const gear = new Gear(g, {
     props: [],
@@ -431,6 +444,7 @@ export function buildStock(key: StockKey, quality: Quality) {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      disposeNavLights(root);
     },
   };
 }

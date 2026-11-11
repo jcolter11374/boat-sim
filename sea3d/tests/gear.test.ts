@@ -87,3 +87,19 @@ test("rowing stroke: blade forward and in at the catch, aft at the finish, lifte
   assert.ok(back.sweep > catchS.sweep && back.sweep < finish.sweep, "swinging back towards the catch");
   for (let p = 0; p < 1; p += 0.01) assert.ok(Math.abs(stroke(p).sweep - stroke((p + 0.001) % 1).sweep) < 0.05, `smooth at ${p}`);
 });
+
+test("navigation lights: red to port, green to starboard, white astern, by the rules' arcs", async () => {
+  const { arcsFor, seenFrom, RED, GREEN, WHITE } = await import("../src/boats/navlights");
+  // A tricolour (sailing boats): dead ahead you see the green edge, then green to 22.5 degrees abaft the starboard beam.
+  assert.equal(seenFrom("tricolour", 45), GREEN, "on the starboard bow");
+  assert.equal(seenFrom("tricolour", 112), GREEN, "just forward of 22.5 degrees abaft the beam");
+  assert.equal(seenFrom("tricolour", 113), WHITE, "the sternlight's arc starts");
+  assert.equal(seenFrom("tricolour", 180), WHITE, "dead astern");
+  assert.equal(seenFrom("tricolour", 247), WHITE);
+  assert.equal(seenFrom("tricolour", 248), RED, "abaft the port beam");
+  assert.equal(seenFrom("tricolour", -45), RED, "on the port bow");
+  const arcs = arcsFor("tricolour");
+  assert.equal(arcs.reduce((s, a) => s + (a.to - a.from), 0), 360, "the three arcs go all the way round, no gaps or overlaps");
+  assert.equal(arcs.find((a) => a.colour === WHITE)!.to - arcs.find((a) => a.colour === WHITE)!.from, 135, "sternlight: 135 degrees");
+  for (const b of [0, 90, 200, 300]) assert.equal(seenFrom("all_round", b), WHITE, "the kayak's all-round white");
+});
