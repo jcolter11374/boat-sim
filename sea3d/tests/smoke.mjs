@@ -436,6 +436,9 @@ try {
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
+  const boats = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
+  if (boats.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(boats)}`);
   // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
   // so a whole game fits in the smoke test.
   await page.selectOption("#launch", "2");

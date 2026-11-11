@@ -62,13 +62,21 @@ export interface ForecastRow {
   current_v: number;
   ghi: number;
 }
+/** How a voyage ended, in the boat's own words (sandbox/endings.py, #234). */
+export interface Ending {
+  headline: string;
+  words: string;
+  where: string | null;
+  day: number | null;
+  boat: string | null;
+}
 export interface Card {
   build: string;
   launch: string;
   seed: number;
   breakdowns_on: boolean;
-  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[] };
-  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[] };
+  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
+  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
   margin_days: number | null;
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;
@@ -90,6 +98,8 @@ export class HelmGame {
   ghost: Replay | null = null;
   status: Status | null = null;
   launches: string[] = [];
+  /** The boat being sailed: "" for our kayak, else a ready-made boat's id ("stock_cruiser31"). */
+  boatBase = "";
   onProgress: (text: string) => void = () => {};
   private worker: Worker;
   private next = 1;
@@ -133,15 +143,17 @@ export class HelmGame {
     return p;
   }
 
-  private take(v: { status?: Status; boat?: Replay; ghost?: Replay }): void {
+  private take(v: { status?: Status; boat?: Replay; ghost?: Replay; base?: string }): void {
     if (v.status) this.status = v.status;
+    if (v.base !== undefined) this.boatBase = v.base;
     if (v.boat) this.boat = v.boat;
     if (v.ghost) this.ghost = v.ghost;
   }
 
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
-   *  its weather (left out when it's the 2020 bundle). */
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }): Promise<Status> {
+   *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
+   *  boat (e.g. "stock_cruiser31"); left out, it's our kayak. */
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string): Promise<Status> {
     const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
       type: "new",
       launch,
@@ -150,6 +162,7 @@ export class HelmGame {
       mode,
       challenge: challenge?.id,
       bundle: challenge?.bundle,
+      choices: boat ? { base: boat } : undefined,
     });
     this.launches = v.launches;
     this.take(v);

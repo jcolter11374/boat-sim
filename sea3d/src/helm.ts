@@ -11,7 +11,7 @@ import { Sea } from "./water";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, STOCK, stockKeyOf, type BoatSpec } from "./boats/specs";
+import { KAYAK, PLAYABLE_STOCK, STOCK, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, type HullParams } from "./motion";
@@ -95,9 +95,9 @@ function buildBoat(): void {
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
 }
-/** Sail the boat the game's replay names; stand the camera back for a bigger one. */
-function useBoat(name: string | undefined): void {
-  const k = stockKeyOf(name);
+/** Sail the boat the game names ("" our kayak, or a stock id); stand the camera back for a bigger one. */
+function useBoat(base: string): void {
+  const k = isStock(base) ? base : null;
   const next = k ? STOCK[k] : KAYAK;
   if (next === spec) return;
   const scale = (b: BoatSpec) => THREE.MathUtils.clamp(b.length / KAYAK.length, 1, 3.4);
@@ -282,7 +282,18 @@ function showOrder(): void {
   const s = page.status;
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
-  $("powertext").textContent = power === 0 ? "Motors off: drifting" : `${Math.round(power * 100)}% power, about ${w} W`;
+  const sails = spec !== KAYAK; // a stock boat: the power is its engine, for calms
+  $("powerlabel").textContent = sails ? "Engine" : "Motor power";
+  $("powerhint").textContent = sails
+    ? "The autopilot runs the engine at 70% in calms. The tank holds about 15 hours of diesel; once it's empty the boat waits for wind."
+    : "The autopilot cruises at 25%. More is faster, but the sun has to refill the battery, and at empty the motors stop until it does.";
+  $("powertext").textContent = sails
+    ? power === 0
+      ? "Off: sails only"
+      : `${Math.round(power * 100)}% when the wind is light; the sails do the rest`
+    : power === 0
+      ? "Motors off: drifting"
+      : `${Math.round(power * 100)}% power, about ${w} W`;
   $("sendrow").hidden = !(mode === "base" && page.ready);
   if (mode === "base") {
     const sent = page.status?.order;
@@ -481,6 +492,29 @@ async function finish(): Promise<void> {
   const table = $("r-table");
   table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>";
   table.append(line("You", me), line("Autopilot ghost", gh));
+  // How it ends, in the boat's own words (#234). textContent only: the words come from the simulator.
+  const ends = $("r-ends");
+  ends.replaceChildren();
+  for (const [who, x] of [["You", me], ["Autopilot ghost", gh]] as const) {
+    const e = x.ending;
+    if (!e) continue;
+    const row = document.createElement("div");
+    row.className = "end";
+    const w = document.createElement("span");
+    w.className = "who";
+    w.textContent = who;
+    const h = document.createElement("span");
+    h.className = "head";
+    h.textContent = e.headline;
+    const t = document.createElement("span");
+    t.className = "words";
+    const when = e.day != null && x.outcome !== "arrived" ? `day ${e.day.toFixed(1)}` : "";
+    // Running aground names only the spot ("38.62N 27.91W"): say what happened there.
+    const words = /^\d+(\.\d+)?[NS]\s/.test(e.words) ? `came ashore at ${e.words}` : e.words;
+    t.textContent = [words, e.where, when].filter(Boolean).join(", ");
+    row.append(w, h, t);
+    ends.append(row);
+  }
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
@@ -548,14 +582,14 @@ async function begin(): Promise<void> {
   try {
     if (shared) {
       const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
-      useBoat(game.boat?.boat);
+      useBoat(game.boatBase);
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
     } else {
-      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) });
-      useBoat(game.boat?.boat);
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, chosenBoat() || undefined);
+      useBoat(game.boatBase);
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
@@ -582,6 +616,7 @@ async function begin(): Promise<void> {
     if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
+    else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies, then let time run.`, d, TONE_COLOUR.info);
     else note("You have the helm. Pick a heading and a power, then let time run.", d, TONE_COLOUR.info);
     if (page.status?.over) await finish();
   } catch (e) {
@@ -590,6 +625,10 @@ async function begin(): Promise<void> {
       page.error = "no challenges in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site doesn't know the weather challenges yet; it's being updated. Pick a 2020 launch for now.";
+    } else if (/NO_BOAT/.test(err)) {
+      page.error = "no such boat in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site doesn't have that boat yet; it's being updated. Pick our kayak for now.";
     } else if (/NO_HELM/.test(err)) {
       page.error = "no helm in the simulator";
       setBusy(false);
@@ -621,11 +660,38 @@ $("sevent").addEventListener("click", () => void sail("event"));
 $("go").addEventListener("click", () => void begin());
 $("send").addEventListener("click", () => void sendOrder());
 $("share").addEventListener("click", () => void shareLink());
+// The boats you can sail: our kayak, and the stock boats Maya cleared for play.
+const BOAT_BLURB: Partial<Record<string, string>> = {
+  stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small diesel engine for calms. The sails trim and reef themselves; you steer and say how hard the engine works.",
+};
+for (const k of PLAYABLE_STOCK) {
+  const label = document.createElement("label");
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = "boat";
+  input.value = k;
+  const b = document.createElement("b");
+  b.textContent = STOCK[k].name.replace(/^\w/, (c) => c.toUpperCase());
+  label.append(input, " ", b, `: ${BOAT_BLURB[k] ?? "a ready-made boat, sailed as it comes."}`);
+  $("boats").append(label);
+}
+/** The boat picked on the start card: "" for our kayak, else a stock id. */
+function chosenBoat(): string {
+  return document.querySelector<HTMLInputElement>('input[name="boat"]:checked')?.value ?? "";
+}
+for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="boat"]')))
+  r.addEventListener("change", () => {
+    // Start each boat at its autopilot's own power: 25% for the kayak, 70% engine for the yacht.
+    power = r.value ? 0.7 : 0.25;
+    $<HTMLInputElement>("power").value = String(Math.round(power * 100));
+  });
+
 // Base mode turns the boat's own battery guard on by default, as the simulator does.
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="mode"]')))
   r.addEventListener("change", () => ($<HTMLInputElement>("safe").checked = r.value === "base" && r.checked));
 if (shared) {
   $("modes").hidden = true;
+  $("boats").hidden = true; // the shared game says which boat
   for (const id of ["launch", "breakdowns", "safe"]) $<HTMLInputElement>(id).disabled = true;
   $("sharedmsg").hidden = false;
   $("sharedmsg").textContent = "Someone shared this game with you: it opens where they left it, with the same weather and luck.";

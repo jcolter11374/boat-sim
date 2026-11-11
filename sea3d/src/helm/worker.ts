@@ -2,7 +2,7 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?}
+// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?, choices?}
 //                 mode: "hands_on" or "base"; challenge: an id from challenges.json, whose
 //                 weather is `bundle` (a URL; left out for the 2020 bundle)
 //               {id, type: "load", code, bundle?}         a shared game (Game.save's code)
@@ -108,7 +108,9 @@ def run_until(kw):
             return out
 
 def voyages():
-    return {"boat": hourly(to_replay(G.mine.log, "You")), "ghost": hourly(to_replay(G.ghost.log, "Autopilot ghost"))}
+    # "base": which boat is sailing ("" for our kayak, else e.g. "stock_cruiser31"), so the 3D view draws it.
+    c = getattr(G, "choices", None) or {}
+    return {"boat": hourly(to_replay(G.mine.log, "You")), "ghost": hourly(to_replay(G.ghost.log, "Autopilot ghost")), "base": c.get("base", "")}
 `);
     return py;
   })();
@@ -147,14 +149,20 @@ m = json.loads(msg_json)
 if Game is None:
     raise RuntimeError("NO_HELM")
 kw = {"safe": m["safe"], "breakdowns": m["breakdowns"]}
+choices = m.get("choices")  # e.g. {"base": "stock_cruiser31"}; None sails our kayak
 if m.get("mode", "hands_on") != "hands_on":
     kw["mode"] = m["mode"]  # older simulators only know hands on
-if m.get("challenge"):
-    if not takes_challenges():
-        raise RuntimeError("NO_CHALLENGES")
-    G = Game(ENV, None, challenge=m["challenge"], **kw)
-else:
-    G = Game(ENV, None, m["launch"], **kw)
+try:
+    if m.get("challenge"):
+        if not takes_challenges():
+            raise RuntimeError("NO_CHALLENGES")
+        G = Game(ENV, choices, challenge=m["challenge"], **kw)
+    else:
+        G = Game(ENV, choices, m["launch"], **kw)
+except KeyError as err:
+    if choices:
+        raise RuntimeError("NO_BOAT " + str(err))  # an older simulator without this boat
+    raise
 json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
 `;
     } else if (m.type === "load") {
