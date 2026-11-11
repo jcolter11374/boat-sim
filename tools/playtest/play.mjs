@@ -214,6 +214,71 @@ const CHECKS = {
       return "race started";
     },
   },
+  // "My boat" (#310): a Boatyard design saved as my boat carries to the helm,
+  // race and voyage pages in the same browser. The name has tags in it, which
+  // must show as plain text everywhere. Skips until the deployed Boatyard has it.
+  "my-boat": {
+    path: "boatyard.html?quality=low",
+    run: async (page) => {
+      const NAME = "<b>Nina</b> Rev C test";
+      await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.$("#mb-save"))) throw new SkipCheck("the deployed Boatyard has no \"my boat\" button yet");
+      await page.click('#bases button[data-base="revc"]', { noWaitAfter: true });
+      await page.fill("#mb-name", NAME);
+      await page.click("#mb-save", { noWaitAfter: true });
+      await page.waitForFunction(() => !!window.__yard.mine, null, { timeout: 10_000 }).catch(() => {
+        throw new CheckFail("clicking Save as my boat didn't save it (window.__yard.mine is empty)");
+      });
+      const yard = await page.evaluate(() => ({
+        line: document.querySelector("#mb-line")?.textContent ?? "",
+        tags: document.querySelectorAll("#mb-line b").length,
+        btn: document.querySelector("#mb-save")?.textContent ?? "",
+        stored: localStorage.getItem("boatsim.myboat.v1"),
+      }));
+      must(yard.stored, "nothing was stored under boatsim.myboat.v1");
+      must(yard.tags === 0, "the boat's name was drawn as HTML in the Boatyard line");
+      must(/your boat/i.test(yard.line), `the Boatyard line doesn't say it's my boat: "${yard.line}"`);
+      const seen = [`Boatyard: "${yard.line.trim()}" / button "${yard.btn.trim()}"`];
+
+      // Helm: the "mine" row is on top and ticked, and starting sails the Rev C.
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      const helm = await page.evaluate(() => {
+        const r = document.querySelector('input[name="boat"][value="mine"]');
+        const label = r?.closest("label")?.textContent ?? "";
+        return { has: !!r, checked: !!r?.checked, label, tags: r?.closest("label")?.querySelectorAll("b").length ?? 0 };
+      });
+      must(helm.has, "the helm's boat list has no row for my boat");
+      must(helm.checked, "my boat isn't ticked at the helm");
+      must(helm.label.includes(NAME), `the helm's row doesn't show the name as typed: "${helm.label.trim()}"`);
+      must(helm.tags === 0, "the boat's name was drawn as HTML at the helm");
+      await helmStart(page);
+      const sailing = await page.evaluate(() => window.__helm.sailing);
+      must(sailing?.base === "revc", `the helm sailed ${JSON.stringify(sailing)}, not my Rev C`);
+      const st = await hop(page, "#s6");
+      seen.push(`helm: sailing ${sailing.base}/${sailing.spec}, day ${st.day}`);
+
+      // Race: my boat is the first, selected choice for boat A.
+      await page.goto(SITE + "race.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => !!window.__race, null, { timeout: MIN });
+      const race = await page.evaluate(() => {
+        const sel = document.querySelector("#baseA");
+        const first = sel?.options[0];
+        return { value: sel?.value, first: first?.value, text: first?.textContent ?? "" };
+      });
+      must(race.first === "mine" && race.value === "mine", `the race doesn't pick my boat first: ${JSON.stringify(race)}`);
+      must(race.text.includes(NAME), `the race option doesn't show the name as typed: "${race.text}"`);
+      seen.push(`race: "${race.text}"`);
+
+      // Voyage: with no ?voyage= it opens a replay of my boat's kind.
+      await page.goto(SITE + "voyage.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
+      const rep = await page.evaluate(() => ({ err: window.__replay.error, search: location.search }));
+      must(!rep.err, `the voyage page didn't load my boat's replay: ${rep.err}`);
+      seen.push("voyage: a replay loaded");
+      return seen.join("; ");
+    },
+  },
   leaderboard: {
     path: "leaderboard.html",
     run: async (page) => {
