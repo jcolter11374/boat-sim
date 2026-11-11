@@ -3,7 +3,7 @@
 // wind (blue arrow, blowing towards).
 
 export interface DialState {
-  order: number | "finish" | "route";
+  order: number | "finish" | "route" | "auto";
   heading: number; // where the bow points now, degrees true
   finish: number; // bearing to the finish
   windTo: number | null; // where the wind blows towards
@@ -12,7 +12,7 @@ export interface DialState {
 
 export class Compass {
   private g: CanvasRenderingContext2D;
-  private s: DialState = { order: "finish", heading: 90, finish: 80, windTo: null, windKn: 0 };
+  private s: DialState = { order: "auto", heading: 90, finish: 80, windTo: null, windKn: 0 };
   private dragging = false;
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -42,7 +42,7 @@ export class Compass {
     this.draw();
   }
 
-  /** The heading the order means now (a number for "finish" and "route" too, for drawing). */
+  /** The heading the order means now (a number for "finish", "route" and "auto" too, for drawing). */
   private orderDeg(): number {
     const o = this.s.order;
     return typeof o === "number" ? o : o === "finish" ? this.s.finish : this.s.heading;
