@@ -50,6 +50,7 @@ import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
 import { PLACE, PLACES, fetchSea } from "./land/place";
 import { Island } from "./land/island";
+import { Mirror, reflectable } from "./mirror";
 import { Town } from "./land/town";
 import { Trees } from "./land/trees";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
@@ -184,6 +185,9 @@ let laneRev: Rev = "kayak";
 let look: Look = startLook($<HTMLSelectElement>("quality"));
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
+// The land, town and boats mirrored in calm water.
+const mirror = new Mirror(quality === "high" ? 0.5 : 0.35);
+const bufSize = new THREE.Vector2();
 scene.add(sea.mesh);
 // Rain in a blow (cosmetic: the log has wind, not rain).
 const rain = new Rain();
@@ -237,6 +241,7 @@ function buildBoat(q: Quality): void {
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
+  reflectable(model.root);
   wet = new Wetness(model.root);
   drain = new Drain(model.form, spec);
   drain.group.visible = !model.twinHull;
@@ -247,6 +252,7 @@ function setQuality(l: Look): void {
   const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
+  mirror.scale = q === "high" ? 0.5 : 0.35;
   buildBoat(q);
   live = new LiveSea(undefined, { n: N_COMP[q], smoothing: 0.4 });
   if (rep) {
@@ -394,6 +400,8 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   force: { cloud: -1, fog: -1 },
+  /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
+  mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
   live: { on: LIVE, lastFix: 0, now: 0, simulated: false, forecast: false, banner: false, fixes: 0 },
   /** Jump to the latest report (the Now button). */
@@ -849,13 +857,22 @@ if (PLACE) {
   void Promise.all([Island.load(PLACE, quality), Town.load(PLACE, quality)]).then(async ([isl, tn]) => {
     island = isl;
     town = tn;
-    if (isl) scene.add(isl.group);
+    if (isl) {
+      scene.add(isl.group);
+      reflectable(isl.group.getObjectByName("island")!);
+    }
     else toast("The land files aren't published on this copy of the site yet, so there's only sea here.", PLACE!.name, "#8ab4ff");
-    if (tn) scene.add(tn.group);
+    if (tn) {
+      scene.add(tn.group);
+      tn.mirrored();
+    }
     shown.town = tn?.shown ?? null;
     if (isl?.grid) {
       trees = await Trees.load(PLACE!, quality, isl.grid, tn ? (x, z) => tn.blocked(x, z) : undefined);
-      if (trees) scene.add(trees.group);
+      if (trees) {
+        scene.add(trees.group);
+        reflectable(trees.group);
+      }
     }
     shown.trees = trees?.count ?? 0;
     shown.surf = isl?.surfTriangles ?? 0;
@@ -1147,6 +1164,11 @@ renderer.setAnimationLoop(() => {
     toast("Switched to High quality: Ultra was running slowly on this computer.", "Quality", "#8ab4ff");
   }
   skyGuide();
+  renderer.getDrawingBufferSize(bufSize);
+  mirror.setSize(bufSize.x, bufSize.y);
+  mirror.update(renderer, scene, camera, sea.waveHeight);
+  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
+  status.mirror = mirror.strength;
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
   status.frames++;
