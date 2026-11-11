@@ -460,6 +460,45 @@ try {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");
   }
+  // Weather challenges start live: with the challenge files
+  // published, pick the first one with its own weather bundle from the picker and
+  // sail 6 hours on it. Without the files the picker stays hidden, and that's fine.
+  await page.goto(`${URL}helm.html?quality=low`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  const chFile = await page.evaluate(async () => {
+    try {
+      const r = await fetch("./challenges/challenges.json");
+      if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return null;
+      return (await r.json()).challenges.find((c) => !c.season) ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const chPicker = await page.evaluate(() => !document.getElementById("chpick").hidden);
+  if (!chFile) {
+    if (chPicker) fail("helm: a challenge picker without challenges.json");
+    log.push("helm challenges: no challenge files, picker hidden");
+  } else if (!hm.ready) {
+    log.push(`helm challenges: files there but no simulator (${hm.err})`);
+  } else {
+    if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
+    await page.selectOption("#challenge", chFile.id);
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    let ch = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, msg: document.querySelector("#startmsg").textContent }));
+    // Published challenge files with a simulator that can't sail them is a live bug: the picker offers a game that won't start.
+    if (!ch.ready || ch.err || ch.id !== chFile.id) fail(`helm challenge ${chFile.id} didn't start: ${JSON.stringify(ch)}`);
+    else {
+      await page.click("#s6");
+      await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
+      const s = await page.evaluate(() => ({ st: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
+      const known = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "passed_ghost", "over", "order_arrived"];
+      if (s.err || !known.includes(s.stop) || !(s.st.day > 0 && s.st.day <= 0.25 + 1e-6)) fail(`helm challenge ${chFile.id}: 6 hours went wrong: ${JSON.stringify({ day: s.st?.day, stop: s.stop, err: s.err })}`);
+      // Its own weather, not 2020's: the boat's clock is on the challenge's start day.
+      if (s.st.boat.t.slice(0, 10) !== chFile.start.slice(0, 10)) fail(`helm challenge ${chFile.id}: boat clock ${s.st.boat.t}, challenge starts ${chFile.start}`);
+      log.push(`helm challenge ${chFile.id}: started ${s.st.boat.t}, sailed to day ${s.st.day.toFixed(2)} (${s.stop})`);
+    }
+  }
   // Design leaderboard: the published board if there is one, else it says so; the
   // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
   await page.goto(`${URL}leaderboard.html`);
