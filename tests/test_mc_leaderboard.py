@@ -210,3 +210,19 @@ def test_cli_assemble_writes_the_board(tmp_path, monkeypatch):
     board = json.loads(out.read_text())
     assert L.check_board(board) == []
     assert board["board"]["launch_set"] == "2015-2019-AprJun-every7d-v1"
+
+
+def test_stock_vessels_never_rank_against_the_drones(monkeypatch):
+    from boatsim.mc.boatyard import BUILDS
+
+    assert L.boat_class("configs/stock_cruiser31.yaml") == L.STOCK_CLASS
+    assert {L.boat_class(BUILDS[b].design_path) for b in L.DEFAULT_ENTRIES} == {L.DRONE_CLASS}
+    # No Boatyard build (so nothing the board or the race view can pick) is a stock vessel.
+    assert all(L.boat_class(b.design_path) == L.DRONE_CLASS for b in BUILDS.values())
+    _fixed_run(monkeypatch)
+    builds = ["k-p25", "revc"]
+    years = [2015, 2016, 2017, 2018, 2019]
+    board = L.assemble(_rows(builds, years), _rows(builds, [2021]), 7, years, [2021])
+    assert L.check_board(board) == []
+    board["entries"][1]["class"] = L.STOCK_CLASS
+    assert any("rule 7" in p for p in L.check_board(board))
