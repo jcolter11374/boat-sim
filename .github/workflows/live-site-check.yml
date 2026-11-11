@@ -1,0 +1,82 @@
+# Live-site end-to-end check: Playwright on GitHub's runners visits the DEPLOYED
+# pages (https://jcolter11374.github.io/boat-sim/) in a fresh browser profile,
+# like a first-time visitor, and fails on any console error, any "being
+# updated" / "can't start" notice, or a launch that never sails a day.
+# Runs after every Pages deploy, by hand, and on a pull request that changes it.
+# Read-only: it only visits the public site. One job per check, so a slow or
+# broken page doesn't hide the others; each job's table is in the run summary.
+name: Live site check
+on:
+  workflow_run:
+    workflows: ["3D sea page"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Site to check"
+        default: "https://jcolter11374.github.io/boat-sim/"
+  pull_request:
+    paths:
+      - ".github/workflows/live-site-check.yml"
+      - "tools/live_site_check.mjs"
+      - "tools/live_visual_checks.mjs"
+permissions:
+  contents: read
+concurrency:
+  group: live-site-check-${{ github.event_name == 'pull_request' && github.ref || 'live' }}
+  cancel-in-progress: true
+jobs:
+  check:
+    # After a deploy: only a successful run on main (that's the one that deployed).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - index
+          - helm-drop
+          - helm-port
+          - helm-challenge
+          - helm-base
+          - helm-share
+          - helm-boats
+          - helm-stock_cruiser31
+          - helm-stock_sail_drone7
+          - helm-stock_ocean_rower45
+          - helm-stock_dinghy14
+          - helm-stock_beachcat16
+          - boatyard
+          - voyage-replay
+          - voyage-annapolis
+          - race
+          - leaderboard
+          - helm-small-window
+          - visual-sea
+          - visual-voyage
+          - visual-helm
+          - visual-boatyard
+          - visual-race
+    env:
+      SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
+      # Pages takes a minute to serve a fresh deploy everywhere.
+      - if: github.event_name == 'workflow_run'
+        run: sleep 90
+      - run: node tools/live_site_check.mjs ${{ matrix.check }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-${{ matrix.check }}
+          path: live-*.png
+          if-no-files-found: ignore
