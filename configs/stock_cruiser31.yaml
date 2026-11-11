@@ -92,7 +92,7 @@ propulsion:
   engine_resist_n: 900       # GUESS: hull resistance at 6 kn, for the sea penalty under power
   engine_below_wind_kn: 5    # GUESS: motors only in calms
   fuel_l: 30                 # specs
-  alternator_w: 500          # GUESS: a 40 A alternator at about 13 V, into the house bank
+  alternator_w: 250          # GUESS: a 40 A alternator gives about 20 A at idle, 13 V (Ravi, #255)
   charge_below_soc: 0.35     # GUESS: the autopilot starts the engine out of gear below this
   charge_until_soc: 0.8      # GUESS: and idles it until the bank is back up to this
   fuel_reserve_l: 5          # GUESS: never burns the last 5 L charging

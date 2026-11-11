@@ -47,7 +47,9 @@ stock:
     anchor_head_ms: 7.0      # GUESS
     anchor_storm_ms: 15.0    # GUESS: about 30 kn, too rough to row safely
     anchor_hysteresis_ms: 2.0
-    anchor_wind_share: 0.15  # GUESS: on the parachute the boat drifts at well under 1 kn
+    # GUESS: rowers report drifting 10-20 nm a day on the anchor (0.4-0.8 kn); this
+    # share drifts it 0.4-0.6 kn in 20-30 kn of wind (Ravi, #255).
+    anchor_wind_share: 0.5
     loss_words:
       capsized and stayed upside down: rolled by a breaking wave and stayed over (the cabins flooded)
       early-life defect or unknown failure: something gave out (the watermaker, the rudder lines, an oar gate)
