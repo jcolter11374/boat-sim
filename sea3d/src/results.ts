@@ -82,7 +82,7 @@ export function standingText(s: Standing): { head: string; detail: string } {
         detail: range,
       };
     const others = s.inTier - 1;
-    const group = `${s.tier === 1 ? "the top" : `the ${ordinal(s.tier)}`} group of ${s.tiers}`;
+    const group = `${s.tier === 1 ? "the top" : `the ${ordinal(s.tier)}`} of ${s.tiers} groups`;
     const with_ = others === 0 ? "on its own there" : `with ${others} other boat${others === 1 ? "" : "s"} it can't be told apart from`;
     return {
       head: `${on}: in ${group}, ${with_}. ${rate}`,
