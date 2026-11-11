@@ -31,9 +31,21 @@ PROFILE = "holland" uses Holland (1980, Mon. Wea. Rev. 108, 1212-1218) in
 its cyclostrophic form instead, V = Vs sqrt((Rmax/r)^B exp(1 - (Rmax/r)^B)),
 B = rho e Vmax^2 / dp clipped to 1-2.5. It was the first choice, but the
 buoy check (PR #215) found it far too broad: +12 m/s at 1-2 Rmax.
-Blend: weight 1 inside 1 Rmax, falling linearly to 0 at 2 Rmax (the buoys
-say ERA5 is already about right beyond 2 Rmax); the result is never weaker
-than ERA5's own wind at that point.
+Peak: PEAK (0.9) x that 10-minute wind. ERA5's hourly wind and the buoys'
+8-minute means are closer to an hourly mean than to a 10-minute peak, and
+buoys in big seas read low (their mast sits in the wave troughs).
+Blend: weight 1 inside 1 Rmax, falling linearly to 0 at 1.5 Rmax; the result
+is never weaker than ERA5's own wind at that point.
+Buoy check, round 2 (run 42965007818; Dorian 2019 and Paulette 2020, wind
+RMS error in m/s, bias in brackets; 10 and 20 buoy hours in the two inner
+bands, so a small sample from mostly one storm):
+    band (Rmax)        0-1           1-2           2-3          3-6
+    ERA5           10.9 (-8.4)    4.2 (-2.6)    2.7 (+1.0)   1.7 (0.0)
+    round 1         8.5 (+4.9)    4.5 (+2.8)    same as ERA5 beyond 2
+    this shape      6.7 (+2.2)    3.3 (-0.7)    same as ERA5 beyond 1.5
+A smaller core (0.8 or 0.65 x Rmax) made 0-1 Rmax worse at every peak. A
+peak of 0.8 scored best in-sample (5.9, 3.3) but 0.9 has the physical
+reason above and is less tuned to ten hours of one storm.
 
 Waves. Young (1988, J. Waterway Port Coastal Ocean Eng. 114(5), 637-652,
 doi:10.1061/(ASCE)0733-950X(1988)114:5(637)) "equivalent fetch" model, as
@@ -78,7 +90,8 @@ B_DEFAULT = 1.3  # GUESS: when the pressure is missing or the drop is tiny
 B_MIN, B_MAX = 1.0, 2.5  # Holland's range for real storms
 INFLOW_DEG = 20.0  # GUESS: typical surface inflow angle (about 20-25 deg over sea)
 MOTION_SHARE = 0.55  # GUESS: share of the storm's motion added to its winds
-INNER, OUTER = 1.0, 2.0  # blend: full vortex inside 1 Rmax, ERA5 beyond 2 Rmax
+INNER, OUTER = 1.0, 1.5  # blend: full vortex inside 1 Rmax, ERA5 beyond 1.5 Rmax
+PEAK = 0.9  # x the 10-minute best-track wind (buoy check, round 2: see the module doc)
 PROFILE = "rankine"  # or "holland" (too broad on the buoys, see above)
 DECAY = 0.6  # GUESS: Rankine fall-off beyond Rmax
 BOOST_WAVES = False  # see the module doc
@@ -240,7 +253,7 @@ class Shape:
     peak: float = 1.0  # x the 10-minute best-track wind
 
 
-SHAPE = Shape(inner=INNER, outer=OUTER)
+SHAPE = Shape(inner=INNER, outer=OUTER, peak=PEAK)
 # Shapes the buoy check also scores (round 2, Maya: smaller core, blend inside
 # 1.5 Rmax, no worse than ERA5 in any band). Names: c<core>_o<outer>_p<peak>.
 SWEEP = {
@@ -252,7 +265,8 @@ SWEEP = {
 
 
 def vortex(fx: Fix, lat: float, lon: float, shape: Shape | None = None) -> Boost | None:
-    """The parametric storm's wind and waves at (lat, lon), or None beyond OUTER Rmax."""
+    """The parametric storm's wind and waves at (lat, lon), or None beyond OUTER Rmax.
+    Default shape SHAPE; the buoy check passes others (SWEEP)."""
     sh = shape or SHAPE
     dy = (lat - fx.lat) * 111.0
     dx = (lon - fx.lon) * 111.0 * math.cos(math.radians(fx.lat))
