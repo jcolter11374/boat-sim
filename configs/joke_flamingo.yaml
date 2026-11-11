@@ -1,0 +1,85 @@
+# JOKE FLEET: "inflatable flamingo". A generic giant pool float, nobody aboard, with a
+# small solar satellite tracker taped on. Our own numbers (stock-vessels design note,
+# joke-fleet sidebar). It can't steer, can't sink and floats either way up; it goes where
+# the wind and the current take it. Sun and salt kill thin PVC: a seam lets go in weeks.
+# Anything unreferenced is a GUESS.
+name: inflatable flamingo
+
+stock:
+  label: inflatable flamingo
+  kind: giant pool float, nobody aboard, drifting
+  spec_card:
+    length_overall_m: 1.9    # GUESS: a common giant pool float
+    beam_m: 1.2              # GUESS
+    mass_kg: 3               # GUESS: thin PVC
+    neck_height_m: 1.2       # GUESS
+  odd:
+    loss_words:
+      early-life defect or unknown failure: a seam let go (sun and salt); it's a flat pink sheet now
+
+hull:
+  model: inflatable flamingo pool float (joke fleet)
+  length_m: 1.9
+  beam_m: 1.2
+  mass_kg: 4                 # float plus tracker
+  displacement_ref_kg: 4
+  waterline_length_m: 1.6
+  wetted_area_m2: 1.4        # GUESS: it sits on the water, not in it
+  form_factor: 1.3
+  wave_making_frac: 0.1
+  waterplane_area_m2: 1.5    # GUESS
+  air_side_area_m2: 1.3      # GUESS: body plus the neck catches about 1 m2 of wind
+  air_front_area_m2: 0.9     # GUESS
+  air_cd_side: 1.0
+  air_cd_front: 1.0
+  lateral_cd_area_m2: 0.4    # GUESS: it barely grips the water, so the wind wins
+  keel_lift_slope_area_m2: 0.05
+  fouling_onset_days: 5
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+power:
+  solar_wp: 0                # the tracker has its own solar cell
+  panels_w: {}
+  battery_wh: 10
+propulsion:
+  thruster_count: 0
+  cruise_drive_w: 0
+  max_drive_w: 1
+
+electronics:
+  autopilot: none
+  hotel_load_wh_per_day: 0
+  nav_light_w: 0
+  nav_light_hours_per_day: 0
+
+comms:
+  one_way: standalone solar satellite tracker (GUESS fit)
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 1.9
+  hull_beam_m: 1.2
+  # It floats either way up, so a knockdown does nothing: no breaker can "capsize" it.
+  critical_wave_frac_of_length: 100.0
+  critical_wave_frac_of_beam: 100.0
+  p_inverted_stuck: 0.0
+  damage_ref_hs_m: 3.0
+  p_part: {}
+  rate_set: planning
+  failures_enabled: true
+  electronics_boxes: 1       # the tracker
+  steering_per_day: 0        # nothing to steer
+  entangle_per_day: 0.003    # as the kayak: it can snag weed and nets
+  capture_per_day: 0.01      # GUESS: a giant pink flamingo gets picked up
+  # Seam life: a Weibull wear-out, about half gone by 60 days (GUESS: thin PVC in
+  # sun and salt; pool floats are sold for a summer, not an ocean).
+  unknown_p_by_60_days: 0.6
+  unknown_shape: 2.0
