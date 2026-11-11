@@ -173,7 +173,7 @@ class HelmAutopilot:
                 t,
                 open_water=lambda h: open_water_km(lat, lon, h),
             )
-            tacking = self.tactician.mode != "reach"
+            tacking = self.tactician.mode != "reach" or self.tactician.escaping
         self.guidance.tacking = tacking
         frac = self.power
         if self.safe:

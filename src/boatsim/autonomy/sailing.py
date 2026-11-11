@@ -55,37 +55,51 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from boatsim.autonomy.base import Autopilot
-from boatsim.autonomy.sphere import wrap180
+from boatsim.autonomy.sphere import track_offsets, wrap180
 from boatsim.geo import bearing_deg, heading_to_vector, move
 from boatsim.types import Command, Mission, Sensors
 
 KN = 0.514444  # m/s per knot
 LAND_LOOKAHEAD_KM = 30.0  # GUESS: about 3-4 h of sailing; more than one min_switch_h leg
-LAND_STEP_KM = 2.0
+LAND_STEP_KM = 1.0  # half the land mask's ~2 km cell
 LAND_URGENT_KM = 5.0  # GUESS: ~30 min of sailing; land this close ahead tacks at once
-LAND_CLEAR_KM = 4.0  # a point this close to the coast counts as land ahead (the chart is cached on a ~5 km grid)
+LAND_CLEAR_KM = 3.0  # GUESS: keep this far off: leeway, current and the mask's 2 km cells
 
 
 def open_water_km(
     lat: float,
     lon: float,
     heading: float,
-    land_km: Callable[[float, float], float] | None = None,
+    on_land: Callable[[float, float], bool] | None = None,
     lookahead_km: float = LAND_LOOKAHEAD_KM,
 ) -> float:
-    """How far the boat can sail along `heading` before it is within
-    LAND_CLEAR_KM of a coast, in km; math.inf if clear for `lookahead_km`.
-    `land_km(lat, lon)`: distance to land (default vessel.coast's, the same
-    chart the waypoint follower uses)."""
-    if land_km is None:
-        from boatsim.vessel.coast import distance_to_land_km as land_km
-    d = LAND_STEP_KM
-    while d <= lookahead_km + 1e-9:
+    """How far the boat can sail along `heading` before its path, LAND_CLEAR_KM
+    wide either side, reaches land, in km (0 if already that close); math.inf
+    if clear for `lookahead_km`. `on_land(lat, lon)`: the land mask
+    (default runner.land.default_land(), the one the voyage runs aground on;
+    vessel.coast's distances are only good to ~10 km, and put Pico 4 km
+    offshore)."""
+    if on_land is None:
+        on_land = _default_on_land()
+        if on_land is None:
+            return math.inf
+    side = (heading + 90.0) % 360.0
+    offsets = [heading_to_vector(side, k * LAND_CLEAR_KM * 1000.0) for k in (0, -1, 1)]
+    d = 0.0
+    while d <= lookahead_km + LAND_CLEAR_KM + 1e-9:
         east, north = heading_to_vector(heading, d * 1000.0)
-        if land_km(*move(lat, lon, east, north)) < LAND_CLEAR_KM:
-            return d
+        for oe, on in offsets:
+            if on_land(*move(lat, lon, east + oe, north + on)):
+                return max(0.0, d - LAND_CLEAR_KM)
         d += LAND_STEP_KM
     return math.inf
+
+
+def _default_on_land():
+    from boatsim.runner.land import default_land
+
+    mask = default_land()
+    return None if mask is None else mask.on_land
 
 
 class Polar(Protocol):
@@ -191,6 +205,9 @@ class Tactician:
     switch_deg: float = 10.0  # GUESS: tack once the mark is this far past the wind
     min_switch_h: float = 2.0  # GUESS: at least this long on one tack or gybe
     max_twa_deg: float = 180.0
+    # GUESS: half of base's 20 km land margin (basestation/replan.py
+    # land_margin_m), so the zig-zag stays inside the lane base checked.
+    corridor_km: float = 10.0
 
     def __post_init__(self) -> None:
         self.angles = VmgAngles(self.polar, self.min_twa_deg, self.max_twa_deg)
@@ -214,12 +231,14 @@ class Tactician:
         prev_heading: float,
         t: datetime,
         open_water: Callable[[float], float] | None = None,
+        off_track_km: float | None = None,
     ) -> float:
         """Heading through the water. `to_mark`: bearing to the mark (deg);
         `reach_heading`: what the normal autopilot would steer (with its crab);
         `prev_heading`: the boat's heading now (for which tack it is on);
         `open_water(heading)`: km of open water along a heading (open_water_km
-        at the boat), or None to sail without a chart."""
+        at the boat), or None to sail without a chart; `off_track_km`: how
+        far the boat is right (+) or left (-) of the leg's line, or None."""
         up, down = self.angles(tws)
         up = min(up + self.beat_margin_deg, 89.0)
         rel = wrap180(to_mark - wind_from)  # where the mark is, off the wind
@@ -228,81 +247,95 @@ class Tactician:
         elif abs(rel) > down:
             mode, angle, past = "run", down, 180.0 - abs(rel)
         else:
-            self.mode, self.escaping = "reach", False
-            self.side = 1 if wrap180(reach_heading - wind_from) >= 0.0 else -1
-            return reach_heading % 360.0
+            mode, angle, past = "reach", 0.0, 0.0
         mark_side = 1 if rel >= 0.0 else -1
-        side = self.side or (1 if wrap180(prev_heading - wind_from) >= 0.0 else -1)
-        if self.mode != mode:
-            # Just started beating or running: take the side the mark is on,
-            # which is also the side nearer the course being sailed.
-            side = mark_side
-        settled = self.last_switch is None or t - self.last_switch >= timedelta(
-            hours=self.min_switch_h
-        )
-        if self.mode == mode and side != mark_side and past > self.switch_deg and settled:
-            side = mark_side
-        heading = (wind_from + side * angle) % 360.0
-        if open_water is not None:
-            # Don't hold a tack or gybe onto land when the other side is clearer
-            # (by at least a step). Land close ahead (LAND_URGENT_KM) switches
-            # at once; further off, only at a normal switch (min_switch_h), or
-            # in a channel both sides see land and it would tack every step
-            # (Ravi's check of #252: 71 tacks in 12 h up a 40 km channel).
+        if mode == "reach":
+            heading = reach_heading % 360.0
+            side = 1 if wrap180(heading - wind_from) >= 0.0 else -1
+        else:
+            side = self.side or (1 if wrap180(prev_heading - wind_from) >= 0.0 else -1)
+            if self.mode != mode:
+                # Just started beating or running: take the side the mark is on,
+                # which is also the side nearer the course being sailed.
+                side = mark_side
+            settled = self.last_switch is None or t - self.last_switch >= timedelta(
+                hours=self.min_switch_h
+            )
+            if self.mode == mode and side != mark_side and past > self.switch_deg and settled:
+                side = mark_side
+            heading = (wind_from + side * angle) % 360.0
+            if (
+                off_track_km is not None
+                and abs(off_track_km) > self.corridor_km
+                and wrap180(heading - to_mark) * off_track_km > 0.0
+            ):
+                # Out of the lane base checked for land (it keeps every leg 20 km
+                # clear) and heading further out: tack back toward the line,
+                # whatever min_switch_h says.
+                side = -side
+                heading = (wind_from + side * angle) % 360.0
+        if open_water is None:
+            self.escaping = False
+        else:
             here = open_water(heading)
-            if here < LAND_LOOKAHEAD_KM and (here <= LAND_URGENT_KM or settled):
+            if mode != "reach" and here < LAND_LOOKAHEAD_KM and (here <= LAND_URGENT_KM or settled):
+                # Don't hold a tack or gybe onto land when the other side is
+                # clearer (by at least a step). Land close ahead switches at
+                # once; further off, only at a normal switch (min_switch_h), or
+                # in a channel both sides see land and it would tack every step
+                # (Ravi's check of #252: 71 tacks in 12 h up a 40 km channel).
                 there = open_water((wind_from - side * angle) % 360.0)
                 if there >= here + LAND_STEP_KM:
                     side, here = -side, there
                     heading = (wind_from + side * angle) % 360.0
             if here <= LAND_URGENT_KM or self.escaping:
-                # Land close ahead on both tacks (in among islands: 15 May 2020,
-                # between Pico and Faial): bear away to the heading with the
-                # most open water, and keep doing so until a tack has clear
-                # water for the whole look-ahead; then beat on from there.
-                # Not a tack. Without the hold it bears away and heads back in
-                # by turns, getting nowhere.
-                clear = [
-                    s
-                    for s in (side, -side)
-                    if math.isinf(open_water((wind_from + s * angle) % 360.0))
-                ]
+                # Land close ahead and nothing clearer to tack onto (in among
+                # islands: 15 May 2020, between Pico and Faial), or reaching
+                # straight at it: steer for the most open water, and keep doing
+                # so until the course wanted (a tack, or the reach) is clear for
+                # the whole look-ahead. Without the hold it bears away and heads
+                # back in by turns, getting nowhere.
+                if mode == "reach":
+                    clear = [side] if math.isinf(here) else []
+                else:
+                    clear = [
+                        s
+                        for s in (side, -side)
+                        if math.isinf(open_water((wind_from + s * angle) % 360.0))
+                    ]
                 if clear:
                     self.escaping = False
-                    side = mark_side if mark_side in clear else clear[0]
-                    heading = (wind_from + side * angle) % 360.0
+                    if mode != "reach":
+                        side = mark_side if mark_side in clear else clear[0]
+                        heading = (wind_from + side * angle) % 360.0
                 else:
                     self.escaping = True
-                    heading = self._bear_away(wind_from, side, angle, open_water, here)
-        if self.side and side != self.side and self.mode == mode:
+                    heading = self._most_open_water(heading, wind_from, open_water, here)
+        if mode != "reach" and self.side and side != self.side and self.mode == mode:
             self.last_switch = t
             self.switches += 1
         self.mode, self.side = mode, side
         return heading
 
-    def _bear_away(
+    def _most_open_water(
         self,
+        wanted: float,
         wind_from: float,
-        side: int,
-        angle: float,
         open_water: Callable[[float], float],
         here: float,
     ) -> float:
-        """The heading with the most open water, trying true wind angles up to
-        90 deg either way from `angle` on both sides (inside the boat's own
-        limits); the smallest change wins a tie, the current side first."""
-        best, best_km = (wind_from + side * angle) % 360.0, here
-        for change in range(10, 91, 10):
-            for twa in (angle + change, angle - change):
-                if not self.min_twa_deg <= twa <= self.max_twa_deg:
-                    continue
-                for s in (side, -side):
-                    h = (wind_from + s * twa) % 360.0
-                    km = open_water(h)
-                    if km > best_km:
-                        best, best_km = h, km
-            if math.isinf(best_km):
-                break
+        """Of the headings every 10 deg the boat can sail (true wind angle
+        inside min_twa_deg..max_twa_deg), the one with the most open water;
+        the nearest to `wanted` wins a tie."""
+        best, best_km, best_turn = wanted, here, 0.0
+        for k in range(36):
+            h = (wanted + 10.0 * k) % 360.0
+            twa = abs(wrap180(h - wind_from))
+            if not self.min_twa_deg <= twa <= self.max_twa_deg:
+                continue
+            km, turn = open_water(h), abs(wrap180(h - wanted))
+            if km > best_km or (km == best_km and turn < best_turn):
+                best, best_km, best_turn = h, km, turn
         return best
 
 
@@ -319,12 +352,12 @@ class SailingAutopilot:
         inner: Autopilot,
         tactician: Tactician,
         guidance=None,
-        land_km: Callable[[float, float], float] | None = None,
+        on_land: Callable[[float, float], bool] | None = None,
     ):
-        """land_km(lat, lon): distance to land for the look-ahead (default the
-        coast chart, vessel.coast.distance_to_land_km)."""
+        """on_land(lat, lon): the land mask for the look-ahead (default
+        runner.land's, the one the voyage runs aground on)."""
         self.inner = inner
-        self.land_km = land_km
+        self.on_land = on_land
         self.tactician = tactician
         self.guidance = guidance
 
@@ -347,6 +380,12 @@ class SailingAutopilot:
             return cmd
         wp = mission.waypoints[min(mission.active_index, len(mission.waypoints) - 1)]
         to_mark = bearing_deg(sensors.lat, sensors.lon, wp.lat, wp.lon)
+        off_track_km = None
+        origin = getattr(self.guidance, "_origin", None)
+        if origin is not None:
+            off_track_km = (
+                track_offsets(*origin, wp.lat, wp.lon, sensors.lat, sensors.lon)[0] / 1000.0
+            )
         heading = self.tactician.heading(
             to_mark,
             cmd.heading,
@@ -354,10 +393,13 @@ class SailingAutopilot:
             sensors.wind_speed_ms,
             sensors.heading,
             t,
-            open_water=lambda h: open_water_km(sensors.lat, sensors.lon, h, self.land_km),
+            open_water=lambda h: open_water_km(sensors.lat, sensors.lon, h, self.on_land),
+            off_track_km=off_track_km,
         )
         if self.guidance is not None:
-            self.guidance.tacking = self.tactician.mode != "reach"
+            # Zig-zagging, or steering round land: the course says nothing
+            # about the current.
+            self.guidance.tacking = self.tactician.mode != "reach" or self.tactician.escaping
         return Command(heading=heading, thrust_fraction=cmd.thrust_fraction)
 
 
