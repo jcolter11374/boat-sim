@@ -412,6 +412,18 @@ try {
   if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
   log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
 
+  // Annapolis: the town stands on the land, and its waterfront lights reach the water.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&place=annapolis&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.land !== undefined, null, { timeout: 120000 })
+    .catch(async () => fail(`Annapolis didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const ann = await page.evaluate(() => ({ land: window.__replay.land, town: window.__replay.town, trees: window.__replay.trees, credit: /ODbL/.test(document.getElementById("credits").textContent) }));
+  if (!ann.credit) fail("Annapolis: no ODbL credit on the page");
+  if (ann.town && !(ann.town.buildings > 1000 && ann.town.lights > 100 && ann.town.moorings > 10)) fail(`Annapolis: a thin town ${JSON.stringify(ann.town)}`);
+  if (errors.length) fail(`page errors off Annapolis: ${errors.join("; ")}`);
+  log.push(
+    ann.town ? `Annapolis: ${ann.town.buildings} buildings, ${ann.town.lights} lights on the water, ${ann.town.moorings} moorings, ${ann.trees} trees, land ${ann.land}` : "Annapolis: no town files",
+  );
+
   // A stock boat: the cruiser's voyage, when the replays have one. It leans by the
   // replay's heel, and its sails follow the logged sail plan and the wind.
   const cruiser = await page.evaluate(async () => {
