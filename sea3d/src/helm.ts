@@ -30,7 +30,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
 import { copyText } from "./helm/share";
-import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
@@ -235,6 +235,8 @@ const page = {
   /** Base mode orders sent (accepted or not), and the last share link (for tests). */
   orders: [] as OrderResult[],
   share: "",
+  /** Decisions the game stopped for (#328): which, and on what day (for tests). */
+  decisions: [] as { kind: string; day: number }[],
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
   /** The port the game started from ("" = the usual drop), and how many the picker offers. */
@@ -686,6 +688,8 @@ function applyPending(all = false): void {
 function setRate(r: number, drain = false): void {
   drainRate = drain && rate > 0 ? rate : 0;
   if (r > 0) {
+    $("decide").hidden = true;
+    $("fcbox").classList.remove("lit");
     lastRate = r;
     if (!rate) armed = untilOptions();
   } else armed = null;
@@ -732,6 +736,7 @@ async function clockRun(): Promise<void> {
       forecastAt = game.status!.day * 24;
       await refreshForecast();
     }
+    if (stopped === "time") maybeDecide();
     if (game.status?.over) {
       setRate(0);
       hour = shownTo;
@@ -807,6 +812,114 @@ function untilOptions(): Record<string, number | boolean> {
   if (soc > 0.2) o.soc_below = Math.max(0.1, soc - 0.3); // a big drop, or the reserve
   if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
   return o;
+}
+
+// ---------- decisions (#328) ----------
+// The clock stops for choices, not only for things that already happened: a gale in the
+// forecast, a night that could run the battery flat, the Gulf Stream. Each is asked once
+// per spell (a gale is not asked again for 2 days, a night for a day, the Stream until you
+// leave it). Hands on only: from base, orders go by satellite and the forecast is the same.
+type Choice = { label: string; title: string; act: () => Promise<void> | void };
+const asked = { gale: -Infinity, night: -Infinity, stream: false };
+const KT = 1.943844; // knots per m/s
+const GALE_MS = 17; // 33 knots, gale force
+const BIG_WAVES_M = 4;
+
+function towards(u: number, v: number): string {
+  const names = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+  return names[Math.round(((Math.atan2(u, v) * 180) / Math.PI + 360) / 45) % 8];
+}
+
+/** The decision due now, if any. */
+function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text: string; choices: Choice[] } | null {
+  if (mode !== "hands_on" || st.over || shared) return null;
+  const h = st.day * 24;
+  const w = st.weather;
+  const motors = !st.sailboat && st.power_w > 0;
+  const carryOn: Choice = { label: "Carry on as I am", title: "Keep the order you have", act: () => undefined };
+  // Gale or big waves in the next 2 days, while it's not blowing yet.
+  const nowWind = w ? Math.hypot(w.wind_u, w.wind_v) : 0;
+  if (fc && nowWind < GALE_MS - 2 && (w?.hs ?? 0) < BIG_WAVES_M - 0.5 && h - asked.gale >= 48) {
+    const t0 = utc(st.boat.t);
+    const rows = fc.map((r) => ({ ...r, ah: (utc(r.t) - t0) / 3.6e6 })).filter((r) => r.ah > 0 && r.ah <= 48);
+    const bad = rows.find((r) => Math.hypot(r.wind_u, r.wind_v) >= GALE_MS || r.hs >= BIG_WAVES_M);
+    if (bad) {
+      asked.gale = h;
+      const peakW = Math.max(...rows.map((r) => Math.hypot(r.wind_u, r.wind_v)));
+      const peakH = Math.max(...rows.map((r) => r.hs));
+      const when = bad.ah < 18 ? `in about ${Math.round(bad.ah)} hours` : `in about ${(bad.ah / 24).toFixed(1)} days`;
+      const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
+      const south = Math.round(((toFinish + 50) % 360) / 5) * 5;
+      const choices: Choice[] = [
+        { label: "Hold course", title: "Sail on through it", act: () => undefined },
+        { label: `Head south-east (${south}°)`, title: "Bear away from the finish to get under the worst of it; aim at the finish again later", act: () => setOrder(south) },
+      ];
+      if (motors && power > 0.1) choices.push({ label: "Ease the motors to 10%", title: "Save the battery for after the blow", act: () => setOrder(order === "auto" ? "route" : order, 0.1) });
+      return {
+        kind: peakW >= GALE_MS ? "gale" : "waves",
+        text: `${peakW >= GALE_MS ? "A gale is" : "Big waves are"} forecast here ${when}: wind up to ${Math.round(peakW * KT)} knots and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. Hold course, slip south-east under it, or save the battery?`,
+        choices,
+      };
+    }
+  }
+  // A night that could run the battery flat.
+  if (fc && motors && st.boat.soc < 0.35 && power > 0.15 && order !== "auto" && h - asked.night >= 24) {
+    const t0 = utc(st.boat.t);
+    const dark = fc.some((r) => { const ah = (utc(r.t) - t0) / 3.6e6; return ah > 0 && ah <= 12 && r.ghi < 5; });
+    if (dark) {
+      asked.night = h;
+      return {
+        kind: "night",
+        text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
+        choices: [
+          { label: "Ease off to 10%", title: "Drift more slowly overnight; turn the power back up in the morning", act: () => setOrder(order, 0.1) },
+          { ...carryOn, label: "Keep the power up" },
+        ],
+      };
+    }
+  }
+  // The Gulf Stream: a river of warm water in the sea, running north-east at up to 4 knots.
+  const cur = w ? Math.hypot(w.current_u, w.current_v) : 0;
+  if (w && cur < 0.5) asked.stream = false;
+  if (w && cur >= 1 && !asked.stream) {
+    asked.stream = true;
+    return {
+      kind: "stream",
+      text: `You're in the Gulf Stream: ${(cur * KT).toFixed(1)} knots of current carrying the boat ${towards(w.current_u, w.current_v)}. Ridden well it's a free ride towards Europe; fought, it pushes you sideways.`,
+      choices: [
+        { label: "Follow the route", title: "The autopilot's planned route allows for the current", act: () => setOrder("route") },
+        carryOn,
+      ],
+    };
+  }
+  return null;
+}
+
+/** Stop the clock and ask, when a decision is due. */
+function maybeDecide(): boolean {
+  const st = game.status;
+  if (!st || rate === 0) return false;
+  const d = decisionDue(st, lastForecast);
+  if (!d) return false;
+  setRate(0, true);
+  page.decisions.push({ kind: d.kind, day: st.day });
+  $("decidetext").textContent = d.text;
+  const box = $("decidebtns");
+  box.replaceChildren();
+  for (const c of d.choices) {
+    const b = document.createElement("button");
+    b.textContent = c.label;
+    b.title = c.title;
+    b.addEventListener("click", async () => {
+      $("decide").hidden = true;
+      await c.act();
+      setRate(lastRate);
+    });
+    box.append(b);
+  }
+  $("decide").hidden = false;
+  $("fcbox").classList.add("lit");
+  return true;
 }
 
 async function refreshForecast(): Promise<void> {

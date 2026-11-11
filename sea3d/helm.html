@@ -57,6 +57,12 @@
   #timestate { position: fixed; top: calc(var(--bar, 0px) + 84px); left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
     text-shadow: 0 1px 4px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; }
   #timestate:empty, #timestate[hidden] { display: none; }
+  #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
+    padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
+  #decide .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb84d; }
+  #fcbox.lit { outline: 2px solid #ffb84d; }
+  #decidebtns { display: flex; flex-wrap: wrap; gap: 6px; }
+  #decidebtns button:first-child { font-weight: 600; }
   #keyhint { position: fixed; top: calc(var(--bar, 0px) + 102px); left: 50%; transform: translateX(-50%); font: 500 11.5px system-ui, sans-serif;
     color: rgba(220,232,246,.75); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
@@ -134,6 +140,12 @@
 <body>
 <div id="app"></div>
 <div id="clock"></div>
+<div id="decide" class="glass" role="dialog" aria-live="polite" aria-labelledby="decidetext" hidden>
+  <div class="t">Your call</div>
+  <div id="decidetext"></div>
+  <div id="decidebtns"></div>
+  <div class="muted" style="font-size:11px">Time is paused until you choose. The forecast is open below.</div>
+</div>
 <div id="timebar" class="glass" role="group" aria-label="How fast time runs" hidden>
   <span class="t">Time</span>
   <button id="t-pause" title="Pause or carry on (space bar)" aria-pressed="false">&#10074;&#10074;</button>
