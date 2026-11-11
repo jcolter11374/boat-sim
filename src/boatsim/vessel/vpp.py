@@ -128,10 +128,17 @@ def _resistance(p: VPPParams, v, heel, side, waves=0.0):
 
 
 def _sail_coeffs(p: VPPParams, alpha, flat):
-    """Lift and drag coefficients of the rig at trim angle alpha (rad)."""
+    """Lift and drag coefficients of the rig at trim angle alpha (rad).
+
+    Past 90 deg the flow meets the sail from its other edge: the curve is
+    mirrored (drag as at pi - alpha, lift reversed). So a sail sheeted hard
+    in on a dead run (alpha near 180) is a stalled sail edge-on to the wind,
+    not a sail square to it."""
     a_s = math.radians(p.alpha_stall_deg)
     clm = p.cl_max * flat
     ar = (2.0 * p.rig_height_m) ** 2 / (p.main_m2 + p.jib_m2)  # sea surface mirror
+    back = alpha > math.pi / 2
+    alpha = np.where(back, math.pi - alpha, alpha)
     attached = alpha <= a_s
     s = np.clip((alpha - a_s) / (math.pi / 2 - a_s), 0.0, 1.0)
     cl = np.where(attached, clm * alpha / a_s, clm * np.cos(s * math.pi / 2))
@@ -141,7 +148,7 @@ def _sail_coeffs(p: VPPParams, alpha, flat):
         p.cd0 + cl * cl / (math.pi * ar),
         cd_top + (p.cd_max - cd_top) * np.sin(s * math.pi / 2),
     )
-    return cl, cd
+    return np.where(back, -cl, cl), cd
 
 
 def pm_hs(tws: float) -> float:
@@ -311,13 +318,18 @@ def solve_trim(
     twa_deg: float,
     plan: SailPlan,
     sheet_deg: float,
-    hs: float | None = 0.0,
+    hs: float | None = None,
 ) -> TrimPoint:
     """Steady speed with the sails held at sheet_deg to the centreline (a
     player's trim) rather than the best trim: the same force balance as
     solve(), with alpha = apparent wind angle - sheet at every speed tried,
     and "flat" still chosen by the boat (the crew flattening the sails).
-    Never faster than solve(), whose trim is the best of all sheets."""
+    hs as in solve() (None: the wind's fully grown sea; trim_table uses 0).
+
+    Not capped: a held sheet can land between the 16 trims solve() tries and
+    come out up to about 1 % faster, and an overpowered trim (heel past
+    heel_max_deg, which solve() rules out) can be faster still. trim_table
+    caps overpowered points at solve()'s speed."""
     twa = math.radians(twa_deg)
     sheet = math.radians(sheet_deg)
     if tws <= 0.0:
@@ -351,7 +363,8 @@ def solve_trim(
 def trim_table(p: VPPParams, tws_kn=TWS_KN, twa_deg=None, sheets: int = TRIM_SHEETS) -> dict:
     """Speeds for every sheet a player can hold (Take the wheel, sea3d/src/helm):
     speed (kn), heel and leeway (deg) and overpowered (0/1) by plan, TWS, TWA and
-    sheet angle to the centreline, in flat water like polar(). Speeds are a
+    sheet angle to the centreline, in flat water like polar(); an overpowered
+    point keeps its heel and flag but no more speed than solve(). Speeds are a
     crew's, not the autopilot's: no autopilot_factor, which is given so the
     page can show how the player compares with it. JSON-ready."""
     twa_deg = list(twa_deg or range(30, 181, 10))
@@ -371,8 +384,11 @@ def trim_table(p: VPPParams, tws_kn=TWS_KN, twa_deg=None, sheets: int = TRIM_SHE
         for w in tws_kn:
             rows = {k: [] for k in cols}
             for a in twa_deg:
-                pts = [solve_trim(p, w * KNOT, a, plan, s) for s in sheet_deg]
-                rows["speed_kn"].append([round(x.speed / KNOT, 3) for x in pts])
+                pts = [solve_trim(p, w * KNOT, a, plan, s, 0.0) for s in sheet_deg]
+                # Overpowered is never worth it: no faster than the best held trim.
+                cap = solve(p, w * KNOT, a, plan, 0.0).speed
+                speeds = [min(x.speed, cap) if x.overpowered else x.speed for x in pts]
+                rows["speed_kn"].append([round(v / KNOT, 3) for v in speeds])
                 rows["heel_deg"].append([round(x.heel_deg, 1) for x in pts])
                 rows["leeway_deg"].append([round(x.leeway_deg, 1) for x in pts])
                 rows["overpowered"].append([int(x.overpowered) for x in pts])
