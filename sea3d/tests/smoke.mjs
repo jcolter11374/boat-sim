@@ -551,6 +551,29 @@ try {
     const fromPort = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
     if (!fromPort.ready || fromPort.err) fail(`helm: can't start from Baltimore: ${JSON.stringify(fromPort)}`);
     log.push("helm started from Baltimore");
+    // My boat: a Boatyard design saved in this browser is ticked on the start card (its name as text), and the game sails it.
+    await page.evaluate(() => localStorage.setItem("boatsim.myboat.v1", JSON.stringify({ v: 1, kind: "yard", base: "revc", hash: "#base=revc&rudder=single", name: "Test <i>Rev C</i>", choices: { base: "revc", rudder: "single", cruise_w: 25 }, saved: "2026-11-11T00:00:00.000Z" })));
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+    const mineRow = await page.evaluate(() => {
+      const r = document.querySelector('input[name="boat"]:checked');
+      return { v: r?.value, text: r?.parentElement.textContent, tags: r?.parentElement.querySelectorAll("i").length };
+    });
+    if (mineRow.v !== "mine" || !mineRow.text.includes("Test <i>Rev C</i>") || mineRow.tags) fail(`helm: my boat isn't offered first: ${JSON.stringify(mineRow)}`);
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, msg: document.querySelector("#startmsg").textContent }));
+    if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
+    // Picking another boat on the start card makes it my boat, for the other pages.
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+    await page.check('input[name="boat"][value="stock_cruiser31"]');
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"));
+    if (saved?.kind !== "stock" || saved.base !== "stock_cruiser31" || saved.choices.base !== "stock_cruiser31") fail(`helm: the boat sailed didn't become my boat: ${JSON.stringify(saved)}`);
+    await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
+    log.push("helm sailed my boat (Rev C design), and the cruiser became my boat");
   } else {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");
