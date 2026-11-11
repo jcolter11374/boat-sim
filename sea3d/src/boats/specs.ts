@@ -7,10 +7,13 @@
 // This matches Theo's wave-motion model (src/motion.ts), which turns the boat
 // about its CG.
 
-import { KAYAK_V4, RANDOLPH_REVB } from "../motion";
+import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, RANDOLPH_REVB } from "../motion";
+
+/** Theo's stock vessels (configs/stock_*.yaml), by their config names. */
+export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16";
 
 export interface BoatSpec {
-  key: "kayak" | "randolph";
+  key: "kayak" | "randolph" | StockKey;
   name: string;
   length: number; // m, overall hull length
   beam: number; // m, widest point of the hull
@@ -56,5 +59,70 @@ export const RANDOLPH: BoatSpec = {
   colour: 0x0f8a8a,
   source: "sheltonr2/drone-boat build-files/source/design.py (MIT)",
 };
+
+// --- Stock vessels: generic boats from published specs (Theo, configs/stock_*.yaml).
+// Length, beam and mass from the configs; the waterline and the boat's own
+// shape from our Blender models (blender/build_stock.py).
+export const CRUISER: BoatSpec = {
+  key: "stock_cruiser31",
+  name: "31 ft cruiser",
+  length: 9.45,
+  beam: 3.21,
+  waterline: 0.55, // the canoe body's draft; the keel goes on to 1.9 m
+  massKg: 3887,
+  ballastKg: 1025,
+  ballastDepth: 1.75,
+  cgX: CRUISER31.cgX,
+  cgBelowWaterline: CRUISER31.cgBelowWaterline,
+  cruiseSpeed: 3.0, // about 6 kt
+  colour: 0x2f6fd0,
+  source: "configs/stock_cruiser31.yaml (published specs of a common 31 ft cruiser-racer)",
+};
+
+export const DINGHY: BoatSpec = {
+  key: "stock_dinghy14",
+  name: "14 ft dinghy",
+  length: 4.2,
+  beam: 1.24,
+  waterline: 0.08,
+  massKg: 75,
+  ballastKg: 0,
+  ballastDepth: 0,
+  cgX: DINGHY14.cgX,
+  cgBelowWaterline: DINGHY14.cgBelowWaterline,
+  cruiseSpeed: 2.0,
+  colour: 0x2c6fb5,
+  source: "configs/stock_dinghy14.yaml (published specs of a common board-boat dinghy)",
+};
+
+export const BEACHCAT: BoatSpec = {
+  key: "stock_beachcat16",
+  name: "16 ft beach cat",
+  length: 4.9,
+  beam: 2.41,
+  waterline: 0.16,
+  massKg: 170,
+  ballastKg: 0,
+  ballastDepth: 0,
+  cgX: BEACHCAT16.cgX,
+  cgBelowWaterline: BEACHCAT16.cgBelowWaterline,
+  cruiseSpeed: 4.0,
+  colour: 0xd8432b,
+  source: "configs/stock_beachcat16.yaml (published specs of a common 16 ft beach catamaran)",
+};
+
+export const STOCK: Record<StockKey, BoatSpec> = { stock_cruiser31: CRUISER, stock_dinghy14: DINGHY, stock_beachcat16: BEACHCAT };
+/** Only the cruiser can be sailed in the games for now (Maya, 11 Nov: the dinghy and
+ * cat capsize in squalls, and the sandbox has no rain yet). */
+export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31"];
+export const isStock = (k: string): k is StockKey => k in STOCK;
+/** The stock boat a replay's boat name is ("31 ft cruiser"), or null. */
+export function stockKeyOf(boat: string | undefined): StockKey | null {
+  const b = boat ?? "";
+  if (/cruiser/i.test(b)) return "stock_cruiser31";
+  if (/dinghy/i.test(b)) return "stock_dinghy14";
+  if (/beach\s*cat|catamaran/i.test(b)) return "stock_beachcat16";
+  return null;
+}
 
 export const BOATS: BoatSpec[] = [KAYAK, RANDOLPH];

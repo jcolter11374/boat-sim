@@ -49,6 +49,12 @@ export interface Replay {
   ghi: Col;
   iridium_ok?: Col; // 1/0 per hour (from PR #135); absent in older files
   beacon_ok?: Col;
+  /** A yacht's lean, deg, + = to starboard (stock vessels; runner/replay.py). */
+  heel?: Col;
+  /** A yacht's sails: "full", "reef1", "reef2", "storm", "main_only" or "down". */
+  sail_plan?: (string | null)[];
+  /** 1 = a yacht's engine is running. */
+  engine?: Col;
   events: ReplayEvent[];
 }
 
@@ -119,6 +125,14 @@ export function valueAt(rep: Replay, col: Col, hour: number): number | null {
   const b = col[i + 1] ?? a;
   if (a == null || b == null) return a ?? b;
   return a + (b - a) * f;
+}
+
+/** The sail plan in force at an hour (the last logged one), or null if the replay has none. */
+export function planAt(rep: Replay, hour: number): string | null {
+  if (!rep.sail_plan) return null;
+  const [i] = locate(rep.h, hour);
+  for (let k = i; k >= 0; k--) if (rep.sail_plan[k] != null) return rep.sail_plan[k];
+  return null;
 }
 
 /** Angle in degrees, interpolated the short way round. */

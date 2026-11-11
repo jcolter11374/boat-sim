@@ -19,8 +19,9 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
-import { KAYAK, RANDOLPH, type BoatSpec } from "./boats/specs";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
+import { BEACHCAT, CRUISER, DINGHY, KAYAK, RANDOLPH, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
+import { hasDetailedStock, loadStockModel } from "./boats/stock";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import {
   angleAt,
@@ -34,6 +35,7 @@ import {
   loadIndex,
   locate,
   loadReplay,
+  planAt,
   positionAt,
   toneOf,
   valueAt,
@@ -100,21 +102,60 @@ type BoatKey = BoatSpec["key"];
  * Which boat a replay is: ours, or one revision of our model of the Randolph boat
  * (#179: Rev B and Rev C each get their own menu entry, colour and roll).
  */
-type Rev = "kayak" | "randolph" | "randolph_c";
+type Rev = "kayak" | "randolph" | "randolph_c" | StockKey;
 /** The 3D model each one is drawn with (the Randolph revisions share one hull model). */
-const MODEL: Record<Rev, BoatKey> = { kayak: "kayak", randolph: "randolph", randolph_c: "randolph" };
-const SPEC: Record<BoatKey, BoatSpec> = { kayak: KAYAK, randolph: RANDOLPH };
+const MODEL: Record<Rev, BoatKey> = {
+  kayak: "kayak",
+  randolph: "randolph",
+  randolph_c: "randolph",
+  stock_cruiser31: "stock_cruiser31",
+  stock_dinghy14: "stock_dinghy14",
+  stock_beachcat16: "stock_beachcat16",
+};
+const SPEC: Record<BoatKey, BoatSpec> = {
+  kayak: KAYAK,
+  randolph: RANDOLPH,
+  stock_cruiser31: CRUISER,
+  stock_dinghy14: DINGHY,
+  stock_beachcat16: BEACHCAT,
+};
 // Rev C rolls on Rev B's numbers until Theo's Rev C righting curve (their revC_gz_curve.csv) lands.
-const HULL: Record<Rev, HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB, randolph_c: RANDOLPH_REVC };
+const HULL: Record<Rev, HullParams> = {
+  kayak: KAYAK_V4,
+  randolph: RANDOLPH_REVB,
+  randolph_c: RANDOLPH_REVC,
+  stock_cruiser31: CRUISER31,
+  stock_dinghy14: DINGHY14,
+  stock_beachcat16: BEACHCAT16,
+};
 const LABEL: Record<Rev, string> = {
   kayak: "Our kayak",
   randolph: "Our model of the Randolph Rev B boat (not their own simulator)",
   randolph_c: "Our model of the Randolph Rev C boat (not their own simulator)",
+  stock_cruiser31: "A 31 ft cruiser (stock boat)",
+  stock_dinghy14: "A 14 ft dinghy (stock boat)",
+  stock_beachcat16: "A 16 ft beach cat (stock boat)",
 };
-const SHORT: Record<Rev, string> = { kayak: "Our kayak", randolph: "Randolph Rev B (our model)", randolph_c: "Randolph Rev C (our model)" };
-/** Which boat a replay's boat name is. Anything not Randolph is ours; a Randolph boat is Rev B unless it says Rev C. */
-const keyOf = (boat: string | undefined): Rev =>
-  !/randolph/i.test(boat ?? "") ? "kayak" : /rev[\s_-]*c\b/i.test(boat ?? "") ? "randolph_c" : "randolph";
+const SHORT: Record<Rev, string> = {
+  kayak: "Our kayak",
+  randolph: "Randolph Rev B (our model)",
+  randolph_c: "Randolph Rev C (our model)",
+  stock_cruiser31: "31 ft cruiser",
+  stock_dinghy14: "14 ft dinghy",
+  stock_beachcat16: "16 ft beach cat",
+};
+/** What the voyage menu calls each stock boat, with what it is in plain words. */
+const STOCK_MENU: Record<StockKey, string> = {
+  stock_cruiser31: "31 ft cruiser (a stock sailing yacht, on autopilot)",
+  stock_dinghy14: "14 ft dinghy (a stock sailing dinghy, nobody aboard)",
+  stock_beachcat16: "16 ft beach cat (a stock catamaran, nobody aboard)",
+};
+/** Which boat a replay's boat name is. The stock boats go by their names ("31 ft cruiser");
+ * otherwise anything not Randolph is ours, and a Randolph boat is Rev B unless it says Rev C. */
+const keyOf = (boat: string | undefined): Rev => {
+  const b = boat ?? "";
+  return stockKeyOf(b) ?? (!/randolph/i.test(b) ? "kayak" : /rev[\s_-]*c\b/i.test(b) ? "randolph_c" : "randolph");
+};
 let boatKey: BoatKey = "kayak";
 let laneRev: Rev = "kayak";
 
@@ -138,6 +179,8 @@ let contact: Contact | null = null;
 let motion = new BoatMotion(HULL[laneRev], place);
 let wet: Wetness | null = null;
 let drain: Drain | null = null;
+/** How much bigger than our 3 m kayak the shown boat is (cameras stand back by this much). */
+let viewScale = 1;
 function buildBoat(q: Quality): void {
   setForecastLook(false); // materials can be shared with the next model: put them back first
   if (model) {
@@ -158,13 +201,25 @@ function buildBoat(q: Quality): void {
   }
   const spec = SPEC[boatKey];
   model = BUILDERS[boatKey](q);
+  // A bigger boat: stand the camera back so it all fits (a 31 ft yacht's mast is 14 m up).
+  const k = THREE.MathUtils.clamp(spec.length / KAYAK.length, 1, 3.4);
+  if (k !== viewScale) {
+    const off = camera.position.clone().sub(controls.target).multiplyScalar(k / viewScale);
+    controls.target.y = 0.2 + (k - 1) * 2.2; // look at the middle of the rig, not the waterline
+    camera.position.copy(controls.target).add(off);
+    controls.minDistance = 1.5 * k;
+    viewScale = k;
+  }
   contact = new Contact(model.form, spec, q);
   scene.add(contact.collar, contact.spray);
+  // Two hulls: the collar and spray follow one centred hull, so leave them off.
+  contact.collar.visible = contact.spray.visible = !model.twinHull;
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
   wet = new Wetness(model.root);
   drain = new Drain(model.form, spec);
+  drain.group.visible = !model.twinHull;
   scene.add(drain.group);
 }
 function setQuality(l: Look): void {
@@ -296,7 +351,7 @@ const status = {
     setLookUp(up);
     const b = THREE.MathUtils.degToRad(bearing);
     const base = controls.target.y - (lifted ? LIFT : 0);
-    const dist = lifted ? 8 : 6;
+    const dist = (lifted ? 8 : 6) * viewScale;
     camera.position.set(controls.target.x - Math.sin(b) * dist, base + (lifted ? 0.4 : 1.2), controls.target.z + Math.cos(b) * dist);
   },
   lookUp: false,
@@ -453,7 +508,9 @@ async function load(files: string[], pick = files[0], autoplay = true): Promise<
     $("sub").textContent =
       lanes.length > 1
         ? `Both boats launched the same day into the same weather. Orange is our kayak; ${lanes[1].key === "randolph_c" ? "purple is our own model of the Randolph team's Rev C" : "teal is our own model of the Randolph team's Rev B"}, not their own simulator, so their real odds may differ. Pick which one the close-up follows.`
-        : lanes[0].key !== "kayak"
+        : isStock(lanes[0].key)
+          ? `${LABEL[lanes[0].key]}, built from published specs of a common boat of its kind, sailing one simulated voyage in real weather and currents for that year. ${lanes[0].key === "stock_cruiser31" ? "Its autopilot reefs (makes the sails smaller) as the wind rises and runs the engine in a calm." : "With nobody aboard to right it, a squall or a breaking sea can turn it over for good."}`
+          : lanes[0].key !== "kayak"
           ? `Our own model of the Randolph ${lanes[0].key === "randolph_c" ? "Rev C" : "Rev B"} boat (${lanes[0].key === "randolph_c" ? "from the config the Randolph team wrote in our format" : "built from their published design"}), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ.`
           : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
     setFocus(0, true);
@@ -559,6 +616,12 @@ function setFocus(i: number, force = false): void {
     boatKey = MODEL[laneRev];
     buildBoat(quality);
   }
+  if (isStock(boatKey) && !hasDetailedStock(boatKey)) {
+    const k = boatKey;
+    void loadStockModel(k).then((ok) => {
+      if (ok && boatKey === k) buildBoat(quality);
+    });
+  }
   motion = new BoatMotion(HULL[laneRev], place);
   wake?.reset();
   smoothYaw = null;
@@ -655,7 +718,14 @@ if (!location.pathname.endsWith("voyage.html")) document.querySelector<HTMLEleme
 
 // ---------- voyage list ----------
 /** Index entries by boat, keyed by launch date. */
-const byKey: Record<Rev, Map<string, IndexEntry>> = { kayak: new Map(), randolph: new Map(), randolph_c: new Map() };
+const byKey: Record<Rev, Map<string, IndexEntry>> = {
+  kayak: new Map(),
+  randolph: new Map(),
+  randolph_c: new Map(),
+  stock_cruiser31: new Map(),
+  stock_dinghy14: new Map(),
+  stock_beachcat16: new Map(),
+};
 const raceDates = (rev: "randolph" | "randolph_c" = "randolph") => [...byKey.kayak.keys()].filter((d) => byKey[rev].has(d)).sort();
 const OUT: Record<string, string> = { arrived: "finished", lost: "lost", aground: "aground", disqualified: "disqualified", timeout: "still at sea" };
 const fmtDay = (iso: string) =>
@@ -683,6 +753,8 @@ setQuality(look);
 loadDetailedModels().then((ok) => {
   status.detailed = ok;
   status.models = [hasDetailedKayak() && "kayak", hasDetailedRandolph() && "randolph"].filter((m): m is string => !!m);
+  (status as unknown as { stockModels: () => string[] }).stockModels = () =>
+    (["stock_cruiser31", "stock_dinghy14", "stock_beachcat16"] as StockKey[]).filter(hasDetailedStock);
   if (ok) buildBoat(quality);
 });
 camera.position.set(-5.6, 2.0, 4.6);
@@ -723,6 +795,7 @@ if (PLACE) {
     if (byKey.randolph_c.size) modes.push(["randolph_c", "Randolph Rev C (our model, not their simulator)"]);
     if (raceDates().length) modes.push(["race", "Race: our kayak vs our model of Randolph Rev B"]);
     if (raceDates("randolph_c").length) modes.push(["race_c", "Race: our kayak vs our model of Randolph Rev C"]);
+    for (const k of Object.keys(STOCK_MENU) as StockKey[]) if (byKey[k].size) modes.push([k, STOCK_MENU[k]]);
     for (const [value, text] of modes) boatSel.add(new Option(text, value));
     boatSel.disabled = modes.length < 2;
     const wantRace = params.get("race");
@@ -789,6 +862,7 @@ const cine = new Cinema({
     }
   },
   toggleSound: () => sound.toggle(),
+  scale: () => viewScale,
 });
 const sound = new OceanSound();
 filmButtons(cine, sound);
@@ -865,6 +939,16 @@ renderer.setAnimationLoop(() => {
     const off = camera.position.clone().sub(controls.target);
     off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
     camera.position.copy(controls.target).add(off);
+    // A sailing yacht leans on its sails: the replay's heel, which the waves rock about.
+    // Once it has turned over (lost), nothing holds it on its side.
+    // (The log's last row can come a little before the final event.)
+    const atEnd = hour >= rep.h[rep.h.length - 1] - 1e-6;
+    const over = rep.events.some((e) => (e.h <= hour || atEnd) && e.kind === "lost" && /capsiz|stayed over/i.test(e.detail));
+    motion.heel = rep.heel && !over ? THREE.MathUtils.degToRad(valueAt(rep, rep.heel, hour) ?? 0) : 0;
+    // Turned over for good (a dinghy or cat with nobody to right it): over it goes, the
+    // way it was leaning, and it floats upside down.
+    if (over && !motion.capsized) motion.capsized = motion.roll < 0 ? -1 : 1;
+    if (!over) motion.capsized = 0;
     motion.advance(comps, t);
     if (model) {
       model.root.position.set(0, motion.heave - SPEC[boatKey].cgBelowWaterline, 0);
@@ -902,6 +986,10 @@ renderer.setAnimationLoop(() => {
         },
         t,
       );
+      if (model.rig) {
+        model.rig.update(dt, { flow: apparentFlow(wu, wv, stw, shownHdg), plan: planAt(rep, hour), rudder: model.gear.shown.rudder });
+        (status as unknown as { rig: object }).rig = { ...model.rig.shown, heel: THREE.MathUtils.radToDeg(motion.roll), over: motion.capsized };
+      }
       status.gear = { parts: model.gear.parts(), now: model.gear.shown, failed: [...failed.keys()] };
       if (tracked) liveEquipment(tracked);
       else equipment(rep, failed);
@@ -1226,6 +1314,9 @@ function skyGuide(): void {
 const EQUIPMENT: Record<BoatKey, string[]> = {
   kayak: ["thruster_port", "thruster_starboard", "rudder", "electronics_main", "electronics_safe", "comms", "beacon", "leak", "entangled"],
   randolph: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak", "entangled"],
+  stock_cruiser31: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
+  stock_dinghy14: ["sail", "rudder", "electronics_main", "comms", "beacon"],
+  stock_beachcat16: ["sail", "rudder", "electronics_main", "comms", "beacon"],
 };
 let lastEquip = "";
 function equipment(r: Replay, failed: Map<string, string>): void {
@@ -1241,7 +1332,12 @@ function equipment(r: Replay, failed: Map<string, string>): void {
       name = PART_NAME.leak_main_tub;
     } else {
       bad = failed.has(p);
-      name = p === "beacon" && boatKey === "randolph" ? "Backup tracker" : PART_NAME[p] ?? p;
+      name =
+        p === "beacon" && boatKey === "randolph"
+          ? "Backup tracker"
+          : p === "sail" && isStock(boatKey)
+            ? "Sails"
+            : (PART_NAME[p] ?? p);
     }
     return `<span class="chip${bad ? " bad" : ""}" data-part="${p}"><i></i>${name}</span>`;
   });

@@ -10,7 +10,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BOATS, type BoatSpec } from "./boats/specs";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
 import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
@@ -21,7 +21,13 @@ import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./wa
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
-const HULLS: Record<BoatSpec["key"], HullParams> = { kayak: KAYAK_V4, randolph: RANDOLPH_REVB };
+const HULLS: Record<BoatSpec["key"], HullParams> = {
+  kayak: KAYAK_V4,
+  randolph: RANDOLPH_REVB,
+  stock_cruiser31: CRUISER31,
+  stock_dinghy14: DINGHY14,
+  stock_beachcat16: BEACHCAT16,
+};
 interface Mover {
   heave: number; // waterline height above still water, m
   pitch: number; // rad, bow up +

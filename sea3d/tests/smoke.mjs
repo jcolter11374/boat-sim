@@ -399,6 +399,27 @@ try {
   if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
   log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
 
+  // A stock boat: the cruiser's voyage, when the replays have one. It leans by the
+  // replay's heel, and its sails follow the logged sail plan and the wind.
+  const cruiser = await page.evaluate(async () => {
+    const idx = await (await fetch("./voyages/index.json")).json();
+    return idx.voyages.find((v) => /cruiser/i.test(v.boat))?.file ?? null;
+  });
+  if (cruiser) {
+    await page.goto(`${URL}voyage.html?voyage=${cruiser}&quality=low`);
+    await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.rig, null, { timeout: 120000 })
+      .catch(async () => fail(`stock cruiser didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+    await page.evaluate(() => window.__replay.setHour(30));
+    await page.waitForTimeout(3000);
+    const st = await page.evaluate(() => ({ boats: window.__replay.boats, rig: window.__replay.rig, menu: [...document.getElementById("boat").options].map((o) => o.value) }));
+    if (!/cruiser/i.test(st.boats.join())) fail(`stock cruiser: the page shows ${st.boats}`);
+    if (!st.menu.includes("stock_cruiser31")) fail("stock cruiser: not in the boat menu");
+    if (typeof st.rig.plan !== "string" || !Number.isFinite(st.rig.heel)) fail(`stock cruiser: no rig (${JSON.stringify(st.rig)})`);
+    if (st.rig.plan === "down" ? st.rig.main !== 0 : !(st.rig.main > 0)) fail(`stock cruiser: sails don't match the plan (${JSON.stringify(st.rig)})`);
+    if (errors.length) fail(`page errors with the stock cruiser: ${errors.join("; ")}`);
+    log.push(`stock cruiser: ${st.rig.plan}, heel ${st.rig.heel.toFixed(1)}`);
+  } else log.push("stock cruiser: no replay yet");
+
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
