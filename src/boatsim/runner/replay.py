@@ -292,6 +292,10 @@ def verify(path: Path, design: str | None = None, max_days: float = 150.0) -> li
     return compare(saved, json.loads(json.dumps(fresh)), limit=0)
 
 
+def _verify_args(args: tuple) -> list[str]:
+    return verify(*args)
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m boatsim.runner.replay")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -311,12 +315,20 @@ def main(argv: list[str] | None = None) -> None:
     v.add_argument("files", nargs="+")
     v.add_argument("--design", default=None, help="default: from the replay's boat name")
     v.add_argument("--max-days", type=float, default=150.0)
+    v.add_argument("--workers", type=int, default=1, help="replays re-simulated at once")
     a = p.parse_args(argv)
 
     if a.cmd == "verify":
         failed = 0
-        for f in a.files:
-            diffs = verify(Path(f), a.design, a.max_days)
+        jobs = [(Path(f), a.design, a.max_days) for f in a.files]
+        if a.workers > 1 and len(jobs) > 1:
+            from concurrent.futures import ProcessPoolExecutor
+
+            with ProcessPoolExecutor(max_workers=a.workers) as pool:
+                results = list(pool.map(_verify_args, jobs))
+        else:
+            results = [verify(*j) for j in jobs]
+        for f, diffs in zip(a.files, results, strict=True):
             print(f"{f}: {'matches a fresh run' if not diffs else 'DIFFERS from a fresh run'}")
             for d in diffs[:10]:
                 print(f"  {d}")

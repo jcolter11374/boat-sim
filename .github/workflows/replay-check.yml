@@ -1,5 +1,5 @@
-# Gate for the 3D page's voyage replays (sea3d Phase 2): the shortest committed
-# replay is re-simulated from its seed, with that year's real weather and
+# Gate for the 3D page's voyage replays (sea3d Phase 2): every committed replay
+# (every boat) is re-simulated from its seed, four at a time, with that year's real weather and
 # currents, and the build fails if anything differs from the file. A replay the
 # simulator wouldn't produce today is stale; regenerate it with "Voyage replays".
 # The cheap checks (well formed, right seed, today's drop point) run in CI on
@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       files:
-        description: "Replay files to check (blank = the shortest one)"
+        description: "Replay files to check (blank = every committed replay)"
         default: ""
 permissions:
   contents: read
