@@ -55,6 +55,14 @@ FLAGS = {
     "beacon_ok": "beacon_ok",
 }
 
+# Columns only a yacht's log fills (vessel/keelboat.py). They are written only
+# when the log has them, so the kayak's and Randolph's replays stay as they were.
+YACHT_UNITS = {
+    "heel": "deg, positive = leaning to starboard",
+    "sail_plan": "sails set: full, reef1, reef2, storm, main_only or down",
+    "engine": "1 = engine running",
+}
+
 
 def _num(x, nd: int):
     if x is None:
@@ -82,6 +90,13 @@ def to_replay(log, label: str = DEFAULT_BOAT) -> dict:
     cols = {name: [_num(r.get(key), nd) for r in rows] for name, (key, nd) in COLUMNS.items()}
     for name, key in FLAGS.items():
         cols[name] = [None if r.get(key) is None else int(bool(r[key])) for r in rows]
+    yacht = {}
+    if any(r.get("heel") is not None for r in rows):
+        yacht["heel"] = [_num(r.get("heel"), 1) for r in rows]
+        yacht["sail_plan"] = [r.get("sail_plan") for r in rows]
+        yacht["engine"] = [
+            None if r.get("engine_on") is None else int(bool(r["engine_on"])) for r in rows
+        ]
     events = [
         {
             "h": round((e.t - start).total_seconds() / 3600.0, 3),
@@ -129,9 +144,11 @@ def to_replay(log, label: str = DEFAULT_BOAT) -> dict:
             "rain": "mm/h rain (ERA5, display only)",
             "iridium_ok": "1 = Iridium can report this hour (powered, main box and comms path ok)",
             "beacon_ok": "1 = Globalstar backup beacon still working",
+            **{k: YACHT_UNITS[k] for k in yacht},
         },
         "h": hours,
         **cols,
+        **yacht,
         "events": events,
     }
 
@@ -170,7 +187,7 @@ def thin(rep: dict, stride_h: float = 6) -> dict:
     if h and keep[-1] != len(h) - 1:
         keep.append(len(h) - 1)
     out = {k: v for k, v in rep.items() if k not in DROP_COLUMNS and k != "units"}
-    for col in ("h", *COLUMNS, *FLAGS):
+    for col in ("h", *COLUMNS, *FLAGS, *YACHT_UNITS):
         if col in out:
             out[col] = [rep[col][i] for i in keep]
     for col in ("lat", "lon"):
@@ -256,6 +273,10 @@ def design_for(rep: dict) -> str:
     configs/<boat name, snake_case>.yaml ('Randolph Rev B' -> randolph_rev_b.yaml)."""
     if rep["boat"] == DEFAULT_BOAT:
         return "configs/v4_kayak.yaml"
+    # Stock boats are named in their file: '31 ft cruiser' -> stock_cruiser31.yaml.
+    for f in sorted(Path("configs").glob("stock_*.yaml")):
+        if re.search(rf"^name:\s*{re.escape(rep['boat'])}\s*$", f.read_text(), re.MULTILINE):
+            return str(f)
     return f"configs/{slug(rep['boat']).replace('-', '_')}.yaml"
 
 

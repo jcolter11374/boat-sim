@@ -1,12 +1,14 @@
 /**
  * Cinematic mode (John, Nov 11): the panels fade away and the camera films the boat
  * on its own: slow orbits and dollies, low shots skimming the waves, a wide shot of
- * the sea and sky, a drone pull-back, and a sunset or night-sky time-lapse when the
- * voyage has one to show. It cuts to a new shot every 8 to 15 seconds. Any key or a
- * click ends it (M turns the sound on and off instead).
+ * the sea and sky, a drone pull-back, and, when it is sunset or a clear night right
+ * now, a shot set against the low sun or tilted up at the stars. It cuts to a new
+ * shot every 8 to 15 seconds. Any key or a click ends it (M turns the sound on and
+ * off instead).
  *
- * The page keeps running its own frame; it hands over the camera each frame through
- * update(), and lets lapseHour override the shown hour during a time-lapse.
+ * It films what is happening at the voyage's current moment and never moves the
+ * clock (John, 11 Nov: "a cinematic for what is currently going on"). The page keeps
+ * running its own frame and clock; it hands over the camera each frame through update().
  */
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -18,21 +20,18 @@ export interface CinemaHost {
   water(x: number, z: number): number;
   /** The boat's heading as scene yaw (bow along (cos yaw, 0, -sin yaw)). */
   yaw(): number;
-  /** The hour on screen, and the hours a time-lapse may show (never past what the player has sailed). */
-  hour(): number;
-  hours(): [number, number];
-  /** Sun elevation in degrees at a voyage hour, at the boat. */
-  sunEl(h: number): number;
+  /** Sun elevation now, degrees, at the boat. */
+  sunEl(): number;
   /** Direction to the sun now (scene, unit). */
   sunDir(): THREE.Vector3;
-  /** A time-lapse starts (true) or ends (false): the page pauses its own clock, then puts it back. */
-  hold(on: boolean): void;
   /** Compass bearing to land worth filming (a place like Pico), or null at sea. */
   landmark?(): number | null;
-  /** Cloud cover now, 0..1: no night-sky time-lapse under a thick overcast. */
+  /** Cloud cover now, 0..1: no night-sky shot under a thick overcast. */
   cloud?(): number;
   /** The sound toggle, for the M key. */
   toggleSound?(): void;
+  /** How much bigger than our 3 m kayak the boat is: the close shots stand back by this much. */
+  scale?(): number;
 }
 
 type ShotKind = "orbit" | "dolly" | "track" | "skim" | "wide" | "drone" | "vista" | "sunset" | "stars";
@@ -42,7 +41,6 @@ interface Shot {
   len: number; // seconds
   seed: number; // 0..1, varies the side and angle
   side: number; // -1 or 1
-  lapse?: [number, number]; // voyage hours, start and end
 }
 
 const CSS = `
@@ -68,8 +66,6 @@ const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 
 export class Cinema {
   on = false;
-  /** The voyage hour to show during a time-lapse, else null. */
-  lapseHour: number | null = null;
   /** Shot names so far, for tests and pictures. */
   readonly log: ShotKind[] = [];
   private shot: Shot | null = null;
@@ -134,7 +130,6 @@ export class Cinema {
 
   stop(): void {
     if (!this.on) return;
-    this.endLapse();
     this.on = false;
     this.shot = null;
     this.dipAt = -1;
@@ -159,30 +154,13 @@ export class Cinema {
     return this.shot?.kind ?? null;
   }
 
-  /** Where a sunset (or a dark night) is in the hours we may show, nearest the hour on screen. */
-  private findLapse(kind: "sunset" | "stars"): [number, number] | null {
-    const [lo, hi] = this.host.hours();
-    const now = this.host.hour();
-    let best: [number, number] | null = null;
-    let bestD = Infinity;
-    for (let h = Math.ceil(lo); h + 4 <= hi; h += 1) {
-      const a = this.host.sunEl(h);
-      if (kind === "sunset") {
-        const b = this.host.sunEl(h + 1);
-        if (!(a > 0 && b <= 0)) continue;
-        const set = h + a / (a - b); // the hour the sun touches the horizon
-        const w: [number, number] = [Math.max(lo, set - 1.6), Math.min(hi, set + 0.9)];
-        if (w[1] - w[0] < 1.5) continue;
-        const d = Math.abs(set - now);
-        if (d < bestD) [best, bestD] = [w, d];
-      } else {
-        if ((this.host.cloud?.() ?? 0) > 0.6) return null; // nothing to see but cloud
-        if (a > -14 || this.host.sunEl(h + 4) > -14) continue;
-        const d = Math.abs(h - now);
-        if (d < bestD) [best, bestD] = [[h, h + 4], d];
-      }
-    }
-    return best;
+  /** The sky shot that fits right now, if any: the low sun at sunset (or sunrise), or
+   * the stars on a clear, dark night. */
+  private skyNow(): "sunset" | "stars" | null {
+    const el = this.host.sunEl();
+    if (el > -4 && el < 10) return "sunset";
+    if (el < -12 && (this.host.cloud?.() ?? 0) <= 0.6) return "stars";
+    return null;
   }
 
   private pick(): Shot {
@@ -190,13 +168,10 @@ export class Cinema {
     const pool: ShotKind[] = ["orbit", "dolly", "track", "skim", "wide", "drone"];
     // Off real land, the land gets its own shots: twice as likely as the others.
     if (this.host.landmark?.() != null) pool.push("vista", "vista");
-    // A time-lapse every third cut or so, when there's one to show.
-    const lapseKinds: ("sunset" | "stars")[] = Math.random() < 0.5 ? ["sunset", "stars"] : ["stars", "sunset"];
-    if (this.cuts > 0 && this.cuts % 3 === 2 && prev !== "sunset" && prev !== "stars") {
-      for (const k of lapseKinds) {
-        const w = this.findLapse(k);
-        if (w) return { kind: k, len: 13, seed: Math.random(), side: Math.random() < 0.5 ? -1 : 1, lapse: w };
-      }
+    // Every third cut or so, the sky when there's something in it now.
+    const sky = this.skyNow();
+    if (sky && this.cuts > 0 && this.cuts % 3 === 2 && prev !== sky) {
+      return { kind: sky, len: 13, seed: Math.random(), side: Math.random() < 0.5 ? -1 : 1 };
     }
     // The first shot is always the orbit: it starts near where the viewer already was.
     const choices = this.cuts === 0 ? ["orbit" as ShotKind] : pool.filter((k) => k !== prev);
@@ -205,30 +180,19 @@ export class Cinema {
   }
 
   private next(): void {
-    this.endLapse();
     this.shot = this.pick();
     this.t = 0;
     this.skimY = null;
     this.cuts++;
     this.log.push(this.shot.kind);
     this.caption();
-    if (this.shot.lapse) {
-      this.host.hold(true);
-      this.lapseHour = this.shot.lapse[0];
-    }
   }
 
   private caption(): void {
-    const words: Partial<Record<ShotKind, string>> = { sunset: "Sunset · time-lapse", stars: "Night sky · time-lapse" };
+    const words: Partial<Record<ShotKind, string>> = { stars: "Night sky" };
     const k = this.shot?.kind;
     this.cap.textContent = (k && words[k]) ?? "";
     this.cap.classList.toggle("on", !!(k && words[k]));
-  }
-
-  private endLapse(): void {
-    if (this.lapseHour === null) return;
-    this.lapseHour = null;
-    this.host.hold(false);
   }
 
   /** Cut now (tests and the picture script). */
@@ -236,15 +200,8 @@ export class Cinema {
     if (!this.on) return;
     this.next();
     if (kind && this.shot && kind !== this.shot.kind) {
-      const lapse = kind === "sunset" || kind === "stars" ? this.findLapse(kind) : null;
-      if ((kind === "sunset" || kind === "stars") && !lapse) return;
-      this.endLapse();
-      this.shot = { ...this.shot, kind, lapse: lapse ?? undefined, len: lapse ? 13 : this.shot.len };
+      this.shot = { ...this.shot, kind };
       this.log[this.log.length - 1] = kind;
-      if (lapse) {
-        this.host.hold(true);
-        this.lapseHour = lapse[0];
-      }
       this.caption();
     }
   }
@@ -266,7 +223,6 @@ export class Cinema {
     }
     const shot = this.shot!;
     const u = Math.min(this.t / shot.len, 1);
-    if (shot.lapse) this.lapseHour = lerp(shot.lapse[0], shot.lapse[1], ease(u * 0.9 + 0.05));
     this.frame(shot, u);
     return true;
   }
@@ -284,11 +240,12 @@ export class Cinema {
       camera.position.set(tg.x + Math.cos(ang) * r, tg.y + y, tg.z + Math.sin(ang) * r);
     const beamAng = Math.atan2(pz, px);
     let fov = 40;
+    const k0 = this.host.scale?.() ?? 1;
     this.look.copy(tg);
     switch (s.kind) {
       case "orbit": {
         const a = beamAng + (s.seed - 0.5) * 2 + s.side * u * 0.85;
-        at(a, 7.5 - u * 1.2, 1.5 + Math.sin(u * Math.PI) * 0.7);
+        at(a, (7.5 - u * 1.2) * k0, (1.5 + Math.sin(u * Math.PI) * 0.7) * k0);
         fov = 38;
         break;
       }
@@ -296,28 +253,28 @@ export class Cinema {
         // In from the quarter, easing to a close-up.
         const a = beamAng + s.side * (0.5 + s.seed * 0.7);
         const k = ease(u);
-        at(a, lerp(24, 5.5, k), lerp(1.6, 0.85, k));
+        at(a, lerp(24, 5.5, k) * k0, lerp(1.6, 0.85, k) * k0);
         fov = lerp(30, 42, k);
         break;
       }
       case "track": {
         // Alongside, sliding from the stern to past the bow.
-        const along = lerp(-6, 6, ease(u));
-        camera.position.set(tg.x + px * 5 + bx * along, tg.y + 0.9, tg.z + pz * 5 + bz * along);
-        this.look.set(tg.x + bx * along * 0.3, tg.y + 0.15, tg.z + bz * along * 0.3);
+        const along = lerp(-6, 6, ease(u)) * k0;
+        camera.position.set(tg.x + px * 5 * k0 + bx * along, tg.y + 0.9 * k0, tg.z + pz * 5 * k0 + bz * along);
+        this.look.set(tg.x + bx * along * 0.3, tg.y + 0.15 * k0, tg.z + bz * along * 0.3);
         fov = 45;
         break;
       }
       case "skim": {
         // Low over the water, crossing in front: the waves fill the bottom of the frame.
         const a = beamAng + s.side * lerp(-0.6, 0.6, u) + (s.seed - 0.5) * 0.8;
-        const r = 11 + s.seed * 4;
+        const r = (11 + s.seed * 4) * k0;
         const x = tg.x + Math.cos(a) * r;
         const z = tg.z + Math.sin(a) * r;
         const want = this.host.water(x, z) + 0.5;
         this.skimY = this.skimY === null ? want : lerp(this.skimY, want, 0.12);
         camera.position.set(x, Math.max(this.skimY, want - 0.1), z);
-        this.look.set(tg.x, tg.y + 0.35, tg.z);
+        this.look.set(tg.x, tg.y + 0.35 * k0, tg.z);
         fov = 52;
         break;
       }
@@ -332,7 +289,11 @@ export class Cinema {
       case "drone": {
         // Up and away from overhead, the wake trailing behind.
         const k = ease(u);
-        camera.position.set(tg.x - bx * lerp(3, 14, k) + px * 2, tg.y + lerp(4, 26, k), tg.z - bz * lerp(3, 14, k) + pz * 2);
+        camera.position.set(
+          tg.x + (-bx * lerp(3, 14, k) + px * 2) * k0,
+          tg.y + lerp(4, 26, k) * k0,
+          tg.z + (-bz * lerp(3, 14, k) + pz * 2) * k0,
+        );
         this.look.set(tg.x + bx * 2, tg.y, tg.z + bz * 2);
         fov = 48;
         break;
@@ -361,15 +322,15 @@ export class Cinema {
         const off = s.side * 0.35;
         const cx = sx * Math.cos(off) - sz * Math.sin(off);
         const cz = sx * Math.sin(off) + sz * Math.cos(off);
-        camera.position.set(tg.x - cx * 9, tg.y + 1.0, tg.z - cz * 9);
-        this.look.set(tg.x + cx * 30, tg.y + 2.2, tg.z + cz * 30);
+        camera.position.set(tg.x - cx * 9 * k0, tg.y + 1.0 * k0, tg.z - cz * 9 * k0);
+        this.look.set(tg.x + cx * 30 * k0, tg.y + 2.2 * k0, tg.z + cz * 30 * k0);
         fov = 50;
         break;
       }
       case "stars": {
         // Low beside the boat, tilted up at the turning sky.
         const a = beamAng + s.seed * 2 + u * 0.25;
-        at(a, 6, 0.9);
+        at(a, 6 * k0, 0.9 * k0);
         this.look.set(tg.x - Math.cos(a) * 10, tg.y + 9, tg.z - Math.sin(a) * 10);
         fov = 68;
         break;
