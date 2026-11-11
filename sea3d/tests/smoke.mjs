@@ -436,6 +436,9 @@ try {
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
+  const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
+  if (picks.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
   // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
   await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
     .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));
@@ -455,6 +458,7 @@ try {
     const six = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error }));
     const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
     if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
+    if (await page.evaluate(() => !document.getElementById("sailrow").hidden)) fail("helm: sail and engine buttons show for the kayak");
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every

@@ -322,7 +322,9 @@ def test_results_card_says_how_it_ended(env):
     assert end["headline"] in ("Still at sea", "Finished") and end["words"]
 
 
-@pytest.mark.parametrize("base", ["joke_canoe", "joke_flamingo", "stock_dinghy14"])
+@pytest.mark.parametrize(
+    "base", ["joke_canoe", "joke_flamingo", "stock_dinghy14", "stock_sail_drone7"]
+)
 def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     g = Game(env, choices={"base": base}, launch_index=MAY1, max_days=0.9)
     g.order("finish", 1.0)
