@@ -31,6 +31,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
+import { WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
@@ -390,6 +391,7 @@ async function shareLink(): Promise<void> {
 
 function showOrder(): void {
   compass.set({ order });
+  $("b-wheel").hidden = !wheelOffered() || wheel.on;
   $("ordertext").textContent =
     order === "auto"
       ? "Autopilot steering, like the ghost"
@@ -868,7 +870,56 @@ function releaseKeys(): void {
   axes.heading.release(performance.now());
   axes.power.release(performance.now());
 }
-addEventListener("blur", releaseKeys);
+addEventListener("blur", () => {
+  releaseKeys();
+  wheel.release();
+});
+
+// "Take the wheel" (Rosa, Gameplay; plan reviewed by Leo): sail the boat yourself in real
+// time. The voyage clock waits while you do; for now a spell doesn't move the voyage.
+let wheelRate = 0; // the clock's speed before the spell, to carry on at
+let wheelNow: WheelFrame | null = null;
+const wheel = new WheelSession({
+  ended: (r) => {
+    wheelNow = null;
+    note(wheelSummary(r), "At the wheel", r.reached ? TONE_COLOUR.good : TONE_COLOUR.info);
+    showOrder();
+    setRate(wheelRate);
+  },
+  note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
+});
+(window as unknown as { __wheel: WheelSession }).__wheel = wheel;
+function wheelOffered(): boolean {
+  return page.ready && !page.status?.over && mode === "hands_on" && canTakeWheel(spec.key) && !cine.on;
+}
+async function takeWheel(): Promise<void> {
+  if (wheel.on || !wheelOffered()) return;
+  wheelRate = rate || lastRate;
+  setRate(0, true);
+  if (inFlight) await inFlight;
+  const s = page.status;
+  // The wind where the boat is now: the simulator's, or the track's at this hour.
+  const r = rep();
+  const hr = r ? Math.min(hour, lastHour(r)) : 0;
+  // Last resort, at the very start: the forecast's first row (lead time zero).
+  const f0 = lastForecast?.[0];
+  const wu = s?.weather?.wind_u ?? (r ? valueAt(r, r.wind_u, hr) : null) ?? f0?.wind_u ?? null;
+  const wv = s?.weather?.wind_v ?? (r ? valueAt(r, r.wind_v, hr) : null) ?? f0?.wind_v ?? null;
+  if (!s || wu == null || wv == null) {
+    note("There's no wind reading here yet: sail on a little, then take the wheel.", "At the wheel", TONE_COLOUR.warn);
+    return setRate(wheelRate);
+  }
+  releaseKeys();
+  const ok = await wheel.start({ boatKey: spec.key, heading: headingNow(), speedMs: s.boat.stw ?? 0, windU: wu, windV: wv, plan: s.sailing?.plan });
+  if (!ok) return setRate(wheelRate);
+  hideKeyHint();
+  note("You have the wheel. Left/right steer; up pulls the sail in, down lets it out; R reefs. Sail to the mark, or Esc to hand back.", "At the wheel", TONE_COLOUR.info);
+  showOrder();
+}
+$("b-wheel").addEventListener("click", (e) => {
+  (e.currentTarget as HTMLElement).blur(); // the keys go to the wheel, not back to this button
+  void takeWheel();
+});
 /** "?" (or K) brings the key list back, and hides it again. */
 function toggleKeyHint(): void {
   const k = $("keyhint");
@@ -881,6 +932,17 @@ function toggleKeyHint(): void {
 addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
   if (!page.ready || page.status?.over || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
+  // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's.
+  if (wheel.on) {
+    if (wheel.key(e, true)) e.preventDefault();
+    return;
+  }
+  // Enter takes the wheel, unless a keyboard user has a button or link focused (then Enter presses it).
+  if (e.code === "Enter" && !t?.closest?.("button:focus-visible, a:focus-visible") && wheelOffered()) {
+    e.preventDefault();
+    void takeWheel();
+    return;
+  }
   const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
@@ -902,6 +964,10 @@ addEventListener("keydown", (e) => {
   hideKeyHint();
 });
 addEventListener("keyup", (e) => {
+  if (wheel.on) {
+    if (wheel.key(e, false)) e.preventDefault();
+    return;
+  }
   const ax = keyAxis(e.code);
   if (ax) axes[ax.axis].up(ax.dir, performance.now());
   else if (e.key === "Shift") {
@@ -1643,11 +1709,13 @@ renderer.setAnimationLoop(() => {
   const wv = r ? valueAt(r, r.wind_v, h) ?? 0 : 0;
   sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv));
   sea.update(comps, t);
-  const hdg = r ? angleAt(r, r.heading, h) ?? 90 : 90;
+  // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).
+  wheelNow = wheel.on ? wheel.frame(dt) : null;
+  const hdg = wheelNow ? wheelNow.heading : r ? angleAt(r, r.heading, h) ?? 90 : 90;
   const yaw = THREE.MathUtils.degToRad(90 - hdg);
   if (smoothYaw === null) smoothYaw = yaw;
   const dyaw = Math.atan2(Math.sin(yaw - smoothYaw), Math.cos(yaw - smoothYaw));
-  const step = dyaw * Math.min(1, dt * 2.5);
+  const step = dyaw * Math.min(1, dt * (wheelNow ? 12 : 2.5));
   smoothYaw += step;
   place.yaw = smoothYaw;
   motion.pose.yaw = smoothYaw;
@@ -1655,9 +1723,9 @@ renderer.setAnimationLoop(() => {
   off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
   camera.position.copy(controls.target).add(off);
   // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
-  motion.heel = r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  motion.heel = wheelNow ? THREE.MathUtils.degToRad(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
   motion.advance(comps, t);
-  const stw = r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
+  const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
@@ -1680,7 +1748,7 @@ renderer.setAnimationLoop(() => {
     );
     model.rig?.update(dt, {
       flow: apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)),
-      plan: r ? planAt(r, h) : null,
+      plan: wheelNow ? wheelNow.plan : r ? planAt(r, h) : null,
       rudder: model.gear.shown.rudder,
     });
   }
