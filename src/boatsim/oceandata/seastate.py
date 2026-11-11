@@ -136,7 +136,7 @@ def read_grid(stem: Path) -> tuple[dict, np.ndarray]:
 
 
 def month_times(year: int, month: int, step_h: int = STEP_H) -> list[datetime]:
-    t, end = datetime(year, month, 1), datetime(year + (month == 12), month % 12 + 1, 1)  # noqa: DTZ001  naive = UTC
+    t, end = datetime(year, month, 1), datetime(year + (month == 12), month % 12 + 1, 1)
     out = []
     while t < end:
         out.append(t)
