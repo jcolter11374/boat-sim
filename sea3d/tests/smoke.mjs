@@ -389,6 +389,16 @@ try {
   if (errors.length) fail(`page errors in cinematic mode: ${errors.join("; ")}`);
   log.push(`cinematic: ${shots.join(", ")}, ${back.sound}`);
 
+  // Off Pico: real land when the land files are there (the Pages build fetches them), sea only otherwise.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&place=pico&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.land !== undefined, null, { timeout: 120000 })
+    .catch(async () => fail(`Pico didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const pico = await page.evaluate(() => ({ land: window.__replay.land, surf: window.__replay.surf, credit: /Sentinel/.test(document.getElementById("credits").textContent) }));
+  if (!pico.credit) fail("Pico: no Sentinel credit on the page");
+  if (pico.land && !(pico.surf > 1000)) fail(`Pico: land but no surf (${pico.surf})`);
+  if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
+  log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
+
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
