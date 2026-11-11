@@ -1,0 +1,33 @@
+# Peak period from mean period for the 3D sea's swell (#193): Tp / Tm01 per wave
+# system on NOAA NDBC buoy spectra, April-November. Free data, no account.
+# Run it by hand: Actions tab -> "Check Tp from Tm01 on buoys" -> Run workflow.
+name: Check Tp from Tm01 on buoys
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Buoy year"
+        default: "2020"
+  pull_request:
+    paths:
+      - ".github/workflows/check-tpfactor.yml"
+      - "src/boatsim/oceandata/tpfactor.py"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . requests
+      - name: Tp / Tm01 on NDBC spectra
+        run: python -m boatsim.oceandata.tpfactor ${{ inputs.year || '2020' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tpfactor
+          path: runs/tpfactor/
+          retention-days: 90
