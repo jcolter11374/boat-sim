@@ -24,7 +24,15 @@ def test_builds_patch_the_design_as_labelled():
     d = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-p25-thr.one-t200"].variant.design)
     assert d.propulsion["thruster_count"] == 1 and d.propulsion["max_drive_w"] == 50
     assert d.propulsion["cruise_drive_w"] == 25
-    assert Y.BUILDS["k-p25-thr.one-t200"].label == "25 W cruise, Thrusters: one-t200"
+    assert Y.BUILDS["k-p25-thr.one-t200"].label == "Our kayak, Thrusters: one-t200"
+    # The glossary's names (docs/glossary.md): "our kayak", never "the kayak as it stands".
+    assert Y.BUILDS["k-p25"].label == "Our kayak"
+    assert Y.BUILDS["k-p15"].label == "Our kayak, 15 W cruise"
+    assert Y.BUILDS["revc"].label == "Randolph's Rev C as built (our model)"
+    assert Y.BUILDS["revb-rudder.twin"].label.startswith("Randolph's Rev B (our model), ")
+    assert all(
+        "as it stands" not in b.label and "published" not in b.label for b in Y.BUILDS.values()
+    )
     one = patched_design(load_design(Y.KAYAK), Y.BUILDS["k-p25-brain.one-box"].variant.design)
     assert HazardParams.from_config(one.hazards).electronics_boxes == 1
     # The current build is the design as it stands.
