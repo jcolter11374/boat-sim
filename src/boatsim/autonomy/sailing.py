@@ -84,6 +84,14 @@ def open_water_km(
         on_land = _default_on_land()
         if on_land is None:
             return math.inf
+    # Far out at sea, the land mask's exact precheck says no land cell lies
+    # within reach of any probe below, so every probe would say "water" (#322:
+    # this probing was a fifth of a cruiser's helm hop). The reach covers the
+    # farthest probe (lookahead + clearance ahead, clearance aside) with slack.
+    clear_of = getattr(getattr(on_land, "__self__", None), "clear_of", None)
+    reach_km = (lookahead_km + 2 * LAND_CLEAR_KM + LAND_STEP_KM) * 1.1
+    if clear_of is not None and clear_of(lat, lon, reach_km * 1000.0):
+        return math.inf
     side = (heading + 90.0) % 360.0
     offsets = [heading_to_vector(side, k * LAND_CLEAR_KM * 1000.0) for k in (0, -1, 1)]
     d = 0.0

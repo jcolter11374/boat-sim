@@ -81,6 +81,7 @@ from __future__ import annotations
 
 import json
 import math
+from bisect import bisect_right
 from dataclasses import dataclass, fields, replace
 from datetime import timedelta
 from pathlib import Path
@@ -157,6 +158,15 @@ class Polar:
             name: {c: np.asarray(p[c], float) for c in self.COLS if c in p}
             for name, p in table["plans"].items()
         }
+        # Plain-list copies for speed_ms, the autopilot's and base's hot path
+        # (#322): the same numbers and arithmetic as at(), without building a
+        # whole PolarPoint per plan or calling numpy for each lookup.
+        self._tws_l = [float(x) for x in self.tws]
+        self._twa_l = [float(x) for x in self.twa]
+        self._speed_l = {
+            name: [[float(x) for x in row] for row in c["speed_kn"]] if "speed_kn" in c else None
+            for name, c in self._t.items()
+        }
 
     @classmethod
     def load(cls, path) -> Polar:
@@ -198,8 +208,34 @@ class Polar:
     def speed_ms(self, tws_ms: float, twa_deg: float, plan: str | None = None) -> float:
         """Flat-water boat speed (m/s) for the autopilot's tactician (autonomy):
         the given plan, or the fastest plan."""
+        # Bit for bit the speed at() gives (same index search, same bilinear
+        # arithmetic), shared across the plans: ten times faster (#322).
         names = [plan] if plan else self.plans
-        return max(self.at(n, tws_ms / KNOT, twa_deg).speed for n in names)
+        tws_kn = tws_ms / KNOT
+        tws, twa_g = self._tws_l, self._twa_l
+        twa = min(abs(twa_deg), 180.0)
+        if twa < twa_g[0] or tws_kn <= 0.0:
+            return 0.0
+        scale = min(tws_kn / tws[0], 1.0)
+        w = min(max(tws_kn, tws[0]), tws[-1])
+        i = min(bisect_right(tws, w) - 1, len(tws) - 2)
+        j = min(bisect_right(twa_g, twa) - 1, len(twa_g) - 2)
+        fw = (w - tws[i]) / (tws[i + 1] - tws[i])
+        fa = (twa - twa_g[j]) / (twa_g[j + 1] - twa_g[j])
+        best = None
+        for n in names:
+            a = self._speed_l[n]
+            if a is None:
+                v = 0.0
+            else:
+                r0, r1 = a[i], a[i + 1]
+                top = r0[j] + (r0[j + 1] - r0[j]) * fa
+                bot = r1[j] + (r1[j + 1] - r1[j]) * fa
+                v = top + (bot - top) * fw
+            sp = v * KNOT * scale
+            if best is None or sp > best:
+                best = sp
+        return best
 
     def beat_deg(self, tws_ms: float, plan: str | None = None) -> float:
         """Best upwind angle (deg) from the VPP, at a wind speed (m/s)."""
