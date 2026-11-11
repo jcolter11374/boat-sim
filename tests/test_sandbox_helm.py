@@ -372,6 +372,33 @@ def test_no_sail_orders_for_boats_without_sails(env):
         g.order("finish", 0.5, engine=True)
 
 
+@pytest.mark.parametrize(
+    ("base", "plans", "engine"),
+    [
+        ("stock_cruiser31", ["full", "reef1", "reef2", "storm", "down"], True),
+        ("stock_dinghy14", ["full", "down"], False),
+        ("stock_beachcat16", ["full", "main_only", "down"], False),
+    ],
+)
+def test_each_sailboat_takes_only_its_own_sail_plans(env, base, plans, engine):
+    """Ravi's check of #242 (docs/qa/helm-sail-engine-orders.md): the dinghy took
+    reef1 and did nothing, and the beach cat refused main_only. Each boat now
+    takes exactly its own polar's plans, and engine orders only if it has one."""
+    g = Game(env, {"base": base}, launch_index=MAY1, max_days=0.9)
+    st = g.status()["sailing"]
+    assert st["plans"] == plans and st["has_engine"] is engine
+    for plan in plans:
+        g.order("finish", 0.5, sails=plan)
+    for plan in {"full", "reef1", "reef2", "storm", "main_only", "down"} - set(plans):
+        with pytest.raises(ValueError):
+            g.order("finish", 0.5, sails=plan)
+    if engine:
+        g.order("finish", 0.5, engine=False)
+    else:
+        with pytest.raises(ValueError, match="no engine"):
+            g.order("finish", 0.5, engine=True)
+
+
 def test_base_station_sends_sail_orders_with_the_route(env):
     g = Game(env, CRUISER, launch_index=MAY1, max_days=2.5, mode="base")
     sent = g.order("finish", 0.0, sails="storm", engine=False)

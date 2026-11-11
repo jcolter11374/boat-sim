@@ -35,6 +35,7 @@ Owner: Sam.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -43,9 +44,19 @@ from boatsim.autonomy.safemode import SafeModeAutopilot
 from boatsim.autonomy.sailing import Tactician
 from boatsim.geo import bearing_deg
 from boatsim.types import Command, Mission, Sensors
+from boatsim.vessel.keelboat import DOWN
 
 HEADING_MODES = ("finish", "route")
-SAIL_PLANS = ("full", "reef1", "reef2", "storm", "down")  # vessel/keelboat.py's plan names
+
+
+def sail_orders_for(vessel) -> tuple[tuple[str, ...], bool]:
+    """What a player may order on this boat: its own sail plans (from its polar,
+    biggest first, plus "down" for bare poles) and whether it has an engine.
+    A boat with no polar (the kayak, Rev B/C) has neither."""
+    polar = getattr(vessel, "polar", None)
+    if polar is None:
+        return (), False
+    return (*polar.plans, DOWN), float(getattr(vessel, "engine_kn", 0.0)) > 0.0
 
 
 @dataclass
@@ -72,8 +83,15 @@ class HelmAutopilot:
         tactician: Tactician | None = None,
         sails: str | None = None,
         engine: bool | None = None,
+        sail_plans: Sequence[str] = (),
+        has_engine: bool = False,
     ):
+        """sail_plans and has_engine: what this boat can be ordered to do
+        (sail_orders_for(vessel)); the defaults, none and no, suit a boat
+        without sails."""
         self.finish = finish
+        self.sail_plans = tuple(sail_plans)
+        self.has_engine = has_engine
         self.safe = safe
         self.tactician = tactician
         self.guidance = WaypointAutopilot()
@@ -95,10 +113,15 @@ class HelmAutopilot:
         sails: str | None = None,
         engine: bool | None = None,
     ) -> None:
-        if sails is not None and sails not in SAIL_PLANS:
-            raise ValueError(f"sails must be one of {SAIL_PLANS} (or None: the boat decides)")
-        if engine is not None and not isinstance(engine, bool):
-            raise ValueError("engine must be True, False or None (the boat decides)")
+        if sails is not None and sails not in self.sail_plans:
+            if not self.sail_plans:
+                raise ValueError("this boat has no sails to order")
+            raise ValueError(f"sails must be one of {self.sail_plans} (or None: the boat decides)")
+        if engine is not None:
+            if not isinstance(engine, bool):
+                raise ValueError("engine must be True, False or None (the boat decides)")
+            if not self.has_engine:
+                raise ValueError("this boat has no engine to order")
         if isinstance(heading, str):
             if heading not in HEADING_MODES:
                 raise ValueError(f"heading must be degrees or one of {HEADING_MODES}")
