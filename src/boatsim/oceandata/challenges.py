@@ -146,10 +146,11 @@ CHALLENGES: list[Challenge] = [
     Challenge(
         "bay-mouth",
         0,
-        "Dead at the Bay mouth (bonus)",
+        "Dead at the Bay mouth",
         date(2023, 5, 15),
-        "The motors die at the drop. Can the currents and wind carry a drifting kayak "
-        "clear of the coast? In our tests it washed into Hampton Roads in 9.6 days.",
+        "A late-spring drop where wind and current push hard toward the coast. In our "
+        "drift test (#90) a kayak with dead motors washed into Hampton Roads in 9.6 days. "
+        "Can you keep yours clear?",
     ),
 ]
 

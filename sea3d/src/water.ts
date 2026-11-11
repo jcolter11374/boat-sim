@@ -15,11 +15,14 @@
 import * as THREE from "three";
 import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, type WaveComponent } from "./waves";
+import { PLACE } from "./land/place";
 
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
-export const HORIZON = 3000; // m, half-width of the whole sea out to the horizon
+// m, half-width of the whole sea out to the horizon; off real land (?place=) it
+// reaches the islands tens of km away.
+export const HORIZON = PLACE ? 60000 : 3000;
 const GRID: Record<Quality, { n: number; centre: number }> = {
   low: { n: 110, centre: 0.45 }, // segments per side, grid spacing at the centre (m)
   high: { n: 220, centre: 0.22 },

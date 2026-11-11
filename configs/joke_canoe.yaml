@@ -1,0 +1,97 @@
+# JOKE FLEET: "open canoe, one paddler". A generic 16 ft open canoe, our own numbers.
+# Honest physics for an absurd crossing (stock-vessels design note, joke-fleet sidebar).
+# One person paddles 8 hours a day; the open top fills when waves crest over its edge
+# (vessel/oddboats.py). Anything not from a reference below is a GUESS.
+# References: human sustained paddling power ~75-100 W for hours (sports-science
+# typical values); Rayleigh crest heights for the swamping odds (vessel/oddboats.py).
+name: open canoe
+
+stock:
+  label: open canoe, one paddler
+  kind: open canoe, one person paddling, nobody else
+  spec_card:
+    length_overall_m: 4.9    # GUESS: a common 16 ft touring canoe
+    beam_m: 0.9              # GUESS
+    hull_kg: 30              # GUESS
+    load_kg: 230             # GUESS: paddler 80 kg, water and food 150 kg
+  odd:
+    crew_w: 75               # GUESS: a fit person, held for hours
+    crew_hours: 8            # GUESS
+    crew_start_hour: 7
+    awake_hours: 16
+    fatigue_per_day: 0.01    # GUESS: about 1 % weaker a day on rations
+    fatigue_floor: 0.6       # GUESS
+    freeboard_m: 0.30        # GUESS: loaded, gunwale to water
+    ship_l: 5                # GUESS: litres a crest slopping over the edge throws in
+    bail_l_per_h: 60         # GUESS: one person with a bailer, between strokes
+    swamp_l: 300             # GUESS: about 0.3 t of water and it's awash
+    loss_words:
+      capsized and stayed upside down: rolled over by a breaking wave; an open canoe fills and stays down
+      early-life defect or unknown failure: something gave out (a split seam, a lost paddle)
+
+hull:
+  model: 16 ft open canoe (joke fleet)
+  length_m: 4.9
+  beam_m: 0.9
+  mass_kg: 260
+  displacement_ref_kg: 260
+  waterline_length_m: 4.7
+  wetted_area_m2: 3.4        # GUESS
+  form_factor: 1.2
+  wave_making_frac: 0.15
+  waterplane_area_m2: 2.6    # GUESS
+  air_side_area_m2: 1.0      # GUESS: paddler and gear, side-on
+  air_front_area_m2: 0.5     # GUESS
+  air_cd_side: 0.9
+  air_cd_front: 0.8
+  lateral_cd_area_m2: 0.8    # GUESS
+  keel_lift_slope_area_m2: 0.4  # GUESS: no keel, the hull alone
+  fouling_onset_days: 10
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+power:
+  # No solar. The "battery" is the paddler's food: crew_w x crew_hours a day for
+  # 40 days of food and water (GUESS), as work at the paddle.
+  solar_wp: 0
+  panels_w: {}
+  battery_wh: 24000
+  charge_eff: 1.0
+  discharge_eff: 1.0
+
+propulsion:
+  thrusters: one paddle
+  thruster_count: 1
+  thruster_diameter_m: 0.45  # GUESS: water swept by the blade, as a disc
+  thruster_efficiency: 0.5   # GUESS: paddle stroke losses
+  cruise_drive_w: 75
+  max_drive_w: 75
+  min_steer_w: 1.0
+
+electronics:
+  autopilot: the paddler, with a handheld GPS
+  hotel_load_wh_per_day: 0
+  nav_light_w: 0
+  nav_light_hours_per_day: 0
+
+comms:
+  one_way: personal satellite tracker (GUESS fit)
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 4.9
+  hull_beam_m: 0.9
+  critical_wave_frac_of_length: 0.25  # GUESS: no ballast; a 1.2 m breaker rolls it
+  critical_wave_frac_of_beam: 1.0
+  p_capsize_stays_over: 1.0  # an open canoe that rolls fills; nobody gets it back up out here
+  damage_ref_hs_m: 3.0
+  p_part: {}
+  rate_set: planning
+  failures_enabled: false    # a paddler steers; no electronics to fail

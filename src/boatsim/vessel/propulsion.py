@@ -52,6 +52,8 @@ class ThrusterParams:
         kw = {}
         if "thruster_count" in prop:
             kw["count"] = int(prop["thruster_count"])
+        if "thruster_diameter_m" in prop:  # e.g. a paddle or a paddle wheel (odd boats)
+            kw["diameter_m"] = float(prop["thruster_diameter_m"])
         if "thruster_efficiency" in prop:
             kw["efficiency"] = float(prop["thruster_efficiency"])
         if "max_drive_w" in prop:

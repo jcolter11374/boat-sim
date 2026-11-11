@@ -23,6 +23,7 @@ import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, posit
 import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
+import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
@@ -107,6 +108,18 @@ let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
 const shared = params.get("g");
+// Weather challenges (challenge-data release, copied to public/challenges/).
+const challengesBase = new URL(params.get("challenges") ?? "./challenges/", location.href).href;
+let challenges: Challenge[] = [];
+const challengesReady = loadChallenges(challengesBase).then((list) => {
+  challenges = list;
+  showChallenges();
+});
+/** The chosen challenge, if any (a shared link names it with ?c=). */
+function chosenChallenge(): Challenge | undefined {
+  const id = shared ? params.get("c") : $<HTMLSelectElement>("challenge").value;
+  return challenges.find((c) => c.id === id);
+}
 let power = 0.25; // the autopilot cruises at 25 W of its 100
 let maxW = 100; // full drive power, W (the simulator says, once there is an order)
 let lastForecast: Awaited<ReturnType<HelmGame["forecast"]>> | null = null;
@@ -124,6 +137,8 @@ const page = {
   /** Base mode orders sent (accepted or not), and the last share link (for tests). */
   orders: [] as OrderResult[],
   share: "",
+  /** The challenge being sailed, if any (for tests and share links). */
+  challenge: "",
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -210,6 +225,7 @@ async function shareLink(): Promise<void> {
     const url = new URL(location.href);
     url.search = "";
     url.searchParams.set("g", code);
+    if (page.challenge) url.searchParams.set("c", page.challenge); // so the link opens the right weather
     page.share = url.href;
     let copied = false;
     try {
@@ -257,24 +273,47 @@ function bearing(a: [number, number], b: [number, number]): number {
 
 const compassWord = (deg: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 
+/** Base mode (#214): the page shows what base knows, not the true boat, until the end. */
+const hidden = () => page.status?.show_true_position === false && !page.card;
+
+function kmTo(a: [number, number], b: [number, number]): number {
+  const r = Math.PI / 180;
+  const h = Math.sin(((b[0] - a[0]) * r) / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(((b[1] - a[1]) * r) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
 function showStatus(): void {
   const s = page.status;
   if (!s) return;
   const b = s.boat;
-  const finish = game.boat?.course.target ?? [39.5, -13.5];
-  const fb = bearing([b.lat, b.lon], finish as [number, number]);
+  const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
+  const est = hidden() ? s.base?.estimate : undefined;
+  const last = s.base?.last_report;
+  // Where the page believes the boat is: the truth, or base's estimate.
+  const here: [number, number] = est ? [est.lat, est.lon] : [b.lat, b.lon];
+  const fb = bearing(here, finish);
   $("day").textContent = `Day ${s.day.toFixed(1)}`;
   $("when").textContent = new Date(utc(b.t)).toUTCString().slice(5, 22) + " UTC";
-  $("local").textContent = localTime(utc(b.t), b.lat, b.lon);
-  $("tofinish").textContent = `${Math.round(b.km_to_finish).toLocaleString()} km to the finish`;
-  const lead = s.lead_km;
-  $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${Math.round(lead)} km ahead of the ghost` : `${Math.round(-lead)} km behind the ghost`;
+  $("local").textContent = localTime(utc(b.t), here[0], here[1]);
+  let toGo = b.km_to_finish;
+  let lead = s.lead_km;
+  if (est) {
+    const radius = (game.boat?.course.target_radius_m ?? 25000) / 1000;
+    toGo = Math.max(kmTo(here, finish) - radius, 0);
+    lead = s.ghost.km_to_finish - toGo;
+  }
+  $("tofinish").textContent = est
+    ? `About ${Math.round(toGo).toLocaleString()} km to go (base's guess, ${Math.round(est.age_h)} h old)`
+    : `${Math.round(toGo).toLocaleString()} km to the finish`;
+  const about = est ? "About " : "";
+  $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
   $("lead").className = lead >= 0 ? "good" : "bad";
-  const soc = Math.round(b.soc * 100);
-  $("battext").textContent = `Battery ${soc}%`;
+  const socNow = est ? last?.soc ?? null : b.soc;
+  const soc = socNow == null ? 0 : Math.round(socNow * 100);
+  $("battext").textContent = socNow == null ? "Battery: no report yet" : est ? `Battery ${soc}% at last report` : `Battery ${soc}%`;
   $("batbar").style.width = `${soc}%`;
   $("batbar").style.background = soc < 15 ? "var(--bad)" : soc < 35 ? "var(--warn)" : "var(--good)";
-  $("speed").textContent = `${(b.stw * KN).toFixed(1)} kn through the water`;
+  $("speed").textContent = est ? "speed unknown" : `${(b.stw * KN).toFixed(1)} kn through the water`;
   const w = s.weather;
   let windTo: number | null = null;
   let kn = 0;
@@ -285,7 +324,7 @@ function showStatus(): void {
     const cur = Math.hypot(w.current_u, w.current_v) * KN;
     $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
   }
-  compass.set({ heading: b.heading, finish: fb, windTo, windKn: kn });
+  compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
   if (s.mode === "base" && s.base) {
     const last = dayOf(s.base.last_report.t);
     const w = s.base.waiting;
@@ -347,7 +386,7 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
       const e = game.boat!.events.filter(isNotable).at(-1);
       note(e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, TONE_COLOUR.warn);
     } else if (!(kind !== "event" && stopped === "time"))
-      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" ? TONE_COLOUR.warn : TONE_COLOUR.info);
+      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
     if (page.status?.over) await finish();
   } catch (e) {
@@ -416,12 +455,38 @@ async function finish(): Promise<void> {
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
-  bits.push(`${c.orders.length} orders given. Launch ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
+  const ch = challenges.find((x) => x.id === page.challenge);
+  bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
 }
 
 // ---------- start ----------
+/** Fill the challenge picker once challenges.json has loaded (hidden without it). */
+function showChallenges(): void {
+  if (!challenges.length) return;
+  const sel = $<HTMLSelectElement>("challenge");
+  for (const c of challenges) {
+    const o = document.createElement("option");
+    o.value = c.id;
+    o.textContent = `${c.n ? `${c.n}.` : "Bonus:"} ${c.title} (${startLabel(c)})`;
+    sel.append(o);
+  }
+  $("chpick").hidden = !!shared;
+  showChallenge();
+}
+
+/** The chosen challenge's story replaces the launch day. */
+function showChallenge(): void {
+  const c = chosenChallenge();
+  $<HTMLSelectElement>("launch").disabled = !!c || !!shared;
+  $("chstory").hidden = !c;
+  $("chnote").hidden = !c?.weather_note;
+  if (!c) return;
+  $("chstory").textContent = `${c.story} The drop is at noon UTC on ${startLabel(c)}.`;
+  // Storm boost (#117) is ignored for now: storms sail on plain ERA5, so say so.
+  $("chnote").textContent = c.weather_note;
+}
 /** True when the page was published with the simulator files (as the Boatyard checks). */
 async function sandboxThere(): Promise<boolean> {
   try {
@@ -441,17 +506,25 @@ async function begin(): Promise<void> {
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
     return;
   }
+  await challengesReady;
+  const ch = chosenChallenge();
+  if (shared && params.get("c") && !ch) {
+    page.error = "no challenge files";
+    $("startmsg").textContent = "That link is for a weather challenge whose weather isn't on this copy of the site. Try the live site.";
+    return;
+  }
+  page.challenge = ch?.id ?? "";
   $("start").hidden = true;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
   try {
     if (shared) {
-      const v = await game.load(shared);
+      const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
     } else {
-      page.status = await game.start(launch, safe, breakdowns, mode);
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) });
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
@@ -481,7 +554,11 @@ async function begin(): Promise<void> {
     if (page.status?.over) await finish();
   } catch (e) {
     const err = String(e);
-    if (/NO_HELM/.test(err)) {
+    if (/NO_CHALLENGES/.test(err)) {
+      page.error = "no challenges in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site doesn't know the weather challenges yet; it's being updated. Pick a 2020 launch for now.";
+    } else if (/NO_HELM/.test(err)) {
       page.error = "no helm in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site doesn't have the helm game yet; it's being updated. Try again later.";
@@ -523,6 +600,7 @@ if (shared) {
   $("go").textContent = "Carry on from where they left it";
 }
 $("again").addEventListener("click", () => location.reload());
+$<HTMLSelectElement>("challenge").addEventListener("change", () => showChallenge());
 for (const w of ["boat", "ghost"] as const)
   $(`w-${w}`).addEventListener("click", () => {
     watch = w;
@@ -545,6 +623,37 @@ const landImg = new Image();
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
 })().catch((e) => console.warn("chart:", e));
+
+/**
+ * Base mode: the chart's own boat is what base knows. The reports that reached it
+ * (a track) and a faint dashed leg out to its estimate of where the boat is now.
+ */
+function knownLanes(): { rep: Replay; colours: { main: string; beacon: string; glow: string } }[] | null {
+  const st = page.status;
+  const r = game.boat;
+  const reps = st?.base?.reports;
+  if (!r || !st || !reps?.length) return null;
+  const t0 = utc(r.start);
+  const lane = (pts: { t: string; lat: number; lon: number }[]): Replay => ({
+    ...r,
+    h: pts.map((p) => (utc(p.t) - t0) / 3600e3),
+    lat: pts.map((p) => p.lat),
+    lon: pts.map((p) => p.lon),
+    iridium_ok: undefined,
+    beacon_ok: undefined,
+    events: [],
+  });
+  const out = [{ rep: lane(reps), colours: TRACK.kayak }];
+  const est = st.base?.estimate;
+  if (est && est.age_h > 0.5) {
+    const a = reps[reps.length - 1];
+    out.push({
+      rep: lane([a, { t: new Date(utc(a.t) + est.age_h * 3600e3).toISOString(), lat: est.lat, lon: est.lon }]),
+      colours: { main: "rgba(255,170,100,0.45)", beacon: "rgba(255,170,100,0.45)", glow: "rgba(255,170,100,0.2)" },
+    });
+  }
+  return out;
+}
 
 // ---------- cinematic mode and sound ----------
 let heldHour: number | null = null;
@@ -667,8 +776,11 @@ renderer.setAnimationLoop(() => {
   // The other boat: a tag on the horizon in its direction, with the distance.
   const other = rep(watch === "boat" ? "ghost" : "boat");
   if (r && other && page.ready) {
-    const me = positionAt(r, h);
-    const it = positionAt(other, Math.min(h, lastHour(other)));
+    // Base mode: our boat is where base guesses it is, whichever end of the tag it's on.
+    const est = hidden() ? page.status?.base?.estimate : undefined;
+    const guess = (p: [number, number]): [number, number] => (est ? [est.lat, est.lon] : p);
+    const me = watch === "boat" ? guess(positionAt(r, h)) : positionAt(r, h);
+    const it = watch === "ghost" ? guess(positionAt(other, Math.min(h, lastHour(other)))) : positionAt(other, Math.min(h, lastHour(other)));
     const km = Math.hypot((it[0] - me[0]) * 111, (it[1] - me[1]) * 111 * Math.cos((me[0] * Math.PI) / 180));
     const b = bearing(me, it);
     const a = THREE.MathUtils.degToRad(b);
@@ -684,12 +796,15 @@ renderer.setAnimationLoop(() => {
   atmos.render();
   if (chart && game.boat && game.ghost) {
     if (chartDirty) {
+      const known = hidden() ? knownLanes() : null;
       chart.setLanes(
-        [
-          { rep: game.boat, colours: TRACK.kayak },
-          { rep: game.ghost, colours: GHOST },
-        ],
-        watch === "boat" ? 0 : 1,
+        known
+          ? [...known, { rep: game.ghost, colours: GHOST }]
+          : [
+              { rep: game.boat, colours: TRACK.kayak },
+              { rep: game.ghost, colours: GHOST },
+            ],
+        watch === "boat" ? 0 : known ? known.length : 1,
       );
       chartDirty = false;
     }

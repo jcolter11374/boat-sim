@@ -86,7 +86,8 @@ def test_stop_conditions(env):
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order(270, 0.0)  # drifting, motors off: the autopilot pulls ahead
     out = g.run(land_within_km=None, breakdown=False)
-    assert out["stopped"] == "ghost_passed" and out["status"]["lead_km"] < 0
+    assert out["stopped"] == "ghost_passed" and out["status"]["lead_km"] < -1.0
+    assert g.mine.state.t >= g.start + timedelta(hours=1)
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order("finish", 1.0)
     out = g.run(soc_below=0.99, ghost_passes=False, land_within_km=None)
@@ -242,6 +243,31 @@ def test_a_shared_early_loss_says_so_plainly(env):
     )
 
 
+def test_a_weather_challenge_sets_the_drop_and_seed_and_survives_a_share_link():
+    from boatsim.oceandata.challenges import by_id
+
+    era5, glorys, ships = _fake_sources()
+    buf = io.BytesIO()
+    F.cut(2020, buf, era5, glorys, ships, log=lambda *_: None, first=(6, 14), last=(6, 17))
+    june = R.open_bundle(buf.getvalue())
+    g = Game(june, challenge="gentle-june", max_days=1.0)
+    assert g.start == datetime(2020, 6, 15, 12) and g.seed == by_id("gentle-june").seed
+    g.order("finish", 0.5)
+    g.run(hours=6, ghost_passes=False, land_within_km=None, breakdown=False)
+    h = Game.load(june, g.save())
+    assert h.challenge == "gentle-june" and h.mine.state.t == g.mine.state.t
+    assert g.result()["challenge"] == "gentle-june"
+
+
+def test_a_challenge_needs_its_own_weather(env):
+    with pytest.raises(ValueError, match="own weather"):
+        Game(env, challenge="sandys-shadow")  # the May 2020 test bundle
+    with pytest.raises(ValueError, match="no challenge"):
+        Game(env, challenge="atlantis")
+    with pytest.raises(ValueError, match="one of"):
+        Game(env, launch_index=MAY1, challenge="gentle-june")
+
+
 def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
     g = Game(env, launch_index=MAY1, mode="base", max_days=2.5)
     assert Game(env, launch_index=MAY1, max_days=0.5).status()["show_true_position"]
@@ -261,3 +287,29 @@ def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
     stale = distance_m(s.lat, s.lon, b["last_report"]["lat"], b["last_report"]["lon"])
     guess = distance_m(s.lat, s.lon, est["lat"], est["lon"])
     assert guess < stale
+
+
+def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
+    """Ravi, 1 May 2020: 'finish' at 25% stopped on a 2 m lead change 20 minutes in."""
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.order("finish", 0.25)
+    out = g.run(land_within_km=None, breakdown=False)
+    assert out["stopped"] == "passed_ghost" and out["status"]["lead_km"] > 1.0
+    assert g.mine.state.t >= g.start + timedelta(hours=1)
+
+    # Hysteresis: a lead wobbling inside +-1 km never stops the clock again.
+    leads = iter([1.5, 0.2, -0.9, 0.4, -0.99, -1.2, 0.5, 0.9, 1.1])
+    g.leader = None
+    g.lead_km = lambda: next(leads)
+    seen = [g._update_leader() for _ in range(9)]
+    assert seen == [
+        "passed_ghost",
+        None,
+        None,
+        None,
+        None,
+        "ghost_passed",
+        None,
+        None,
+        "passed_ghost",
+    ]
