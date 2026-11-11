@@ -66,10 +66,22 @@ def test_wind_peaks_at_rmax_on_the_right_and_turns_anticlockwise(tracks):
     assert east.wind_v > 0 and west.wind_v < 0  # anticlockwise
     assert east.wind_u < 0  # spiralling in toward the eye
     inner = SB.vortex(fx, fx.lat, fx.lon + dlon / 4)
-    outer = SB.vortex(fx, fx.lat, fx.lon + 2.5 * dlon)
+    outer = SB.vortex(fx, fx.lat, fx.lon + 1.5 * dlon)
     assert math.hypot(inner.wind_u, inner.wind_v) < math.hypot(east.wind_u, east.wind_v)
     assert outer.weight == pytest.approx(0.5)
-    assert SB.vortex(fx, fx.lat, fx.lon + 3.1 * dlon) is None
+    assert SB.vortex(fx, fx.lat, fx.lon + 2.1 * dlon) is None
+    # Rankine: (Rmax / r)^0.6 outside, about 0.78 of the peak at 1.5 Rmax (before motion).
+    vs = v10 - SB.MOTION_SHARE * math.hypot(fx.cu, fx.cv)
+    north = SB.vortex(fx, fx.lat + 1.5 * fx.rmax_km / 111.0, fx.lon)  # wind blows west there
+    assert -north.wind_u == pytest.approx(vs * 1.5**-0.6 * math.cos(math.radians(20)), rel=0.01)
+
+
+def test_holland_profile_is_still_there(monkeypatch, tracks):
+    monkeypatch.setattr(SB, "PROFILE", "holland")
+    fx = SB.storm_at(tracks.storms[0], (T - SB._EPOCH).total_seconds())
+    dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
+    east = SB.vortex(fx, fx.lat, fx.lon + dlon)
+    assert math.hypot(east.wind_u, east.wind_v) == pytest.approx(0.93 * fx.vmax, rel=0.01)
 
 
 def test_young_waves(monkeypatch):
@@ -85,13 +97,20 @@ def test_boosted_env_is_era5_far_away_and_never_weaker(tracks):
     env = SB.StormBoost(ConstantEnvironment(CALM), tracks)
     assert env.sample(T, 40.0, -40.0) is CALM  # far from any storm: untouched
     assert env.sample(datetime(2020, 6, 1), 30.5, -60.0) is CALM  # no storm then
-    near = env.sample(T, 30.5, -59.7)
-    assert math.hypot(near.wind_u, near.wind_v) > 30 and near.hs > 8 and near.tp > 10
+    near = env.sample(T, 30.5, -59.8)
+    assert math.hypot(near.wind_u, near.wind_v) > 30
+    assert near.hs == CALM.hs and near.tp == CALM.tp  # waves are off by default
     assert near.ghi == CALM.ghi and near.air_temp == CALM.air_temp  # only wind and waves
     gale = EnvState(wind_u=60.0, hs=20.0, tp=18.0, wave_dir=10.0)
-    strong = SB.StormBoost(ConstantEnvironment(gale), tracks).sample(T, 30.5, -59.7)
+    strong = SB.StormBoost(ConstantEnvironment(gale), tracks).sample(T, 30.5, -59.8)
     assert strong.wind_u == 60.0 and strong.hs == 20.0 and strong.wave_dir == 10.0
     assert env.state is CALM  # other attributes are the wrapped environment's
+
+
+def test_waves_when_switched_on(monkeypatch, tracks):
+    monkeypatch.setattr(SB, "BOOST_WAVES", True)
+    near = SB.StormBoost(ConstantEnvironment(CALM), tracks).sample(T, 30.5, -59.8)
+    assert near.hs > 8 and near.tp > 10
 
 
 def test_off_by_default_and_flag_wires_it(monkeypatch, tracks):
