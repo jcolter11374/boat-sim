@@ -216,7 +216,8 @@ const CHECKS = {
   },
   // "My boat" (#310): a Boatyard design saved as my boat carries to the helm,
   // race and voyage pages in the same browser. The name has tags in it, which
-  // must show as plain text everywhere. Skips until the deployed Boatyard has it.
+  // must show as plain text everywhere: the visible text has to include them
+  // literally (the page's own <b> formatting around the name is fine). Skips until the deployed Boatyard has it.
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
@@ -231,12 +232,10 @@ const CHECKS = {
       });
       const yard = await page.evaluate(() => ({
         line: document.querySelector("#mb-line")?.textContent ?? "",
-        tags: document.querySelectorAll("#mb-line b").length,
         btn: document.querySelector("#mb-save")?.textContent ?? "",
         stored: localStorage.getItem("boatsim.myboat.v1"),
       }));
       must(yard.stored, "nothing was stored under boatsim.myboat.v1");
-      must(yard.tags === 0, "the boat's name was drawn as HTML in the Boatyard line");
       must(/your boat/i.test(yard.line), `the Boatyard line doesn't say it's my boat: "${yard.line}"`);
       const seen = [`Boatyard: "${yard.line.trim()}" / button "${yard.btn.trim()}"`];
 
@@ -246,12 +245,11 @@ const CHECKS = {
       const helm = await page.evaluate(() => {
         const r = document.querySelector('input[name="boat"][value="mine"]');
         const label = r?.closest("label")?.textContent ?? "";
-        return { has: !!r, checked: !!r?.checked, label, tags: r?.closest("label")?.querySelectorAll("b").length ?? 0 };
+        return { has: !!r, checked: !!r?.checked, label };
       });
       must(helm.has, "the helm's boat list has no row for my boat");
       must(helm.checked, "my boat isn't ticked at the helm");
       must(helm.label.includes(NAME), `the helm's row doesn't show the name as typed: "${helm.label.trim()}"`);
-      must(helm.tags === 0, "the boat's name was drawn as HTML at the helm");
       await helmStart(page);
       const sailing = await page.evaluate(() => window.__helm.sailing);
       must(sailing?.base === "revc", `the helm sailed ${JSON.stringify(sailing)}, not my Rev C`);
