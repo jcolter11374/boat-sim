@@ -21,6 +21,7 @@ Owner: Sam.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from boatsim.autonomy.guidance import WaypointAutopilot
@@ -29,6 +30,15 @@ from boatsim.geo import bearing_deg
 from boatsim.types import Command, Mission, Sensors
 
 HEADING_MODES = ("finish", "route")
+
+
+@dataclass
+class OrderMission(Mission):
+    """A route from base that also sets the motor power ("Real base station"
+    mode). On the real boat this is the normal route uplink plus one byte of
+    power; the boat follows the waypoints and runs the motors at `power`."""
+
+    power: float = 0.0
 
 
 class HelmAutopilot:
@@ -52,6 +62,7 @@ class HelmAutopilot:
         self.power = 0.0
         self.set_order(heading, power)
         self.last: Command | None = None
+        self._mission_seen: Mission | None = None
 
     def set_order(self, heading: float | str, power: float) -> None:
         if isinstance(heading, str):
@@ -67,6 +78,11 @@ class HelmAutopilot:
         self._rules.on_message_received(t)
 
     def update(self, sensors: Sensors, mission: Mission, t: datetime) -> Command:
+        if mission is not self._mission_seen:
+            # An order delivered by satellite: follow its route at its power.
+            self._mission_seen = mission
+            if isinstance(mission, OrderMission):
+                self.set_order("route", mission.power)
         # Keep the waypoint follower's crab estimate current even when it isn't
         # steering, so switching to "route" mid-voyage starts from a good guess.
         self.guidance.hold_crab = self.last is not None and self.last.thrust_fraction <= 0.0
