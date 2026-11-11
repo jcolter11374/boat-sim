@@ -44,6 +44,7 @@ from pathlib import Path
 import pandas as pd
 
 from boatsim.geo import distance_m
+from boatsim.mc.stats import wilson
 from boatsim.runner.parallel import StandardVoyage, run_many
 from boatsim.types import EventKind
 
@@ -290,16 +291,6 @@ def run_year(
 
 
 # --- Odds by month ----------------------------------------------------------
-
-
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float, float]:
-    if n == 0:
-        return float("nan"), float("nan"), float("nan")
-    p = k / n
-    denom = 1 + z * z / n
-    centre = (p + z * z / (2 * n)) / denom
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return p, max(0.0, centre - half), min(1.0, centre + half)
 
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

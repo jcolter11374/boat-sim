@@ -55,6 +55,7 @@ from boatsim.mc.months import (
     swept_odds,
     wilson,
 )
+from boatsim.mc.stats import sign_test
 from boatsim.runner.simulate import DROP_POINT
 
 
@@ -403,17 +404,6 @@ def run_year(
 
 
 # --- Report -----------------------------------------------------------------
-
-
-def sign_test(gained: int, lost: int) -> float:
-    """Two-sided exact sign test: chance of a split at least this lopsided
-    among the flipped voyages if the change made no difference."""
-    n = gained + lost
-    if n == 0:
-        return 1.0
-    k = min(gained, lost)
-    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2**n
-    return min(1.0, 2 * tail)
 
 
 def compare(df: pd.DataFrame) -> pd.DataFrame:
