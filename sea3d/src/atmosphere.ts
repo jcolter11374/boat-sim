@@ -93,8 +93,9 @@ function deepenSky(m: THREE.ShaderMaterial): void {
   m.uniforms.uWarm = { value: 0 };
   m.uniforms.uTwilight = { value: 0 };
   m.uniforms.uNight = { value: 0 };
+  m.uniforms.uMoonSky = { value: 1 };
   m.fragmentShader = m.fragmentShader
-    .replace("void main() {", "uniform float uClear;\nuniform float uWarm;\nuniform float uTwilight;\nuniform float uNight;\nvoid main() {")
+    .replace("void main() {", "uniform float uClear;\nuniform float uWarm;\nuniform float uTwilight;\nuniform float uNight;\nuniform float uMoonSky;\nvoid main() {")
     .replace(
       "gl_FragColor = vec4( retColor, 1.0 );",
       /* glsl */ `
@@ -128,7 +129,8 @@ function deepenSky(m: THREE.ShaderMaterial): void {
         // Full night: the stock model leaves a muddy brown glow; a clear night at sea
         // is a deep navy, a shade lighter down by the horizon.
         float nl = dot(retColor, vec3(0.2126, 0.7152, 0.0722));
-        vec3 navy = vec3(0.012, 0.02, 0.045) * (1.0 + 1.2 * (1.0 - smoothstep(0.0, 0.25, hgt))) + nl * vec3(0.25, 0.35, 0.6);
+        // Moonlight lifts it; with no moon it's close to black apart from the stars.
+        vec3 navy = vec3(0.012, 0.02, 0.045) * (1.0 + 1.2 * (1.0 - smoothstep(0.0, 0.25, hgt))) * uMoonSky + nl * vec3(0.25, 0.35, 0.6);
         retColor = mix(retColor, navy, uNight);
       }
       gl_FragColor = vec4( retColor, 1.0 );`,
@@ -150,6 +152,8 @@ export class Atmosphere {
   readonly moonDir = new THREE.Vector3();
   moonEl = 35;
   moonLit = 0.6;
+  /** Moonlight now, 0 (new moon or moon down) .. 1 (full moon up, clear). */
+  moonlight = 0;
   moonPhaseName = "";
   /** Bright stars by name, as unit vectors in the scene (for labels). */
   readonly starDirs = new Map<string, THREE.Vector3>();
@@ -305,20 +309,27 @@ export class Atmosphere {
     this.sun.intensity = 2.4 * this.sunLight;
     this.sun.position.copy(this.sunDir).multiplyScalar(100);
     const moonUp = smooth(this.moonEl, -1, 4);
-    this.moon.intensity = 0.9 * night * (1 - 0.8 * storm) * moonUp * (0.25 + 0.75 * this.moonLit);
-    this.hemi.intensity = 0.12 + 0.38 * day;
+    // How much the moon lights the night: a half moon gives about a tenth of a full
+    // moon's light (it falls off much faster than the lit fraction), a new moon none.
+    const moonlight = moonUp * Math.pow(this.moonLit, 2.2) * (1 - 0.8 * storm);
+    this.moonlight = moonlight;
+    this.moon.intensity = 0.9 * night * moonlight;
+    // Starlight alone is very dim: a moonless night at sea is nearly black.
+    this.hemi.intensity = (0.022 + 0.1 * moonlight) * (1 - day) + 0.5 * day;
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
     for (const m of this.starMats) m.opacity = night * (1 - storm);
     this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day));
     this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
-    this.ambient = 0.18 + 0.82 * day * (1 - 0.4 * storm);
+    const dark = 0.05 + 0.13 * moonlight; // what the night leaves, moonless .. full moon
+    this.ambient = dark + (1 - dark) * day * (1 - 0.4 * storm);
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = HORIZON * (0.9 - 0.77 * storm);
-    this.exposure = (0.55 - 0.17 * storm) * (1 + 0.5 * (1 - day));
+    // Eyes adjust a little to the dark, more so by moonlight.
+    this.exposure = (0.55 - 0.17 * storm) * (1 + (1 - day) * (0.15 + 0.35 * moonlight));
     this.renderer.toneMappingExposure = this.exposure;
     this.overcast.material.color.copy(this.fog.color);
 
@@ -335,6 +346,7 @@ export class Atmosphere {
     this.dusk = dusk;
     su.uClear.value = smooth(elDeg, -4, 4) * (1 - smooth(storm, 0.1, 0.8));
     su.uNight.value = 1 - smooth(elDeg, -14, -6);
+    su.uMoonSky.value = 0.35 + 0.65 * moonlight;
     su.uTwilight.value = smooth(elDeg, -12, -4) * (1 - smooth(elDeg, -1, 5)) * (1 - 0.85 * storm);
     su.uWarm.value = (1 - smooth(elDeg, 1, 14)) * smooth(elDeg, -6, -1) * (1 - storm);
 
