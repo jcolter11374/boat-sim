@@ -38,6 +38,16 @@ What a person at base would do each morning, written down as a rule:
    counts until it is clear. Without the mask file it falls back to circles
    round the Azores island groups.
 
+8. **Sailing boats (a polar).** A boat with a VPP polar (vessel/keelboat.py)
+   can't hold a line into the wind, so for it each 3-hour step uses the best
+   speed made good along the line from the polar and the forecast wind:
+   sailing at any angle and tacking or gybing as needed, the boat makes
+   max over angles a of polar(a) cos(a - line angle off the wind). That is
+   what a good tactician gets out of it, times `polar_factor` (the autopilot
+   sails at about 90 % of the polar). The current carries it as before; wind
+   drift is already in the polar (leeway), so `windage` isn't added. A
+   motorboat (no polar) is costed exactly as before.
+
 The forecast it reads already contains realistic error (oceandata's Forecast),
 so it can't cheat by seeing the future.
 
@@ -69,6 +79,25 @@ AZORES_KEEP_OUT: tuple[tuple[float, float, float], ...] = (
     (37.78, -25.50, 55_000.0),  # Sao Miguel
     (36.97, -25.10, 30_000.0),  # Santa Maria
 )
+
+
+def vmc_ms(polar, line_deg: float, wind_u: float, wind_v: float, factor: float = 1.0) -> float:
+    """Best speed (m/s) a sailing boat makes good along a line on `line_deg`,
+    in true wind (wind_u, wind_v): the best of every angle to the wind,
+    tacking or gybing on both sides so the sideways parts cancel. Never
+    negative (a boat that can't gain just holds on)."""
+    tws = math.hypot(wind_u, wind_v)
+    if tws <= 0.0:
+        return 0.0
+    wind_from = math.degrees(math.atan2(-wind_u, -wind_v)) % 360.0
+    off = abs((line_deg - wind_from + 180.0) % 360.0 - 180.0)  # line's angle off the wind
+    best = 0.0
+    for twa in (off, *VMC_ANGLES):
+        best = max(best, polar.speed_ms(tws, twa) * math.cos(math.radians(twa - off)))
+    return best * factor
+
+
+VMC_ANGLES = tuple(float(a) for a in range(30, 181, 10))  # angles off the wind tried, deg
 
 
 def _ground_velocity(heading_deg: float, speed: float, ce: float, cn: float) -> tuple[float, float]:
@@ -108,6 +137,10 @@ class ForecastReplanPolicy:
     # 5 km waypoint radius.
     land_margin_m: float = 20_000.0
     land: object = "default"  # a runner.land.LandMask, "default" (the committed one) or None
+    # A sailing boat's VPP polar (anything with speed_ms(tws_ms, twa_deg)), or
+    # None for a motorboat. See rule 8 in the module doc.
+    polar: object = None
+    polar_factor: float = 0.9  # GUESS: autopilot vs polar (cruiser: ~91 % of its certificate)
     sent: list[tuple[datetime, Mission]] = field(default_factory=list)  # route changes
     acks: list[datetime] = field(default_factory=list)
     _current: list[Waypoint] | None = None
@@ -119,6 +152,8 @@ class ForecastReplanPolicy:
         return ahead or [self.route[-1]]
 
     def _speed(self, soc: float) -> float:
+        if self.polar is not None:
+            return self.boat_speed  # the wind drives a sailing boat, not the battery
         # Safe mode (autonomy/safemode.py) runs at 60% power below 50% charge;
         # speed goes roughly with the cube root of power. GUESS.
         return self.boat_speed * (0.6 ** (1 / 3) if soc < self.low_soc else 1.0)
@@ -225,9 +260,14 @@ class ForecastReplanPolicy:
             if distance_m(lat, lon, wp.lat, wp.lon) < speed * secs:
                 break
             env = forecast.sample(t, lat, lon)
-            ce = env.current_u + self.windage * env.wind_u
-            cn = env.current_v + self.windage * env.wind_v
-            ve, vn = _ground_velocity(bearing_deg(lat, lon, wp.lat, wp.lon), speed, ce, cn)
+            line = bearing_deg(lat, lon, wp.lat, wp.lon)
+            if self.polar is None:
+                ce = env.current_u + self.windage * env.wind_u
+                cn = env.current_v + self.windage * env.wind_v
+                ve, vn = _ground_velocity(line, speed, ce, cn)
+            else:
+                v = vmc_ms(self.polar, line, env.wind_u, env.wind_v, self.polar_factor)
+                ve, vn = _ground_velocity(line, v, env.current_u, env.current_v)
             lat, lon = move(lat, lon, ve * secs, vn * secs)
             path.append((lat, lon))
             t += self.step
