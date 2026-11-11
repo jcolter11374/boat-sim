@@ -217,6 +217,16 @@ export class Kit {
   /** Solar panel draped over a surface height function top(x, z). */
   panel(parent: THREE.Object3D, x0: number, x1: number, w: number, top: (x: number, z: number) => number, cols: number, rows: number) {
     const [nx, nz] = this.detail.panel;
+    // Each corner sits on the highest point of the surface within one cell of it,
+    // so the flat facets clear a steep-sided surface (the kayak's dome shoulders)
+    // instead of letting it poke through the cells.
+    const dx = (x1 - x0) / nx;
+    const dz = w / nz;
+    const env = (x: number, z: number) => {
+      let y = -Infinity;
+      for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) y = Math.max(y, top(x + (dx * a) / 4, z + (dz * b) / 4));
+      return y;
+    };
     const pos: number[] = [];
     const uv: number[] = [];
     const idx: number[] = [];
@@ -224,7 +234,7 @@ export class Kit {
       for (let j = 0; j <= nz; j++) {
         const x = x0 + ((x1 - x0) * i) / nx;
         const z = -w / 2 + (w * j) / nz;
-        pos.push(x, top(x, z) + 0.014, z);
+        pos.push(x, env(x, z) + 0.014, z);
         uv.push(i / nx, j / nz);
       }
     }

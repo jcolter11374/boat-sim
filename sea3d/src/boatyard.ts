@@ -40,7 +40,7 @@ import {
 import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/bases";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
-import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
+import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -137,13 +137,13 @@ let cat: Catalog | null = null;
 let design: Design;
 /** The parts catalog per boat (the kayak's from parts-catalog.json; the Randolph boats' from bases.ts). */
 const catalogs = new Map<BaseKey, Catalog>();
-const grid = new GridLauncher(() => (base === "kayak" ? cat : catalogs.get("kayak") ?? null));
+const grid = new GridLauncher(() => cat);
 const asBuilt: Record<"revc" | "revb", AsBuiltLauncher> = {
   revc: new AsBuiltLauncher("Randolph Rev C", BASE_LONG.revc, (d) => isAsBuilt(d), grid, null),
   revb: new AsBuiltLauncher("Randolph Rev B", BASE_LONG.revb, (d) => isAsBuilt(d), grid, "revb"),
 };
 const isAsBuilt = (d: Design) => !!cat && encodeDesign(cat, d) === "";
-const sandbox = new SandboxLauncher(grid, undefined, () => { const k = catalogs.get("kayak"); return k ? plannedDesign(k) : null; });
+const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
 const sandboxReady = sandbox.available();
 let launching = false;
 let planned: LaunchResult | null = null;
@@ -497,22 +497,28 @@ $("launch").addEventListener("click", async () => {
   let r: LaunchResult | null = null;
   try {
     // The real simulator in the browser when the page has its files; else the precomputed grid.
-    // The Randolph boats: their voyages as built, until Theo's simulations of their parts land.
-    const useSandbox = base === "kayak" && (await sandboxReady);
-    const launcher = base !== "kayak" ? asBuilt[base] : useSandbox ? sandbox : grid;
+    // The Randolph boats sail the same way (Theo's #187); if neither has their builds yet,
+    // their voyages as built, said plainly.
+    const useSandbox = await sandboxReady;
+    let launcher: Launcher = useSandbox ? sandbox : grid;
+    const onProgress = (text: string, done: number, total: number) => say(done ? `${text} (${done} of ${total})` : `${text} This takes a minute or two.`);
+    r = await launcher.launch(design, summarise(cat, design), onProgress);
+    if (!r && base !== "kayak") {
+      launcher = asBuilt[base];
+      r = await launcher.launch(design, summarise(cat, design), onProgress);
+    }
     status.backend = launcher.name;
-    r = await launcher.launch(design, summarise(cat, design), (text, done, total) => {
-      say(done ? `${text} (${done} of ${total})` : `${text} This takes a minute or two.`);
-    });
-    // The planned build on the same launches, to compare with (once per back end; it never changes).
-    if (r && base === "kayak" && encodeDesign(cat, design) !== "") {
+    // The planned (or as-built) build on the same launches, to compare with (once per back end and boat).
+    if (r && launcher !== asBuilt.revc && launcher !== asBuilt.revb && encodeDesign(cat, design) !== "") {
       const plan = plannedDesign(cat);
-      let p = plannedRuns.get(launcher.name);
+      const key = `${launcher.name}|${base}`;
+      let p = plannedRuns.get(key);
       if (!p) {
         p = (await launcher.launch(plan, summarise(cat, plan), (text, done, total) => {
-          say(`Now the planned build, to compare: ${done ? `${text} (${done} of ${total})` : text}`);
+          const who = base === "kayak" ? "the planned build" : "the boat as built";
+          say(`Now ${who}, to compare: ${done ? `${text} (${done} of ${total})` : text}`);
         })) ?? undefined;
-        if (p) plannedRuns.set(launcher.name, p);
+        if (p) plannedRuns.set(key, p);
       }
       planned = p ?? null;
     } else planned = null;
@@ -550,7 +556,7 @@ const rangeText = (o: LaunchOdds) =>
 function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   const grid = document.createElement("div");
   grid.className = "vs";
-  for (const [who, res] of [["Planned build", p], ["Your build", r]] as const) {
+  for (const [who, res] of [[base === "kayak" ? "Planned build" : "As built", p], ["Your build", r]] as const) {
     const col = document.createElement("div");
     col.append(
       Object.assign(document.createElement("div"), { className: "muted", textContent: who }),
@@ -572,7 +578,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   t.className = "pairs";
   const head = t.insertRow();
   const years = [...new Set(starts.map((x) => x.slice(0, 4)))];
-  for (const h of [`Launch${years.length === 1 ? ` (${years[0]})` : ""}`, "Planned", "Yours"]) head.append(Object.assign(document.createElement("th"), { textContent: h }));
+  for (const h of [`Launch${years.length === 1 ? ` (${years[0]})` : ""}`, base === "kayak" ? "Planned" : "As built", "Yours"]) head.append(Object.assign(document.createElement("th"), { textContent: h }));
   for (const st of starts) {
     const a = p.replays.find((x) => x.start === st);
     const b = r.replays.find((x) => x.start === st);

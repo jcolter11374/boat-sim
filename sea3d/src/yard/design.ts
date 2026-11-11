@@ -141,13 +141,16 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
  * (the simulator's defaults are the planned build), plus the cruise power. */
 export function simChoices(d: Design, base?: Design | null): Record<string, string | number> {
   const picks = Object.entries(d.picks).filter(([s, o]) => !base || base.picks[s] !== o);
-  return { ...Object.fromEntries(picks), cruise_w: d.cruiseW };
+  // A Randolph boat names its base; the simulator then ignores the cruise power.
+  return { ...(d.base && d.base !== "kayak" ? { base: d.base } : {}), ...Object.fromEntries(picks), cruise_w: d.cruiseW };
 }
 
 /** Choice per slot id (option id), and the cruise power in watts. */
 export interface Design {
   picks: Record<string, string>;
   cruiseW: number;
+  /** The boat it starts from: absent or "kayak" for ours, "revc" or "revb" (the catalog's key). */
+  base?: string;
 }
 
 export const PLANNED_KG = 123; // the planned build's weight (catalog kg are changes from it)
@@ -158,7 +161,7 @@ export const DEFAULT_CRUISE_W = 25;
 export function plannedDesign(cat: Catalog): Design {
   const picks: Record<string, string> = {};
   for (const s of cat.slots) picks[s.id] = (s.opts.find((o) => o.def) ?? s.opts[0]).id;
-  return { picks, cruiseW: DEFAULT_CRUISE_W };
+  return { picks, cruiseW: DEFAULT_CRUISE_W, ...(cat.key && cat.key !== "kayak" ? { base: cat.key } : {}) };
 }
 
 export function optionOf(cat: Catalog, slot: string, d: Design): CatalogOption | undefined {

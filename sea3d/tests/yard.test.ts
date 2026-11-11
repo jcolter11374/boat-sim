@@ -201,7 +201,8 @@ test("the Randolph bases build from Theo's slot table, as built by default", () 
     const rc = randolphCatalog(key, sim, k);
     assert.ok(rc, key);
     const plan = plannedDesign(rc!);
-    for (const [slot, id] of Object.entries(sim.bases![key].defaults)) assert.equal(plan.picks[slot], id, `${key} ${slot}`);
+    for (const [slot, id] of Object.entries(sim.bases![key].defaults)) if (slot !== "spares") assert.equal(plan.picks[slot], id, `${key} ${slot}`);
+    assert.equal(plan.base, key);
     const s = summarise(rc!, plan);
     // As built: their published weight, 40 W of panels, 192 Wh, no motor, the YB3 as backup tracker.
     assert.equal(s.massKg, key === "revc" ? 25.2 : 20.8);
@@ -227,4 +228,22 @@ test("Randolph base: their thruster counts, sinks on a small waterplane, links c
   assert.equal(baseFromHash("#base=revc&x=1"), "revc");
   assert.equal(baseFromHash("#base=nope"), "kayak");
   assert.equal(baseFromHash(""), "kayak");
+});
+
+test("Randolph designs name their base for the simulator, and only match their own grid builds", () => {
+  const k = withSim(cat, sim);
+  const rc = randolphCatalog("revc", sim, k)!;
+  const plan = plannedDesign(rc);
+  const d = { ...plan, picks: { ...plan.picks, rudder: "single" } };
+  assert.deepEqual(simChoices(d, plan), { base: "revc", rudder: "single", cruise_w: 25 });
+  assert.equal(simChoices(plannedDesign(k)).base, undefined);
+  const b = (boat: string, options: Record<string, string | number>) => ({ id: "", boat, label: "", options, odds: null, replays: [] });
+  assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc" }), rc, plan), [0, 0]);
+  assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc", rudder: "single" }), rc, d), [0, 0]);
+  assert.deepEqual(gridDistance(b("Randolph Rev C", { base: "revc" }), rc, d), [1, 0]);
+  // Never a kayak build, another base, or an older Randolph build without a base.
+  assert.equal(gridDistance(b("v4 kayak", { cruise_w: 25 }), rc, plan)[0], Infinity);
+  assert.equal(gridDistance(b("Randolph Rev B", { base: "revb" }), rc, plan)[0], Infinity);
+  assert.equal(gridDistance(b("Randolph Rev B", { wing: "published" }), rc, plan)[0], Infinity);
+  assert.equal(gridDistance(b("Randolph Rev C", { base: "revc" }), k, plannedDesign(k))[0], Infinity);
 });
