@@ -447,3 +447,16 @@ def test_randolph_bases_start_from_their_own_yaml():
     assert all(
         t[b]["defaults"][s["id"]] in {o["id"] for o in s["opts"]} for b in t for s in t[b]["slots"]
     )
+
+
+def test_cut_takes_a_window_across_new_year():
+    """Weather challenges run into the next year (winter-train: Dec 2013 - May 2014)."""
+    era5, glorys, ships = _fake_sources()
+    buf = io.BytesIO()
+    F.cut(2013, buf, era5, glorys, ships, log=lambda *_: None,
+          start=date(2013, 12, 30), end=date(2014, 1, 2))  # fmt: skip
+    env = F.BundleEnvironment(buf.getvalue())
+    assert env.meta == {"year": 2013, "first": "2013-12-30", "last": "2014-01-02"}
+    assert len(env.weather.times) == 4 * 4 and len(env.currents.times) == 4
+    s = env.sample(datetime(2014, 1, 1, 12), 40.0, -60.0)
+    assert s.wind_v == pytest.approx(-2.0, abs=0.1)

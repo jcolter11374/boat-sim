@@ -149,11 +149,21 @@ def pick(entries: list[Entry], var: str, level: str, hour: int) -> Entry | None:
 
 
 def cycle_complete(cycle: datetime, get=_get) -> bool:
-    """Both files at the last hour exist (NOAA writes hours in order)."""
-    try:
-        return all(get(url(cycle, k, HOURS[-1]) + ".idx") for k in ("atmos", "wave"))
-    except (urllib.error.URLError, OSError):
+    """Every file we need is out. NOAA writes the hours slightly out of order
+    (on 11 Nov 2026 the 00 UTC f120 was out while f111 wasn't), so the last
+    hour alone isn't enough: check every index."""
+
+    def have(kh: tuple[str, int]) -> bool:
+        try:
+            return bool(get(url(cycle, kh[0], kh[1]) + ".idx"))
+        except (urllib.error.URLError, OSError):
+            return False
+
+    # The last hour first: a cycle still running fails there in one request.
+    if not all(have((k, HOURS[-1])) for k in ("atmos", "wave")):
         return False
+    with ThreadPoolExecutor(8) as ex:
+        return all(ex.map(have, [(k, h) for h in HOURS for k in ("atmos", "wave")]))
 
 
 def latest_cycle(now: datetime | None = None, get=_get, tries: int = 6) -> datetime:
