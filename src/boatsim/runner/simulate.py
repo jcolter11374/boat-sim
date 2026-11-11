@@ -334,6 +334,7 @@ def standard_components(
     (they keep per-voyage state such as the airtime ledger). Shared by the batch
     runs (runner.parallel) and the browser sandbox (boatsim.sandbox)."""
     from boatsim.autonomy import SafeModeAutopilot
+    from boatsim.autonomy.sailing import wrap_for_sailing
     from boatsim.basestation import ForecastReplanPolicy
     from boatsim.comms import GlobalstarPinger, IridiumSBDLink
     from boatsim.oceandata.forecast import ErrorForecast
@@ -341,14 +342,17 @@ def standard_components(
 
     prop = design.propulsion
     drop = (design.voyage["drop_lat"], design.voyage["drop_lon"])
+    vessel = make_vessel(design)
+    autopilot = SafeModeAutopilot(
+        cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
+        thruster_count=int(prop.get("thruster_count", 2)),
+    )
     return Components(
         env=env,
         forecast=ErrorForecast(forecast_env, seed=seed, scale=forecast_error),
-        vessel=make_vessel(design),
-        autopilot=SafeModeAutopilot(
-            cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
-            thruster_count=int(prop.get("thruster_count", 2)),
-        ),
+        vessel=vessel,
+        # A boat with a polar tacks and gybes (autonomy/sailing.py); others are unchanged.
+        autopilot=wrap_for_sailing(autopilot, vessel),
         link=IridiumSBDLink(),
         pinger=GlobalstarPinger(),
         base=ForecastReplanPolicy(route=default_mission(drop).waypoints),

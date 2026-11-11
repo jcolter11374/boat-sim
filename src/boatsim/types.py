@@ -83,6 +83,10 @@ class Sensors:
     thrusters_ok: int | None = (
         None  # working thrusters, from motor-controller current; None = unknown
     )
+    # Masthead wind vane, sailboats only (None on boats without one): where the
+    # wind comes from (deg) and its speed (m/s), relative to the water.
+    wind_from_deg: float | None = None
+    wind_speed_ms: float | None = None
 
 
 @dataclass(frozen=True)

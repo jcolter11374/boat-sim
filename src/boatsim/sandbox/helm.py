@@ -52,6 +52,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from boatsim.autonomy.helm import HelmAutopilot, OrderMission
+from boatsim.autonomy.sailing import tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
 from boatsim.geo import distance_m
@@ -224,6 +225,7 @@ class Game:
             finish=self.finish,
             thruster_count=int(prop.get("thruster_count", 2)),
             safe=safe,
+            tactician=tactician_for(mine.vessel),  # None unless the boat has a polar
         )
         if mode == "base":
             # Until the first order arrives the boat sails the launch route at
