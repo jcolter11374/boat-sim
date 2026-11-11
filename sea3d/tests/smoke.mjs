@@ -439,6 +439,11 @@ try {
   // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
   const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
   if (picks.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
+  // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
+  await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
+    .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));
+  if (!(await page.locator('#port option[value="baltimore"]').count())) fail("port picker has no Baltimore");
+  log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);
   // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
   // so a whole game fits in the smoke test.
   await page.selectOption("#launch", "2");

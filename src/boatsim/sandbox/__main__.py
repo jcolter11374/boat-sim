@@ -38,6 +38,8 @@ PACK_FILES = (
     "configs/joke_flamingo.yaml",
     "configs/joke_wheelie_bin.yaml",
     "data/land/land_mask_v1.npz",
+    # Ports to sail from (oceandata/ports.py; Game(start_port=...)).
+    "sea3d/public/ports.json",
 )
 
 
