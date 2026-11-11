@@ -11,17 +11,16 @@ import { Sea } from "../water";
 import { Clouds, cloudFromSun, fogChance } from "../clouds";
 import { Rain, rainFromRate } from "../rain";
 import { BUILDERS, type BoatModel } from "../boats/model";
-import { KAYAK, RANDOLPH, STOCK, isStock, type BoatSpec } from "../boats/specs";
+import { KAYAK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "../boats/specs";
 import { hasDetailedStock, loadStockModel } from "../boats/stock";
 import { apparentFlow, rudderFor } from "../boats/gear";
-import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, SAIL_DRONE7, type HullParams } from "../motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "../motion";
 import { Wake } from "../wake";
 import { Contact } from "../contact";
 import { heightAt, Sea as LiveSea } from "../waves";
 import type { Placement } from "../standin";
 
 const KN = 1.94384;
-const STOCK_HULL: Record<string, HullParams> = { stock_cruiser31: CRUISER31, stock_dinghy14: DINGHY14, stock_beachcat16: BEACHCAT16, stock_sail_drone7: SAIL_DRONE7 };
 
 /** What a view shows: one boat's latest status from the race simulator. */
 export interface ViewState {
@@ -39,7 +38,7 @@ export function boatFor(choices: Record<string, string>): { spec: BoatSpec; hull
   const base = choices.base ?? "kayak";
   if (base === "revb") return { spec: RANDOLPH, hull: RANDOLPH_REVB };
   if (base === "revc") return { spec: RANDOLPH, hull: RANDOLPH_REVC };
-  if (isStock(base)) return { spec: STOCK[base], hull: STOCK_HULL[base] ?? KAYAK_V4 };
+  if (isStock(base)) return { spec: STOCK[base], hull: STOCK_HULL[base] };
   return { spec: KAYAK, hull: KAYAK_V4 };
 }
 

@@ -1,0 +1,22 @@
+# Replay check on a pull request: the same bit-identical gate (see
+# replay-check.yml) on the currents a main or hand-started run cached, with no
+# secrets (secret-using workflows never run on pull_request). Owner: Ravi (QA).
+name: Replay check (PR)
+on:
+  pull_request:
+    paths:
+      - "sea3d/public/voyages/**"
+      - "src/boatsim/runner/replay.py"
+      - ".github/workflows/replay-check.yml"
+      - ".github/workflows/replay-check-run.yml"
+      - ".github/workflows/replay-check-pr.yml"
+permissions:
+  contents: read
+concurrency:
+  group: replay-check-pr-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    uses: ./.github/workflows/replay-check-run.yml
+    with:
+      currents: cache

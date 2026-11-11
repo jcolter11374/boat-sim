@@ -15,9 +15,19 @@ export interface Place {
   credit: string;
   /** The land files' name (<land>_meta.json and so on) when another place's files cover it. */
   land?: string;
+  /** A town's buildings and piers (<town>.json and <town>_height.bin) to stand on the land. */
+  town?: string;
+  /** "plain" for a shore without Pico's black basalt band (bulkheads, lawns, marsh). */
+  shore?: "basalt" | "plain";
+  /**
+   * A sheltered harbour: the waves are the local wind's chop over this many metres
+   * of open water (the fetch), not the ocean swell the replay logged offshore.
+   */
+  fetch?: number;
 }
 
 const CREDIT = "Land: AWS Terrain Tiles; contains modified Copernicus Sentinel data 2023-24";
+const ODBL = "Buildings, piers and trees: © OpenStreetMap contributors and Overture Maps Foundation, ODbL";
 
 export const PLACES: Record<string, Place> = {
   pico: {
@@ -57,7 +67,33 @@ export const PLACES: Record<string, Place> = {
     look: 340,
     credit: CREDIT,
   },
+  annapolis: {
+    key: "annapolis",
+    name: "Annapolis harbour",
+    // In the harbour mouth, about 800 m east-south-east of the State House, looking at the town.
+    lat: 38.97556,
+    lon: -76.48283,
+    look: 297,
+    credit: `${CREDIT} · ${ODBL}`,
+    land: "annapolisbay",
+    town: "annapolis",
+    shore: "plain",
+    fetch: 3000, // out past the harbour mouth to the Bay
+  },
 };
+
+/**
+ * Wind chop on a short stretch of open water (JONSWAP fetch-limited growth):
+ * Hs = 0.0016 U sqrt(F / g) and g Tp / U = 0.286 (g F / U^2)^(1/3), for wind U (m/s) over F metres.
+ * Capped at a fully developed sea (Pierson-Moskowitz: Hs = 0.21 U^2 / g, Tp = 0.73 U).
+ */
+export function fetchSea(wind: number, fetch: number): { hs: number; tp: number } {
+  const g = 9.81;
+  const u = Math.max(wind, 1);
+  const hs = Math.min(0.0016 * u * Math.sqrt(fetch / g), 0.0214 * u * u);
+  const tp = Math.min(0.286 * (u / g) * Math.cbrt((g * fetch) / (u * u)), 0.73 * u);
+  return { hs: Math.max(hs, 0.03), tp: Math.max(tp, 1) };
+}
 
 /** The place in the page's address, if any; &spot=lat,lon moves the boat (for pictures and tests). */
 export const PLACE: Place | null = (() => {

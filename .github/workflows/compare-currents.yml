@@ -4,10 +4,6 @@
 name: Compare currents with SMOC
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/compare-currents.yml"
-      - "src/boatsim/oceandata/currents_check.py"
 permissions:
   contents: read
 jobs:

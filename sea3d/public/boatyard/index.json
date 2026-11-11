@@ -126,6 +126,17 @@
   "note": "April to June launches every 10 days, real weather and currents, same seeds for every build; unknown failure off (odds_unknown_10 puts a 10% chance by day 60 back in). Microtransat finish on our target."
  },
  "commit": "cbb9dbf",
+ "regrids": [
+  {
+   "builds": [
+    "k-p0-drive.wing-sail",
+    "k-p25-drive.hybrid",
+    "revb-brain.two-box",
+    "revc-brain.two-box"
+   ],
+   "commit": "55a6c4f"
+  }
+ ],
  "builds": [
   {
    "id": "k-p25",
@@ -1383,21 +1394,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 80,
-    "odds": 0.8,
-    "low95": 0.711,
-    "high95": 0.867,
-    "within_150": 80,
-    "median_days": 58.5,
-    "odds_unknown_10": 0.72,
+    "finished": 87,
+    "odds": 0.87,
+    "low95": 0.79,
+    "high95": 0.922,
+    "within_150": 87,
+    "median_days": 53.1,
+    "odds_unknown_10": 0.786,
     "endings": {
-     "arrived": 80,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 3,
-     "taken or snagged by fishermen [near land]": 3,
-     "disqualified: silent too long": 2,
-     "ran aground before the finish": 1,
-     "stuck inverted or keel lost [open ocean]": 1
+     "arrived": 87,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "ran aground before the finish": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -1405,13 +1415,13 @@
      "file": "k-p25-drive.hybrid/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 66.69
+     "days": 97.07
     },
     {
      "file": "k-p25-drive.hybrid/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 63.23
+     "days": 47.79
     },
     {
      "file": "k-p25-drive.hybrid/2020-05-01.json",
@@ -1422,20 +1432,20 @@
     {
      "file": "k-p25-drive.hybrid/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "disqualified",
-     "days": 64.26
+     "outcome": "arrived",
+     "days": 51.15
     },
     {
      "file": "k-p25-drive.hybrid/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 50.02
+     "days": 49.28
     },
     {
      "file": "k-p25-drive.hybrid/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 61.73
+     "days": 52.41
     }
    ]
   },
@@ -1465,23 +1475,24 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 52,
-    "odds": 0.52,
-    "low95": 0.423,
-    "high95": 0.615,
-    "within_150": 52,
-    "median_days": 84.8,
-    "odds_unknown_10": 0.457,
+    "finished": 54,
+    "odds": 0.54,
+    "low95": 0.443,
+    "high95": 0.634,
+    "within_150": 54,
+    "median_days": 75.1,
+    "odds_unknown_10": 0.478,
     "endings": {
-     "arrived": 52,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 15,
-     "still at sea": 13,
-     "ran aground before the finish": 11,
+     "arrived": 54,
+     "ran aground before the finish": 19,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "taken or snagged by fishermen [near land]": 5,
+     "still at sea": 4,
      "disqualified: silent too long": 3,
-     "taken or snagged by fishermen [near land]": 2,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
      "left the weather box": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+     "ship strike": 1
     }
    },
    "replays": [
@@ -1495,7 +1506,7 @@
      "file": "k-p0-drive.wing-sail/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "timeout",
-     "days": 96.49
+     "days": 91.69
     },
     {
      "file": "k-p0-drive.wing-sail/2020-05-01.json",
@@ -1507,19 +1518,19 @@
      "file": "k-p0-drive.wing-sail/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "disqualified",
-     "days": 64.26
+     "days": 64.51
     },
     {
      "file": "k-p0-drive.wing-sail/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 69.35
+     "days": 70.51
     },
     {
      "file": "k-p0-drive.wing-sail/2020-06-15.json",
      "start": "2020-06-15T12:00",
-     "outcome": "aground",
-     "days": 85.1
+     "outcome": "timeout",
+     "days": 133.01
     }
    ]
   },
@@ -2519,37 +2530,37 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 13,
-    "odds": 0.13,
-    "low95": 0.078,
-    "high95": 0.21,
-    "within_150": 13,
-    "median_days": 132.0,
-    "odds_unknown_10": 0.111,
+    "finished": 22,
+    "odds": 0.22,
+    "low95": 0.15,
+    "high95": 0.311,
+    "within_150": 22,
+    "median_days": 125.1,
+    "odds_unknown_10": 0.189,
     "endings": {
-     "still at sea": 54,
-     "arrived": 13,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "stuck inverted or keel lost [open ocean]": 6,
-     "ran aground before the finish": 5,
-     "taken or snagged by fishermen [near land]": 5,
+     "still at sea": 38,
+     "arrived": 22,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 12,
+     "taken or snagged by fishermen [near land]": 11,
+     "ran aground before the finish": 6,
      "disqualified: silent too long": 4,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
-     "stuck inverted or keel lost [near land]": 1
+     "both electronics boxes dead: silent and uncontrolled [near land]": 3,
+     "stuck inverted or keel lost [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 2
     }
    },
    "replays": [
     {
      "file": "revc-brain.two-box/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 127.5
     },
     {
      "file": "revc-brain.two-box/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "arrived",
-     "days": 124.24
+     "outcome": "lost",
+     "days": 138.26
     },
     {
      "file": "revc-brain.two-box/2020-05-01.json",
@@ -2993,20 +3004,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 7,
-    "odds": 0.07,
-    "low95": 0.034,
-    "high95": 0.137,
-    "within_150": 7,
-    "median_days": 135.7,
-    "odds_unknown_10": 0.06,
+    "finished": 12,
+    "odds": 0.12,
+    "low95": 0.07,
+    "high95": 0.198,
+    "within_150": 12,
+    "median_days": 117.8,
+    "odds_unknown_10": 0.104,
     "endings": {
-     "still at sea": 53,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 18,
-     "stuck inverted or keel lost [open ocean]": 8,
-     "arrived": 7,
-     "taken or snagged by fishermen [near land]": 5,
-     "ran aground before the finish": 4,
+     "still at sea": 41,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 20,
+     "arrived": 12,
+     "stuck inverted or keel lost [open ocean]": 9,
+     "taken or snagged by fishermen [near land]": 7,
+     "ran aground before the finish": 6,
      "disqualified: silent too long": 4,
      "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
@@ -3033,20 +3044,20 @@
     {
      "file": "revb-brain.two-box/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "disqualified",
-     "days": 64.51
+     "outcome": "lost",
+     "days": 28.14
     },
     {
      "file": "revb-brain.two-box/2020-06-01.json",
      "start": "2020-06-01T12:00",
-     "outcome": "lost",
-     "days": 127.01
+     "outcome": "timeout",
+     "days": 150.0
     },
     {
      "file": "revb-brain.two-box/2020-06-15.json",
      "start": "2020-06-15T12:00",
-     "outcome": "lost",
-     "days": 138.48
+     "outcome": "timeout",
+     "days": 150.0
     }
    ]
   },

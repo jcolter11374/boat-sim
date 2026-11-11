@@ -6,11 +6,13 @@
 // Moving parts are found by name, so the Blender models (blender/*.py) and the
 // drawn-in-code fallbacks work the same way:
 //   rudder_pivot, wing_pivot, vane_pivot (empties/groups to turn about y),
-//   tail_flap (hidden when the sail is torn), panel* (solar panel meshes).
+//   tail_flap (hidden when the sail is torn), panel* (solar panel meshes),
+//   seat_<n> and oar_<n>_p / oar_<n>_s (a rowing crew, boats/rowers.ts).
 // Everything here works in the builder frame (x aft from the bow, y up from
 // the hull bottom, z to port), inside the model's inner group.
 
 import * as THREE from "three";
+import { Rowers } from "./rowers";
 
 /** Part names as the replay's part_failed events give them. */
 export type Part =
@@ -143,6 +145,8 @@ export class Gear {
   readonly wing: THREE.Object3D | null;
   readonly vane: THREE.Object3D | null;
   private readonly flap: THREE.Object3D | null;
+  /** The crew at the oars, on a rowing boat. */
+  readonly rowers: Rowers | null;
   private readonly panels: THREE.MeshStandardMaterial[] = [];
   private readonly lamp: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly glow: THREE.Sprite;
@@ -164,6 +168,8 @@ export class Gear {
     this.wing = g.getObjectByName("wing_pivot") ?? null;
     this.vane = g.getObjectByName("vane_pivot") ?? null;
     this.flap = g.getObjectByName("tail_flap") ?? null;
+    this.rowers = Rowers.find(g);
+    if (this.rowers) this.owned.push(this.rowers);
     this.spin = layout.props.map(() => 0);
     // Solar panels: own copies of their materials so the sun can light them.
     g.traverse((o) => {
@@ -232,6 +238,7 @@ export class Gear {
       panels: this.panels.length,
       light: !!this.lamp.parent,
       signs: this.signs.size,
+      rowers: this.rowers?.shown.stations ?? 0,
     };
   }
 
@@ -273,6 +280,9 @@ export class Gear {
       if (this.flap) this.flap.visible = !torn;
       this.shown.wing = this.wingA;
     }
+    // Rowers: pull in time while the boat makes way; below decks when it doesn't.
+    this.rowers?.update(dt, s.speed);
+
     // Wind vane on the stern pole: points straight downwind, with a little flutter.
     if (this.vane) this.vane.rotation.y = wingAngle(s.flow, 0) + 0.05 * Math.sin(t * 5.3);
 
