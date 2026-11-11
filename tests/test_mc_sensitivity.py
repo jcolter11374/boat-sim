@@ -237,9 +237,11 @@ def test_routing_variants_swap_only_base_and_its_forecast():
             unknown_p_by_60_days=0.0,
         ).components(1)
 
-    base, iso, table = comps("baseline"), comps("isochrone"), comps("fan_table")
+    base, iso, table = comps("fan"), comps("isochrone"), comps("fan_table")
     assert type(base.base) is ForecastReplanPolicy and base.base.polar is None
     assert isinstance(iso.base, IsochroneReplanPolicy)
+    # The drone's own default since 11 Nov 2026 (Ravi's gate, Maya).
+    assert isinstance(comps("baseline").base, IsochroneReplanPolicy)
     assert type(table.base) is ForecastReplanPolicy and isinstance(table.base.polar, SteadyPolar)
     assert iso.forecast.scale == base.forecast.scale == 1.0
     assert comps("isochrone_forecast_x2").forecast.scale == 2.0
