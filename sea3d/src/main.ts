@@ -9,8 +9,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
-import { BOATS, STOCK_HULL, type BoatSpec } from "./boats/specs";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
+import { BOATS, type BoatSpec } from "./boats/specs";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, SAIL_DRONE7, type HullParams } from "./motion";
 import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
@@ -24,7 +24,10 @@ const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin"
 const HULLS: Record<BoatSpec["key"], HullParams> = {
   kayak: KAYAK_V4,
   randolph: RANDOLPH_REVB,
-  ...STOCK_HULL,
+  stock_cruiser31: CRUISER31,
+  stock_dinghy14: DINGHY14,
+  stock_beachcat16: BEACHCAT16,
+  stock_sail_drone7: SAIL_DRONE7,
 };
 interface Mover {
   heave: number; // waterline height above still water, m

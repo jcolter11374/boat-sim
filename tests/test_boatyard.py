@@ -112,26 +112,3 @@ def test_the_cat_stays_over_guess_is_bracketed():
         assert f"{cat}-over{round(q * 100)}" not in {catalog.grid_id(g) for g in catalog.GRID}
     ids = list(Y.BUILDS)
     assert ids.index(cat) < ids.index(f"{cat}-over20")  # the browser keeps the first tie
-
-
-def test_a_partial_regrid_merges_into_the_grid_and_keeps_the_rest(tmp_path):
-    grid, new = tmp_path / "grid", tmp_path / "new"
-    for bid, days in (("k-p10", 30), ("k-p15", 40)):
-        rep = Y.thin(_rep(days))
-        rep["build"] = bid
-        Y.write_replays([rep], grid)
-    old = {"k-p10": {"finished": 3}, "k-p15": {"finished": 4}}
-    meta = {"commit": "full", "odds_source": {"years": [2012, 2021]}}
-    (grid / "index.json").write_text(json.dumps(Y.build_index(old, grid, meta)))
-    rep = Y.thin(_rep(50))
-    rep["build"] = "k-p10"
-    Y.write_replays([rep], new)
-    idx = Y.merge_into(grid, {"k-p10": {"finished": 9}}, new, {"commit": "part"})
-    by_id = {b["id"]: b for b in idx["builds"]}
-    assert len(by_id) == len(Y.BUILDS)
-    assert by_id["k-p10"]["odds"] == {"finished": 9}  # redone
-    assert by_id["k-p15"]["odds"] == {"finished": 4}  # kept
-    assert [r["days"] for r in by_id["k-p10"]["replays"]] == [Y.thin(_rep(50))["days"]]
-    assert len(by_id["k-p15"]["replays"]) == 1
-    assert idx["commit"] == "full" and idx["odds_source"] == {"years": [2012, 2021]}
-    assert idx["regrids"] == [{"builds": ["k-p10"], "commit": "part"}]

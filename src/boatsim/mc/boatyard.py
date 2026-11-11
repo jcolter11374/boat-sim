@@ -312,26 +312,6 @@ def build_index(odds: dict[str, dict], replay_dir: Path, meta: dict) -> dict:
     }
 
 
-def merge_into(out: Path, odds: dict[str, dict], replay_dir: Path, meta: dict) -> dict:
-    """A partial regrid: put these builds' new odds and replays into the grid
-    already in `out`, keeping every other build as it was. A build's replays are
-    replaced only when the new run has some for it; its odds only when the new
-    run has odds for it. The regrid is recorded in the index's "regrids"."""
-    import shutil
-
-    old = json.loads((out / "index.json").read_text())
-    kept = {b["id"]: b["odds"] for b in old["builds"] if b.get("odds")}
-    redone = sorted(set(odds) | {b for b in BUILDS if (replay_dir / b).is_dir()})
-    for bid in redone:
-        if (replay_dir / bid).is_dir() and replay_dir.resolve() != out.resolve():
-            shutil.rmtree(out / bid, ignore_errors=True)
-            shutil.copytree(replay_dir / bid, out / bid)
-    keep_meta = {k: v for k, v in old.items() if k in ("odds_source", "commit", "regrids")}
-    regrid = {"builds": redone, **({"commit": meta["commit"]} if "commit" in meta else {})}
-    keep_meta["regrids"] = [*keep_meta.get("regrids", []), regrid]
-    return build_index({**kept, **odds}, out, keep_meta)
-
-
 def _units() -> dict:
     """Column units, as in the voyage replays, less the columns the yard drops."""
     from types import SimpleNamespace
@@ -365,11 +345,6 @@ def main(argv: list[str] | None = None) -> None:
     b.add_argument("--replays", required=True)
     b.add_argument("--out", required=True)
     b.add_argument("--commit", default=None)
-    b.add_argument(
-        "--merge",
-        action="store_true",
-        help="partial regrid: merge these builds into the grid already in --out",
-    )
     a = p.parse_args(argv)
 
     if a.cmd == "odds":
@@ -413,12 +388,6 @@ def main(argv: list[str] | None = None) -> None:
             }
         if a.commit:
             meta["commit"] = a.commit
-        if a.merge:
-            idx = merge_into(out, odds, replay_dir, meta)
-            (out / "index.json").write_text(json.dumps(idx, indent=1))
-            done = idx["regrids"][-1]["builds"]
-            print(f"merged {len(done)} builds into {out}: {' '.join(done)}")
-            return
         if replay_dir.resolve() != out.resolve():
             import shutil
 

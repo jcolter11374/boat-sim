@@ -417,17 +417,10 @@ NO_GO_MARGIN_DEG = 1.0  # GUESS: beat this far outside the vessel's own no-go cl
 
 
 def tactician_for(vessel) -> Tactician | None:
-    """A Tactician for `vessel` if it has a polar (`vessel.polar`), or is a
-    sail-only wing boat (the drone: its speed table from its own physics,
-    vessel.kayak.SteadyPolar, since 11 Nov 2026), else None. The beat stays
-    NO_GO_MARGIN_DEG outside the vessel's no-go limit
+    """A Tactician for `vessel` if it has a polar (`vessel.polar`), else None.
+    The beat stays NO_GO_MARGIN_DEG outside the vessel's no-go limit
     (`vessel.sail.min_upwind_twa_deg`), so the vessel never has to clamp it."""
-    if not getattr(vessel, "tactician_ok", True):
-        return None  # e.g. Randolph's Rev B/C steer like their own autopilot
     polar = getattr(vessel, "polar", None)
-    if polar is None:
-        steady = getattr(vessel, "steady_polar", None)
-        polar = steady() if steady is not None else None
     if polar is None:
         return None
     sail = getattr(vessel, "sail", None)
@@ -441,9 +434,8 @@ def tactician_for(vessel) -> Tactician | None:
 
 
 def wrap_for_sailing(autopilot, vessel):
-    """`autopilot` wrapped in a SailingAutopilot when `vessel` has a polar or
-    is a sail-only wing boat (tactician_for); otherwise `autopilot` itself
-    (the kayak, Rev B/C, hybrids: unchanged)."""
+    """`autopilot` wrapped in a SailingAutopilot when `vessel` has a polar;
+    otherwise `autopilot` itself (the kayak, Rev B/C: unchanged)."""
     tac = tactician_for(vessel)
     if tac is None:
         return autopilot

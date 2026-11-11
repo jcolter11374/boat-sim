@@ -7,10 +7,10 @@
 // This matches Theo's wave-motion model (src/motion.ts), which turns the boat
 // about its CG.
 
-import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, OCEAN_ROWER45, RANDOLPH_REVB, SAIL_DRONE7, type HullParams } from "../motion";
+import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, RANDOLPH_REVB, SAIL_DRONE7 } from "../motion";
 
 /** Theo's stock vessels (configs/stock_*.yaml), by their config names. */
-export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45";
+export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7";
 
 export interface BoatSpec {
   key: "kayak" | "randolph" | StockKey;
@@ -127,36 +127,11 @@ export const SAIL_DRONE: BoatSpec = {
   source: "configs/stock_sail_drone7.yaml (published specs of a 7 m uncrewed sailing drone)",
 };
 
-export const OCEAN_ROWER: BoatSpec = {
-  key: "stock_ocean_rower45",
-  name: "ocean rowing boat",
-  length: 8.64,
-  beam: 1.74,
-  waterline: 0.35, // GUESS: loaded to 1500 kg; the daggerboard goes on to about 0.9 m
-  massKg: 1500,
-  ballastKg: 0, // water and food stowed low, no lead
-  ballastDepth: 0,
-  cgX: OCEAN_ROWER45.cgX,
-  cgBelowWaterline: OCEAN_ROWER45.cgBelowWaterline,
-  cruiseSpeed: 1.3, // about 2.5 kn with two rowing
-  colour: 0x2f6fa8,
-  source: "configs/stock_ocean_rower45.yaml (published specs of an 8.64 m ocean rowing boat for four)",
-};
-
 export const STOCK: Record<StockKey, BoatSpec> = {
   stock_cruiser31: CRUISER,
   stock_dinghy14: DINGHY,
   stock_beachcat16: BEACHCAT,
   stock_sail_drone7: SAIL_DRONE,
-  stock_ocean_rower45: OCEAN_ROWER,
-};
-/** Each stock boat's motion model (motion.ts), so every page moves it the same way. */
-export const STOCK_HULL: Record<StockKey, HullParams> = {
-  stock_cruiser31: CRUISER31,
-  stock_dinghy14: DINGHY14,
-  stock_beachcat16: BEACHCAT16,
-  stock_sail_drone7: SAIL_DRONE7,
-  stock_ocean_rower45: OCEAN_ROWER45,
 };
 /** Only the cruiser can be sailed in the games for now (Maya, 11 Nov: the dinghy and
  * cat capsize in squalls, and the sandbox has no rain yet). */
@@ -169,7 +144,6 @@ export function stockKeyOf(boat: string | undefined): StockKey | null {
   if (/dinghy/i.test(b)) return "stock_dinghy14";
   if (/beach\s*cat|catamaran/i.test(b)) return "stock_beachcat16";
   if (/ocean drone|sail\s*drone/i.test(b)) return "stock_sail_drone7";
-  if (/rowing|rower/i.test(b)) return "stock_ocean_rower45";
   return null;
 }
 

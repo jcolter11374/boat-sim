@@ -7,28 +7,21 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
-import { HORIZON, Sea } from "./water";
-import { Mirror, reflectable } from "./mirror";
-import { LAND_HORIZON, NearbyLand } from "./land/nearby";
-import { PLACES } from "./land/place";
+import { Sea } from "./water";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
-import { Spindrift } from "./spindrift";
-import { RainBands } from "./rainbands";
-import { Traffic } from "./traffic";
-import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, PLAYABLE_STOCK, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
+import { KAYAK, PLAYABLE_STOCK, STOCK, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BoatMotion, KAYAK_V4, type HullParams } from "./motion";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, SAIL_DRONE7, type HullParams } from "./motion";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
-import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
@@ -37,7 +30,7 @@ import { loadPorts, portLabel } from "./helm/ports";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
-import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
+import { loadPois, passes, PoiCards, type Poi } from "./pois";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -67,41 +60,16 @@ const clouds = new Clouds();
 scene.add(clouds.group);
 const rain = new Rain();
 scene.add(rain.mesh);
-// Real land near the boat (Bay mouth, Annapolis, the Azores, Lisbon), when it's in range.
-let land: NearbyLand | null = null;
-void NearbyLand.create(quality).then((n) => {
-  land = n;
-  page.landKnown = n.known;
-  scene.add(n.root);
-});
-/** How far the view reaches now (m): out to LAND_HORIZON while land is about, eased. */
-let reach = HORIZON;
-// Calm water mirrors the land and the boat.
-const mirror = new Mirror(quality === "high" ? 0.5 : 0.35);
-const bufSize = new THREE.Vector2();
-// ?spot=lat,lon puts the boat there before a game starts (for pictures and tests).
-const spot = (params.get("spot") ?? "").split(",").map(Number);
-const SPOT: [number, number] | null = spot.length === 2 && spot.every(Number.isFinite) ? [spot[0], spot[1]] : null;
-/** After a finish at the Lisbon line: the scene moves to the coast the line points at. */
-let arrival: [number, number] | null = null;
-const bands = new RainBands();
-scene.add(bands.mesh);
-// Other ships, where the real traffic is (loaded in the background; none until it is).
-let traffic: Traffic | null = null;
-void Traffic.load().then((tr) => {
-  traffic = tr;
-  scene.add(tr.root);
-});
-const spray = new Spindrift(quality === "high" ? 5000 : 2000);
-scene.add(spray.points);
-const sprayBuf = new THREE.Vector2();
 const place: Placement = { x: 0, z: 0, yaw: 0 };
 // The boat you sail: our kayak, or a stock boat when the simulator offers one (the
 // game's replay names it, e.g. "31 ft cruiser").
 let spec: BoatSpec = KAYAK;
 const HULL: Partial<Record<BoatSpec["key"], HullParams>> = {
   kayak: KAYAK_V4,
-  ...STOCK_HULL,
+  stock_cruiser31: CRUISER31,
+  stock_dinghy14: DINGHY14,
+  stock_beachcat16: BEACHCAT16,
+  stock_sail_drone7: SAIL_DRONE7,
 };
 let motion = new BoatMotion(KAYAK_V4, place);
 let model: BoatModel | null = null;
@@ -125,7 +93,6 @@ function buildBoat(): void {
     contact.dispose();
   }
   model = BUILDERS[spec.key](quality);
-  reflectable(model.root);
   contact = new Contact(model.form, spec, quality);
   contact.collar.visible = contact.spray.visible = !model.twinHull;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
@@ -224,23 +191,6 @@ const page = {
   ports: 0,
   /** Points of interest: how many loaded, and the ids the track has reached (in order). */
   pois: { loaded: 0, shown: [] as string[] },
-  /** Real land in view: the place, how far off its box (km), buildings and trees; and the view's reach (m). */
-  land: { place: "", km: Infinity, buildings: 0, trees: 0 } as NearbyLand["shown"],
-  reach: HORIZON,
-  /** How many places' land files this copy of the site has (-1 until known). */
-  landKnown: -1,
-  /** How strongly the sea mirrors the land and boat now (0 off .. 1 calm). */
-  mirror: 0,
-  /** True when the view shows the arrival off Lisbon. */
-  arrival: false,
-  /** Look the given compass bearing past the boat (for pictures and tests). */
-  aim: (bearing: number) => aimAt(bearing),
-  /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
-  spindrift: 0,
-  bands: 0,
-  ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } } as Traffic["shown"],
-  /** The wreck showing through the water below, if any (its id). */
-  wreck: "",
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -577,7 +527,7 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
       const e = game.boat!.events.filter(isNotable).at(-1);
       note(e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, TONE_COLOUR.warn);
     } else if (!(kind !== "event" && stopped === "time"))
-      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
+      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
     if (page.status?.over) await finish();
   } catch (e) {
@@ -632,7 +582,6 @@ async function finish(): Promise<void> {
       `${x.days.toFixed(1)} days`,
       `${Math.round(x.battery_low * 100)}%`,
       x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none",
-      airtimeText(x.airtime),
     ];
     for (const c of cells) {
       const td = document.createElement("td");
@@ -642,7 +591,7 @@ async function finish(): Promise<void> {
     return tr;
   };
   const table = $("r-table");
-  table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th><th>Satellite messages</th></tr>";
+  table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>";
   table.append(line("You", me), line("Autopilot ghost", gh));
   // How it ends, in the boat's own words (#234). textContent only: the words come from the simulator.
   const ends = $("r-ends");
@@ -670,26 +619,10 @@ async function finish(): Promise<void> {
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
-  const air = me.airtime;
-  if (air) bits.push(`Satellite bill on the ${air.plan} plan, for ${air.months} month${air.months === 1 ? "" : "s"} with the $${air.usd.activation.toFixed(2)} activation; the backup beacon pinged ${air.beacon_pings} times on its own yearly fee.`);
   const ch = challenges.find((x) => x.id === page.challenge);
   bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
-  // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
-  if (me.outcome === "arrived" && finishesOffLisbon()) {
-    const L = PLACES.lisbon;
-    arrival = [L.lat, L.lon];
-    page.arrival = true;
-    aimAt(L.look);
-    bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
-  }
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
-}
-
-/** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
-function finishesOffLisbon(): boolean {
-  const t = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
-  return kmTo(t, [39.5, -13.5]) < 100;
 }
 
 // ---------- start ----------
@@ -719,8 +652,6 @@ function showChallenge(): void {
   $("chnote").textContent = c.weather_note;
 }
 async function begin(): Promise<void> {
-  arrival = null;
-  page.arrival = false;
   const launch = Number($<HTMLSelectElement>("launch").value);
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
@@ -892,7 +823,6 @@ const landImg = new Image();
     }),
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
-  chart.setWrecks(wreckMarks());
 })().catch((e) => console.warn("chart:", e));
 
 /**
@@ -960,28 +890,12 @@ const proj = new THREE.Vector3();
 // ---------- points of interest (wrecks, history, ocean facts) ----------
 // Your boat's track only: a card pops up as the replayed hours reach it.
 let pois: Poi[] = [];
-
-/** Where the wrecks are, for the chart. */
-function wreckMarks(): [number, number][] {
-  return pois.filter((p) => p.kind === "wreck").map((p) => p.at[0]);
-}
-
-/** A wreck right below, seen through clear, calm water by day (pois.ts). */
-function showWreck(lat: number, lon: number): void {
-  const w = Number.isFinite(lat) ? wreckBelow(pois, lat, lon) : null;
-  const calm = 1 - THREE.MathUtils.smoothstep(sea.waveHeight, 0.6, 2.5);
-  const k = w ? w.clear * calm * THREE.MathUtils.smoothstep(atmos.sunLight, 0.05, 0.5) : 0;
-  if (w) sea.setWreck(w.x, w.z, w.poi.size_m![0], w.poi.size_m![1], w.poi.depth_m!, k);
-  else sea.setWreck(0, 0, 1, 1, 0, 0);
-  page.wreck = k > 0.01 ? w!.poi.id : "";
-}
 const poiSeen = new Set<string>();
 let poiH = 0;
 const poiCards = new PoiCards();
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   page.pois.loaded = p.length;
-  chart?.setWrecks(wreckMarks());
   resetPois();
 });
 /** A new or shared game: what the boat already passed counts as seen. */
@@ -997,41 +911,6 @@ function poisReached(): void {
   poiH = hour;
   for (const p of ps) poiCards.add(p, `Day ${(p.h / 24).toFixed(1)}`);
   page.pois.shown.push(...ps.map((x) => x.poi.id));
-}
-
-/** Land near the boat: load it, keep it in place, and reach the view out to it (gently, over a few seconds). */
-function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: number, hs: number, wu: number, wv: number): void {
-  if (!land) return;
-  land.update(lat, lon, t, { haze: atmos.fog.color, light: atmos.ambient, sunEl, hs, storm, wu, wv });
-  page.land = land.shown;
-  const want = land.active ? LAND_HORIZON : HORIZON;
-  if (want > sea.horizon) sea.setHorizon(want);
-  reach += (want - reach) * Math.min(1, dt * 0.6);
-  if (Math.abs(want - reach) < 50) reach = want;
-  if (!land.active && reach === HORIZON) sea.setHorizon(HORIZON);
-  page.reach = reach;
-  if (reach !== atmos.horizon) atmos.setHorizon(reach);
-  const far = Math.max(12000, reach * 3);
-  if (far !== camera.far) {
-    camera.far = far;
-    camera.updateProjectionMatrix();
-  }
-  const credit = $("landcredit");
-  const name = land.shown.place;
-  if (credit.dataset.place !== name) {
-    credit.dataset.place = name;
-    credit.textContent = name ? `${PLACES[name].credit} · ` : "";
-  }
-}
-
-/** Turn the camera to look the given compass bearing past the boat, keeping its distance. */
-function aimAt(bearing: number): void {
-  const a = THREE.MathUtils.degToRad(bearing);
-  const off = camera.position.clone().sub(controls.target);
-  const flat = Math.hypot(off.x, off.z);
-  off.x = -Math.sin(a) * flat;
-  off.z = Math.cos(a) * flat;
-  camera.position.copy(controls.target).add(off);
 }
 
 renderer.setAnimationLoop(() => {
@@ -1104,29 +983,17 @@ renderer.setAnimationLoop(() => {
   controls.target.y += dy;
   const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * KN - 15) / 20, 0, 1);
   storm += (target - storm) * Math.min(1, dt * 1.5);
-  const [lat, lon] = arrival ?? (r ? positionAt(r, h) : (SPOT ?? [36.65, -74.94]));
+  const [lat, lon] = r ? positionAt(r, h) : [36.65, -74.94];
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
-  atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
-  atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.set(sp.el, sp.az, storm);
-  showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient);
   clouds.closeIn(atmos.fog);
   const rate = r?.rain ? valueAt(r, r.rain, h) : null;
-  // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
-  bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
-  rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
-  page.bands = bands.shown;
-  traffic?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight);
-  if (traffic) page.ships = traffic.shown;
-  renderer.getDrawingBufferSize(sprayBuf);
-  spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
-  page.spindrift = spray.amount;
+  rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.ambient);
-  updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
   sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target) });
   if (!cine.update(dt)) controls.update();
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
@@ -1151,11 +1018,6 @@ renderer.setAnimationLoop(() => {
       ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
     }
   } else ghostTag.hidden = true;
-  renderer.getDrawingBufferSize(bufSize);
-  mirror.setSize(bufSize.x, bufSize.y);
-  mirror.update(renderer, scene, camera, sea.waveHeight);
-  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
-  page.mirror = mirror.strength;
   atmos.render();
   if (chart && game.boat && game.ghost) {
     if (chartDirty) {

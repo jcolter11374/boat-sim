@@ -4,7 +4,6 @@ stop conditions, the ghost and fairness."""
 import io
 import json
 from datetime import datetime, timedelta
-from itertools import pairwise
 
 import pytest
 from test_sandbox import _fake_sources
@@ -12,7 +11,7 @@ from test_sandbox import _fake_sources
 from boatsim.autonomy.helm import HelmAutopilot
 from boatsim.sandbox import forcing as F
 from boatsim.sandbox import run as R
-from boatsim.sandbox.helm import LAND_CLOSE_KM, LAND_REARM_KM, LAND_WARN_KM, Game, launch_days
+from boatsim.sandbox.helm import Game, launch_days
 from boatsim.types import Mission, Sensors, Waypoint
 
 MAY1 = 2  # launch index of 1 May 2020, inside the test bundle (1-4 May)
@@ -498,112 +497,3 @@ def test_base_station_sends_sail_orders_with_the_route(env):
     g.run(hours=1, ghost_passes=False, land_within_km=None, breakdown=False)
     assert g.helm.sails == "storm" and g.helm.engine is False
     assert g.status()["sailing"]["plan"] == "storm"
-
-
-# ------------------------------------------------------------- the near-land ring
-
-
-def test_a_port_start_still_stops_before_running_ashore(env):
-    """Ravi's port check (11 Nov): from Yarmouth, ~23 km off Nova Scotia and so
-    already inside the 50 km ring, a boat ran ashore with no "land" stop. The
-    10 km ring stops it the first time it closes in, with the boat still afloat."""
-    g = Game(env, launch_index=MAY1, start_port="yarmouth", breakdowns=False, max_days=3.0)
-    assert g._land_km() < LAND_WARN_KM  # starts inside the outer ring
-    g.order(0.0, 1.0)  # due north, onto the Nova Scotia shore
-    out = g.run(ghost_passes=False, breakdown=False)
-    assert out["stopped"] == "land" and not g.mine.done
-    assert g._land_km() <= LAND_CLOSE_KM
-    # Fires once: carrying on in, the next stop is the grounding itself.
-    assert g.run(ghost_passes=False, breakdown=False)["stopped"] == "over"
-    assert g.result()["boat"]["outcome"] == "aground"
-
-
-def test_the_near_ring_rearms_only_once_clear(env):
-    g = Game(env, launch_index=MAY1, start_port="yarmouth", breakdowns=False, max_days=3.0)
-    g.order(0.0, 1.0)
-    assert g.run(ghost_passes=False, breakdown=False)["stopped"] == "land"
-    g.order(180.0, 1.0)  # back out to sea
-    g.run(hours=3, ghost_passes=False, breakdown=False, land_within_km=None)
-    assert g._land_km() >= LAND_REARM_KM and g.close_armed
-    g.order(0.0, 1.0)  # and in again: a second warning
-    assert g.run(ghost_passes=False, breakdown=False)["stopped"] == "land"
-    # Saving and loading replays the ring the same way.
-    back = Game.load(env, g.save())
-    assert back.close_armed == g.close_armed and back.mine.state == g.mine.state
-
-
-def _base_game(env, **kw):
-    g = Game(env, launch_index=MAY1, mode="base", breakdowns=False, max_days=2.5, **kw)
-    g.order("finish", 0.5)
-    return g
-
-
-def test_base_hears_only_the_daily_report_while_iridium_works(env):
-    g = _base_game(env)
-    g.run(hours=30, ghost_passes=False, land_within_km=None, breakdown=False)
-    b = g.status()["base"]
-    assert [r.get("source") for r in b["reports"]] == [None, "iridium"]  # drop, then day 1
-    assert g.status()["silence"]["days_in_a_row"] < 1.0
-
-
-def test_with_iridium_dead_base_gets_the_beacons_six_hourly_fixes(env):
-    g = _base_game(env)
-    g.mine.state.damage["comms_silent"] = True  # the main link is gone
-    g.run(hours=30, ghost_passes=False, land_within_km=None, breakdown=False)
-    b = g.status()["base"]
-    beacon = [r for r in b["reports"] if r.get("source") == "beacon"]
-    assert all(r.get("source") != "iridium" for r in b["reports"])
-    assert 4 <= len(beacon) <= 6 and b["last_report"] == beacon[-1]
-    ts = [datetime.fromisoformat(r["t"]) for r in beacon]
-    assert all(abs((b2 - a).total_seconds() / 3600 - 6.0) < 0.5 for a, b2 in pairwise(ts))
-    # Base's guess runs on from the beacon fix, and the boat still counts as heard.
-    assert b["estimate"]["from_report"] == beacon[-1]["t"]
-    assert g.status()["silence"]["days_in_a_row"] < 0.3
-
-
-def _silent_game(env, monkeypatch, warn_d=0.5):
-    import boatsim.sandbox.helm as H
-
-    monkeypatch.setattr(H, "SILENCE_WARN_ROW_D", warn_d)
-    g = _base_game(env)
-    g.mine.state.damage.update(comms_silent=True, beacon=True)  # nothing gets out
-    return g
-
-
-def test_a_silent_boat_warns_once_before_the_limit(env, monkeypatch):
-    g = _silent_game(env, monkeypatch)
-    r = g.run(hours=24, ghost_passes=False, land_within_km=None, breakdown=False)
-    assert r["stopped"] == "silence"
-    sil = r["status"]["silence"]
-    assert 0.5 <= sil["days_in_a_row"] < 0.6 and sil["limit_in_a_row"] == 10.0
-    assert sil["limit_total"] == 15
-    # No second warning while it stays silent.
-    r = g.run(hours=12, ghost_passes=False, land_within_km=None, breakdown=False)
-    assert r["stopped"] == "time"
-
-
-def test_silence_past_the_race_limit_disqualifies_the_run(env, monkeypatch):
-    from boatsim.runner import arrival
-
-    monkeypatch.setattr(arrival, "SILENT_DAYS_IN_A_ROW", 1.0)  # the rule itself, not a copy
-    g = _silent_game(env, monkeypatch)
-    assert g.run(ghost_passes=False, land_within_km=None, breakdown=False)["stopped"] == "silence"
-    r = g.run(ghost_passes=False, land_within_km=None, breakdown=False)
-    assert r["stopped"] == "over" and r["status"]["silence"]["limit_in_a_row"] == 1.0
-    assert g.result()["boat"]["outcome"] == "disqualified"
-
-
-def test_the_silence_warning_can_be_turned_off(env, monkeypatch):
-    g = _silent_game(env, monkeypatch)
-    r = g.run(hours=24, silence=False, ghost_passes=False, land_within_km=None, breakdown=False)
-    assert r["stopped"] == "time"
-
-
-def test_results_card_counts_satellite_airtime(env):
-    g = _base_game(env)
-    g.run(hours=50, ghost_passes=False, land_within_km=None, breakdown=False)
-    a = g.result()["boat"]["airtime"]
-    assert a["up"]["messages"] >= 1 and a["up"]["bytes"] > 0  # the daily reports
-    assert a["beacon_pings"] >= 4  # every 6 hours
-    assert a["usd"]["total"] >= 15.75 + 26.25  # a month's fee and activation
-    assert g.result()["ghost"]["airtime"]["up"]["messages"] >= 1

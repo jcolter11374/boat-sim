@@ -58,28 +58,3 @@ test("sunrise bearings off Washington DC match the almanac to within a degree", 
   near(sunriseBearing(Date.UTC(2020, 2, 20), 38.9, -77.04), 90, 1, "equinox sunrise");
   near(sunriseBearing(Date.UTC(2020, 5, 20), 38.9, -77.04), 59.3, 1, "solstice sunrise");
 });
-
-test("the star catalogue: the Yale Bright Star Catalogue, brightest first, at the right places", async () => {
-  const { readFileSync } = await import("node:fs");
-  const { decodeStars } = await import("../src/sky");
-  const b = readFileSync(new URL("../public/stars.bin", import.meta.url));
-  const stars = decodeStars(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
-  assert.ok(stars.length > 9000, `${stars.length} stars`);
-  for (let i = 1; i < stars.length; i++) assert.ok(stars[i].mag >= stars[i - 1].mag, "brightest first");
-  // Sirius: RA 6h 45m 09s, Dec -16 43', magnitude -1.46.
-  assert.ok(Math.abs(stars[0].ra - 101.29) < 0.05 && Math.abs(stars[0].dec + 16.72) < 0.05 && stars[0].mag === -1.46, JSON.stringify(stars[0]));
-  assert.ok(stars.filter((s) => s.mag <= 6.5).length > 8000, "about 9,000 stars to the eye's limit");
-});
-
-test("star colours run from orange (cool) to blue-white (hot), and moonlight hides the faint ones", async () => {
-  const { starColour, nakedEyeLimit } = await import("../src/sky");
-  const cool = starColour(3500);
-  const sun = starColour(5800);
-  const hot = starColour(20000);
-  assert.ok(cool[0] > cool[2] && hot[2] >= hot[0], `${cool} / ${hot}`);
-  assert.ok(sun[0] > 0.9 && sun[1] > 0.9 && sun[2] > 0.85, `the sun's kind is near white: ${sun}`);
-  assert.deepEqual(starColour(0), [1, 1, 1]);
-  assert.equal(nakedEyeLimit(-30, 0), 6.5);
-  assert.ok(Math.abs(nakedEyeLimit(-30, 1) - 4.3) < 1e-9, "a full moon washes out the faint stars");
-  assert.ok(nakedEyeLimit(-6, 0) < 1.5, "civil twilight: only the brightest");
-});

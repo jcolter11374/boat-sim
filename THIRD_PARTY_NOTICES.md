@@ -68,10 +68,6 @@ between the two maps.
   World Seaborne Trade Monitoring System (Cerdeiro, Komaromi, Liu and Saeed,
   2020). Licence: CC BY 4.0.
 
-The 3D pages' other ships come from the same map: `sea3d/public/ships.bin` is
-this file on a log scale with near-all-land cells cleared (built by
-`sea3d/scripts/ships.py`), so it carries the same two credits and licence.
-
 ## Weather and ocean data
 
 The weather and current files in `data/era5/`, the voyage replays in
@@ -99,16 +95,6 @@ and quantised it.
   (`data/land/land_mask_v1.npz`) and the coastline on the 3D pages. Made with
   Natural Earth. Free vector and raster map data @ naturalearthdata.com. It is
   in the public domain.
-
-## Stars (`sea3d/public/stars.bin`)
-
-The night sky in the 3D pages is the Yale Bright Star Catalogue, 5th revised
-edition (D. Hoffleit and W. H. Warren Jr., 1991; NASA Astronomical Data Center,
-CDS catalogue V/50): every star to about magnitude 6.5, with its J2000 position,
-visual magnitude and colour temperature. The catalogue is freely distributed for
-any use. We read it from the JSON copy at
-https://github.com/brettonw/YaleBrightStarCatalog (`bsc5-short.json`) and pack it
-with `sea3d/scripts/stars.py`.
 
 ## Software that ships in, or is loaded by, the 3D pages
 
@@ -194,5 +180,3 @@ stored in git. Resampled by us.
   License (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/). The file
   is a derived database and stays under the ODbL, separate from this repo's MIT
   code; any public copy keeps this notice.
-  Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
-  work, with the OpenStreetMap / Overture credit on the page's credit line.

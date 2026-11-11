@@ -43,12 +43,7 @@
    "radius_km": 90,
    "text": "A German submarine lies about 27 m down off Oregon Inlet. On 14 April 1942 the US destroyer Roper sank it: the first U-boat sunk by US forces off the East Coast in the Second World War.",
    "source": "NOAA Monitor National Marine Sanctuary",
-   "url": "https://monitor.noaa.gov/shipwrecks/u-85.html",
-   "depth_m": 27,
-   "size_m": [
-    66.5,
-    6.2
-   ]
+   "url": "https://monitor.noaa.gov/shipwrecks/u-85.html"
   },
   {
    "id": "uss-monitor",
@@ -63,12 +58,7 @@
    "radius_km": 90,
    "text": "The Union's famous Civil War ironclad sank in a storm off Cape Hatteras on 31 December 1862; 16 of the 62 men aboard died. It lies about 70 m down, and in 1975 the wreck became the first US national marine sanctuary.",
    "source": "NOAA Monitor National Marine Sanctuary",
-   "url": "https://monitor.noaa.gov/shipwrecks/uss_monitor.html",
-   "depth_m": 70,
-   "size_m": [
-    52.4,
-    12.6
-   ]
+   "url": "https://monitor.noaa.gov/shipwrecks/uss_monitor.html"
   },
   {
    "id": "sandy-hook-light",
@@ -113,12 +103,7 @@
    "radius_km": 60,
    "text": "The night steamer Portland left Boston for Portland, Maine on 26 November 1898 and sailed into a storm now called the Portland Gale. Nobody survived: 192 or 193 people died. The wreck lies upright in over 400 feet (120 m) of water in the Stellwagen Bank sanctuary. Found in 1989 and confirmed in 2002, it is called the Titanic of New England.",
    "source": "NOAA Stellwagen Bank National Marine Sanctuary",
-   "url": "https://stellwagen.noaa.gov/maritime/portland.html",
-   "depth_m": 120,
-   "size_m": [
-    85.6,
-    12.8
-   ]
+   "url": "https://stellwagen.noaa.gov/maritime/portland.html"
   },
   {
    "id": "fundy-tides",
@@ -255,12 +240,7 @@
    "radius_km": 120,
    "text": "The Italian liner Andrea Doria was hit in fog by the Swedish liner Stockholm late on 25 July 1956, about 45 miles south of Nantucket. It took 11 hours to sink, long enough for 1,660 people to be rescued; 51 died. The wreck lies about 72 m down.",
    "source": "History.com (this day in history)",
-   "url": "https://www.history.com/this-day-in-history/july-25/ships-collide-off-nantucket",
-   "depth_m": 72,
-   "size_m": [
-    212.2,
-    27.5
-   ]
+   "url": "https://www.history.com/this-day-in-history/july-25/ships-collide-off-nantucket"
   },
   {
    "id": "bermuda-triangle",
@@ -336,12 +316,7 @@
    "radius_km": 150,
    "text": "Not far from here, nearly 4 km down, lies the Titanic. It hit an iceberg and sank on 15 April 1912, about 350 nautical miles off Newfoundland, and more than 1,500 people died. The wreck was found in 1985 by a joint US-French team led by Robert Ballard and Jean-Louis Michel.",
    "source": "NOAA",
-   "url": "https://noaa.gov/node/10822",
-   "depth_m": 3800,
-   "size_m": [
-    269.1,
-    28.2
-   ]
+   "url": "https://noaa.gov/node/10822"
   },
   {
    "id": "azores-high",

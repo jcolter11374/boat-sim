@@ -27,14 +27,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-04-01T12:00",
    "outcome": "aground",
-   "days": 28.58
-  },
-  {
-   "file": "voyage_wind-powered-ocean-drone_2020-04-01.json",
-   "boat": "wind-powered ocean drone",
-   "start": "2020-04-01T12:00",
-   "outcome": "lost",
-   "days": 127.5
+   "days": 32.87
   },
   {
    "file": "voyage_2020-04-15.json",
@@ -62,14 +55,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 16.7
-  },
-  {
-   "file": "voyage_wind-powered-ocean-drone_2020-04-15.json",
-   "boat": "wind-powered ocean drone",
-   "start": "2020-04-15T12:00",
-   "outcome": "arrived",
-   "days": 47.03
+   "days": 17.07
   },
   {
    "file": "voyage_2020-05-01.json",
@@ -95,13 +81,6 @@
   {
    "file": "voyage_31-ft-cruiser_2020-05-01.json",
    "boat": "31 ft cruiser",
-   "start": "2020-05-01T12:00",
-   "outcome": "timeout",
-   "days": 150.0
-  },
-  {
-   "file": "voyage_wind-powered-ocean-drone_2020-05-01.json",
-   "boat": "wind-powered ocean drone",
    "start": "2020-05-01T12:00",
    "outcome": "timeout",
    "days": 150.0
@@ -135,13 +114,6 @@
    "days": 22.42
   },
   {
-   "file": "voyage_wind-powered-ocean-drone_2020-05-15.json",
-   "boat": "wind-powered ocean drone",
-   "start": "2020-05-15T12:00",
-   "outcome": "arrived",
-   "days": 45.89
-  },
-  {
    "file": "voyage_2020-06-01.json",
    "boat": "v4 kayak",
    "start": "2020-06-01T12:00",
@@ -170,13 +142,6 @@
    "days": 43.83
   },
   {
-   "file": "voyage_wind-powered-ocean-drone_2020-06-01.json",
-   "boat": "wind-powered ocean drone",
-   "start": "2020-06-01T12:00",
-   "outcome": "timeout",
-   "days": 150.0
-  },
-  {
    "file": "voyage_2020-06-15.json",
    "boat": "v4 kayak",
    "start": "2020-06-15T12:00",
@@ -203,13 +168,6 @@
    "start": "2020-06-15T12:00",
    "outcome": "arrived",
    "days": 22.07
-  },
-  {
-   "file": "voyage_wind-powered-ocean-drone_2020-06-15.json",
-   "boat": "wind-powered ocean drone",
-   "start": "2020-06-15T12:00",
-   "outcome": "arrived",
-   "days": 54.62
   }
  ]
 }

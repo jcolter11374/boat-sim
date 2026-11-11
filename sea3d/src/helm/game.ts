@@ -12,8 +12,6 @@ export interface Report {
   lon: number;
   soc?: number;
   hdg?: number;
-  /** Where it came from: the daily Iridium report, or a 6-hourly backup-beacon fix while Iridium is down. The drop has none. */
-  source?: "iridium" | "beacon";
 }
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
@@ -64,8 +62,6 @@ export interface Status {
     /** Base's dead-reckoned guess at where the boat is now (#214). */
     estimate?: { lat: number; lon: number; from_report: string; age_h: number };
   };
-  /** How long the boat has gone unheard, against the race's limits (older simulators leave it out). */
-  silence?: { days_in_a_row: number; days_total: number; limit_in_a_row: number; limit_total: number };
   /** False in base mode: the page shows what base knows, not the true boat (#214). */
   show_true_position?: boolean;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
@@ -87,38 +83,19 @@ export interface Ending {
   day: number | null;
   boat: string | null;
 }
-/** The satellite airtime counter (older simulators leave it out). */
-export interface Airtime {
-  up: { messages: number; bytes: number };
-  down: { messages: number; bytes: number };
-  lost: number;
-  months: number;
-  bytes_billed: number;
-  usd: { monthly_fees: number; extra_bytes: number; empty_mailbox_checks: number; activation: number; total: number };
-  plan: string;
-  beacon_pings: number;
-}
-
-/** Plain words for the airtime counter: messages each way, bytes, and the bill. */
-export function airtimeText(a: Airtime | null | undefined): string {
-  if (!a) return "not counted";
-  const bytes = a.up.bytes + a.down.bytes;
-  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes: $${a.usd.total.toFixed(2)}`;
-}
-
 export interface Card {
   build: string;
   launch: string;
   seed: number;
   breakdowns_on: boolean;
-  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
-  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
+  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
+  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
   margin_days: number | null;
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
 }
-export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "silence" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
+export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
   hours?: number;
   max_hours?: number;
@@ -260,13 +237,7 @@ export function stopText(s: Stop, st: Status | null): string {
     case "wind":
       return "The wind is getting up.";
     case "land":
-      return "Land is getting close.";
-    case "silence": {
-      const q = st?.silence;
-      return q
-        ? `Nothing has heard from the boat for ${q.days_in_a_row.toFixed(1)} days (${q.days_total} silent days in all). The race disqualifies a boat silent more than ${q.limit_in_a_row} days in a row or ${q.limit_total} in total.`
-        : "The boat has gone quiet; the race disqualifies a boat that stays silent too long.";
-    }
+      return "Land is within 50 km.";
     case "breakdown":
       return "Something went wrong on board (see the note on the right).";
     case "ghost_passed":

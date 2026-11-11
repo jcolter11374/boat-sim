@@ -14,6 +14,10 @@ on:
       last_year:
         description: "Last year"
         default: "2024"
+  pull_request:
+    paths:
+      - src/boatsim/mc/dropday.py
+      - .github/workflows/drop-day.yml
 permissions:
   contents: read
 concurrency:

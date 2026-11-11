@@ -36,10 +36,6 @@ class Poi:
     text: str
     source: str
     url: str
-    # Wrecks: how deep the wreck lies (m, as the card says) and its hull's length and
-    # beam (m), for the faint outline seen through clear, shallow water (sea3d water.ts).
-    depth_m: float | None = None
-    size_m: tuple[float, float] | None = None
 
 
 POIS: list[Poi] = [
@@ -85,8 +81,6 @@ POIS: list[Poi] = [
         "Coast in the Second World War.",
         "NOAA Monitor National Marine Sanctuary",
         "https://monitor.noaa.gov/shipwrecks/u-85.html",
-        depth_m=27,
-        size_m=(66.5, 6.2),  # a Type VIIB U-boat
     ),
     Poi(
         "uss-monitor",
@@ -99,8 +93,6 @@ POIS: list[Poi] = [
         "1975 the wreck became the first US national marine sanctuary.",
         "NOAA Monitor National Marine Sanctuary",
         "https://monitor.noaa.gov/shipwrecks/uss_monitor.html",
-        depth_m=70,
-        size_m=(52.4, 12.6),  # 172 ft by 41.5 ft
     ),
     # ---------- off the other ports (Take the helm's "Start from") ----------
     # One card near each group of launch points (sea3d/public/ports.json), wide
@@ -144,8 +136,6 @@ POIS: list[Poi] = [
         "Titanic of New England.",
         "NOAA Stellwagen Bank National Marine Sanctuary",
         "https://stellwagen.noaa.gov/maritime/portland.html",
-        depth_m=120,
-        size_m=(85.6, 12.8),  # 281 ft by 42 ft
     ),
     Poi(
         "fundy-tides",
@@ -254,8 +244,6 @@ POIS: list[Poi] = [
         "72 m down.",
         "History.com (this day in history)",
         "https://www.history.com/this-day-in-history/july-25/ships-collide-off-nantucket",
-        depth_m=72,
-        size_m=(212.2, 27.5),
     ),
     Poi(
         "bermuda-triangle",
@@ -311,8 +299,6 @@ POIS: list[Poi] = [
         "Robert Ballard and Jean-Louis Michel.",
         "NOAA",
         "https://noaa.gov/node/10822",
-        depth_m=3800,
-        size_m=(269.1, 28.2),
     ),
     # ---------- mid-ocean and the Azores ----------
     Poi(
@@ -425,10 +411,8 @@ POIS: list[Poi] = [
 def catalog() -> dict:
     out = []
     for p in POIS:
-        d = {k: v for k, v in asdict(p).items() if v is not None}
+        d = asdict(p)
         d["at"] = [list(x) for x in p.at]
-        if p.size_m:
-            d["size_m"] = list(p.size_m)
         out.append(d)
     return {
         "pois": out,

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { SEE_DEPTH, kmBetween, loadPois, passes, safeUrl, segmentNearest, whereFrom, wreckBelow, type Poi, type Track } from "../src/pois";
+import { kmBetween, loadPois, passes, safeUrl, segmentNearest, whereFrom, type Poi, type Track } from "../src/pois";
 
 const P = (id: string, at: [number, number][], radius_km: number): Poi => ({
   id,
@@ -79,18 +79,4 @@ test("the first moments of a replay count as at the drop, before its first sampl
   const late: Track = { h: [0.17, 1.17], lat: [37, 37], lon: [-75, -74.99] };
   assert.equal(passes(late, 0, 0.001, [P("drop", [[37.5, -75]], 60)], new Set()).length, 1);
   assert.equal(passes(late, 0.5, 0.6, [P("drop", [[37.5, -75]], 60)], new Set()).length, 1);
-});
-
-test("a wreck shows through the water only when it's shallow and right below", () => {
-  const all = JSON.parse(readFileSync(new URL("../public/pois.json", import.meta.url), "utf8")).pois as Poi[];
-  const u85 = all.find((p) => p.id === "u-85")!;
-  assert.ok(u85.depth_m! <= SEE_DEPTH && u85.size_m, "U-85 lies shallow enough");
-  const [la, lo] = u85.at[0];
-  const w = wreckBelow(all, la + 0.001, lo)!; // about 110 m south of the boat
-  assert.equal(w.poi.id, "u-85");
-  assert.ok(Math.abs(w.x) < 1 && Math.abs(w.z - 111) < 1, `${w.x}, ${w.z}`);
-  assert.ok(w.clear > 0.3 && w.clear < 0.6, `faint at 27 m: ${w.clear}`);
-  assert.equal(wreckBelow(all, la + 0.01, lo), null, "1 km off: nothing to see");
-  const monitor = all.find((p) => p.id === "uss-monitor")!;
-  assert.equal(wreckBelow(all, ...monitor.at[0]), null, "70 m down: too deep to see");
 });

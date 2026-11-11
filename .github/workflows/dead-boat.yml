@@ -20,6 +20,10 @@ on:
       hour:
         description: "UTC launch hour"
         default: "12"
+  pull_request:
+    paths:
+      - src/boatsim/mc/deadboat.py
+      - .github/workflows/dead-boat.yml
 permissions:
   contents: read
 jobs:

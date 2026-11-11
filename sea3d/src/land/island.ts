@@ -4,8 +4,7 @@
  * Sentinel-2 passes ("contains modified Copernicus Sentinel data").
  *
  * Looks, on top of the plain heightmap:
- * - a band of dark wet basalt along the waterline (Pico's shore is black lava; not
- *   on places whose shore is "plain", such as Annapolis's bulkheads),
+ * - a band of dark wet basalt along the waterline (Pico's shore is black lava),
  * - surf: white bands that roll in towards the shore and a wash line at the
  *   water's edge, more of it in a bigger sea,
  * - haze: distant slopes fade towards the colour of the air,
@@ -15,9 +14,10 @@
 import * as THREE from "three";
 import type { Quality } from "../boats/parts";
 import type { Place } from "./place";
-import { CURVE, NOISE, distanceField, metresPerDegree } from "./shader";
 
-export interface LandGrid {
+const R_EARTH = 6371000;
+
+interface Meta {
   nx: number;
   ny: number;
   lon0: number;
@@ -26,20 +26,32 @@ export interface LandGrid {
   lat1: number;
 }
 
+/** Shared by the land and the surf: drop the far ground with the earth's curve (world x, z from the boat). */
+const CURVE = `
+  vec4 wpC = modelMatrix * vec4(transformed, 1.0);
+  transformed.y -= dot(wpC.xz, wpC.xz) / ${(2 * R_EARTH).toFixed(1)};
+`;
+
+const NOISE = `
+float lhash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float lnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(lhash(i), lhash(i + vec2(1, 0)), f.x), mix(lhash(i + vec2(0, 1)), lhash(i + vec2(1, 1)), f.x), f.y);
+}
+`;
+
 export class Island {
   readonly group = new THREE.Group();
   private surfMat: THREE.ShaderMaterial | null = null;
-  private landUniforms: { uHaze: { value: THREE.Color }; uHazeK: { value: number }; uRock: { value: number } } = {
+  private landUniforms: { uHaze: { value: THREE.Color }; uHazeK: { value: number } } = {
     uHaze: { value: new THREE.Color(0.7, 0.8, 0.9) },
     uHazeK: { value: 1 },
-    uRock: { value: 1 },
   };
   /** Surf sheet size (for tests). */
   surfTriangles = 0;
   /** True once the files have loaded and the land is in the scene. */
   ready = false;
-  /** The land's grid and heights (m), for layers that stand on it (trees). */
-  grid: { meta: LandGrid; hgt: Int16Array } | null = null;
 
   private constructor(private readonly place: Place) {
     this.group.name = "land";
@@ -52,13 +64,13 @@ export class Island {
       if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) throw new Error(f);
       return r;
     };
-    let meta: LandGrid;
+    let meta: Meta;
     let hgt: Int16Array;
     let map: THREE.Texture;
     try {
       meta = await (await get("meta.json")).json();
       hgt = new Int16Array(await (await get("height.bin")).arrayBuffer());
-      map = await new THREE.TextureLoader().loadAsync(`${base}/${place.land ?? place.key}_colour.jpg`);
+      map = await new THREE.TextureLoader().loadAsync(`${base}/${place.key}_colour.jpg`);
     } catch {
       return null;
     }
@@ -66,14 +78,14 @@ export class Island {
     map.colorSpace = THREE.SRGBColorSpace;
     map.anisotropy = 8;
     isl.build(meta, hgt, map, quality === "low" ? 4 : 2);
-    isl.grid = { meta, hgt };
     isl.ready = true;
     return isl;
   }
 
-  private build(meta: LandGrid, hgt: Int16Array, map: THREE.Texture, step: number): void {
+  private build(meta: Meta, hgt: Int16Array, map: THREE.Texture, step: number): void {
     const { place } = this;
-    const { mx, my } = metresPerDegree((meta.lat0 + meta.lat1) / 2);
+    const mx = 111320 * Math.cos((((meta.lat0 + meta.lat1) / 2) * Math.PI) / 180);
+    const my = 110950;
     const at = (i: number, j: number) => hgt[Math.min(j, meta.ny - 1) * meta.nx + Math.min(i, meta.nx - 1)];
     const xOf = (i: number) => (meta.lon0 + ((meta.lon1 - meta.lon0) * i) / (meta.nx - 1) - place.lon) * mx;
     const zOf = (j: number) => -(meta.lat1 - ((meta.lat1 - meta.lat0) * j) / (meta.ny - 1) - place.lat) * my;
@@ -118,14 +130,13 @@ export class Island {
     geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({ map, roughness: 0.93, metalness: 0, color: new THREE.Color(1.2, 1.2, 1.2) });
     const lu = this.landUniforms;
-    lu.uRock.value = place.shore === "plain" ? 0 : 1;
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, lu);
       sh.vertexShader = sh.vertexShader
         .replace("void main() {", "varying float vH;\nvarying vec3 vW;\nvoid main() {")
         .replace("#include <begin_vertex>", `#include <begin_vertex>\nvH = transformed.y;\n${CURVE}\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", `uniform vec3 uHaze;\nuniform float uHazeK;\nuniform float uRock;\nvarying float vH;\nvarying vec3 vW;\n${NOISE}\nvoid main() {`)
+        .replace("void main() {", `uniform vec3 uHaze;\nuniform float uHazeK;\nvarying float vH;\nvarying vec3 vW;\n${NOISE}\nvoid main() {`)
         .replace(
           "#include <map_fragment>",
           `#include <map_fragment>
@@ -133,7 +144,7 @@ export class Island {
           float br = lnoise(vW.xz * 0.05) * 0.6 + lnoise(vW.xz * 0.31) * 0.4;
           float rock = (1.0 - smoothstep(4.0 + 9.0 * br, 12.0 + 14.0 * br, vH)) * smoothstep(-3.0, -0.5, vH);
           vec3 basalt = vec3(0.045, 0.043, 0.042) * (0.7 + 0.6 * br);
-          diffuseColor.rgb = mix(diffuseColor.rgb, basalt, rock * 0.85 * uRock);
+          diffuseColor.rgb = mix(diffuseColor.rgb, basalt, rock * 0.85);
           diffuseColor.rgb *= mix(1.0, 0.55, 1.0 - smoothstep(0.0, 2.5, vH)); // wet`,
         )
         .replace(
@@ -149,7 +160,7 @@ export class Island {
           #include <fog_fragment>`,
         );
     };
-    mat.customProgramCacheKey = () => "boatsim-land-v2";
+    mat.customProgramCacheKey = () => "boatsim-land-v1";
     const land = new THREE.Mesh(geo, mat);
     land.name = "island";
     land.frustumCulled = false; // the curve moves vertices after culling's bounds
@@ -161,15 +172,46 @@ export class Island {
     const W = meta.nx;
     const H = meta.ny;
     const cell = ((meta.lon1 - meta.lon0) / (W - 1)) * mx; // about 31 m
-    const off = distanceField(W, H, (k) => hgt[k] > 0); // to the nearest land, for sea pixels
-    const inl = distanceField(W, H, (k) => hgt[k] <= 0); // to the nearest sea, for land pixels
+    const BIG = 1e9;
+    const off = new Float32Array(W * H); // to the nearest land, for sea pixels
+    const inl = new Float32Array(W * H); // to the nearest sea, for land pixels
+    for (let k = 0; k < W * H; k++) {
+      const land = hgt[k] > 0;
+      off[k] = land ? 0 : BIG;
+      inl[k] = land ? BIG : 0;
+    }
+    const D2 = Math.SQRT2;
+    for (const d of [off, inl]) {
+      for (let j = 0; j < H; j++)
+        for (let i = 0; i < W; i++) {
+          const k = j * W + i;
+          let v = d[k];
+          if (i > 0) v = Math.min(v, d[k - 1] + 1);
+          if (j > 0) {
+            v = Math.min(v, d[k - W] + 1);
+            if (i > 0) v = Math.min(v, d[k - W - 1] + D2);
+            if (i < W - 1) v = Math.min(v, d[k - W + 1] + D2);
+          }
+          d[k] = v;
+        }
+      for (let j = H - 1; j >= 0; j--)
+        for (let i = W - 1; i >= 0; i--) {
+          const k = j * W + i;
+          let v = d[k];
+          if (i < W - 1) v = Math.min(v, d[k + 1] + 1);
+          if (j < H - 1) {
+            v = Math.min(v, d[k + W] + 1);
+            if (i < W - 1) v = Math.min(v, d[k + W + 1] + D2);
+            if (i > 0) v = Math.min(v, d[k + W - 1] + D2);
+          }
+          d[k] = v;
+        }
+    }
     const signed = (i: number, j: number) => {
       const k = j * W + i;
       return hgt[k] > 0 ? -(inl[k] - 0.5) * cell : (off[k] - 0.5) * cell;
     };
-    // m offshore that the surf can reach: far on an open coast, a short wash in a sheltered harbour.
-    const REACH = place.fetch ? 50 : 330;
-    const FAR = place.fetch ? 4000 : Infinity;
+    const REACH = 330; // m offshore that the surf can reach
     const spos: number[] = [];
     const sdep: number[] = [];
     const sidx: number[] = [];
@@ -189,7 +231,6 @@ export class Island {
       for (let i = 0; i < W - 1; i++) {
         const ds = [signed(i, j), signed(i + 1, j), signed(i, j + 1), signed(i + 1, j + 1)];
         if (Math.min(...ds) > REACH || Math.max(...ds) < -cell) continue; // open water, or inland
-        if (Math.hypot(xOf(i), zOf(j)) > FAR) continue; // a harbour's far shores are too far to see a wash on
         const a = vert(i, j);
         const b = vert(i + 1, j);
         const c = vert(i, j + 1);
