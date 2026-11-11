@@ -302,6 +302,12 @@ VARIANTS: dict[str, Variant] = {
         "Base routes on the forecast with isochrones (5-day weather router)",
         routing="isochrone",
     ),
+    "fan": Variant(
+        "routing",
+        "Base plans with the fan of 3-day legs (every boat's default, and the "
+        "wind-powered drone's before 11 Nov 2026)",
+        routing="fan",
+    ),
     "fan_table": Variant(
         "routing",
         "Today's planner with a wing-sail boat's own speed table (#269)",
