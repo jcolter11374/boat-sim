@@ -617,6 +617,31 @@ def test_the_first_hour_ends_without_a_pass_stop(env):
     was the first time either boat was clear, not a pass: the first leader is
     taken quietly, and only a change of leader after that stops the clock."""
     g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.order("finish", 0.25)  # the page's old first order; on auto the boats never part
     r = g.run(hours=6, ghost_passes=True)
     assert r["stopped"] not in ("ghost_passed", "passed_ghost")
     assert g.leader is not None  # someone is clear by now, and it was noted
+
+
+def test_a_game_with_no_orders_sails_the_ghosts_voyage(env):
+    """Leo (#327): a full kayak crossing with no orders finished 10.9 days ahead of
+    the ghost, because the page's first order was "straight at the finish". Every
+    hands-on game now starts on "auto", the ghost's own autopilot and base route
+    corrections, so an untouched game is a dead heat."""
+    g = Game(env, launch_index=0, max_days=12)
+    assert g.status()["order"] == {"heading": "auto", "power": 0.25}
+    g._advance_to(g.start + timedelta(days=12))
+    assert (g.mine.state.lat, g.mine.state.lon) == (g.ghost.state.lat, g.ghost.state.lon)
+    assert g.lead_km() == 0.0
+    # Steering by hand and then handing back: auto is an order like any other.
+    g2 = Game(env, launch_index=0, max_days=2)
+    g2.order("finish", 0.25)
+    g2._advance_to(g2.start + timedelta(days=1))
+    assert g2.status()["order"]["heading"] == "finish"
+    assert g2.order("auto", 0.0)["power"] == 0.25
+    assert g2.on_auto and g2.status()["order"]["heading"] == "auto"
+    code = g2.save()
+    g2._advance_to(g2.start + timedelta(days=2))
+    assert Game.load(env, code).orders[-1]["heading"] == "auto"
+    with pytest.raises(ValueError):
+        Game(env, launch_index=0, mode="base").order("auto", 0.25)
