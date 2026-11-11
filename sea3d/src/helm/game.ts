@@ -87,13 +87,32 @@ export interface Ending {
   day: number | null;
   boat: string | null;
 }
+/** The satellite airtime counter (older simulators leave it out). */
+export interface Airtime {
+  up: { messages: number; bytes: number };
+  down: { messages: number; bytes: number };
+  lost: number;
+  months: number;
+  bytes_billed: number;
+  usd: { monthly_fees: number; extra_bytes: number; empty_mailbox_checks: number; activation: number; total: number };
+  plan: string;
+  beacon_pings: number;
+}
+
+/** Plain words for the airtime counter: messages each way, bytes, and the bill. */
+export function airtimeText(a: Airtime | null | undefined): string {
+  if (!a) return "not counted";
+  const bytes = a.up.bytes + a.down.bytes;
+  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes: $${a.usd.total.toFixed(2)}`;
+}
+
 export interface Card {
   build: string;
   launch: string;
   seed: number;
   breakdowns_on: boolean;
-  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
-  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending };
+  boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
+  ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
   margin_days: number | null;
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;

@@ -715,6 +715,21 @@ class Game:
             )
         return out
 
+    def _airtime(self, v: Voyage) -> dict | None:
+        """The satellite airtime counter (comms/iridium.py airtime()): Iridium
+        messages and bytes each way and their cost on the published contract
+        plan, plus the backup beacon's pings (a flat yearly fee, not per ping).
+        None for a stand-in boat or link without a ledger (QA's test games)."""
+        count = getattr(getattr(getattr(v, "c", None), "link", None), "airtime", None)
+        if count is None:
+            return None
+        pings = sum(
+            1
+            for e in v.log.events
+            if e.kind == EventKind.MESSAGE_RECEIVED and e.detail == "globalstar ping"
+        )
+        return {**count(self.start, v.state.t), "beacon_pings": pings}
+
     def result(self) -> dict:
         """The results card. Call when status()["over"] (it also works mid-game)."""
 
@@ -730,6 +745,7 @@ class Game:
                 "breakdowns": broke,
                 # How it ends, in the boat's own words (sandbox/endings.py).
                 "ending": ending(outcome, v.log.events, self.start, label),
+                "airtime": self._airtime(v),
             }
 
         design = getattr(self, "design", None)  # QA's stand-in games have none
