@@ -250,6 +250,27 @@ const CHECKS = {
       return `${hops} hops to the card (${card.verdict}, day ${card.boat.days.toFixed(1)}); "${next.head.trim()}" [${next.kind}]; links ${next.links.map((l) => l.text.trim()).join(" / ")}; the Leaderboard link opened the board`;
     },
   },
+  // Randolph Rev C5 preset (#304): labelled as our model, its weight, and it launches.
+  "boatyard-revc5": {
+    path: "boatyard.html?quality=low#base=revc",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
+      const label = (await page.locator('#bases button[data-base="revc"]').textContent().catch(() => "")) ?? "";
+      if (!/C5/.test(label)) throw new SkipCheck(`the deployed Boatyard has no Rev C5 preset yet ("${label.trim()}")`);
+      const pressed = await page.getAttribute('#bases button[data-base="revc"]', "aria-pressed");
+      must(pressed === "true", "opening #base=revc didn't select the Rev C5 preset");
+      must(/our model/i.test(label), `the preset isn't labelled as our model: "${label.trim()}"`);
+      const text = await page.evaluate(() => document.body.innerText);
+      must(/26\.9\s*kg/.test(text), "the page doesn't show 26.9 kg for the Rev C5's boat");
+      await page.screenshot({ path: `play-${BROWSER}-revc5.png` }).catch(() => {});
+      await page.click("#launch");
+      await page.waitForFunction(() => window.__yard.launch || window.__yard.launchError, null, { timeout: 15 * MIN });
+      const r = await page.evaluate(() => ({ err: window.__yard.launchError, n: window.__yard.launch?.replays?.length ?? 0 }));
+      must(!r.err, `the Rev C5 launch failed: ${r.err}`);
+      must(r.n > 0, "the Rev C5 launch gave no voyages");
+      return `"${label.trim()}" selected, 26.9 kg shown, launched: ${r.n} voyages`;
+    },
+  },
   // "My boat" (#310): a Boatyard design saved as my boat carries to the helm,
   // race and voyage pages in the same browser. The name has tags in it, which
   // must show as plain text everywhere: the visible text has to include them
