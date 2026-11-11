@@ -313,3 +313,20 @@ def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
         None,
         "passed_ghost",
     ]
+
+
+def test_results_card_says_how_it_ended(env):
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.run(hours=6)
+    end = g.result()["boat"]["ending"]
+    assert end["headline"] in ("Still at sea", "Finished") and end["words"]
+
+
+@pytest.mark.parametrize("base", ["joke_canoe", "joke_flamingo", "stock_dinghy14"])
+def test_stock_and_joke_boats_sail_in_the_helm(env, base):
+    g = Game(env, choices={"base": base}, launch_index=MAY1, max_days=0.9)
+    g.order("finish", 1.0)
+    g.run(hours=12)
+    r = g.result()
+    assert r["build"] == base
+    assert r["boat"]["ending"]["boat"] == g.design.stock["label"]
