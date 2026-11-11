@@ -1,0 +1,247 @@
+// Points of interest: wrecks, history and ocean facts along the route
+// (Priya's src/boatsim/oceandata/pois.py writes public/pois.json). When a
+// boat's track comes within a point's radius, the voyage replay and Take the
+// helm show a card with the story and a link to its source. Display only.
+//
+// Everything from the file goes on the page with textContent, never innerHTML,
+// and a link is only made for an https URL.
+
+export type PoiKind = "wreck" | "history" | "ocean";
+
+export interface Poi {
+  id: string;
+  kind: PoiKind;
+  title: string;
+  /** (lat, lon) points; a line (the Gulf Stream, the ridge) is several. */
+  at: [number, number][];
+  radius_km: number;
+  text: string;
+  source: string;
+  url: string;
+}
+
+/** A track passing a point: when, how far off, and where the boat was. */
+export interface Pass {
+  poi: Poi;
+  h: number;
+  km: number;
+  boat: [number, number];
+  /** The point of the poi that was closest. */
+  near: [number, number];
+}
+
+export interface Track {
+  h: number[];
+  lat: (number | null)[];
+  lon: (number | null)[];
+}
+
+export const KIND_LABEL: Record<PoiKind, string> = { wreck: "Shipwreck", history: "History", ocean: "Ocean fact" };
+export const KIND_COLOUR: Record<PoiKind, string> = { wreck: "#c9a46b", history: "#d98cb3", ocean: "#5cc8e0" };
+
+export async function loadPois(url: string, get: (u: string) => Promise<Response> = (u) => fetch(u)): Promise<Poi[]> {
+  try {
+    const r = await get(url);
+    if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return [];
+    const j = (await r.json()) as { pois?: Poi[] };
+    return (j.pois ?? []).filter((p) => p && Array.isArray(p.at) && p.at.length && p.radius_km > 0 && p.kind in KIND_LABEL);
+  } catch {
+    return [];
+  }
+}
+
+const R = 6371;
+const RAD = Math.PI / 180;
+
+/** Great-circle distance, km. */
+export function kmBetween(a: [number, number], b: [number, number]): number {
+  const dlat = (b[0] - a[0]) * RAD;
+  const dlon = (b[1] - a[1]) * RAD;
+  const s = Math.sin(dlat / 2) ** 2 + Math.cos(a[0] * RAD) * Math.cos(b[0] * RAD) * Math.sin(dlon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** Initial bearing from a to b, degrees clockwise from north. */
+export function bearingTo(a: [number, number], b: [number, number]): number {
+  const [p1, p2] = [a[0] * RAD, b[0] * RAD];
+  const dl = (b[1] - a[1]) * RAD;
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return ((Math.atan2(y, x) / RAD) % 360 + 360) % 360;
+}
+
+/** Closest approach of the segment a-b to point p: distance in km and the fraction along a-b.
+ *  Flat-earth about p, which is fine for the short legs between track samples. */
+export function segmentNearest(p: [number, number], a: [number, number], b: [number, number]): { km: number; f: number } {
+  const kx = R * RAD * Math.cos(p[0] * RAD);
+  const ky = R * RAD;
+  const ax = (a[1] - p[1]) * kx, ay = (a[0] - p[0]) * ky;
+  const bx = (b[1] - p[1]) * kx, by = (b[0] - p[0]) * ky;
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const f = len2 > 0 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2)) : 0;
+  return { km: Math.hypot(ax + f * dx, ay + f * dy), f };
+}
+
+function at(t: Track, i: number): [number, number] | null {
+  const la = t.lat[i], lo = t.lon[i];
+  return la == null || lo == null || !Number.isFinite(la) || !Number.isFinite(lo) ? null : [la, lo];
+}
+
+function lerp(a: [number, number], b: [number, number], f: number): [number, number] {
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+}
+
+/** The points of interest the track passes between hours h0 and h1, earliest first,
+ *  skipping (and adding to) the ids in `seen`, so each card shows once. */
+export function passes(track: Track, h0: number, h1: number, pois: Poi[], seen: Set<string>): Pass[] {
+  const out: Pass[] = [];
+  const n = track.h.length;
+  if (!n || h1 < h0) return out;
+  // Before the first sample the boat is at the drop: the start of the voyage counts as there.
+  if (h0 <= track.h[0]) h1 = Math.max(h1, track.h[0]);
+  // A track of one point (the drop) is a leg of length zero.
+  const legs = n === 1 ? [[0, 0]] : Array.from({ length: n - 1 }, (_, i) => [i, i + 1]);
+  for (const [i, j] of legs) {
+    const ti = track.h[i], tj = track.h[j];
+    if (tj < h0 || ti > h1) continue;
+    let a = at(track, i), b = at(track, j);
+    if (!a || !b) continue;
+    // Only the part of the leg inside [h0, h1].
+    const span = tj - ti;
+    const f0 = span > 0 ? Math.max(0, (h0 - ti) / span) : 0;
+    const f1 = span > 0 ? Math.min(1, (h1 - ti) / span) : 1;
+    [a, b] = [lerp(a, b, f0), lerp(a, b, f1)];
+    const ha = ti + span * f0, hb = ti + span * f1;
+    for (const poi of pois) {
+      if (seen.has(poi.id)) continue;
+      let best: Pass | null = null;
+      for (const q of poi.at) {
+        // Cheap reject first: nowhere near either end of a short leg.
+        if (Math.abs(q[0] - a[0]) * 111 > poi.radius_km + 500) continue;
+        const { km, f } = segmentNearest(q, a, b);
+        if (km <= poi.radius_km && (!best || km < best.km)) best = { poi, h: ha + (hb - ha) * f, km, boat: lerp(a, b, f), near: q };
+      }
+      if (best) {
+        seen.add(poi.id);
+        out.push(best);
+      }
+    }
+  }
+  return out.sort((x, y) => x.h - y.h);
+}
+
+const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+
+/** "About 120 km to the north-east" from where the boat was; "Right here" when close. */
+export function whereFrom(p: Pass): string {
+  const km = kmBetween(p.boat, p.near);
+  if (km < 10) return "Right here";
+  const word = COMPASS[Math.round(bearingTo(p.boat, p.near) / 45) % 8];
+  const r = km < 100 ? Math.round(km / 5) * 5 : Math.round(km / 10) * 10;
+  return `About ${r} km to the ${word}`;
+}
+
+/** Only https links go on the page. */
+export function safeUrl(u: string): string | null {
+  try {
+    const url = new URL(u);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+const STYLE = `
+.poi-card { position: fixed; right: var(--poi-right, 12px); bottom: var(--poi-bottom, 100px); width: min(340px, calc(100vw - 24px)); z-index: 20;
+  padding: 10px 12px 9px; border-left: 4px solid var(--c, #5cc8e0); border-radius: 8px; color: #f2f6fa;
+  background: rgba(14, 24, 36, .86); backdrop-filter: blur(6px); font: 13px/1.4 system-ui, sans-serif;
+  box-shadow: 0 4px 18px rgba(0,0,0,.35); animation: poi-in .35s ease; }
+.poi-card .poi-k { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--c, #5cc8e0); }
+.poi-card .poi-t { font-weight: 600; font-size: 15px; margin: 2px 0 4px; }
+.poi-card .poi-src { margin-top: 6px; font-size: 11.5px; color: #aab8c6; }
+.poi-card .poi-src a { color: #cfe6ff; }
+.poi-card .poi-x { position: absolute; right: 6px; top: 4px; background: none; border: 0; color: #aab8c6; font-size: 18px; cursor: pointer; padding: 2px 6px; }
+.poi-card.poi-out { opacity: 0; transition: opacity .8s; }
+@keyframes poi-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+`;
+
+/** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom). Each stays SHOW_S seconds (or until closed); points passed
+ *  together (three at the drop) wait their turn. */
+export class PoiCards {
+  static SHOW_S = 25;
+  readonly shown: string[] = [];
+  private el: HTMLElement | null = null;
+  private timer = 0;
+  private waiting: [Pass, string][] = [];
+  constructor(private doc: Document = document) {
+    if (!doc.getElementById("poi-style")) {
+      const s = doc.createElement("style");
+      s.id = "poi-style";
+      s.textContent = STYLE;
+      doc.head.appendChild(s);
+    }
+  }
+
+  /** Show it now, or after the cards already up or waiting. */
+  add(p: Pass, when = ""): void {
+    if (this.el || this.waiting.length) this.waiting.push([p, when]);
+    else this.show(p, when);
+  }
+
+  show(p: Pass, when = ""): HTMLElement {
+    this.hide(true, false);
+    const d = this.doc;
+    const el = d.createElement("aside");
+    el.className = "poi-card";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.style.setProperty("--c", KIND_COLOUR[p.poi.kind]);
+    const add = (tag: string, cls: string, text: string) => {
+      const e = d.createElement(tag);
+      e.className = cls;
+      e.textContent = text;
+      el.appendChild(e);
+      return e;
+    };
+    add("div", "poi-k", `${KIND_LABEL[p.poi.kind]} · ${whereFrom(p)}${when ? ` · ${when}` : ""}`);
+    add("div", "poi-t", p.poi.title);
+    add("div", "poi-x-text", p.poi.text);
+    const src = add("div", "poi-src", "Source: ");
+    const url = safeUrl(p.poi.url);
+    if (url) {
+      const a = d.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = p.poi.source;
+      src.appendChild(a);
+    } else src.appendChild(d.createTextNode(p.poi.source));
+    const x = add("button", "poi-x", "×");
+    x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", () => this.hide());
+    d.body.appendChild(el);
+    this.el = el;
+    this.shown.push(p.poi.id);
+    this.timer = window.setTimeout(() => this.hide(), PoiCards.SHOW_S * 1000);
+    return el;
+  }
+
+  /** Take the card down: `now` at once (a jump in time), and `clear` drops the waiting ones too. */
+  hide(now = false, clear = now): void {
+    window.clearTimeout(this.timer);
+    if (clear) this.waiting = [];
+    const el = this.el;
+    this.el = null;
+    if (!el) return;
+    if (now) el.remove();
+    else {
+      el.classList.add("poi-out");
+      window.setTimeout(() => {
+        el.remove();
+        const next = this.waiting.shift();
+        if (next && !this.el) this.show(...next);
+      }, 900);
+    }
+  }
+}

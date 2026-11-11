@@ -48,7 +48,7 @@ import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
-import { PLACE } from "./land/place";
+import { PLACE, PLACES } from "./land/place";
 import { Island } from "./land/island";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
@@ -58,6 +58,7 @@ import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, ty
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
+import { loadPois, passes, PoiCards, type Poi } from "./pois";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -346,6 +347,8 @@ const status = {
   lanePositionAt: (i: number, h: number): [number, number] => (lanes[i] ? positionAt(lanes[i].rep, h) : [NaN, NaN]),
   /** The launch-day game: picks, story beats shown so far, and the result. */
   game: { on: GAME, picking: false, guess: "", beats: [] as string[], beat: "", result: "" },
+  /** Points of interest: how many loaded, and the ids the track has reached (in order). */
+  pois: { loaded: 0, shown: [] as string[] },
   /** Put the camera behind the boat looking along a compass bearing (tests and screenshots). */
   aim: (bearing: number, up = false) => {
     setLookUp(up);
@@ -399,6 +402,32 @@ function seek(h: number): void {
   live.snap();
   clouds.snap();
   $("outcome").classList.remove("show");
+  resetPois();
+}
+
+// ---------- points of interest (wrecks, history, ocean facts) ----------
+let pois: Poi[] = [];
+const poiSeen = new Set<string>();
+let poiH = 0;
+const poiCards = new PoiCards();
+loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
+  pois = p;
+  status.pois.loaded = p.length;
+  resetPois();
+});
+/** After a jump: anything the boat passed before now counts as seen, so only what's ahead pops up. */
+function resetPois(): void {
+  poiSeen.clear();
+  poiCards.hide(true);
+  if (rep && hour > 0) passes(rep, 0, hour - 1e-6, pois, poiSeen);
+  poiH = hour;
+}
+function poisReached(): void {
+  if (!rep || !pois.length || hour < poiH) return;
+  const ps = passes(rep, poiH, hour, pois, poiSeen);
+  poiH = hour;
+  for (const p of ps) poiCards.add(p, `Day ${(p.h / 24).toFixed(1)}`);
+  status.pois.shown.push(...ps.map((x) => x.poi.id));
 }
 
 function toast(text: string, when: string, colour: string): void {
@@ -760,6 +789,23 @@ loadDetailedModels().then((ok) => {
 camera.position.set(-5.6, 2.0, 4.6);
 controls.target.set(0, 0.2, 0);
 // ---------- real land (?place=pico) ----------
+{
+  const pick = $<HTMLSelectElement>("placepick");
+  for (const p of Object.values(PLACES)) {
+    const o = document.createElement("option");
+    o.value = p.key;
+    o.textContent = p.name;
+    pick.appendChild(o);
+  }
+  pick.value = PLACE?.key ?? "";
+  pick.addEventListener("change", () => {
+    const q = new URLSearchParams(location.search);
+    if (pick.value) q.set("place", pick.value);
+    else q.delete("place");
+    q.delete("spot");
+    location.search = q.toString();
+  });
+}
 let island: Island | null = null;
 if (PLACE) {
   // Look past the boat towards the land.
@@ -884,6 +930,7 @@ renderer.setAnimationLoop(() => {
         toast(describeEvent(e, l.rep.boat), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
       }
     }
+    poisReached();
     // Story beats (game): stop at each one, then carry on.
     if (GAME && !beatShown && beatIdx < beats.length && beats[beatIdx].h <= hour) showBeat(beats[beatIdx++]);
     if (beatShown) {

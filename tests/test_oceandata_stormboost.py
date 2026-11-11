@@ -177,3 +177,55 @@ def test_check_scores_every_swept_shape(tracks):
     lines = []
     SB.summarise_check(rows, log=lines.append)
     assert any(line.startswith("c0.65_o1.5_p0.8") for line in lines)
+
+
+MAY_CSV = """SID,SEASON,NUMBER,NAME,ISO_TIME,LAT,LON,USA_WIND,USA_PRES,USA_RMW,USA_SSHS
+ ,Year, , ,,degrees_north,degrees_east,kts,mb,nmile,1
+M,2020,1,MAYDAY,2020-05-02 00:00:00,34.0,-70.0,90,960,20,2
+M,2020,1,MAYDAY,2020-05-02 06:00:00,34.5,-69.5,90,960,20,2
+M,2020,1,MAYDAY,2020-05-02 12:00:00,35.0,-69.0,85,965,20,2
+L,2020,2,LATER,2020-08-01 00:00:00,30.0,-60.0,90,960,20,2
+"""
+
+
+def test_bundle_carries_the_storm_track_and_boosts_at_sample_time(tmp_path):
+    from test_sandbox import _fake_sources
+
+    from boatsim.sandbox import forcing as F
+
+    csv_path = tmp_path / "ib.csv"
+    csv_path.write_text(MAY_CSV)
+    era5, glorys, ships = _fake_sources()
+    plain, with_storms = io.BytesIO(), io.BytesIO()
+    quiet = {"log": lambda *_: None, "first": (5, 1), "last": (5, 4)}
+    F.cut(2020, plain, era5, glorys, ships, **quiet)
+    F.cut(2020, with_storms, era5, glorys, ships, storms_csv=csv_path, **quiet)
+    a = F.BundleEnvironment(plain.getvalue())
+    b = F.BundleEnvironment(with_storms.getvalue())
+    assert a.storms is None and SB.boost_bundle(a) is a  # old bundles: unchanged
+    assert [s.name for s in b.storms] == ["MAYDAY"]  # August's storm is outside the window
+    assert len(b.storms[0].t) == 3
+    env = SB.boost_bundle(b)
+    t = datetime(2020, 5, 2, 6)
+    fx = SB.storm_at(b.storms[0], (t - SB._EPOCH).total_seconds())
+    dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
+    near = env.sample(t, fx.lat, fx.lon + dlon)
+    assert math.hypot(near.wind_u, near.wind_v) > 30.0  # the core is back
+    far = (t, 40.0, -40.0)
+    assert env.sample(*far) == b.sample(*far)
+    assert env.meta == b.meta  # everything else is the bundle's
+    # The pages open bundles through open_bundle, so they get the boost too.
+    from boatsim.sandbox.run import open_bundle
+
+    assert open_bundle(plain.getvalue()).__class__ is F.BundleEnvironment
+    page = open_bundle(with_storms.getvalue())
+    assert isinstance(page, SB.StormBoost)
+    assert page.sample(t, fx.lat, fx.lon + dlon) == near
+
+
+def test_storm_arrays_round_trip(tracks):
+    arrays = SB.storms_to_arrays(tracks.storms)
+    back = SB.storms_from_arrays(arrays)
+    assert [s.name for s in back] == [s.name for s in tracks.storms]
+    assert back[0].t == tracks.storms[0].t
+    assert back[0].lat == pytest.approx(tracks.storms[0].lat)

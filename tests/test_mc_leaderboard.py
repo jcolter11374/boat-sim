@@ -251,3 +251,18 @@ def test_summary_has_what_the_page_draws(tmp_path, monkeypatch):
     f.write_text(json.dumps(board))
     L.main(["summarise", str(f)])
     assert json.loads(f.read_text())["summary"]["rows"]
+
+
+def test_paired_interval_stays_inside_plus_minus_100_points():
+    # A six-launch race season (race view): 3 flips one way, none the other.
+    la = [
+        {"start": f"2020-0{4 + i // 2}-01", "seed": i, "outcome": "arrived" if i < 4 else "lost"}
+        for i in range(6)
+    ]
+    lb = [
+        {"start": x["start"], "seed": x["seed"], "outcome": "arrived" if x["seed"] == 0 else "lost"}
+        for x in la
+    ]
+    p = L.paired({"design": "a", "launches": la}, {"design": "b", "launches": lb})
+    assert p.a_only == 3 and p.b_only == 0
+    assert -1.0 <= p.lo <= p.gap <= p.hi <= 1.0

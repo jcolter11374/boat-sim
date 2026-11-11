@@ -8,6 +8,11 @@ An order is a heading and a power level. The heading is one of:
 * ``"route"``: follow the stored route with the normal waypoint follower,
   which also crabs into the current (see guidance.py).
 
+On a sailboat with a polar (the 31 ft cruiser), "finish" and "route" tack and
+gybe with the sailing tactician (sailing.py) when the mark is upwind or dead
+downwind. A compass number is steered as given; if it points into the wind
+the boat sails as close as it can on the nearer tack (the vessel's limit).
+
 Power is a fraction of the motors' full drive power (0 to 1).
 
 Safe mode is off by default, so the battery is the player's to manage. The
@@ -26,6 +31,7 @@ from datetime import datetime
 
 from boatsim.autonomy.guidance import WaypointAutopilot
 from boatsim.autonomy.safemode import SafeModeAutopilot
+from boatsim.autonomy.sailing import Tactician
 from boatsim.geo import bearing_deg
 from boatsim.types import Command, Mission, Sensors
 
@@ -51,9 +57,11 @@ class HelmAutopilot:
         safe: bool = False,
         heading: float | str = "route",
         power: float = 0.0,
+        tactician: Tactician | None = None,
     ):
         self.finish = finish
         self.safe = safe
+        self.tactician = tactician
         self.guidance = WaypointAutopilot()
         self._rules = SafeModeAutopilot(
             cruise_fraction=1.0, guidance=self.guidance, thruster_count=thruster_count
@@ -89,10 +97,27 @@ class HelmAutopilot:
         follow = self.guidance.update(sensors, mission, t)
         if self.heading == "route":
             heading = follow.heading
+            wp = mission.waypoints[mission.active_index]
+            mark = (wp.lat, wp.lon)
         elif self.heading == "finish":
             heading = bearing_deg(sensors.lat, sensors.lon, *self.finish)
+            mark = self.finish
         else:
-            heading = self.heading
+            heading, mark = self.heading, None
+        tacking = False
+        if (
+            self.tactician is not None
+            and mark is not None
+            and sensors.gps_ok
+            and sensors.wind_from_deg is not None
+            and sensors.wind_speed_ms is not None
+        ):
+            to_mark = bearing_deg(sensors.lat, sensors.lon, *mark)
+            heading = self.tactician.heading(
+                to_mark, heading, sensors.wind_from_deg, sensors.wind_speed_ms, sensors.heading, t
+            )
+            tacking = self.tactician.mode != "reach"
+        self.guidance.tacking = tacking
         frac = self.power
         if self.safe:
             frac = min(
