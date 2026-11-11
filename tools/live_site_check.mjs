@@ -11,6 +11,7 @@
 // live-<check>.png. The exit code is the number of failed checks (capped at 1).
 import { chromium } from "playwright";
 import { appendFileSync } from "node:fs";
+import { PAGES, checkPage } from "./live_visual_checks.mjs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const MIN = 60_000;
@@ -25,8 +26,8 @@ const must = (ok, msg) => {
 };
 
 /** Open a page in a brand-new browser context, collecting console errors, page errors and failed loads. */
-async function open(browser, path) {
-  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, bypassCSP: false, serviceWorkers: "block" });
+async function open(browser, path, viewport = { width: 1400, height: 900 }) {
+  const ctx = await browser.newContext({ viewport, bypassCSP: false, serviceWorkers: "block" });
   const page = await ctx.newPage();
   const errors = [];
   const notes = [];
@@ -242,6 +243,34 @@ Object.assign(CHECKS, {
   },
 });
 
+// Iris's visual checks (tools/live_visual_checks.mjs): the 3D picture itself, at the
+// small window she tuned them on, plus the main control responding.
+const VISUAL = { "visual-sea": "sea (index)", "visual-voyage": "voyage replay", "visual-helm": "helm", "visual-boatyard": "boatyard", "visual-race": "race" };
+for (const [name, pageName] of Object.entries(VISUAL)) {
+  const p = PAGES.find((x) => x.name === pageName);
+  CHECKS[name] = {
+    path: p.path,
+    viewport: { width: 960, height: 540 },
+    run: async (page) => {
+      const problems = await checkPage(page, SITE, p);
+      must(!problems.length, problems.join("; "));
+      return "the picture and the main control look right";
+    },
+  };
+}
+// Iris's find: in a small window the helm's start card must still let you reach "Take the helm".
+CHECKS["helm-small-window"] = {
+  path: "helm.html",
+  viewport: { width: 960, height: 540 },
+  run: async (page) => {
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+    await page.click("#go", { trial: true, timeout: 10_000 }).catch(() => {
+      throw new CheckFail('"Take the helm" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
+    });
+    return '"Take the helm" is reachable at 960x540';
+  },
+};
+
 async function runCheck(browser, name) {
   const c = CHECKS[name];
   const t0 = Date.now();
@@ -249,7 +278,7 @@ async function runCheck(browser, name) {
   let result = "";
   let failure = "";
   try {
-    o = await open(browser, c.path);
+    o = await open(browser, c.path, c.viewport);
     if (c.optional && name.startsWith("helm-stock")) {
       await o.page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       const b = name.slice("helm-".length);

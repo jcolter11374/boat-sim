@@ -19,6 +19,7 @@ on:
     paths:
       - ".github/workflows/live-site-check.yml"
       - "tools/live_site_check.mjs"
+      - "tools/live_visual_checks.mjs"
 permissions:
   contents: read
 concurrency:
@@ -55,6 +56,12 @@ jobs:
           - voyage-annapolis
           - race
           - leaderboard
+          - helm-small-window
+          - visual-sea
+          - visual-voyage
+          - visual-helm
+          - visual-boatyard
+          - visual-race
     env:
       SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
     steps:
