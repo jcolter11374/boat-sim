@@ -610,7 +610,11 @@
     "rsol": "deck-40w",
     "rbat": "lfp-192wh",
     "keel": "bulb-9kg",
-    "tracker": "yb3"
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full"
    },
    "shared_slots": [
     "brain",
@@ -626,19 +630,27 @@
      "opts": [
       {
        "id": "wing",
-       "n": "Wing sail, 1.0 x 0.30 m (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "their design.py",
-       "sim": []
+       "basis": "their design.py: 1.0 x 0.30 m free-rotating wing",
+       "sim": [],
+       "kg": 0.0,
+       "n": "Wing sail, 1.0 x 0.30 m (as built)"
       },
       {
        "id": "wing-thruster",
-       "n": "Wing sail plus their 35 W thruster",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "design.py thruster_w; run like our hybrid",
-       "sim": []
+       "basis": "their design.py thruster_w 35 W, switched on and run like our hybrid; 5 W cruise (GUESS)",
+       "sim": [
+        "propulsion.thrusters",
+        "propulsion.thruster_count",
+        "propulsion.max_drive_w",
+        "propulsion.min_steer_w",
+        "hull.mass_kg"
+       ],
+       "kg": 0.6,
+       "n": "Wing sail plus their 35 W thruster"
       }
      ]
     },
@@ -648,19 +660,25 @@
      "opts": [
       {
        "id": "one-box",
-       "n": "One box (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "their Build_Plan.md",
-       "sim": []
+       "basis": "their Build_Plan.md: one box",
+       "sim": [],
+       "kg": 0.0,
+       "n": "One box (as built)"
       },
       {
        "id": "two-box",
-       "n": "Two boxes, separate safe-mode box",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "our design; GUESS for their boat",
-       "sim": []
+       "basis": "our separate safe-mode box (GUESS for their boat)",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.3,
+       "n": "Two boxes, separate safe-mode box"
       }
      ]
     },
@@ -670,19 +688,32 @@
      "opts": [
       {
        "id": "twin",
-       "n": "Twin rudders, separate servos (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "Rev C",
-       "sim": []
+       "basis": "Rev C (twin) and Rev B (single) yamls",
+       "sim": [
+        "hull.wetted_area_m2",
+        "hull.lateral_cd_area_m2",
+        "hull.keel_lift_slope_area_m2",
+        "hazards.steering_per_day"
+       ],
+       "kg": 0.0,
+       "n": "Twin rudders, separate servos (as built)"
       },
       {
        "id": "single",
-       "n": "Single rudder",
-       "effect": "no effect yet",
-       "est": false,
-       "basis": "Rev B",
-       "sim": []
+       "effect": "wired",
+       "est": true,
+       "basis": "the other revision's rudder, scaled (GUESS)",
+       "sim": [
+        "hull.wetted_area_m2",
+        "hull.lateral_cd_area_m2",
+        "hull.keel_lift_slope_area_m2",
+        "hazards.steering_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": -0.35,
+       "n": "Single rudder"
       }
      ]
     },
@@ -692,19 +723,25 @@
      "opts": [
       {
        "id": "deck-40w",
-       "n": "2 x 20 W deck panels (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "design.py",
-       "sim": []
+       "basis": "their design.py: 2 x 20 W",
+       "sim": [],
+       "kg": 0.0,
+       "n": "2 x 20 W deck panels (as built)"
       },
       {
        "id": "deck-60w",
-       "n": "60 W on deck",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "GUESS: what fits",
-       "sim": []
+       "basis": "GUESS: what fits on the deck",
+       "sim": [
+        "power.solar_wp",
+        "power.panels_w",
+        "hull.mass_kg"
+       ],
+       "kg": 0.5,
+       "n": "60 W on deck"
       }
      ]
     },
@@ -714,19 +751,24 @@
      "opts": [
       {
        "id": "lfp-192wh",
-       "n": "192 Wh LiFePO4 (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "design.py",
-       "sim": []
+       "basis": "their design.py, LiFePO4",
+       "sim": [],
+       "kg": 0.0,
+       "n": "192 Wh LiFePO4 (as built)"
       },
       {
        "id": "lfp-384wh",
-       "n": "384 Wh LiFePO4",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "GUESS: double",
-       "sim": []
+       "basis": "GUESS: double the pack",
+       "sim": [
+        "power.battery_wh",
+        "hull.mass_kg"
+       ],
+       "kg": 1.6,
+       "n": "384 Wh LiFePO4"
       }
      ]
     },
@@ -736,19 +778,30 @@
      "opts": [
       {
        "id": "bulb-9kg",
-       "n": "9 kg bulb (Rev C, D72)",
        "effect": "wired",
        "est": false,
-       "basis": "Rev C yaml",
-       "sim": []
+       "basis": "the yaml's bulb",
+       "sim": [
+        "hull.keel_bulb_kg",
+        "sail.max_heel_moment_nm",
+        "hazards.p_inverted_stuck"
+       ],
+       "kg": 0.0,
+       "n": "9 kg bulb (Rev C, D72)"
       },
       {
        "id": "bulb-8kg",
-       "n": "8.2 kg bulb (Rev B)",
-       "effect": "no effect yet",
-       "est": false,
-       "basis": "their README",
-       "sim": []
+       "effect": "wired",
+       "est": true,
+       "basis": "the other revision's bulb; righting moment scaled (GUESS)",
+       "sim": [
+        "hull.keel_bulb_kg",
+        "sail.max_heel_moment_nm",
+        "hazards.p_inverted_stuck",
+        "hull.mass_kg"
+       ],
+       "kg": -0.8,
+       "n": "8.2 kg bulb (Rev B)"
       }
      ]
     },
@@ -758,19 +811,104 @@
      "opts": [
       {
        "id": "yb3",
-       "n": "YB3 backup tracker (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "Backup_Tracker.md",
-       "sim": []
+       "basis": "their Backup_Tracker.md",
+       "sim": [],
+       "kg": 0.0,
+       "n": "YB3 backup tracker (as built)"
       },
       {
        "id": "none",
-       "n": "None",
+       "effect": "wired",
+       "est": false,
+       "basis": "no backup tracker",
+       "sim": [
+        "comms.beacon",
+        "hull.mass_kg"
+       ],
+       "kg": -0.3,
+       "n": "None"
+      }
+     ]
+    },
+    {
+     "id": "sat",
+     "name": "Satellite modem",
+     "opts": [
+      {
+       "id": "rockblock-9603n",
        "effect": "no effect yet",
        "est": false,
-       "basis": "one box dead = lost, silent",
-       "sim": []
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      }
+     ]
+    },
+    {
+     "id": "light",
+     "name": "Navigation light",
+     "opts": [
+      {
+       "id": "hella-naviled-360",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      }
+     ]
+    },
+    {
+     "id": "paint",
+     "name": "Antifouling",
+     "opts": [
+      {
+       "id": "micron-csc",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      },
+      {
+       "id": "none",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      }
+     ]
+    },
+    {
+     "id": "spares",
+     "name": "Spares",
+     "opts": [
+      {
+       "id": "spares-full",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      },
+      {
+       "id": "spares-no-pixhawk",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      },
+      {
+       "id": "none",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
       }
      ]
     }
@@ -785,7 +923,11 @@
     "rsol": "deck-40w",
     "rbat": "lfp-192wh",
     "keel": "bulb-8kg",
-    "tracker": "yb3"
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full"
    },
    "shared_slots": [
     "brain",
@@ -801,19 +943,27 @@
      "opts": [
       {
        "id": "wing",
-       "n": "Wing sail, 1.0 x 0.30 m (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "their design.py",
-       "sim": []
+       "basis": "their design.py: 1.0 x 0.30 m free-rotating wing",
+       "sim": [],
+       "kg": 0.0,
+       "n": "Wing sail, 1.0 x 0.30 m (as built)"
       },
       {
        "id": "wing-thruster",
-       "n": "Wing sail plus their 35 W thruster",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "design.py thruster_w; run like our hybrid",
-       "sim": []
+       "basis": "their design.py thruster_w 35 W, switched on and run like our hybrid; 5 W cruise (GUESS)",
+       "sim": [
+        "propulsion.thrusters",
+        "propulsion.thruster_count",
+        "propulsion.max_drive_w",
+        "propulsion.min_steer_w",
+        "hull.mass_kg"
+       ],
+       "kg": 0.6,
+       "n": "Wing sail plus their 35 W thruster"
       }
      ]
     },
@@ -823,19 +973,25 @@
      "opts": [
       {
        "id": "one-box",
-       "n": "One box (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "their Build_Plan.md",
-       "sim": []
+       "basis": "their Build_Plan.md: one box",
+       "sim": [],
+       "kg": 0.0,
+       "n": "One box (as built)"
       },
       {
        "id": "two-box",
-       "n": "Two boxes, separate safe-mode box",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "our design; GUESS for their boat",
-       "sim": []
+       "basis": "our separate safe-mode box (GUESS for their boat)",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.3,
+       "n": "Two boxes, separate safe-mode box"
       }
      ]
     },
@@ -845,19 +1001,32 @@
      "opts": [
       {
        "id": "twin",
-       "n": "Twin rudders, separate servos",
-       "effect": "no effect yet",
-       "est": false,
-       "basis": "Rev C",
-       "sim": []
+       "effect": "wired",
+       "est": true,
+       "basis": "the other revision's rudder, scaled (GUESS)",
+       "sim": [
+        "hull.wetted_area_m2",
+        "hull.lateral_cd_area_m2",
+        "hull.keel_lift_slope_area_m2",
+        "hazards.steering_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.35,
+       "n": "Twin rudders, separate servos"
       },
       {
        "id": "single",
-       "n": "Single rudder (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "Rev B",
-       "sim": []
+       "basis": "Rev C (twin) and Rev B (single) yamls",
+       "sim": [
+        "hull.wetted_area_m2",
+        "hull.lateral_cd_area_m2",
+        "hull.keel_lift_slope_area_m2",
+        "hazards.steering_per_day"
+       ],
+       "kg": 0.0,
+       "n": "Single rudder (as built)"
       }
      ]
     },
@@ -867,19 +1036,25 @@
      "opts": [
       {
        "id": "deck-40w",
-       "n": "2 x 20 W deck panels (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "design.py",
-       "sim": []
+       "basis": "their design.py: 2 x 20 W",
+       "sim": [],
+       "kg": 0.0,
+       "n": "2 x 20 W deck panels (as built)"
       },
       {
        "id": "deck-60w",
-       "n": "60 W on deck",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "GUESS: what fits",
-       "sim": []
+       "basis": "GUESS: what fits on the deck",
+       "sim": [
+        "power.solar_wp",
+        "power.panels_w",
+        "hull.mass_kg"
+       ],
+       "kg": 0.5,
+       "n": "60 W on deck"
       }
      ]
     },
@@ -889,19 +1064,24 @@
      "opts": [
       {
        "id": "lfp-192wh",
-       "n": "192 Wh LiFePO4 (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "design.py",
-       "sim": []
+       "basis": "their design.py, LiFePO4",
+       "sim": [],
+       "kg": 0.0,
+       "n": "192 Wh LiFePO4 (as built)"
       },
       {
        "id": "lfp-384wh",
-       "n": "384 Wh LiFePO4",
-       "effect": "no effect yet",
+       "effect": "wired",
        "est": true,
-       "basis": "GUESS: double",
-       "sim": []
+       "basis": "GUESS: double the pack",
+       "sim": [
+        "power.battery_wh",
+        "hull.mass_kg"
+       ],
+       "kg": 1.6,
+       "n": "384 Wh LiFePO4"
       }
      ]
     },
@@ -911,19 +1091,30 @@
      "opts": [
       {
        "id": "bulb-9kg",
-       "n": "9 kg bulb (Rev C, D72)",
-       "effect": "no effect yet",
-       "est": false,
-       "basis": "Rev C yaml",
-       "sim": []
+       "effect": "wired",
+       "est": true,
+       "basis": "the other revision's bulb; righting moment scaled (GUESS)",
+       "sim": [
+        "hull.keel_bulb_kg",
+        "sail.max_heel_moment_nm",
+        "hazards.p_inverted_stuck",
+        "hull.mass_kg"
+       ],
+       "kg": 0.8,
+       "n": "9 kg bulb (Rev C, D72)"
       },
       {
        "id": "bulb-8kg",
-       "n": "8.2 kg bulb (Rev B)",
        "effect": "wired",
        "est": false,
-       "basis": "their README",
-       "sim": []
+       "basis": "the yaml's bulb",
+       "sim": [
+        "hull.keel_bulb_kg",
+        "sail.max_heel_moment_nm",
+        "hazards.p_inverted_stuck"
+       ],
+       "kg": 0.0,
+       "n": "8.2 kg bulb (Rev B)"
       }
      ]
     },
@@ -933,19 +1124,104 @@
      "opts": [
       {
        "id": "yb3",
-       "n": "YB3 backup tracker (as built)",
        "effect": "wired",
        "est": false,
-       "basis": "Backup_Tracker.md",
-       "sim": []
+       "basis": "their Backup_Tracker.md",
+       "sim": [],
+       "kg": 0.0,
+       "n": "YB3 backup tracker (as built)"
       },
       {
        "id": "none",
-       "n": "None",
+       "effect": "wired",
+       "est": false,
+       "basis": "no backup tracker",
+       "sim": [
+        "comms.beacon",
+        "hull.mass_kg"
+       ],
+       "kg": -0.3,
+       "n": "None"
+      }
+     ]
+    },
+    {
+     "id": "sat",
+     "name": "Satellite modem",
+     "opts": [
+      {
+       "id": "rockblock-9603n",
        "effect": "no effect yet",
        "est": false,
-       "basis": "one box dead = lost, silent",
-       "sim": []
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      }
+     ]
+    },
+    {
+     "id": "light",
+     "name": "Navigation light",
+     "opts": [
+      {
+       "id": "hella-naviled-360",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      }
+     ]
+    },
+    {
+     "id": "paint",
+     "name": "Antifouling",
+     "opts": [
+      {
+       "id": "micron-csc",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      },
+      {
+       "id": "none",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      }
+     ]
+    },
+    {
+     "id": "spares",
+     "name": "Spares",
+     "opts": [
+      {
+       "id": "spares-full",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      },
+      {
+       "id": "spares-no-pixhawk",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
+      },
+      {
+       "id": "none",
+       "effect": "no effect yet",
+       "est": false,
+       "basis": "not modelled on the Randolph boat",
+       "sim": [],
+       "kg": 0.0
       }
      ]
     }

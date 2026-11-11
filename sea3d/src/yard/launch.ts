@@ -59,6 +59,8 @@ interface GridIndex {
 
 /** How far a grid build is from a design: [modelled slots that differ, cruise watts apart] (as boatsim.sandbox.catalog.nearest). */
 export function gridDistance(b: GridBuild, cat: Catalog, d: Design): [number, number] {
+  // Only builds of the same boat compare (an older Randolph build without a base never matches).
+  if (gridBase(b) !== (d.base ?? "kayak")) return [Infinity, Infinity];
   let slots = 0;
   // A wing sail with no motors: the motors and cruise power don't apply (Theo's k-p0-drive.wing-sail).
   const sail = sailOnly(d);
@@ -70,7 +72,15 @@ export function gridDistance(b: GridBuild, cat: Catalog, d: Design): [number, nu
     const opt = s.opts.find((o) => o.id === want);
     if (have !== want && (opt?.effect ?? "wired") === "wired") slots++;
   }
-  return [slots, sail ? 0 : Math.abs(Number(b.options.cruise_w ?? 25) - d.cruiseW)];
+  // The simulator ignores the cruise power on a Randolph boat.
+  return [slots, sail || gridBase(b) !== "kayak" ? 0 : Math.abs(Number(b.options.cruise_w ?? 25) - d.cruiseW)];
+}
+
+/** Which boat a grid build is: its base option, else the kayak; older Randolph builds (no base) are their own. */
+export function gridBase(b: GridBuild): string {
+  const v = b.options.base;
+  if (typeof v === "string") return v;
+  return /randolph/i.test(b.boat) ? "legacy-randolph" : "kayak";
 }
 
 export class GridLauncher implements Launcher {
@@ -92,10 +102,9 @@ export class GridLauncher implements Launcher {
     const idx = await this.index;
     const cat = this.cat();
     if (!idx || !cat) return null;
-    const kayaks = idx.builds.filter((b) => !/randolph/i.test(b.boat));
     let best: GridBuild | null = null;
     let bestD: [number, number] = [Infinity, Infinity];
-    for (const b of kayaks) {
+    for (const b of idx.builds) {
       const dist = gridDistance(b, cat, d);
       if (dist[0] < bestD[0] || (dist[0] === bestD[0] && dist[1] < bestD[1])) [best, bestD] = [b, dist];
     }
@@ -334,10 +343,10 @@ export function wilson(k: number, n: number): [number, number] {
 }
 
 /**
- * The Randolph boats: until Theo's simulations of their parts land, a launch
- * plays the boat's existing voyage replays as built (public/voyages), with the
- * grid's odds when the grid has the boat (Rev B), else the count of those voyages.
- * It says so plainly when the design differs from as built.
+ * The Randolph boats' last resort: when neither the simulator in the browser nor
+ * the grid has their builds yet, a launch plays the boat's existing voyage replays
+ * as built (public/voyages), with the grid's odds when the grid has the boat (Rev B),
+ * else the count of those voyages. It says so plainly when the design differs from as built.
  */
 export class AsBuiltLauncher implements Launcher {
   readonly name = "replays of the boat as built";
@@ -370,7 +379,7 @@ export class AsBuiltLauncher implements Launcher {
       exact: this.asBuilt(d),
       note: this.asBuilt(d)
         ? `Simulated as built: ${what}`
-        : `Your part changes aren't simulated for this boat yet (Theo is adding them), so these are ${what}`,
+        : `Our servers haven't simulated this build of their boat yet, so these are ${what}`,
       odds,
       replays,
     };

@@ -339,7 +339,7 @@ try {
   await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
   await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
   const rc = await page.evaluate(() => ({ base: window.__yard.base, s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));
-  if (rc.base !== "revc" || rc.s.solarW !== 40 || rc.s.batteryWh !== 192 || rc.s.thrusters !== 0 || Math.abs(rc.s.massKg - 24.7) > 0.01)
+  if (rc.base !== "revc" || rc.s.solarW !== 40 || rc.s.batteryWh !== 192 || rc.s.thrusters !== 0 || Math.abs(rc.s.massKg - 24.85) > 0.01)
     fail(`boatyard Rev C totals: ${JSON.stringify(rc)}`);
   if (rc.d.rudders !== 1 || !rc.d.tracker) fail(`boatyard Rev C model didn't dress to the picks: ${JSON.stringify(rc.d)}`);
   if (rc.share !== "#base=revc&rudder=single") fail(`boatyard Rev C share link: ${rc.share}`);

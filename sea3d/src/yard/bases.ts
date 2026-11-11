@@ -88,38 +88,65 @@ const MM_PER_KG_RANDOLPH = 1000 / (1025 * 0.38);
 export function randolphCatalog(key: "revc" | "revb", sim: SimSlots | null, kayak: Catalog): Catalog | null {
   const b = sim?.bases?.[key];
   if (!b) return null;
-  const slots: CatalogSlot[] = b.slots.map((s) => ({
-    id: s.id,
-    name: s.name,
-    opts: s.opts.map((o) => {
-      const f = FIGURES[s.id]?.[o.id] ?? { cost: 0, kg: 0, est: 1 };
-      return {
-        id: o.id,
-        n: o.n ?? o.id,
-        d: f.d ?? o.basis,
-        cost: f.cost ?? 0,
-        kg: f.kg ?? 0,
-        ...f,
-        def: b.defaults[s.id] === o.id ? 1 : undefined,
-        est: f.est || o.est ? 1 : undefined,
-        effect: o.effect,
-        basis: o.basis,
-        simEst: o.est,
-      } as CatalogOption;
-    }),
-  }));
+  const slots: CatalogSlot[] = [];
+  for (const s of b.slots) {
+    // Spares: their build plan has none, so their boat starts without (the simulator ignores spares on it).
+    const def = s.id === "spares" ? SHARED_DEFAULTS.spares : (b.defaults[s.id] ?? SHARED_DEFAULTS[s.id]);
+    const shared = kayak.slots.find((x) => x.id === s.id);
+    if (!FIGURES[s.id] && shared) {
+      // A slot shared with the kayak (satellite modem, light, paint, spares): our catalog's parts,
+      // the simulator's word on what they do to their boat. What it has as built always sails.
+      slots.push({
+        ...shared,
+        opts: shared.opts
+          .filter((o) => s.opts.some((x) => x.id === o.id))
+          .map((o) => {
+            const so = s.opts.find((x) => x.id === o.id)!;
+            return {
+              ...o,
+              kg: 0, // the kayak's weight changes don't carry over; these are small parts
+              def: o.id === def ? 1 : undefined,
+              effect: o.id === def ? "wired" : so.effect,
+              basis: so.basis,
+            };
+          }),
+      });
+      continue;
+    }
+    slots.push({
+      id: s.id,
+      name: s.name,
+      opts: s.opts.map((o) => {
+        const f = FIGURES[s.id]?.[o.id] ?? { cost: 0, kg: 0, est: 1 };
+        return {
+          id: o.id,
+          n: o.n ?? o.id,
+          d: f.d ?? o.basis,
+          cost: f.cost ?? 0,
+          ...f,
+          // The simulator's weight change when it gives one, so the totals and the physics agree.
+          kg: typeof o.kg === "number" ? o.kg : (f.kg ?? 0),
+          def: def === o.id ? 1 : undefined,
+          est: f.est || o.est ? 1 : undefined,
+          effect: o.effect,
+          basis: o.basis,
+          simEst: o.est,
+        } as CatalogOption;
+      }),
+    });
+  }
+  // Older slot tables list the shared slots only by id.
   for (const id of b.shared_slots) {
     if (slots.some((s) => s.id === id)) continue;
     const s = kayak.slots.find((x) => x.id === id);
     if (!s) continue;
-    const want = SHARED_DEFAULTS[id];
+    const want = b.defaults[id] ?? SHARED_DEFAULTS[id];
     slots.push({
       ...s,
       opts: s.opts.map((o) => ({
         ...o,
-        kg: 0, // the kayak's weight changes don't carry over; these are small parts
-        def: o.id === (want ?? s.opts.find((x) => x.def)?.id) ? 1 : undefined,
-        // Their boat isn't modelled with our parts: only what it has as built sails.
+        kg: 0,
+        def: o.id === want ? 1 : undefined,
         effect: o.id === want ? "wired" : "no effect yet",
       })),
     });
