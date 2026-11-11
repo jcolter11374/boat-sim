@@ -29,6 +29,7 @@ import {
   optionOf,
   plannedDesign,
   sailOnly,
+  simChoices,
   summarise,
   withSim,
   type SimSlots,
@@ -40,6 +41,7 @@ import {
 import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/bases";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
+import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
@@ -166,6 +168,8 @@ const status = {
   summary: {} as Record<string, unknown>,
   dressed: {} as Record<string, unknown>,
   share: "",
+  /** The player's saved boat ("my boat"), as this page last drew it. */
+  mine: null as MyBoat | null,
   yaml: "",
   launch: null as unknown,
   launchError: "",
@@ -399,7 +403,59 @@ function redraw(): void {
   status.summary = { ...s };
   status.share = hash;
   $("result").replaceChildren();
+  drawMine();
 }
+
+// ---------- my boat (remembered in this browser, carried to the other pages) ----------
+const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C", revb: "Rev B" };
+let nameTyped = false; // the player has typed a name: keep it while they change parts
+const defaultName = () => `My ${SHORT[base]}`;
+function drawMine(): void {
+  const mine = loadMyBoat();
+  status.mine = mine;
+  const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
+  const input = $<HTMLInputElement>("mb-name");
+  if (!nameTyped) input.value = here ? mine.name : defaultName();
+  $("mb-save").textContent = here ? (input.value.trim() === mine.name ? "Saved" : "Rename my boat") : mine ? "Make this my boat" : "Save as my boat";
+  // The name is the player's own text: textContent only, never innerHTML.
+  const line = $("mb-line");
+  line.replaceChildren();
+  if (!mine) line.textContent = "Save it to take it to the other pages: the helm, the race and the voyage.";
+  else if (here) line.textContent = "This design is your boat. It's remembered in this browser.";
+  else if (mine.kind === "yard") {
+    const a = Object.assign(document.createElement("a"), { href: myBoatYardLink(mine), textContent: mine.name });
+    line.append("Your boat now: ", a, ". Saving this design replaces it.");
+  } else line.append(`Your boat now: ${mine.name} (a stock boat). Saving this design replaces it.`);
+}
+function saveMine(): void {
+  if (!cat) return;
+  const name = $<HTMLInputElement>("mb-name").value.trim().slice(0, 40) || defaultName();
+  saveMyBoat({ kind: "yard", base, hash: status.share, name, choices: simChoices(design, plannedDesign(cat)) });
+  nameTyped = false;
+  toast(`Saved "${name}" as your boat, in this browser.`);
+}
+$("mb-save").addEventListener("click", saveMine);
+$<HTMLInputElement>("mb-name").addEventListener("input", () => {
+  nameTyped = true;
+  drawMine();
+});
+$<HTMLInputElement>("mb-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") saveMine();
+});
+onMyBoatChange(() => cat && drawMine());
+// "Your boat now" links here with a new hash: open that design without a reload.
+window.addEventListener("hashchange", () => {
+  const b = baseFromHash(location.hash);
+  if (!catalogs.has(b)) return;
+  if (b !== base) {
+    base = b;
+    if (view === "inside" && b !== "kayak") view = "afloat";
+    build();
+    fly = { p0: camera.position.clone(), p1: framePos(view), t0: controls.target.clone(), t1: frameTarget(view), k: 0 };
+  }
+  useBase(location.hash);
+  setView(view);
+});
 
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
