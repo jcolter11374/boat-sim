@@ -181,6 +181,7 @@ export class Atmosphere {
   private grade: ShaderPass | null = null;
   private film: ShaderPass | null = null;
   private storm = 0;
+  private reach = HORIZON;
   private dusk = 0;
   private pmrem: THREE.PMREMGenerator;
   private envScene = new THREE.Scene();
@@ -327,7 +328,7 @@ export class Atmosphere {
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
     this.fog.near = 300 * (1 - 0.9 * storm);
-    this.fog.far = HORIZON * (0.9 - 0.77 * storm);
+    this.fog.far = this.horizon * (0.9 - 0.77 * storm);
     // Eyes adjust a little to the dark, more so by moonlight.
     this.exposure = (0.55 - 0.17 * storm) * (1 + (1 - day) * (0.15 + 0.35 * moonlight));
     this.renderer.toneMappingExposure = this.exposure;
@@ -376,7 +377,8 @@ export class Atmosphere {
       const h = toHorizon(ra, dec, ms, latDeg, lonDeg);
       return compassToScene(h.el, h.az);
     };
-    this.stars.matrix.makeBasis(ax(0, 0), ax(90, 0), ax(0, 90));
+    const k = this.horizon / HORIZON;
+    this.stars.matrix.makeBasis(ax(0, 0), ax(90, 0), ax(0, 90)).scale(new THREE.Vector3(k, k, k));
     this.stars.matrixWorldNeedsUpdate = true;
     for (const st of BRIGHT_STARS) {
       const h = toHorizon(st.ra * 15, st.dec, ms, latDeg, lonDeg);
@@ -394,9 +396,25 @@ export class Atmosphere {
   }
 
   /** Keep the moon's disc in its place in the sky as the camera moves, lit from the sun's side. */
+  /** How far the view reaches (m): the haze, the sky and the moon go with it. */
+  get horizon(): number {
+    return this.reach;
+  }
+
+  /**
+   * Reach further (or less far) than the page's own HORIZON, as when real land comes
+   * into view on the helm page. Cheap: only scales and the haze change.
+   */
+  setHorizon(h: number): void {
+    this.reach = h;
+    this.sky.scale.setScalar(h * 3);
+    this.overcast.scale.setScalar(h / HORIZON);
+    this.fog.far = h * (0.9 - 0.77 * this.storm);
+  }
+
   private placeMoon(): void {
     const cam = this.camera.position;
-    const D = HORIZON * 2.2;
+    const D = this.horizon * 2.2;
     const disc = this.moonDisc;
     disc.position.copy(cam).addScaledVector(this.moonDir, D);
     disc.lookAt(cam);
