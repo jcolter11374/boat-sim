@@ -798,7 +798,9 @@ document.querySelectorAll<HTMLButtonElement>("#warp button").forEach((b) =>
 /** A short hint by the speed bar as a replay opens, so the lit speed button gets noticed. */
 function warpHint(): void {
   const el = $("warphint");
-  el.textContent = REDUCED_MOTION ? "Paused at the start: press play when you're ready." : "Real time: speed up here.";
+  // Over the faster buttons, not the lit "Real time" one, so it doesn't read as that button's label (Leo).
+  el.style.left = `${($("warp").children[2] as HTMLElement).offsetLeft}px`;
+  el.textContent = REDUCED_MOTION ? "Paused at the start: press play when you're ready." : "Playing in real time. Faster speeds →";
   el.classList.remove("fade");
   el.hidden = false;
   window.setTimeout(() => el.classList.add("fade"), 6000); // fades out (at once with reduced motion)
