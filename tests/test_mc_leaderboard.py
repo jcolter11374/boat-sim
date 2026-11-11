@@ -1,6 +1,7 @@
 """Leaderboard fairness checks and paired ranking (#197, Ravi's 8 rules)."""
 
 import json
+import re
 
 import pytest
 
@@ -176,6 +177,8 @@ def test_assembled_board_passes_the_fairness_checks(monkeypatch):
     assert L.check_board(board) == []
     assert board["board"]["launch_set"] == "2015-2019-AprJun-every7d-v1"
     assert board["board"]["holdout_set"] == "2021-2021-AprJun-every7d-v1"
+    assert board["board"]["sha"] == run["commit"]
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\dZ", board["board"]["made"])
     e = {x["design"]: x for x in board["entries"]}
     assert set(e) == set(builds)
     assert all(x["run"] == run for x in board["entries"])

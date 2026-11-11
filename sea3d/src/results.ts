@@ -15,7 +15,8 @@ export interface BoardRow {
   launches: number;
 }
 export interface Board {
-  board: { launch_set: string; sample?: boolean };
+  /** made: when the board was run ("2026-11-11T20:15Z"), sha: the sim commit; older boards lack both. */
+  board: { launch_set: string; sample?: boolean; made?: string; sha?: string };
   summary?: { fair: boolean; rows: BoardRow[] };
 }
 /** A precomputed Boatyard build (boatyard/index.json builds[]), as much as we need. */
@@ -31,7 +32,7 @@ export interface Grid {
 
 /** Where a build stands. "board": on the leaderboard; "odds": only the Boatyard's odds; "none": neither. */
 export type Standing =
-  | { kind: "board"; rank: number; of: number; tier: number; tiers: number; row: BoardRow; launchSet: string }
+  | { kind: "board"; rank: number; of: number; tier: number; tiers: number; inTier: number; row: BoardRow; launchSet: string; made: string | null }
   | { kind: "odds"; build: GridBuild; years: [number, number] | null }
   | { kind: "none" };
 
@@ -39,13 +40,13 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /**
  * Where `build` (a Boatyard build id, catalog.grid_id) stands. The board wins
- * when the build is on it and the board is fair; its rank counts the rows with a
- * strictly higher finish rate, so equal rates share a place. The Boatyard's odds
- * come from another launch set (2012-2021, every 10 days, against the board's
- * own years), so they are never given a board place.
+ * when the build is on it and the board is fair (and not the sample board); its
+ * rank counts the rows with a strictly higher finish rate, so equal rates share
+ * a place. The Boatyard's odds come from another launch set (2012-2021, against
+ * the board's own years), so they are never given a board place.
  */
 export function standing(build: string, board: Board | null, grid: Grid | null): Standing {
-  const rows = board?.summary?.fair ? board.summary.rows : [];
+  const rows = board?.summary?.fair && !board.board.sample ? board.summary.rows : [];
   const row = rows.find((r) => r.design === build);
   if (row && board) {
     return {
@@ -54,8 +55,10 @@ export function standing(build: string, board: Board | null, grid: Grid | null):
       of: rows.length,
       tier: row.tier,
       tiers: Math.max(...rows.map((r) => r.tier)),
+      inTier: rows.filter((r) => r.tier === row.tier).length,
       row,
       launchSet: board.board.launch_set,
+      made: board.board.made ?? null,
     };
   }
   const g = grid?.builds.find((b) => b.id === build && b.odds);
@@ -63,26 +66,46 @@ export function standing(build: string, board: Board | null, grid: Grid | null):
   return { kind: "none" };
 }
 
-/** The standing in plain words: one sentence, and a second line of detail. */
+/** The standing in plain words: one sentence, and a second line of detail.
+ *  Board wording leads with the group, not the place (Ravi): boats in one group
+ *  can't be told apart on the board's launches, so a place alone overclaims. */
 export function standingText(s: Standing): { head: string; detail: string } {
   if (s.kind === "board") {
     const r = s.row;
-    const place = ordinal(s.rank);
-    const tier = s.tiers > 1 ? ` In the ${s.tier === 1 ? "top" : ordinal(s.tier)} group of ${s.tiers}: boats in one group can't be told apart on these launches.` : "";
+    const when = boardDay(s.made);
+    const on = when ? `On the board of ${when}` : "On the leaderboard (board date unknown)";
+    const rate = `It finishes ${pct(r.finish_rate)} of ${r.launches} launches.`;
+    const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
+    if (s.tiers <= 1)
+      return {
+        head: `${on}: all ${s.of} boats are in one group, which these launches can't tell apart. ${rate}`,
+        detail: range,
+      };
+    const others = s.inTier - 1;
+    const group = `${s.tier === 1 ? "the top" : `the ${ordinal(s.tier)}`} group of ${s.tiers}`;
+    const with_ = others === 0 ? "on its own there" : `with ${others} other boat${others === 1 ? "" : "s"} it can't be told apart from`;
     return {
-      head: `On the leaderboard: ${place} of ${s.of}, finishing ${pct(r.finish_rate)} of ${r.launches} launches.`,
-      detail: `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.${tier}`,
+      head: `${on}: in ${group}, ${with_}. ${rate}`,
+      detail: `${ordinal(s.rank)} of ${s.of} by finish rate. ${range}`,
     };
   }
   if (s.kind === "odds") {
     const o = s.build.odds!;
     const yrs = s.years ? ` (${s.years[0]} to ${s.years[1]})` : "";
     return {
-      head: `Not on the leaderboard yet. Over ${o.voyages} launches${yrs} this build finishes ${pct(o.odds)}.`,
+      head: `Not on the leaderboard yet. The simulator gives it ${pct(o.odds)} over ${o.voyages} launches${yrs}.`,
       detail: `Likely range ${pct(o.low95)} to ${pct(o.high95)}. One voyage is one roll of the dice; these odds are the better guide.`,
     };
   }
   return { head: "No odds for this boat yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-11-11T20:15Z" -> "11 Nov" (the UTC day, read off the string: no time zone guessing). Null if unreadable. */
+export function boardDay(made: string | null): string | null {
+  const m = made ? /^(\d{4})-(\d\d)-(\d\d)/.exec(made) : null;
+  const mo = m ? Number(m[2]) : 0;
+  return m && mo >= 1 && mo <= 12 ? `${Number(m[3])} ${MONTHS[mo - 1]}` : null;
 }
 
 export function ordinal(n: number): string {
