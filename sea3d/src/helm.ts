@@ -150,6 +150,9 @@ function chosenChallenge(): Challenge | undefined {
 }
 let power = 0.25; // the autopilot cruises at 25 W of its 100
 let maxW = 100; // full drive power, W (the simulator says, once there is an order)
+/** A sailboat's own orders (#242): a sail plan and the engine; null lets the boat decide. */
+let sailOrder: string | null = null;
+let engineOrder: boolean | null = null;
 let lastForecast: Awaited<ReturnType<HelmGame["forecast"]>> | null = null;
 let chart: Chart | null = null;
 let chartDirty = true;
@@ -212,7 +215,7 @@ async function setOrder(h: Heading, p = power): Promise<void> {
   showOrder();
   if (!page.ready) return;
   try {
-    await game.order(h, p);
+    await game.order(h, p, sailOrder, engineOrder);
     page.status = game.status;
     showStatus();
   } catch (e) {
@@ -226,7 +229,7 @@ const dayOf = (iso: string) => (utc(iso) - startMs) / 86400e3;
 async function sendOrder(): Promise<void> {
   if (busy || !page.ready) return;
   try {
-    const r = await game.order(order, power);
+    const r = await game.order(order, power, sailOrder, engineOrder);
     page.status = game.status;
     page.orders.push(r);
     const d = page.status!.day;
@@ -283,18 +286,22 @@ function showOrder(): void {
   const s = page.status;
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
-  const sails = spec !== KAYAK; // a stock boat: the power is its engine, for calms
-  $("powerlabel").textContent = sails ? "Engine" : "Motor power";
-  $("powerhint").textContent = sails
-    ? "The autopilot runs the engine at 70% in calms. The tank holds about 15 hours of diesel; once it's empty the boat waits for wind."
+  const yacht = spec !== KAYAK; // a stock boat: the power is its engine's
+  $("powerlabel").textContent = yacht ? "Engine power" : "Motor power";
+  $("powerhint").textContent = yacht
+    ? "On Auto the boat motors only in a calm. The tank holds about 15 hours of diesel; once it's empty the boat waits for wind."
     : "The autopilot cruises at 25%. More is faster, but the sun has to refill the battery, and at empty the motors stop until it does.";
-  $("powertext").textContent = sails
-    ? power === 0
+  const pct = `${Math.round(power * 100)}%`;
+  $("powertext").textContent = yacht
+    ? power === 0 || engineOrder === false
       ? "Off: sails only"
-      : `${Math.round(power * 100)}% when the wind is light; the sails do the rest`
+      : engineOrder
+        ? `${pct}, running whatever the wind`
+        : `${pct} in a calm; sails otherwise`
     : power === 0
       ? "Motors off: drifting"
-      : `${Math.round(power * 100)}% power, about ${w} W`;
+      : `${pct} power, about ${w} W`;
+  showSailOrders();
   $("sendrow").hidden = !(mode === "base" && page.ready);
   if (mode === "base") {
     const sent = page.status?.order;
@@ -321,6 +328,77 @@ function kmTo(a: [number, number], b: [number, number]): number {
   const r = Math.PI / 180;
   const h = Math.sin(((b[0] - a[0]) * r) / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(((b[1] - a[1]) * r) / 2) ** 2;
   return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+// ---------- sails and engine (sailboats only, #242) ----------
+const PLAN_WORDS: Record<string, [string, string]> = {
+  full: ["Full", "All sail up: fastest in light and moderate wind"],
+  reef1: ["Reef 1", "Mainsail made a little smaller (reefed) for a fresh breeze"],
+  reef2: ["Reef 2", "Mainsail made smaller again for strong wind"],
+  storm: ["Storm", "Only small storm sails: for a gale"],
+  main_only: ["Main only", "Mainsail up, front sail (jib) rolled away"],
+  down: ["Down", "No sails up (bare poles): the boat drifts, or motors"],
+};
+const ENGINE_WORDS: [string, boolean | null, string][] = [
+  ["Auto", null, "The boat decides: it motors only in a calm"],
+  ["On", true, "Motor at the power below, whatever the wind"],
+  ["Off", false, "Keep the engine off and save the diesel"],
+];
+let sailPlansShown = "";
+/** The Sails and Engine buttons: built once for the boat's own plans, then kept in step with the orders. */
+function showSailOrders(): void {
+  const sailing = page.status?.sailing;
+  $("sailrow").hidden = !sailing;
+  document.body.classList.toggle("sailboat", !!sailing);
+  if (!sailing) return;
+  const key = `${sailing.plans.join()}|${sailing.has_engine}`;
+  if (key !== sailPlansShown) {
+    sailPlansShown = key;
+    const mk = (label: string, title: string, on: () => void) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener("click", on);
+      return b;
+    };
+    $("sailbtns").replaceChildren(
+      mk("Auto", "The boat decides: it makes the sails smaller as the wind rises", () => void setSails(null, engineOrder)),
+      ...sailing.plans.map((p) => {
+        const [label, title] = PLAN_WORDS[p] ?? [p, p];
+        const b = mk(label, title, () => void setSails(p, engineOrder));
+        b.dataset.plan = p;
+        return b;
+      }),
+    );
+    $("enginebtns").replaceChildren(
+      ...ENGINE_WORDS.map(([label, v, title]) => {
+        const b = mk(label, title, () => void setSails(sailOrder, v));
+        b.dataset.engine = String(v);
+        return b;
+      }),
+    );
+  }
+  $("enginerow").hidden = !sailing.has_engine;
+  for (const b of Array.from($("sailbtns").children) as HTMLElement[]) b.setAttribute("aria-pressed", String((b.dataset.plan ?? null) === sailOrder));
+  for (const b of Array.from($("enginebtns").children) as HTMLElement[]) b.setAttribute("aria-pressed", String(b.dataset.engine === String(engineOrder)));
+}
+async function setSails(sails: string | null, engine: boolean | null): Promise<void> {
+  if (busy) return;
+  sailOrder = sails;
+  engineOrder = engine;
+  await setOrder(order, power);
+}
+/** One plain line on what the sails and engine are doing now. */
+function sailText(s: Status): string {
+  const g = s.sailing!;
+  const plan = g.plan ? (PLAN_WORDS[g.plan]?.[0] ?? g.plan).toLowerCase() : "?";
+  const bits = [`Sails ${g.plan === "down" ? "down" : plan}${s.order.sails ? "" : " (auto)"}`];
+  if (g.heel_deg != null) bits.push(`leaning ${Math.abs(g.heel_deg).toFixed(0)}°`);
+  if (g.has_engine) bits.push(`engine ${g.engine_on ? "on" : "off"}${g.fuel_l != null ? `, ${g.fuel_l.toFixed(0)} L diesel` : ""}`);
+  // A sailboat can't sail straight into the wind, or well dead downwind: it zigzags.
+  if (g.tactic === "beat") bits.push("zigzagging upwind");
+  else if (g.tactic === "run") bits.push("zigzagging downwind");
+  return bits.join(" · ");
 }
 
 function showStatus(): void {
@@ -371,6 +449,9 @@ function showStatus(): void {
     const w = s.base.waiting;
     $("baseline").textContent = `Base last heard from the boat on day ${last.toFixed(1)}.${w.length ? ` Order on its way: it reaches the boat on day ${dayOf(w[0].due).toFixed(1)}.` : ""}`;
   } else $("baseline").textContent = "";
+  showSailOrders();
+  $("sailline").hidden = !s.sailing;
+  if (s.sailing) $("sailline").textContent = sailText(s);
   $("ghostline").textContent = `Ghost: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
   showOrder();
 }
@@ -579,6 +660,8 @@ async function begin(): Promise<void> {
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
+      sailOrder = v.status.order.sails ?? null;
+      engineOrder = v.status.order.engine ?? null;
     } else {
       page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, chosenBoat() || undefined);
       useBoat(game.boatBase);
@@ -587,7 +670,7 @@ async function begin(): Promise<void> {
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
       }
       // Hands on: the first order goes at once. From base, the boat sails the launch route until base sends one.
-      if (mode === "hands_on") await game.order(order, power);
+      if (mode === "hands_on") await game.order(order, power, sailOrder, engineOrder);
       else draft = true; // ready to send
       page.status = game.status;
     }

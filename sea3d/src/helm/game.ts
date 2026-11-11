@@ -36,7 +36,20 @@ export interface Status {
   boat: BoatNow;
   ghost: BoatNow;
   lead_km: number;
-  order: { heading: Heading; power: number };
+  order: { heading: Heading; power: number; sails?: string | null; engine?: boolean | null };
+  /** True for a boat with sails (#242): it also takes sail and engine orders. */
+  sailboat?: boolean;
+  /** A sailboat's state and what may be ordered (#242). */
+  sailing?: {
+    plans: string[];
+    has_engine: boolean;
+    plan: string | null;
+    heel_deg: number | null;
+    engine_on: boolean | null;
+    fuel_l: number | null;
+    tactic: "beat" | "run" | "reach" | null;
+    tacks: number;
+  };
   power_w: number;
   /** "hands_on" or "base" (older simulators leave it out: hands on). */
   mode?: Mode;
@@ -182,8 +195,10 @@ export class HelmGame {
     return this.ask<string>({ type: "save" });
   }
 
-  async order(heading: Heading, power: number): Promise<OrderResult> {
-    const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power });
+  /** sails and engine: sailboats only; null or left out lets the boat decide. */
+  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null): Promise<OrderResult> {
+    const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+    const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power, ...extra });
     this.status = v.status;
     return v.order;
   }
