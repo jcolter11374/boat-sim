@@ -5,9 +5,12 @@
 #   replays - the 1st/15th April to June launches of one year, slimmed for git
 #   build   - sea3d/public/boatyard/index.json plus the replays; commits them to
 #             the chosen branch when "commit" is ticked (main redeploys the page)
-# Run it by hand: Actions tab -> "Boatyard grid" -> Run workflow. On a pull request
-# that changes the grid code it runs the whole grid and commits it to the PR
-# branch, so the data always matches the code it ships with. Free runners only.
+# Run it by hand: Actions tab -> "Boatyard grid" -> Run workflow. With "builds"
+# set it is a partial regrid: those builds are merged into the grid already on
+# the branch (mc.boatyard build --merge) and every other build is kept as it was.
+# On a pull request that changes the grid code it runs the whole grid as a check
+# and uploads it as an artifact, but never commits: a PR run used to push bot
+# commits onto PR branches, even after the PR had merged. Free runners only.
 # Uses the Copernicus secrets for currents; GitHub masks them in logs.
 name: Boatyard grid
 on:
@@ -139,11 +142,16 @@ jobs:
         env:
           CODE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          rm -rf sea3d/public/boatyard
           shopt -s nullglob
           odds=(runs/odds/odds_*.csv)
           mkdir -p runs/replays
-          python -m boatsim.mc.boatyard build --odds "${odds[@]}" --replays runs/replays --out sea3d/public/boatyard --commit "${CODE_SHA::7}"
+          if [ -n "$BUILDS" ]; then
+            merge=--merge  # partial regrid: keep every other build's odds and replays
+          else
+            merge=""
+            rm -rf sea3d/public/boatyard
+          fi
+          python -m boatsim.mc.boatyard build --odds "${odds[@]}" --replays runs/replays --out sea3d/public/boatyard --commit "${CODE_SHA::7}" $merge
           du -sh sea3d/public/boatyard
           python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import json
@@ -164,10 +172,8 @@ jobs:
             runs/odds/
           retention-days: 90
       - name: Commit the grid
-        if: >-
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository) ||
-          (github.event_name == 'workflow_dispatch' && inputs.commit)
+        # Only from a hand-started run with "commit" ticked; never from a pull request.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
