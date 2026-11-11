@@ -335,6 +335,23 @@ try {
   const how = await page.evaluate(() => ({ backend: window.__yard.backend, text: document.querySelector("#result").textContent }));
   if (!how.text || /failed/.test(how.text)) fail(`boatyard launch: ${JSON.stringify(how)}`);
   log.push(`boatyard ${y1.share}, ${greyed.noeff} greyed options, launch via ${how.backend}`);
+  // Start from the Randolph boat: its own slots and totals, the model dressing to the picks, a share link with the base.
+  await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
+  await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
+  const rc = await page.evaluate(() => ({ base: window.__yard.base, s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));
+  if (rc.base !== "revc" || rc.s.solarW !== 40 || rc.s.batteryWh !== 192 || rc.s.thrusters !== 0 || Math.abs(rc.s.massKg - 24.7) > 0.01)
+    fail(`boatyard Rev C totals: ${JSON.stringify(rc)}`);
+  if (rc.d.rudders !== 1 || !rc.d.tracker) fail(`boatyard Rev C model didn't dress to the picks: ${JSON.stringify(rc.d)}`);
+  if (rc.share !== "#base=revc&rudder=single") fail(`boatyard Rev C share link: ${rc.share}`);
+  await page.evaluate(() => window.__yard.pick("rudder", "twin"));
+  if ((await page.evaluate(() => window.__yard.dressed.rudders)) !== 2) fail("boatyard Rev C: twin rudders don't show");
+  await page.click("#launch");
+  await page.waitForFunction(() => window.__yard.launch || window.__yard.launchError, null, { timeout: 30000 });
+  const rl = await page.evaluate(() => ({ backend: window.__yard.backend, n: window.__yard.launch?.replays.length ?? 0, err: window.__yard.launchError }));
+  if (rl.err || rl.backend !== "replays of the boat as built") fail(`boatyard Rev C launch: ${JSON.stringify(rl)}`);
+  await page.evaluate(() => window.__yard.setBase("kayak"));
+  if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
+  log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();

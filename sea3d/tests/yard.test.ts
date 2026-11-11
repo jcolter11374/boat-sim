@@ -18,6 +18,7 @@ import {
   type SimSlots,
 } from "../src/yard/design";
 import { Pool, gridDistance } from "../src/yard/launch";
+import { baseFromHash, randolphCatalog } from "../src/yard/bases";
 import { replayUrl } from "../src/replay/data";
 
 const cat = JSON.parse(readFileSync("public/parts-catalog.json", "utf8")) as Catalog;
@@ -191,4 +192,40 @@ test("replays are read from this site only", () => {
   assert.equal(replayUrl(".", `${o}/boat-sim/boatyard/x.json`, o), `${o}/boat-sim/boatyard/x.json`);
   assert.equal(replayUrl(".", `blob:${o}/1234`, o), `blob:${o}/1234`);
   assert.throws(() => replayUrl(".", "https://example.com/x.json", o));
+});
+
+// ---------- the Randolph boats as a starting point (bases.ts) ----------
+
+test("the Randolph bases build from Theo's slot table, as built by default", () => {
+  const k = withSim(cat, sim);
+  for (const key of ["revc", "revb"] as const) {
+    const rc = randolphCatalog(key, sim, k);
+    assert.ok(rc, key);
+    const plan = plannedDesign(rc!);
+    for (const [slot, id] of Object.entries(sim.bases![key].defaults)) assert.equal(plan.picks[slot], id, `${key} ${slot}`);
+    const s = summarise(rc!, plan);
+    // As built: their published weight, 40 W of panels, 192 Wh, no motor, the YB3 as backup tracker.
+    assert.equal(s.massKg, key === "revc" ? 25.2 : 20.8);
+    assert.equal(s.solarW, 40);
+    assert.equal(s.batteryWh, 192);
+    assert.equal(s.thrusters, 0);
+    assert.equal(s.beacon, true);
+    assert.equal(s.electronicsWhDay, 33); // their 33 Wh a day
+    assert.equal(encodeDesign(rc!, plan), "");
+    assert.ok(s.partsCost > 2000 && s.partsCost < 3500, `${key} cost ${s.partsCost}`);
+  }
+});
+
+test("Randolph base: their thruster counts, sinks on a small waterplane, links carry the base", () => {
+  const rc = randolphCatalog("revc", sim, withSim(cat, sim))!;
+  const d = decodeDesign(rc, "#base=revc&drive=wing-thruster&rbat=lfp-384wh");
+  assert.equal(d.picks.drive, "wing-thruster");
+  const s = summarise(rc, d);
+  assert.equal(s.thrusters, 1);
+  assert.equal(s.batteryWh, 384);
+  const hints = hintsFor(optionOf(rc, "rbat", plannedDesign(rc)), optionOf(rc, "rbat", d)!, rc.mmPerKg);
+  assert.ok(hints.some((h) => /sits [45] mm lower/.test(h)), hints.join("; "));
+  assert.equal(baseFromHash("#base=revc&x=1"), "revc");
+  assert.equal(baseFromHash("#base=nope"), "kayak");
+  assert.equal(baseFromHash(""), "kayak");
 });

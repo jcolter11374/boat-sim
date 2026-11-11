@@ -13,6 +13,7 @@ import { Atmosphere } from "./atmosphere";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
+import { RANDOLPH_REVB, RANDOLPH_REVC } from "./motion";
 import { Contact } from "./contact";
 import { BoatMotion, KAYAK_V4 } from "./motion";
 import { shadowsOn } from "./ultra";
@@ -36,8 +37,10 @@ import {
   type CatalogSlot,
   type Design,
 } from "./yard/design";
+import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/bases";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
-import { GridLauncher, SandboxLauncher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
+import { RandolphDress } from "./yard/dressRandolph";
+import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -69,7 +72,12 @@ scene.add(sea.mesh);
 const comps = components(SEA_STATES.calm);
 sea.setSea(SEA_STATES.calm.hs);
 const place = { x: 0, z: 0, yaw: -0.5 };
-const motion = new BoatMotion(KAYAK_V4, place);
+let motion = new BoatMotion(KAYAK_V4, place);
+/** Which boat the design starts from (share links: #base=revc&...). */
+let base: BaseKey = baseFromHash(location.hash);
+let rdress: RandolphDress | null = null;
+/** Our model is smaller: the camera comes in closer round the Randolph boat. */
+const zoom = () => (base === "kayak" ? 1 : 0.5);
 let model: BoatModel | null = null;
 let contact: Contact | null = null;
 let sinkM = 0;
@@ -81,6 +89,8 @@ const LIFT = 1.35;
 function build(): void {
   outfit?.dispose();
   outfit = null;
+  rdress?.dispose();
+  rdress = null;
   if (model) {
     scene.remove(model.root);
     model.dispose();
@@ -89,6 +99,17 @@ function build(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  if (base !== "kayak") {
+    // Our model of the Randolph boat (their Rev B and Rev C share a hull shape in our model).
+    model = BUILDERS.randolph(quality);
+    shadowsOn(model.root);
+    scene.add(model.root);
+    motion = new BoatMotion(base === "revc" ? RANDOLPH_REVC : RANDOLPH_REVB, place);
+    rdress = new RandolphDress(model);
+    if (cat) redraw();
+    return;
+  }
+  motion = new BoatMotion(KAYAK_V4, place);
   model = BUILDERS.kayak(quality);
   shadowsOn(model.root);
   contact = new Contact(model.form, KAYAK, quality);
@@ -114,8 +135,15 @@ frameView();
 // ---------- the catalog and the design ----------
 let cat: Catalog | null = null;
 let design: Design;
-const grid = new GridLauncher(() => cat);
-const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
+/** The parts catalog per boat (the kayak's from parts-catalog.json; the Randolph boats' from bases.ts). */
+const catalogs = new Map<BaseKey, Catalog>();
+const grid = new GridLauncher(() => (base === "kayak" ? cat : catalogs.get("kayak") ?? null));
+const asBuilt: Record<"revc" | "revb", AsBuiltLauncher> = {
+  revc: new AsBuiltLauncher("Randolph Rev C", BASE_LONG.revc, (d) => isAsBuilt(d), grid, null),
+  revb: new AsBuiltLauncher("Randolph Rev B", BASE_LONG.revb, (d) => isAsBuilt(d), grid, "revb"),
+};
+const isAsBuilt = (d: Design) => !!cat && encodeDesign(cat, d) === "";
+const sandbox = new SandboxLauncher(grid, undefined, () => { const k = catalogs.get("kayak"); return k ? plannedDesign(k) : null; });
 const sandboxReady = sandbox.available();
 let launching = false;
 let planned: LaunchResult | null = null;
@@ -123,11 +151,11 @@ const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
 /** Slots by theme, in the order a builder thinks about them. Unknown slots go at the end. */
 const GROUPS: [string, string[]][] = [
-  ["Driving", ["thr"]],
-  ["Power", ["sol", "bat", "mppt"]],
-  ["Brains and radio", ["brain", "sat", "beacon"]],
+  ["Driving", ["thr", "drive", "rudder"]],
+  ["Power", ["sol", "rsol", "bat", "rbat", "mppt"]],
+  ["Brains and radio", ["brain", "sat", "beacon", "tracker"]],
   ["Being seen by ships", ["ais", "radar", "light"]],
-  ["Hull and keel", ["lead", "paint"]],
+  ["Hull and keel", ["lead", "keel", "paint"]],
   ["Before launch", ["spares"]],
 ];
 
@@ -163,6 +191,9 @@ const status = {
   },
   /** Choose an option in a slot (tests). */
   pick: (slot: string, id: string) => choose(slot, id),
+  /** The boat the design starts from, and switching it (tests). */
+  base: base as BaseKey,
+  setBase: (b: BaseKey) => setBase(b),
 };
 (window as unknown as { __yard: typeof status }).__yard = status;
 
@@ -175,7 +206,7 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   top.className = "top";
   const name = document.createElement("span");
   name.textContent = o.n;
-  if (o.def) name.append(badge("plan", "PLANNED"));
+  if (o.def) name.append(badge("plan", base === "kayak" ? "PLANNED" : "AS BUILT"));
   if (o.est) name.append(badge("est", "ESTIMATE"));
   if (o.effect === "no effect yet") {
     name.append(badge("noeff", "NO EFFECT YET"));
@@ -235,6 +266,7 @@ function drawSlots(): void {
 
 function cruiseControl(): HTMLElement {
   const wrap = document.createElement("div");
+  wrap.id = "cruise-wrap";
   const label = document.createElement("div");
   label.className = "muted";
   label.style.margin = "2px 2px 4px";
@@ -264,7 +296,8 @@ function choose(slot: string, id: string): void {
   if (changed) {
     // Show the swap: the view that shows that part best, and a flash on it.
     // (Taking the AIS out shows best on deck: its aerial goes.)
-    setView(id === "none" && slot === "ais" ? "afloat" : (VIEW_FOR[slot] ?? "afloat"));
+    if (base !== "kayak") setView(slot === "rudder" || slot === "keel" || (slot === "drive" && id !== "wing") ? "lifted" : "afloat");
+    else setView(id === "none" && slot === "ais" ? "afloat" : (VIEW_FOR[slot] ?? "afloat"));
     outfit?.pulse(slot, clock.getElapsedTime());
   }
 }
@@ -275,11 +308,22 @@ const FRAMES: Record<View, { pos: [number, number, number]; target: [number, num
   inside: { pos: [-1.9, 3.0, 3.0], target: [0.15, 0.25, 0] },
   lifted: { pos: [-4.3, 1.0, 6.0], target: [0.15, 0.55, 0] },
 };
+// The Randolph boat is half the length but its wing stands 1.3 m up: closer in, aimed higher.
+const R_FRAMES: Record<View, { pos: [number, number, number]; target: [number, number, number] }> = {
+  afloat: { pos: [-3.0, 1.3, 4.2], target: [0.0, 0.35, 0] },
+  inside: { pos: [-3.0, 1.3, 4.2], target: [0.0, 0.35, 0] },
+  lifted: { pos: [-3.0, 1.0, 4.2], target: [0.0, 0.55, 0] },
+};
+/** A view's camera spot for the boat on show. */
+const frameOf = (v: View) => (base === "kayak" ? FRAMES : R_FRAMES)[v];
+const frameTarget = (v: View) => new THREE.Vector3(...frameOf(v).target);
+const framePos = (v: View) => new THREE.Vector3(...frameOf(v).pos);
+camera.position.copy(framePos("afloat"));
+controls.target.copy(frameTarget("afloat"));
 let fly: { p0: THREE.Vector3; p1: THREE.Vector3; t0: THREE.Vector3; t1: THREE.Vector3; k: number } | null = null;
 function setView(v: View): void {
   if (v !== view) {
-    const f = FRAMES[v];
-    fly = { p0: camera.position.clone(), p1: new THREE.Vector3(...f.pos), t0: controls.target.clone(), t1: new THREE.Vector3(...f.target), k: 0 };
+    fly = { p0: camera.position.clone(), p1: framePos(v), t0: controls.target.clone(), t1: frameTarget(v), k: 0 };
     controls.autoRotate = false;
   }
   view = v;
@@ -300,7 +344,7 @@ function redraw(): void {
   for (const slot of cat.slots) {
     const ul = document.getElementById(`hints-${slot.id}`);
     if (!ul) continue;
-    const hints = hintsFor(optionOf(cat, slot.id, plan), optionOf(cat, slot.id, design)!);
+    const hints = hintsFor(optionOf(cat, slot.id, plan), optionOf(cat, slot.id, design)!, cat.mmPerKg);
     ul.replaceChildren(...hints.map((h) => Object.assign(document.createElement("li"), { textContent: h })));
   }
   const cr = $<HTMLInputElement>("cruise");
@@ -309,8 +353,16 @@ function redraw(): void {
     cr.value = String(CRUISE_W.indexOf(design.cruiseW));
     cr.disabled = sail;
   }
+  // Their boat as built has no motor at all: no cruise setting to show.
+  const cw = document.getElementById("cruise-wrap");
+  if (cw) cw.hidden = sail && base !== "kayak";
   const cl = document.getElementById("cruise-label");
-  if (cl) cl.textContent = sail ? "Cruising power: no motors with the wing sail only" : `Cruising power: ${design.cruiseW} W while motoring`;
+  if (cl)
+    cl.textContent = sail
+      ? base === "kayak"
+        ? "Cruising power: no motors with the wing sail only"
+        : "Cruising power: no motor, the wing sails it"
+      : `Cruising power: ${design.cruiseW} W while motoring`;
   // With the wing sail only, the motor choices don't apply: grey them.
   document.querySelectorAll<HTMLButtonElement>('.opt[data-slot="thr"]').forEach((b) => {
     b.classList.toggle("na", sail);
@@ -326,21 +378,69 @@ function redraw(): void {
   $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
   $("s-est").textContent = s.estimates.length ? `Includes estimates: ${s.estimates.join(", ")}.` : "";
   // The model.
-  if (outfit) {
+  if (outfit && base === "kayak") {
     const lead = optionOf(cat, "lead", design);
     const d = outfit.apply(design.picks, s, 50 + (lead?.kg ?? 0));
     sinkM = d.sinkMm / 1000;
     shapeKayak = d.shape === "kayak";
     status.dressed = { ...d };
+  } else if (rdress) {
+    const d = rdress.apply(design.picks);
+    // Heavier sits lower: their waterplane is small, so a couple of kilos shows.
+    sinkM = ((s.massKg - (cat.plannedKg ?? s.massKg)) * (cat.mmPerKg ?? 0)) / 1000;
+    shapeKayak = false;
+    status.dressed = { ...d, sinkMm: Math.round(sinkM * 1000) };
   }
   // Link and file.
-  const hash = encodeDesign(cat, design);
+  const parts = encodeDesign(cat, design);
+  const hash = base === "kayak" ? parts : `#base=${base}${parts ? "&" + parts.slice(1) : ""}`;
   history.replaceState(null, "", location.pathname + location.search + hash);
   status.design = JSON.parse(JSON.stringify(design));
   status.summary = { ...s };
   status.share = hash;
   $("result").replaceChildren();
 }
+
+// ---------- the boat to start from ----------
+const INTRO: Record<BaseKey, string> = {
+  kayak:
+    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ESTIMATE marks figures nobody has measured or quoted yet.",
+  revc:
+    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ESTIMATE marks our guesses.",
+  revb:
+    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ESTIMATE marks our guesses.",
+};
+/** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
+function useBase(hash: string): void {
+  const c = catalogs.get(base);
+  if (!c) return;
+  cat = c;
+  design = decodeDesign(c, hash);
+  status.base = base;
+  $("intro").textContent = INTRO[base];
+  const credit = $("credit");
+  credit.replaceChildren();
+  if (c.credit) {
+    credit.append(`${c.credit.text} `, Object.assign(document.createElement("a"), { href: c.credit.url, target: "_blank", rel: "noopener", textContent: "Their repository" }));
+  }
+  $("reset").textContent = base === "kayak" ? "Back to the planned build" : "Back to as built";
+  // The Randolph boat has no "see inside" yet (our model has no cut-away).
+  const inside = document.querySelector<HTMLButtonElement>('#views button[data-view="inside"]');
+  if (inside) inside.hidden = base !== "kayak";
+  document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.base === base)));
+  drawSlots();
+  redraw();
+}
+function setBase(b: BaseKey): void {
+  if (b === base || !catalogs.has(b)) return;
+  base = b;
+  if (view === "inside" && b !== "kayak") view = "afloat";
+  build();
+  useBase("");
+  fly = { p0: camera.position.clone(), p1: framePos(view), t0: controls.target.clone(), t1: frameTarget(view), k: 0 };
+  setView(view);
+}
+document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => b.addEventListener("click", () => setBase(b.dataset.base as BaseKey)));
 
 // ---------- buttons ----------
 function toast(text: string): void {
@@ -397,14 +497,15 @@ $("launch").addEventListener("click", async () => {
   let r: LaunchResult | null = null;
   try {
     // The real simulator in the browser when the page has its files; else the precomputed grid.
-    const useSandbox = await sandboxReady;
-    status.backend = useSandbox ? sandbox.name : grid.name;
-    const launcher = useSandbox ? sandbox : grid;
+    // The Randolph boats: their voyages as built, until Theo's simulations of their parts land.
+    const useSandbox = base === "kayak" && (await sandboxReady);
+    const launcher = base !== "kayak" ? asBuilt[base] : useSandbox ? sandbox : grid;
+    status.backend = launcher.name;
     r = await launcher.launch(design, summarise(cat, design), (text, done, total) => {
       say(done ? `${text} (${done} of ${total})` : `${text} This takes a minute or two.`);
     });
     // The planned build on the same launches, to compare with (once per back end; it never changes).
-    if (r && encodeDesign(cat, design) !== "") {
+    if (r && base === "kayak" && encodeDesign(cat, design) !== "") {
       const plan = plannedDesign(cat);
       let p = plannedRuns.get(launcher.name);
       if (!p) {
@@ -611,10 +712,15 @@ Promise.all([
 ])
   .then(([catalog, sim]) => {
     const c = withSim(catalog, sim);
-    cat = c;
-    design = decodeDesign(c, location.hash);
-    drawSlots();
-    redraw();
+    catalogs.set("kayak", c);
+    for (const k of ["revc", "revb"] as const) {
+      const rc = randolphCatalog(k, sim, c);
+      if (rc) catalogs.set(k, rc);
+    }
+    // Only offer the boats the slot table has.
+    document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => (b.hidden = !catalogs.has(b.dataset.base as BaseKey)));
+    if (!catalogs.has(base)) base = "kayak";
+    useBase(location.hash);
     status.ready = true;
   })
   .catch((e) => {
@@ -641,7 +747,7 @@ renderer.setAnimationLoop(() => {
   lastT = t;
   // Lifted out: the boat rises clear of the water (and the camera's aim with it), and hangs still.
   // (See inside lifts it a little too, so the parts below the waterline show.)
-  const wantLift = view === "lifted" ? LIFT : view === "inside" ? 0.45 : 0;
+  const wantLift = (view === "lifted" ? LIFT : view === "inside" ? 0.45 : 0) * zoom();
   lift += Math.sign(wantLift - lift) * Math.min(Math.abs(wantLift - lift), dt * 2.2);
   status.lift = lift;
   if (fly) {
@@ -652,15 +758,15 @@ renderer.setAnimationLoop(() => {
     controls.target.lerpVectors(fly.t0, fly.t1, e);
     if (fly.k >= 1) fly = null;
   }
-  const still = 1 - lift / LIFT;
+  const still = 1 - lift / (LIFT * zoom());
   sea.update(comps, t);
   motion.advance(comps, t);
   if (model) {
-    model.root.position.set(0, motion.heave * still - KAYAK.cgBelowWaterline - sinkM + lift, 0);
+    model.root.position.set(0, motion.heave * still - model.spec.cgBelowWaterline - sinkM + lift, 0);
     model.root.rotation.set(motion.roll * still, place.yaw, motion.pitch * still, "YZX");
     model.animate(t);
     outfit?.update(t, dt);
-    if (contact) {
+    if (contact && base === "kayak") {
       // The foam line only fits our kayak's own hull, sitting in the water.
       contact.collar.visible = contact.spray.visible = shapeKayak && lift < 0.05;
       model.root.updateMatrixWorld();

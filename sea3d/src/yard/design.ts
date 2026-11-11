@@ -42,6 +42,14 @@ export interface SimSlots {
   note: string;
   catalog_slots: { id: string; name?: string; opts: SimOption[] }[];
   new_slots: { id: string; name: string; opts: SimOption[] }[];
+  /** Other boats to start from (Theo): their own slots, as-built picks, and the kayak slots they share. */
+  bases?: Record<string, SimBase>;
+}
+export interface SimBase {
+  design: string; // the simulator config, e.g. configs/randolph_rev_c.yaml
+  defaults: Record<string, string>;
+  shared_slots: string[];
+  slots: { id: string; name: string; opts: SimOption[] }[];
 }
 
 export interface CatalogSlot {
@@ -52,7 +60,18 @@ export interface CatalogSlot {
 }
 export interface Catalog {
   note: string;
+  /** cost: the parts not in any slot; kg: added to plannedKg (a change from the planned build). */
   base: { label: string; cost: number; kg: number };
+  /** Which boat this is built on: "kayak" (default), "revc", "revb". */
+  key?: string;
+  /** The as-built weight, kg (the kayak's PLANNED_KG when absent). */
+  plannedKg?: number;
+  /** Fixed numbers for things this boat has no slot for (e.g. thr: 0 on a sail boat). */
+  fixed?: Record<string, number>;
+  /** How far the boat sinks per kg added, mm (MM_PER_KG for the kayak). */
+  mmPerKg?: number;
+  /** Where the parts and prices come from, shown under the slots. */
+  credit?: { text: string; url: string };
   program: [string, number, string][];
   slots: CatalogSlot[];
 }
@@ -73,8 +92,8 @@ const OPTION_NAMES: Record<string, string> = {
   board: "Surfboard, 3.0 x 0.85 m",
 };
 
-/** True when the motors and cruise power don't apply: a wing sail with no motors. */
-export const sailOnly = (d: Design): boolean => d.picks.drive === "wing-sail";
+/** True when the motors and cruise power don't apply: a wing sail with no motors (ours, or the Randolph boat as built). */
+export const sailOnly = (d: Design): boolean => d.picks.drive === "wing-sail" || d.picks.drive === "wing";
 
 /**
  * The catalog with the simulator's notes merged in by slot and option id, and
@@ -164,7 +183,7 @@ export interface Summary {
 
 export function summarise(cat: Catalog, d: Design): Summary {
   let cost = cat.base.cost;
-  let kg = PLANNED_KG + cat.base.kg;
+  let kg = (cat.plannedKg ?? PLANNED_KG) + cat.base.kg;
   const pick = (slot: string) => optionOf(cat, slot, d);
   const estimates: string[] = [];
   let wh = 0;
@@ -176,20 +195,25 @@ export function summarise(cat: Catalog, d: Design): Summary {
     wh += o.wh ?? 0;
     if (o.est) estimates.push(s.name);
   }
-  const num = (slot: string, key: string, dflt: number) => {
-    const v = pick(slot)?.[key];
-    return typeof v === "number" ? v : dflt;
+  // The first of these slots that the boat has and that gives the figure (the kayak's
+  // slots first, then the Randolph boat's: rsol, rbat, tracker, drive).
+  const num = (slots: string | string[], key: string, dflt: number) => {
+    for (const slot of typeof slots === "string" ? [slots] : slots) {
+      const v = pick(slot)?.[key];
+      if (typeof v === "number") return v;
+    }
+    return cat.fixed?.[key] ?? dflt;
   };
   return {
     partsCost: cost,
     programCost: cat.program.reduce((a, p) => a + p[1], 0),
     massKg: kg,
-    thrusters: num("thr", "thr", 2),
-    solarW: num("sol", "wp", 250),
-    batteryWh: num("bat", "bat", 1280),
+    thrusters: num(["thr", "drive"], "thr", 2),
+    solarW: num(["sol", "rsol"], "wp", 250),
+    batteryWh: num(["bat", "rbat"], "bat", 1280),
     electronicsWhDay: wh,
     boxes: num("brain", "boxes", 2),
-    beacon: num("beacon", "beacon", 1) > 0,
+    beacon: num(["beacon", "tracker"], "beacon", 1) > 0,
     ais: num("ais", "ais", 1) > 0,
     antifouling: num("paint", "af", 1) > 0,
     cruiseW: sailOnly(d) ? 0 : d.cruiseW,
@@ -213,12 +237,12 @@ export function nightHours(s: Summary): number {
 }
 
 /** What changes if you swap `from` for `to` in this slot, in plain words. */
-export function hintsFor(from: CatalogOption | undefined, to: CatalogOption): string[] {
+export function hintsFor(from: CatalogOption | undefined, to: CatalogOption, mmPerKg = MM_PER_KG): string[] {
   if (!from || from.id === to.id) return [];
   const out: string[] = [];
   const dkg = to.kg - (from.kg ?? 0);
   if (Math.abs(dkg) >= 0.3) {
-    const mm = Math.round(Math.abs(dkg) * MM_PER_KG);
+    const mm = Math.round(Math.abs(dkg) * mmPerKg);
     const kg = `${Math.abs(dkg).toFixed(1)} kg ${dkg > 0 ? "heavier" : "lighter"}`;
     out.push(mm >= 1 ? `${kg}: sits ${mm} mm ${dkg > 0 ? "lower" : "higher"} in the water` : kg);
   }
@@ -278,7 +302,7 @@ export function designYaml(cat: Catalog, d: Design, name = "my boatyard design")
     "# Boatyard design (boat-sim). The simulator reads `picks` and `cruise_w`;",
     "# the rest is a summary for people. Slot and option ids are from sea3d/public/parts-catalog.json.",
     `name: ${yamlStr(name)}`,
-    "base: v4 kayak",
+    `base: ${yamlStr(cat.base.label)}`,
     `cruise_w: ${d.cruiseW}`,
     "picks:",
     ...cat.slots.map((sl) => `  ${sl.id}: ${d.picks[sl.id]}`),
