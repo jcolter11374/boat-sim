@@ -375,16 +375,15 @@ def standard_components(
         from boatsim.basestation.isochrone import IsochroneReplanPolicy as Policy
     else:
         Policy = ForecastReplanPolicy
-    sail_only = getattr(vessel, "sail", None) is not None and prop["cruise_drive_w"] <= 0
+    steady = getattr(vessel, "steady_polar", None)
+    sail_only = steady is not None and steady() is not None
     if polar is None and routing == "isochrone" and sail_only:
         # A wing-sail boat with no VPP polar and no motors (the drone): the
         # router needs its speeds by wind angle, so it gets a table from the
         # boat's own physics, and the wing's own angle limits (vessel/sail.py
         # sail_heading). A hybrid (wing plus motors) holds any course under
         # power, so it is costed as a motorboat, as before.
-        from boatsim.basestation.isochrone import SteadyPolar
-
-        polar = SteadyPolar(vessel)
+        polar = steady()
         f = ForecastReplanPolicy.polar_factor
         base = Policy(
             route=route,

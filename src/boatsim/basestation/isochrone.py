@@ -74,49 +74,7 @@ from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.oceandata.base import Environment
 from boatsim.oceandata.grid import OutsideCoverage
 from boatsim.types import Mission, Waypoint
-
-
-class SteadyPolar:
-    """A speed table for a wing-sail boat with no VPP polar (the wind-powered
-    drone, a KayakVessel with a sail): its steady speed through the water at
-    each wind speed and angle, from the boat's own force balance
-    (vessel.kayak.solve_speed), so base plans with the physics the boat sails
-    with. Waves come from the wind with the height of a fully developed sea,
-    Hs = 0.0214 U^2 (Pierson & Moskowitz 1964, doi:10.1029/JZ069i024p05181),
-    capped at 6 m: a GUESS, since the planner asks by wind alone. No current,
-    no fouling (polar_factor covers both). Above the storm wind the wing is
-    feathered and the boat only runs off, so it counts as making no way."""
-
-    def __init__(self, vessel):
-        self.vessel = vessel
-        self._cache: dict[tuple[int, int], float] = {}
-
-    def speed_ms(self, tws_ms: float, twa_deg: float) -> float:
-        from boatsim.types import EnvState
-        from boatsim.vessel.kayak import solve_speed
-
-        key = (round(tws_ms * 4), round(twa_deg))
-        got = self._cache.get(key)
-        if got is not None:
-            return got
-        v, sail = self.vessel, self.vessel.sail
-        tws, twa = key[0] / 4, math.radians(key[1])
-        if tws <= 0.0 or tws > sail.storm_wind_ms:
-            speed = 0.0
-        else:
-            env = EnvState(
-                wind_u=-tws * math.sin(twa),
-                wind_v=-tws * math.cos(twa),
-                hs=min(0.0214 * tws * tws, 6.0),
-                wave_dir=float(key[1]),
-            )
-            sol = solve_speed(
-                v.hull, v.thrusters, 0.0, 0.0, 0, env, 0.0, 0.0, 0.0,
-                sail=sail, sail_alpha_max_deg=sail.max_alpha_deg,
-            )  # fmt: skip
-            speed = max(sol.surge, 0.0)
-        self._cache[key] = speed
-        return speed
+from boatsim.vessel.kayak import SteadyPolar  # noqa: F401  (moved; kept importable here)
 
 
 @dataclass
