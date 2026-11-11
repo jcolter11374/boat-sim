@@ -463,7 +463,11 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
         changes.append(("hull", "mass_kg", round(base.hull["mass_kg"] + d_kg, 3)))
     # Leave out changes that set what the base already has, so the default build
     # is the design file untouched.
-    return tuple((s, k, v) for s, k, v in changes if getattr(base, s).get(k, _MISSING) != v)
+    return tuple(
+        (s, k, v)
+        for s, k, v in changes
+        if getattr(base, s).get(k, KEY_DEFAULTS.get((s, k), _MISSING)) != v
+    )
 
 
 _MISSING = object()
@@ -675,14 +679,37 @@ SPARE_SLOT = {
     "none": Option(basis="as the boat comes: one autopilot"),
     "spare-autopilot": SPARE_BOX,
 }
+# The tactician (autonomy/sailing.py, #279): software in the autopilot that beats
+# upwind and gybes downwind on the boat's own polar instead of pointing at the
+# next waypoint. Design key electronics.tactician (default true). The ids are
+# shared with the Randolph bases, which Sam offers it on (their yamls have it
+# off). Software only, so no weight, power or price; it needs the wind's
+# direction, which the sim takes from the true wind.
+TACTICIAN_SLOT = {
+    "on": Option(
+        (("electronics", "tactician", True),),
+        basis="software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat "
+        "without a wind sensor would need a small masthead wind vane (GUESS)",
+    ),
+    "off": Option(
+        (("electronics", "tactician", False),),
+        est=True,
+        basis="steers straight for the next waypoint, clamped out of the no-go zone",
+    ),
+}
+# What a design key means when its file doesn't set it, so a default option that
+# sets the same value leaves the design file untouched (design_changes).
+KEY_DEFAULTS = {("electronics", "tactician"): True}
 # The stock boats steered by an autopilot box that can fail. The rower is steered
-# by its crew and the joke fleet's boxes are trackers, so they have no slot.
+# by its crew and the joke fleet's boxes are trackers, so they have no slot. All
+# four sail, so each can switch its tactician off.
 STOCK_SLOTS = {
-    b: {"spare": SPARE_SLOT}
+    b: {"spare": SPARE_SLOT, "tactician": TACTICIAN_SLOT}
     for b in ("stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7")
 }
-STOCK_SLOT_NAMES = {"spare": "Spare autopilot"}
-STOCK_DEFAULTS = {b: {"spare": "none"} for b in STOCK_SLOTS}
+STOCK_SLOT_NAMES = {"spare": "Spare autopilot", "tactician": "Sailing tactician"}
+# As each yaml comes: none of them sets electronics.tactician, so it's on.
+STOCK_DEFAULTS = {b: {"spare": "none", "tactician": "on"} for b in STOCK_SLOTS}
 
 
 def base_of(choices: dict | None) -> str:
