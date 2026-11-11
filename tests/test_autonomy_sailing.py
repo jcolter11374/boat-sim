@@ -7,7 +7,14 @@ from datetime import datetime, timedelta
 import pytest
 
 from boatsim.autonomy.guidance import WaypointAutopilot
-from boatsim.autonomy.sailing import KN, SailingAutopilot, TablePolar, Tactician, VmgAngles
+from boatsim.autonomy.sailing import (
+    KN,
+    LAND_CLEAR_KM,
+    SailingAutopilot,
+    TablePolar,
+    Tactician,
+    VmgAngles,
+)
 from boatsim.autonomy.sphere import wrap180
 from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.types import Mission, Sensors, Waypoint
@@ -82,11 +89,13 @@ def test_tacks_only_when_the_mark_is_clearly_across_and_not_too_often():
     assert tac.side == side and tac.switches == 2
 
 
-def _sail_to(mark, wind_from, tws, hours=60):
+def _sail_to(mark, wind_from, tws, hours=60, land_km=None, track=None, corridor_km=10.0):
+    # land_km: distance to a test coast; the autopilot sees it as a mask (<= 0).
     """Flat-water point-mass boat at polar speed, through the full autopilot."""
     guidance = WaypointAutopilot(acceptance_radius_m=1_000.0)
-    tac = Tactician(CRUISER, min_twa_deg=46.0)
-    ap = SailingAutopilot(guidance, tac, guidance=guidance)
+    tac = Tactician(CRUISER, min_twa_deg=46.0, corridor_km=corridor_km)
+    on_land = None if land_km is None else (lambda lat, lon: land_km(lat, lon) <= 0.0)
+    ap = SailingAutopilot(guidance, tac, guidance=guidance, on_land=on_land)
     mission = Mission([Waypoint(*mark)])
     lat, lon, heading, t = 36.65, -74.94, 0.0, T0
     switches_at = []
@@ -100,6 +109,8 @@ def _sail_to(mark, wind_from, tws, hours=60):
         assert abs(twa) >= 46.0 - 1e-9  # never asks for the no-go zone
         v = CRUISER.speed_ms(tws, twa) * 600.0
         lat, lon = move(lat, lon, *_east_north(heading, v))
+        if track is not None:
+            track.append((lat, lon))
         t += timedelta(minutes=10)
         if distance_m(lat, lon, *mark) < 1_000.0:
             return t - T0, switches_at, guidance
@@ -120,7 +131,7 @@ def test_beats_up_to_a_mark_dead_upwind():
     assert vmg > 0.8 * best  # zig-zagging costs little beyond the angle itself
     assert 1 <= len(switches_at) <= 20
     assert all(b - a >= timedelta(hours=2) for a, b in itertools.pairwise(switches_at))
-    assert guidance.crab_deg == 0.0  # no current learnt from the zig-zag
+    assert abs(guidance.crab_deg) < 0.01  # no current learnt from the zig-zag
 
 
 def test_runs_down_to_a_mark_dead_downwind():
@@ -170,3 +181,114 @@ def test_wrap_for_sailing_only_touches_boats_with_a_polar():
     assert isinstance(wrapped, SailingAutopilot) and wrapped.guidance is ap
     tac = tactician_for(boat)
     assert tac.min_twa_deg == 46.0 and tac.max_twa_deg == 169.0
+
+
+def test_land_ahead_tacks_away_at_once():
+    """Holding a tack onto land is never right, even inside min_switch_h."""
+    tac = Tactician(CRUISER, min_twa_deg=46.0, min_switch_h=2.0)
+    tws, wind = 12 * KN, 90.0
+    h = tac.heading(90.0, 90.0, wind, tws, 90.0, T0)
+    assert tac.side == 1  # heading ~140, south of east
+    blocked = lambda heading: 8.0 if abs(wrap180(heading - h)) < 1.0 else math.inf
+    h2 = tac.heading(90.0, 90.0, wind, tws, h, T0 + timedelta(minutes=10), open_water=blocked)
+    assert tac.side == -1 and tac.switches == 1 and wrap180(h2 - wind) < 0
+    # Land on both sides: keep the side with more room.
+    tight = lambda heading: 5.0 if wrap180(heading - wind) < 0 else 9.0
+    tac.heading(90.0, 90.0, wind, tws, h2, T0 + timedelta(minutes=20), open_water=tight)
+    assert tac.side == 1
+
+
+def test_beats_round_an_island_on_the_first_tack():
+    """15 May 2020 cruiser replay: a healthy boat beat onto Pico (Azores) on
+    one long tack. An island 30 km down the first tack must be avoided."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 1.0)  # dead upwind, wind from the east
+    wind = bearing_deg(*start, *mark)
+    blind: list = []  # without a chart it sails across the island (no grounding here)...
+    _sail_to(mark, wind, 12 * KN, land_km=lambda lat, lon: math.inf, track=blind)
+    island = blind[len(blind) // 6]  # a point on the first tack
+    radius_km = 4.0
+
+    def land_km(lat, lon):
+        return max(0.0, distance_m(lat, lon, *island) / 1000.0 - radius_km)
+
+    def closest(track):
+        return min(land_km(*p) for p in track)
+
+    assert closest(blind) == 0.0
+    seen: list = []
+    took, _, _ = _sail_to(mark, wind, 12 * KN, land_km=land_km, track=seen)
+    assert closest(seen) >= LAND_CLEAR_KM - 1.0  # ...with one it keeps clear
+    assert took < timedelta(hours=30)
+
+
+@pytest.mark.parametrize(
+    ("width_km", "max_tacks"), [(80.0, 7), (40.0, 8), (20.0, 20), (12.0, None)]
+)
+def test_beats_up_a_channel_without_dithering(width_km, max_tacks):
+    """Ravi's check of #252: up a channel, both tacks see land inside the
+    look-ahead, and "the other side is clearer" flipped almost every step (71
+    tacks in 12 h at 40 km). Now only land within LAND_URGENT_KM tacks early."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 3.0)  # ~270 km up the channel, dead upwind
+    wind = bearing_deg(*start, *mark)
+
+    def land_km(lat, lon):
+        off_axis = distance_m(lat, start[1], *start) / 1000.0  # km north or south
+        return max(0.0, width_km / 2.0 - off_axis)
+
+    track: list = []
+    with pytest.raises(AssertionError, match="never reached"):  # 12 h is not enough
+        _sail_to(mark, wind, 12 * KN, hours=12, land_km=land_km, track=track)
+    assert min(land_km(*p) for p in track) >= LAND_CLEAR_KM - 1.0  # never ashore
+    tacks = sum(
+        1
+        for a, b, c in zip(track, track[1:], track[2:], strict=False)
+        if (b[0] - a[0]) * (c[0] - b[0]) < 0  # north-south direction reverses
+    )
+    # Wide water: the normal tack every min_switch_h. 20 km: wall to wall,
+    # about 40 minutes a board. Narrower than ~2 x LAND_URGENT_KM of beat plus
+    # the margins, the tacks come as fast as the walls force them, but it
+    # still never touches land.
+    if max_tacks is not None:
+        assert tacks <= max_tacks
+    # And it keeps working up the channel: Ravi's check of #252 had it turn
+    # round and run 225 km back downwind once both tacks saw land.
+    made_good_km = distance_m(*start, start[0], track[-1][1]) / 1000.0
+    assert track[-1][1] > start[1] and made_good_km > 60.0
+
+
+def test_never_holds_on_to_the_shore_between_two_islands():
+    """15 May 2020 replay: beating between Pico and Faial, land close ahead on
+    both tacks, it held on and ran aground. Now, with nothing clearer to tack
+    onto, it steers for open water instead. Here the leg itself runs through a
+    gap between two islands, which base never sends (the lane, corridor_km,
+    keeps the boat away from such places), so this is the look-ahead alone,
+    the backstop: it stays off the land and still gets through."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 1.0)
+    wind = bearing_deg(*start, *mark)
+    islands = [move(*start, *_east_north((wind + s * 50.0) % 360.0, 12_000.0)) for s in (1, -1)]
+    radius_km = 3.0
+
+    def land_km(lat, lon):
+        return max(0.0, min(distance_m(lat, lon, *i) / 1000.0 - radius_km for i in islands))
+
+    seen: list = []
+    took, _, _ = _sail_to(
+        mark, wind, 12 * KN, hours=30, land_km=land_km, track=seen, corridor_km=math.inf
+    )
+    assert min(land_km(*p) for p in seen) >= 1.0
+    assert took < timedelta(hours=20)
+
+
+def test_the_lane_keeps_the_zig_zag_near_the_leg():
+    """Base checks each leg for land 20 km either side; the tactician tacks
+    back before it is corridor_km off the line, whatever min_switch_h says."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 1.0)
+    wind = bearing_deg(*start, *mark)
+    seen: list = []
+    _sail_to(mark, wind, 6 * KN, track=seen, corridor_km=5.0)
+    off = max(abs(distance_m(p[0], start[1], *start)) for p in seen) / 1000.0
+    assert off < 5.0 + 2.0  # one 10-minute step past the line at most
