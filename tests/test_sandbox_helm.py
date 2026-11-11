@@ -167,3 +167,9 @@ def test_save_and_resume_gives_the_same_game(env):
         assert a == b  # and they carry on identically
     with pytest.raises(ValueError):
         Game.load(env, "not-a-game")
+
+
+def test_forecast_stops_at_the_end_of_the_bundle(env):
+    g = Game(env, launch_index=MAY1, max_days=0.5)
+    f = g.forecast(hours=240)
+    assert 0 < len(f) < 41 and f[-1]["t"] <= "2020-05-04T18:00"

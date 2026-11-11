@@ -393,13 +393,19 @@ class Game:
 
     def forecast(self, hours: float = 120.0, every_h: float = 6.0) -> list[dict]:
         """The forecast the base would get now, at the boat's position: same
-        realistic error as the base station's (ErrorForecast), not the truth."""
+        realistic error as the base station's (ErrorForecast), not the truth.
+        Cut short at the end of the weather bundle."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
         v = self.mine
         issued = v.c.forecast.issue(v.state.t)
         out = []
         for k in range(int(hours // every_h) + 1):
             t = v.state.t + timedelta(hours=k * every_h)
-            e = issued.sample(t, v.state.lat, v.state.lon)
+            try:
+                e = issued.sample(t, v.state.lat, v.state.lon)
+            except OutsideCoverage:
+                break  # past the end of the weather bundle: a shorter forecast
             out.append(
                 {
                     "t": _iso(t),
