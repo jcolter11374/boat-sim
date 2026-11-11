@@ -51,6 +51,7 @@
   #chart { width: 100%; height: 190px; display: block; border-radius: 8px; }
   #watch { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; }
   #watch button { padding: 4px 9px; font-size: 12px; }
+  #film { display: flex; gap: 6px; margin-top: 6px; } #film button { padding: 4px 9px; font-size: 12px; }
   #notes { position: fixed; top: 12px; right: 12px; width: 300px; display: flex; flex-direction: column; gap: 6px; }
   .note { padding: 7px 10px; border-left: 4px solid #8ab4ff; font-size: 13px; transition: opacity 1s; }
   .note .when { font-size: 11px; color: var(--dim); }
@@ -121,6 +122,7 @@
   <h2>The chart <span class="muted" style="text-transform:none;letter-spacing:0">· orange you, grey the ghost</span></h2>
   <canvas id="chart"></canvas>
   <div id="watch">Watch: <button id="w-boat" aria-pressed="true">Your boat</button><button id="w-ghost" aria-pressed="false">The ghost</button></div>
+  <div id="film"><button id="cinebtn" title="The panels fade and the camera films the boat on its own. Any key or a click to leave.">&#127916; Cinematic</button><button id="soundbtn" aria-pressed="false" title="Wind, rain and waves, made from the weather">Sound off</button></div>
 </section>
 
 <div id="notes"></div>

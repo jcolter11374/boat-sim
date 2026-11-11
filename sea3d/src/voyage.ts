@@ -52,6 +52,8 @@ import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 import { localTime } from "./replay/localtime";
+import { Cinema, filmButtons } from "./cinema";
+import { OceanSound } from "./sound";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -733,6 +735,46 @@ controls.target.set(0, 0.2, 0);
   }
 })();
 
+// ---------- cinematic mode and sound ----------
+let held: { hour: number; playing: boolean } | null = null;
+const sunElAt = (h: number) => {
+  if (!rep) return 0;
+  const [la, lo] = positionAt(rep, h);
+  return Number.isFinite(la) ? sunPosition(utc(rep.start) + h * 3600e3, la, lo).el : 0;
+};
+const cine = new Cinema({
+  camera,
+  controls,
+  water: (x, z) => heightAt(live.advance(last), x, z, last),
+  yaw: () => smoothYaw ?? 0,
+  hour: () => hour,
+  // Live: never past the latest report. The game: never past where you've watched to,
+  // so no story beat comes early. Otherwise the whole voyage.
+  hours: () => [0, tracked ? tracked.nowHour : GAME ? hour : Math.max(endHour() - 0.1, 0)],
+  sunEl: sunElAt,
+  sunDir: () => atmos.sunDir,
+  cloud: () => clouds.cover,
+  hold: (on) => {
+    if (on) {
+      held = { hour, playing };
+      setPlaying(false);
+    } else if (held) {
+      hour = held.hour;
+      // Events the time-lapse ran past haven't happened yet.
+      for (const l of lanes) {
+        const i = l.rep.events.findIndex((e) => e.h > hour);
+        l.shown = i < 0 ? l.rep.events.length : Math.min(l.shown, i);
+      }
+      setPlaying(held.playing);
+      held = null;
+    }
+  },
+  toggleSound: () => sound.toggle(),
+});
+const sound = new OceanSound();
+filmButtons(cine, sound);
+(status as unknown as { cine: Cinema }).cine = cine;
+
 // ---------- loop ----------
 const guard = new FpsGuard();
 const bowW = new THREE.Vector3();
@@ -751,6 +793,7 @@ renderer.setAnimationLoop(() => {
     hour = Math.min(hour + dt * warp, endHour());
     if (hour >= endHour()) setPlaying(false);
   }
+  if (cine.lapseHour !== null) hour = cine.lapseHour;
   if (rep) {
     // Events reached since last frame, for every boat on screen.
     for (const [li, l] of lanes.entries()) {
@@ -901,8 +944,15 @@ renderer.setAnimationLoop(() => {
       if (fresh) liveHud(tracked);
     }
     status.hour = hour;
+    sound.update(dt, {
+      wind: Math.hypot(wu, wv),
+      hs,
+      tp: valueAt(rep, rep.tp, hour) ?? 3 + 2.5 * Math.sqrt(hs),
+      rain: rain.amount,
+      near: camera.position.distanceTo(controls.target),
+    });
   }
-  controls.update();
+  if (!cine.update(dt)) controls.update();
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;

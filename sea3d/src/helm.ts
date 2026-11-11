@@ -24,6 +24,8 @@ import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type O
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { localTime } from "./replay/localtime";
+import { Cinema, filmButtons } from "./cinema";
+import { OceanSound } from "./sound";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -544,6 +546,37 @@ const landImg = new Image();
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
 })().catch((e) => console.warn("chart:", e));
 
+// ---------- cinematic mode and sound ----------
+let heldHour: number | null = null;
+const cine = new Cinema({
+  camera,
+  controls,
+  water: (x, z) => heightAt(live.advance(last), x, z, last),
+  yaw: () => smoothYaw ?? 0,
+  hour: () => hour,
+  // Only hours already sailed: the films never show what's ahead of your clock.
+  hours: () => [0, page.ready && game.boat ? Math.min(shownTo, lastHour(game.boat)) : 0],
+  sunEl: (h) => {
+    const r = game.boat;
+    if (!r) return 0;
+    const [la, lo] = positionAt(r, Math.min(h, lastHour(r)));
+    return sunPosition(utc(r.start) + h * 3600e3, la, lo).el;
+  },
+  sunDir: () => atmos.sunDir,
+  cloud: () => clouds.cover,
+  hold: (on) => {
+    if (on) heldHour = hour;
+    else if (heldHour !== null) {
+      hour = heldHour;
+      heldHour = null;
+    }
+  },
+  toggleSound: () => sound.toggle(),
+});
+const sound = new OceanSound();
+filmButtons(cine, sound);
+(page as unknown as { cine: Cinema }).cine = cine;
+
 // ---------- frame ----------
 const clock = new THREE.Clock();
 const bowW = new THREE.Vector3();
@@ -563,6 +596,7 @@ renderer.setAnimationLoop(() => {
     const rate = Math.max(span / Math.min(6, 0.6 + (2.5 * span) / 24), 6); // hours per second
     hour = Math.min(shownTo, hour + dt * rate);
   }
+  if (cine.lapseHour !== null) hour = cine.lapseHour;
   const r = rep();
   const h = r ? Math.min(hour, lastHour(r)) : 0;
   const hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;
@@ -626,7 +660,8 @@ renderer.setAnimationLoop(() => {
   rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.ambient);
-  controls.update();
+  sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target) });
+  if (!cine.update(dt)) controls.update();
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
   // The other boat: a tag on the horizon in its direction, with the distance.
