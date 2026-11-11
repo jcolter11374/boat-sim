@@ -187,8 +187,8 @@ def paired(a: dict, b: dict) -> Pair:
         a_only,
         b_only,
         gap,
-        gap - half,
-        gap + half,
+        max(gap - half, -1.0),  # a gap can't pass +-100 points; small n would
+        min(gap + half, 1.0),  # stretch the Wald interval past it
         sign_test(a_only, b_only),
     )
 

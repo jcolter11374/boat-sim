@@ -21,8 +21,14 @@ LAUNCH_MONTHS = (4, 5, 6)
 LAUNCH_DAYS = (1, 15)
 
 
-def open_bundle(source) -> BundleEnvironment:
-    return BundleEnvironment(source)
+def open_bundle(source):
+    """The bundle's weather for every page (Boatyard, helm). A hurricane
+    challenge bundle carries its storms' best-track fixes, and the vortex goes
+    back into the 1 degree weather at sample time (oceandata/stormboost.py);
+    any other bundle comes back as the plain BundleEnvironment."""
+    from boatsim.oceandata.stormboost import boost_bundle
+
+    return boost_bundle(BundleEnvironment(source))
 
 
 def note(env: BundleEnvironment) -> str:

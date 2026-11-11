@@ -60,7 +60,7 @@ export class Island {
   /** Load the place's land; null when the files aren't published on this copy of the site. */
   static async load(place: Place, quality: Quality, base = "./land"): Promise<Island | null> {
     const get = async (f: string) => {
-      const r = await fetch(`${base}/${place.key}_${f}`);
+      const r = await fetch(`${base}/${place.land ?? place.key}_${f}`);
       if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) throw new Error(f);
       return r;
     };
