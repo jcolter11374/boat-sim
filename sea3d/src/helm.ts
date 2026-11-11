@@ -852,12 +852,12 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
       const south = Math.round(((toFinish + 50) % 360) / 5) * 5;
       const choices: Choice[] = [
         { label: "Hold course", title: "Sail on through it", act: () => undefined },
-        { label: `Head south-east (${south}°)`, title: "Bear away from the finish to get under the worst of it; aim at the finish again later", act: () => setOrder(south) },
+        { label: `Dodge south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: () => setOrder(south) },
       ];
       if (motors && power > 0.1) choices.push({ label: "Ease the motors to 10%", title: "Save the battery for after the blow", act: () => setOrder(order === "auto" ? "route" : order, 0.1) });
       return {
         kind: peakW >= GALE_MS ? "gale" : "waves",
-        text: `${peakW >= GALE_MS ? "A gale is" : "Big waves are"} forecast here ${when}: wind up to ${Math.round(peakW * KT)} knots and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. Hold course, slip south-east under it, or save the battery?`,
+        text: `${peakW >= GALE_MS ? "A gale is" : "Big waves are"} forecast here ${when}: wind up to ${Math.round(peakW * KT)} knots and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. Hold course, dodge south-east away from the worst of it, or save the battery?`,
         choices,
       };
     }
