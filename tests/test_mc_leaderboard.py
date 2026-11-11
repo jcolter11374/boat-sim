@@ -114,3 +114,99 @@ def test_cli_is_behind_a_flag(tmp_path, monkeypatch, capsys):
     L.main([str(f), "--strict"])
     out = capsys.readouterr().out
     assert "| 1 | a | 75% |" in out and "a beats b" in out
+
+
+# --- Building a board (data side) ---------------------------------------------
+
+
+def _rows(builds, years, per_year=13):
+    import pandas as pd
+
+    from boatsim.mc.sensitivity import window_launches
+
+    out = []
+    for y in years:
+        for i, s in enumerate(window_launches(y, 7)[:per_year]):
+            for k, b in enumerate(builds):
+                ok = (i + k) % 3 != 0
+                out.append(
+                    {
+                        "build": b,
+                        "start": s,
+                        "seed": y * 1000 + i,
+                        "outcome": "arrived" if ok else "lost",
+                        "days": 70.0 + i,
+                    }
+                )
+    return pd.DataFrame(out)
+
+
+def _fixed_run(monkeypatch):
+    run = {"job": "1/leaderboard/1", "commit": "abc1234", "numpy": "2.0", "cpu": "test cpu"}
+    monkeypatch.setattr(L, "provenance", lambda: dict(run))
+    return run
+
+
+def test_default_entries_are_grid_builds():
+    from boatsim.mc.boatyard import BUILDS
+
+    assert L.DEFAULT_ENTRIES and all(b in BUILDS for b in L.DEFAULT_ENTRIES)
+    assert len(set(L.DEFAULT_ENTRIES)) == len(L.DEFAULT_ENTRIES)
+
+
+def test_launch_set_id_names_years_and_spacing():
+    assert L.launch_set_id([2019, 2015, 2017], 7) == "2015-2019-AprJun-every7d-v1"
+
+
+def test_badges_and_design_hash():
+    from boatsim.mc.boatyard import BUILDS
+
+    assert L.badges(BUILDS["k-p25"]) == [L.KAYAK_BADGE]
+    assert L.badges(BUILDS["revc"]) == ["our model of Randolph Rev C"]
+    h = {b: L.design_hash(BUILDS[b]) for b in ("k-p25", "k-p20", "revc")}
+    assert len(set(h.values())) == 3  # a part change or a different file changes the hash
+    assert h["k-p25"] == L.design_hash(BUILDS["k-p25"])
+
+
+def test_assembled_board_passes_the_fairness_checks(monkeypatch):
+    run = _fixed_run(monkeypatch)
+    builds = ["k-p25", "k-p20", "revc"]
+    years = [2015, 2016, 2017, 2018, 2019]
+    board = L.assemble(_rows(builds, years), _rows(builds, [2021]), 7, years, [2021])
+    assert L.check_board(board) == []
+    assert board["board"]["launch_set"] == "2015-2019-AprJun-every7d-v1"
+    assert board["board"]["holdout_set"] == "2021-2021-AprJun-every7d-v1"
+    e = {x["design"]: x for x in board["entries"]}
+    assert set(e) == set(builds)
+    assert all(x["run"] == run for x in board["entries"])
+    assert len(e["k-p25"]["launches"]) == 65
+    assert e["k-p25"]["launches"][0]["start"] == "2015-04-01T12:00"
+    json.dumps(board)  # plain JSON
+    assert "too close to call" in L.report(board) or "beats" in L.report(board)
+
+
+def test_assembled_board_flags_short_sets_and_missing_holdout(monkeypatch):
+    _fixed_run(monkeypatch)
+    builds = ["k-p25", "revb"]
+    board = L.assemble(_rows(builds, [2020]), None, 7, [2020], [])
+    problems = " ".join(L.check_board(board))
+    assert "rule 2" in problems and "rule 6" in problems
+
+
+def test_cli_assemble_writes_the_board(tmp_path, monkeypatch):
+    _fixed_run(monkeypatch)
+    monkeypatch.setenv(L.FLAG, "1")
+    builds = ["k-p25", "k-p30"]
+    years = [2015, 2016, 2017, 2018, 2019]
+    pubs = []
+    for y in years:
+        f = tmp_path / f"public_{y}.csv"
+        _rows(builds, [y]).to_csv(f, index=False)
+        pubs.append(str(f))
+    hold = tmp_path / "holdout_2021.csv"
+    _rows(builds, [2021]).to_csv(hold, index=False)
+    out = tmp_path / "board.json"
+    L.main(["assemble", "--public", *pubs, "--holdout", str(hold), "--out", str(out), "--strict"])
+    board = json.loads(out.read_text())
+    assert L.check_board(board) == []
+    assert board["board"]["launch_set"] == "2015-2019-AprJun-every7d-v1"

@@ -258,13 +258,184 @@ def report(board: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- Building a board (data side; the leaderboard workflow) -------------------
+
+KAYAK_BADGE = "3.05 m hull: breaks the race's 2.4 m cap"
+
+# The first board's entries: the plan build, its nearest rivals, and both
+# Randolph boats as we model them. One job must score every entry (#197), and a
+# free runner gets 6 hours, so the list stays short (about 0.3 min per voyage
+# with 4 workers on the Boatyard grid runs; 8 builds x 78 launches ~ 3.5 h).
+DEFAULT_ENTRIES = [
+    "k-p25",
+    "k-p20",
+    "k-p30",
+    "k-p25-brain.one-box",
+    "k-p25-drive.hybrid",
+    "k-p25-sol.solar-300-bat.two-100ah",
+    "revc",
+    "revb",
+]
+
+
+def launch_set_id(years, every_days: int) -> str:
+    """Name of a launch set: which years, how often (seeds follow from it)."""
+    ys = sorted(years)
+    return f"{ys[0]}-{ys[-1]}-AprJun-every{every_days}d-v1"
+
+
+def provenance() -> dict:
+    """Where and with what this was run: the #197 fields."""
+    import platform
+
+    import numpy as np
+
+    cpu = platform.processor() or ""
+    try:
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                cpu = line.split(":", 1)[1].strip()
+                break
+    except OSError:
+        pass
+    job = os.environ.get("GITHUB_RUN_ID", "local")
+    job += "/" + os.environ.get("GITHUB_JOB", "") + "/" + os.environ.get("GITHUB_RUN_ATTEMPT", "")
+    commit = os.environ.get("GITHUB_SHA") or _git_commit()
+    return {"job": job, "commit": commit, "numpy": np.__version__, "cpu": cpu or "unknown"}
+
+
+def _git_commit() -> str:
+    import subprocess
+
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
+def design_hash(build) -> str:
+    """sha256 of the design file plus the build's changes to it (rule 8)."""
+    import hashlib
+
+    h = hashlib.sha256(Path(build.design_path).read_bytes())
+    h.update(repr(build.variant.design).encode())
+    return h.hexdigest()
+
+
+def badges(build) -> list[str]:
+    if build.boat == "v4 kayak":
+        return [KAYAK_BADGE]
+    return [f"our model of {build.boat}"]
+
+
+def score_year(year: int, ids, every_days: int, workers: int):
+    """Every build over one year's launches, in this process (rule 8, #197)."""
+    from boatsim.mc.boatyard import run_odds
+
+    df = run_odds(year, ids, every_days=every_days, workers=workers)
+    return df[["build", "start", "seed", "outcome", "days"]]
+
+
+def assemble(public, holdout, every_days: int, public_years, holdout_years) -> dict:
+    """One board from per-launch rows (DataFrames with build, start, seed, outcome, days)."""
+    from boatsim.mc.boatyard import BUILDS
+
+    run = provenance()
+
+    def rows(df, bid):
+        g = df[df["build"] == bid].sort_values("start")
+        return [
+            {
+                "start": str(r.start)[:16].replace(" ", "T"),
+                "seed": int(r.seed),
+                "outcome": r.outcome,
+                "days": float(r.days),
+            }
+            for r in g.itertuples()
+        ]
+
+    entries = []
+    for bid in sorted(set(public["build"])):
+        b = BUILDS[bid]
+        e = {
+            "design": bid,
+            "label": b.label,
+            "design_sha256": design_hash(b),
+            "badges": badges(b),
+            "run": run,
+            "launches": rows(public, bid),
+        }
+        if holdout is not None:
+            e["holdout"] = {"launches": rows(holdout, bid)}
+        entries.append(e)
+    return {
+        "board": {
+            "launch_set": launch_set_id(public_years, every_days),
+            "holdout_set": launch_set_id(holdout_years, every_days) if holdout_years else None,
+            "headline": HEADLINE,
+            "min_launches": MIN_LAUNCHES,
+        },
+        "entries": entries,
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m boatsim.mc.leaderboard")
-    p.add_argument("board", help="board JSON (see module doc)")
-    p.add_argument("--strict", action="store_true", help="exit 1 if any fairness rule fails")
-    a = p.parse_args(argv)
+    sub = p.add_subparsers(dest="cmd")
+    r = sub.add_parser("report", help="check and rank a board JSON")
+    r.add_argument("board", help="board JSON (see module doc)")
+    r.add_argument("--strict", action="store_true", help="exit 1 if any fairness rule fails")
+    y = sub.add_parser("score-year", help="run every build over one year's launches (one job)")
+    y.add_argument("year", type=int)
+    y.add_argument("--every-days", type=int, default=7)
+    y.add_argument("--builds", nargs="*", default=None)
+    y.add_argument("--workers", type=int, default=4)
+    y.add_argument("--out", required=True)
+    b = sub.add_parser("assemble", help="build the board JSON from score-year CSVs")
+    b.add_argument("--public", nargs="+", required=True)
+    b.add_argument("--holdout", nargs="*", default=[])
+    b.add_argument("--every-days", type=int, default=7)
+    b.add_argument("--out", required=True)
+    b.add_argument("--strict", action="store_true", help="exit 1 if any fairness rule fails")
+    argv = list(argv) if argv is not None else None
+    # Old form: `python -m boatsim.mc.leaderboard board.json [--strict]`.
+    import sys
+
+    raw = argv if argv is not None else sys.argv[1:]
+    if raw and raw[0] not in ("report", "score-year", "assemble", "-h", "--help"):
+        raw = ["report", *raw]
+    a = p.parse_args(raw)
     if not enabled():
         raise SystemExit(f"the leaderboard is behind a flag: set {FLAG}=1 to run it")
+    if a.cmd == "score-year":
+        from boatsim.mc.boatyard import pick
+
+        df = score_year(a.year, pick(a.builds or DEFAULT_ENTRIES, None), a.every_days, a.workers)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(a.out, index=False)
+        print(f"{len(df)} voyages, {df['build'].nunique()} builds, year {a.year}")
+        return
+    if a.cmd == "assemble":
+        import pandas as pd
+
+        def load(paths):
+            return pd.concat([pd.read_csv(x) for x in paths], ignore_index=True) if paths else None
+
+        pub, hold = load(a.public), load(a.holdout)
+        board = assemble(
+            pub,
+            hold,
+            a.every_days,
+            sorted({int(str(s)[:4]) for s in pub["start"]}),
+            sorted({int(str(s)[:4]) for s in hold["start"]}) if hold is not None else [],
+        )
+        Path(a.out).write_text(json.dumps(board, indent=1))
+        print(report(board))
+        if a.strict and check_board(board):
+            raise SystemExit(1)
+        return
     board = json.loads(Path(a.board).read_text())
     print(report(board))
     if a.strict and check_board(board):
