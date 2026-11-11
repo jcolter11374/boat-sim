@@ -25,7 +25,9 @@ The fairness rules (Ravi, agreed by Maya 11 Nov 2026):
 5. Frozen yardstick: one sim commit (and launch set) per board.
 6. No tuning to the test: a hidden holdout set flags designs that drop there.
 7. Same rules for every boat; exceptions are shown as badges (e.g. a Randolph
-   design is "our model" of their boat; our kayak breaks the 2.4 m cap).
+   design is "our model" of their boat; our kayak breaks the 2.4 m cap), and
+   one class of boat per board: stock vessels (the 31 ft cruiser) never rank
+   against the small autonomous boats.
 8. Reproducible: design file hash and sim commit stored; and (#197) every
    entry scored in ONE job, because runner CPUs differ in the last bit and a
    long voyage is chaotic, so cross-job gaps can be machine noise.
@@ -108,6 +110,14 @@ def check_board(board: dict, min_launches: int = MIN_LAUNCHES) -> list[str]:
             if "outcome" not in x:
                 out.append(f"{e.get('design')}: a launch has no outcome")
                 break
+    # Rule 7: one class of boat per board. A stock vessel (a 31 ft yacht) is
+    # not ranked against the small drones; it gets its own board.
+    classes = {e.get("class", DRONE_CLASS) for e in entries}
+    if len(classes) > 1:
+        out.append(
+            f"the board mixes boat classes ({', '.join(sorted(classes))}); "
+            "rank each class on its own board (rule 7)"
+        )
     # Rule 6: a holdout set must be declared and every entry scored on it.
     if not (board.get("board") or {}).get("holdout_set"):
         out.append("no holdout set declared (rule 6)")
@@ -324,6 +334,18 @@ def design_hash(build) -> str:
     return h.hexdigest()
 
 
+DRONE_CLASS = "small autonomous boat"
+STOCK_CLASS = "stock vessel"
+
+
+def boat_class(design_path: str) -> str:
+    """Which board a design belongs on: a stock vessel (its yaml has a `stock:`
+    block, e.g. the 31 ft cruiser) or a small autonomous boat (kayak, Rev B/C)."""
+    from boatsim.config import load_design
+
+    return STOCK_CLASS if load_design(design_path).stock else DRONE_CLASS
+
+
 def badges(build) -> list[str]:
     if build.boat == "v4 kayak":
         return [KAYAK_BADGE]
@@ -363,6 +385,7 @@ def assemble(public, holdout, every_days: int, public_years, holdout_years) -> d
             "design": bid,
             "label": b.label,
             "design_sha256": design_hash(b),
+            "class": boat_class(b.design_path),
             "badges": badges(b),
             "run": run,
             "launches": rows(public, bid),
