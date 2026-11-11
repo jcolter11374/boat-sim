@@ -1,5 +1,7 @@
-// Theo's stock vessels in 3D: a 31 ft cruiser, a 14 ft lateen dinghy and a
-// 16 ft beach cat (configs/stock_*.yaml). Generic boats, no makers' names.
+// Theo's stock vessels in 3D: a 31 ft cruiser, a 14 ft lateen dinghy, a 16 ft
+// beach cat and a 7 m wind-powered ocean drone (configs/stock_*.yaml). Generic
+// boats, no makers' names. The drone's wing turns itself to the wind like Rev B's
+// (wing_pivot, turned by the gear), so it has no sheets or sail plans here.
 //
 // Detailed models come from Blender (blender/build_stock.py, stock_<kind>.glb),
 // loaded the first time a stock boat is shown; until then (or on hosts without
@@ -13,13 +15,14 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
-import { BEACHCAT, CRUISER, DINGHY, type BoatSpec, type StockKey } from "./specs";
+import { BEACHCAT, CRUISER, DINGHY, SAIL_DRONE, type BoatSpec, type StockKey } from "./specs";
 
 /** The Blender file each one is built into (sea3d.yml). */
 const FILE: Record<StockKey, string> = {
   stock_cruiser31: "stock_cruiser",
   stock_dinghy14: "stock_dinghy",
   stock_beachcat16: "stock_beachcat",
+  stock_sail_drone7: "stock_drone",
 };
 
 /** Sail sizes for each plan, as fractions of full (configs' vpp.plans). Anything
@@ -33,6 +36,7 @@ const PLANS: Record<StockKey, Record<string, { main: number; jib: number }>> = {
   },
   stock_dinghy14: { full: { main: 1, jib: 0 } },
   stock_beachcat16: { full: { main: 1, jib: 1 }, main_only: { main: 1, jib: 0 } },
+  stock_sail_drone7: {},
 };
 
 // ---------------------------------------------------------------- hull shapes ----
@@ -68,6 +72,15 @@ const CAT_HULL: HullForm = {
   dz: (s) => 0.55 - 0.08 * s,
 };
 const CAT_HALF_GAP = 1.05;
+const DRONE_FORM: HullForm = {
+  L: 7.0,
+  n: 2.6,
+  crown: 0.06,
+  wl: SAIL_DRONE.waterline,
+  hb: (s) => (s <= 0.45 ? 0.45 * pos(1 - (1 - s / 0.45) ** 2) ** 0.95 : 0.45 - (0.45 - 0.3) * ((s - 0.45) / 0.55) ** 2),
+  kz: (s) => 0.3 * pos(1 - s / 0.25) ** 2 + 0.12 * pos((s - 0.85) / 0.15) ** 2,
+  dz: (s) => 0.72 - 0.08 * s + 0.1 * pos(1 - s / 0.12) ** 2,
+};
 const deckY = (f: HullForm, x: number) => f.dz(x / f.L) + f.crown;
 
 // ------------------------------------------------------------- detailed models ----
@@ -305,15 +318,41 @@ function drawCat(kit: Kit, g: THREE.Group): void {
   }
 }
 
+function drawDrone(kit: Kit, g: THREE.Group): void {
+  const f = DRONE_FORM;
+  const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.02, side: THREE.DoubleSide }));
+  kit.mesh(kit.hull(f, { top: 0x3a4756, deck: 0xdadde0, bottom: 0x262a2f, boot: 0xf2b33d }), hullMat, g);
+  const lead = kit.std(0x3b3f44, { metalness: 0.3 });
+  kit.mesh(kit.foil(1.0, 0.7, 2.3, 2.55, 0.15, -1.45, 0.1), lead, g);
+  kit.box(g, lead, 2.15, 3.65, -1.7, -1.4, -0.15, 0.15);
+  const rp = pivot(g, "rudder_pivot", 6.55, 0.2);
+  kit.mesh(kit.foil(0.5, 0.36, 6.45, 6.55, 0.2, -0.9, 0.12), kit.std(0xeeede8), rp).position.set(-6.55, -0.2, 0);
+  const wx = 2.6;
+  const y0 = deckY(f, wx) + 0.25;
+  const wp = pivot(g, "wing_pivot", wx, 0);
+  const wing = kit.mesh(kit.foil(1.15, 0.85, wx - 0.3, wx - 0.2, y0, y0 + 5, 0.14), kit.std(0xf5f5f1, { roughness: 0.4 }), wp);
+  wing.position.x = -wx;
+  const alu = kit.std(0xb9bec4, { metalness: 0.7, roughness: 0.3 });
+  const by = y0 + 0.55;
+  kit.rod(wp, alu, 0.022, [0.75, by, 0], [2.6, by, 0]);
+  kit.box(wp, kit.std(0xf5f5f1), 2.56, 2.96, by - 0.55, by + 0.75, -0.025, 0.025);
+}
+
 const DRAW: Record<StockKey, (kit: Kit, g: THREE.Group) => void> = {
   stock_cruiser31: drawCruiser,
   stock_dinghy14: drawDinghy,
   stock_beachcat16: drawCat,
+  stock_sail_drone7: drawDrone,
 };
-const FORM: Record<StockKey, HullForm> = { stock_cruiser31: CRUISER_FORM, stock_dinghy14: DINGHY_FORM, stock_beachcat16: CAT_HULL };
-const SPECS: Record<StockKey, BoatSpec> = { stock_cruiser31: CRUISER, stock_dinghy14: DINGHY, stock_beachcat16: BEACHCAT };
-/** Name tag height above the waterline: the masthead. */
-const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5 };
+const FORM: Record<StockKey, HullForm> = {
+  stock_cruiser31: CRUISER_FORM,
+  stock_dinghy14: DINGHY_FORM,
+  stock_beachcat16: CAT_HULL,
+  stock_sail_drone7: DRONE_FORM,
+};
+const SPECS: Record<StockKey, BoatSpec> = { stock_cruiser31: CRUISER, stock_dinghy14: DINGHY, stock_beachcat16: BEACHCAT, stock_sail_drone7: SAIL_DRONE };
+/** Name tag height above the waterline: the masthead (the drone's wing tip). */
+const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5, stock_sail_drone7: 5.8 };
 
 /** A stock boat as a BoatModel (boats/model.ts), with its rig. */
 export function buildStock(key: StockKey, quality: Quality) {

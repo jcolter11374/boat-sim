@@ -3,6 +3,7 @@
     python sea3d/blender/build_stock.py cruiser sea3d/public/models/stock_cruiser.glb
     python sea3d/blender/build_stock.py dinghy  sea3d/public/models/stock_dinghy.glb
     python sea3d/blender/build_stock.py beachcat sea3d/public/models/stock_beachcat.glb
+    python sea3d/blender/build_stock.py drone   sea3d/public/models/stock_drone.glb
 
 (one boat per run: export() ends the process). Same frame and helpers as
 build_kayak.py: x aft from the bow, y up from the bottom of the hull (the
@@ -17,12 +18,18 @@ insignia (Maya, 11 Nov):
 - dinghy: a 13 ft 9 in (4.2 m) lateen-rigged board boat, the kind people learn
   on: a flat deck, a little footwell, a daggerboard and a kick-up rudder;
 - beachcat: a 16 ft (4.9 m) beach catamaran, two hulls, a trampoline, a tall
-  rotating mast with a fully battened main and a jib, a rudder on each hull.
+  rotating mast with a fully battened main and a jib, a rudder on each hull;
+- drone: a 7 m wind-powered ocean drone (configs/stock_sail_drone7.yaml): a
+  narrow hull on a deep keel, a 5 m rigid wing that turns freely on its mast
+  and is set to the wind by a small tail flap on two booms, solar panels and
+  a sensor mast. Generic colours, no maker's look.
 
 Sails sit under empties the page can find by name and turn with the sheet:
 "main_pivot" (on the mast) and "jib_pivot" (on the forestay), so trimming
 them later is a rotation, not a rebuild. Rudders and tillers sit under
 "rudder_pivot" (one per hull on the cat: "rudder_pivot_s" / "rudder_pivot_p").
+The drone's whole wing, booms and tail flap hang under "wing_pivot", which
+the page turns to the wind (boats/gear.ts), as on Randolph's Rev B.
 """
 
 from __future__ import annotations
@@ -50,6 +57,7 @@ from common import (
     lathe,
     material,
     mesh_object,
+    panel,
     pivot,
     reset,
     rod,
@@ -573,7 +581,131 @@ def build_beachcat() -> list:
     return [(port, img, rgb)]
 
 
-BUILD = {"cruiser": build_cruiser, "dinghy": build_dinghy, "beachcat": build_beachcat}
+# ------------------------------------------------------------ ocean drone ----
+# 7 m long, 0.9 m beam, about 2 m draft on a fin keel with a bulb; a 5 m wing
+# about 1.1 m in chord stepped 2.6 m from the bow. Slate topsides, a yellow
+# stripe to be seen by ships, a white wing with a yellow tip.
+DRONE = {"L": 7.0, "B": 0.45, "wl": 0.34, "wing_x": 2.6, "wing_h": 5.0}
+DRONE_PAINT = HullPaint(top=0x3A4756, deck=0xDADDE0, boot=0xF2B33D, bottom=0x262A2F, lettering=None)
+
+
+def build_drone() -> list:
+    L, B = DRONE["L"], DRONE["B"]
+    M = mats()
+
+    def hb(s: float) -> float:
+        # A fine, knife-like bow, parallel sides, a narrow transom.
+        if s <= 0.45:
+            return B * max(1 - (1 - s / 0.45) ** 2, 0) ** 0.95
+        return B - (B - 0.3) * ((s - 0.45) / 0.55) ** 2
+
+    def kz(s: float) -> float:
+        return 0.3 * max(1 - s / 0.25, 0) ** 2 + 0.12 * max((s - 0.85) / 0.15, 0) ** 2
+
+    def dz(s: float) -> float:
+        return 0.72 - 0.08 * s + 0.1 * max(1 - s / 0.12, 0) ** 2
+
+    f = HullForm(L=L, n=2.6, crown=0.06, wl=DRONE["wl"], hb=hb, kz=kz, dz=dz)
+    ob, img, rgb = hull(f, DRONE_PAINT, rough=0.3, coat=0.4, nx=180, nt=28, nd=18)
+    yd = lambda x: f.deck_y(x, 0)
+
+    # Deep fin keel with a long lead bulb (draft about 2 m), a spade rudder aft.
+    foil("keel", 1.0, 0.7, 2.3, 2.55, 0.15, -1.45, 0.1, M["lead"], n_span=10)
+    lathe("keel_bulb", bulb_profile(1.5, 0.3, 0.4), 40, M["lead"], (2.15, -1.55, 0))
+    rp = pivot("rudder_pivot", (6.55, 0.2, 0))
+    foil("rudder", 0.5, 0.36, 6.45, 6.55, 0.2, -0.9, 0.12, M["g10"], parent=rp)
+
+    # Solar panels fore and aft of the wing, a hatch, a low deck fairing at the step.
+    panel("panel_fwd", 0.9, 2.05, 0.62, lambda x, z: f.deck_y(x, z), 5, 2)
+    panel("panel_aft", 3.25, 5.6, 0.56, lambda x, z: f.deck_y(x, z), 10, 2)
+    rounded_box("hatch", 5.75, 6.2, yd(6.0) - 0.01, yd(6.0) + 0.05, -0.18, 0.18, M["g10"], 0.012)
+    dark = material("fairing", base=hexcol(0x2B3036), rough=0.45)
+    wx = DRONE["wing_x"]
+    cylinder("wing_step", 0.2, wx, yd(wx) - 0.02, yd(wx) + 0.12, 0, dark, r_top=0.13)
+    # Sensor mast at the stern: a light, an antenna dome and a little weather vane mount.
+    sx = 6.25
+    cylinder("sensor_mast", 0.03, sx, yd(sx), yd(sx) + 1.1, 0, M["alu"], segs=16)
+    rod("sensor_arm", (sx - 0.18, yd(sx) + 0.95, 0), (sx + 0.18, yd(sx) + 0.95, 0), 0.015, M["alu"])
+    dome = material("dome", base=hexcol(0xF2F2EE), rough=0.4)
+    cylinder("antenna_dome", 0.09, sx, yd(sx) + 1.1, yd(sx) + 1.2, 0, dome, r_top=0.04)
+    cylinder("masthead_light", 0.028, sx + 0.18, yd(sx) + 0.95, yd(sx) + 1.02, 0, M["lamp"])
+    # Bow: a small sensor pod on the stem.
+    lathe("bow_pod", bulb_profile(0.4, 0.12, 0.35), 20, dark, (0.3, yd(0.5) + 0.04, 0))
+
+    # The wing: one rigid foil turning freely on a mast. Two booms reach aft
+    # from it to a small tail flap that sets its angle to the wind, and a
+    # counterweight forward balances it. All of it turns about wing_pivot.
+    wp = pivot("wing_pivot", (wx, 0, 0))
+    wing_mat = material("wing", base=hexcol(0xF5F5F1), rough=0.4, coat=0.3)
+    tip_mat = material("wing_tip", base=hexcol(0xF2B33D), rough=0.45)
+    y0 = yd(wx) + 0.25
+    y1 = y0 + DRONE["wing_h"]
+    foil(
+        "wing", 1.15, 0.85, wx - 0.3, wx - 0.2, y0, y1 - 0.35, 0.14, wing_mat, n_span=12, parent=wp
+    )
+    foil(
+        "wing_tip",
+        0.85,
+        0.7,
+        wx - 0.2,
+        wx - 0.17,
+        y1 - 0.35,
+        y1,
+        0.14,
+        tip_mat,
+        n_span=3,
+        parent=wp,
+    )
+    cylinder("wing_mast", 0.05, wx, yd(wx) - 0.05, y0 + 0.1, 0, dark, segs=20, parent=wp)
+    by = y0 + 0.55
+    tx = wx + 2.6  # tail flap hinge
+    for z in (0.09, -0.09):
+        rod(
+            f"tail_boom_{'p' if z > 0 else 's'}",
+            (wx + 0.75, by, z),
+            (tx, by, z * 0.4),
+            0.022,
+            M["alu"],
+            parent=wp,
+        )
+    foil(
+        "tail_flap",
+        0.42,
+        0.34,
+        tx - 0.04,
+        tx - 0.02,
+        by - 0.55,
+        by + 0.75,
+        0.12,
+        wing_mat,
+        n_span=3,
+        parent=wp,
+    )
+    rod(
+        "counter_arm",
+        (wx - 0.25, by - 0.25, 0),
+        (wx - 0.95, by - 0.25, 0),
+        0.025,
+        M["alu"],
+        parent=wp,
+    )
+    lathe(
+        "counterweight",
+        bulb_profile(0.36, 0.12, 0.45),
+        24,
+        M["lead"],
+        (wx - 1.15, by - 0.25, 0),
+        parent=wp,
+    )
+    return [(ob, img, rgb)]
+
+
+BUILD = {
+    "cruiser": build_cruiser,
+    "dinghy": build_dinghy,
+    "beachcat": build_beachcat,
+    "drone": build_drone,
+}
 
 
 def main() -> None:
