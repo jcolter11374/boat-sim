@@ -169,6 +169,29 @@ def test_save_and_resume_gives_the_same_game(env):
         Game.load(env, "not-a-game")
 
 
+def test_a_mangled_link_is_a_friendly_error(env):
+    import base64
+    import json
+    import zlib
+
+    def code(obj):
+        raw = zlib.compress(json.dumps(obj).encode())
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    good = json.loads(zlib.decompress(base64.urlsafe_b64decode(
+        Game(env, launch_index=MAY1, max_days=0.5).save() + "==")))  # fmt: skip
+    for bad in (
+        [1, 2, 3],
+        {"v": 1},
+        {**good, "o": [[0, "finish"]]},
+        {**good, "o": "x"},
+        {**good, "l": 99},
+        {**good, "c": {"thr": "warp-drive"}},
+    ):
+        with pytest.raises(ValueError):
+            Game.load(env, code(bad))
+
+
 def test_forecast_stops_at_the_end_of_the_bundle(env):
     g = Game(env, launch_index=MAY1, max_days=0.5)
     f = g.forecast(hours=240)
