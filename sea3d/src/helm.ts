@@ -706,7 +706,7 @@ async function finish(): Promise<void> {
     bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   // #335: the browser sails on a lighter weather file than the full runs behind the voyage replays.
-  bits.push("Sailed in your browser on simplified weather; full-data runs (voyage replays, leaderboard) can differ.");
+  bits.unshift("Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.");
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
   void showStanding(c.build);
