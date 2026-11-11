@@ -101,15 +101,32 @@ interface Layout {
   offset: number[]; // direction from the mean, rad
   phase: number[]; // rad
 }
+
+/** Spectrum shape of one wave system: JONSWAP peak enhancement, cos^2s
+ *  spreading, and the band of f / fp it is drawn over. */
+export interface SpectrumShape {
+  gamma: number;
+  spread: number; // s in cos^2s
+  lo: number; // f / fp
+  hi: number; // f / fp
+}
+/** The wind sea (and the single-number sea of older replays). */
+export const WIND_SEA: SpectrumShape = { gamma: JONSWAP_GAMMA, spread: SPREAD_S, lo: F_LO, hi: F_HI };
+/** Swell from distant storms: a narrow peak (gamma 5, GUESS: swell spectra run
+ *  gamma 3-10) and long, parallel crests (s = 40, GUESS: Goda gives 25 for
+ *  young swell, 75 for old), with no short-wave tail (the tail is the wind
+ *  sea's). */
+export const SWELL: SpectrumShape = { gamma: 5, spread: 40, lo: 0.75, hi: 1.6 };
+
 const layouts = new Map<string, Layout>();
 
-function layout(n: number, seed: number): Layout {
-  const key = `${n}:${seed}`;
+function layout(n: number, seed: number, shape: SpectrumShape = WIND_SEA): Layout {
+  const key = `${n}:${seed}:${shape.gamma}:${shape.spread}:${shape.lo}:${shape.hi}`;
   const hit = layouts.get(key);
   if (hit) return hit;
   const rand = mulberry32(seed);
-  const ratio = equalAreaMidpoints((r) => jonswapShape(r), F_LO, F_HI, n);
-  const spread = (d: number) => Math.pow(Math.cos(d / 2), 2 * SPREAD_S);
+  const ratio = equalAreaMidpoints((r) => jonswapShape(r, shape.gamma), shape.lo, shape.hi, n);
+  const spread = (d: number) => Math.pow(Math.cos(d / 2), 2 * shape.spread);
   const dirs = equalAreaMidpoints(spread, -Math.PI, Math.PI, n);
   for (let i = n - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
@@ -119,6 +136,13 @@ function layout(n: number, seed: number): Layout {
   const out = { ratio, offset: dirs, phase };
   layouts.set(key, out);
   return out;
+}
+
+/** Peak period over mean period (Tp / Tm01) of the sea as drawn: equal-energy
+ *  components, so Tm01 = 1 / (fp x mean ratio). */
+export function drawnTpPerTm01(n: number, shape: SpectrumShape = WIND_SEA, seed = 1): number {
+  const r = layout(n, seed, shape).ratio;
+  return r.reduce((a, b) => a + b, 0) / r.length;
 }
 
 /** Equal-energy amplitude that makes n components add up to Hs exactly. */
@@ -180,17 +204,22 @@ export class Sea {
    *  round faster, like a fan opening. */
   anchor = { x: 0, z: 0 };
 
-  constructor(start: SeaState = SEA_STATES.moderate, opts: { n?: number; seed?: number; smoothing?: number } = {}) {
+  constructor(
+    start: SeaState = SEA_STATES.moderate,
+    opts: { n?: number; seed?: number; smoothing?: number; shape?: SpectrumShape } = {},
+  ) {
     this.n = opts.n ?? 24;
     this.seed = opts.seed ?? 1;
     this.smoothing = opts.smoothing ?? 3;
-    this.L = layout(this.n, this.seed);
+    this.L = layout(this.n, this.seed, opts.shape);
     this.hs = start.hs;
     this.tp = start.tp;
     this.direction = start.meanDirection;
     this.target = { hs: this.hs, tp: this.tp, direction: this.direction };
     this.psi = this.L.phase.slice();
-    this.comps = components(start, this.n, this.seed);
+    this.comps = this.L.ratio.map(() => ({ amplitude: 0, wavelength: 1, direction: 0, phase: 0 }));
+    this.advance(0);
+    this.tLast = null;
   }
 
   /** New conditions: significant wave height (m), peak period (s), and the
@@ -202,6 +231,11 @@ export class Sea {
   /** Same, with a preset (direction already in radians of travel). */
   setPreset(sea: SeaState): void {
     this.setTarget(sea.hs, sea.tp, sea.meanDirection);
+  }
+
+  /** Ease the height to nothing, keeping the period and direction. */
+  fadeOut(): void {
+    this.target = { ...this.target, hs: 0 };
   }
 
   /** Jump straight to the target (e.g. when the replay seeks). Not smooth. */
@@ -346,4 +380,85 @@ export function heightAt(
     z0 = z - dz;
   }
   return displace(comps, x0, z0, t, steepness)[1];
+}
+
+/** One wave system: significant height (m), PEAK period (s), and the compass
+ *  direction it comes FROM (deg true). */
+export interface WaveSystem {
+  hs: number;
+  tp: number;
+  dirFrom: number;
+}
+
+/**
+ * The real mix: the local wind sea plus up to two swells from distant storms,
+ * each its own live Sea with its own spectrum, easing on its own. Drop-in for
+ * Sea where a page only calls setSeaState / snap / advance / anchor.
+ *
+ * Train budget: n for the wind sea, 5n/12 and n/3 for the swells (24 -> 24 +
+ * 10 + 8 = 42, inside the shader's 48). A swell is narrow, so a few trains
+ * draw it well.
+ */
+export class MixedSea {
+  readonly wind: Sea;
+  readonly swell1: Sea;
+  readonly swell2: Sea;
+  private readonly parts: Sea[];
+  private readonly out: WaveComponent[] = [];
+
+  constructor(start: SeaState = SEA_STATES.moderate, opts: { n?: number; smoothing?: number } = {}) {
+    const n = opts.n ?? 24;
+    const smoothing = opts.smoothing;
+    const calm = { ...start, hs: 0 };
+    this.wind = new Sea(start, { n, seed: 1, smoothing });
+    this.swell1 = new Sea(calm, { n: Math.max(3, Math.round((5 * n) / 12)), seed: 2, smoothing, shape: SWELL });
+    this.swell2 = new Sea(calm, { n: Math.max(3, Math.round(n / 3)), seed: 3, smoothing, shape: SWELL });
+    this.parts = [this.wind, this.swell1, this.swell2];
+  }
+
+  get n(): number {
+    return this.parts.reduce((s, p) => s + p.n, 0);
+  }
+
+  /** Combined significant height of what's drawn now (m). */
+  get hs(): number {
+    return Math.sqrt(this.parts.reduce((s, p) => s + p.hs * p.hs, 0));
+  }
+
+  get anchor(): { x: number; z: number } {
+    return this.wind.anchor;
+  }
+  set anchor(a: { x: number; z: number }) {
+    for (const p of this.parts) p.anchor = a;
+  }
+
+  /** One combined sea (older replays, the tracker): all of it as wind sea. */
+  setSeaState(hs: number, tp: number, dirFromDeg: number): void {
+    this.wind.setSeaState(hs, tp, dirFromDeg);
+    this.swell1.fadeOut();
+    this.swell2.fadeOut();
+  }
+
+  /** The three systems; null (or absent) means that system isn't there. A
+   *  calm-going swell keeps its period and direction while it fades. */
+  setSystems(ws: WaveSystem | null, s1: WaveSystem | null, s2: WaveSystem | null): void {
+    const set = (sea: Sea, w: WaveSystem | null) => {
+      if (w) sea.setSeaState(w.hs, w.tp, w.dirFrom);
+      else sea.fadeOut();
+    };
+    set(this.wind, ws);
+    set(this.swell1, s1);
+    set(this.swell2, s2);
+  }
+
+  snap(): void {
+    for (const p of this.parts) p.snap();
+  }
+
+  /** Every train of all three systems at time t (s). Call with non-decreasing t. */
+  advance(t: number): WaveComponent[] {
+    this.out.length = 0;
+    for (const p of this.parts) for (const c of p.advance(t)) this.out.push(c);
+    return this.out;
+  }
 }

@@ -129,11 +129,22 @@ def systems(f: np.ndarray, e: np.ndarray, df: np.ndarray, min_hs: float = MIN_HS
         if m0 <= 0 or m1 <= 0 or len(idx) < 3:
             continue
         k = int(idx[np.argmax(e[idx])])
+        # A system that runs to the top band goes on past what the buoy measures.
+        # Add an f^-5 tail beyond it, as ECMWF's wave model does for its own
+        # mean periods (ECMWF IFS documentation, Part VII, the WAM high-frequency
+        # tail); without it short wind seas read too long a Tm01.
+        t0, t1 = m0, m1
+        if idx.max() == n - 1 and e[-1] > 0:
+            fe = f[-1] + df[-1] / 2
+            c = e[-1] * f[-1] ** 5
+            t0 += c / (4 * fe**4)
+            t1 += c / (3 * fe**3)
         out.append(
             {
                 "hs": 4 * math.sqrt(m0),
                 "tp": 1 / peak_freq(f, e, k),
                 "tm01": m0 / m1,
+                "tm01_tail": t0 / t1,
                 "edge": k in (0, n - 1),
             }
         )
@@ -197,28 +208,37 @@ def run(year: int = 2020, stations=STATIONS, months=MONTHS, log=print):
 
 
 def summary(df, log=print):
-    """Median and quartiles of Tp / Tm01 per system, all buoys together."""
+    """Median and quartiles of Tp / Tm01 per system, all buoys together, with
+    and without the high-frequency tail, and by peak period."""
     import pandas as pd
 
     out = []
+    bins = [(0, 5), (5, 8), (8, 12), (12, 99)]
     for name in ("ws", "s1", "s2"):
         d = df[df.system == name]
         if d.empty:
             continue
         r = d.tp / d.tm01
-        out.append(
-            {
-                "system": name,
-                "n": len(d),
-                "median": r.median(),
-                "q25": r.quantile(0.25),
-                "q75": r.quantile(0.75),
-                "median_hs": d.hs.median(),
-                "median_tm01": d.tm01.median(),
-            }
-        )
+        rt = d.tp / d.tm01_tail
+        row = {
+            "system": name,
+            "n": len(d),
+            "median": r.median(),
+            "q25": r.quantile(0.25),
+            "q75": r.quantile(0.75),
+            "tail_median": rt.median(),
+            "tail_q25": rt.quantile(0.25),
+            "tail_q75": rt.quantile(0.75),
+            "median_hs": d.hs.median(),
+            "median_tp": d.tp.median(),
+        }
+        for lo, hi in bins:
+            b = (d.tp >= lo) & (d.tp < hi)
+            row[f"tail_tp{lo}-{hi}"] = rt[b].median() if b.sum() >= 50 else float("nan")
+            row[f"n_tp{lo}-{hi}"] = int(b.sum())
+        out.append(row)
     t = pd.DataFrame(out)
-    log(t.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
+    log(t.T.to_string(header=False, float_format=lambda x: f"{x:.3f}"))
     return t
 
 
