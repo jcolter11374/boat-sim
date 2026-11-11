@@ -127,6 +127,56 @@ const CHECKS = {
       return `6 h hop to day ${a.day.toFixed(2)} (${a.secs} s), 1 day hop to ${b.day.toFixed(2)} (${b.secs} s, stop ${b.stop})`;
     },
   },
+  // #339 as a first-timer sees it: only the start card at first, Set sail in view,
+  // a loading message, then time runs by itself, pauses on an event and says why,
+  // and the 3D day label agrees with the panel.
+  "helm-first-timer": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.locator("#timebar").count())) throw new SkipCheck("this build has no time bar (#339 not deployed)");
+      const first = await page.evaluate(() => {
+        const shown = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return false; const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && +cs.opacity > 0.05; };
+        const go = document.getElementById("go").getBoundingClientRect();
+        return { orders: shown("orders"), status: shown("status"), timebar: shown("timebar"), go: shown("go"), goInView: go.bottom <= innerHeight && go.top >= 0, moreOpen: !!document.getElementById("more")?.open, label: document.getElementById("go").textContent.trim() };
+      });
+      must(first.go && first.goInView, `"${first.label}" isn't visible without scrolling on the first screen`);
+      must(!first.orders && !first.status && !first.timebar, `game controls show before you set sail (orders ${first.orders}, status ${first.status}, time bar ${first.timebar})`);
+      must(!first.moreOpen, `"More options" starts open`);
+      await page.screenshot({ path: `play-${BROWSER}-first-screen.png` }).catch(() => {});
+      await page.click("#go");
+      const loading = await page.waitForFunction(() => !document.getElementById("loading").hidden || window.__helm.ready, null, { timeout: 10_000 }).then(() => page.evaluate(() => !document.getElementById("loading").hidden || "already ready")).catch(() => false);
+      must(loading, "nothing said it was loading after Set sail");
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      const st = await page.evaluate(() => ({ err: window.__helm.error, clock: window.__helm.clock, loading: !document.getElementById("loading").hidden, timebar: !document.getElementById("timebar").hidden, state: document.getElementById("timestate").textContent }));
+      must(!st.err, `didn't start: ${st.err}`);
+      must(!st.loading, "the loading message stayed up after it started");
+      must(st.timebar, "no time bar once sailing");
+      must(st.clock > 0, `time didn't start by itself (clock ${st.clock}, says "${st.state}")`);
+      const d0 = await page.evaluate(() => window.__helm.status?.day ?? 0);
+      await page.waitForFunction((d0) => (window.__helm.status?.day ?? 0) > d0 || window.__helm.clock === 0, d0, { timeout: 60_000 }).catch(() => {
+        throw new CheckFail(`the day didn't move on its own in 60 s (day ${d0})`);
+      });
+      // Go fastest so an event comes soon, then wait for the clock to pause itself.
+      const fast = page.locator('#timebar .rate[data-rate="96"]');
+      if (await fast.count()) await fast.click({ noWaitAfter: true });
+      await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.error || window.__helm.card, null, { timeout: 6 * MIN }).catch(() => {
+        throw new CheckFail("the clock never paused itself for an event in 6 minutes");
+      });
+      const p = await page.evaluate(() => ({ err: window.__helm.error, stop: window.__helm.stops?.at(-1), state: document.getElementById("timestate").textContent, note: document.querySelector("#notes .note .txt")?.textContent ?? "", day: window.__helm.status?.day, over: window.__helm.status?.over }));
+      must(!p.err, `sailing failed: ${p.err}`);
+      if (!p.over) {
+        must(/paused/i.test(p.state), `paused but the time bar says "${p.state}"`);
+        must(p.stop === "time" || /^Paused:/.test(p.note), `paused for "${p.stop}" with no reason in the notes (latest note "${p.note}")`);
+      }
+      // The picture plays on to the moment it stopped; then the 3D label and the panel must agree.
+      const agree = await page.waitForFunction(() => { const c = document.getElementById("clock").textContent.trim(); return c && c === document.getElementById("day").textContent.trim(); }, null, { timeout: 30_000 }).then(() => true).catch(() => false);
+      const labels = await page.evaluate(() => [document.getElementById("clock").textContent.trim(), document.getElementById("day").textContent.trim()]);
+      await page.screenshot({ path: `play-${BROWSER}-first-pause.png` }).catch(() => {});
+      must(agree || p.over, `the 3D day label says "${labels[0]}" but the panel says "${labels[1]}"`);
+      return `first screen clean; ran by itself from day ${d0.toFixed(2)}; paused at day ${p.day?.toFixed(2)} (${p.stop}): "${p.note}"; labels ${labels.join(" = ")}`;
+    },
+  },
   // Sam's spot 5: "Sail until something happens" stops within 72 h.
   "helm-until": {
     path: "helm.html?quality=low",
