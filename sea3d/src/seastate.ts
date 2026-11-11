@@ -9,10 +9,20 @@
 import type { WaveSystem } from "./waves";
 
 /** ERA5 gives each system's MEAN period (Tm01); the 3D sea is set by the PEAK
- *  period. Tp = factor x Tm01, measured on NDBC buoy spectra (see
- *  src/boatsim/oceandata/tpfactor.py and the "Check Tp from Tm01 on buoys"
- *  workflow). GUESS until that check has run. */
-export const TP_PER_TM01 = { windSea: 1.2, swell: 1.15 };
+ *  period. Tp = factor x Tm01, from ERA5 itself: where one system holds over
+ *  85% of the wave energy, ERA5's peak period over that system's Tm01 has
+ *  median 1.36 for the wind sea (middle half 1.30-1.49, 1.8k points) and 1.14
+ *  for swell (1.11-1.19, 9.8k), June 2020 over the corridor
+ *  (`python -m boatsim.oceandata.tpfactor --era5`). The second swell rarely
+ *  holds the peak, so it takes the first swell's factor.
+ *
+ *  Checked against NOAA NDBC buoys (8 buoys, April-November 2020, each hourly
+ *  spectrum split into systems the way ERA5 splits them; workflow "Check Tp
+ *  from Tm01 on buoys"): real swell gives 1.09, close to ERA5's 1.14, but the
+ *  buoys' wind sea gives 1.10, not 1.36. ERA5's wind-sea mean periods run short
+ *  next to its own peaks; we draw ERA5's sea, so we use ERA5's ratio and the
+ *  drawn wind sea peaks where ERA5's does. */
+export const TP_PER_TM01 = { windSea: 1.35, swell1: 1.14, swell2: 1.14 };
 
 export const FILL = -32768;
 const SYSTEMS = ["ws", "s1", "s2"] as const;
@@ -134,7 +144,7 @@ export class SeaStateMonth {
       if (!(hs >= MIN_HS)) return;
       const tm = a.tm / a.e;
       const dir = ((Math.atan2(a.x, a.y) * 180) / Math.PI + 360) % 360;
-      const f = s === "ws" ? TP_PER_TM01.windSea : TP_PER_TM01.swell;
+      const f = s === "ws" ? TP_PER_TM01.windSea : s === "s1" ? TP_PER_TM01.swell1 : TP_PER_TM01.swell2;
       out[s] = { hs, tp: f * tm, dirFrom: dir };
     });
     return out;

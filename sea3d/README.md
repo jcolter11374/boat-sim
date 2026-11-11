@@ -30,7 +30,14 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
   `Sea` follows changing conditions (`setSeaState(hs, tp, dirFrom)`, where
   dirFrom is the direction the waves come from, in degrees true) and eases
   between them without jumps. The boats float on this same function, so what
-  you see and what moves the boats always agree.
+  you see and what moves the boats always agree. `MixedSea` is the real mix:
+  the local wind sea plus up to two swells from distant storms (narrow,
+  long-crested spectra), each easing on its own (`setSystems(ws, s1, s2)`).
+- `src/seastate.ts`: reads the baked ERA5 wave systems in `public/seastate/`
+  (the "Sea state data" workflow) for a time and place. ERA5 gives mean
+  periods; the peak period is `TP_PER_TM01` x that, measured on NOAA buoy
+  spectra (`python -m boatsim.oceandata.tpfactor`, workflow "Check Tp from
+  Tm01 on buoys"). The voyage page uses it where the files are deployed.
 - `src/water.ts`: the drawn sea. The moving waves cover the 400 m round the
   boats; a flat grid carries on to the horizon (3 km). The shader adds small
   ripples and sun glitter, long swell texture far out, light glowing through

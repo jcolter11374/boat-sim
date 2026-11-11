@@ -23,10 +23,19 @@ Method, per hourly spectrum:
      buoy has no wind-to-wave angle for each system, so the cosine is taken as 1).
 Reported: median and quartiles of Tp / Tm01 for wind sea, first swell (the
 largest swell system in the hour) and second swell.
+
+Result, 2020 (8 buoys, 81k systems): wind sea 1.10, first swell 1.09, second
+swell 1.06; every buoy within 0.03; the f^-5 tail moves the wind sea by 0.01.
+
+era5_ratio() measures the same ratio inside ERA5 (its peak period over the
+dominant system's Tm01). June 2020: wind sea 1.36, swell 1.14. Swell agrees with
+the buoys; ERA5's wind-sea mean periods run short next to its own peaks. The 3D
+sea draws ERA5's sea, so it uses ERA5's ratios (sea3d/src/seastate.ts).
 """
 
 from __future__ import annotations
 
+import gzip
 import math
 from concurrent.futures import ThreadPoolExecutor
 
@@ -242,6 +251,50 @@ def summary(df, log=print):
     return t
 
 
+def era5_ratio(stem, every: int = 6, share: float = 0.85, log=print) -> dict[str, np.ndarray]:
+    """ERA5's own Tp / Tm01: its peak period (peak_wave_period, the peak of the
+    whole spectrum) over a system's mean period, where that system holds more
+    than `share` of the energy, so the peak is that system's. Reads a baked
+    seastate_YYYY-MM month (stem without suffix) and the same hours from
+    ARCO-ERA5 (every `every`-th 3-hour step)."""
+    import json
+    from pathlib import Path
+
+    from boatsim.oceandata.era5 import ARCO_ERA5_URL, _open_store
+
+    stem = Path(stem)
+    h = json.loads(stem.with_suffix(".json").read_text())
+    raw = np.frombuffer(gzip.decompress(stem.with_suffix(".bin.gz").read_bytes()), "<i2")
+    q = raw.reshape(h["shape"])
+    v = {
+        f["name"]: np.where(q[:, i] == -32768, np.nan, q[:, i] * f["scale"])
+        for i, f in enumerate(h["fields"])
+    }
+    st = _open_store(ARCO_ERA5_URL)
+    lats, lons = st.latitude.values, st.longitude.values
+    lons = ((lons + 180.0) % 360.0) - 180.0
+    li = [int(np.argmin(abs(lats - (h["lat0"] + i * h["res"])))) for i in range(h["nlat"])]
+    lj = [int(np.argmin(abs(lons - (h["lon0"] + j * h["res"])))) for j in range(h["nlon"])]
+    tv = st.time.values
+    t0 = np.datetime64(h["t0"].rstrip("Z"), "ns")
+    out: dict[str, list] = {"ws": [], "s1": [], "s2": []}
+    for k in range(0, h["nt"], every):
+        ti = int(np.searchsorted(tv, t0 + np.timedelta64(h["step_h"] * k, "h")))
+        pp = st["peak_wave_period"].isel(time=ti).values[np.ix_(li, lj)]
+        e = {s: np.nan_to_num(v[f"{s}_hs"][k]) ** 2 for s in out}
+        tot = sum(e.values())
+        for s in out:
+            tm = v[f"{s}_tm"][k]
+            m = (e[s] > share * tot) & (tot > 0.04) & np.isfinite(pp) & np.isfinite(tm)
+            out[s] += list(pp[m] / tm[m])
+    res = {s: np.array(r) for s, r in out.items()}
+    for s, r in res.items():
+        if len(r):
+            q25, q50, q75 = np.percentile(r, [25, 50, 75])
+            log(f"ERA5 {s}: n {len(r)}, Tp/Tm01 median {q50:.3f} (middle half {q25:.3f}-{q75:.3f})")
+    return res
+
+
 def main(argv=None) -> None:
     import argparse
     from pathlib import Path
@@ -249,7 +302,11 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("year", type=int, nargs="?", default=2020)
     p.add_argument("--out", default="runs/tpfactor")
+    p.add_argument("--era5", help="a baked seastate month (stem, no suffix): ERA5's own ratio")
     a = p.parse_args(argv)
+    if a.era5:
+        era5_ratio(a.era5)
+        return
     df = run(a.year)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)

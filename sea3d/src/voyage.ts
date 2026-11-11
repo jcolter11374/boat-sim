@@ -1244,7 +1244,7 @@ function hud(r: Replay, stw: number, hs: number): boolean {
   $("h-tp").textContent =
     (tp != null ? `${tp.toFixed(0)} s apart` : "") +
     (wd != null ? `, from the ${compass(wd)}` : "") +
-    (sw ? ` · swell ${sw.hs.toFixed(1)} m from the ${compass(sw.dirFrom)}` : "");
+    (sw ? `; swell ${sw.hs.toFixed(1)} m from the ${compass(sw.dirFrom)}` : "");
   const here = positionAt(r, hour);
   if (Number.isFinite(here[0])) {
     const km = Math.max(distanceKm(here, r.course.target) - r.course.target_radius_m / 1000, 0);

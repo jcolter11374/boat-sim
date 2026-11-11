@@ -42,7 +42,7 @@ test("a grid point reads back exactly, with Tp from Tm01", () => {
   const s = m.at(T0, 40, -59)!;
   assert.ok(Math.abs(s.ws!.hs - 1.2) < 1e-9);
   assert.ok(Math.abs(s.ws!.tp - 4 * TP_PER_TM01.windSea) < 1e-9);
-  assert.ok(Math.abs(s.s1!.tp - 10 * TP_PER_TM01.swell) < 1e-9);
+  assert.ok(Math.abs(s.s1!.tp - 10 * TP_PER_TM01.swell1) < 1e-9);
   assert.ok(Math.abs(s.s1!.dirFrom - 90) < 1e-6);
   assert.ok(Math.abs(s.s2!.dirFrom - 350) < 1e-6);
 });
