@@ -16,6 +16,7 @@ on:
       - "tools/build_site.sh"
       - "configs/**"
       - "tools/live_site_check.mjs"
+      - "tools/live_visual_checks.mjs"
       - ".github/workflows/prerelease-playtest.yml"
   workflow_dispatch:
 permissions:
