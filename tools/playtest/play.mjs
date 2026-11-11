@@ -214,6 +214,42 @@ const CHECKS = {
       return "race started";
     },
   },
+  // Results (#307): play "until something happens" to the end of the voyage; the
+  // card says where the build stands and offers the three ways on, which work.
+  "helm-results": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await helmStart(page);
+      if (!(await page.$("#r-next"))) throw new SkipCheck("the deployed helm has no Results 'where this leaves you' yet");
+      let hops = 0;
+      for (; hops < 60 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+        const st = await hop(page, "#sevent");
+        if (st.stop === "over") await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN });
+      }
+      const card = await page.evaluate(() => window.__helm.card);
+      must(card, `no results card after ${hops} hops of "until something happens"`);
+      must(await page.locator("#result").isVisible(), "the results card isn't shown");
+      await page.waitForFunction(() => window.__helm.standing, null, { timeout: MIN }).catch(() => {
+        throw new CheckFail("the results card never said where the build stands");
+      });
+      const next = await page.evaluate(() => ({
+        kind: window.__helm.standing,
+        head: document.querySelector("#r-next .standing")?.textContent ?? "",
+        links: [...document.querySelectorAll("#r-next .next a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
+      }));
+      must(next.head.trim(), "the standing line is empty");
+      must(next.links.length === 3, `expected 3 ways on, got ${JSON.stringify(next.links)}`);
+      await page.screenshot({ path: `play-${BROWSER}-results-card.png` }).catch(() => {});
+      // Follow the leaderboard link like a player: the board loads.
+      const lb = next.links.find((l) => /leaderboard/.test(l.href));
+      must(lb, "no Leaderboard link on the card");
+      await page.click(`#r-next .next a[href="${lb.href}"]`);
+      await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: MIN }).catch(() => {
+        throw new CheckFail(`the card's Leaderboard link (${lb.href}) didn't open a working board`);
+      });
+      return `${hops} hops to the card (${card.verdict}, day ${card.boat.days.toFixed(1)}); "${next.head.trim()}" [${next.kind}]; links ${next.links.map((l) => l.text.trim()).join(" / ")}; the Leaderboard link opened the board`;
+    },
+  },
   // "My boat" (#310): a Boatyard design saved as my boat carries to the helm,
   // race and voyage pages in the same browser. The name has tags in it, which
   // must show as plain text everywhere: the visible text has to include them
