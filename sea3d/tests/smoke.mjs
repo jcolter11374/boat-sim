@@ -378,11 +378,11 @@ try {
   await page.evaluate(() => window.__yard.setBase("kayak"));
   if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
   log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
-  // Cinematic mode: the panels fade, the camera cuts between shots (a time-lapse
-  // puts the replay hour back afterwards), and any key ends it.
+  // Cinematic mode: the panels fade, the camera cuts between shots of what is
+  // happening now (it never moves the voyage clock), and any key ends it.
   await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 });
-  await page.evaluate(() => window.__replay.setHour(150));
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(150); });
   await page.click("#cinebtn");
   await page.waitForFunction(() => window.__replay.cine.on && getComputedStyle(document.getElementById("credits")).opacity === "0", null, { timeout: 30000 })
     .catch(() => fail("cinematic: the panels and credits didn't fade"));
@@ -391,14 +391,14 @@ try {
     await page.evaluate((k) => window.__replay.cine.cut(k), k);
     const f = await page.evaluate(() => window.__replay.frames);
     await page.waitForFunction((n) => window.__replay.frames > n + 3, f, { timeout: 30000 });
-    shots.push(await page.evaluate(() => `${window.__replay.cine.current}${window.__replay.cine.lapseHour !== null ? "@" + window.__replay.hour.toFixed(1) : ""}`));
+    shots.push(await page.evaluate(() => `${window.__replay.cine.current}@${window.__replay.hour.toFixed(1)}`));
   }
-  if (!shots[1].startsWith("sunset@")) fail(`cinematic: no sunset time-lapse (${shots})`);
+  if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
     .catch(() => fail("cinematic: a key didn't bring the panels back"));
   const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
-  if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour wasn't put back (${back.hour})`);
+  if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);
   if (errors.length) fail(`page errors in cinematic mode: ${errors.join("; ")}`);
   log.push(`cinematic: ${shots.join(", ")}, ${back.sound}`);
 
@@ -411,6 +411,27 @@ try {
   if (pico.land && !(pico.surf > 1000)) fail(`Pico: land but no surf (${pico.surf})`);
   if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
   log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
+
+  // A stock boat: the cruiser's voyage, when the replays have one. It leans by the
+  // replay's heel, and its sails follow the logged sail plan and the wind.
+  const cruiser = await page.evaluate(async () => {
+    const idx = await (await fetch("./voyages/index.json")).json();
+    return idx.voyages.find((v) => /cruiser/i.test(v.boat))?.file ?? null;
+  });
+  if (cruiser) {
+    await page.goto(`${URL}voyage.html?voyage=${cruiser}&quality=low`);
+    await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.rig, null, { timeout: 120000 })
+      .catch(async () => fail(`stock cruiser didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+    await page.evaluate(() => window.__replay.setHour(30));
+    await page.waitForTimeout(3000);
+    const st = await page.evaluate(() => ({ boats: window.__replay.boats, rig: window.__replay.rig, menu: [...document.getElementById("boat").options].map((o) => o.value) }));
+    if (!/cruiser/i.test(st.boats.join())) fail(`stock cruiser: the page shows ${st.boats}`);
+    if (!st.menu.includes("stock_cruiser31")) fail("stock cruiser: not in the boat menu");
+    if (typeof st.rig.plan !== "string" || !Number.isFinite(st.rig.heel)) fail(`stock cruiser: no rig (${JSON.stringify(st.rig)})`);
+    if (st.rig.plan === "down" ? st.rig.main !== 0 : !(st.rig.main > 0)) fail(`stock cruiser: sails don't match the plan (${JSON.stringify(st.rig)})`);
+    if (errors.length) fail(`page errors with the stock cruiser: ${errors.join("; ")}`);
+    log.push(`stock cruiser: ${st.rig.plan}, heel ${st.rig.heel.toFixed(1)}`);
+  } else log.push("stock cruiser: no replay yet");
 
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
@@ -542,7 +563,9 @@ try {
     await page.screenshot({ path: "test-output/race.png", fullPage: true });
     log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
   } else {
-    if (!/aren't published|older than the race view/.test(rc0.msg)) fail(`race start: ${JSON.stringify(rc0)}`);
+    // No files: the page checks before loading Python (a preview server answers the
+    // missing zip with HTML, which Pyodide would choke on). An old simulator: NO_RACE.
+    if (!(rc0.err === "no simulator files" && /aren't published/.test(rc0.msg)) && !/older than the race view/.test(rc0.msg)) fail(`race start: ${JSON.stringify(rc0)}`);
     log.push("race: no simulator files, says so");
   }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);

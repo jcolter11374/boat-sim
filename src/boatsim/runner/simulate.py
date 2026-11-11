@@ -253,6 +253,14 @@ class Voyage:
                     "beacon_ok": bool(getattr(self.state, "beacon_ok", True)),
                 }
             )
+            if hasattr(self.state, "heel_deg"):
+                # Yachts only (vessel/keelboat.py): how far it leans, which sails are
+                # up and whether the engine runs, for the 3D page.
+                self.log.rows[-1].update(
+                    heel=self.state.heel_deg,
+                    sail_plan=self.state.sail_plan,
+                    engine_on=self.state.engine_on,
+                )
 
         if not self.state.alive:
             self.log.outcome, self.log.end = Outcome.LOST, self.state.t

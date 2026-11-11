@@ -1,7 +1,16 @@
 import json
 from datetime import datetime, timedelta
 
-from boatsim.runner.replay import COLUMNS, SCHEMA, file_name, slug, to_replay, write
+from boatsim.runner.replay import (
+    COLUMNS,
+    SCHEMA,
+    design_for,
+    file_name,
+    slug,
+    thin,
+    to_replay,
+    write,
+)
 from boatsim.runner.simulate import VoyageLog
 from boatsim.types import Event, EventKind, Outcome
 
@@ -85,3 +94,22 @@ def test_other_boats_get_their_own_file_names():
     assert slug("Randolph Rev B") == "randolph-rev-b"
     assert file_name(rep) == "voyage_randolph-rev-b_2020-05-01.json"
     assert file_name(to_replay(_log())) == "voyage_2020-05-01.json"
+
+
+def test_yacht_columns_only_when_the_log_has_them():
+    assert "heel" not in to_replay(_log())  # kayak replays stay as they were
+    log = _log()
+    for i, r in enumerate(log.rows):
+        r.update(heel=-12.34 * i, sail_plan=["full", "reef1", "down"][i], engine_on=i == 2)
+    rep = to_replay(log, label="31 ft cruiser")
+    assert rep["heel"] == [0.0, -12.3, -24.7]
+    assert rep["sail_plan"] == ["full", "reef1", "down"]
+    assert rep["engine"] == [0, 0, 1]
+    assert "heel" in rep["units"]
+    assert thin(rep, 2)["sail_plan"] == ["full", "down"]
+
+
+def test_stock_boat_replays_find_their_design():
+    rep = to_replay(_log(), label="31 ft cruiser")
+    assert design_for(rep) == "configs/stock_cruiser31.yaml"
+    assert design_for(to_replay(_log(), label="Randolph Rev B")) == "configs/randolph_rev_b.yaml"

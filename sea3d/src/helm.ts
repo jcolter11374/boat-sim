@@ -11,18 +11,20 @@ import { Sea } from "./water";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK } from "./boats/specs";
+import { KAYAK, STOCK, stockKeyOf, type BoatSpec } from "./boats/specs";
+import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BoatMotion, KAYAK_V4 } from "./motion";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, type HullParams } from "./motion";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
-import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
+import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
 import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
+import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { loadPorts, portLabel } from "./helm/ports";
 import { localTime } from "./replay/localtime";
@@ -59,7 +61,16 @@ scene.add(clouds.group);
 const rain = new Rain();
 scene.add(rain.mesh);
 const place: Placement = { x: 0, z: 0, yaw: 0 };
-const motion = new BoatMotion(KAYAK_V4, place);
+// The boat you sail: our kayak, or a stock boat when the simulator offers one (the
+// game's replay names it, e.g. "31 ft cruiser").
+let spec: BoatSpec = KAYAK;
+const HULL: Partial<Record<BoatSpec["key"], HullParams>> = {
+  kayak: KAYAK_V4,
+  stock_cruiser31: CRUISER31,
+  stock_dinghy14: DINGHY14,
+  stock_beachcat16: BEACHCAT16,
+};
+let motion = new BoatMotion(KAYAK_V4, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
@@ -80,10 +91,26 @@ function buildBoat(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
-  model = BUILDERS.kayak(quality);
-  contact = new Contact(model.form, KAYAK, quality);
-  wake = new Wake(quality, KAYAK.cruiseSpeed, KAYAK.beam, model.stern.x);
+  model = BUILDERS[spec.key](quality);
+  contact = new Contact(model.form, spec, quality);
+  contact.collar.visible = contact.spray.visible = !model.twinHull;
+  wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
+}
+/** Sail the boat the game's replay names; stand the camera back for a bigger one. */
+function useBoat(name: string | undefined): void {
+  const k = stockKeyOf(name);
+  const next = k ? STOCK[k] : KAYAK;
+  if (next === spec) return;
+  const scale = (b: BoatSpec) => THREE.MathUtils.clamp(b.length / KAYAK.length, 1, 3.4);
+  const off = camera.position.clone().sub(controls.target).multiplyScalar(scale(next) / scale(spec));
+  controls.target.y += (scale(next) - scale(spec)) * 2.2;
+  camera.position.copy(controls.target).add(off);
+  controls.minDistance = 1.5 * scale(next);
+  spec = next;
+  motion = new BoatMotion(HULL[spec.key] ?? KAYAK_V4, place);
+  buildBoat();
+  if (k && !hasDetailedStock(k)) void loadStockModel(k).then((ok) => ok && spec.key === k && buildBoat());
 }
 buildBoat();
 void loadDetailedModels().then((ok) => ok && buildBoat());
@@ -508,21 +535,12 @@ function showChallenge(): void {
   // Storm boost (#117) is ignored for now: storms sail on plain ERA5, so say so.
   $("chnote").textContent = c.weather_note;
 }
-/** True when the page was published with the simulator files (as the Boatyard checks). */
-async function sandboxThere(): Promise<boolean> {
-  try {
-    const r = await fetch(new URL("boatsim.zip", sandboxBase).href, { method: "HEAD" });
-    return r.ok && !(r.headers.get("content-type") ?? "").includes("text/html");
-  } catch {
-    return false;
-  }
-}
 async function begin(): Promise<void> {
   const launch = Number($<HTMLSelectElement>("launch").value);
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
   mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as Mode) ?? "hands_on";
-  if (!(await sandboxThere())) {
+  if (!(await sandboxThere(sandboxBase))) {
     page.error = "no simulator files";
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
     return;
@@ -541,12 +559,14 @@ async function begin(): Promise<void> {
   try {
     if (shared) {
       const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
+      useBoat(game.boat?.boat);
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
     } else {
       page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, page.startPort);
+      useBoat(game.boat?.boat);
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
@@ -683,30 +703,21 @@ function knownLanes(): { rep: Replay; colours: { main: string; beacon: string; g
 }
 
 // ---------- cinematic mode and sound ----------
-let heldHour: number | null = null;
 const cine = new Cinema({
   camera,
   controls,
   water: (x, z) => heightAt(live.advance(last), x, z, last),
   yaw: () => smoothYaw ?? 0,
-  hour: () => hour,
-  // Only hours already sailed: the films never show what's ahead of your clock.
-  hours: () => [0, page.ready && game.boat ? Math.min(shownTo, lastHour(game.boat)) : 0],
-  sunEl: (h) => {
+  // The moment on screen: cinematic mode never moves the clock (John, 11 Nov).
+  sunEl: () => {
     const r = game.boat;
     if (!r) return 0;
-    const [la, lo] = positionAt(r, Math.min(h, lastHour(r)));
+    const h = Math.min(hour, lastHour(r));
+    const [la, lo] = positionAt(r, h);
     return sunPosition(utc(r.start) + h * 3600e3, la, lo).el;
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
-  hold: (on) => {
-    if (on) heldHour = hour;
-    else if (heldHour !== null) {
-      hour = heldHour;
-      heldHour = null;
-    }
-  },
   toggleSound: () => sound.toggle(),
 });
 const sound = new OceanSound();
@@ -758,8 +769,7 @@ renderer.setAnimationLoop(() => {
     const rate = Math.max(span / Math.min(6, 0.6 + (2.5 * span) / 24), 6); // hours per second
     hour = Math.min(shownTo, hour + dt * rate);
   }
-  if (cine.lapseHour !== null) hour = cine.lapseHour;
-  else poisReached();
+  poisReached();
   const r = rep();
   const h = r ? Math.min(hour, lastHour(r)) : 0;
   const hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;
@@ -782,20 +792,22 @@ renderer.setAnimationLoop(() => {
   const off = camera.position.clone().sub(controls.target);
   off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
   camera.position.copy(controls.target).add(off);
+  // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
+  motion.heel = r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
   motion.advance(comps, t);
   const stw = r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   if (model) {
-    model.root.position.set(0, motion.heave - KAYAK.cgBelowWaterline, 0);
+    model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
     model.root.updateMatrixWorld();
     if (contact) {
-      bowW.set(contact.bow[0], KAYAK.cgBelowWaterline, contact.bow[1]);
+      bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
       contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
     }
     model.gear.update(
       {
-        speed: stw / KAYAK.cruiseSpeed,
+        speed: stw / spec.cruiseSpeed,
         rudder: rudderFor(dt > 0 ? step / dt : 0),
         sun: r ? (valueAt(r, r.ghi, h) ?? 0) / 1000 : 0.5,
         comms: r ? commsAt(r, h) ?? "" : "",
@@ -804,6 +816,11 @@ renderer.setAnimationLoop(() => {
       },
       t,
     );
+    model.rig?.update(dt, {
+      flow: apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)),
+      plan: r ? planAt(r, h) : null,
+      rudder: model.gear.shown.rudder,
+    });
   }
   wake?.update(comps, t, place, stw);
   const dy = motion.heave - rigHeave;

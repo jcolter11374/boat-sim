@@ -396,3 +396,81 @@ def test_ports_file_is_read_once():
     from boatsim.oceandata import ports
 
     assert ports.load() is ports.load()
+
+
+CRUISER = {"base": "stock_cruiser31"}
+
+
+def test_sail_and_engine_orders_on_the_cruiser(env):
+    g = Game(env, CRUISER, launch_index=MAY1, max_days=0.9)
+    assert g.status()["sailboat"] and g.status()["sailing"]["plan"] is not None
+    g.order("finish", 0.0, sails="reef2", engine=False)
+    g.run(hours=6, ghost_passes=False, land_within_km=None, breakdown=False)
+    st = g.status()
+    assert st["order"]["sails"] == "reef2" and st["order"]["engine"] is False
+    assert st["sailing"]["plan"] == "reef2" and st["sailing"]["engine_on"] is False
+    assert st["sailing"]["tactic"] in ("beat", "run", "reach")
+    g.order("finish", 0.5, engine=True)  # motor-sail; sails back to the boat's choice
+    g.run(hours=1, ghost_passes=False, land_within_km=None, breakdown=False)
+    assert g.status()["sailing"]["engine_on"] is True
+    with pytest.raises(ValueError):
+        g.order("finish", 0.5, sails="spinnaker")
+    json.dumps(g.status())
+
+
+def test_sail_orders_survive_a_share_link(env):
+    g = Game(env, CRUISER, launch_index=MAY1, max_days=0.9)
+    g.order(80, 0.0, sails="reef1")
+    g.run(hours=3, ghost_passes=False, land_within_km=None, breakdown=False)
+    g.order("finish", 0.3, engine=True)
+    g.run(hours=2, ghost_passes=False, land_within_km=None, breakdown=False)
+    h = Game.load(env, g.save())
+    assert (h.mine.state.lat, h.mine.state.lon) == (g.mine.state.lat, g.mine.state.lon)
+    assert [o.get("sails") for o in h.orders] == ["reef1", None]
+
+
+def test_no_sail_orders_for_boats_without_sails(env):
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    assert not g.status()["sailboat"] and "sailing" not in g.status()
+    with pytest.raises(ValueError):
+        g.order("finish", 0.5, sails="reef1")
+    with pytest.raises(ValueError):
+        g.order("finish", 0.5, engine=True)
+
+
+@pytest.mark.parametrize(
+    ("base", "plans", "engine"),
+    [
+        ("stock_cruiser31", ["full", "reef1", "reef2", "storm", "down"], True),
+        ("stock_dinghy14", ["full", "down"], False),
+        ("stock_beachcat16", ["full", "main_only", "down"], False),
+    ],
+)
+def test_each_sailboat_takes_only_its_own_sail_plans(env, base, plans, engine):
+    """Ravi's check of #242 (docs/qa/helm-sail-engine-orders.md): the dinghy took
+    reef1 and did nothing, and the beach cat refused main_only. Each boat now
+    takes exactly its own polar's plans, and engine orders only if it has one."""
+    g = Game(env, {"base": base}, launch_index=MAY1, max_days=0.9)
+    st = g.status()["sailing"]
+    assert st["plans"] == plans and st["has_engine"] is engine
+    for plan in plans:
+        g.order("finish", 0.5, sails=plan)
+    for plan in {"full", "reef1", "reef2", "storm", "main_only", "down"} - set(plans):
+        with pytest.raises(ValueError):
+            g.order("finish", 0.5, sails=plan)
+    if engine:
+        g.order("finish", 0.5, engine=False)
+    else:
+        with pytest.raises(ValueError, match="no engine"):
+            g.order("finish", 0.5, engine=True)
+
+
+def test_base_station_sends_sail_orders_with_the_route(env):
+    g = Game(env, CRUISER, launch_index=MAY1, max_days=2.5, mode="base")
+    sent = g.order("finish", 0.0, sails="storm", engine=False)
+    assert sent["accepted"] and g.helm.sails is None  # not aboard yet
+    out = g.run(ghost_passes=False, land_within_km=None, breakdown=False)
+    assert out["stopped"] == "order_arrived"
+    g.run(hours=1, ghost_passes=False, land_within_km=None, breakdown=False)
+    assert g.helm.sails == "storm" and g.helm.engine is False
+    assert g.status()["sailing"]["plan"] == "storm"

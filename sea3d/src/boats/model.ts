@@ -13,6 +13,7 @@ import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
+import { buildStock, type StockRig } from "./stock";
 
 export interface BoatModel {
   spec: BoatSpec;
@@ -25,6 +26,10 @@ export interface BoatModel {
   gear: Gear;
   /** The hull's shape (builder frame), for the foam where hull meets water. */
   form: HullForm;
+  /** Sails and rudders of a stock sailing boat (boats/stock.ts), posed from the replay. */
+  rig?: StockRig;
+  /** Two hulls (the beach cat): the one-hull foam collar and deck drain don't fit. */
+  twinHull?: boolean;
   /** Showroom: everything working, a gentle breeze. */
   animate(t: number): void;
   dispose(): void;
@@ -370,4 +375,10 @@ export function buildRandolph(quality: Quality): BoatModel {
   };
 }
 
-export const BUILDERS = { kayak: buildKayak, randolph: buildRandolph };
+export const BUILDERS: Record<BoatSpec["key"], (q: Quality) => BoatModel> = {
+  kayak: buildKayak,
+  randolph: buildRandolph,
+  stock_cruiser31: (q) => buildStock("stock_cruiser31", q),
+  stock_dinghy14: (q) => buildStock("stock_dinghy14", q),
+  stock_beachcat16: (q) => buildStock("stock_beachcat16", q),
+};
