@@ -27,7 +27,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-04-01T12:00",
    "outcome": "aground",
-   "days": 32.87
+   "days": 28.58
   },
   {
    "file": "voyage_2020-04-15.json",
@@ -55,7 +55,7 @@
    "boat": "31 ft cruiser",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 17.07
+   "days": 16.7
   },
   {
    "file": "voyage_2020-05-01.json",
