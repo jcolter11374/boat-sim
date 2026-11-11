@@ -30,6 +30,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
+import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
@@ -825,30 +826,88 @@ $("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
 // pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 6, Digit3: 24, Digit4: 96, Numpad1: 1, Numpad2: 6, Numpad3: 24, Numpad4: 96 };
 /** The key hint under the time bar: for the first minute, or until a key is used. */
+let keyHintTimer: ReturnType<typeof setTimeout> | undefined;
 function hideKeyHint(): void {
   const k = $("keyhint");
   if (k.hidden || k.classList.contains("gone")) return;
   k.classList.add("gone");
-  setTimeout(() => (k.hidden = true), 1000);
+  clearTimeout(keyHintTimer);
+  keyHintTimer = setTimeout(() => (k.hidden = true), 1000);
+}
+// Held arrows (Rosa, src/helm/keys.ts): a tap is 5 degrees or 5 %, Shift is 1; holding keeps
+// it moving, faster the longer you hold. The dial follows every frame; the simulator is told a
+// few times a second and where it stopped, newest order only.
+const sendHeading = latestOnly<number>((h) => setOrder(h));
+const sendPower = latestOnly<number>((p) => setOrder(order, p));
+const axes = {
+  heading: new HeldAxis(
+    {
+      value: () => (typeof order === "number" ? order : headingNow()),
+      preview: (h) => {
+        order = h;
+        showOrder();
+      },
+      commit: sendHeading,
+    },
+    HEADING,
+  ),
+  power: new HeldAxis(
+    {
+      value: () => power,
+      preview: (p) => {
+        power = p;
+        $<HTMLInputElement>("power").value = String(Math.round(p * 100));
+        showOrder();
+      },
+      commit: sendPower,
+    },
+    POWER,
+  ),
+};
+function releaseKeys(): void {
+  axes.heading.release(performance.now());
+  axes.power.release(performance.now());
+}
+addEventListener("blur", releaseKeys);
+/** "?" (or K) brings the key list back, and hides it again. */
+function toggleKeyHint(): void {
+  const k = $("keyhint");
+  const showing = !k.hidden && !k.classList.contains("gone");
+  if (showing) return hideKeyHint();
+  clearTimeout(keyHintTimer);
+  k.classList.remove("gone");
+  k.hidden = false;
 }
 addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
   if (!page.ready || page.status?.over || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
+  const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
     setRate(rate ? 0 : lastRate);
   } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
-  else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
-    const now = typeof order === "number" ? order : headingNow();
-    void setOrder((Math.round(now / 5) * 5 + (e.code === "ArrowLeft" ? -5 : 5) + 360) % 360);
-  } else if (e.code === "ArrowUp" || e.code === "ArrowDown") {
-    if (order === "auto") return; // the autopilot sets its own power (#327)
-    const p = Math.min(1, Math.max(0, Math.round(power * 20) / 20 + (e.code === "ArrowUp" ? 0.05 : -0.05)));
-    $<HTMLInputElement>("power").value = String(Math.round(p * 100));
-    void setOrder(order, p);
+  else if (e.key === "?" || e.code === "KeyK") {
+    toggleKeyHint();
+    e.preventDefault();
+    return;
+  } else if (ax) {
+    // The autopilot sets its own power (#327); steering takes the boat off it.
+    if (!(ax.axis === "power" && order === "auto") && !e.repeat) axes[ax.axis].down(ax.dir, e.shiftKey, performance.now());
+  } else if (e.key === "Shift") {
+    axes.heading.setFine(true);
+    axes.power.setFine(true);
+    return;
   } else return;
   e.preventDefault();
   hideKeyHint();
+});
+addEventListener("keyup", (e) => {
+  const ax = keyAxis(e.code);
+  if (ax) axes[ax.axis].up(ax.dir, performance.now());
+  else if (e.key === "Shift") {
+    axes.heading.setFine(false);
+    axes.power.setFine(false);
+  }
 });
 /** The bearing the boat is being steered on now, when the order is "the finish" or "the route": where it's heading. */
 function headingNow(): number {
@@ -1548,6 +1607,12 @@ renderer.setAnimationLoop(() => {
   // Play the hours just sailed: about 2.5 s a day, at most 6 s.
   if (page.ready && pending.length) applyPending();
   if (page.ready && game.boat) newEvents();
+  if (axes.heading.held || axes.power.held) {
+    if (page.ready && !page.status?.over && !busy) {
+      axes.heading.tick(performance.now());
+      axes.power.tick(performance.now());
+    } else releaseKeys();
+  }
   if (tickClock(dt)) {
     // the clock moved the picture on
   } else if (drainRate > 0 && hour < shownTo) {
