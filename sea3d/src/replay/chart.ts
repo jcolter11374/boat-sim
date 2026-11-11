@@ -43,6 +43,9 @@ const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
 interface ChartLane {
   rep: Replay;
   colours: TrackColours;
+  /** Stretches to draw brighter, as hour ranges from the voyage start (the helm's
+   * hand-trimmed watches, Rosa). Unset everywhere else. */
+  bright?: [number, number][];
 }
 
 export class Chart {
@@ -298,7 +301,7 @@ export class Chart {
     for (const k of order) this.drawLane(this.lanes[k], hour, now, k === this.focus);
   }
 
-  private drawLane({ rep, colours }: ChartLane, hour: number, now: number, focused: boolean): void {
+  private drawLane({ rep, colours, bright }: ChartLane, hour: number, now: number, focused: boolean): void {
     const g = this.g;
     // Track so far, with a glow.
     const [i] = locate(rep.h, hour);
@@ -342,6 +345,40 @@ export class Chart {
     }
     if (colour) g.stroke();
     g.restore();
+
+    // Bright stretches (hand-trimmed watches), up to now; silent stretches stay dashed.
+    if (bright?.length) {
+      g.save();
+      g.lineJoin = "round";
+      g.lineCap = "round";
+      g.strokeStyle = "#ffe2b8";
+      g.shadowColor = colours.glow;
+      g.shadowBlur = 14;
+      g.lineWidth = (focused ? 2 : 1.6) + 1.5;
+      for (const [a, b0] of bright) {
+        const b = Math.min(b0, hour);
+        if (!(b > a)) continue;
+        const pts: [number, number][] = [];
+        const add = (h: number) => {
+          const [la, lo] = positionAt(rep, h);
+          if (Number.isFinite(la)) pts.push(this.xy(la, lo));
+        };
+        add(a);
+        for (let k = 0; k < rep.h.length; k++) {
+          if (rep.h[k] <= a || rep.h[k] >= b) continue;
+          const ir = rep.iridium_ok?.[k];
+          if (ir != null && !ir && !rep.beacon_ok?.[k]) continue; // silent: leave the dashes alone
+          add(rep.h[k]);
+        }
+        add(b);
+        if (pts.length < 2) continue;
+        g.beginPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (const p of pts.slice(1)) g.lineTo(p[0], p[1]);
+        g.stroke();
+      }
+      g.restore();
+    }
 
     // Event markers up to now.
     for (const e of rep.events) {
