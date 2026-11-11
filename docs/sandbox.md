@@ -210,6 +210,28 @@ numbers still apply). The cat's missing rudder comes from a new design flag,
 `propulsion.rudder: false`, which starts the voyage with the rudder marked broken,
 so it steers by differential thrust only.
 
+**Randolph bases.** A design can start from the Randolph team's boat instead of
+the kayak: `"base": "revc"` or `"revb"` (their yamls, MIT; our model of their boat,
+their simulator is the authority on it). The kayak's slots then don't apply; the
+base has its own, ids agreed with Iris. The as-built option is the yaml untouched.
+
+| Slot | As built | Other option | What changes (GUESSes marked) |
+|---|---|---|---|
+| Drive (`drive`) | wing | wing-thruster | their 35 W thruster switched on, run like our hybrid at 5 W cruise (GUESS), +0.6 kg |
+| Electronics (`brain`) | one-box | two-box | our separate safe-mode box: 2 boxes, +5 Wh/day, +0.3 kg (GUESS) |
+| Rudder (`rudder`) | Rev C twin, Rev B single | the other | rudder areas and steering failure rate from the other revision's yaml, +/-0.35 kg (GUESS) |
+| Solar (`rsol`) | deck-40w | deck-60w | 60 W on deck (GUESS: what fits), +0.5 kg |
+| Battery (`rbat`) | lfp-192wh | lfp-384wh | double the pack (GUESS), +1.6 kg |
+| Keel (`keel`) | Rev C 9 kg, Rev B 8.2 kg | the other | heel limit scaled with the bulb; a lighter bulb is more often stuck upside down (GUESS) |
+| Tracker (`tracker`) | yb3 | none | no backup tracker: one dead box is a silent loss, -0.3 kg |
+
+`sat`, `light`, `paint` and `spares` take the kayak's ids but don't change the
+Randolph boat yet. The cruise power the page sends is ignored: the boat sails,
+0 W, or 5 W with the thruster. Grid ids start with the base: `revc`,
+`revc-drive.wing-thruster`. Six grid builds per base (as built plus one change
+each). Each base drops from its own yaml's point; Rev C's is about 10 km off Ocean
+City, which is why it runs aground on some launches.
+
 The hotel load is the design's 85 Wh/day with the default autopilot (31 Wh)
 and AIS (36 Wh) swapped for the chosen ones' catalog figures.
 

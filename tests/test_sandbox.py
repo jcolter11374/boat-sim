@@ -69,8 +69,8 @@ def test_every_slot_has_its_default_and_a_badge():
 
 def test_odds_grid_is_the_catalog_builds_and_nearest_finds_them():
     ids = [C.grid_id(g) for g in C.GRID]
-    assert len(set(ids)) == len(ids) == 28
-    assert len(Y.BUILDS) == 32 and Y.CURRENT in Y.BUILDS
+    assert len(set(ids)) == len(ids) == 40
+    assert len(Y.BUILDS) == 43 and Y.CURRENT in Y.BUILDS
     for g in C.GRID:
         assert C.nearest(g) == (C.grid_id(g), True)
     assert C.nearest({"ais": "none", "cruise_w": 20}) in (
@@ -397,3 +397,53 @@ def test_a_rudderless_cat_needs_both_thrusters_and_stays_over_when_rolled():
     assert out.lost and "not self-righting" in out.events[-1].detail
     kayak = HazardParams.from_config(load_design(C.KAYAK).hazards)
     assert not sample_hazards(kayak, storm, 1.0, {}, t, dice).lost
+
+
+def test_randolph_bases_start_from_their_own_yaml():
+    for b, path in (
+        ("revc", "configs/randolph_rev_c.yaml"),
+        ("revb", "configs/randolph_rev_b.yaml"),
+    ):
+        assert C.design_changes({"base": b}) == ()
+        assert C.grid_id({"base": b}) == b
+        # The page always sends a cruise power; a sailboat ignores it.
+        assert C.grid_id({"base": b, "cruise_w": 25, "paint": "none"}) == b
+        assert C.nearest({"base": b, "keel": "bulb-8kg" if b == "revc" else "bulb-9kg"}) == (
+            b,
+            False,
+        )
+        d = C.design_for(
+            {"base": b, "drive": "wing-thruster", "brain": "two-box", "tracker": "none"}
+        )
+        base = load_design(path)
+        assert d.propulsion["thruster_count"] == 1 and d.propulsion["cruise_drive_w"] == 5
+        assert d.hazards["electronics_boxes"] == 2 and d.comms["beacon"] is False
+        assert (
+            d.electronics["hotel_load_wh_per_day"] == base.electronics["hotel_load_wh_per_day"] + 5
+        )
+        assert d.hull["mass_kg"] == round(base.hull["mass_kg"] + 0.6 + 0.3 - 0.3, 3)
+    # Rev C on Rev B's single rudder takes Rev B's steering rate and rudder areas.
+    one = C.design_for({"base": "revc", "rudder": "single"})
+    assert one.hazards["steering_per_day"] == 0.004
+    assert one.hull["lateral_cd_area_m2"] == 0.19
+    with pytest.raises(ValueError, match="for base 'revc'"):
+        C.normalise({"base": "revc", "thr": "one-t200"})
+    with pytest.raises(ValueError, match="unknown base"):
+        C.normalise({"base": "raft"})
+    t = C.base_table()
+    assert {s["id"] for s in t["revc"]["slots"]} == {
+        "drive",
+        "brain",
+        "rudder",
+        "rsol",
+        "rbat",
+        "keel",
+        "tracker",
+        "sat",
+        "light",
+        "paint",
+        "spares",
+    }
+    assert all(
+        t[b]["defaults"][s["id"]] in {o["id"] for o in s["opts"]} for b in t for s in t[b]["slots"]
+    )
