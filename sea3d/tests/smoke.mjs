@@ -377,8 +377,11 @@ try {
   if (hm.ready) {
     await page.click("#s6");
     await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
-    const day = await page.evaluate(() => window.__helm.status?.day);
-    if (!(Math.abs(day - 0.25) < 0.01) || (await page.evaluate(() => window.__helm.error))) fail(`helm: 6 hours sailed to day ${day}`);
+    // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
+    // hits the same stops): then it must be a known reason, before hour 6.
+    const six = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error }));
+    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "ghost_passed", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
+    if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
@@ -386,7 +389,7 @@ try {
     const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "over", "order_arrived"];
     const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
     let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
-    if (st.stop !== "time" || ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
+    if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
     let hops = 0;
     for (; hops < 40 && !(await page.evaluate(() => window.__helm.card)); hops++) {
       await page.click("#sevent");
@@ -405,7 +408,7 @@ try {
     if (both && (Math.abs(card.margin_days) < 1) !== (card.verdict === "draw")) fail(`helm card: draw rule broken (${card.margin_days} d, ${card.verdict})`);
     if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
     await page.screenshot({ path: "test-output/helm-result.png" });
-    log.push(`helm sailed 6 h, ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
+    log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
   } else {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");
