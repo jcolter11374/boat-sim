@@ -23,6 +23,13 @@
    "days": 150.0
   },
   {
+   "file": "voyage_randolph-rev-c-85-km-drop_2020-04-01.json",
+   "boat": "Randolph Rev C (85 km drop)",
+   "start": "2020-04-01T12:00",
+   "outcome": "lost",
+   "days": 13.12
+  },
+  {
    "file": "voyage_2020-04-15.json",
    "boat": "v4 kayak",
    "start": "2020-04-15T12:00",
@@ -39,6 +46,13 @@
   {
    "file": "voyage_randolph-rev-c_2020-04-15.json",
    "boat": "Randolph Rev C",
+   "start": "2020-04-15T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
+   "file": "voyage_randolph-rev-c-85-km-drop_2020-04-15.json",
+   "boat": "Randolph Rev C (85 km drop)",
    "start": "2020-04-15T12:00",
    "outcome": "timeout",
    "days": 150.0
@@ -65,6 +79,13 @@
    "days": 150.0
   },
   {
+   "file": "voyage_randolph-rev-c-85-km-drop_2020-05-01.json",
+   "boat": "Randolph Rev C (85 km drop)",
+   "start": "2020-05-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
    "file": "voyage_2020-05-15.json",
    "boat": "v4 kayak",
    "start": "2020-05-15T12:00",
@@ -84,6 +105,13 @@
    "start": "2020-05-15T12:00",
    "outcome": "aground",
    "days": 11.92
+  },
+  {
+   "file": "voyage_randolph-rev-c-85-km-drop_2020-05-15.json",
+   "boat": "Randolph Rev C (85 km drop)",
+   "start": "2020-05-15T12:00",
+   "outcome": "aground",
+   "days": 12.22
   },
   {
    "file": "voyage_2020-06-01.json",
@@ -107,6 +135,13 @@
    "days": 113.35
   },
   {
+   "file": "voyage_randolph-rev-c-85-km-drop_2020-06-01.json",
+   "boat": "Randolph Rev C (85 km drop)",
+   "start": "2020-06-01T12:00",
+   "outcome": "lost",
+   "days": 41.78
+  },
+  {
    "file": "voyage_2020-06-15.json",
    "boat": "v4 kayak",
    "start": "2020-06-15T12:00",
@@ -126,6 +161,13 @@
    "start": "2020-06-15T12:00",
    "outcome": "aground",
    "days": 1.88
+  },
+  {
+   "file": "voyage_randolph-rev-c-85-km-drop_2020-06-15.json",
+   "boat": "Randolph Rev C (85 km drop)",
+   "start": "2020-06-15T12:00",
+   "outcome": "timeout",
+   "days": 150.0
   }
  ]
 }
