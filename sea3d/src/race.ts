@@ -133,6 +133,7 @@ function setBusy(on: boolean): void {
   $<HTMLButtonElement>("go").disabled = on;
   for (const id of ["day", "week", "until", "end"]) $<HTMLButtonElement>(id).disabled = on || !page.ready || over;
   $<HTMLButtonElement>("seasonbtn").disabled = on || !page.ready;
+  drawMap(); // the empty chart's hint goes while the simulator loads
 }
 
 // ---------------------------------------------------------------- drawing
@@ -226,6 +227,17 @@ function drawMap(): void {
     const [x, y] = P(pts[pts.length - 1].lat, pts[pts.length - 1].lon);
     g.fillStyle = COLOURS[i];
     g.beginPath(); g.arc(x, y, 4.5, 0, Math.PI * 2); g.fill();
+  }
+  // Nothing sailed yet: say what starts it.
+  if (!page.status && !page.busy) {
+    g.fillStyle = "rgba(230,238,248,.85)";
+    g.font = "600 15px system-ui, sans-serif";
+    g.textAlign = "center";
+    g.fillText("Pick two boats, then press Start the race.", W / 2, H / 2 - 6);
+    g.font = "12px system-ui, sans-serif";
+    g.fillStyle = "rgba(159,179,200,.85)";
+    g.fillText("Both tracks are drawn here as the boats sail.", W / 2, H / 2 + 14);
+    g.textAlign = "start";
   }
   const st = page.status;
   const lead = $("lead");
@@ -450,6 +462,15 @@ $("week").addEventListener("click", () => void sail(24 * 7));
 $("until").addEventListener("click", () => void sail(null));
 $("end").addEventListener("click", () => void end());
 $("seasonbtn").addEventListener("click", () => void season());
+// The share-link boxes are for experts: a link opens each one (#317).
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>(".pastelink")))
+  b.addEventListener("click", () => {
+    const box = $(b.dataset.for!);
+    box.hidden = !box.hidden;
+    b.textContent = box.hidden ? "Paste a design link instead" : "Hide the design link";
+    if (box.hidden) box.querySelector("input")!.value = "";
+    else box.querySelector("input")!.focus();
+  });
 window.addEventListener("resize", drawMap);
 drawAll();
 export {};
