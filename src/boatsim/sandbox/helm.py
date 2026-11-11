@@ -62,6 +62,7 @@ from boatsim.runner.simulate import (
     standard_components,
 )
 from boatsim.sandbox import catalog
+from boatsim.sandbox.endings import ending
 from boatsim.sandbox.run import MAX_DAYS, launches
 from boatsim.types import EventKind, Message, Outcome, Waypoint
 
@@ -548,12 +549,18 @@ class Game:
             days = (v.state.t - self.start).total_seconds() / 86400.0
             socs = [r["soc"] for r in v.log.rows] or [v.state.soc]
             broke = sorted({e.kind.value for e in v.log.events if e.kind in BREAKDOWNS})
+            outcome = self._outcome(v)
             return {
-                "outcome": self._outcome(v),
+                "outcome": outcome,
                 "days": days,
                 "battery_low": min(socs),
                 "breakdowns": broke,
+                # How it ends, in the boat's own words (sandbox/endings.py).
+                "ending": ending(outcome, v.log.events, self.start, label),
             }
+
+        design = getattr(self, "design", None)  # QA's stand-in games have none
+        label = design.stock.get("label") if design is not None else None
 
         if self.mine.done:
             self._advance(
