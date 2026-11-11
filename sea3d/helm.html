@@ -117,6 +117,7 @@
   #wheel .w-guide { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; background: rgba(61,220,151,.14); border-left: 3px solid #3ddc97; font-size: 13.5px; font-weight: 600; }
   #wheel .w-guide[hidden] { display: none; }
   #wheel .w-gskip { float: right; margin-left: 8px; }
+  #r-trim:empty { display: none; }
   #wheel .w-keys { color: var(--dim); font-size: 11px; margin-top: 6px; }
   #wheel .w-btns { display: flex; gap: 5px; margin-top: 5px; }
   /* While at the wheel the voyage controls wait. */
@@ -321,6 +322,7 @@
 <div id="result" class="overlay" hidden>
   <div class="card glass">
     <h1 id="r-head"></h1>
+    <p id="r-trim" class="muted"></p>
     <table id="r-table"></table>
     <div id="r-ends"></div>
     <p class="muted" id="r-notes"></p>
