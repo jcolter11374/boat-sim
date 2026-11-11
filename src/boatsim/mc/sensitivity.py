@@ -473,7 +473,9 @@ def run_year(
     else:
         with ProcessPoolExecutor(max_workers=workers) as pool:
             rows = list(pool.map(_tagged, tasks))
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["design"] = Path(job_kw.get("design_path") or "configs/v4_kayak.yaml").stem
+    return df
 
 
 # --- Report -----------------------------------------------------------------
@@ -534,11 +536,13 @@ def report_markdown(df: pd.DataFrame) -> str:
     years = sorted(df["year"].unique())
     months = sorted(df["month"].unique())
     n = int(t["voyages"].max())
+    stem = df["design"].iloc[0] if "design" in df.columns else "v4_kayak"
+    boat = "the v4 kayak" if stem == "v4_kayak" else f"`{stem}`"
     lines = [
         "# Sensitivity study: April to June launches",
         "",
         (
-            f"Each row is the v4 kayak with one change, sailing the same {n} launches "
+            f"Each row is {boat} with one change, sailing the same {n} launches "
             f"({MONTHS[months[0] - 1]} to {MONTHS[months[-1] - 1]}, {years[0]} to "
             f"{years[-1]}, real weather and currents) with the same random dice. "
             "'Finished' follows each row's own finish rule (the Microtransat target "
