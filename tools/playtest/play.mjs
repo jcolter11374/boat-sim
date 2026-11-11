@@ -73,7 +73,8 @@ async function hop(page, button) {
 /** Cinematic mode: panels hide, the picture keeps moving, the clock doesn't move, any key leaves. */
 async function cinematic(page, framesOf) {
   const day0 = await page.evaluate(() => window.__helm?.status?.day ?? null);
-  await page.click("#cinebtn");
+  // The button only toggles a class; don't wait for navigations (software GL can stall that wait, 11 Nov).
+  await page.click("#cinebtn", { noWaitAfter: true });
   await page.waitForFunction(() => document.body.classList.contains("cinema"), null, { timeout: 10_000 }).catch(() => {
     throw new CheckFail("clicking Cinematic didn't start cinematic mode");
   });
@@ -182,7 +183,7 @@ const CHECKS = {
     },
   },
   "voyage-cinematic": {
-    path: "voyage.html?voyage=2020-04-15",
+    path: "voyage.html?voyage=2020-04-15&quality=low",
     run: async (page) => {
       await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
       const err = await page.evaluate(() => window.__replay.error);
