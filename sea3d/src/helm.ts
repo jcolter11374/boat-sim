@@ -830,6 +830,15 @@ function towards(u: number, v: number): string {
   return names[Math.round(((Math.atan2(u, v) * 180) / Math.PI + 360) / 45) % 8];
 }
 
+const kmh = (ms: number) => `${Math.round(ms * KT)} knots (about ${Math.round((ms * 3.6) / 5) * 5} km/h)`;
+function inWords(hours: number): string {
+  if (hours < 18) return `in about ${Math.max(1, Math.round(hours))} hours`;
+  const d = Math.round((hours / 24) * 2) / 2;
+  return d <= 1 ? "in about a day" : d === 1.5 ? "in about a day and a half" : `in about ${d % 1 ? `${Math.floor(d)} and a half` : d} days`;
+}
+/** The storm being sailed through after a "Your call", to say how it went once it's past (Leo). */
+let spell: { kind: string; h: number; chose: string; km: number } | null = null;
+
 /** The decision due now, if any. */
 function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text: string; choices: Choice[] } | null {
   if (mode !== "hands_on" || st.over || shared) return null;
@@ -837,58 +846,80 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
   const w = st.weather;
   const motors = !st.sailboat && st.power_w > 0;
   const carryOn: Choice = { label: "Carry on as I am", title: "Keep the order you have", act: () => undefined };
-  // Gale or big waves in the next 2 days, while it's not blowing yet.
   const nowWind = w ? Math.hypot(w.wind_u, w.wind_v) : 0;
+  const t0 = utc(st.boat.t);
+  const ahead = (fc ?? []).map((r) => ({ ...r, ah: (utc(r.t) - t0) / 3.6e6 }));
+  const rough = (r: ForecastRow) => Math.hypot(r.wind_u, r.wind_v) >= GALE_MS || r.hs >= BIG_WAVES_M;
+  // After a storm call: once it has blown over, say how the choice went.
+  if (spell && h - spell.h >= 18 && nowWind < GALE_MS - 4 && (w?.hs ?? 0) < BIG_WAVES_M - 1 && !ahead.some((r) => r.ah > 0 && r.ah <= 12 && rough(r))) {
+    const flat = (game.boat?.events ?? []).filter((e) => e.kind === "capsize" && e.h >= spell!.h).length;
+    const verb: Record<string, string> = { hold: "held your course", dodge: "dodged south-east", slow: "slowed down to ride it out" };
+    const gone = spell.kind === "gale" ? "The gale has passed" : "The big waves have passed";
+    const how = flat ? `you were knocked flat ${flat === 1 ? "once" : `${flat} times`}` : "you stayed upright";
+    const made = Math.round(spell.km - st.boat.km_to_finish);
+    note(`${gone}. You ${verb[spell.chose] ?? "carried on"}: ${how}, and made ${made.toLocaleString()} km towards the finish since.${spell.chose === "dodge" ? " Aim at the finish again when you're ready." : ""}`, `Day ${st.day.toFixed(1)}`, flat ? TONE_COLOUR.warn : TONE_COLOUR.good);
+    spell = null;
+  }
+  // Gale or big waves in the next 2 days, while it's not blowing yet.
   if (fc && nowWind < GALE_MS - 2 && (w?.hs ?? 0) < BIG_WAVES_M - 0.5 && h - asked.gale >= 48) {
-    const t0 = utc(st.boat.t);
-    const rows = fc.map((r) => ({ ...r, ah: (utc(r.t) - t0) / 3.6e6 })).filter((r) => r.ah > 0 && r.ah <= 48);
-    const bad = rows.find((r) => Math.hypot(r.wind_u, r.wind_v) >= GALE_MS || r.hs >= BIG_WAVES_M);
+    const rows = ahead.filter((r) => r.ah > 0 && r.ah <= 48);
+    const bad = rows.find(rough);
     if (bad) {
       asked.gale = h;
       const peakW = Math.max(...rows.map((r) => Math.hypot(r.wind_u, r.wind_v)));
       const peakH = Math.max(...rows.map((r) => r.hs));
-      const when = bad.ah < 18 ? `in about ${Math.round(bad.ah)} hours` : `in about ${(bad.ah / 24).toFixed(1)} days`;
+      const kind = peakW >= GALE_MS ? "gale" : "waves";
       const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
       const south = Math.round(((toFinish + 50) % 360) / 5) * 5;
+      const call = (chose: string, act: () => Promise<void> | void) => () => {
+        spell = { kind, h, chose, km: st.boat.km_to_finish };
+        return act();
+      };
       const choices: Choice[] = [
-        { label: "Hold course", title: "Sail on through it", act: () => undefined },
-        { label: `Dodge south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: () => setOrder(south) },
+        { label: "Hold course: fastest, but a knockdown is likelier", title: "Sail on through it", act: call("hold", () => undefined) },
+        { label: `Dodge south-east (${south}°): safer, but a longer way round`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)) },
       ];
-      if (motors && power > 0.1) choices.push({ label: "Ease the motors to 10%", title: "Save the battery for after the blow", act: () => setOrder(order === "auto" ? "route" : order, 0.1) });
+      if (motors && power > 0.1)
+        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)) });
       return {
-        kind: peakW >= GALE_MS ? "gale" : "waves",
-        text: `${peakW >= GALE_MS ? "A gale is" : "Big waves are"} forecast here ${when}: wind up to ${Math.round(peakW * KT)} knots and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. Hold course, dodge south-east away from the worst of it, or save the battery?`,
+        kind,
+        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
         choices,
       };
     }
   }
   // A night that could run the battery flat.
   if (fc && motors && st.boat.soc < 0.35 && power > 0.15 && order !== "auto" && h - asked.night >= 24) {
-    const t0 = utc(st.boat.t);
-    const dark = fc.some((r) => { const ah = (utc(r.t) - t0) / 3.6e6; return ah > 0 && ah <= 12 && r.ghi < 5; });
-    if (dark) {
+    if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
       asked.night = h;
       return {
         kind: "night",
-        text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
+        text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
         choices: [
-          { label: "Ease off to 10%", title: "Drift more slowly overnight; turn the power back up in the morning", act: () => setOrder(order, 0.1) },
-          { ...carryOn, label: "Keep the power up" },
+          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => setOrder(order, 0.1) },
+          { ...carryOn, label: "Keep the power up: faster, but may run flat overnight" },
         ],
       };
     }
   }
   // The Gulf Stream: a river of warm water in the sea, running north-east at up to 4 knots.
+  // Riding it already: a word, not a stop. Fighting it: ask (Leo).
   const cur = w ? Math.hypot(w.current_u, w.current_v) : 0;
   if (w && cur < 0.5) asked.stream = false;
   if (w && cur >= 1 && !asked.stream) {
     asked.stream = true;
+    const setTo = (Math.atan2(w.current_u, w.current_v) * 180) / Math.PI;
+    const off = Math.abs(((st.boat.heading - setTo + 540) % 360) - 180);
+    if (off < 90 || order === "route") {
+      note(`You're riding the Gulf Stream: ${kmh(cur)} of current carrying you ${towards(w.current_u, w.current_v)}, for free.`, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.good);
+      return null;
+    }
     return {
       kind: "stream",
-      text: `You're in the Gulf Stream: ${(cur * KT).toFixed(1)} knots of current carrying the boat ${towards(w.current_u, w.current_v)}. Ridden well it's a free ride towards Europe; fought, it pushes you sideways.`,
+      text: `You're in the Gulf Stream, and steering against it: ${kmh(cur)} of current is carrying the boat ${towards(w.current_u, w.current_v)}. Ridden well it's a free ride towards Europe; fought, it pushes you sideways.`,
       choices: [
-        { label: "Follow the route", title: "The autopilot's planned route allows for the current", act: () => setOrder("route") },
-        carryOn,
+        { label: "Follow the planned route (it rides the Stream)", title: "The autopilot's planned route allows for the current", act: () => setOrder("route") },
+        { ...carryOn, label: "Carry on as I am: keep fighting it" },
       ],
     };
   }

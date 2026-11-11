@@ -61,7 +61,8 @@
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
   #decide .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb84d; }
   #fcbox.lit { outline: 2px solid #ffb84d; }
-  #decidebtns { display: flex; flex-wrap: wrap; gap: 6px; }
+  #decidebtns { display: flex; flex-direction: column; gap: 6px; }
+  #decidebtns button { text-align: left; white-space: normal; }
   #decidebtns button:first-child { font-weight: 600; }
   #keyhint { position: fixed; top: calc(var(--bar, 0px) + 102px); left: 50%; transform: translateX(-50%); font: 500 11.5px system-ui, sans-serif;
     color: rgba(220,232,246,.75); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; }
