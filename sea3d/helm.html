@@ -77,7 +77,10 @@
     text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
   .overlay[hidden] { display: none; }
-  .card { width: min(560px, 92vw); padding: 20px 24px; }
+  /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
+  .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+  .card select { max-width: 100%; }
+  @media (max-width: 480px), (max-height: 480px) { .card { padding: 14px 16px; } .card h1 { font-size: 19px; } }
   .card h1 { margin: 0 0 6px; font-size: 22px; }
   .card p { color: #d4e1f0; margin: 8px 0; }
   .card label { display: block; margin: 8px 0; }
