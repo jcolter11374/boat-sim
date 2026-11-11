@@ -63,7 +63,7 @@ KN = 0.514444  # m/s per knot
 LAND_LOOKAHEAD_KM = 30.0  # GUESS: about 3-4 h of sailing; more than one min_switch_h leg
 LAND_STEP_KM = 2.0
 LAND_URGENT_KM = 5.0  # GUESS: ~30 min of sailing; land this close ahead tacks at once
-LAND_CLEAR_KM = 2.0  # a point this close to the coast counts as land ahead
+LAND_CLEAR_KM = 4.0  # a point this close to the coast counts as land ahead (the chart is cached on a ~5 km grid)
 
 
 def open_water_km(
@@ -203,6 +203,7 @@ class Tactician:
         )
         self.last_switch: datetime | None = None
         self.switches = 0  # tacks plus gybes, for logging and tests
+        self.escaping = False  # bearing away from land ahead on both tacks
 
     def heading(
         self,
@@ -227,7 +228,7 @@ class Tactician:
         elif abs(rel) > down:
             mode, angle, past = "run", down, 180.0 - abs(rel)
         else:
-            self.mode = "reach"
+            self.mode, self.escaping = "reach", False
             self.side = 1 if wrap180(reach_heading - wind_from) >= 0.0 else -1
             return reach_heading % 360.0
         mark_side = 1 if rel >= 0.0 else -1
@@ -241,22 +242,68 @@ class Tactician:
         )
         if self.mode == mode and side != mark_side and past > self.switch_deg and settled:
             side = mark_side
+        heading = (wind_from + side * angle) % 360.0
         if open_water is not None:
             # Don't hold a tack or gybe onto land when the other side is clearer
             # (by at least a step). Land close ahead (LAND_URGENT_KM) switches
             # at once; further off, only at a normal switch (min_switch_h), or
             # in a channel both sides see land and it would tack every step
             # (Ravi's check of #252: 71 tacks in 12 h up a 40 km channel).
-            here = open_water((wind_from + side * angle) % 360.0)
+            here = open_water(heading)
             if here < LAND_LOOKAHEAD_KM and (here <= LAND_URGENT_KM or settled):
                 there = open_water((wind_from - side * angle) % 360.0)
                 if there >= here + LAND_STEP_KM:
-                    side = -side
+                    side, here = -side, there
+                    heading = (wind_from + side * angle) % 360.0
+            if here <= LAND_URGENT_KM or self.escaping:
+                # Land close ahead on both tacks (in among islands: 15 May 2020,
+                # between Pico and Faial): bear away to the heading with the
+                # most open water, and keep doing so until a tack has clear
+                # water for the whole look-ahead; then beat on from there.
+                # Not a tack. Without the hold it bears away and heads back in
+                # by turns, getting nowhere.
+                clear = [
+                    s
+                    for s in (side, -side)
+                    if math.isinf(open_water((wind_from + s * angle) % 360.0))
+                ]
+                if clear:
+                    self.escaping = False
+                    side = mark_side if mark_side in clear else clear[0]
+                    heading = (wind_from + side * angle) % 360.0
+                else:
+                    self.escaping = True
+                    heading = self._bear_away(wind_from, side, angle, open_water, here)
         if self.side and side != self.side and self.mode == mode:
             self.last_switch = t
             self.switches += 1
         self.mode, self.side = mode, side
-        return (wind_from + side * angle) % 360.0
+        return heading
+
+    def _bear_away(
+        self,
+        wind_from: float,
+        side: int,
+        angle: float,
+        open_water: Callable[[float], float],
+        here: float,
+    ) -> float:
+        """The heading with the most open water, trying true wind angles up to
+        90 deg either way from `angle` on both sides (inside the boat's own
+        limits); the smallest change wins a tie, the current side first."""
+        best, best_km = (wind_from + side * angle) % 360.0, here
+        for change in range(10, 91, 10):
+            for twa in (angle + change, angle - change):
+                if not self.min_twa_deg <= twa <= self.max_twa_deg:
+                    continue
+                for s in (side, -side):
+                    h = (wind_from + s * twa) % 360.0
+                    km = open_water(h)
+                    if km > best_km:
+                        best, best_km = h, km
+            if math.isinf(best_km):
+                break
+        return best
 
 
 class SailingAutopilot:

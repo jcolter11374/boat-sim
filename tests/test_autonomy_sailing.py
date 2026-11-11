@@ -250,3 +250,22 @@ def test_beats_up_a_channel_without_dithering(width_km, max_tacks):
     # still never touches land.
     if max_tacks is not None:
         assert tacks <= max_tacks
+
+
+def test_gets_out_from_between_two_islands():
+    """15 May 2020 replay: beating between Pico and Faial, land close ahead on
+    both tacks. With nothing clearer to tack onto, it bears away to open water
+    instead of holding on to the shore, then beats on to the mark."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 1.0)
+    wind = bearing_deg(*start, *mark)
+    islands = [move(*start, *_east_north((wind + s * 50.0) % 360.0, 12_000.0)) for s in (1, -1)]
+    radius_km = 3.0
+
+    def land_km(lat, lon):
+        return max(0.0, min(distance_m(lat, lon, *i) / 1000.0 - radius_km for i in islands))
+
+    seen: list = []
+    took, _, _ = _sail_to(mark, wind, 12 * KN, land_km=land_km, track=seen)
+    assert min(land_km(*p) for p in seen) >= 1.0
+    assert took < timedelta(hours=30)
