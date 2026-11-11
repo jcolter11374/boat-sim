@@ -275,7 +275,7 @@ def design_for(rep: dict) -> str:
         return "configs/v4_kayak.yaml"
     # Stock boats are named in their file: '31 ft cruiser' -> stock_cruiser31.yaml.
     for f in sorted(Path("configs").glob("stock_*.yaml")):
-        if re.search(rf"^name:\s*{re.escape(rep['boat'])}\s*$", f.read_text(), re.M):
+        if re.search(rf"^name:\s*{re.escape(rep['boat'])}\s*$", f.read_text(), re.MULTILINE):
             return str(f)
     return f"configs/{slug(rep['boat']).replace('-', '_')}.yaml"
 

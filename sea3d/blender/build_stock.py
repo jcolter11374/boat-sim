@@ -121,7 +121,14 @@ def stanchions(f: HullForm, xs, height, inset, mat_post, mat_wire, ends=None):
             s = x / f.L
             z = side * (f.hb(s) - inset)
             y0 = f.deck_y(x, z)
-            rod(f"stanchion_{x:.2f}_{'s' if side > 0 else 'p'}", (x, y0, z), (x, y0 + height, z), 0.012, mat_post, segs=10)
+            rod(
+                f"stanchion_{x:.2f}_{'s' if side > 0 else 'p'}",
+                (x, y0, z),
+                (x, y0 + height, z),
+                0.012,
+                mat_post,
+                segs=10,
+            )
             top.append((x, y0 + height, z))
             mid.append((x, y0 + height * 0.5, z))
         if ends:
@@ -151,7 +158,9 @@ def mats():
 # 9.45 m long, 3.2 m beam, 1.75 m draft (fin keel with a bulb), masthead
 # sloop with a 12.5 m mast above the deck. White topsides, a navy boot stripe.
 CRUISER = {"L": 9.45, "B": 1.6, "wl": 0.55, "mast_x": 3.35, "mast_h": 12.4}
-CRUISER_PAINT = HullPaint(top=0xF4F3EF, deck=0xE8E5DC, boot=0x1D2F4D, bottom=0x23344F, lettering=None)
+CRUISER_PAINT = HullPaint(
+    top=0xF4F3EF, deck=0xE8E5DC, boot=0x1D2F4D, bottom=0x23344F, lettering=None
+)
 
 
 def build_cruiser() -> list:
@@ -172,8 +181,18 @@ def build_cruiser() -> list:
     f = HullForm(L=L, n=2.3, crown=0.05, wl=CRUISER["wl"], hb=hb, kz=kz, dz=dz)
     ob, img, rgb = hull(f, CRUISER_PAINT, rough=0.22, coat=0.6, nx=200, nt=34, nd=20)
     rub = material("rubrail", base=hexcol(0x2A2E33), rough=0.5)
-    tube("toerail_s", [(x, f.dz(x / L) + 0.015, hb(x / L) - 0.01) for x in np.linspace(0.15, L - 0.02, 40)], 0.018, rub)
-    tube("toerail_p", [(x, f.dz(x / L) + 0.015, -hb(x / L) + 0.01) for x in np.linspace(0.15, L - 0.02, 40)], 0.018, rub)
+    tube(
+        "toerail_s",
+        [(x, f.dz(x / L) + 0.015, hb(x / L) - 0.01) for x in np.linspace(0.15, L - 0.02, 40)],
+        0.018,
+        rub,
+    )
+    tube(
+        "toerail_p",
+        [(x, f.dz(x / L) + 0.015, -hb(x / L) + 0.01) for x in np.linspace(0.15, L - 0.02, 40)],
+        0.018,
+        rub,
+    )
 
     # Fin keel with a bulb, and a spade rudder.
     foil("keel", 1.35, 0.9, 3.55, 3.95, 0.25, -1.12, 0.11, M["lead"], n_span=10)
@@ -191,29 +210,100 @@ def build_cruiser() -> list:
         yt = y_deck(x0 + 0.55) + 0.5 if x > x0 else yb + 0.18
         w = hw * (0.82 if x == x0 else 1.0)
         verts += [(x, yb, -w), (x, yt, -w * 0.94), (x, yt, w * 0.94), (x, yb, w)]
-    faces = [(0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (4, 5, 9, 8), (5, 6, 10, 9), (6, 7, 11, 10), (0, 3, 2, 1), (8, 9, 10, 11)]
+    faces = [
+        (0, 1, 5, 4),
+        (1, 2, 6, 5),
+        (2, 3, 7, 6),
+        (4, 5, 9, 8),
+        (5, 6, 10, 9),
+        (6, 7, 11, 10),
+        (0, 3, 2, 1),
+        (8, 9, 10, 11),
+    ]
     mesh_object("cabin", verts, faces, mat=cab, smooth=False)
     yt = y_deck(x0 + 0.55) + 0.5
     for side in (1, -1):
         for k, (a, b) in enumerate(((3.55, 4.45), (4.6, 5.6))):
-            rounded_box(f"window_{k}_{'s' if side > 0 else 'p'}", a, b, yt - 0.3, yt - 0.14, side * hw - 0.012, side * hw + 0.012, M["glass"], 0.01)
+            rounded_box(
+                f"window_{k}_{'s' if side > 0 else 'p'}",
+                a,
+                b,
+                yt - 0.3,
+                yt - 0.14,
+                side * hw - 0.012,
+                side * hw + 0.012,
+                M["glass"],
+                0.01,
+            )
     rounded_box("hatch", 3.55, 4.25, yt, yt + 0.06, -0.35, 0.35, M["glass"], 0.02)
     rounded_box("companionway", 5.85, 6.07, yt - 0.42, yt - 0.02, -0.33, 0.33, M["teak"], 0.01)
     cy = y_deck(7.4)
     rounded_box("cockpit_sole", 6.15, 8.75, cy + 0.005, cy + 0.03, -0.75, 0.75, M["teak"], 0.01)
     for side in (1, -1):
-        rounded_box(f"coaming_{'s' if side > 0 else 'p'}", 6.05, 8.6, cy, cy + 0.32, side * 0.98 - 0.04, side * 0.98 + 0.04, cab, 0.02)
-        rounded_box(f"bench_{'s' if side > 0 else 'p'}", 6.3, 8.4, cy, cy + 0.2, side * 0.78 - 0.17, side * 0.78 + 0.17, M["teak"], 0.02)
+        rounded_box(
+            f"coaming_{'s' if side > 0 else 'p'}",
+            6.05,
+            8.6,
+            cy,
+            cy + 0.32,
+            side * 0.98 - 0.04,
+            side * 0.98 + 0.04,
+            cab,
+            0.02,
+        )
+        rounded_box(
+            f"bench_{'s' if side > 0 else 'p'}",
+            6.3,
+            8.4,
+            cy,
+            cy + 0.2,
+            side * 0.78 - 0.17,
+            side * 0.78 + 0.17,
+            M["teak"],
+            0.02,
+        )
     # A tiller (common on a 31-footer).
-    rod("tiller", (8.55, y_deck(8.55) + 0.45, 0), (7.3, y_deck(7.3) + 0.55, 0), 0.025, M["teak"], parent=rp)
+    rod(
+        "tiller",
+        (8.55, y_deck(8.55) + 0.45, 0),
+        (7.3, y_deck(7.3) + 0.55, 0),
+        0.025,
+        M["teak"],
+        parent=rp,
+    )
     rod("rudder_stock", (8.55, 0.3, 0), (8.55, y_deck(8.55) + 0.47, 0), 0.03, M["steel"], parent=rp)
 
     # Pulpit, pushpit, stanchions and lifelines.
     yb = y_deck(0.3)
-    tube("pulpit", [(0.9, yb + 0.02, 0.62), (0.45, yb + 0.68, 0.45), (0.2, yb + 0.7, 0.0), (0.45, yb + 0.68, -0.45), (0.9, yb + 0.02, -0.62)], 0.014, M["steel"])
+    tube(
+        "pulpit",
+        [
+            (0.9, yb + 0.02, 0.62),
+            (0.45, yb + 0.68, 0.45),
+            (0.2, yb + 0.7, 0.0),
+            (0.45, yb + 0.68, -0.45),
+            (0.9, yb + 0.02, -0.62),
+        ],
+        0.014,
+        M["steel"],
+    )
     ys = y_deck(L - 0.2)
-    tube("pushpit", [(8.7, ys + 0.02, 1.25), (9.25, ys + 0.66, 1.15), (9.3, ys + 0.66, 0.4), (9.3, ys + 0.66, -0.4), (9.25, ys + 0.66, -1.15), (8.7, ys + 0.02, -1.25)], 0.014, M["steel"])
-    stanchions(f, [1.9, 3.2, 4.5, 5.8, 7.1, 8.3], 0.62, 0.07, M["steel"], M["wire"], ends=(0.55, 9.25))
+    tube(
+        "pushpit",
+        [
+            (8.7, ys + 0.02, 1.25),
+            (9.25, ys + 0.66, 1.15),
+            (9.3, ys + 0.66, 0.4),
+            (9.3, ys + 0.66, -0.4),
+            (9.25, ys + 0.66, -1.15),
+            (8.7, ys + 0.02, -1.25),
+        ],
+        0.014,
+        M["steel"],
+    )
+    stanchions(
+        f, [1.9, 3.2, 4.5, 5.8, 7.1, 8.3], 0.62, 0.07, M["steel"], M["wire"], ends=(0.55, 9.25)
+    )
 
     # Rig: deck-stepped mast, boom, spreaders, standing rigging.
     mx, mh = CRUISER["mast_x"], CRUISER["mast_h"]
@@ -221,17 +311,49 @@ def build_cruiser() -> list:
     cylinder("mast", 0.085, mx, ym, ym + mh, 0, M["alu"], segs=24, r_top=0.055)
     cylinder("masthead_light", 0.04, mx, ym + mh, ym + mh + 0.08, 0, M["lamp"], segs=16)
     for side in (1, -1):
-        rod(f"spreader_{'s' if side > 0 else 'p'}", (mx, ym + 6.4, 0), (mx + 0.1, ym + 6.4, side * 1.05), 0.022, M["alu"], segs=10)
+        rod(
+            f"spreader_{'s' if side > 0 else 'p'}",
+            (mx, ym + 6.4, 0),
+            (mx + 0.1, ym + 6.4, side * 1.05),
+            0.022,
+            M["alu"],
+            segs=10,
+        )
         chain = (mx + 0.15, y_deck(mx + 0.15), side * (hb((mx + 0.15) / L) - 0.08))
-        rod(f"shroud_{'s' if side > 0 else 'p'}", chain, (mx + 0.1, ym + 6.4, side * 1.05), 0.005, M["wire"], segs=6)
-        rod(f"shroud_up_{'s' if side > 0 else 'p'}", (mx + 0.1, ym + 6.4, side * 1.05), (mx, ym + mh - 0.1, 0), 0.005, M["wire"], segs=6)
+        rod(
+            f"shroud_{'s' if side > 0 else 'p'}",
+            chain,
+            (mx + 0.1, ym + 6.4, side * 1.05),
+            0.005,
+            M["wire"],
+            segs=6,
+        )
+        rod(
+            f"shroud_up_{'s' if side > 0 else 'p'}",
+            (mx + 0.1, ym + 6.4, side * 1.05),
+            (mx, ym + mh - 0.1, 0),
+            0.005,
+            M["wire"],
+            segs=6,
+        )
     bow = (0.18, y_deck(0.18) + 0.05, 0)
     rod("forestay", bow, (mx, ym + mh - 0.05, 0), 0.006, M["wire"], segs=6)
-    rod("backstay", (mx, ym + mh - 0.05, 0), (L - 0.12, y_deck(L - 0.12) + 0.05, 0), 0.005, M["wire"], segs=6)
+    rod(
+        "backstay",
+        (mx, ym + mh - 0.05, 0),
+        (L - 0.12, y_deck(L - 0.12) + 0.05, 0),
+        0.005,
+        M["wire"],
+        segs=6,
+    )
     gx = 7.35
     mp = pivot("main_pivot", (mx, ym, 0))
     rod("boom", (mx + 0.09, ym + 0.95, 0), (gx, ym + 0.95, 0), 0.055, M["alu"], segs=16, parent=mp)
-    main_t, main_h, main_c = (mx + 0.1, ym + 1.0, 0), (mx + 0.08, ym + mh - 0.35, 0), (gx - 0.08, ym + 1.0, 0)
+    main_t, main_h, main_c = (
+        (mx + 0.1, ym + 1.0, 0),
+        (mx + 0.08, ym + mh - 0.35, 0),
+        (gx - 0.08, ym + 1.0, 0),
+    )
     sail("sail_main", main_t, main_h, main_c, 0.07, M["sail"], parent=mp)
     jp = pivot("jib_pivot", bow)
     jib_t = (0.3, y_deck(0.3) + 0.42, 0)
@@ -240,7 +362,17 @@ def build_cruiser() -> list:
     sail("sail_jib", jib_t, jib_h, jib_c, 0.09, M["sail"], parent=jp)
     # Winches by the cockpit.
     for side in (1, -1):
-        cylinder(f"winch_{'s' if side > 0 else 'p'}", 0.07, 6.3, cy + 0.32, cy + 0.46, side * 0.98, M["steel"], segs=20, r_top=0.06)
+        cylinder(
+            f"winch_{'s' if side > 0 else 'p'}",
+            0.07,
+            6.3,
+            cy + 0.32,
+            cy + 0.46,
+            side * 0.98,
+            M["steel"],
+            segs=20,
+            r_top=0.06,
+        )
     # Navigation lights on the pulpit.
     red = material("red_light", base=hexcol(0xFF3030), rough=0.2, emit=(1.0, 0.1, 0.1))
     green = material("green_light", base=hexcol(0x30FF60), rough=0.2, emit=(0.1, 1.0, 0.3))
@@ -252,7 +384,9 @@ def build_cruiser() -> list:
 # ----------------------------------------------------------------- dinghy ----
 # 4.2 m by 1.2 m, a flat board boat 0.3 m deep; lateen rig on a short mast.
 DINGHY = {"L": 4.2, "B": 0.6, "wl": 0.08, "mast_x": 1.05}
-DINGHY_PAINT = HullPaint(top=0xF5F4EF, deck=0xF0EFEA, boot=0x2C6FB5, bottom=0xEDEBE6, lettering=None)
+DINGHY_PAINT = HullPaint(
+    top=0xF5F4EF, deck=0xF0EFEA, boot=0x2C6FB5, bottom=0xEDEBE6, lettering=None
+)
 
 
 def build_dinghy() -> list:
@@ -281,7 +415,9 @@ def build_dinghy() -> list:
     foil("daggerboard", 0.3, 0.26, 1.48, 1.52, 0.2, -0.75, 0.1, M["g10"])
     rp = pivot("rudder_pivot", (L - 0.02, 0.2, 0))
     foil("rudder", 0.24, 0.18, L - 0.02, L + 0.02, 0.28, -0.42, 0.1, M["g10"], parent=rp)
-    rod("tiller", (L, f.dz(1.0) + 0.06, 0), (3.2, f.dz(0.76) + 0.12, 0), 0.016, M["teak"], parent=rp)
+    rod(
+        "tiller", (L, f.dz(1.0) + 0.06, 0), (3.2, f.dz(0.76) + 0.12, 0), 0.016, M["teak"], parent=rp
+    )
     # Lateen rig: a short mast, the sail laced between a long yard and a boom
     # that cross at the mast.
     mx = DINGHY["mast_x"]
@@ -291,15 +427,37 @@ def build_dinghy() -> list:
     tack = (0.55, ym + 0.42, 0.0)
     clew = (3.95, ym + 0.5, 0.0)
     peak = (2.35, ym + 4.5, 0.0)
-    rod("boom", (tack[0] - 0.05, tack[1] - 0.03, 0), (clew[0] + 0.05, clew[1] - 0.03, 0), 0.025, M["alu"], parent=mp)
-    rod("yard", (tack[0] - 0.08, tack[1] - 0.06, 0), (peak[0] + 0.05, peak[1] + 0.04, 0), 0.025, M["alu"], parent=mp)
+    rod(
+        "boom",
+        (tack[0] - 0.05, tack[1] - 0.03, 0),
+        (clew[0] + 0.05, clew[1] - 0.03, 0),
+        0.025,
+        M["alu"],
+        parent=mp,
+    )
+    rod(
+        "yard",
+        (tack[0] - 0.08, tack[1] - 0.06, 0),
+        (peak[0] + 0.05, peak[1] + 0.04, 0),
+        0.025,
+        M["alu"],
+        parent=mp,
+    )
     sail_mat = material("sail_dinghy", base=hexcol(0xF6F4EC), rough=0.75)
     sail("sail_main", tack, peak, clew, 0.06, sail_mat, parent=mp)
     # One coloured panel low on the sail (generic, no insignia).
     band = material("sail_band", base=hexcol(0x2C6FB5), rough=0.75)
     t2 = (tack[0] + 0.12, tack[1] + 0.12, 0.012)
     c2 = (clew[0] - 0.55, clew[1] + 0.12, 0.012)
-    flat_quad("sail_band", t2, c2, (c2[0] - 0.05, c2[1] + 0.32, 0.012), (t2[0] + 0.12, t2[1] + 0.34, 0.012), band, parent=mp)
+    flat_quad(
+        "sail_band",
+        t2,
+        c2,
+        (c2[0] - 0.05, c2[1] + 0.32, 0.012),
+        (t2[0] + 0.12, t2[1] + 0.34, 0.012),
+        band,
+        parent=mp,
+    )
     return [(ob, img, rgb)]
 
 
@@ -321,7 +479,9 @@ def build_beachcat() -> list:
         return CAT["hb"] - (CAT["hb"] - 0.12) * ((s - 0.42) / 0.58) ** 2
 
     def kz(s: float) -> float:
-        return 0.3 * max(1 - s / 0.3, 0) ** 2 + 0.08 * max((s - 0.8) / 0.2, 0) ** 2  # a banana rocker
+        return (
+            0.3 * max(1 - s / 0.3, 0) ** 2 + 0.08 * max((s - 0.8) / 0.2, 0) ** 2
+        )  # a banana rocker
 
     def dz(s: float) -> float:
         return CAT["depth"] - 0.08 * s
@@ -340,9 +500,23 @@ def build_beachcat() -> list:
     for x in (1.45, 3.65):
         rod(f"beam_{x:.2f}", (x, yd, -g - 0.06), (x, yd, g + 0.06), 0.045, M["alu"])
     tramp = material("trampoline", base=hexcol(0x24282D), rough=0.85)
-    flat_quad("trampoline", (1.47, yd + 0.01, -g + 0.12), (1.47, yd + 0.01, g - 0.12), (3.63, yd + 0.01, g - 0.12), (3.63, yd + 0.01, -g + 0.12), tramp)
+    flat_quad(
+        "trampoline",
+        (1.47, yd + 0.01, -g + 0.12),
+        (1.47, yd + 0.01, g - 0.12),
+        (3.63, yd + 0.01, g - 0.12),
+        (3.63, yd + 0.01, -g + 0.12),
+        tramp,
+    )
     for side in (1, -1):
-        rod(f"tramp_edge_{'s' if side > 0 else 'p'}", (1.47, yd, side * (g - 0.12)), (3.63, yd, side * (g - 0.12)), 0.02, M["alu"], segs=10)
+        rod(
+            f"tramp_edge_{'s' if side > 0 else 'p'}",
+            (1.47, yd, side * (g - 0.12)),
+            (3.63, yd, side * (g - 0.12)),
+            0.02,
+            M["alu"],
+            segs=10,
+        )
     # Mast on the front beam, a dolphin striker, stays to the bows.
     mh = CAT["mast_h"]
     cylinder("mast", 0.07, 1.45, yd, yd + mh, 0, M["alu"], segs=20, r_top=0.045)
@@ -353,10 +527,25 @@ def build_beachcat() -> list:
     rod("bridle_p", bow_p, bridle, 0.004, M["wire"], segs=6)
     rod("forestay", bridle, hound, 0.004, M["wire"], segs=6)
     for side in (1, -1):
-        rod(f"shroud_{'s' if side > 0 else 'p'}", (1.6, yd, side * g), hound, 0.004, M["wire"], segs=6)
+        rod(
+            f"shroud_{'s' if side > 0 else 'p'}",
+            (1.6, yd, side * g),
+            hound,
+            0.004,
+            M["wire"],
+            segs=6,
+        )
     # Sails: a jib on the bridle, a fully battened square-top main with a short boom.
     jp = pivot("jib_pivot", bridle)
-    sail("sail_jib", (0.8, yd + 0.22, 0), (1.3, hound[1] - 0.12, 0), (2.25, yd + 0.42, 0), 0.08, M["sail"], parent=jp)
+    sail(
+        "sail_jib",
+        (0.8, yd + 0.22, 0),
+        (1.3, hound[1] - 0.12, 0),
+        (2.25, yd + 0.42, 0),
+        0.08,
+        M["sail"],
+        parent=jp,
+    )
     mp = pivot("main_pivot", (1.45, yd, 0))
     rod("boom", (1.5, yd + 0.45, 0), (4.35, yd + 0.45, 0), 0.035, M["alu"], segs=12, parent=mp)
     m_t, m_h, m_c = (1.52, yd + 0.5, 0), (1.5, yd + mh - 0.08, 0), (4.3, yd + 0.5, 0)
@@ -366,8 +555,21 @@ def build_beachcat() -> list:
     for side, tag in ((1, "p"), (-1, "s")):  # builder +z is port
         rp = pivot(f"rudder_pivot_{tag}", (L - 0.03, 0.25, side * g))
         foil(f"rudder_{tag}", 0.26, 0.2, L - 0.03, L + 0.0, 0.32, -0.55, 0.1, M["g10"], parent=rp)
-        rod(f"tiller_arm_{tag}", (L + 0.02, CAT["depth"] - 0.05, side * g), (L - 0.25, CAT["depth"] + 0.05, side * (g - 0.15)), 0.015, M["alu"], parent=rp)
-    rod("tiller_bar", (L - 0.25, CAT["depth"] + 0.05, g - 0.15), (L - 0.25, CAT["depth"] + 0.05, -g + 0.15), 0.018, M["alu"])
+        rod(
+            f"tiller_arm_{tag}",
+            (L + 0.02, CAT["depth"] - 0.05, side * g),
+            (L - 0.25, CAT["depth"] + 0.05, side * (g - 0.15)),
+            0.015,
+            M["alu"],
+            parent=rp,
+        )
+    rod(
+        "tiller_bar",
+        (L - 0.25, CAT["depth"] + 0.05, g - 0.15),
+        (L - 0.25, CAT["depth"] + 0.05, -g + 0.15),
+        0.018,
+        M["alu"],
+    )
     return [(port, img, rgb)]
 
 
