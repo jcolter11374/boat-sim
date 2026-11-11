@@ -240,3 +240,27 @@ def test_a_leak_can_sink_the_cruiser_and_a_flat_battery_stops_the_pump(boat, mon
     s.battery_wh = 0.0
     s3, ev = boat.step(s, Command(90, 0.7), replace(beam, ghi=0.0), timedelta(minutes=10), rng)
     assert not s3.alive and any("bilge pump" in e.detail for e in ev)
+
+
+def test_the_engine_charges_a_low_battery_out_of_gear(boat):
+    """Below 35 % the computer idles the engine out of gear until 80 %: the
+    alternator fills the bank, idle fuel is burnt, and the boat isn't pushed.
+    No rudder needed; no computer, or only the fuel reserve left, no charging."""
+    night = EnvState()
+    s = boat.initial_state(T0, 36.65, -74.94)
+    s.battery_wh = 0.3 * s.battery_capacity_wh
+    rng = np.random.default_rng(0)
+    s1, _ = boat.step(s, Command(90, 0.0), night, timedelta(minutes=10), rng)
+    assert s1.charging and s1.engine_on and s1.speed_through_water < 0.05
+    assert s1.battery_wh > s.battery_wh
+    assert s.fuel_l - s1.fuel_l == pytest.approx(boat.engine_l_per_h * boat.engine_idle_frac / 6.0)
+    s2 = s1
+    for _ in range(6 * 8):
+        s2, _ = boat.step(s2, Command(90, 0.0), night, timedelta(minutes=10), rng)
+    # Filled to 80 %, then stopped (and the hotel load eats a little since).
+    assert not s2.charging and s2.battery_wh > 0.65 * s2.battery_capacity_wh
+    rudderless = replace(s, damage={"rudder": True})
+    assert boat.step(rudderless, Command(90, 0.0), night, timedelta(minutes=10), rng)[0].charging
+    dead = replace(s, damage={"electronics_main": True})
+    assert not boat.wants_charge(dead, s.fuel_l)
+    assert not boat.wants_charge(s, boat.fuel_reserve_l)
