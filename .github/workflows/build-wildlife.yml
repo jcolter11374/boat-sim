@@ -1,0 +1,45 @@
+# Builds sea3d/public/wildlife.json (where you meet dolphins, whales and seabirds in
+# the 3D views) from OBIS, which thread sandboxes can't reach but GitHub's runners can.
+# On a pull request that changes the script, it rebuilds the map and commits it to the
+# PR's branch (same-repo branches only). Run by hand: Actions tab -> "Build wildlife map".
+name: Build wildlife map
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit the built map to this branch"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/build-wildlife.yml"
+      - "sea3d/scripts/wildlife.py"
+permissions:
+  contents: write  # only used by the commit step
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy
+      - name: Build the map (prints the record counts and the scale)
+        run: python sea3d/scripts/wildlife.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wildlife
+          path: sea3d/public/wildlife.json
+          retention-days: 30
+      - name: Commit the map to this branch
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.commit) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sea3d/public/wildlife.json
+          git commit -m "Wildlife map built by run ${{ github.run_id }}" || { echo "map unchanged"; exit 0; }
+          git push
