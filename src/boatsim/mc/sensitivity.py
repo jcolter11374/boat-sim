@@ -686,6 +686,8 @@ def main(argv: list[str] | None = None) -> None:
                 f"{a.start} is not a launch day every {a.every_days} days from 1 April"
             )
         seed = start.year * 1000 + starts.index(start)  # the same seed as run gives it
+        if "baseline" not in a.variants:  # as in run: always the baseline to compare with
+            a.variants = ["baseline", *a.variants]
         for name in a.variants:
             job = SensitivityVoyage(
                 variant=name,
