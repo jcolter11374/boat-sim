@@ -168,3 +168,32 @@ def test_full_voyage_daily_reports_get_through_and_are_costed():
     cost = link.voyage_cost_usd(log.start, log.end)
     # ~2.5 months of rental plus a few dollars of credits for daily reports.
     assert 30.0 < cost["total"] < 95.0
+
+
+def test_airtime_counter_counts_messages_and_bills_the_published_plan():
+    from boatsim.comms.iridium import LedgerEntry
+
+    link = IridiumSBDLink()
+    oct_, nov = T0, T0 + timedelta(days=40)
+
+    def entry(t, direction, size, status="delivered"):
+        done = t if status == "delivered" else None
+        return LedgerEntry(t, direction, size, 1, 0.12, 1, done, status)
+
+    link.ledger = [
+        entry(oct_, "up", 30),
+        entry(oct_, "down", 4),  # billed as 10 bytes, the plan's minimum
+        entry(oct_, "up", 30, status="lost"),  # never got through: free
+        *[entry(nov, "up", 300) for _ in range(20)],  # 6,000 bytes: 1,000 over
+    ]
+    a = link.airtime(oct_, nov)
+    assert a["up"] == {"messages": 21, "bytes": 6030}
+    assert a["down"] == {"messages": 1, "bytes": 4}
+    assert a["lost"] == 1 and a["months"] == 2 and a["bytes_billed"] == 6040
+    usd = a["usd"]
+    assert usd["monthly_fees"] == pytest.approx(2 * 15.75)
+    assert usd["extra_bytes"] == pytest.approx(1000 * 0.00315)
+    assert usd["activation"] == 26.25 and usd["empty_mailbox_checks"] == 0.0
+    assert usd["total"] == pytest.approx(31.5 + 3.15 + 26.25)
+    # The prepaid estimate the batch runs use is unchanged.
+    assert link.voyage_cost_usd(oct_, nov)["line_rental"] == 2 * 17.0

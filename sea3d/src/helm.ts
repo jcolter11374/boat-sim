@@ -27,7 +27,7 @@ import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
-import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
@@ -624,6 +624,7 @@ async function finish(): Promise<void> {
       `${x.days.toFixed(1)} days`,
       `${Math.round(x.battery_low * 100)}%`,
       x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none",
+      airtimeText(x.airtime),
     ];
     for (const c of cells) {
       const td = document.createElement("td");
@@ -633,7 +634,7 @@ async function finish(): Promise<void> {
     return tr;
   };
   const table = $("r-table");
-  table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>";
+  table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th><th>Satellite messages</th></tr>";
   table.append(line("You", me), line("Autopilot ghost", gh));
   // How it ends, in the boat's own words (#234). textContent only: the words come from the simulator.
   const ends = $("r-ends");
@@ -661,6 +662,8 @@ async function finish(): Promise<void> {
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
+  const air = me.airtime;
+  if (air) bits.push(`Satellite bill on the ${air.plan} plan, for ${air.months} month${air.months === 1 ? "" : "s"} with the $${air.usd.activation.toFixed(2)} activation; the backup beacon pinged ${air.beacon_pings} times on its own yearly fee.`);
   const ch = challenges.find((x) => x.id === page.challenge);
   bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).

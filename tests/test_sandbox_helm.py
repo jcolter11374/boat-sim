@@ -597,3 +597,13 @@ def test_the_silence_warning_can_be_turned_off(env, monkeypatch):
     g = _silent_game(env, monkeypatch)
     r = g.run(hours=24, silence=False, ghost_passes=False, land_within_km=None, breakdown=False)
     assert r["stopped"] == "time"
+
+
+def test_results_card_counts_satellite_airtime(env):
+    g = _base_game(env)
+    g.run(hours=50, ghost_passes=False, land_within_km=None, breakdown=False)
+    a = g.result()["boat"]["airtime"]
+    assert a["up"]["messages"] >= 1 and a["up"]["bytes"] > 0  # the daily reports
+    assert a["beacon_pings"] >= 4  # every 6 hours
+    assert a["usd"]["total"] >= 15.75 + 26.25  # a month's fee and activation
+    assert g.result()["ghost"]["airtime"]["up"]["messages"] >= 1
