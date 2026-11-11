@@ -34,6 +34,15 @@ from dataclasses import dataclass
 from boatsim.vessel.hull import RHO_AIR
 
 ALPHA_STEP_DEG = 2.5  # wing angles tried, 0 .. max_alpha_deg (their VPP grid)
+# Lift coefficient where the wing's straight-line lift meets stall. A finite wing
+# stalls when its lift reaches the section's limit, so a stubby wing, whose lift
+# builds more slowly with angle, stalls at a LARGER angle (Anderson, Fundamentals
+# of Aerodynamics, 5th ed., sec. 5.3). Before 11 Nov 2026 the stall angle grew with
+# aspect ratio instead (10 + 4 AR/6 deg), backwards. 1.03 keeps their AR 5.33
+# wing's stall where their VPP put it (13.6 deg); NACA 0015 sections near
+# Re 3e5 reach about cl 1.0-1.1 (Sheldahl & Klimas 1981, SAND80-2114). GUESS.
+CL_AT_STALL = 1.03
+MAX_STALL_DEG = 45.0  # very stubby wings: past this it's flat plate either way
 
 
 @dataclass(frozen=True)
@@ -69,12 +78,13 @@ def foil_coeffs(alpha: float, ar: float, cd0: float, e: float = 0.85) -> tuple[f
     """Lift and drag coefficients of a finite symmetric wing at any angle (rad).
 
     Linear lift (slope from aspect ratio) and induced drag below stall, blended
-    smoothly into flat-plate behaviour above it. Same curve as the Randolph
-    VPP's foil_coeffs.
+    smoothly into flat-plate behaviour above it. The Randolph VPP's foil_coeffs,
+    except the stall angle: here it is where the lift reaches CL_AT_STALL, so a
+    lower aspect ratio stalls later, as real wings do (theirs stalled earlier).
     """
     a = math.atan2(math.sin(alpha), math.cos(alpha))
     slope = 2.0 * math.pi * ar / (2.0 + math.sqrt(ar * ar + 4.0))
-    stall = math.radians(10.0 + 4.0 * min(ar, 6.0) / 6.0)
+    stall = min(CL_AT_STALL / slope, math.radians(MAX_STALL_DEG))
     cdmax = 1.11 + 0.018 * min(ar, 20.0)
     cl_lin = slope * a
     cd_lin = cd0 + cl_lin * cl_lin / (math.pi * e * ar)
