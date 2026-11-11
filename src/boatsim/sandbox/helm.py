@@ -171,22 +171,24 @@ class PlayerBase:
 def port_start(port_id: str, env=None) -> tuple[float, float]:
     """A port's launch point (oceandata/ports.py): where a support boat drops the
     boat when it sails from that port. Only ports whose voyage crosses the race
-    start line, with the launch point inside the weather actually loaded (a
-    challenge's own bundle included) and clear of its edge."""
+    start line, with the launch point and its launch route inside the weather
+    actually loaded (a challenge's own bundle included) and clear of its edge."""
     from boatsim.oceandata import ports
 
     p = ports.load().get(port_id)
     if p is None:
         raise ValueError(f"no port called {port_id!r}")
-    if not (p["in_corridor"] and p["crosses_start"]):
+    if not p["crosses_start"]:
         raise ValueError(
             f"can't sail from {p['name']}: its voyage wouldn't cross the start line here"
         )
+    if not p["in_corridor"]:
+        raise ValueError(f"can't sail from {p['name']}: the boats would drift out of the weather")
     lat, lon = float(p["launch_lat"]), float(p["launch_lon"])
     w = getattr(env, "weather", None)  # a bundle's weather grid; full data has no edge to check
     if w is not None:
-        e = ports.EDGE_DEG  # the same margin the list's in_corridor flag allows
-        if not (w.lats[0] + e <= lat <= w.lats[-1] - e and w.lons[0] + e <= lon <= w.lons[-1] - e):
+        box = (float(w.lats[0]), float(w.lats[-1]), float(w.lons[0]), float(w.lons[-1]))
+        if not ports.route_inside(lat, lon, box=box):  # same margin as the list's flag
             raise ValueError(f"can't sail from {p['name']}: this weather doesn't reach it")
     return lat, lon
 

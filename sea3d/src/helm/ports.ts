@@ -29,9 +29,16 @@ export async function loadPorts(url: string, get: (u: string) => Promise<Respons
   }
 }
 
-/** "Boston, launched 35 km out by water" (with the position when two share a name). */
+const deg = (v: number, pos: string, neg: string, dp: number) => `${Math.abs(v).toFixed(dp)}°${v >= 0 ? pos : neg}`;
+
+/** "Boston, launched 35 km out by water at 42.2°N 70.6°W" (with the port's
+ *  position when two share a name, and "same start as ..." when the support boat
+ *  drops several ports' boats at one point, as up a long bay or strait). */
 export function portLabel(p: Port, all: Port[]): string {
   const twin = all.some((q) => q !== p && q.name === p.name);
-  const where = twin ? ` (${Math.abs(p.lat).toFixed(0)}°${p.lat >= 0 ? "N" : "S"} ${Math.abs(p.lon).toFixed(0)}°${p.lon < 0 ? "W" : "E"})` : "";
-  return `${p.name}${where}, launched ${Math.round(p.launch_km)} km out by water`;
+  const where = twin ? ` (${deg(p.lat, "N", "S", 0)} ${deg(p.lon, "E", "W", 0)})` : "";
+  const at = `${deg(p.launch_lat, "N", "S", 1)} ${deg(p.launch_lon, "E", "W", 1)}`;
+  const same = all.filter((q) => q !== p && q.launch_lat === p.launch_lat && q.launch_lon === p.launch_lon).map((q) => q.name);
+  const shared = same.length ? `, same start as ${[...new Set(same)].join(", ")}` : "";
+  return `${p.name}${where}, launched ${Math.round(p.launch_km)} km out by water at ${at}${shared}`;
 }

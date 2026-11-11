@@ -84,6 +84,10 @@ def test_corridor_and_duplicates(tmp_path, monkeypatch):
     assert len(ports) == 1 and ports[0].in_corridor
     assert not P.in_corridor(49.0, -5.0) and P.in_corridor(36.6, -74.9)
     assert not P.in_corridor(49.5, -60.0)  # inside the bundles, but on their last weather cell
+    assert not P.in_corridor(47.8, -52.5)  # off St John's: drifts north out of the weather
+    assert P.route_inside(36.65, -74.94) and not P.route_inside(
+        36.65, -74.94, box=(28, 40, -78, -8)
+    )
 
 
 def test_finish_is_the_race_target():
@@ -105,7 +109,8 @@ def test_published_list():
     assert {"Norfolk", "Baltimore", "Lisboa", "Horta"} <= names
     assert len({p["id"] for p in d["ports"]}) == len(d["ports"])
     for p in d["ports"]:
-        assert P.in_corridor(p["launch_lat"], p["launch_lon"]) == p["in_corridor"]
+        inside = P.in_corridor(p["launch_lat"], p["launch_lon"])
+        assert (inside and P.route_inside(p["launch_lat"], p["launch_lon"])) == p["in_corridor"]
         assert P.crosses_start(p["launch_lat"], p["launch_lon"]) == p["crosses_start"]
         assert 0 <= p["launch_km"] <= P.SEARCH_KM + 50
 

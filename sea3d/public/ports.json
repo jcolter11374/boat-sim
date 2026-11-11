@@ -63,7 +63,7 @@
    "launch_lat": 46.51,
    "launch_lon": -53.99,
    "launch_km": 87.1,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -294,7 +294,7 @@
    "launch_lat": 46.27,
    "launch_lon": -59.59,
    "launch_km": 271.5,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -492,7 +492,7 @@
    "launch_lat": 46.47,
    "launch_lon": -55.75,
    "launch_km": 70.1,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -547,7 +547,7 @@
    "launch_lat": 48.25,
    "launch_lon": -52.65,
    "launch_km": 75.3,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -833,7 +833,7 @@
    "launch_lat": 46.27,
    "launch_lon": -59.59,
    "launch_km": 50.4,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -855,7 +855,7 @@
    "launch_lat": 46.27,
    "launch_lon": -59.59,
    "launch_km": 250.9,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -1075,7 +1075,7 @@
    "launch_lat": 47.81,
    "launch_lon": -52.45,
    "launch_km": 33.0,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -1218,7 +1218,7 @@
    "launch_lat": 46.37,
    "launch_lon": -58.13,
    "launch_km": 242.7,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -1240,7 +1240,7 @@
    "launch_lat": 46.27,
    "launch_lon": -59.59,
    "launch_km": 322.2,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -1251,7 +1251,7 @@
    "launch_lat": 46.27,
    "launch_lon": -59.59,
    "launch_km": 49.3,
-   "in_corridor": true,
+   "in_corridor": false,
    "crosses_start": true
   },
   {
@@ -1357,5 +1357,6 @@
  "clear_km": 20.0,
  "source": "Natural Earth 1:10m ports (public domain), https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_ports.geojson",
  "route_clear_km": 10.0,
- "notes": "launch_*: nearest open-Atlantic point at least clear_km from land on the simulator's land mask whose straight route to the finish stays route_clear_km from land; in_corridor: inside the browser bundles, a weather cell clear of their edge; crosses_start: the line from the launch point to the finish crosses the race start line."
+ "north_drift_deg": 4.0,
+ "notes": "launch_*: nearest open-Atlantic point at least clear_km from land on the simulator's land mask whose straight route to the finish stays route_clear_km from land; in_corridor: the launch point and that route are inside the browser bundles, a weather cell clear of their edge, the launch point north_drift_deg south of their top; crosses_start: the line from the launch point to the finish crosses the race start line."
 }

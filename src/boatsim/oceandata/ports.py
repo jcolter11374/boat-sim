@@ -16,9 +16,12 @@ mask. Ports with no such point within ``SEARCH_KM`` by water (the Great Lakes, t
 St Lawrence and most of its Gulf) are left out.
 
 Each port says whether its launch point is inside the browser bundles'
-corridor (sandbox.forcing.CORRIDOR, 28-50N, 78-8W), at least ``EDGE_DEG``
-inside its edge (a weather cell, so the boat never starts on the grid's
-border): only those can sail in the in-browser game today. The rest need the corridor widened (bigger bundles).
+corridor (sandbox.forcing.CORRIDOR, 28-50N, 78-8W), and its launch route
+too, at least ``EDGE_DEG`` inside its edge (a weather cell, so the boat never
+starts or steers onto the grid's border): only those can sail in the
+in-browser game today. The launch point must also sit ``NORTH_DRIFT_DEG``
+south of the corridor's north edge: from Newfoundland the boats drift north
+out of the weather (Ravi, #246). The rest need the corridor widened (bigger bundles).
 
     curl -sSLO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_ports.geojson
     python -m boatsim.oceandata.ports ne_10m_ports.geojson --out sea3d/public/ports.json
@@ -46,6 +49,11 @@ ROUTE_CLEAR_KM = 10.0  # GUESS: the launch route's closest allowed approach to l
 ROUTE_STEP_KM = 2.0  # the route is checked at points this far apart (the mask's cell size)
 CORRIDOR = (28.0, 50.0, -78.0, -8.0)  # lat_min, lat_max, lon_min, lon_max (= sandbox.forcing)
 EDGE_DEG = 1.0  # a launch point at least one weather cell inside the corridor
+# GUESS, from the 2020 bundle: dropped off Newfoundland (46.5-48.3N), both boats
+# reached the corridor's top (50N) within 30 days in 2-3 of the 6 Apr-Jun
+# launches, a drift of 3.5 degrees north; every launch point south of 46.4N
+# stayed below 48.9N. Four degrees keeps the drop clear of that.
+NORTH_DRIFT_DEG = 4.0
 FINISH = (39.5, -13.5)  # = runner.arrival.DEFAULT_TARGET (checked in the tests)
 KM_PER_DEG = 111.2
 
@@ -59,7 +67,7 @@ class Port:
     launch_lat: float
     launch_lon: float
     launch_km: float  # port to launch point by water (roughly: 8-way steps on the mask)
-    in_corridor: bool  # the launch point is inside the browser bundles
+    in_corridor: bool  # the launch point and its launch route are inside the browser bundles
     # The straight line from the launch point to the finish target crosses the
     # race's western start line (runner/arrival.py), so a voyage from here can
     # start under the Microtransat rules. False for the Azores, Iberia and Bermuda.
@@ -187,9 +195,19 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", plain.lower()).strip("-")
 
 
-def in_corridor(lat: float, lon: float, edge=EDGE_DEG) -> bool:
+def in_corridor(lat: float, lon: float, edge=EDGE_DEG, north=NORTH_DRIFT_DEG) -> bool:
+    """A launch point the browser's weather covers: edge inside the corridor,
+    and north degrees south of its top, for the drift north."""
     a, b, c, d = CORRIDOR
-    return a + edge <= lat <= b - edge and c + edge <= lon <= d - edge
+    return a + edge <= lat <= b - max(edge, north) and c + edge <= lon <= d - edge
+
+
+def route_inside(lat: float, lon: float, box=CORRIDOR, edge=EDGE_DEG, target=FINISH) -> bool:
+    """The great circle from (lat, lon) to target stays edge inside box
+    (lat_min, lat_max, lon_min, lon_max) all the way."""
+    a, b, c, d = box
+    la, lo = great_circle((lat, lon), target)
+    return bool(((la >= a + edge) & (la <= b - edge) & (lo >= c + edge) & (lo <= d - edge)).all())
 
 
 def build(geojson: str | Path, mask=None, log=print) -> list[Port]:
@@ -224,7 +242,7 @@ def build(geojson: str | Path, mask=None, log=print) -> list[Port]:
                 la,
                 lo,
                 round(km, 1),
-                in_corridor(la, lo),
+                in_corridor(la, lo) and route_inside(la, lo),
                 crosses_start(la, lo),
             )
         )
@@ -254,10 +272,12 @@ def dumps(ports: list[Port]) -> str:
                 "clear_km": CLEAR_KM,
                 "source": "Natural Earth 1:10m ports (public domain), " + SOURCE_URL,
                 "route_clear_km": ROUTE_CLEAR_KM,
+                "north_drift_deg": NORTH_DRIFT_DEG,
                 "notes": "launch_*: nearest open-Atlantic point at least clear_km from land "
                 "on the simulator's land mask whose straight route to the finish stays "
-                "route_clear_km from land; in_corridor: inside the browser bundles, a "
-                "weather cell clear of their edge; "
+                "route_clear_km from land; in_corridor: the launch point and that route "
+                "are inside the browser bundles, a weather cell clear of their edge, the "
+                "launch point north_drift_deg south of their top; "
                 "crosses_start: the line from the launch point to the finish crosses the "
                 "race start line.",
             },

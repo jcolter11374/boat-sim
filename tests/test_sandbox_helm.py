@@ -358,6 +358,8 @@ def test_ports_you_cannot_start_from(env):
         Game(env, launch_index=MAY1, start_port="atlantis")
     with pytest.raises(ValueError, match="start line"):
         Game(env, launch_index=MAY1, start_port="lisboa")  # east of the start line
+    with pytest.raises(ValueError, match="drift out of the weather"):
+        Game(env, launch_index=MAY1, start_port="saint-john-s")  # Newfoundland: drifts past 50N
 
 
 def test_a_port_start_still_logs_the_start_line(env, monkeypatch):
@@ -402,7 +404,7 @@ def test_every_offered_port_sails_a_day_without_running_aground(env):
     """Ravi's check on #246: from every port the picker offers, both boats sail
     the launch route for a day and neither hits land or the weather's edge."""
     offered = _picker_ports()
-    assert len(offered) >= 30
+    assert len(offered) >= 20
     for pid in offered:
         g = Game(env, launch_index=MAY1, start_port=pid, breakdowns=False, max_days=2.0)
         g.run(hours=24, land_within_km=None, breakdown=False, ghost_passes=False)
