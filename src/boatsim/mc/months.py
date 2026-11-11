@@ -482,6 +482,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     r.add_argument("--spread", action="store_true", help="vary drag, solar and fouling per boat")
     r.add_argument("--no-currents", action="store_true", help="try-out only: zero current")
+    r.add_argument(
+        "--storm-boost",
+        action="store_true",
+        help="blend hurricane cores from IBTrACS into ERA5 (#117; needs data/storms/)",
+    )
     r.add_argument("--prefetch", action="store_true", help="fetch the ERA5 days first")
     s = sub.add_parser("report", help="combine per-year CSVs into the by-month report")
     s.add_argument("csvs", nargs="+")
@@ -519,6 +524,7 @@ def job_from_args(a) -> MonthlyVoyage:
         max_days=a.max_days,
         unknown_p_by_60_days=a.unknown_p,
         spread=a.spread,
+        storm_boost=a.storm_boost,
     )
 
 
