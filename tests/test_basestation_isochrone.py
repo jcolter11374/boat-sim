@@ -160,8 +160,10 @@ def test_the_drone_gets_a_speed_table_from_its_own_physics():
     iso = standard_components(d, env, env, land=None, routing="isochrone").base
     assert isinstance(iso.polar, SteadyPolar)
     assert (iso.min_twa_deg, iso.max_twa_deg) == (50.0, 165.0)
-    # The default planner is unchanged for the drone: no polar, as before.
-    assert standard_components(d, env, env, land=None).base.polar is None
+    # The drone's default is the isochrone router (11 Nov 2026); "fan" is
+    # still the old planner, with no polar.
+    assert isinstance(standard_components(d, env, env, land=None).base, IsochroneReplanPolicy)
+    assert standard_components(d, env, env, land=None, routing="fan").base.polar is None
 
 
 def test_a_hybrid_wing_and_motor_boat_is_still_costed_as_a_motorboat():
