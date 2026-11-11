@@ -20,6 +20,7 @@ Legend: A = automated (Ravi), P = automated (playtest, Chrome + Firefox), E = by
 | Loads with no console or page errors, no "being updated" / "can't start" notice | A, P |
 | The 3D picture draws: not blank, sea and sky there, no black or magenta patches | A, E |
 | Panels don't overlap each other or run off a 1400x900 screen | E |
+| Small windows (960x540, phone 390x844 and 844x390): the main button can be reached and clicked (#288) | A (helm-small-window), todo for other pages |
 | Words are plain English (nautical terms explained) | E |
 
 ## Take the helm (`helm.html`)
