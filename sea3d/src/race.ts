@@ -102,6 +102,14 @@ if (mine) {
   sel.value = MINE;
 }
 
+/** The player's name for boat A when it's "my boat" (null otherwise): shown instead of the simulator's
+ *  generic name ("Our kayak") everywhere the page names the boats. Plain text only. */
+let nameA: string | null = null;
+function ownNames<T extends { boats: { name: string }[] }>(x: T): T {
+  if (nameA && x.boats[0]) x.boats[0].name = nameA;
+  return x;
+}
+
 /** A Boatyard share link's choices (the part after #), checked word by word; else the boat picked. */
 function choicesFrom(baseSel: string, share: string): Choices | null {
   const hash = share.includes("#") ? share.slice(share.indexOf("#") + 1) : share.trim();
@@ -125,6 +133,7 @@ function setBusy(on: boolean): void {
   $<HTMLButtonElement>("go").disabled = on;
   for (const id of ["day", "week", "until", "end"]) $<HTMLButtonElement>(id).disabled = on || !page.ready || over;
   $<HTMLButtonElement>("seasonbtn").disabled = on || !page.ready;
+  drawMap(); // the empty chart's hint goes while the simulator loads
 }
 
 // ---------------------------------------------------------------- drawing
@@ -218,6 +227,17 @@ function drawMap(): void {
     const [x, y] = P(pts[pts.length - 1].lat, pts[pts.length - 1].lon);
     g.fillStyle = COLOURS[i];
     g.beginPath(); g.arc(x, y, 4.5, 0, Math.PI * 2); g.fill();
+  }
+  // Nothing sailed yet: say what starts it.
+  if (!page.status && !page.busy) {
+    g.fillStyle = "rgba(230,238,248,.85)";
+    g.font = "600 15px system-ui, sans-serif";
+    g.textAlign = "center";
+    g.fillText("Pick two boats, then press Start the race.", W / 2, H / 2 - 6);
+    g.font = "12px system-ui, sans-serif";
+    g.fillStyle = "rgba(159,179,200,.85)";
+    g.fillText("Both tracks are drawn here as the boats sail.", W / 2, H / 2 + 14);
+    g.textAlign = "start";
   }
   const st = page.status;
   const lead = $("lead");
@@ -336,6 +356,7 @@ async function startRace(): Promise<void> {
   const a = choicesFrom($<HTMLSelectElement>("baseA").value, $<HTMLInputElement>("shareA").value);
   const b = choicesFrom($<HTMLSelectElement>("baseB").value, $<HTMLInputElement>("shareB").value);
   if (!a || !b) return msg("That share link doesn't look like one from the Boatyard.", "bad");
+  nameA = $<HTMLSelectElement>("baseA").value === MINE && mine && !$<HTMLInputElement>("shareA").value.trim() ? mine.name : null;
   if (!(await sandboxThere(sandboxBase))) {
     page.error = "no simulator files";
     return msg("The simulator files aren't published on this site yet, so races can't run here.", "bad");
@@ -357,7 +378,7 @@ async function startRace(): Promise<void> {
       breakdowns: $<HTMLInputElement>("breakdowns").checked,
       drop: $<HTMLSelectElement>("drop").value,
     });
-    page.status = v.status;
+    page.status = ownNames(v.status);
     page.tracks = v.track;
     page.ready = true;
     msg("Both boats are in the water. Sail on, or race the whole season.");
@@ -382,7 +403,7 @@ async function sail(hours: number | null): Promise<void> {
   setBusy(true);
   try {
     const v = await worker.ask<{ stopped: string; status: Status; track: [Row[], Row[]] }>({ type: "run", ...(hours === null ? {} : { hours }) });
-    page.status = v.status;
+    page.status = ownNames(v.status);
     page.tracks = v.track;
     page.stops.push(v.stopped);
     msg(STOP_WORDS[v.stopped] ?? v.stopped);
@@ -396,8 +417,8 @@ async function sail(hours: number | null): Promise<void> {
 
 async function toEnd(): Promise<void> {
   const v = await worker!.ask<{ card: Card; status: Status; track: [Row[], Row[]] }>({ type: "result" });
-  page.card = v.card;
-  page.status = v.status;
+  page.card = ownNames(v.card);
+  page.status = ownNames(v.status);
   page.tracks = v.track;
 }
 
@@ -426,6 +447,7 @@ async function season(): Promise<void> {
       rows.push(await worker.ask<{ a: LaunchResult; b: LaunchResult }>({ type: "season_launch", i }));
     }
     page.season = await worker.ask<Season>({ type: "season_verdict" });
+    if (nameA) page.season.names[0] = nameA;
     drawSeason();
     msg("Season done.");
   } catch (e) {
@@ -440,6 +462,15 @@ $("week").addEventListener("click", () => void sail(24 * 7));
 $("until").addEventListener("click", () => void sail(null));
 $("end").addEventListener("click", () => void end());
 $("seasonbtn").addEventListener("click", () => void season());
+// The share-link boxes are for experts: a link opens each one (#317).
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>(".pastelink")))
+  b.addEventListener("click", () => {
+    const box = $(b.dataset.for!);
+    box.hidden = !box.hidden;
+    b.textContent = box.hidden ? "Paste a design link instead" : "Hide the design link";
+    if (box.hidden) box.querySelector("input")!.value = "";
+    else box.querySelector("input")!.focus();
+  });
 window.addEventListener("resize", drawMap);
 drawAll();
 export {};
