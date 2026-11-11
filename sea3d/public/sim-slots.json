@@ -1,5 +1,5 @@
 {
- "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, all 'no effect yet' except today's choice, until the physics lands (order: mass link, hybrid drive, materials, then the hull shapes). cost and kg for the new options: Sam.",
+ "note": "Simulator side of the parts catalog (Theo). Merge into Sam's parts-catalog.json by slot and option id. effect: wired = changes the simulation; 'no effect yet' = show greyed with that label, don't hide; fixed = nothing to choose. est = estimated (badge), basis = why. The catalog slots come from boatsim.sandbox.catalog.slot_table() and stay in step with the code; drive, material and shape are new slots, wired (est) since #174 and #183. cost and kg for the new options: Sam.",
  "catalog_slots": [
   {
    "id": "thr",
@@ -508,26 +508,94 @@
     {
      "id": "cat",
      "n": "Small catamaran, 3.0 x 1.6 m",
-     "effect": "no effect yet",
+     "effect": "wired",
      "est": true,
-     "basis": "two slim hulls on a bridge deck, 140 kg; physics coming (Theo)",
-     "sim": []
+     "basis": "GUESS: twin hulls scaled from the kayak; not self-righting, so a capsize ends it",
+     "sim": [
+      "hull.length_m",
+      "hull.beam_m",
+      "hull.waterline_length_m",
+      "hull.wetted_area_m2",
+      "hull.form_factor",
+      "hull.wave_making_frac",
+      "hull.waterplane_area_m2",
+      "hull.waterline_girth_factor",
+      "hull.air_side_area_m2",
+      "hull.air_front_area_m2",
+      "hull.lateral_cd_area_m2",
+      "hull.keel_lift_slope_area_m2",
+      "hull.wave_drag_frac_per_m2",
+      "hull.wave_drag_beam_factor",
+      "hull.self_righting_dome",
+      "hull.keel_bulb_kg",
+      "hull.displacement_ref_kg",
+      "hazards.hull_length_m",
+      "hazards.hull_beam_m",
+      "hazards.p_capsize_stays_over",
+      "hazards.p_part",
+      "hazards.steering_per_day",
+      "propulsion.rudder",
+      "hull.mass_kg"
+     ],
+     "kg": 17.0
     },
     {
      "id": "semisub",
      "n": "Low semi-submerged hull, 3.2 x 0.5 m",
-     "effect": "no effect yet",
+     "effect": "wired",
      "est": true,
-     "basis": "rides almost awash, 175 kg; physics coming (Theo)",
-     "sim": []
+     "basis": "GUESS: low hull scaled from the kayak; deck panels awash give 60 % solar",
+     "sim": [
+      "hull.length_m",
+      "hull.beam_m",
+      "hull.waterline_length_m",
+      "hull.wetted_area_m2",
+      "hull.form_factor",
+      "hull.wave_making_frac",
+      "hull.waterplane_area_m2",
+      "hull.air_side_area_m2",
+      "hull.air_front_area_m2",
+      "hull.lateral_cd_area_m2",
+      "hull.keel_lift_slope_area_m2",
+      "hull.wave_drag_frac_per_m2",
+      "hull.self_righting_dome",
+      "hull.keel_bulb_kg",
+      "hull.displacement_ref_kg",
+      "hazards.hull_length_m",
+      "hazards.hull_beam_m",
+      "hazards.leak_per_day",
+      "power.mounting_mismatch",
+      "hull.mass_kg"
+     ],
+     "kg": 52.0
     },
     {
      "id": "board",
      "n": "Surfboard, 3.0 x 0.85 m",
-     "effect": "no effect yet",
+     "effect": "wired",
      "est": true,
-     "basis": "flat wide board with a fin and a buoyant deck pod, 105 kg; physics coming (Theo)",
-     "sim": []
+     "basis": "GUESS: flat board scaled from the kayak; half the bulb, so more often stuck inverted",
+     "sim": [
+      "hull.length_m",
+      "hull.beam_m",
+      "hull.waterline_length_m",
+      "hull.wetted_area_m2",
+      "hull.form_factor",
+      "hull.wave_making_frac",
+      "hull.waterplane_area_m2",
+      "hull.air_side_area_m2",
+      "hull.air_front_area_m2",
+      "hull.lateral_cd_area_m2",
+      "hull.keel_lift_slope_area_m2",
+      "hull.wave_drag_frac_per_m2",
+      "hull.keel_bulb_kg",
+      "hull.displacement_ref_kg",
+      "hazards.hull_length_m",
+      "hazards.hull_beam_m",
+      "hazards.p_inverted_stuck",
+      "hull.mass_kg"
+     ],
+     "kg": -18.0
     }
    ]
   }
