@@ -1,12 +1,19 @@
-"""Land for the 3D views: Pico (Azores) and the Annapolis waterfront (display only).
+"""Land for the 3D views: coasts along the route and the Annapolis waterfront (display only).
 
-Two places the 3D pages can show from the water, built from free, open data:
+Places the 3D pages can show from the water, built from free, open data.
 
-    Pico and Faial, Azores (38.36-38.66N, 28.86-28.00W)
-      pico_meta.json     grid: nx, ny, lon0/lon1/lat0/lat1, width and height in m
-      pico_height.bin    int16 little-endian, metres, row 0 = north, nx per row;
+Coasts (REGIONS), each as <key>_meta.json, <key>_height.bin, <key>_colour.jpg:
+
+    pico       Pico and Faial, Azores, Horta included (38.36-38.66N, 28.86-28.00W)
+    baymouth   the Chesapeake Bay mouth: Cape Henry, Cape Charles and the water
+               between, where the bridge-tunnel crosses (36.88-37.12N, 76.12-75.88W)
+    lisbon     Cabo da Roca, Cascais and the Tagus mouth to Lisbon
+               (38.62-38.82N, 9.52-9.08W)
+
+      <key>_meta.json    grid: nx, ny, lon0/lon1/lat0/lat1, width and height in m
+      <key>_height.bin   int16 little-endian, metres, row 0 = north, nx per row;
                          sea is clamped at -60 m
-      pico_colour.jpg    true colour, the same grid: Sentinel-2 median of clear
+      <key>_colour.jpg   true colour, the same grid: Sentinel-2 median of clear
                          summer passes, clouds filled from their surroundings
 
     Annapolis waterfront (38.968-38.990N, 76.505-76.472W)
@@ -41,6 +48,7 @@ import io
 import json
 import math
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -69,6 +77,27 @@ PICO_SCENES = {
     "MH": ["S2B_26SMH_20240626", "S2A_26SMH_20240701", "S2B_26SMH_20240815", "S2A_26SMH_20240621"],
 }
 SCL_BAD = [0, 1, 3, 8, 9, 10]  # no data, saturated, cloud shadow, cloud (med, high), cirrus
+
+# The other coasts: summer passes with under 15% cloud over the tile (each
+# scene's eo:cloud_cover, listed from the bucket on 11 Nov 2026) that cover the
+# whole box (the Bay mouth sits at the edge of two orbits' swaths, so most passes
+# only see its eastern third), median as for Pico.
+BAYMOUTH_BOX = (-76.12, -75.88, 36.88, 37.12)  # tiles 18SVF and, north of 37.0N, 18SVG
+_BAY_DAYS = ("S2B_{}_20230629", "S2A_{}_20230813", "S2A_{}_20230823", "S2B_{}_20240623")
+_BAY_DAYS += ("S2B_{}_20240723", "S2A_{}_20240728")
+BAYMOUTH_SCENES = {t[3:]: [d.format(t) for d in _BAY_DAYS] for t in ("18SVF", "18SVG")}
+# Lisbon: passes under 0.2% cloud.
+LISBON_BOX = (-9.52, -9.08, 38.62, 38.82)  # inside tile 29SMC
+LISBON_SCENES = {
+    "MC": [
+        "S2A_29SMC_20240816",
+        "S2B_29SMC_20230807",
+        "S2A_29SMC_20230713",
+        "S2B_29SMC_20240722",
+        "S2B_29SMC_20240702",
+        "S2B_29SMC_20230817",
+    ]
+}
 
 ANNAPOLIS_BOX = (-76.505, -76.472, 38.968, 38.990)  # lon0, lon1, lat0, lat1
 ANNAPOLIS_ORIGIN = (38.9725, -76.4800)  # lat, lon: the boat, in the harbour mouth
@@ -244,18 +273,39 @@ def sentinel_median(lon_g, lat_g, scenes: dict, epsg: int, log=print) -> np.ndar
 # ----------------------------------------------------------------- Pico
 
 
-def bake_pico(out: Path, cache: Path | None = None, nx: int = PICO_NX, log=print) -> list[Path]:
+@dataclass(frozen=True)
+class Region:
+    """A coast baked as heights plus true colour on one lon/lat grid."""
+
+    box: tuple[float, float, float, float]  # lon0, lon1, lat0, lat1
+    nx: int  # columns; rows follow from the box's shape
+    zoom: int  # terrain tile zoom
+    scenes: dict  # Sentinel-2 passes per UTM tile (see PICO_SCENES)
+    epsg: int  # the tiles' UTM zone
+
+
+REGIONS = {
+    "pico": Region(PICO_BOX, PICO_NX, 12, PICO_SCENES, 32626),  # about 30 m
+    "baymouth": Region(BAYMOUTH_BOX, 1200, 13, BAYMOUTH_SCENES, 32618),  # about 18 m
+    "lisbon": Region(LISBON_BOX, 2000, 13, LISBON_SCENES, 32629),  # about 19 m
+}
+
+
+def bake_region(
+    key: str, out: Path, cache: Path | None = None, nx: int | None = None, log=print
+) -> list[Path]:
     from PIL import Image
 
+    reg = REGIONS[key]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    lons, lats, w, h = grid(PICO_BOX, nx)
-    hgt = terrain(PICO_BOX, 12, lons, lats, cache)
+    lons, lats, w, h = grid(reg.box, nx or reg.nx)
+    hgt = terrain(reg.box, reg.zoom, lons, lats, cache)
     hgt = np.where(hgt < 0, np.maximum(hgt, -60.0), hgt)
-    log(f"pico: {len(lons)} x {len(lats)} heights, highest {hgt.max():.0f} m")
+    log(f"{key}: {len(lons)} x {len(lats)} heights, highest {hgt.max():.0f} m")
     lon_g, lat_g = np.meshgrid(lons, lats)
-    col = fill_clouds(sentinel_median(lon_g, lat_g, PICO_SCENES, 32626, log), hgt)
-    lon0, lon1, lat0, lat1 = PICO_BOX
+    col = fill_clouds(sentinel_median(lon_g, lat_g, reg.scenes, reg.epsg, log), hgt)
+    lon0, lon1, lat0, lat1 = reg.box
     meta = {
         "nx": len(lons),
         "ny": len(lats),
@@ -265,15 +315,19 @@ def bake_pico(out: Path, cache: Path | None = None, nx: int = PICO_NX, log=print
         "lon1": lon1,
         "lat0": lat0,
         "lat1": lat1,
-        "height": "pico_height.bin: int16 little-endian metres, row 0 north; sea clamped at -60",
-        "colour": "pico_colour.jpg: the same grid, row 0 north",
+        "height": f"{key}_height.bin: int16 little-endian metres, row 0 north; sea clamped at -60",
+        "colour": f"{key}_colour.jpg: the same grid, row 0 north",
         "attribution": [CREDITS["terrain"], CREDITS["sentinel"]],
     }
-    paths = [out / "pico_meta.json", out / "pico_height.bin", out / "pico_colour.jpg"]
+    paths = [out / f"{key}_meta.json", out / f"{key}_height.bin", out / f"{key}_colour.jpg"]
     paths[0].write_text(json.dumps(meta, indent=1))
     np.round(hgt).astype("<i2").tofile(paths[1])
     Image.fromarray(col).save(paths[2], quality=90)
     return paths
+
+
+def bake_pico(out: Path, cache: Path | None = None, nx: int = PICO_NX, log=print) -> list[Path]:
+    return bake_region("pico", out, cache, nx, log)
 
 
 # ----------------------------------------------------------------- Annapolis
@@ -451,16 +505,16 @@ def bake_annapolis(
 def main(argv: list[str] | None = None) -> None:
     import argparse
 
-    ap = argparse.ArgumentParser(description="Bake land for the 3D views (Pico, Annapolis)")
-    ap.add_argument("places", nargs="*", default=["pico", "annapolis"])
+    ap = argparse.ArgumentParser(description="Bake land for the 3D views (coasts, Annapolis)")
+    ap.add_argument("places", nargs="*", default=[*REGIONS, "annapolis"])
     ap.add_argument("--out", default="site/land")
     ap.add_argument("--cache", default=None, help="keep downloaded terrain tiles here")
     ap.add_argument("--overture-release", default=OVERTURE_RELEASE)
     a = ap.parse_args(argv)
     cache = Path(a.cache) if a.cache else None
     for place in a.places:
-        if place == "pico":
-            paths = bake_pico(a.out, cache)
+        if place in REGIONS:
+            paths = bake_region(place, a.out, cache)
         elif place == "annapolis":
             paths = bake_annapolis(a.out, cache, a.overture_release)
         else:

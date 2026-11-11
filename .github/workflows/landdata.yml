@@ -1,5 +1,5 @@
-# Land for the 3D views (src/boatsim/oceandata/landviews.py): Pico and Faial in
-# the Azores, and the Annapolis waterfront. Heights from AWS Terrain Tiles,
+# Land for the 3D views (src/boatsim/oceandata/landviews.py): coasts (Pico and
+# Faial, the Chesapeake Bay mouth, Lisbon) and the Annapolis waterfront. Heights from AWS Terrain Tiles,
 # colour from a Sentinel-2 median, buildings and piers from Overture Maps
 # (ODbL). Display only: nothing in the simulator reads them.
 # Run it by hand: Actions tab -> "Land data" -> Run workflow. Tick "publish" to
@@ -12,7 +12,7 @@ on:
     inputs:
       places:
         description: "Places (space separated)"
-        default: "pico annapolis"
+        default: "pico baymouth lisbon annapolis"
       overture_release:
         description: "Overture Maps release"
         default: "2026-10-21.0"
@@ -66,7 +66,7 @@ jobs:
 
           Data sources (resampled by us):
           - Terrain: AWS Terrain Tiles (Mapzen/Tilezen; SRTM, GMTED2010, ETOPO1, USGS 3DEP and others, https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
-          - Colour (pico_colour.jpg): contains modified Copernicus Sentinel data 2023-2024 (Sentinel-2 L2A, via the Registry of Open Data on AWS).
+          - Colour (*_colour.jpg): contains modified Copernicus Sentinel data 2023-2024 (Sentinel-2 L2A, via the Registry of Open Data on AWS).
           - Buildings and piers (annapolis.json): contains information from OpenStreetMap and Overture Maps Foundation (release $OVERTURE), available under the Open Database License (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/). annapolis.json is a derived database under the ODbL: anyone may use, share and adapt it, provided they credit the sources, keep it under the ODbL, and keep it open.
           EOF
           gh release view land-data >/dev/null 2>&1 || gh release create land-data \

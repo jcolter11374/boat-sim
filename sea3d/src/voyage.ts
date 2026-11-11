@@ -46,7 +46,7 @@ import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
-import { PLACE } from "./land/place";
+import { PLACE, PLACES } from "./land/place";
 import { Island } from "./land/island";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
@@ -717,6 +717,23 @@ loadDetailedModels().then((ok) => {
 camera.position.set(-5.6, 2.0, 4.6);
 controls.target.set(0, 0.2, 0);
 // ---------- real land (?place=pico) ----------
+{
+  const pick = $<HTMLSelectElement>("placepick");
+  for (const p of Object.values(PLACES)) {
+    const o = document.createElement("option");
+    o.value = p.key;
+    o.textContent = p.name;
+    pick.appendChild(o);
+  }
+  pick.value = PLACE?.key ?? "";
+  pick.addEventListener("change", () => {
+    const q = new URLSearchParams(location.search);
+    if (pick.value) q.set("place", pick.value);
+    else q.delete("place");
+    q.delete("spot");
+    location.search = q.toString();
+  });
+}
 let island: Island | null = null;
 if (PLACE) {
   // Look past the boat towards the land.
