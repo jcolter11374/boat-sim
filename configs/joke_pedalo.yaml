@@ -1,0 +1,96 @@
+# JOKE FLEET: "two-seat pedalo". A generic rotomoulded paddle-wheel pedal boat, our own
+# numbers (stock-vessels design note, joke-fleet sidebar). Two people pedal a paddle wheel
+# 10 hours a day. Two floats make it very stable, but the seat well is open and sits low,
+# so steep seas fill it. Anything unreferenced is a GUESS.
+name: pedalo
+
+stock:
+  label: two-seat pedalo
+  kind: paddle-wheel pedal boat, two people pedalling
+  spec_card:
+    length_overall_m: 2.5    # GUESS
+    beam_m: 1.5              # GUESS: two floats
+    hull_kg: 150             # GUESS: rotomoulded
+    load_kg: 360             # GUESS: two people 160 kg, food and water 200 kg
+  odd:
+    crew_w: 150              # GUESS: two people, about 75 W each, for hours
+    crew_hours: 10           # GUESS
+    crew_start_hour: 7
+    awake_hours: 16
+    fatigue_per_day: 0.01    # GUESS
+    fatigue_floor: 0.6       # GUESS
+    freeboard_m: 0.30        # GUESS: seat well rim above the water, loaded
+    ship_l: 8                # GUESS: a wide well catches more per crest than a canoe
+    bail_l_per_h: 80         # GUESS: two people, one bailer and a bucket
+    swamp_l: 350             # GUESS: a full seat well and the floats awash
+    loss_words:
+      capsized and stayed upside down: flipped by a breaking wave; two floats upside down stay that way
+      early-life defect or unknown failure: something gave out (a pedal crank, the paddle wheel's axle)
+
+hull:
+  model: two-seat paddle-wheel pedalo (joke fleet)
+  length_m: 2.5
+  beam_m: 1.5
+  mass_kg: 510
+  displacement_ref_kg: 510
+  waterline_length_m: 2.3
+  wetted_area_m2: 3.6        # GUESS: two blunt floats
+  form_factor: 1.5           # GUESS: blunt
+  wave_making_frac: 0.7      # GUESS: short, fat and blunt: it pushes a bow wave at 2 kn
+  wave_wall_fn: 0.4         # GUESS: hull speed of a 2.3 m float, about 3.6 kn
+  waterplane_area_m2: 2.0    # GUESS
+  air_side_area_m2: 1.8      # GUESS: two seated people and a sunshade frame
+  air_front_area_m2: 1.4     # GUESS
+  air_cd_side: 1.0
+  air_cd_front: 1.0
+  lateral_cd_area_m2: 1.2    # GUESS
+  keel_lift_slope_area_m2: 0.3
+  wave_drag_frac_per_m2: 0.6 # GUESS: the blunt bow stops dead in a head sea
+  fouling_onset_days: 10
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+power:
+  # No solar. The "battery" is the crew's food: 150 W x 10 h a day for 40 days (GUESS).
+  solar_wp: 0
+  panels_w: {}
+  battery_wh: 60000
+  charge_eff: 1.0
+  discharge_eff: 1.0
+
+propulsion:
+  thrusters: one paddle wheel
+  thruster_count: 1
+  thruster_diameter_m: 0.5   # GUESS: the wheel's wetted paddles, as a disc
+  thruster_efficiency: 0.3   # GUESS: paddle wheels churn more than they push
+  cruise_drive_w: 150
+  max_drive_w: 150
+  min_steer_w: 1.0
+
+electronics:
+  autopilot: the crew, with a phone in a dry bag
+  hotel_load_wh_per_day: 0
+  nav_light_w: 0
+  nav_light_hours_per_day: 0
+
+comms:
+  one_way: personal satellite tracker (GUESS fit)
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 2.5
+  hull_beam_m: 1.5
+  critical_wave_frac_of_length: 0.55  # GUESS: very stable for its size (two floats)
+  critical_wave_frac_of_beam: 1.2
+  p_capsize_stays_over: 1.0
+  damage_ref_hs_m: 3.0
+  p_part: {}
+  rate_set: planning
+  failures_enabled: false    # the crew steers; no electronics to fail
