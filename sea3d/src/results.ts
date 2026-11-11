@@ -78,12 +78,12 @@ export function standingText(s: Standing): { head: string; detail: string } {
     const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
     if (s.tiers <= 1)
       return {
-        head: `${on}: all ${s.of} boats are in one group, which these launches can't tell apart. ${rate}`,
+        head: `${on}: all ${s.of} builds are in one group, which these launches can't tell apart. ${rate}`,
         detail: range,
       };
     const others = s.inTier - 1;
     const group = `${s.tier === 1 ? "the top" : `the ${ordinal(s.tier)}`} of ${s.tiers} groups`;
-    const with_ = others === 0 ? "on its own there" : `with ${others} other boat${others === 1 ? "" : "s"} it can't be told apart from`;
+    const with_ = others === 0 ? "on its own there" : `with ${others} other build${others === 1 ? "" : "s"} it can't be told apart from`;
     return {
       head: `${on}: in ${group}, ${with_}. ${rate}`,
       detail: `${ordinal(s.rank)} of ${s.of} by finish rate. ${range}`,
@@ -97,7 +97,7 @@ export function standingText(s: Standing): { head: string; detail: string } {
       detail: `Likely range ${pct(o.low95)} to ${pct(o.high95)}. One voyage is one roll of the dice; these odds are the better guide.`,
     };
   }
-  return { head: "No odds for this boat yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
+  return { head: "No odds for this build yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
