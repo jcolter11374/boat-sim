@@ -32,3 +32,18 @@ What's honest already:
 
 - It is **fine as a free-sail stock boat** in the 3D view now.
 - It is **held from any odds, race or board result** until items 1 and 2 are set in its yaml. Item 3 is wording only.
+
+## Status, 11 Nov 2026 (Theo)
+
+Items 1 and 2 are now set in `configs/stock_cruiser31.yaml`. Each value is a GUESS and is marked in the yaml.
+
+| Finding | Fix | Where |
+|---|---|---|
+| 1. Power runs out by day 12 | Solar is 400 W (two 200 W panels), and the engine's alternator (250 W) charges the bank below 35%, keeping a 5 L fuel reserve | #226, #255 |
+| 2a. Two electronics boxes | One box (`electronics_boxes: 1`). A spare autopilot is now a Boatyard option for the stock boats, at the parts-list cost | #226, #257 |
+| 2b. Leaks never sink it | A leak sinks it with chance `p_sink_given_leak: 0.3`, or for certain once the bilge pump has no power | #226 |
+| 2b. Strike loss is the kayak's by default | Set explicitly to 0.8 lost, with a survived hit leaving a leak, so about 86% of strikes end the voyage | this change |
+| 2c. Capture near land | Kept at the kayak's 1% a day, marked GUESS (it had been halved to 0.5%). The dinghy and the beach cat use the same value | this change |
+| 3. Wording | Say "fitted to the certificate", not "checked against" | wording only |
+
+Lifting the hold on odds, races and boards is Ravi's call, after a recheck.
