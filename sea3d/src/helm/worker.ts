@@ -158,6 +158,11 @@ if m.get("start_port"):
     if not takes_ports():
         raise RuntimeError("NO_PORTS")
     kw["start_port"] = m["start_port"]
+    from boatsim.sandbox.helm import port_start
+    try:
+        port_start(m["start_port"], ENV)  # a plain message for a port this weather can't sail from
+    except ValueError as err:
+        raise RuntimeError("BAD_PORT " + str(err))
 if m.get("challenge"):
     if not takes_challenges():
         raise RuntimeError("NO_CHALLENGES")

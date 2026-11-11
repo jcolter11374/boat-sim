@@ -392,6 +392,24 @@ def test_a_port_must_be_inside_the_weather_loaded(env, monkeypatch):
     )
 
 
+def _picker_ports():
+    from boatsim.oceandata import ports
+
+    return sorted(k for k, p in ports.load().items() if p["in_corridor"] and p["crosses_start"])
+
+
+def test_every_offered_port_sails_a_day_without_running_aground(env):
+    """Ravi's check on #246: from every port the picker offers, both boats sail
+    the launch route for a day and neither hits land or the weather's edge."""
+    offered = _picker_ports()
+    assert len(offered) >= 30
+    for pid in offered:
+        g = Game(env, launch_index=MAY1, start_port=pid, breakdowns=False, max_days=2.0)
+        g.run(hours=24, land_within_km=None, breakdown=False, ghost_passes=False)
+        for v in (g.mine, g.ghost):
+            assert not v.done, (pid, g.result())
+
+
 def test_ports_file_is_read_once():
     from boatsim.oceandata import ports
 

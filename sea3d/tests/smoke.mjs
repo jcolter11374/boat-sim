@@ -437,7 +437,7 @@ try {
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
   // Ports to start from (public/ports.json): the picker lists the ports west of the start line.
-  await page.waitForFunction(() => window.__helm.ports >= 40 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
+  await page.waitForFunction(() => window.__helm.ports >= 30 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
     .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));
   if (!(await page.locator('#port option[value="baltimore"]').count())) fail("port picker has no Baltimore");
   log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);

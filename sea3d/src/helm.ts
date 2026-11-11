@@ -601,6 +601,10 @@ async function begin(): Promise<void> {
       page.error = "no ports in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site can't start from a port yet; it's being updated. Start from our usual drop for now.";
+    } else if (/BAD_PORT/.test(err)) {
+      page.error = "port not sailable here";
+      setBusy(false);
+      $("startmsg").textContent = `${err.replace(/^.*BAD_PORT\s*/, "").replace(/^./, (c) => c.toUpperCase())}. Pick another port, or start from our usual drop.`;
     } else if (/NO_CHALLENGES/.test(err)) {
       page.error = "no challenges in the simulator";
       setBusy(false);

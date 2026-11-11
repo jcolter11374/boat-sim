@@ -168,9 +168,6 @@ class PlayerBase:
         }
 
 
-PORT_EDGE_DEG = 1.0  # a launch point at least one weather cell inside the bundle
-
-
 def port_start(port_id: str, env=None) -> tuple[float, float]:
     """A port's launch point (oceandata/ports.py): where a support boat drops the
     boat when it sails from that port. Only ports whose voyage crosses the race
@@ -188,7 +185,7 @@ def port_start(port_id: str, env=None) -> tuple[float, float]:
     lat, lon = float(p["launch_lat"]), float(p["launch_lon"])
     w = getattr(env, "weather", None)  # a bundle's weather grid; full data has no edge to check
     if w is not None:
-        e = PORT_EDGE_DEG
+        e = ports.EDGE_DEG  # the same margin the list's in_corridor flag allows
         if not (w.lats[0] + e <= lat <= w.lats[-1] - e and w.lons[0] + e <= lon <= w.lons[-1] - e):
             raise ValueError(f"can't sail from {p['name']}: this weather doesn't reach it")
     return lat, lon
