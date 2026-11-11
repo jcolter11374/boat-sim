@@ -1,0 +1,335 @@
+{
+ "pois": [
+  {
+   "id": "cape-henry",
+   "kind": "history",
+   "title": "Cape Henry, 1607",
+   "at": [
+    [
+     36.926,
+     -76.006
+    ]
+   ],
+   "radius_km": 130,
+   "text": "In April 1607, after four and a half months at sea, 144 English settlers came ashore at the south side of the Bay mouth, put up a wooden cross and named the cape. About three weeks later they founded Jamestown. The granite cross there now was put up in 1935.",
+   "source": "US National Park Service",
+   "url": "https://home.nps.gov/came/learn/historyculture/index.htm"
+  },
+  {
+   "id": "battle-of-the-capes",
+   "kind": "history",
+   "title": "Battle of the Capes, 1781",
+   "at": [
+    [
+     36.95,
+     -75.75
+    ]
+   ],
+   "radius_km": 130,
+   "text": "On 5 September 1781 a French fleet under de Grasse fought 19 British warships off this coast. The British lost 90 men killed and the French kept control of the Bay. With no help able to come by sea, the British army at Yorktown under Cornwallis surrendered on 19 October, a turning point of the American War of Independence.",
+   "source": "US National Park Service",
+   "url": "https://home.nps.gov/york/learn/historyculture/battle-of-the-capes.htm"
+  },
+  {
+   "id": "u-85",
+   "kind": "wreck",
+   "title": "U-boat U-85",
+   "at": [
+    [
+     35.92,
+     -75.28
+    ]
+   ],
+   "radius_km": 90,
+   "text": "A German submarine lies about 27 m down off Oregon Inlet. On 14 April 1942 the US destroyer Roper sank it: the first U-boat sunk by US forces off the East Coast in the Second World War.",
+   "source": "NOAA Monitor National Marine Sanctuary",
+   "url": "https://monitor.noaa.gov/shipwrecks/u-85.html"
+  },
+  {
+   "id": "uss-monitor",
+   "kind": "wreck",
+   "title": "USS Monitor",
+   "at": [
+    [
+     35.00195,
+     -75.40633
+    ]
+   ],
+   "radius_km": 90,
+   "text": "The Union's famous Civil War ironclad sank in a storm off Cape Hatteras on 31 December 1862; 16 of the 62 men aboard died. It lies about 70 m down, and in 1975 the wreck became the first US national marine sanctuary.",
+   "source": "NOAA Monitor National Marine Sanctuary",
+   "url": "https://monitor.noaa.gov/shipwrecks/uss_monitor.html"
+  },
+  {
+   "id": "gulf-stream",
+   "kind": "ocean",
+   "title": "The Gulf Stream",
+   "at": [
+    [
+     35.5,
+     -74.6
+    ],
+    [
+     36.4,
+     -72.5
+    ],
+    [
+     37.3,
+     -70.0
+    ],
+    [
+     38.2,
+     -67.0
+    ],
+    [
+     39.0,
+     -64.0
+    ],
+    [
+     39.8,
+     -60.0
+    ],
+    [
+     40.5,
+     -55.0
+    ]
+   ],
+   "radius_km": 80,
+   "text": "A river of warm water in the sea, flowing north-east. It averages about 6 km/h and can run near 9 km/h, faster than the kayak's motors push it, and it carries more water than all the world's rivers put together. Further north and east it slows to under 2 km/h.",
+   "source": "NOAA National Ocean Service",
+   "url": "https://oceanservice.noaa.gov/facts/gulfstreamspeed.html"
+  },
+  {
+   "id": "andrea-doria",
+   "kind": "wreck",
+   "title": "Andrea Doria",
+   "at": [
+    [
+     40.4917,
+     -69.8433
+    ]
+   ],
+   "radius_km": 120,
+   "text": "The Italian liner Andrea Doria was hit in fog by the Swedish liner Stockholm late on 25 July 1956, about 45 miles south of Nantucket. It took 11 hours to sink, long enough for 1,660 people to be rescued; 51 died. The wreck lies about 72 m down.",
+   "source": "History.com (this day in history)",
+   "url": "https://www.history.com/this-day-in-history/july-25/ships-collide-off-nantucket"
+  },
+  {
+   "id": "bermuda-triangle",
+   "kind": "ocean",
+   "title": "The 'Bermuda Triangle'",
+   "at": [
+    [
+     32.3,
+     -64.8
+    ]
+   ],
+   "radius_km": 300,
+   "text": "You're near Bermuda, one corner of the famous triangle. NOAA's answer: ships and planes go missing here no more often than in any busy stretch of ocean, and storms, the Gulf Stream and shallow reefs explain the losses. The name isn't official and there are no official edges.",
+   "source": "NOAA National Ocean Service",
+   "url": "https://oceanservice.noaa.gov/facts/bermudatri.html"
+  },
+  {
+   "id": "sargasso-sea",
+   "kind": "ocean",
+   "title": "The Sargasso Sea",
+   "at": [
+    [
+     33.5,
+     -66.0
+    ],
+    [
+     33.5,
+     -58.0
+    ],
+    [
+     33.5,
+     -50.0
+    ],
+    [
+     33.0,
+     -42.0
+    ]
+   ],
+   "radius_km": 250,
+   "text": "The only sea with no coast: four currents, the Gulf Stream among them, fence it in. Mats of floating seaweed called sargassum give it its name; young turtles shelter in them, and eels and marlin swim here to spawn.",
+   "source": "NOAA National Ocean Service",
+   "url": "https://oceanservice.noaa.gov/facts/sargassosea.html"
+  },
+  {
+   "id": "grand-banks",
+   "kind": "ocean",
+   "title": "Fog off the Grand Banks",
+   "at": [
+    [
+     43.5,
+     -50.5
+    ],
+    [
+     44.0,
+     -48.0
+    ]
+   ],
+   "radius_km": 250,
+   "text": "To the north are the Grand Banks of Newfoundland, where the cold Labrador Current meets the warm Gulf Stream. Where they mix, the fog is famous for lasting days, and the cold current carries icebergs down from Greenland: nearly 500 reach the shipping lanes in an average year.",
+   "source": "US Coast Guard International Ice Patrol",
+   "url": "https://navcen.uscg.gov/node/31306"
+  },
+  {
+   "id": "titanic",
+   "kind": "wreck",
+   "title": "RMS Titanic",
+   "at": [
+    [
+     41.732,
+     -49.946
+    ]
+   ],
+   "radius_km": 150,
+   "text": "Not far from here, nearly 4 km down, lies the Titanic. It hit an iceberg and sank on 15 April 1912, about 350 nautical miles off Newfoundland, and more than 1,500 people died. The wreck was found in 1985 by a joint US-French team led by Robert Ballard and Jean-Louis Michel.",
+   "source": "NOAA",
+   "url": "https://noaa.gov/node/10822"
+  },
+  {
+   "id": "azores-high",
+   "kind": "ocean",
+   "title": "The Azores High",
+   "at": [
+    [
+     35.0,
+     -32.0
+    ]
+   ],
+   "radius_km": 450,
+   "text": "You're sailing near the Azores High, a big area of high air pressure that usually sits south of the islands. Paired with the Icelandic Low far to the north, it sets the westerly winds across to Europe: the bigger the difference in pressure between them, the stronger the westerlies and the storms.",
+   "source": "Met Office",
+   "url": "https://www.metoffice.gov.uk/blog/2025/what-is-the-azores-high"
+  },
+  {
+   "id": "mid-atlantic-ridge",
+   "kind": "ocean",
+   "title": "The Mid-Atlantic Ridge",
+   "at": [
+    [
+     35.0,
+     -35.5
+    ],
+    [
+     36.2,
+     -33.9
+    ],
+    [
+     37.3,
+     -32.3
+    ],
+    [
+     38.3,
+     -30.5
+    ],
+    [
+     39.8,
+     -29.6
+    ],
+    [
+     42.0,
+     -29.2
+    ]
+   ],
+   "radius_km": 70,
+   "text": "You're crossing the seam of the Atlantic. Deep below, the plates of the earth's crust pull apart about 2.5 cm a year, and new sea floor forms between them. Over 100 to 200 million years this spreading grew the Atlantic from a narrow inlet into an ocean.",
+   "source": "US Geological Survey",
+   "url": "https://pubs.usgs.gov/gip/dynamic/understanding.html"
+  },
+  {
+   "id": "horta-cables",
+   "kind": "history",
+   "title": "Horta, the cable town",
+   "at": [
+    [
+     38.532,
+     -28.627
+    ]
+   ],
+   "radius_km": 70,
+   "text": "Horta on Faial was once a crossroads of the world's telegraph. The first cable reached it in 1893, and by 1928 fifteen undersea cables linked it to Britain, the US, Canada, Ireland, France, Germany, Italy and Cape Verde. The last cable company left in 1969.",
+   "source": "Explore Faial Island",
+   "url": "https://www.explorefaialisland.com/en/?p=4997"
+  },
+  {
+   "id": "azores-whaling",
+   "kind": "history",
+   "title": "Azores whalers",
+   "at": [
+    [
+     38.4,
+     -28.25
+    ]
+   ],
+   "radius_km": 70,
+   "text": "From Pico and its neighbours, Azoreans hunted sperm whales from open boats with oars, sails and hand-thrown harpoons until 1987. The old whaleboats now race, and the whales bring whale watchers instead.",
+   "source": "National Geographic",
+   "url": "https://www.nationalgeographic.com/adventure/article/130613-azores-whalers-culture-history-marine-science"
+  },
+  {
+   "id": "columbus-santa-maria",
+   "kind": "history",
+   "title": "Columbus at Santa Maria, 1493",
+   "at": [
+    [
+     37.006,
+     -25.16
+    ]
+   ],
+   "radius_km": 80,
+   "text": "Coming home from his first voyage in February 1493, Columbus was caught by a storm and sheltered at Santa Maria. His men went ashore to give thanks at a shrine, and the unfriendly Portuguese held them for a time. Once freed they sailed on, still in storms, and the battered Niña reached Lisbon.",
+   "source": "Britannica",
+   "url": "https://www.britannica.com/biography/Christopher-Columbus/The-first-voyage"
+  },
+  {
+   "id": "gorringe-bank",
+   "kind": "ocean",
+   "title": "Gorringe Bank",
+   "at": [
+    [
+     36.53,
+     -11.57
+    ]
+   ],
+   "radius_km": 80,
+   "text": "A mountain under the sea, about 160 nautical miles off Portugal. It rises from 5,000 m down, and its two peaks, Gettysburg and Ormonde, come to within 50 m of the surface.",
+   "source": "Oceana",
+   "url": "https://europe.oceana.org/wp-content/uploads/sites/26/fact_sheet_gorringe.pdf"
+  },
+  {
+   "id": "cabo-da-roca",
+   "kind": "history",
+   "title": "Cabo da Roca",
+   "at": [
+    [
+     38.7819,
+     -9.4973
+    ]
+   ],
+   "radius_km": 380,
+   "text": "Due east is Cabo da Roca, the westernmost point of mainland Europe. A lighthouse has shone there since 1772, and a stone marks it with the poet Camões's line 'where the land ends and the sea begins'.",
+   "source": "Parques de Sintra",
+   "url": "https://bilheteira.parquesdesintra.pt/info/farol-cabo-da-roca-visita-essencial/1188/en"
+  },
+  {
+   "id": "lisbon-1755",
+   "kind": "history",
+   "title": "The Lisbon earthquake, 1755",
+   "at": [
+    [
+     38.71,
+     -9.14
+    ]
+   ],
+   "radius_km": 400,
+   "text": "On the morning of 1 November 1755 an earthquake of about magnitude 8.7 shook Lisbon, and a tsunami struck the riverfront. About a quarter of the city's 250,000 people died.",
+   "source": "US Geological Survey (archived page)",
+   "url": "https://webarchive.library.unt.edu/eot2008/20090109025722/http://earthquake.usgs.gov/regional/world/events/1755_11_01.php"
+  }
+ ],
+ "notes": "A card shows when the track passes within radius_km of any point in 'at'."
+}

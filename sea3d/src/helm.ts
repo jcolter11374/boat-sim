@@ -27,6 +27,7 @@ import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/ch
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
+import { loadPois, passes, PoiCards, type Poi } from "./pois";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -139,6 +140,8 @@ const page = {
   share: "",
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
+  /** Points of interest: how many loaded, and the ids the track has reached (in order). */
+  pois: { loaded: 0, shown: [] as string[] },
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -538,6 +541,7 @@ async function begin(): Promise<void> {
     page.ready = true;
     shownTo = shared ? lastHour(game.boat!) : 0;
     hour = shownTo;
+    resetPois();
     showStatus();
     newEvents();
     await refreshForecast();
@@ -695,6 +699,32 @@ let storm = 0;
 let rigHeave = 0;
 const ghostTag = $("ghosttag");
 const proj = new THREE.Vector3();
+// ---------- points of interest (wrecks, history, ocean facts) ----------
+// Your boat's track only: a card pops up as the replayed hours reach it.
+let pois: Poi[] = [];
+const poiSeen = new Set<string>();
+let poiH = 0;
+const poiCards = new PoiCards();
+loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
+  pois = p;
+  page.pois.loaded = p.length;
+  resetPois();
+});
+/** A new or shared game: what the boat already passed counts as seen. */
+function resetPois(): void {
+  poiSeen.clear();
+  poiCards.hide(true);
+  if (page.ready && game.boat && hour > 0) passes(game.boat, 0, hour - 1e-6, pois, poiSeen);
+  poiH = hour;
+}
+function poisReached(): void {
+  if (!page.ready || !game.boat || !pois.length || hour < poiH) return;
+  const ps = passes(game.boat, poiH, hour, pois, poiSeen);
+  poiH = hour;
+  for (const p of ps) poiCards.add(p, `Day ${(p.h / 24).toFixed(1)}`);
+  page.pois.shown.push(...ps.map((x) => x.poi.id));
+}
+
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
   const dt = Math.min(t - last, 0.1);
@@ -706,6 +736,7 @@ renderer.setAnimationLoop(() => {
     hour = Math.min(shownTo, hour + dt * rate);
   }
   if (cine.lapseHour !== null) hour = cine.lapseHour;
+  else poisReached();
   const r = rep();
   const h = r ? Math.min(hour, lastHour(r)) : 0;
   const hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;

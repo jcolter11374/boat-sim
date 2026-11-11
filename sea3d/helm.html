@@ -71,7 +71,10 @@
   #r-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
   #r-table th { text-align: left; color: var(--dim); font-weight: 600; padding: 3px 5px; }
   #r-table td { padding: 4px 5px; border-top: 1px solid var(--line); }
+  /* Point-of-interest cards (src/pois.ts): above the forecast strip, clear of the chart. */
+  :root { --poi-right: 376px; --poi-bottom: 150px; }
   @media (max-width: 1100px) { #fcbox { left: 12px; right: 12px; bottom: 260px; } #notes { width: 240px; } }
+  @media (max-width: 1100px) { :root { --poi-right: 12px; --poi-bottom: 400px; } }
 </style>
 </head>
 <body>
