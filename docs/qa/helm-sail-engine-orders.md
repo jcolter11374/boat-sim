@@ -81,6 +81,7 @@ The engine speed has the wave penalty but no wind drag on the hull and rig. Head
 # python -I probe.py from the repo root (src on the path): one vessel, fixed env, 10-minute steps
 from boatsim.vessel.keelboat import KeelboatVessel
 from boatsim.types import Command, EnvState
+
 v = KeelboatVessel(load_design("configs/stock_cruiser31.yaml"))
 # calm creep:   Command(90, f, None, True) in EnvState(), f = 1.0 ... 0.01
 # no steering:  same at 0.7 with damage {"rudder": True} / {"electronics_main": True} / battery 0
