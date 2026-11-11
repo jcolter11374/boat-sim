@@ -15,8 +15,9 @@ look-ahead), and published on the challenge-data release with challenges.json.
 Hurricanes: ERA5 shows hurricane winds at about 40-65% of their real strength
 (#117), so the storms in challenges 3-7 are weaker in the simulator than they
 were. Their waves are less affected (ERA5's wind sea still reached 13.4 m in
-September 2020). Each of those challenges carries ``hurricane: true`` so the
-page can say so until a fix is chosen.
+September 2020). Each of those challenges carries ``hurricane: true``, a
+``weather_note`` for the page, and ``storm_boost: true``: the hook for the
+game to switch on Theo's storm boost (#117) once it lands.
 
     python -m boatsim.oceandata.challenges catalog --out site/challenges.json
     python -m boatsim.oceandata.challenges matrix     # JSON list for Actions
@@ -32,6 +33,7 @@ from pathlib import Path
 SEASON_BUNDLE = "forcing_2020.npz"
 DAYS_BEFORE = 1
 DAYS_AFTER = 155  # 150 days of sailing + 5 days of forecast look-ahead
+STORM_NOTE = "Storm winds approximate (ERA5 smooths hurricanes)"
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,10 @@ class Challenge:
         )
         d["first"], d["last"] = (str(x) for x in self.window())
         d["bundle"], d["seed"] = self.bundle, self.seed
+        # The page shows the note; the game turns on Theo's storm boost (#117,
+        # a Holland/Young vortex behind a flag) for these once it lands.
+        d["weather_note"] = STORM_NOTE if self.hurricane else ""
+        d["storm_boost"] = self.hurricane
         return d
 
 

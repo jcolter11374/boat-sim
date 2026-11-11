@@ -43,3 +43,6 @@ def test_catalog_records_start_at_noon_and_hurricane_flags(tmp_path):
     assert recs["sandys-shadow"]["start"] == "2012-10-22T12:00:00Z"
     assert recs["sandys-shadow"]["hurricane"] and not recs["winter-train"]["hurricane"]
     assert recs["gentle-june"]["bundle"] == "forcing_2020.npz"
+    for r in recs.values():
+        assert r["storm_boost"] == r["hurricane"]
+        assert ("ERA5 smooths hurricanes" in r["weather_note"]) == r["hurricane"]
