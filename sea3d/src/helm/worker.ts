@@ -2,7 +2,9 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns}
+// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode}   mode: "hands_on" or "base"
+//               {id, type: "load", code}                  a shared game (Game.save's code)
+//               {id, type: "save"}
 //               {id, type: "order", heading, power}       heading: degrees, "finish" or "route"; power 0..1
 //               {id, type: "run", hours?, soc_below?, wind_above?, breakdown?}
 //               {id, type: "forecast"} | {id, type: "result"}
@@ -48,6 +50,10 @@ try:
     from boatsim.sandbox.helm import Game
 except ImportError:
     Game = None  # an older simulator on the site: the page says so
+try:
+    from boatsim.sandbox.helm import UNTIL_CAP_H as UNTIL_CAP
+except ImportError:
+    UNTIL_CAP = 240.0
 from boatsim.runner.replay import to_replay, QUIET_EVENTS
 ENV = open_bundle("forcing.npz")
 G = None
@@ -87,11 +93,12 @@ def run_until(kw):
         new = [e for e in G.mine.log.events[n:] if e.kind in BREAKDOWNS]
         if any(e.kind != EventKind.CAPSIZE for e in new):
             return out
-        if kw.get("hours") is not None:
-            kw["hours"] = max(kw["hours"] - (G.mine.state.t - t0).total_seconds() / 3600.0, 0.0)
-            if kw["hours"] <= 0:
-                out["stopped"] = "time"
-                return out
+        # Carry on with what's left of the hop (or of the 3-day cap).
+        key = "hours" if kw.get("hours") is not None else "max_hours"
+        kw[key] = kw.get(key, UNTIL_CAP) - (G.mine.state.t - t0).total_seconds() / 3600.0
+        if kw[key] <= 0:
+            out["stopped"] = "time"
+            return out
 
 def voyages():
     return {"boat": hourly(to_replay(G.mine.log, "You")), "ghost": hourly(to_replay(G.ghost.log, "Autopilot ghost"))}
@@ -113,20 +120,39 @@ self.onmessage = async (ev: MessageEvent) => {
 m = json.loads(msg_json)
 if Game is None:
     raise RuntimeError("NO_HELM")
-G = Game(ENV, None, m["launch"], safe=m["safe"], breakdowns=m["breakdowns"])
+kw = {"safe": m["safe"], "breakdowns": m["breakdowns"]}
+if m.get("mode", "hands_on") != "hands_on":
+    kw["mode"] = m["mode"]  # older simulators only know hands on
+G = Game(ENV, None, m["launch"], **kw)
 json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
 `;
+    } else if (m.type === "load") {
+      say("Sailing the shared game back to where it was...");
+      code = `
+m = json.loads(msg_json)
+if Game is None or not hasattr(Game, "load"):
+    raise RuntimeError("NO_HELM")
+try:
+    G = Game.load(ENV, m["code"])
+except ValueError as err:
+    raise RuntimeError("BAD_CODE " + str(err))
+json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), "orders": G.orders, "launch": G.launch_index, **voyages()}, default=_f)
+`;
+    } else if (m.type === "save") {
+      code = `json.dumps(G.save())`;
     } else if (m.type === "order") {
       code = `
 m = json.loads(msg_json)
-G.order(m["heading"], m["power"])
-json.dumps(G.status(), default=_f)
+o = G.order(m["heading"], m["power"])
+json.dumps({"order": o if isinstance(o, dict) else {"accepted": True}, "status": G.status()}, default=_f)
 `;
     } else if (m.type === "run") {
       say("Sailing...");
       code = `
 m = json.loads(msg_json)
 kw = {k: m[k] for k in ("hours", "soc_below", "wind_above", "breakdown", "land_within_km") if k in m}
+if kw.get("hours") is None and UNTIL_CAP == 240.0:
+    kw["hours"] = 240.0  # an older simulator without the 3-day cap
 out = run_until(kw)
 json.dumps({"stopped": out["stopped"], "status": out["status"], **voyages()}, default=_f)
 `;
