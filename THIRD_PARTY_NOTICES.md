@@ -67,3 +67,18 @@ between the two maps.
   (https://datacatalog.worldbank.org/search/dataset/0037580), from the IMF's
   World Seaborne Trade Monitoring System (Cerdeiro, Komaromi, Liu and Saeed,
   2020). Licence: CC BY 4.0.
+
+## Sea state and depth for the 3D view (`seastate-data` release)
+
+Built by `src/boatsim/oceandata/seastate.py` and the "Sea state data" workflow;
+not stored in git. Thinned and quantised by us.
+
+- ERA5 wave partitions: Contains modified Copernicus Climate Change Service
+  information (Hersbach et al. 2020, doi:10.1002/qj.3803), read from Google's
+  ARCO-ERA5 public copy. Neither the European Commission nor ECMWF is
+  responsible for any use that may be made of the Copernicus information or
+  data it contains.
+- Depth: GEBCO Compilation Group (2024) GEBCO 2024 Grid
+  (doi:10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f), free to use with this
+  credit; or, if GEBCO's server didn't answer, NOAA NCEI ETOPO 2022 Global Relief
+  Model (doi:10.25921/fd45-gt74), public domain. Each file's header names which.

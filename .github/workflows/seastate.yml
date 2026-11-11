@@ -1,0 +1,82 @@
+# Sea state data for the 3D view (src/boatsim/oceandata/seastate.py): ERA5 wind
+# sea and two swell partitions over the sandbox corridor, 1 deg, 3-hourly, one
+# file per month, plus a depth map of the Chesapeake-Delmarva box. Display
+# only: nothing in the simulator reads them.
+# Run it by hand: Actions tab -> "Sea state data" -> Run workflow. Tick
+# "publish" to put the files on the seastate-data release; the 3D page's build
+# (sea3d.yml) copies them into public/seastate/ when the release exists.
+# No secrets: ARCO-ERA5 is a public Google Cloud bucket and the depth grids are
+# public OPeNDAP servers. Free runners only.
+name: Sea state data
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Weather year"
+        default: "2020"
+      months:
+        description: "Months (space separated)"
+        default: "4 5 6 7 8 9 10 11"
+      publish:
+        description: "Publish to the seastate-data release"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: seastate-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  YEAR: ${{ inputs.year }}
+  MONTHS: ${{ inputs.months }}
+jobs:
+  seastate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write  # only for the publish step
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Wave partitions from ARCO-ERA5
+        run: python -m boatsim.oceandata.seastate seastate "$YEAR" --months $MONTHS --out site --workers 8
+      # GEBCO first, ETOPO 2022 as the fallback; a failure here leaves the sea
+      # state files to publish on their own (the page treats depth as optional).
+      - name: Depth, Chesapeake-Delmarva
+        continue-on-error: true
+        run: python -m boatsim.oceandata.seastate depth --out site
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "| File | kB |"; echo "|---|---|"
+            for f in site/*; do echo "| $(basename $f) | $(( $(stat -c %s $f) / 1000 )) |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seastate-${{ env.YEAR }}
+          path: site/
+          retention-days: 90
+      - name: Publish to the seastate-data release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DEPTH=$(python -c "import json; print(json.load(open('site/depth_chesapeake.json'))['attribution'])" 2>/dev/null || echo "none in this release")
+          cat > NOTES.md <<EOF
+          Sea state (wind sea and two swell partitions, 1 deg, 3-hourly) and Chesapeake depth for
+          the 3D view. Display only. Rebuilt by the Sea state data workflow; format in
+          src/boatsim/oceandata/seastate.py.
+
+          Data sources (thinned and quantised by us):
+          - ERA5 waves: Contains modified Copernicus Climate Change Service information $YEAR (Hersbach et al. 2020, doi:10.1002/qj.3803), read from Google's ARCO-ERA5. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains.
+          - Depth: $DEPTH
+          EOF
+          gh release view seastate-data >/dev/null 2>&1 || gh release create seastate-data \
+            --title "Sea state data for the 3D view" --notes-file NOTES.md
+          gh release edit seastate-data --notes-file NOTES.md
+          gh release upload seastate-data site/* --clobber
