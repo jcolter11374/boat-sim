@@ -94,7 +94,11 @@ export const PAGES = [
     drawing: () => (window.__sea3d?.frames ?? 0) > 10,
     frames: () => window.__sea3d.frames,
     // The sea selector rebuilds the sea at the new wave height.
-    act: async (page, o) => page.selectOption("#sea", "gale", o),
+    // The title screen (if this deploy has one) hides the sea panel until "Just watch the sea".
+    act: async (page, o) => {
+      if (await page.locator("#t-sea").isVisible()) await page.click("#t-sea", o);
+      return page.selectOption("#sea", "gale", o);
+    },
     responded: () => Math.abs(window.__sea3d.hs - 5) < 1e-6,
   },
   {

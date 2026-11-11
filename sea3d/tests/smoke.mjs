@@ -42,6 +42,20 @@ try {
   mkdirSync("test-output", { recursive: true });
   const log = [];
 
+  // Title screen and shared top bar (one-game plan, step 2): the menu shows over the
+  // sea, every menu link is a page, and "Just watch the sea" brings the sea panel back.
+  const ts = await page.evaluate(() => ({
+    title: !document.getElementById("title").hidden,
+    panel: getComputedStyle(document.getElementById("panel")).display,
+    bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
+    barH: document.getElementById("topbar")?.getBoundingClientRect().height,
+    build: document.getElementById("t-build").classList.contains("main"),
+  }));
+  if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
+  await page.click("#t-sea");
+  const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
+  if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
+
   for (const sea of ["calm", "moderate", "gale"]) {
     await page.selectOption("#sea", sea);
     const f0 = await page.evaluate(() => window.__sea3d.frames);
