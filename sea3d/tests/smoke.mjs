@@ -426,7 +426,7 @@ try {
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
     // stop a known reason, and the game ends in a results card that follows the draw rule.
-    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "over", "order_arrived"];
+    const STOPS = ["time", "battery", "wind", "land", "breakdown", "ghost_passed", "passed_ghost", "over", "order_arrived"];
     const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
     let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
     if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
