@@ -161,6 +161,10 @@ def test_a_voyage_runs_end_to_end():
     last = log.rows[-1]
     made_km = math.hypot((last["lon"] + 74.94) * 89.0, (last["lat"] - 36.65) * 111.0)
     assert 200 < made_km < 300  # about 5.6 kn, 250 km a day
+    # The log carries the yacht's own state for the 3D page (wind from the west on
+    # its port quarter: it leans a little to starboard under full sail).
+    assert last["sail_plan"] == "full" and last["engine_on"] is False
+    assert 0.0 <= last["heel"] < 5.0
 
 
 # --- the joke fleet's small boats: a crewless dinghy and beach cat --------------------
