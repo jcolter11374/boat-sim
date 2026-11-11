@@ -4,7 +4,8 @@ autopilot sails the same launch beside them as a ghost.
 What the page's worker calls (Pyodide), one game per worker:
 
     from boatsim.sandbox.helm import Game
-    g = Game(env, choices=None, launch_index=0)       # 1 April 2020
+    days = launch_days(env)                           # every day the bundle covers
+    g = Game(env, choices=None, day=days[k]["date"])  # or launch_index=0 (1 April 2020)
     g.order("finish", 0.5)                            # heading, power (0-1)
     out = g.run(hours=24)                             # or g.run(soc_below=0.3)
     out["stopped"], out["status"], out["track"]
@@ -73,6 +74,40 @@ MODES = ("hands_on", "base")
 ORDER_EVERY = timedelta(hours=24)  # "Real base station": one order a day
 COMPASS_LEG_M = 2_000_000.0  # GUESS: a compass order is a waypoint this far along the bearing
 SAVE_VERSION = 1
+LAUNCH_MONTHS = (4, 5, 6)  # the target window (John, 8 Nov): April to June
+LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the bundle
+SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
+
+
+def day_seed(start: datetime) -> int:
+    """The seed for a launch day. The 1st and 15th keep the grid's and the
+    replays' seeds (year * 1000 + place among the year's 24 launches), so the
+    ghost on those days is exactly the Boatyard's voyage. Every other day gets
+    year * 1000 + 100 + day of the year, clear of those."""
+    for t, seed in launches(start.year):
+        if t == start:
+            return seed
+    return start.year * 1000 + 100 + start.timetuple().tm_yday
+
+
+def launch_days(
+    env, max_days: float = MAX_DAYS, lookahead_days: float = LOOKAHEAD_DAYS
+) -> list[dict]:
+    """Every April to June launch day (noon) the weather bundle covers for a
+    whole voyage, with its seed. More days than the six odds launches, so one
+    unlucky seed can't decide the game (Ravi, 11 Nov: 1 May 2020 loses every
+    two-box build on day 3.9). `odds` marks the six that match the Boatyard."""
+    year = int(env.meta["year"])
+    first = datetime.fromisoformat(env.meta["first"])
+    last = datetime.fromisoformat(env.meta["last"]) + timedelta(days=1)
+    odds = {t for t, _ in launches(year)}
+    out = []
+    t = datetime(year, LAUNCH_MONTHS[0], 1, 12)
+    while t.month in LAUNCH_MONTHS:
+        if t >= first and t + timedelta(days=max_days + lookahead_days) <= last:
+            out.append({"date": t.date().isoformat(), "seed": day_seed(t), "odds": t in odds})
+        t += timedelta(days=1)
+    return out
 
 
 class PlayerBase:
@@ -100,11 +135,12 @@ class Game:
         self,
         env,
         choices: dict | None = None,
-        launch_index: int = 0,
+        launch_index: int | None = None,
         safe: bool | None = None,
         breakdowns: bool = True,
         max_days: float = MAX_DAYS,
         mode: str = "hands_on",
+        day: str | None = None,
     ):
         from boatsim.runner.land import default_land
 
@@ -113,10 +149,21 @@ class Game:
         if safe is None:
             safe = mode == "base"  # the boat's own safe mode acts between base orders
         self.mode, self.safe, self.max_days = mode, safe, max_days
-        self.launch_index = launch_index
+        if day is not None and launch_index is not None:
+            raise ValueError("give a launch day or a launch index, not both")
+        self.launch_index, self.day = launch_index, day
         self.choices = choices
         self.design = catalog.design_for(choices)
-        self.start, self.seed = launches(env)[launch_index]
+        if day is not None:
+            self.start = datetime.fromisoformat(day).replace(hour=12)
+            # Any April to June noon inside the bundle; a voyage that later
+            # sails past its end stops as "left_data_box", as in run_voyage.
+            ok = {d["date"] for d in launch_days(env, 0.0, 0.0)}
+            if self.start.date().isoformat() not in ok:
+                raise ValueError(f"{day} is not a launch day this weather covers")
+            self.seed = day_seed(self.start)
+        else:
+            self.start, self.seed = launches(env)[launch_index or 0]
         voyage = self.design.voyage
         self.drop = (voyage["drop_lat"], voyage["drop_lon"])
         land = default_land()
@@ -448,6 +495,18 @@ class Game:
             verdict = "lost"
         else:
             verdict = "neither_finished"
+        shared = (
+            verdict == "neither_finished"
+            and me["outcome"] == gh["outcome"]
+            and me["outcome"] not in ("at_sea", "left_data_box")
+            and me["breakdowns"] == gh["breakdowns"]
+            and abs(me["days"] - gh["days"]) < DRAW_DAYS
+            and me["days"] < SHARED_LOSS_DAYS
+        )
+        note = None
+        if shared:
+            what = "An electronics failure" if "part_failed" in me["breakdowns"] else "Bad luck"
+            note = f"{what} no one could steer around: both boats lost. Try another day."
         return {
             "build": catalog.grid_id(self.choices),
             "launch": _iso(self.start),
@@ -459,6 +518,8 @@ class Game:
             "margin_days": margin,  # positive: the player finished first
             "verdict": verdict,
             "breakdowns_differ": me["breakdowns"] != gh["breakdowns"],
+            "shared_loss": shared,  # both lost early to the same thing: not the player's doing
+            "note": note,
             "orders": self.orders,
         }
 
@@ -472,6 +533,7 @@ class Game:
             "v": SAVE_VERSION,
             "c": self.choices,
             "l": self.launch_index,
+            "day": self.day,
             "m": self.mode,
             "s": self.safe,
             "b": self.breakdowns,
@@ -501,6 +563,7 @@ class Game:
                 env,
                 choices=p["c"],
                 launch_index=p["l"],
+                day=p.get("day"),
                 safe=p["s"],
                 breakdowns=p["b"],
                 max_days=p["d"],

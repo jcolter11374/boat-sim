@@ -11,7 +11,7 @@ from test_sandbox import _fake_sources
 from boatsim.autonomy.helm import HelmAutopilot
 from boatsim.sandbox import forcing as F
 from boatsim.sandbox import run as R
-from boatsim.sandbox.helm import Game
+from boatsim.sandbox.helm import Game, launch_days
 from boatsim.types import Mission, Sensors, Waypoint
 
 MAY1 = 2  # launch index of 1 May 2020, inside the test bundle (1-4 May)
@@ -196,3 +196,47 @@ def test_forecast_stops_at_the_end_of_the_bundle(env):
     g = Game(env, launch_index=MAY1, max_days=0.5)
     f = g.forecast(hours=240)
     assert 0 < len(f) < 41 and f[-1]["t"] <= "2020-05-04T18:00"
+
+
+# --- Any launch day, and losses nobody could steer around ----------------------
+
+
+def test_launch_days_cover_the_bundle_and_keep_the_odds_seeds(env):
+    assert launch_days(env) == []  # 1-4 May holds no whole voyage
+    days = launch_days(env, max_days=0.5, lookahead_days=0.0)
+    assert [d["date"] for d in days] == ["2020-05-01", "2020-05-02", "2020-05-03", "2020-05-04"]
+    may1 = days[0]
+    assert may1["odds"] and may1["seed"] == R.launches(env)[MAY1][1]
+    assert not days[1]["odds"] and days[1]["seed"] == 2020 * 1000 + 100 + 123  # 2 May
+    assert len({d["seed"] for d in days}) == len(days)
+    g = Game(env, day="2020-05-02", max_days=0.5)
+    assert g.start == datetime(2020, 5, 2, 12) and g.seed == days[1]["seed"]
+    h = Game.load(env, g.save())
+    assert h.start == g.start and h.seed == g.seed
+    with pytest.raises(ValueError):
+        Game(env, day="2020-07-04", max_days=0.5)
+    with pytest.raises(ValueError):
+        Game(env, day="2020-05-02", launch_index=0, max_days=0.5)
+
+
+def test_a_shared_early_loss_says_so_plainly(env):
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    r = g.result()
+    assert not r["shared_loss"] and r["note"] is None  # still at sea
+    from types import SimpleNamespace as NS
+
+    from boatsim.types import Event, EventKind, Outcome
+
+    def dead(v):
+        t = g.start + timedelta(days=3.9)
+        ev = Event(t, EventKind.PART_FAILED, "electronics")
+        return NS(state=NS(t=t), log=NS(rows=[{"soc": 0.7}], events=[ev], outcome=Outcome.LOST),
+                  done=True, c=v.c)  # fmt: skip
+
+    g.mine, g.ghost = dead(g.mine), dead(g.ghost)
+    g._advance = lambda v, until=None: None
+    r = g.result()
+    assert r["shared_loss"] and r["verdict"] == "neither_finished"
+    assert r["note"] == (
+        "An electronics failure no one could steer around: both boats lost. Try another day."
+    )
