@@ -18,6 +18,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Quality } from "../boats/parts";
 import type { Place } from "./place";
+import { reflectable } from "../mirror";
 import { NOISE, R_EARTH, bendWithEarth, distanceField, metresPerDegree, rnd } from "./shader";
 
 export interface Building {
@@ -277,6 +278,11 @@ export class Town {
     const town = new Town();
     town.build(d, hgt, place, quality);
     return town;
+  }
+
+  /** Put the buildings, piers, dome and moored boats in the sea's mirror (not the night reflections). */
+  mirrored(): void {
+    for (const o of this.group.children) if (o !== this.reflections?.mesh) reflectable(o);
   }
 
   /** True where a tree mustn't stand (inside or right next to a building or pier); world x, z. */
