@@ -214,6 +214,37 @@ const CHECKS = {
   "helm-base": { path: HELM, run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
 };
 
+// The Sea page leads into the game (sea3d/src/sailLink.ts): with Gale on screen,
+// "Sail this sea" opens the helm with the Spring gale challenge already picked,
+// the player sets sail as they are, and it sails a day. "Build a boat" opens the Boatyard.
+CHECKS["sea-sail"] = {
+  path: "?title=0&quality=low",
+  run: async (page) => {
+    await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 2 * MIN });
+    must(await page.isVisible("#sail"), 'the Sea page has no "Sail this sea" button');
+    const build = await page.evaluate(() => (document.getElementById("build")?.offsetParent ? document.getElementById("build").href : ""));
+    must(build === `${SITE}boatyard.html`, `"Build a boat" should show and open the Boatyard, not ${JSON.stringify(build)}`);
+    await page.selectOption("#sea", "gale");
+    await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale$/, { timeout: 2 * MIN }), clickNamed(page, "#sail", "Sail this sea")]);
+    // Low quality from here, like the other helm checks (software graphics on runners).
+    await page.goto(`${page.url()}&quality=low`, { waitUntil: "load", timeout: 2 * MIN });
+    return helm(
+      async (p) => {
+        await p.waitForFunction(() => !document.querySelector("#chpick").hidden, null, { timeout: MIN }).catch(() => {
+          throw new CheckFail("the weather challenge picker never appeared");
+        });
+        const v = await p.evaluate(() => document.querySelector("#challenge").value);
+        must(v === "spring-gale", `the helm arrived with ${JSON.stringify(v)} picked, not Spring gale`);
+      },
+      async (p) => {
+        const id = await p.evaluate(() => window.__helm.challenge);
+        must(id === "spring-gale", `the game sailed ${JSON.stringify(id)}, not Spring gale`);
+        return `, from the Sea page on challenge ${id}`;
+      },
+    )(page);
+  },
+};
+
 // One helm check per boat the live picker offers (our kayak is helm-drop).
 const STOCK_BOATS = ["stock_cruiser31", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14", "stock_beachcat16"];
 for (const b of STOCK_BOATS)

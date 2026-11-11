@@ -635,6 +635,55 @@ try {
       log.push(`helm challenge ${chFile.id}: started ${s.st.boat.t}, sailed to day ${s.st.day.toFixed(2)} (${s.stop})`);
     }
   }
+  // The Sea page leads into the game (src/sailLink.ts): "Sail this sea" opens the helm in
+  // weather like the sea on screen (Calm -> Gentle June, Gale -> Spring gale, Moderate ->
+  // the usual launch), and "Build a boat" opens the Boatyard. ?title=0 skips #309's menu.
+  await page.goto(`${URL}?quality=low&title=0`);
+  await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 2, null, { timeout: 30000 });
+  const WANT = { calm: "helm.html?challenge=gentle-june", moderate: "helm.html", gale: "helm.html?challenge=spring-gale" };
+  for (const [sea, want] of Object.entries(WANT)) {
+    await page.selectOption("#sea", sea);
+    const w = await page.evaluate(() => ({ sail: document.getElementById("sail").href, build: document.getElementById("build").href, shown: !!document.getElementById("sail").offsetParent && !!document.getElementById("build").offsetParent }));
+    if (w.sail !== URL + want) fail(`Sea page, ${sea}: "Sail this sea" goes to ${w.sail}, want ${URL + want}`);
+    if (w.build !== `${URL}boatyard.html` || !w.shown) fail(`Sea page: "Build a boat" should show and open the Boatyard: ${JSON.stringify(w)}`);
+  }
+  await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale$/, { timeout: 30000 }), page.click("#sail")]);
+  // On to the helm at Low quality, as the rest of this test runs it (software graphics).
+  await page.goto(`${page.url()}&quality=low`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  const chJson = await page.evaluate(async () => {
+    try {
+      const r = await fetch("./challenges/challenges.json");
+      return r.ok && !(r.headers.get("content-type") ?? "").includes("text/html");
+    } catch {
+      return false;
+    }
+  });
+  if (!chJson) {
+    // No challenge files: the link quietly falls back to the usual launch.
+    const fb = await page.evaluate(() => ({ asked: window.__helm.asked, picker: !document.getElementById("chpick").hidden, launch: document.getElementById("launch").disabled }));
+    if (fb.asked || fb.picker || fb.launch) fail(`helm from the Sea page without challenge files: ${JSON.stringify(fb)}`);
+    log.push("Sea page -> helm: no challenge files, so the usual launch");
+  } else {
+    await page.waitForFunction(() => !document.getElementById("chpick").hidden, null, { timeout: 30000 });
+    const pre = await page.evaluate(() => ({ asked: window.__helm.asked, value: document.getElementById("challenge").value, story: document.getElementById("chstory").textContent, launchOff: document.getElementById("launch").disabled }));
+    if (pre.asked !== "spring-gale" || pre.value !== "spring-gale" || !pre.launchOff || !/gale/i.test(pre.story)) fail(`helm from the Sea page should arrive with Spring gale picked: ${JSON.stringify(pre)}`);
+    if (!hm.ready) {
+      log.push(`Sea page -> helm: Spring gale preselected; no simulator to sail it (${hm.err})`);
+    } else {
+      await page.click("#go");
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+      const g = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, t: window.__helm.status?.boat?.t }));
+      if (!g.ready || g.err || g.id !== "spring-gale" || !g.t?.startsWith("2020-04-01")) fail(`helm from the Sea page didn't start Spring gale: ${JSON.stringify(g)}`);
+      log.push(`Sea page -> helm: Spring gale preselected and started (${g.t})`);
+    }
+  }
+  // Moderate opens the usual launch, with nothing preselected.
+  await page.goto(`${URL}helm.html?quality=low`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  await page.waitForTimeout(500);
+  const mod = await page.evaluate(() => ({ asked: window.__helm.asked, value: document.getElementById("challenge").value }));
+  if (mod.asked || mod.value) fail(`a plain helm link preselected a challenge: ${JSON.stringify(mod)}`);
   // Design leaderboard: the published board if there is one, else it says so; the
   // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
   await page.goto(`${URL}leaderboard.html`);

@@ -32,6 +32,7 @@ import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planA
 import { copyText } from "./helm/share";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
+import { askedChallenge } from "./sailLink";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
@@ -231,6 +232,8 @@ const page = {
   share: "",
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
+  /** The challenge a link preselected (?challenge=, from the Sea page's "Sail this sea"); "" = none. */
+  asked: "",
   /** The port the game started from ("" = the usual drop), and how many the picker offers. */
   startPort: "",
   ports: 0,
@@ -753,6 +756,10 @@ function showChallenges(): void {
     sel.append(o);
   }
   $("chpick").hidden = !!shared;
+  // "Sail this sea" on the Sea page asks for the weather that matches its sea (?challenge=).
+  const asked = askedChallenge(location.search, challenges.map((c) => c.id), !!shared);
+  if (asked) sel.value = asked;
+  page.asked = asked ?? "";
   showChallenge();
 }
 

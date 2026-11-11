@@ -18,6 +18,7 @@ import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Atmosphere } from "./atmosphere";
 import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./waves";
+import { mountSailLink } from "./sailLink";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -47,6 +48,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const app = $("app");
 const seaSelect = $<HTMLSelectElement>("sea");
 const qualitySelect = $<HTMLSelectElement>("quality");
+mountSailLink(); // "Sail this sea" follows the sea-state picker
 const headingSelect = $<HTMLSelectElement>("heading");
 const underCheck = $<HTMLInputElement>("under");
 const tourCheck = $<HTMLInputElement>("tour");
