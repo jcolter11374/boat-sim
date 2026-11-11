@@ -12,6 +12,8 @@ export interface Report {
   lon: number;
   soc?: number;
   hdg?: number;
+  /** Where it came from: the daily Iridium report, or a 6-hourly backup-beacon fix while Iridium is down. The drop has none. */
+  source?: "iridium" | "beacon";
 }
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
@@ -62,6 +64,8 @@ export interface Status {
     /** Base's dead-reckoned guess at where the boat is now (#214). */
     estimate?: { lat: number; lon: number; from_report: string; age_h: number };
   };
+  /** How long the boat has gone unheard, against the race's limits (older simulators leave it out). */
+  silence?: { days_in_a_row: number; days_total: number; limit_in_a_row: number; limit_total: number };
   /** False in base mode: the page shows what base knows, not the true boat (#214). */
   show_true_position?: boolean;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
@@ -95,7 +99,7 @@ export interface Card {
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
 }
-export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
+export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "silence" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
   hours?: number;
   max_hours?: number;
@@ -237,7 +241,13 @@ export function stopText(s: Stop, st: Status | null): string {
     case "wind":
       return "The wind is getting up.";
     case "land":
-      return "Land is within 50 km.";
+      return "Land is getting close.";
+    case "silence": {
+      const q = st?.silence;
+      return q
+        ? `Nothing has heard from the boat for ${q.days_in_a_row.toFixed(1)} days (${q.days_total} silent days in all). The race disqualifies a boat silent more than ${q.limit_in_a_row} days in a row or ${q.limit_total} in total.`
+        : "The boat has gone quiet; the race disqualifies a boat that stays silent too long.";
+    }
     case "breakdown":
       return "Something went wrong on board (see the note on the right).";
     case "ghost_passed":
