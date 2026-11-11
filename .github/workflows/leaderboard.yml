@@ -1,0 +1,84 @@
+# Design leaderboard, data side (roadmap item 5; boatsim.mc.leaderboard).
+# Builds ONE board JSON from ONE job, so every design is scored on the same
+# machine, numpy and commit (#197: runner CPUs differ in the last bit, and a long
+# voyage is chaotic, so gaps between jobs can be machine noise). No UI yet; the
+# board is an artifact only, behind BOATSIM_LEADERBOARD=1.
+#
+#   public launch set  - April to June, every 7 days, 2015-2019: 65 launches
+#   holdout launch set - the same spacing in 2021, kept off the board (rule 6)
+#   seeds              - year * 1000 + i, the same for every design (rule 1)
+#
+# Each year: fetch that year's weather and currents, score every entry, then
+# delete the cache so seven years fit on the runner's disk. Free runners only.
+# Run it by hand: Actions tab -> "Design leaderboard" -> Run workflow.
+name: Design leaderboard
+on:
+  workflow_dispatch:
+    inputs:
+      public_years:
+        description: "Public launch-set years (space separated)"
+        default: "2015 2016 2017 2018 2019"
+      holdout_years:
+        description: "Holdout years (space separated; not on the board)"
+        default: "2021"
+      every_days:
+        description: "Days between launches"
+        default: "7"
+      builds:
+        description: "Entries (Boatyard build ids, space separated; empty = the default list)"
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: leaderboard-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  BOATSIM_LEADERBOARD: "1"
+  BOATSIM_REQUIRE_LAND: "1"
+  BOATSIM_REQUIRE_SHIPS: "1"
+  BOATSIM_NO_FETCH: "1"  # data is pre-fetched per year; a cache miss mid-run is an error
+  COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+  COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+  PUBLIC_YEARS: ${{ inputs.public_years || '2015 2016 2017 2018 2019' }}
+  HOLDOUT_YEARS: ${{ inputs.holdout_years || '2021' }}
+  EVERY_DAYS: ${{ inputs.every_days || '7' }}
+  BUILDS: ${{ inputs.builds }}
+jobs:
+  board:  # one job on purpose: do not split this into a matrix (#197)
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]'
+      - name: Score every entry, year by year, in this one job
+        run: |
+          set -euo pipefail
+          mkdir -p runs/lb
+          score() {  # $1 = year, $2 = public|holdout
+            python -m boatsim.oceandata fetch-glorys "$1-04" "$(($1 + 1))-01"
+            python -m boatsim.oceandata fetch-era5 "$1-04-01" "$(($1 + 1))-01-05" --workers 4
+            python -m boatsim.mc.leaderboard score-year "$1" --every-days "$EVERY_DAYS" \
+              --workers 4 ${BUILDS:+--builds $BUILDS} --out "runs/lb/$2_$1.csv"
+            rm -rf data/era5 data/glorys
+          }
+          for y in $PUBLIC_YEARS; do echo "::group::public $y"; score "$y" public; echo "::endgroup::"; done
+          for y in $HOLDOUT_YEARS; do echo "::group::holdout $y"; score "$y" holdout; echo "::endgroup::"; done
+      - name: Assemble the board and check the fairness rules
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          hold=(runs/lb/holdout_*.csv)
+          python -m boatsim.mc.leaderboard assemble --public runs/lb/public_*.csv \
+            --holdout "${hold[@]}" --every-days "$EVERY_DAYS" --out runs/lb/board.json \
+            | tee runs/lb/report.md
+          { echo '```'; cat runs/lb/report.md; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          python -m boatsim.mc.leaderboard report runs/lb/board.json --strict
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: leaderboard
+          path: runs/lb/
+          retention-days: 90
