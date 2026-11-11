@@ -81,6 +81,15 @@ class Variant:
     min_gain_h: float | None = None
     # WaypointAutopilot keyword overrides (e.g. steer="pursuit"), under safe mode.
     guidance: tuple[tuple[str, object], ...] = ()
+    # How base plans (runner.simulate standard_components routing=): None keeps
+    # the design's own ("fan" unless it says otherwise), or "fan" / "isochrone".
+    routing: str | None = None
+    # Forecast error scale for base (1 = the error model as it stands, 2 = twice
+    # as bad); None keeps the voyage's own. A router that leans on the forecast
+    # should keep its gain when the forecast is worse.
+    forecast_error: float | None = None
+    # The row this variant is paired against in the report.
+    against: str = "baseline"
 
 
 BAY_MOUTH = DROP_POINT  # first waypoint of every route, as in default_mission (the drop)
@@ -286,6 +295,31 @@ VARIANTS: dict[str, Variant] = {
         "(now the default, so this row matches the design as it stands)",
         guidance=(("steer", "pursuit"),),
     ),
+    # Weather routing for the sailing boats (#269): run with --design on a stock
+    # sailboat (configs/stock_sail_drone7.yaml or stock_cruiser31.yaml).
+    "isochrone": Variant(
+        "routing",
+        "Base routes on the forecast with isochrones (5-day weather router)",
+        routing="isochrone",
+    ),
+    "fan_table": Variant(
+        "routing",
+        "Today's planner with a wing-sail boat's own speed table (#269)",
+        routing="fan_table",
+    ),
+    "fan_forecast_x2": Variant(
+        "routing",
+        "Today's planner, forecast error doubled",
+        routing="fan",
+        forecast_error=2.0,
+    ),
+    "isochrone_forecast_x2": Variant(
+        "routing",
+        "Isochrone router, forecast error doubled (paired with the row above)",
+        routing="isochrone",
+        forecast_error=2.0,
+        against="fan_forecast_x2",
+    ),
     "pursuit_nocrab": Variant(
         "steering",
         "As pursuit, but never crab into the current far from land",
@@ -349,6 +383,38 @@ class SensitivityVoyage(MonthlyVoyage):
                 guidance=WaypointAutopilot(**dict(v.guidance)) if v.guidance else None,
                 **dict(v.safemode),
             )
+        if v.routing is not None or v.forecast_error is not None:
+            # Base and its forecast as standard_components builds them for this
+            # routing and error, on the same weather (the forecast's truth).
+            from boatsim.runner.simulate import standard_components
+
+            alt = standard_components(
+                design,
+                c.env,
+                c.forecast.truth,
+                seed=seed,
+                forecast_error=self.forecast_error
+                if v.forecast_error is None
+                else v.forecast_error,
+                routing="fan" if v.routing == "fan_table" else v.routing,
+            )
+            c.base, c.forecast = alt.base, alt.forecast
+            if v.routing == "fan_table":
+                # Today's fan planner, but costing a wing-sail boat with no VPP
+                # polar from its own speed table, as the isochrone router does.
+                from boatsim.basestation.isochrone import SteadyPolar
+
+                # Boats with a polar or no wing are costed as before (same as "fan").
+                boat = getattr(c.vessel, "inner", c.vessel)
+                if getattr(boat, "polar", None) is None and getattr(boat, "sail", None):
+                    table = SteadyPolar(boat)
+                    c.base = ForecastReplanPolicy(
+                        route=self.mission().waypoints,
+                        polar=table,
+                        boat_speed=ForecastReplanPolicy.polar_factor * table.speed_ms(7.0, 100.0),
+                        min_twa_deg=boat.sail.min_upwind_twa_deg,
+                        max_twa_deg=boat.sail.min_downwind_twa_deg,
+                    )
         route = self.mission().waypoints
         if v.base == "no_corrections":
             c.base = ForecastReplanPolicy(route=route, min_gain_h=math.inf)
@@ -407,7 +473,9 @@ def run_year(
     else:
         with ProcessPoolExecutor(max_workers=workers) as pool:
             rows = list(pool.map(_tagged, tasks))
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["design"] = Path(job_kw.get("design_path") or "configs/v4_kayak.yaml").stem
+    return df
 
 
 # --- Report -----------------------------------------------------------------
@@ -416,10 +484,12 @@ def run_year(
 def compare(df: pd.DataFrame) -> pd.DataFrame:
     """One row per variant, paired against the baseline voyage by voyage."""
     key = ["start", "seed"]
-    base = df[df["variant"] == "baseline"].set_index(key)
-    base_ok = base["outcome"] == "arrived"
     rows = []
     for name in [v for v in VARIANTS if v in set(df["variant"])]:
+        v = VARIANTS[name]
+        against = v.against if v.against in set(df["variant"]) else "baseline"
+        base = df[df["variant"] == against].set_index(key)
+        base_ok = base["outcome"] == "arrived"
         g = df[df["variant"] == name]
         ok = g["outcome"] == "arrived"
         k = int(ok.sum())
@@ -428,7 +498,9 @@ def compare(df: pd.DataFrame) -> pd.DataFrame:
         common = pair.index.intersection(base_ok.index)
         gained = int((pair[common] & ~base_ok[common]).sum())
         lost = int((~pair[common] & base_ok[common]).sum())
-        v = VARIANTS[name]
+        # Days saved on voyages that finish both ways (positive = faster).
+        both = common[pair[common].values & base_ok[common].values]
+        saved = base.loc[both, "days"] - g.set_index(key).loc[both, "days"]
         air = g["airtime_usd"].median() if "airtime_usd" in g else math.nan
         rows.append(
             {
@@ -449,6 +521,11 @@ def compare(df: pd.DataFrame) -> pd.DataFrame:
                 "odds_unknown_50": swept_odds(g, 0.50),
                 "airtime_usd": air,
                 "min_soc": g["min_soc"].median(),
+                "against": against,
+                "both_finished": len(both),
+                "median_days_saved": saved.median() if len(both) else math.nan,
+                "faster": int((saved > 0).sum()),
+                "slower": int((saved < 0).sum()),
             }
         )
     return pd.DataFrame(rows)
@@ -459,11 +536,13 @@ def report_markdown(df: pd.DataFrame) -> str:
     years = sorted(df["year"].unique())
     months = sorted(df["month"].unique())
     n = int(t["voyages"].max())
+    stem = df["design"].iloc[0] if "design" in df.columns else "v4_kayak"
+    boat = "the v4 kayak" if stem == "v4_kayak" else f"`{stem}`"
     lines = [
         "# Sensitivity study: April to June launches",
         "",
         (
-            f"Each row is the v4 kayak with one change, sailing the same {n} launches "
+            f"Each row is {boat} with one change, sailing the same {n} launches "
             f"({MONTHS[months[0] - 1]} to {MONTHS[months[-1] - 1]}, {years[0]} to "
             f"{years[-1]}, real weather and currents) with the same random dice. "
             "'Finished' follows each row's own finish rule (the Microtransat target "
@@ -496,6 +575,23 @@ def report_markdown(df: pd.DataFrame) -> str:
             f"{'' if same else f'{r.sign_p:.0%}'} | {r.median_days:.0f} | "
             f"{r.odds_unknown_10:.0%} | {r.odds_unknown_50:.0%} | {r.airtime_usd:.0f} | "
             f"{r.min_soc:.0%} |"
+        )
+    lines += [
+        "",
+        (
+            "Speed, paired: on voyages that finish both ways, days saved against the row it "
+            "is paired with (positive = faster)."
+        ),
+        "",
+        "| Change | Paired with | Both finished | Median days saved | Faster | Slower |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in t.itertuples():
+        if r.variant == r.against:
+            continue
+        lines.append(
+            f"| {r.label} | {VARIANTS[r.against].label} | {r.both_finished} | "
+            f"{r.median_days_saved:+.1f} | {r.faster} | {r.slower} |"
         )
     lines += ["", "How voyages ended:", "", "| Change | " + " | ".join(_endings(df)) + " |"]
     lines.append("|---" * (1 + len(_endings(df))) + "|")
