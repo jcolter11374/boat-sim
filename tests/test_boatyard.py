@@ -15,7 +15,7 @@ from boatsim.vessel.hazards import HazardParams
 
 
 def test_grid_is_catalog_builds_and_two_rev_b_builds():
-    assert len(Y.BUILDS) == 25 + 2
+    assert len(Y.BUILDS) == 28 + 2 + 2  # grid, Rev B pair, cat bracket
     assert {"k-p25", "k-p10", "k-p25-brain.one-box", "revb", "revb-spar"} <= set(Y.BUILDS)
     assert Y.BUILDS["k-p25"].options["thr"] == "two-t200"
 
@@ -98,3 +98,17 @@ def test_index_lists_every_build_with_its_odds_and_replays(tmp_path):
     assert [x["id"] for x in idx["builds"] if x["current"]] == ["k-p25"]
     assert idx["schema"] == 2 and idx["defaults"]["cruise_w"] == 25
     assert "ghi" not in idx["units"] and idx["commit"] == "abc"
+
+
+def test_the_cat_stays_over_guess_is_bracketed():
+    from boatsim.sandbox import catalog
+
+    cat = catalog.grid_id({"shape": "cat"})
+    for q in Y.CAT_STAYS_OVER:
+        b = Y.BUILDS[f"{cat}-over{round(q * 100)}"]
+        d = patched_design(load_design(Y.KAYAK), b.variant.design)
+        assert d.hazards["p_capsize_stays_over"] == q
+        assert d.hull["beam_m"] == 1.6 and d.propulsion["rudder"] is False
+        assert f"{cat}-over{round(q * 100)}" not in {catalog.grid_id(g) for g in catalog.GRID}
+    ids = list(Y.BUILDS)
+    assert ids.index(cat) < ids.index(f"{cat}-over20")  # the browser keeps the first tie

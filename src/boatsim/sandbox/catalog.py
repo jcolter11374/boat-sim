@@ -125,6 +125,121 @@ def _material(kg: float, leak: float, strike: float, basis: str, *extra) -> Opti
     )
 
 
+# --- Hull shape -------------------------------------------------------------------
+# Sizes agreed with Iris (the 3D models), 10 Nov 2026; each carries today's kit.
+# Every drag, windage and hazard number below is a GUESS scaled from the kayak
+# (configs/v4_kayak.yaml) by area and shape; mass is each shape's own, so its
+# drag numbers are for that weight (displacement_ref_kg) and only other options'
+# weight goes through the mass link. Displacement checked: volume below the
+# waterline x ~0.6 block coefficient x seawater ~= mass.
+KAYAK_KG = 123.0
+
+
+def _shape(kg: float, hull: dict, hazards: dict, basis: str, other: tuple = ()) -> Option:
+    return Option(
+        (
+            *(("hull", k, v) for k, v in {**hull, "displacement_ref_kg": kg}.items()),
+            *(("hazards", k, v) for k, v in hazards.items()),
+            *other,
+        ),
+        est=True,
+        basis=basis,
+        kg=kg - KAYAK_KG,
+    )
+
+
+SHAPES = {
+    # Two 3.0 x 0.30 m hulls 1.30 m apart (1.60 m overall), 140 kg, 0.16 m draft,
+    # bridge deck with the electronics pod and panels. No rudder (differential
+    # thrust) and no keel. Very stiff but not self-righting: a capsize is final.
+    "cat": _shape(
+        140.0,
+        {
+            "length_m": 3.0,
+            "beam_m": 1.6,
+            "waterline_length_m": 2.9,
+            "wetted_area_m2": 3.0,  # two hulls, (0.30 + 2 x 0.16) m girth x 0.85
+            "form_factor": 1.2,  # slender hulls
+            "wave_making_frac": 0.08,  # slender hulls make smaller waves
+            "waterplane_area_m2": 1.3,  # 2 x 2.9 x 0.30 x 0.75
+            "waterline_girth_factor": 4.2,  # two waterlines
+            "air_side_area_m2": 1.0,  # two hulls' topsides plus the bridge-deck pod
+            "air_front_area_m2": 0.5,
+            "lateral_cd_area_m2": 0.9,  # two hulls broadside, no keel
+            "keel_lift_slope_area_m2": 0.3,  # hulls only: more leeway than the kayak
+            "wave_drag_frac_per_m2": 0.12,
+            "wave_drag_beam_factor": 0.5,
+            "self_righting_dome": False,
+            "keel_bulb_kg": 0,
+        },
+        {
+            "hull_length_m": 3.0,
+            "hull_beam_m": 1.6,  # it takes a ~1.9 m breaker to roll it
+            "p_capsize_stays_over": 0.5,  # GUESS: half the breakers that roll it past ~70 deg
+            "p_part": {"rudder": 0.0},
+            "steering_per_day": 0.0,  # no rudder servo
+        },
+        "GUESS: twin hulls scaled from the kayak; not self-righting, so a capsize ends it",
+        (("propulsion", "rudder", False),),
+    ),
+    # 3.2 x 0.50 m hull riding low (0.18 m draft, 0.10 m freeboard), 175 kg with
+    # 35 kg of lead, a 0.55 m buoyant tower. Waves wash over the deck panels.
+    "semisub": _shape(
+        175.0,
+        {
+            "length_m": 3.2,
+            "beam_m": 0.5,
+            "waterline_length_m": 3.1,
+            "wetted_area_m2": 2.5,  # (0.50 + 2 x 0.18) m girth x 0.85, plus skeg and rudder
+            "form_factor": 1.25,
+            "wave_making_frac": 0.12,
+            "waterplane_area_m2": 1.16,  # 3.1 x 0.50 x 0.75
+            "air_side_area_m2": 0.5,  # 0.10 m freeboard plus the tower
+            "air_front_area_m2": 0.15,
+            "lateral_cd_area_m2": 0.6,
+            "keel_lift_slope_area_m2": 0.5,
+            "wave_drag_frac_per_m2": 0.10,  # waves wash over rather than lift it
+            "self_righting_dome": False,
+            "keel_bulb_kg": 35,
+        },
+        {
+            "hull_length_m": 3.2,
+            "hull_beam_m": 0.5,
+            "leak_per_day": round(0.0025 * 1.5, 6),  # GUESS: hatches often under water
+        },
+        "GUESS: low hull scaled from the kayak; deck panels awash give 60 % solar",
+        (("power", "mounting_mismatch", round(0.8 * 0.6, 3)),),  # Iris's 60 % yield
+    ),
+    # 3.0 x 0.85 x 0.18 m board, 105 kg, 0.06 m draft, 0.9 m fin with a 25 kg
+    # bulb, and a ~60 L buoyant deck pod (without it a wide flat board is as
+    # stable upside down as right way up).
+    "board": _shape(
+        105.0,
+        {
+            "length_m": 3.0,
+            "beam_m": 0.85,
+            "waterline_length_m": 2.9,
+            "wetted_area_m2": 2.6,  # flat bottom 2.9 x 0.85 x 0.9, plus fin, bulb, rudder
+            "form_factor": 1.2,
+            "wave_making_frac": 0.12,
+            "waterplane_area_m2": 1.97,  # 2.9 x 0.85 x 0.8
+            "air_side_area_m2": 0.5,  # 0.12 m of board edge plus the pod
+            "air_front_area_m2": 0.25,
+            "lateral_cd_area_m2": 0.5,
+            "keel_lift_slope_area_m2": 0.75,  # same fin as the kayak
+            "wave_drag_frac_per_m2": 0.2,  # a flat wide bottom slams in a seaway
+            "keel_bulb_kg": 25,
+        },
+        {
+            "hull_length_m": 3.0,
+            "hull_beam_m": 0.85,
+            # half the kayak's bulb: the 40 kg bulb rule, (50/25)^2
+            "p_inverted_stuck": round(4.0e-5 * (50 / 25) ** 2, 9),
+        },
+        "GUESS: flat board scaled from the kayak; half the bulb, so more often stuck inverted",
+    ),
+}
+
 SLOTS: dict[str, dict[str, Option]] = {
     "thr": {"two-t200": _thr(2), "one-t200": _thr(1, -0.45)},
     "sol": {
@@ -240,6 +355,7 @@ SLOTS: dict[str, dict[str, Option]] = {
             ("hull", "fouling_frac_per_day", 0.009),
         ),
     },
+    "shape": {"kayak": Option(basis="the v4 kayak as modelled"), **SHAPES},
     "spares": {
         "spares-full": Option(effect="no effect yet", basis="spares are for the trials only"),
         "spares-no-pixhawk": Option(effect="no effect yet", basis="spares are for the trials only"),
@@ -262,6 +378,7 @@ SLOT_NAMES = {  # as in Sam's catalog
     "paint": "Antifouling paint",
     "drive": "Drive",
     "material": "Hull material",
+    "shape": "Hull shape",
     "spares": "Spares",
 }
 
@@ -281,6 +398,7 @@ DEFAULTS = {
     "paint": "micron-csc",
     "drive": "solar-electric",
     "material": "polyethylene",
+    "shape": "kayak",
     "spares": "spares-full",
 }
 
@@ -371,6 +489,7 @@ GRID: tuple[dict, ...] = (
     {"drive": "hybrid"},
     {"drive": "wing-sail"},
     *({"material": m} for m in ("fibreglass", "carbon", "plywood-epoxy", "aluminium")),
+    *({"shape": s} for s in ("cat", "semisub", "board")),
     {"brain": "one-box", "beacon": "none"},
     {"sol": "solar-300", "bat": "two-100ah"},
     {"sol": "solar-300", "bat": "two-100ah", "cruise_w": 30},
