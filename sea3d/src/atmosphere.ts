@@ -34,7 +34,7 @@ export function compassToScene(elDeg: number, azDeg: number, out = new THREE.Vec
   return out.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
 }
 
-const DAY_HAZE = new THREE.Color(0xc9dbe6);
+const DAY_HAZE = new THREE.Color(0xabc3d7);
 const DUSK_HAZE = new THREE.Color(0xd8a58a);
 const NIGHT_HAZE = new THREE.Color(0x0a1424);
 const STORM_HAZE = new THREE.Color(0x7d8a94);
@@ -79,6 +79,61 @@ const FILM = {
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
+
+/**
+ * The stock sky model makes a clear day pale and milky: nearly white at the
+ * horizon and only a washed blue overhead, so the sea (which mirrors it) goes
+ * white too. Real clear air over the open ocean is a deep blue high up, paling
+ * to a bright, slightly hazy band just above the horizon, with a white glow
+ * round the sun. This adds that on top of the stock model (uClear 0..1: how much
+ * clear, sunlit sky there is; 0 at night and in a blow, so those stay as they were).
+ */
+function deepenSky(m: THREE.ShaderMaterial): void {
+  m.uniforms.uClear = { value: 1 };
+  m.uniforms.uWarm = { value: 0 };
+  m.uniforms.uTwilight = { value: 0 };
+  m.uniforms.uNight = { value: 0 };
+  m.fragmentShader = m.fragmentShader
+    .replace("void main() {", "uniform float uClear;\nuniform float uWarm;\nuniform float uTwilight;\nuniform float uNight;\nvoid main() {")
+    .replace(
+      "gl_FragColor = vec4( retColor, 1.0 );",
+      /* glsl */ `
+      {
+        float hgt = max(direction.y, 0.0);
+        float lum = dot(retColor, vec3(0.2126, 0.7152, 0.0722));
+        // Clear air: bluer and darker going up, but not in the bright glow round the sun.
+        float glow = smoothstep(0.75, 0.995, cosTheta);
+        float up = smoothstep(0.0, 0.55, hgt);
+        vec3 deep = mix(vec3(1.0), vec3(0.42, 0.62, 1.08), up * (1.0 - glow));
+        vec3 graded = mix(vec3(lum), retColor, 1.35) * deep;
+        // Just above the horizon: a pale, bright band of haze rather than flat white.
+        float band = 1.0 - smoothstep(0.0, 0.12, hgt);
+        graded = mix(graded, retColor * vec3(0.8, 0.9, 1.03), band * 0.6);
+        // Low sun: warm the sky on the sun's side, rose and violet opposite (the "belt of Venus").
+        float sunSide = 0.5 + 0.5 * cosTheta;
+        vec3 dusk = mix(vec3(0.95, 0.82, 1.0), vec3(1.18, 0.86, 0.62), sunSide);
+        graded *= mix(vec3(1.0), dusk, uWarm * (1.0 - 0.6 * up));
+        retColor = mix(retColor, max(graded, 0.0), uClear);
+        // Twilight, sun just below the horizon: the sky keeps a glow for half an hour
+        // or so. Orange low on the sun's side, a deepening blue overhead, and a
+        // rose band low on the opposite side above the earth's blue shadow.
+        float sunward = smoothstep(-0.2, 1.0, cosTheta);
+        float low = 1.0 - smoothstep(0.0, 0.35, hgt);
+        vec3 tw = vec3(0.025, 0.05, 0.11) * (1.0 - 0.5 * low);                 // twilight blue
+        tw += vec3(0.32, 0.13, 0.04) * pow(sunward, 3.0) * low * low;          // afterglow
+        float belt = smoothstep(0.03, 0.09, hgt) * (1.0 - smoothstep(0.09, 0.22, hgt));
+        tw += vec3(0.11, 0.06, 0.08) * belt * (1.0 - sunward);                // rose band
+        tw += vec3(0.01, 0.02, 0.05) * (1.0 - smoothstep(0.0, 0.05, hgt)) * (1.0 - sunward); // earth's shadow
+        retColor += tw * uTwilight;
+        // Full night: the stock model leaves a muddy brown glow; a clear night at sea
+        // is a deep navy, a shade lighter down by the horizon.
+        float nl = dot(retColor, vec3(0.2126, 0.7152, 0.0722));
+        vec3 navy = vec3(0.012, 0.02, 0.045) * (1.0 + 1.2 * (1.0 - smoothstep(0.0, 0.25, hgt))) + nl * vec3(0.25, 0.35, 0.6);
+        retColor = mix(retColor, navy, uNight);
+      }
+      gl_FragColor = vec4( retColor, 1.0 );`,
+    );
+}
 
 export class Atmosphere {
   readonly sky = new Sky();
@@ -142,6 +197,7 @@ export class Atmosphere {
     // ?gl=full draws everything even on software graphics (slow; for screenshots).
     this.software = /swiftshader|llvmpipe|software|basic render/i.test(gpu) && new URLSearchParams(location.search).get("gl") !== "full";
     this.sky.scale.setScalar(HORIZON * 3);
+    deepenSky(this.sky.material);
     const su = this.sky.material.uniforms;
     su.rayleigh.value = 1.4;
     su.mieCoefficient.value = 0.004;
@@ -260,7 +316,7 @@ export class Atmosphere {
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
-    this.fog.near = 150 * (1 - 0.8 * storm);
+    this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = HORIZON * (0.9 - 0.77 * storm);
     this.exposure = (0.55 - 0.17 * storm) * (1 + 0.5 * (1 - day));
     this.renderer.toneMappingExposure = this.exposure;
@@ -277,6 +333,10 @@ export class Atmosphere {
     if (this.bloom) this.bloom.strength = 0.22 + 0.25 * dusk + 0.15 * night;
     this.storm = storm;
     this.dusk = dusk;
+    su.uClear.value = smooth(elDeg, -4, 4) * (1 - smooth(storm, 0.1, 0.8));
+    su.uNight.value = 1 - smooth(elDeg, -14, -6);
+    su.uTwilight.value = smooth(elDeg, -12, -4) * (1 - smooth(elDeg, -1, 5)) * (1 - 0.85 * storm);
+    su.uWarm.value = (1 - smooth(elDeg, 1, 14)) * smooth(elDeg, -6, -1) * (1 - storm);
 
     // Re-light reflections when the sky has changed enough, a few times a second at most
     // (every few seconds on software graphics, where each re-light costs about a frame).

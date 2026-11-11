@@ -68,6 +68,7 @@ float fbm(vec2 p) {
   return v;
 }`;
 
+const ROSE = new THREE.Color(0.75, 0.38, 0.45); // cloud undersides after the sun has set
 const CLOUD_Y = 600; // m, the cloud base
 const CLOUD_R = 9000; // m, how far the layer reaches (it fades out well before)
 
@@ -78,29 +79,53 @@ void main() {
   vWorld = w.xyz;
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
+// The layer is drawn as fair-weather cumulus: rounded heaps with knobbly,
+// cauliflower edges (a warped noise field for the heaps, a "billow" noise for
+// the knobs). Each point looks a little way towards the sun: if there is more
+// cloud that way, it is in its own shade. Overhead you see the grey, flat
+// bases with bright thin edges; towards the horizon you see their sunlit
+// sides, white with the sun behind you and dark with silver edges against it.
+// Round sunset they glow orange underneath, then rose, then fade.
 const cloudFrag = /* glsl */ `
-uniform float uCover, uDark;
+uniform float uCover, uDark, uWarm;
 uniform vec2 uDrift;
-uniform vec3 uCam, uSunDir, uLit, uShade, uHaze;
+uniform vec3 uCam, uSunDir, uLit, uShade, uHaze, uGlow;
 varying vec3 vWorld;
 ${noise}
+float billow(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int k = 0; k < 4; k++) { v += a * abs(vnoise(p) * 2.0 - 1.0); p = p * 2.07 + vec2(5.3, 11.9); a *= 0.5; }
+  return v;
+}
+float dens(vec2 p) {
+  vec2 w = p + 0.45 * vec2(vnoise(p * 0.8 + 3.1), vnoise(p * 0.8 + 8.3));
+  return 0.9 * fbm(w) + 0.26 * (1.0 - billow(w * 3.0 + 1.7)) - 0.15;
+}
 void main() {
   vec2 p = (vWorld.xz + uDrift) / 900.0;
-  float n = fbm(p) + 0.25 * fbm(p * 3.1 + 4.0) - 0.12;
+  float n = dens(p);
   float edge = 1.0 - uCover;
-  float d = smoothstep(edge - 0.08, edge + 0.22, n);
-  // Thicker cloud is darker underneath; the sun lights the thin edges and the side towards it.
-  float thick = smoothstep(edge, edge + 0.5, n);
+  float d = smoothstep(edge - 0.015, edge + 0.07, n);
+  if (d < 0.004) discard;
+  float thick = smoothstep(edge, edge + 0.3, n);
+  // Self-shade: more cloud towards the sun means this bit is in shadow.
+  vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+  float toward = dens(p + sunH * 0.09) - n;
+  float shade = clamp(0.55 * thick + 2.6 * toward, 0.0, 1.0);
   vec3 view = normalize(vWorld - uCam);
-  float toSun = pow(max(dot(view, uSunDir), 0.0), 6.0);
-  vec3 col = mix(uLit, uShade, thick * (0.75 + 0.25 * uDark));
-  col += uLit * toSun * (1.0 - thick) * 0.6;
-  // Far cloud melts into the haze on the horizon.
   float dist = length(vWorld.xz - uCam.xz);
+  float side = smoothstep(700.0, 3500.0, dist);           // far off you see the sides, not the base
+  float facing = dot(view, uSunDir);                        // +1 looking at the sun
+  float baseShade = mix(0.35 + 0.65 * shade, shade * (0.4 + 0.6 * smoothstep(-0.3, 0.6, facing)), side);
+  vec3 col = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uDark));
+  // Silver lining: thin edges light up looking towards the sun.
+  float rim = pow(max(facing, 0.0), 5.0) * (1.0 - thick);
+  col += uLit * rim * 0.9;
+  // Sunset: the undersides catch the low sun, strongest on the sun's side.
+  col += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
   float far = smoothstep(2500.0, 8000.0, dist);
   col = mix(col, uHaze, far);
-  float a = d * (1.0 - smoothstep(5000.0, 8500.0, dist)) * 0.95;
-  if (a < 0.004) discard;
+  float a = d * (1.0 - smoothstep(5000.0, 8500.0, dist)) * 0.96;
   gl_FragColor = vec4(col, a);
 }`;
 
@@ -155,6 +180,8 @@ export class Clouds {
         uCam: { value: new THREE.Vector3() },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uLit: { value: new THREE.Color() },
+        uWarm: { value: 0 },
+        uGlow: { value: new THREE.Color(1.0, 0.55, 0.3) },
         uShade: { value: new THREE.Color() },
         uHaze: { value: new THREE.Color() },
       },
@@ -228,7 +255,9 @@ export class Clouds {
     this.layer.position.set(cam.x, CLOUD_Y, cam.z);
     const u = this.layer.material.uniforms;
     // Above ~0.92 the sky's own grey lid already does the job; the layer adds the broken edges.
-    u.uCover.value = 0.15 + 0.75 * this.cover;
+    // Even a "clear" reading keeps a few small fair-weather cumulus (they hardly dim the sun):
+    // looks only.
+    u.uCover.value = 0.42 + 0.5 * this.cover;
     u.uDark.value = storm;
     u.uDrift.value.copy(this.drift);
     u.uCam.value.copy(cam);
@@ -237,7 +266,12 @@ export class Clouds {
     u.uLit.value.setRGB(lit, lit, lit * 1.02);
     u.uShade.value.copy(haze).multiplyScalar(0.42 + 0.2 * light);
     u.uHaze.value.copy(haze);
-    this.layer.visible = this.cover > 0.02;
+    // Sun's height from its direction: glow from just before sunset until it is well down.
+    const el = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(sunDir.y, -1, 1)));
+    u.uWarm.value = SM(el, -7, -1) * (1 - SM(el, 3, 16)) * (1 - storm);
+    // Orange while the sun is up, rose after it has gone.
+    u.uGlow.value.setRGB(1.0, 0.5, 0.25).lerp(ROSE, 1 - SM(el, -3, 1)).multiplyScalar(0.9);
+    this.layer.visible = true; // always a few fair-weather clouds, at least
 
     for (const b of this.banks) {
       b.visible = this.fog > 0.02;
