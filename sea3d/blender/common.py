@@ -514,17 +514,29 @@ def strakes(f: HullForm, mat, r=0.011, nx=90) -> None:
     )
 
 
+def envelope(top, x, z, dx, dz, n=4) -> float:
+    """The highest point of top() within one cell (dx, dz) of (x, z)."""
+    return max(
+        top(x + dx * a / n, z + dz * b / n) for a in range(-n, n + 1) for b in range(-n, n + 1)
+    )
+
+
 def panel(
     name, x0, x1, w, top, cols, rows, thick=0.008, lift=0.014, parent=None
 ) -> bpy.types.Object:
-    """Solar panel draped over a surface height function top(x, z)."""
+    """Solar panel draped over a surface height function top(x, z).
+
+    Each corner sits on the highest point of the surface within one cell of it,
+    so the flat facets between corners clear a curved, steep-sided surface (the
+    kayak's dome shoulders) instead of letting it poke through the cells."""
     pnx, pnz = 48, 24
+    dx, dz = (x1 - x0) / pnx, w / pnz
     pv, pf, puv = [], [], []
     for i in range(pnx + 1):
         for j in range(pnz + 1):
             x = x0 + (x1 - x0) * i / pnx
             z = -w / 2 + w * j / pnz
-            pv.append((x, top(x, z) + lift, z))
+            pv.append((x, envelope(top, x, z, dx, dz) + lift, z))
     for i in range(pnx):
         for j in range(pnz):
             a = i * (pnz + 1) + j
