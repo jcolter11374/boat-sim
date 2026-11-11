@@ -134,10 +134,15 @@ jobs:
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)
         run: npm run test:unit
+      # --with-deps also apt-installs fonts and libraries, which fails whenever
+      # the runner can't reach the Ubuntu mirrors (11 Nov: "Temporary failure
+      # resolving security.ubuntu.com"). The runner image already has what
+      # headless Chromium needs, so fall back to the browser alone. apt hangs
+      # about 10 minutes on the failed lookups first, so give it 2 minutes.
       - name: Install headless browser for the smoke test
         run: |
           npm install --no-save playwright@1
-          npx playwright install --with-deps chromium
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Smoke test (animates, wave heights right, not blank)
         run: npm test
       - uses: actions/upload-artifact@v4
