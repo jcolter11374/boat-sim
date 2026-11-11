@@ -9,6 +9,13 @@ Coasts (REGIONS), each as <key>_meta.json, <key>_height.bin, <key>_colour.jpg:
                between, where the bridge-tunnel crosses (36.88-37.12N, 76.12-75.88W)
     lisbon     Cabo da Roca, Cascais and the Tagus mouth to Lisbon
                (38.62-38.82N, 9.52-9.08W)
+    annapolisbay  Annapolis and around it: the harbour, Spa and Back Creeks, the
+               Severn mouth, Greenbury Point and the Bay off them
+               (38.92-39.02N, 76.56-76.40W), about 11 m, with two more files:
+      annapolisbay_cover.png   8-bit classes on the same grid (meta "cover" has
+                               the legend): trees, grass, wetland, sand, built
+      annapolisbay_trees.json  OpenStreetMap single trees (points) and tree rows
+                               (lines), lon/lat
 
       <key>_meta.json    grid: nx, ny, lon0/lon1/lat0/lat1, width and height in m
       <key>_height.bin   int16 little-endian, metres, row 0 = north, nx per row;
@@ -31,6 +38,10 @@ Sources:
   credit.
 - Colour: Copernicus Sentinel-2 L2A, Cloud-Optimized GeoTIFFs on AWS (Element 84).
   "Contains modified Copernicus Sentinel data 2023-2024."
+- Land cover (annapolisbay_cover.png): Sentinel-2 greenness (NDVI) for trees,
+  grass and built-up land, with OpenStreetMap areas (woods, wetland, beaches,
+  golf, pitches; Overture base theme land and land_use) over it. ODbL, as are
+  the trees.
 - Buildings and piers: Overture Maps Foundation (buildings and transportation/base
   themes, which include OpenStreetMap). The derived file is a database under the
   Open Database License (ODbL 1.0): "Contains information from OpenStreetMap and
@@ -99,6 +110,20 @@ LISBON_SCENES = {
     ]
 }
 
+# Annapolis and around it: tile 18SUJ, the passes that see the whole tile with
+# under 5% cloud (eo:cloud_cover, listed from the bucket on 11 Nov 2026).
+ANNAPOLISBAY_BOX = (-76.56, -76.40, 38.92, 39.02)
+ANNAPOLISBAY_SCENES = {
+    "UJ": [
+        "S2B_18SUJ_20240911",
+        "S2A_18SUJ_20240827",
+        "S2B_18SUJ_20230629",
+        "S2B_18SUJ_20240703",
+        "S2A_18SUJ_20230902",
+        "S2A_18SUJ_20240728",
+    ]
+}
+
 ANNAPOLIS_BOX = (-76.505, -76.472, 38.968, 38.990)  # lon0, lon1, lat0, lat1
 ANNAPOLIS_ORIGIN = (38.9725, -76.4800)  # lat, lon: the boat, in the harbour mouth
 ANNAPOLIS_NX = 900  # about 3 m spacing
@@ -108,6 +133,9 @@ CREDITS = {
     "and others, https://github.com/tilezen/joerd/blob/master/docs/attribution.md)",
     "sentinel": "Colour: contains modified Copernicus Sentinel data 2023-2024 (Sentinel-2 L2A, "
     "via the Registry of Open Data on AWS)",
+    "cover": "Land cover and trees: contains information from OpenStreetMap and Overture Maps "
+    "Foundation (https://overturemaps.org), available under the Open Database License "
+    "(ODbL 1.0); greenness from modified Copernicus Sentinel data 2023-2024",
     "overture": "Buildings and piers: contains information from OpenStreetMap and Overture Maps "
     "Foundation (https://overturemaps.org), available under the Open Database License "
     "(ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/)",
@@ -218,9 +246,10 @@ def _scene_url(scene: str, band: str) -> str:
     return f"{S2_COG}/{utm}/{lat_band}/{sq}/{day[:4]}/{int(day[4:6])}/{scene}_0_L2A/{band}.tif"
 
 
-def sentinel_median(lon_g, lat_g, scenes: dict, epsg: int, log=print) -> np.ndarray:
-    """True colour (uint8 RGB) on the lon/lat grid: per UTM tile, the median of
-    the cloud-free pixels of its scenes, at 20 m."""
+def s2_median(lon_g, lat_g, scenes: dict, epsg: int, bands=("TCI",), step=2, log=print):
+    """The median of the cloud-free pixels of each tile's passes, sampled on the
+    lon/lat grid: float32 (..., channels), the bands' channels in order (TCI has
+    three); 0 where no pass sees the cell. step: read every step-th 10 m pixel."""
     import rasterio
     from pyproj import Transformer
     from rasterio.windows import from_bounds
@@ -228,29 +257,37 @@ def sentinel_median(lon_g, lat_g, scenes: dict, epsg: int, log=print) -> np.ndar
     east, north = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True).transform(
         lon_g, lat_g
     )
-    col = np.zeros(lon_g.shape + (3,), np.float32)
-    have = np.zeros(lon_g.shape, bool)
+    out, have = None, np.zeros(lon_g.shape, bool)
     for tile, names in scenes.items():
         stack, wt, shp, win = [], None, None, None
         for sc in names:
             try:
-                with rasterio.open(_scene_url(sc, "TCI")) as ds:
-                    b = ds.bounds
-                    e0, e1 = max(east.min(), b.left), min(east.max(), b.right)
-                    n0, n1 = max(north.min(), b.bottom), min(north.max(), b.top)
-                    if e0 >= e1 or n0 >= n1:
-                        break
-                    win = from_bounds(e0, n0, e1, n1, ds.transform).round_offsets().round_lengths()
-                    shp = (int(win.height // 2), int(win.width // 2))  # 10 m -> 20 m
-                    a = np.moveaxis(ds.read(window=win, out_shape=(3, *shp)), 0, -1)
-                    a = a.astype(np.float32)
-                    wt = ds.window_transform(win)
+                chans = []
+                for band in bands:
+                    with rasterio.open(_scene_url(sc, band)) as ds:
+                        if win is None or wt is None:
+                            b = ds.bounds
+                            e0, e1 = max(east.min(), b.left), min(east.max(), b.right)
+                            n0, n1 = max(north.min(), b.bottom), min(north.max(), b.top)
+                            if e0 >= e1 or n0 >= n1:
+                                raise LookupError("outside the tile")
+                            win = from_bounds(e0, n0, e1, n1, ds.transform)
+                            win = win.round_offsets().round_lengths()
+                            shp = (int(win.height // step), int(win.width // step))
+                            wt = ds.window_transform(win)
+                            box = (e0, n0, e1, n1)
+                        w = from_bounds(*box, ds.transform).round_offsets().round_lengths()
+                        a = ds.read(window=w, out_shape=(ds.count, *shp)).astype(np.float32)
+                        chans += list(a)
                 with rasterio.open(_scene_url(sc, "SCL")) as ds2:
-                    w2 = from_bounds(e0, n0, e1, n1, ds2.transform).round_offsets().round_lengths()
+                    w2 = from_bounds(*box, ds2.transform).round_offsets().round_lengths()
                     scl = ds2.read(1, window=w2, out_shape=shp)
+            except LookupError:
+                break
             except Exception as e:  # noqa: BLE001  a missing pass is fine; the median uses the rest
                 log(f"  {sc}: skipped ({e!r})"[:200])
                 continue
+            a = np.stack(chans, -1)
             bad = np.isin(scl, SCL_BAD) | (a.sum(-1) == 0)
             a[bad] = np.nan
             stack.append(a)
@@ -262,12 +299,30 @@ def sentinel_median(lon_g, lat_g, scenes: dict, epsg: int, log=print) -> np.ndar
         px = (east - wt.c) / wt.a * (shp[1] / win.width)
         py = (north - wt.f) / wt.e * (shp[0] / win.height)
         ok = (px >= 0) & (px < shp[1] - 1) & (py >= 0) & (py < shp[0] - 1) & ~have
-        c = np.stack([bilinear(med[..., k], px, py) for k in range(3)], -1)
+        c = np.stack([bilinear(med[..., k], px, py) for k in range(med.shape[-1])], -1)
         ok &= c.sum(-1) > 0
-        col[ok] = c[ok]
+        if out is None:
+            out = np.zeros(lon_g.shape + (med.shape[-1],), np.float32)
+        out[ok] = c[ok]
         have |= ok
         log(f"  tile {tile}: {int(ok.sum())} pixels")
+    return out if out is not None else np.zeros(lon_g.shape + (3,), np.float32)
+
+
+def sentinel_median(lon_g, lat_g, scenes: dict, epsg: int, log=print, step=2) -> np.ndarray:
+    """True colour (uint8 RGB) on the lon/lat grid: per UTM tile, the median of
+    the cloud-free pixels of its scenes, at 10 m x step."""
+    col = s2_median(lon_g, lat_g, scenes, epsg, ("TCI",), step, log)
     return np.clip(col, 0, 255).astype(np.uint8)
+
+
+def sentinel_ndvi(lon_g, lat_g, scenes: dict, epsg: int, log=print, step=1) -> np.ndarray:
+    """Greenness, (NIR - red) / (NIR + red), from the cloud-free median of bands
+    B08 and B04 (10 m); nan where no pass sees the cell."""
+    rn = s2_median(lon_g, lat_g, scenes, epsg, ("B04", "B08"), step, log)
+    r, n = rn[..., 0], rn[..., 1]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(r + n > 0, (n - r) / (r + n), np.nan)
 
 
 # ----------------------------------------------------------------- Pico
@@ -282,17 +337,30 @@ class Region:
     zoom: int  # terrain tile zoom
     scenes: dict  # Sentinel-2 passes per UTM tile (see PICO_SCENES)
     epsg: int  # the tiles' UTM zone
+    step: int = 2  # colour from every step-th 10 m Sentinel pixel (2: 20 m)
+    cover: bool = False  # also bake <key>_cover.png and <key>_trees.json
+    # Fill leftover cloud from around it. Off where the passes are clear: the fill
+    # also takes bright grey roofs for cloud (downtown Annapolis, the Academy).
+    fill: bool = True
 
 
 REGIONS = {
     "pico": Region(PICO_BOX, PICO_NX, 12, PICO_SCENES, 32626),  # about 30 m
     "baymouth": Region(BAYMOUTH_BOX, 1200, 13, BAYMOUTH_SCENES, 32618),  # about 18 m
     "lisbon": Region(LISBON_BOX, 2000, 13, LISBON_SCENES, 32629),  # about 19 m
+    "annapolisbay": Region(
+        ANNAPOLISBAY_BOX, 1300, 14, ANNAPOLISBAY_SCENES, 32618, step=1, cover=True, fill=False
+    ),  # about 11 m
 }
 
 
 def bake_region(
-    key: str, out: Path, cache: Path | None = None, nx: int | None = None, log=print
+    key: str,
+    out: Path,
+    cache: Path | None = None,
+    nx: int | None = None,
+    log=print,
+    release: str = OVERTURE_RELEASE,
 ) -> list[Path]:
     from PIL import Image
 
@@ -304,7 +372,9 @@ def bake_region(
     hgt = np.where(hgt < 0, np.maximum(hgt, -60.0), hgt)
     log(f"{key}: {len(lons)} x {len(lats)} heights, highest {hgt.max():.0f} m")
     lon_g, lat_g = np.meshgrid(lons, lats)
-    col = fill_clouds(sentinel_median(lon_g, lat_g, reg.scenes, reg.epsg, log), hgt)
+    col = sentinel_median(lon_g, lat_g, reg.scenes, reg.epsg, log, reg.step)
+    if reg.fill:
+        col = fill_clouds(col, hgt)
     lon0, lon1, lat0, lat1 = reg.box
     meta = {
         "nx": len(lons),
@@ -320,10 +390,103 @@ def bake_region(
         "attribution": [CREDITS["terrain"], CREDITS["sentinel"]],
     }
     paths = [out / f"{key}_meta.json", out / f"{key}_height.bin", out / f"{key}_colour.jpg"]
+    if reg.cover:
+        ndvi = sentinel_ndvi(lon_g, lat_g, reg.scenes, reg.epsg, log)
+        cover, trees = land_cover(reg.box, lons, lats, hgt, ndvi, release, log)
+        meta["cover"] = {
+            "file": f"{key}_cover.png: 8-bit classes on the same grid, row 0 north",
+            "classes": COVER_NAMES,
+            "trees": f"{key}_trees.json: OpenStreetMap single trees (points: lon, lat, "
+            "height in m or null) and tree rows (rows: lists of lon, lat)",
+            "overture_release": release,
+            "license": "ODbL-1.0 (cover and trees)",
+        }
+        meta["attribution"].append(CREDITS["cover"])
+        paths += [out / f"{key}_cover.png", out / f"{key}_trees.json"]
+        Image.fromarray(cover).save(paths[3], optimize=True)
+        trees = {"license": "ODbL-1.0", "attribution": [CREDITS["cover"]], **trees}
+        paths[4].write_text(json.dumps(trees, separators=(",", ":")))
     paths[0].write_text(json.dumps(meta, indent=1))
     np.round(hgt).astype("<i2").tofile(paths[1])
     Image.fromarray(col).save(paths[2], quality=90)
     return paths
+
+
+# Classes: greenness (Sentinel-2 NDVI at 10 m) sorts land into trees, grass
+# and built; OpenStreetMap areas from Overture's base theme then paint over it,
+# in this order (later wins). Overture's land_cover (ESA WorldCover, generalised
+# polygons) is left out: it calls whole leafy suburbs "forest" or "urban".
+COVER_NAMES = {0: "water or nothing known", 1: "trees", 2: "grass, fields, golf, pitches"}
+COVER_NAMES |= {3: "wetland, marsh", 4: "sand, beach", 5: "built, paved (little greenery)"}
+COVER_RULES = [
+    ("land_use", "subtype", {"golf": 2, "recreation": 2, "agriculture": 2, "managed": 2}),
+    ("land_use", "class", {"grass": 2, "meadow": 2, "cemetery": 2}),
+    ("land", "subtype", {"forest": 1, "wetland": 3, "sand": 4, "grass": 2, "shrub": 2}),
+]
+# GUESS, from the summer median over Annapolis (land NDVI: 10% below 0.28,
+# median 0.73): canopy is the greenest, lawns a step below, roofs and roads low.
+TREE_NDVI = 0.6
+BUILT_NDVI = 0.3
+
+
+def _raster_transform(lons, lats):
+    from rasterio.transform import from_origin
+
+    dlon, dlat = lons[1] - lons[0], lats[0] - lats[1]
+    return from_origin(lons[0] - dlon / 2, lats[0] + dlat / 2, dlon, dlat)
+
+
+def land_cover(box, lons, lats, hgt, ndvi, release=OVERTURE_RELEASE, log=print, rows=None):
+    """Classes on the grid (COVER_NAMES) and the OSM trees. rows(type) gives the
+    Overture rows of a base-theme type (default: read the release)."""
+    from rasterio.features import rasterize
+    from shapely import wkb
+
+    rows = rows or (lambda typ: overture("base", typ, box, release).to_pylist())
+    shape = (len(lats), len(lons))
+    tf = _raster_transform(lons, lats)
+    cover = np.zeros(shape, np.uint8)
+    land = (hgt > 0.5) | (ndvi > 0.1)  # GUESS: low shores count by greenness
+    green = np.nan_to_num(ndvi, nan=0.0)
+    cover[land] = 2
+    cover[land & (green >= TREE_NDVI)] = 1
+    cover[land & (green < BUILT_NDVI)] = 5
+    cache: dict = {}
+    for typ, key, table in COVER_RULES:
+        if typ not in cache:
+            cache[typ] = rows(typ)
+        shapes = [
+            (wkb.loads(r["geometry"]), table[r.get(key)]) for r in cache[typ] if r.get(key) in table
+        ]
+        shapes = [(g, v) for g, v in shapes if g.geom_type in ("Polygon", "MultiPolygon")]
+        if not shapes:
+            continue
+        painted = rasterize(shapes, out_shape=shape, transform=tf, fill=0, dtype="uint8")
+        cover = np.where(painted > 0, painted, cover)
+    cover[~land] = 0
+    pts, lines = [], []
+    for r in cache.get("land") or rows("land"):
+        if r.get("subtype") != "tree":
+            continue
+        g = wkb.loads(r["geometry"])
+        if g.geom_type == "Point":
+            pts.append([round(g.x, 6), round(g.y, 6), tag_height(r.get("source_tags"))])
+        elif g.geom_type == "LineString":
+            lines.append([[round(x, 6), round(y, 6)] for x, y in g.coords])
+    n = {COVER_NAMES[k]: int((cover == k).sum()) for k in COVER_NAMES}
+    log(f"  cover: {n}; {len(pts)} trees, {len(lines)} tree rows")
+    return cover, {"points": pts, "rows": lines}
+
+
+def tag_height(tags) -> float | None:
+    """An OSM height tag ("12", "12 m", "40'") in metres, or None."""
+    import re
+
+    v = dict(tags or {}).get("height")
+    m = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*(m|ft|')?\s*", str(v or ""))
+    if not m:
+        return None
+    return round(float(m[1]) * (0.3048 if m[2] in ("ft", "'") else 1.0), 1)
 
 
 def bake_pico(out: Path, cache: Path | None = None, nx: int = PICO_NX, log=print) -> list[Path]:
@@ -368,6 +531,7 @@ def overture(theme: str, typ: str, box, release: str = OVERTURE_RELEASE):
         "roof_shape",
         "names",
         "is_underground",
+        "source_tags",
     ]
     return d.to_table(filter=f, columns=[c for c in d.schema.names if c in want])
 
@@ -506,7 +670,7 @@ def main(argv: list[str] | None = None) -> None:
     import argparse
 
     ap = argparse.ArgumentParser(description="Bake land for the 3D views (coasts, Annapolis)")
-    ap.add_argument("places", nargs="*", default=[*REGIONS, "annapolis"])
+    ap.add_argument("places", nargs="*", default=[*REGIONS, "annapolis"])  # annapolis: #203's
     ap.add_argument("--out", default="site/land")
     ap.add_argument("--cache", default=None, help="keep downloaded terrain tiles here")
     ap.add_argument("--overture-release", default=OVERTURE_RELEASE)
@@ -514,7 +678,7 @@ def main(argv: list[str] | None = None) -> None:
     cache = Path(a.cache) if a.cache else None
     for place in a.places:
         if place in REGIONS:
-            paths = bake_region(place, a.out, cache)
+            paths = bake_region(place, a.out, cache, release=a.overture_release)
         elif place == "annapolis":
             paths = bake_annapolis(a.out, cache, a.overture_release)
         else:
