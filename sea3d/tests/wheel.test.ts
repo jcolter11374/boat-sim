@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRUISER_HANDLING, Wheel, bestSheet, look, type TrimTable } from "../src/helm/wheel.ts";
+import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, type TrimTable } from "../src/helm/wheel.ts";
 
 const T: TrimTable = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31_trim.json", import.meta.url), "utf8"));
 const POLAR = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31.json", import.meta.url), "utf8"));
@@ -113,4 +113,44 @@ test("auto-trim sails at the best speed, and the spell ends at the mark", () => 
   assert.ok(w.share() > 0.95, `${w.share()}`);
   assert.equal(w.s.done, true);
   assert.ok(w.distToMark() < 40);
+});
+
+test("the guided first spell waits for each thing to be done", () => {
+  const w = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 90 }, SPELL);
+  const g = new Guide();
+  const run = (secs: number, inp: { helm: number; sheet: number }) => {
+    for (let t = 0; t < secs; t += 1 / 30) {
+      w.step(1 / 30, inp);
+      g.update(w, 1 / 30);
+    }
+  };
+  run(5, { helm: 0, sheet: 0 });
+  assert.equal(g.step, "steer", "waits: nothing done yet");
+  run(2.5, { helm: -1, sheet: 0 });
+  assert.equal(g.step, "trim");
+  assert.equal(w.s.sheet, 90, "the guide lets the sail out");
+  run(5, { helm: 0, sheet: 0 });
+  assert.equal(g.step, "trim", "still loose");
+  // pull in until the needle is in the band, then hold
+  for (let t = 0; t < 10 && w.sailState() !== "good"; t += 1 / 30) {
+    w.step(1 / 30, { helm: 0, sheet: -1 });
+    g.update(w, 1 / 30);
+  }
+  run(2, { helm: 0, sheet: 0 });
+  assert.equal(g.step, "reef");
+  assert.ok(w.reef(1));
+  g.reefed();
+  assert.equal(g.step, "go");
+  run(7, { helm: 0, sheet: 0 });
+  assert.equal(g.done, true);
+});
+
+test("with auto-trim on, the guide skips the trim step", () => {
+  const w = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 90, autoTrim: true }, SPELL);
+  const g = new Guide();
+  for (let t = 0; t < 3; t += 1 / 30) {
+    w.step(1 / 30, { helm: 1, sheet: 0 });
+    g.update(w, 1 / 30);
+  }
+  assert.equal(g.step, "reef");
 });

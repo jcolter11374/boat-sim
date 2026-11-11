@@ -11,7 +11,7 @@
  * textContent. Reduced motion is respected by the page's camera code, not here.
  */
 
-import { CRUISER_HANDLING, SAIL_WORDS, Wheel, type Handling, type TrimTable } from "./wheel";
+import { CRUISER_HANDLING, Guide, SAIL_WORDS, Wheel, type Handling, type TrimTable } from "./wheel";
 
 /** Boats that can be sailed by hand, and their trim tables (written by vpp.py --trim). */
 const TABLES: Record<string, { url: URL; handling: Handling; name: string }> = {
@@ -23,6 +23,7 @@ export const canTakeWheel = (boatKey: string): boolean => boatKey in TABLES;
 const PLAN_WORDS: Record<string, string> = { full: "Full sail", reef1: "Reef 1", reef2: "Reef 2", storm: "Storm sails" };
 const SPEEDS = [1, 2, 5, 10];
 const BEST_KEY = "boatsim.wheel.best.v1";
+const TAUGHT_KEY = "boatsim.wheel.taught.v1";
 const KNOTS_PER_MS = 1.943844;
 
 export interface WheelStart {
@@ -81,6 +82,8 @@ export class WheelSession {
   private paused = false;
   private root: HTMLElement;
   private startedAt = 0;
+  /** The guided first spell (Leo), until the player has done it or skipped it once. */
+  guide: Guide | null = null;
 
   constructor(
     private readonly host: {
@@ -102,6 +105,7 @@ export class WheelSession {
           <button data-x="0" title="Pause (space bar)">❚❚</button><button data-x="1" title="Real time (key 1)">1×</button><button data-x="2" title="Twice as fast (key 2)">2×</button><button data-x="5" title="Five times (key 3)">5×</button><button data-x="10" title="Ten times (key 4)">10×</button>
         </span>
         <button class="w-back" title="Give the boat back to your orders (Esc)">Hand back</button></div>
+      <div class="w-guide" hidden><span class="w-gtext"></span> <button class="w-gskip" title="Skip the guide">Skip</button></div>
       <div class="w-grid">
         <div><div class="w-lbl">Speed</div><div class="w-big w-speed"></div><div class="w-bar"><i class="w-best"></i><i class="w-now"></i></div><div class="w-sub w-bestt"></div></div>
         <div><div class="w-lbl">Sail <span class="w-plan"></span></div><div class="w-tell"></div>
@@ -117,6 +121,7 @@ export class WheelSession {
     el(this.root, ".w-reef").addEventListener("click", () => this.reef(1));
     el(this.root, ".w-shake").addEventListener("click", () => this.reef(-1));
     el(this.root, ".w-autob").addEventListener("click", () => this.toggleAuto());
+    el(this.root, ".w-gskip").addEventListener("click", () => this.endGuide());
   }
 
   /** Start a spell: about 800 m on the course the boat was already sailing. */
@@ -136,7 +141,9 @@ export class WheelSession {
       table,
       spec.handling,
       { twsKn: tws, fromDeg: from },
-      { heading: s.heading, speedKn: s.speedMs * KNOTS_PER_MS, plan: s.plan ?? undefined, autoTrim: localStorage.getItem("boatsim.wheel.auto") === "1" },
+      // She was sailing on autopilot until now, so start at the best speed for this heading
+      // (a new game reports 0 kn through the water before its first step).
+      { heading: s.heading, speedKn: undefined, plan: s.plan ?? undefined, autoTrim: localStorage.getItem("boatsim.wheel.auto") === "1" },
       { markM: 800, markBearing: s.heading }, // GUESS: 800 m, about 3 minutes at 1x (Leo: 2-4 minute spells)
     );
     this.on = true;
@@ -144,6 +151,14 @@ export class WheelSession {
     this.speed = 1;
     this.keys = { left: false, right: false, up: false, down: false };
     this.startedAt = performance.now();
+    let taught = true;
+    try {
+      taught = localStorage.getItem(TAUGHT_KEY) === "1";
+    } catch {
+      /* private mode: guide every time is fine */
+      taught = false;
+    }
+    this.guide = taught ? null : new Guide();
     this.root.hidden = false;
     document.body.classList.add("at-wheel");
     this.draw();
@@ -187,7 +202,21 @@ export class WheelSession {
   }
 
   private reef(dir: 1 | -1): void {
-    if (this.wheel?.reef(dir)) this.draw();
+    if (this.wheel?.reef(dir)) {
+      this.guide?.reefed();
+      this.draw();
+    }
+  }
+
+  private endGuide(): void {
+    this.guide = null;
+    try {
+      localStorage.setItem(TAUGHT_KEY, "1");
+    } catch {
+      /* fine */
+    }
+    this.lastDraw = 0;
+    this.draw();
   }
 
   private toggleAuto(): void {
@@ -233,7 +262,11 @@ export class WheelSession {
       const total = Math.min(dt, 0.1) * this.speed;
       const n = Math.max(1, Math.ceil(total / 0.05));
       const inp = { helm: (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0), sheet: (this.keys.down ? 1 : 0) - (this.keys.up ? 1 : 0) };
-      for (let i = 0; i < n; i++) w.step(total / n, inp);
+      for (let i = 0; i < n; i++) {
+        w.step(total / n, inp);
+        this.guide?.update(w, total / n);
+      }
+      if (this.guide?.done) this.endGuide();
       if (w.s.done) {
         this.draw();
         this.stop(true);
@@ -255,6 +288,9 @@ export class WheelSession {
     const b = w.best();
     const st = w.sailState();
     const toGo = w.distToMark();
+    const g = el(r, ".w-guide");
+    g.hidden = !this.guide;
+    if (this.guide) el(r, ".w-gtext").textContent = this.guide.text;
     el(r, ".w-goal").textContent = `${toGo >= 1000 ? `${(toGo / 1000).toFixed(1)} km` : `${Math.round(toGo / 10) * 10} m`} to the mark`;
     for (const btn of Array.from(r.querySelectorAll<HTMLButtonElement>(".w-speeds button"))) {
       const x = Number(btn.dataset.x);
