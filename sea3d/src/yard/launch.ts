@@ -8,6 +8,7 @@
 // The yard shows the sandbox's voyages beside the grid's odds.
 
 import { sailOnly, simChoices, type Catalog, type Design, type Summary } from "./design";
+import { sandboxThere } from "../sandbox";
 
 export interface LaunchOdds {
   voyages: number;
@@ -246,13 +247,7 @@ export class SandboxLauncher implements Launcher {
   ) {}
   /** True when the page was published with the sandbox files (boatsim.zip, the weather bundle). */
   async available(): Promise<boolean> {
-    try {
-      const r = await fetch(`${this.base}boatsim.zip`, { method: "HEAD" });
-      // A dev server answers a missing file with its HTML page, not a 404.
-      return r.ok && !(r.headers.get("content-type") ?? "").includes("text/html");
-    } catch {
-      return false;
-    }
+    return sandboxThere(new URL(this.base, location.href).href);
   }
   async launch(d: Design, _s: Summary, progress: Progress = () => {}): Promise<LaunchResult | null> {
     try {
