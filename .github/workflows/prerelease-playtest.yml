@@ -29,19 +29,18 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -e .
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: sea3d/package-lock.json
-      # The detailed Blender boats, from the deploy's cache when the scripts are
-      # unchanged. On a miss the page uses its drawn-in-code boats (as the deploy
-      # does when Blender fails), which is fine for a playtest.
-      - uses: actions/cache/restore@v4
+      # The detailed Blender boats: the deploy's cache when sea3d/blender is
+      # unchanged, otherwise built here with the deploy's own script, so a PR that
+      # changes a boat plays its new boats (Iris's #304 got 404s without this).
+      # Before Python 3.12 is set up for the simulator: bpy 4.2 needs 3.11.
+      - name: Cache the Blender boats
+        id: boats-cache
+        uses: actions/cache@v4
         with:
           path: |
             sea3d/public/models/kayak.glb
@@ -49,6 +48,18 @@ jobs:
             sea3d/public/models/shape_*.glb
             sea3d/public/models/stock_*.glb
           key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
+      - uses: actions/setup-python@v5
+        if: steps.boats-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.11"
+      - name: Build the boats with Blender
+        if: steps.boats-cache.outputs.cache-hit != 'true'
+        continue-on-error: true # as in the deploy: the page falls back to the drawn-in-code boats
+        run: tools/build_boats.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
       - name: Build the site from this commit
         env:
           GH_TOKEN: ${{ github.token }}
