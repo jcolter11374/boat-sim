@@ -7,7 +7,14 @@ from datetime import datetime, timedelta
 import pytest
 
 from boatsim.autonomy.guidance import WaypointAutopilot
-from boatsim.autonomy.sailing import KN, SailingAutopilot, TablePolar, Tactician, VmgAngles
+from boatsim.autonomy.sailing import (
+    KN,
+    LAND_CLEAR_KM,
+    SailingAutopilot,
+    TablePolar,
+    Tactician,
+    VmgAngles,
+)
 from boatsim.autonomy.sphere import wrap180
 from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.types import Mission, Sensors, Waypoint
@@ -82,11 +89,11 @@ def test_tacks_only_when_the_mark_is_clearly_across_and_not_too_often():
     assert tac.side == side and tac.switches == 2
 
 
-def _sail_to(mark, wind_from, tws, hours=60):
+def _sail_to(mark, wind_from, tws, hours=60, land_km=None, track=None):
     """Flat-water point-mass boat at polar speed, through the full autopilot."""
     guidance = WaypointAutopilot(acceptance_radius_m=1_000.0)
     tac = Tactician(CRUISER, min_twa_deg=46.0)
-    ap = SailingAutopilot(guidance, tac, guidance=guidance)
+    ap = SailingAutopilot(guidance, tac, guidance=guidance, land_km=land_km)
     mission = Mission([Waypoint(*mark)])
     lat, lon, heading, t = 36.65, -74.94, 0.0, T0
     switches_at = []
@@ -100,6 +107,8 @@ def _sail_to(mark, wind_from, tws, hours=60):
         assert abs(twa) >= 46.0 - 1e-9  # never asks for the no-go zone
         v = CRUISER.speed_ms(tws, twa) * 600.0
         lat, lon = move(lat, lon, *_east_north(heading, v))
+        if track is not None:
+            track.append((lat, lon))
         t += timedelta(minutes=10)
         if distance_m(lat, lon, *mark) < 1_000.0:
             return t - T0, switches_at, guidance
@@ -170,3 +179,42 @@ def test_wrap_for_sailing_only_touches_boats_with_a_polar():
     assert isinstance(wrapped, SailingAutopilot) and wrapped.guidance is ap
     tac = tactician_for(boat)
     assert tac.min_twa_deg == 46.0 and tac.max_twa_deg == 169.0
+
+
+def test_land_ahead_tacks_away_at_once():
+    """Holding a tack onto land is never right, even inside min_switch_h."""
+    tac = Tactician(CRUISER, min_twa_deg=46.0, min_switch_h=2.0)
+    tws, wind = 12 * KN, 90.0
+    h = tac.heading(90.0, 90.0, wind, tws, 90.0, T0)
+    assert tac.side == 1  # heading ~140, south of east
+    blocked = lambda heading: 8.0 if abs(wrap180(heading - h)) < 1.0 else math.inf
+    h2 = tac.heading(90.0, 90.0, wind, tws, h, T0 + timedelta(minutes=10), open_water=blocked)
+    assert tac.side == -1 and tac.switches == 1 and wrap180(h2 - wind) < 0
+    # Land on both sides: keep the side with more room.
+    tight = lambda heading: 5.0 if wrap180(heading - wind) < 0 else 9.0
+    tac.heading(90.0, 90.0, wind, tws, h2, T0 + timedelta(minutes=20), open_water=tight)
+    assert tac.side == 1
+
+
+def test_beats_round_an_island_on_the_first_tack():
+    """15 May 2020 cruiser replay: a healthy boat beat onto Pico (Azores) on
+    one long tack. An island 30 km down the first tack must be avoided."""
+    start = (36.65, -74.94)
+    mark = (36.65, -74.94 + 1.0)  # dead upwind, wind from the east
+    wind = bearing_deg(*start, *mark)
+    blind: list = []  # without a chart it sails across the island (no grounding here)...
+    _sail_to(mark, wind, 12 * KN, land_km=lambda lat, lon: math.inf, track=blind)
+    island = blind[len(blind) // 6]  # a point on the first tack
+    radius_km = 4.0
+
+    def land_km(lat, lon):
+        return max(0.0, distance_m(lat, lon, *island) / 1000.0 - radius_km)
+
+    def closest(track):
+        return min(land_km(*p) for p in track)
+
+    assert closest(blind) == 0.0
+    seen: list = []
+    took, _, _ = _sail_to(mark, wind, 12 * KN, land_km=land_km, track=seen)
+    assert closest(seen) >= LAND_CLEAR_KM - 1.0  # ...with one it keeps clear
+    assert took < timedelta(hours=30)

@@ -25,6 +25,10 @@ or a navigator with a polar does.
   `min_switch_h` after the last switch, so a wind shift doesn't set off a
   string of tacks. The zig-zag stays inside a cone around the mark that
   narrows as the boat closes on it, so the tacks get shorter near the mark.
+* **Land ahead.** Before holding a tack or gybe, it looks `LAND_LOOKAHEAD_KM`
+  along that heading. If land is that close and the other side is clearer,
+  it switches now, whatever the minimum interval says (15 May 2020 replay: a
+  healthy cruiser beat straight onto Pico in the Azores on one long tack).
 * While beating or running, the waypoint follower's current (crab) estimate
   is frozen: the boat zig-zags on purpose, so its course over the ground says
   nothing about the current.
@@ -44,16 +48,42 @@ from __future__ import annotations
 
 import math
 from bisect import bisect_right
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
 
 from boatsim.autonomy.base import Autopilot
 from boatsim.autonomy.sphere import wrap180
-from boatsim.geo import bearing_deg
+from boatsim.geo import bearing_deg, heading_to_vector, move
 from boatsim.types import Command, Mission, Sensors
 
 KN = 0.514444  # m/s per knot
+LAND_LOOKAHEAD_KM = 30.0  # GUESS: about 3-4 h of sailing; more than one min_switch_h leg
+LAND_STEP_KM = 2.0
+LAND_CLEAR_KM = 2.0  # a point this close to the coast counts as land ahead
+
+
+def open_water_km(
+    lat: float,
+    lon: float,
+    heading: float,
+    land_km: Callable[[float, float], float] | None = None,
+    lookahead_km: float = LAND_LOOKAHEAD_KM,
+) -> float:
+    """How far the boat can sail along `heading` before it is within
+    LAND_CLEAR_KM of a coast, in km; math.inf if clear for `lookahead_km`.
+    `land_km(lat, lon)`: distance to land (default vessel.coast's, the same
+    chart the waypoint follower uses)."""
+    if land_km is None:
+        from boatsim.vessel.coast import distance_to_land_km as land_km
+    d = LAND_STEP_KM
+    while d <= lookahead_km + 1e-9:
+        east, north = heading_to_vector(heading, d * 1000.0)
+        if land_km(*move(lat, lon, east, north)) < LAND_CLEAR_KM:
+            return d
+        d += LAND_STEP_KM
+    return math.inf
 
 
 class Polar(Protocol):
@@ -180,10 +210,13 @@ class Tactician:
         tws: float,
         prev_heading: float,
         t: datetime,
+        open_water: Callable[[float], float] | None = None,
     ) -> float:
         """Heading through the water. `to_mark`: bearing to the mark (deg);
         `reach_heading`: what the normal autopilot would steer (with its crab);
-        `prev_heading`: the boat's heading now (for which tack it is on)."""
+        `prev_heading`: the boat's heading now (for which tack it is on);
+        `open_water(heading)`: km of open water along a heading (open_water_km
+        at the boat), or None to sail without a chart."""
         up, down = self.angles(tws)
         up = min(up + self.beat_margin_deg, 89.0)
         rel = wrap180(to_mark - wind_from)  # where the mark is, off the wind
@@ -207,6 +240,11 @@ class Tactician:
             )
             if settled:
                 side = mark_side
+        if open_water is not None:
+            # Never hold a tack or gybe onto land when the other side is clearer.
+            here = open_water((wind_from + side * angle) % 360.0)
+            if here < LAND_LOOKAHEAD_KM and open_water((wind_from - side * angle) % 360.0) > here:
+                side = -side
         if self.side and side != self.side and self.mode == mode:
             self.last_switch = t
             self.switches += 1
@@ -222,8 +260,17 @@ class SailingAutopilot:
     estimate can be frozen while tacking. Without a wind vane reading
     (Sensors.wind_from_deg is None) it passes the inner command through."""
 
-    def __init__(self, inner: Autopilot, tactician: Tactician, guidance=None):
+    def __init__(
+        self,
+        inner: Autopilot,
+        tactician: Tactician,
+        guidance=None,
+        land_km: Callable[[float, float], float] | None = None,
+    ):
+        """land_km(lat, lon): distance to land for the look-ahead (default the
+        coast chart, vessel.coast.distance_to_land_km)."""
         self.inner = inner
+        self.land_km = land_km
         self.tactician = tactician
         self.guidance = guidance
 
@@ -247,7 +294,13 @@ class SailingAutopilot:
         wp = mission.waypoints[min(mission.active_index, len(mission.waypoints) - 1)]
         to_mark = bearing_deg(sensors.lat, sensors.lon, wp.lat, wp.lon)
         heading = self.tactician.heading(
-            to_mark, cmd.heading, sensors.wind_from_deg, sensors.wind_speed_ms, sensors.heading, t
+            to_mark,
+            cmd.heading,
+            sensors.wind_from_deg,
+            sensors.wind_speed_ms,
+            sensors.heading,
+            t,
+            open_water=lambda h: open_water_km(sensors.lat, sensors.lon, h, self.land_km),
         )
         if self.guidance is not None:
             self.guidance.tacking = self.tactician.mode != "reach"
