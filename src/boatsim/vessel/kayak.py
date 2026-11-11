@@ -270,6 +270,40 @@ class KayakVessel:
     def working_thrusters(self, state: BoatState) -> int:
         return sum(1 for k in self.thruster_parts if not state.damage.get(k, False))
 
+    # Hooks for other hull types (vessel/keelboat.py); the kayak's own physics.
+    def _motoring(self, state: BoatState, cmd: Command, drive_w: float, working: int) -> bool:
+        """Is a sailing design under power (so it holds any course, even upwind)?"""
+        can_motor = working >= (2 if state.damage.get("rudder") else 1)
+        return can_motor and drive_w >= self.min_steer_w
+
+    def _solve(
+        self,
+        heading: float,
+        push_w: float,
+        working: int,
+        env: EnvState,
+        foul: float,
+        cur_e: float,
+        cur_n: float,
+        extra_drag_mult: float,
+        sail_alpha_max: float,
+    ) -> SpeedSolution:
+        """Steady speed through the water this step."""
+        return solve_speed(
+            self.hull,
+            self.thrusters,
+            heading,
+            push_w,
+            working,
+            env,
+            foul,
+            cur_e,
+            cur_n,
+            extra_drag_mult=extra_drag_mult,
+            sail=self.sail,
+            sail_alpha_max_deg=sail_alpha_max,
+        )
+
     def step(
         self,
         state: BoatState,
@@ -334,8 +368,7 @@ class KayakVessel:
             # wing adds whatever drive it can at that heading (best_alpha picks
             # feathered when it can't help). With a dead rudder, two thrusters
             # still steer by differential thrust, as on the kayak.
-            can_motor = working >= (2 if state.damage.get("rudder") else 1)
-            motoring = can_motor and es.drive_w >= self.min_steer_w
+            motoring = self._motoring(state, cmd, es.drive_w, working)
             steering = steering or motoring
         else:
             motoring = False
@@ -367,9 +400,7 @@ class KayakVessel:
         # A boat that can't steer just turns circles: the power is spent (until the
         # autopilot cuts it) but it makes no headway, so it drifts.
         push_w = es.drive_w if steering else 0.0
-        sol = solve_speed(
-            self.hull,
-            self.thrusters,
+        sol = self._solve(
             heading,
             push_w,
             working,
@@ -377,9 +408,8 @@ class KayakVessel:
             foul,
             cur_e,
             cur_n,
-            extra_drag_mult=self.extra_drag_mult(state),
-            sail=self.sail,
-            sail_alpha_max_deg=sail_alpha_max,
+            self.extra_drag_mult(state),
+            sail_alpha_max,
         )
         ve, vn = _world_axes(heading, sol.surge, sol.sway)
         ge, gn = ve + cur_e, vn + cur_n
@@ -409,6 +439,7 @@ class KayakVessel:
         # One fixed block of dice per step, so the stream stays in step across
         # runs whose paths differ (hazards.SLOT).
         dice = draw_dice(rng)
+        self._last_dice = dice  # for subclasses' own hazards (keelboat gusts)
         hz = sample_hazards(self.hazards, env, hours, state.damage, new.t, dice)
         events += hz.events
         new.knockdowns = getattr(state, "knockdowns", 0) + hz.knockdowns
