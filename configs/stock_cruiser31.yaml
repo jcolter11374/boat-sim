@@ -67,7 +67,8 @@ sail:
 power:
   # GUESS: two 200 W panels on a stern arch, a common offshore fit. 200 W ran the
   # batteries flat in 12 days against the 960 Wh/day load (Ravi, docs/qa/stock-cruiser31-
-  # fairness.md); 400 W holds them full in typical spring sun. (The engine doesn't charge.)
+  # fairness.md); 400 W holds them full in typical spring sun. Cloudy spells still drain
+  # them, so the engine's alternator tops them up (propulsion block, vessel/keelboat.py).
   solar_wp: 400
   panels_w: {panel_port: 200, panel_stbd: 200}
   soiling_salt: 0.93         # GUESS
@@ -91,6 +92,10 @@ propulsion:
   engine_resist_n: 900       # GUESS: hull resistance at 6 kn, for the sea penalty under power
   engine_below_wind_kn: 5    # GUESS: motors only in calms
   fuel_l: 30                 # specs
+  alternator_w: 500          # GUESS: a 40 A alternator at about 13 V, into the house bank
+  charge_below_soc: 0.35     # GUESS: the autopilot starts the engine out of gear below this
+  charge_until_soc: 0.8      # GUESS: and idles it until the bank is back up to this
+  fuel_reserve_l: 5          # GUESS: never burns the last 5 L charging
 
 electronics:
   autopilot: below-deck autopilot with a rudder ram, plus instruments

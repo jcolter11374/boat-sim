@@ -1,6 +1,6 @@
 """The joke fleet's odd boats: honest physics for absurd craft (stock vessels).
 
-Each is the kayak model (drag, windage, drift, hazards) plus up to three
+Each is the kayak model (drag, windage, drift, hazards) plus up to four
 things the kayak never needed, all set in the design's `odd:` block:
 
 * Muscle power. A person (or two) paddling or pedalling: crew_w watts at the
@@ -31,6 +31,15 @@ things the kayak never needed, all set in the design's `odd:` block:
   windage (a kite is a drag device on a string). Each hour the wind is
   below kite_min_ms, it falls in the sea with p_kite_drop_per_lull_h and
   nobody can relaunch it.
+
+* A para-anchor (ocean rowing boats). A parachute streamed from the bow
+  holds the boat head to wind, and the crew shelters in the cabins. They
+  put it out when rowing would lose ground or is unsafe: the wind's head-on
+  part along the course above anchor_head_ms, or any wind above
+  anchor_storm_ms. On the anchor nobody rows, and the boat drifts with the
+  current while the parachute takes most of the wind's push: the hull feels
+  anchor_wind_share of the wind (GUESS). The crew takes it in again once
+  the wind eases below the limits less anchor_hysteresis_ms.
 
 Random draws use the step's fixed dice block (hazards.SLOT), in slots of
 thrusters these boats don't have, so paired runs stay in step.
@@ -64,6 +73,7 @@ class OddState(KayakState):
     water_l: float = 0.0  # in the boat
     kite_up: bool = False
     crew_working: bool = False
+    on_anchor: bool = False  # para-anchor out (rowing boats)
 
 
 class OddBoatVessel(KayakVessel):
@@ -86,6 +96,10 @@ class OddBoatVessel(KayakVessel):
         self.kite_cda_m2 = float(o.get("kite_cda_m2", 0.0))
         self.kite_min_ms = float(o.get("kite_min_ms", 0.0))
         self.p_kite_drop_per_lull_h = float(o.get("p_kite_drop_per_lull_h", 0.0))
+        self.anchor_head_ms = float(o.get("anchor_head_ms", math.inf))
+        self.anchor_storm_ms = float(o.get("anchor_storm_ms", math.inf))
+        self.anchor_wind_share = float(o.get("anchor_wind_share", 1.0))
+        self.anchor_hysteresis_ms = float(o.get("anchor_hysteresis_ms", 2.0))
         self.loss_words = dict(o.get("loss_words", {}))
         self._bare_hull = self.hull
         if self.kite_cda_m2 > 0.0:
@@ -120,6 +134,16 @@ class OddBoatVessel(KayakVessel):
         t0 = getattr(state, "t_launch", None) or state.t
         days = (state.t - t0).total_seconds() / 86400.0
         return self.crew_w * max(1.0 - self.fatigue_per_day * days, self.fatigue_floor)
+
+    def wants_anchor(self, heading: float, env: EnvState, out_now: bool) -> bool:
+        """Would the crew have the para-anchor out, rowing on `heading`?"""
+        if not math.isfinite(self.anchor_head_ms) and not math.isfinite(self.anchor_storm_ms):
+            return False
+        h = math.radians(heading)
+        head = -(env.wind_u * math.sin(h) + env.wind_v * math.cos(h))  # on the nose, m/s
+        ease = self.anchor_hysteresis_ms if out_now else 0.0
+        tws = math.hypot(env.wind_u, env.wind_v)
+        return head > self.anchor_head_ms - ease or tws > self.anchor_storm_ms - ease
 
     def relative_wave_m(self, hs: float, tp: float, wind_ms: float) -> tuple[float, float]:
         """(height of the water moving relative to the boat, m; wind-sea period, s)."""
@@ -156,7 +180,16 @@ class OddBoatVessel(KayakVessel):
         hours = dt.total_seconds() / 3600.0
         water = getattr(state, "water_l", 0.0)
         kite = getattr(state, "kite_up", False)
-        working = self.crew_on(state) and state.alive
+        anchor = state.alive and self.wants_anchor(
+            cmd.heading, env, getattr(state, "on_anchor", False)
+        )
+        working = self.crew_on(state) and state.alive and not anchor
+        sea = env  # the real wind, for the kite and the waves
+        if anchor:
+            # The parachute takes most of the wind's push; the hull drifts with
+            # the current and what is left of the wind (module doc).
+            k = self.anchor_wind_share
+            env = replace(env, wind_u=env.wind_u * k, wind_v=env.wind_v * k)
         if self.crew_w > 0.0:
             # The crew is the motor: full effort while on shift, nothing off it.
             frac = min(self.crew_power_w(state) / self.crew_w, 1.0) if working else 0.0
@@ -165,7 +198,7 @@ class OddBoatVessel(KayakVessel):
         new, events = super().step(state, cmd, env, dt, rng)
         self.hull = self._bare_hull
         dice = self._last_dice
-        tws = math.hypot(env.wind_u, env.wind_v)
+        tws = math.hypot(sea.wind_u, sea.wind_v)
         p_drop = 1.0 - (1.0 - self.p_kite_drop_per_lull_h) ** hours
         if kite and tws < self.kite_min_ms and dice[KITE_SLOT] < p_drop:
             kite = False
@@ -181,6 +214,7 @@ class OddBoatVessel(KayakVessel):
             water_l=water,
             kite_up=kite,
             crew_working=working,
+            on_anchor=anchor,
         )
         if out.alive and water >= self.swamp_l:
             ph = phase(self.hazards, distance_to_land_km(out.lat, out.lon))

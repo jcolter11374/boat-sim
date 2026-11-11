@@ -7,10 +7,10 @@
 // This matches Theo's wave-motion model (src/motion.ts), which turns the boat
 // about its CG.
 
-import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, RANDOLPH_REVB } from "../motion";
+import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, RANDOLPH_REVB, SAIL_DRONE7 } from "../motion";
 
 /** Theo's stock vessels (configs/stock_*.yaml), by their config names. */
-export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16";
+export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7";
 
 export interface BoatSpec {
   key: "kayak" | "randolph" | StockKey;
@@ -111,7 +111,28 @@ export const BEACHCAT: BoatSpec = {
   source: "configs/stock_beachcat16.yaml (published specs of a common 16 ft beach catamaran)",
 };
 
-export const STOCK: Record<StockKey, BoatSpec> = { stock_cruiser31: CRUISER, stock_dinghy14: DINGHY, stock_beachcat16: BEACHCAT };
+export const SAIL_DRONE: BoatSpec = {
+  key: "stock_sail_drone7",
+  name: "wind-powered ocean drone",
+  length: 7.0,
+  beam: 0.9,
+  waterline: 0.34, // the hull's draft; the keel goes on to about 2 m
+  massKg: 750,
+  ballastKg: 250,
+  ballastDepth: 1.6,
+  cgX: SAIL_DRONE7.cgX,
+  cgBelowWaterline: SAIL_DRONE7.cgBelowWaterline,
+  cruiseSpeed: 1.4, // about 2.7 kn
+  colour: 0xf2b33d,
+  source: "configs/stock_sail_drone7.yaml (published specs of a 7 m uncrewed sailing drone)",
+};
+
+export const STOCK: Record<StockKey, BoatSpec> = {
+  stock_cruiser31: CRUISER,
+  stock_dinghy14: DINGHY,
+  stock_beachcat16: BEACHCAT,
+  stock_sail_drone7: SAIL_DRONE,
+};
 /** Only the cruiser can be sailed in the games for now (Maya, 11 Nov: the dinghy and
  * cat capsize in squalls, and the sandbox has no rain yet). */
 export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31"];
@@ -122,6 +143,7 @@ export function stockKeyOf(boat: string | undefined): StockKey | null {
   if (/cruiser/i.test(b)) return "stock_cruiser31";
   if (/dinghy/i.test(b)) return "stock_dinghy14";
   if (/beach\s*cat|catamaran/i.test(b)) return "stock_beachcat16";
+  if (/ocean drone|sail\s*drone/i.test(b)) return "stock_sail_drone7";
   return null;
 }
 

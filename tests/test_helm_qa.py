@@ -129,6 +129,7 @@ def _fake_game(me_days, gh_days, me="arrived", gh="arrived"):
     g.choices, g.seed, g.breakdowns, g.orders, g.left_data = None, 1, True, [], set()
     g.mode = "hands_on"
     g.challenge = None
+    g.start_port = None
     g.start = start
     g.mine, g.ghost = voyage(me_days, me), voyage(gh_days, gh)
     g._advance = lambda v, until=None: None

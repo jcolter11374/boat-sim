@@ -67,7 +67,7 @@ jobs:
           python blender/build_kayak.py public/models/kayak.glb
           python blender/build_randolph.py public/models/randolph.glb
           for s in cat semisub board; do python blender/build_shapes.py $s public/models/shape_$s.glb; done
-          for b in cruiser dinghy beachcat; do python blender/build_stock.py $b public/models/stock_$b.glb; done
+          for b in cruiser dinghy beachcat drone; do python blender/build_stock.py $b public/models/stock_$b.glb; done
       # The Boatyard's simulator in the browser (docs/sandbox.md): Theo's
       # boatsim.zip and the 2020 weather, served from this site so the page can
       # fetch them (a release download can't be read from a browser page). If

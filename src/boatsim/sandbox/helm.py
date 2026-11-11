@@ -168,6 +168,31 @@ class PlayerBase:
         }
 
 
+def port_start(port_id: str, env=None) -> tuple[float, float]:
+    """A port's launch point (oceandata/ports.py): where a support boat drops the
+    boat when it sails from that port. Only ports whose voyage crosses the race
+    start line, with the launch point and its launch route inside the weather
+    actually loaded (a challenge's own bundle included) and clear of its edge."""
+    from boatsim.oceandata import ports
+
+    p = ports.load().get(port_id)
+    if p is None:
+        raise ValueError(f"no port called {port_id!r}")
+    if not p["crosses_start"]:
+        raise ValueError(
+            f"can't sail from {p['name']}: its voyage wouldn't cross the start line here"
+        )
+    if not p["in_corridor"]:
+        raise ValueError(f"can't sail from {p['name']}: the boats would drift out of the weather")
+    lat, lon = float(p["launch_lat"]), float(p["launch_lon"])
+    w = getattr(env, "weather", None)  # a bundle's weather grid; full data has no edge to check
+    if w is not None:
+        box = (float(w.lats[0]), float(w.lats[-1]), float(w.lons[0]), float(w.lons[-1]))
+        if not ports.route_inside(lat, lon, box=box):  # same margin as the list's flag
+            raise ValueError(f"can't sail from {p['name']}: this weather doesn't reach it")
+    return lat, lon
+
+
 def _iso(t: datetime) -> str:
     return t.isoformat(timespec="minutes")
 
@@ -188,6 +213,7 @@ class Game:
         mode: str = "hands_on",
         day: str | None = None,
         challenge: str | None = None,
+        start_port: str | None = None,
     ):
         from boatsim.runner.land import default_land
 
@@ -214,7 +240,12 @@ class Game:
         else:
             self.start, self.seed = launches(env)[launch_index or 0]
         voyage = self.design.voyage
-        self.drop = (voyage["drop_lat"], voyage["drop_lon"])
+        # Where both boats start: the design's drop, or a port's launch point. The
+        # route (and base's "route" orders) start there too; the finish is unchanged.
+        self.start_port = start_port
+        self.drop = (
+            port_start(start_port, env) if start_port else (voyage["drop_lat"], voyage["drop_lon"])
+        )
         land = default_land()
         self.breakdowns = breakdowns
 
@@ -631,6 +662,7 @@ class Game:
             "build": catalog.grid_id(self.choices),
             "launch": _iso(self.start),
             "challenge": self.challenge,
+            "start_port": self.start_port,
             "seed": self.seed,
             "breakdowns_on": self.breakdowns,
             "mode": self.mode,
@@ -668,6 +700,8 @@ class Game:
             "at": round((self.mine.state.t - self.start).total_seconds() / 60),
             "p": [round(self.mine.state.lat, 4), round(self.mine.state.lon, 4)],
         }
+        if self.start_port:
+            payload["sp"] = self.start_port  # only when set, so other codes stay as they were
         raw = zlib.compress(json.dumps(payload, separators=(",", ":")).encode(), 9)
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -691,6 +725,7 @@ class Game:
                 launch_index=p["l"],
                 day=p.get("day"),
                 challenge=p.get("ch"),
+                start_port=p.get("sp"),  # older links: the usual drop
                 safe=p["s"],
                 breakdowns=p["b"],
                 max_days=p["d"],

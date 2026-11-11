@@ -323,7 +323,8 @@ def test_results_card_says_how_it_ended(env):
 
 
 @pytest.mark.parametrize(
-    "base", ["joke_canoe", "joke_flamingo", "stock_dinghy14", "stock_sail_drone7"]
+    "base",
+    ["joke_canoe", "joke_flamingo", "stock_dinghy14", "stock_sail_drone7", "stock_ocean_rower45"],
 )
 def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     g = Game(env, choices={"base": base}, launch_index=MAY1, max_days=0.9)
@@ -332,6 +333,92 @@ def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     r = g.result()
     assert r["build"] == base
     assert r["boat"]["ending"]["boat"] == g.design.stock["label"]
+
+
+# ------------------------------------------------------------- start from a port
+
+
+def test_a_port_start_moves_both_boats_and_survives_save(env):
+    from boatsim.oceandata import ports
+
+    boston = ports.load()["boston"]
+    at = (boston["launch_lat"], boston["launch_lon"])
+    g = Game(env, launch_index=MAY1, start_port="boston", max_days=1.0)
+    assert g.drop == at
+    assert (g.mine.state.lat, g.mine.state.lon) == at == (g.ghost.state.lat, g.ghost.state.lon)
+    assert g._route[0].lat == at[0] and g.finish == FINISH  # the route starts there, same finish
+    g.order("finish", 0.5)
+    g.run(hours=6)
+    back = Game.load(env, g.save())
+    assert back.start_port == "boston" and back.mine.state == g.mine.state
+    assert g.result()["start_port"] == "boston"
+    # Old links (no "sp") start from the usual drop.
+    assert Game(env, launch_index=MAY1, max_days=0.5).start_port is None
+
+
+def test_ports_you_cannot_start_from(env):
+    with pytest.raises(ValueError, match="no port called"):
+        Game(env, launch_index=MAY1, start_port="atlantis")
+    with pytest.raises(ValueError, match="start line"):
+        Game(env, launch_index=MAY1, start_port="lisboa")  # east of the start line
+    with pytest.raises(ValueError, match="drift out of the weather"):
+        Game(env, launch_index=MAY1, start_port="saint-john-s")  # Newfoundland: drifts past 50N
+
+
+def test_a_port_start_still_logs_the_start_line(env, monkeypatch):
+    """The picker only offers ports west of the race's start line; a voyage from
+    one must still log the Microtransat start when it crosses it."""
+    from boatsim.oceandata import ports
+
+    near = {"id": "edge", "name": "Edge", "launch_lat": 40.0, "launch_lon": -65.04}
+    near |= {"in_corridor": True, "crosses_start": True}
+    monkeypatch.setattr(ports, "load", lambda path=None: {"edge": near})
+    g = Game(env, launch_index=MAY1, start_port="edge", breakdowns=False, max_days=1.0)
+    assert g.mine.log.t_start_line is None
+    g.order(90.0, 1.0)  # due east, across the line at 40N 65W
+    g.run(hours=12)
+    assert g.mine.log.t_start_line is not None
+
+
+def test_a_port_must_be_inside_the_weather_loaded(env, monkeypatch):
+    """Checked against the bundle in use (a challenge brings its own), not only
+    the precomputed corridor flag: no drop on or past the grid's edge."""
+    from boatsim.oceandata import ports
+
+    lats, lons = env.weather.lats, env.weather.lons
+    edge = {"id": "edge", "name": "Edge", "in_corridor": True, "crosses_start": True}
+    edge |= {"launch_lat": float(lats[0]) + 0.5, "launch_lon": float(lons[0]) + 5}
+    inside = edge | {"id": "in", "launch_lat": float(lats[0]) + 2}
+    monkeypatch.setattr(ports, "load", lambda path=None: {"edge": edge, "in": inside})
+    with pytest.raises(ValueError, match="doesn't reach"):
+        Game(env, launch_index=MAY1, start_port="edge")
+    assert (
+        Game(env, launch_index=MAY1, start_port="in", max_days=0.5).drop[0] == inside["launch_lat"]
+    )
+
+
+def _picker_ports():
+    from boatsim.oceandata import ports
+
+    return sorted(k for k, p in ports.load().items() if p["in_corridor"] and p["crosses_start"])
+
+
+def test_every_offered_port_sails_a_day_without_running_aground(env):
+    """Ravi's check on #246: from every port the picker offers, both boats sail
+    the launch route for a day and neither hits land or the weather's edge."""
+    offered = _picker_ports()
+    assert len(offered) >= 20
+    for pid in offered:
+        g = Game(env, launch_index=MAY1, start_port=pid, breakdowns=False, max_days=2.0)
+        g.run(hours=24, land_within_km=None, breakdown=False, ghost_passes=False)
+        for v in (g.mine, g.ghost):
+            assert not v.done, (pid, g.result())
+
+
+def test_ports_file_is_read_once():
+    from boatsim.oceandata import ports
+
+    assert ports.load() is ports.load()
 
 
 CRUISER = {"base": "stock_cruiser31"}

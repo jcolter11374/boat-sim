@@ -28,6 +28,7 @@ PACK_FILES = (
     "configs/stock_dinghy14.yaml",
     "configs/stock_beachcat16.yaml",
     "configs/stock_sail_drone7.yaml",
+    "configs/stock_ocean_rower45.yaml",
     "configs/polars/cruiser31.json",
     "configs/polars/dinghy14.json",
     "configs/polars/beachcat16.json",
@@ -38,6 +39,8 @@ PACK_FILES = (
     "configs/joke_flamingo.yaml",
     "configs/joke_wheelie_bin.yaml",
     "data/land/land_mask_v1.npz",
+    # Ports to sail from (oceandata/ports.py; Game(start_port=...)).
+    "sea3d/public/ports.json",
 )
 
 

@@ -14,7 +14,7 @@ import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import { KAYAK, PLAYABLE_STOCK, STOCK, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, type HullParams } from "./motion";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, SAIL_DRONE7, type HullParams } from "./motion";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
@@ -26,6 +26,7 @@ import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
+import { loadPorts, portLabel } from "./helm/ports";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
@@ -68,6 +69,7 @@ const HULL: Partial<Record<BoatSpec["key"], HullParams>> = {
   stock_cruiser31: CRUISER31,
   stock_dinghy14: DINGHY14,
   stock_beachcat16: BEACHCAT16,
+  stock_sail_drone7: SAIL_DRONE7,
 };
 let motion = new BoatMotion(KAYAK_V4, place);
 let model: BoatModel | null = null;
@@ -143,6 +145,20 @@ const challengesReady = loadChallenges(challengesBase).then((list) => {
   challenges = list;
   showChallenges();
 });
+// Ports to start from (public/ports.json): the picker stays hidden without the file,
+// and for a shared game, which carries its own start.
+void loadPorts(new URL(params.get("ports") ?? "./ports.json", location.href).href).then((list) => {
+  page.ports = list.length;
+  if (!list.length || shared) return;
+  const sel = $<HTMLSelectElement>("port");
+  for (const p of list) {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = portLabel(p, list);
+    sel.appendChild(o);
+  }
+  $("portpick").hidden = false;
+});
 /** The chosen challenge, if any (a shared link names it with ?c=). */
 function chosenChallenge(): Challenge | undefined {
   const id = shared ? params.get("c") : $<HTMLSelectElement>("challenge").value;
@@ -170,6 +186,9 @@ const page = {
   share: "",
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
+  /** The port the game started from ("" = the usual drop), and how many the picker offers. */
+  startPort: "",
+  ports: 0,
   /** Points of interest: how many loaded, and the ids the track has reached (in order). */
   pois: { loaded: 0, shown: [] as string[] },
   /** The last run's stop reason (for tests). */
@@ -650,6 +669,7 @@ async function begin(): Promise<void> {
     return;
   }
   page.challenge = ch?.id ?? "";
+  page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
   $("start").hidden = true;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
   try {
@@ -663,7 +683,7 @@ async function begin(): Promise<void> {
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
     } else {
-      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, chosenBoat() || undefined);
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, chosenBoat() || undefined, page.startPort);
       useBoat(game.boatBase);
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
@@ -696,7 +716,15 @@ async function begin(): Promise<void> {
     if (page.status?.over) await finish();
   } catch (e) {
     const err = String(e);
-    if (/NO_CHALLENGES/.test(err)) {
+    if (/NO_PORTS/.test(err)) {
+      page.error = "no ports in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site can't start from a port yet; it's being updated. Start from our usual drop for now.";
+    } else if (/BAD_PORT/.test(err)) {
+      page.error = "port not sailable here";
+      setBusy(false);
+      $("startmsg").textContent = `${err.replace(/^.*BAD_PORT\s*/, "").replace(/^./, (c) => c.toUpperCase())}. Pick another port, or start from our usual drop.`;
+    } else if (/NO_CHALLENGES/.test(err)) {
       page.error = "no challenges in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site doesn't know the weather challenges yet; it's being updated. Pick a 2020 launch for now.";
