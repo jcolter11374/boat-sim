@@ -24,12 +24,10 @@ jobs:
       - run: pip install -e . requests
       - name: Fetch constants and NOAA's predictions
         run: python -m boatsim.oceandata.tides fetch --out runs/tides
-      - name: Print the constants (for threads that can't download artifacts)
-        if: always()
-        run: |
-          cat runs/tides/summary.json
-          for f in runs/tides/harcon_*.json; do echo "== $f"; cat "$f"; echo; done
-          for f in runs/tides/pred_*.json; do echo "== $f"; python -c "import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d)[:6000])" "$f"; done
+      - name: Build the table and check it against NOAA's predictions
+        run: python -m boatsim.oceandata.tides build runs/tides --out runs/tides/tide_currents.json
+      - name: Print the table (for threads that can't download artifacts)
+        run: python -c "import json; print(json.dumps(json.load(open('runs/tides/tide_currents.json'))))"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

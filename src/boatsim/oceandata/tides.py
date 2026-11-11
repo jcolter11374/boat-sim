@@ -265,6 +265,100 @@ class TidalCurrents:
         return replace(e, current_u=e.current_u + u, current_v=e.current_v + v)
 
 
+OUT = Path(__file__).with_name("tide_currents.json")
+
+
+def _cp_rows(pred: dict) -> list[dict]:
+    cp = (pred.get("current_predictions") or {}).get("cp") or []
+    return [c for c in cp if isinstance(c, dict) and c.get("Velocity_Major") is not None]
+
+
+def build(raw: Path, log=print) -> dict:
+    """The committed table: for each harmonic station in the fetch, its
+    shallowest bin's constants (major axis), and how far our prediction is from
+    NOAA's own over CHECK_DAYS (rms, m/s)."""
+    raw = Path(raw)
+    listing = json.loads((raw / "stations_all.json").read_text()).get("stations", [])
+    where = {s["id"]: s for s in listing}
+    best: dict[str, tuple[float, Path]] = {}
+    for f in sorted(raw.glob("harcon_*.json")):
+        hc = json.loads(f.read_text()).get("HarmonicConstituents") or []
+        if not hc:
+            continue  # a subordinate station: no constants of its own
+        sid = f.stem[len("harcon_") :].rsplit("_", 1)[0]
+        depth = float(hc[0].get("binDepth") or 0.0)
+        if sid not in best or depth < best[sid][0]:
+            best[sid] = (depth, f)
+    out = []
+    for sid, (depth, f) in sorted(best.items()):
+        hc = json.loads(f.read_text())["HarmonicConstituents"]
+        pf = raw / f.name.replace("harcon_", "pred_")
+        cp = _cp_rows(json.loads(pf.read_text())) if pf.exists() else []
+        flood = float(cp[0]["meanFloodDir"]) if cp else float(hc[0].get("azi") or 0.0)
+        st = Station(
+            sid,
+            str(where.get(sid, {}).get("name", "")),
+            float(where.get(sid, {}).get("lat", 0.0)),
+            float(where.get(sid, {}).get("lng", 0.0)),
+            flood,
+            float(hc[0].get("majorMeanSpeed") or 0.0) / 100.0,
+            tuple(
+                (str(c["constituentName"]), float(c["majorAmplitude"]) / 100.0,
+                 float(c["majorPhaseGMT"]))
+                for c in hc
+                if float(c.get("majorAmplitude") or 0.0) > 0.0
+            ),
+        )  # fmt: skip
+        rms = None
+        if cp:
+            e = [
+                st.speed(datetime.strptime(c["Time"], "%Y-%m-%d %H:%M").replace(tzinfo=UTC))
+                - float(c["Velocity_Major"]) / 100.0
+                for c in cp
+            ]
+            rms = round(math.sqrt(sum(x * x for x in e) / len(e)), 3)
+        row = {
+            "id": sid,
+            "name": st.name,
+            "lat": st.lat,
+            "lon": st.lon,
+            "bin": int(hc[0].get("binNbr") or 0),
+            "depth_m": depth,
+            "flood_dir": st.flood_dir,
+            "mean": round(st.mean, 4),
+            "constituents": [[n, round(a, 4), ph] for n, a, ph in st.constituents],
+            "check_rms": rms,
+            "check_peak": round(
+                max((abs(float(c["Velocity_Major"])) for c in cp), default=0) / 100, 3
+            ),
+        }
+        out.append(row)
+        log(f"{sid} {st.name}: {len(st.constituents)} constituents, rms {rms} m/s vs NOAA")
+    doc = {
+        "source": "NOAA CO-OPS tidal current harmonic constants (public domain), "
+        + MDAPI
+        + "/stations/<id>/harcon.json; station pages https://tidesandcurrents.noaa.gov/"
+        "noaacurrents/predictions?id=<id>_<bin>",
+        "notes": "major axis only, shallowest bin; amplitudes m/s, phases degrees GMT; "
+        "check_rms: our prediction against NOAA's own over " + " to ".join(CHECK_DAYS),
+        "stations": out,
+    }
+    return doc
+
+
+def load(path: str | Path = OUT, areas: tuple[str, ...] | None = None) -> list[Station]:
+    """The committed stations (optionally only those in some AREAS)."""
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [
+        Station(
+            r["id"], r["name"], r["lat"], r["lon"], r["flood_dir"], r["mean"],
+            tuple((n, a, ph) for n, a, ph in r["constituents"]),
+        )
+        for r in doc["stations"]
+        if areas is None or in_area(r["lat"], r["lon"]) in areas
+    ]  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> None:
     import argparse
 
@@ -272,9 +366,14 @@ def main(argv: list[str] | None = None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fetch")
     f.add_argument("--out", default="runs/tides")
+    b = sub.add_parser("build", help="the committed table from a fetch")
+    b.add_argument("raw", nargs="?", default="runs/tides")
+    b.add_argument("--out", default=str(OUT))
     a = ap.parse_args(argv)
     if a.cmd == "fetch":
         fetch(Path(a.out))
+    elif a.cmd == "build":
+        Path(a.out).write_text(json.dumps(build(Path(a.raw)), indent=1) + "\n")
 
 
 if __name__ == "__main__":
