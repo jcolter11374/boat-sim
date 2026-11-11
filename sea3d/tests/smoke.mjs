@@ -365,11 +365,11 @@ try {
   await page.evaluate(() => window.__yard.setBase("kayak"));
   if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
   log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
-  // Cinematic mode: the panels fade, the camera cuts between shots (a time-lapse
-  // puts the replay hour back afterwards), and any key ends it.
+  // Cinematic mode: the panels fade, the camera cuts between shots of what is
+  // happening now (it never moves the voyage clock), and any key ends it.
   await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 });
-  await page.evaluate(() => window.__replay.setHour(150));
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(150); });
   await page.click("#cinebtn");
   await page.waitForFunction(() => window.__replay.cine.on && getComputedStyle(document.getElementById("credits")).opacity === "0", null, { timeout: 30000 })
     .catch(() => fail("cinematic: the panels and credits didn't fade"));
@@ -378,14 +378,14 @@ try {
     await page.evaluate((k) => window.__replay.cine.cut(k), k);
     const f = await page.evaluate(() => window.__replay.frames);
     await page.waitForFunction((n) => window.__replay.frames > n + 3, f, { timeout: 30000 });
-    shots.push(await page.evaluate(() => `${window.__replay.cine.current}${window.__replay.cine.lapseHour !== null ? "@" + window.__replay.hour.toFixed(1) : ""}`));
+    shots.push(await page.evaluate(() => `${window.__replay.cine.current}@${window.__replay.hour.toFixed(1)}`));
   }
-  if (!shots[1].startsWith("sunset@")) fail(`cinematic: no sunset time-lapse (${shots})`);
+  if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
     .catch(() => fail("cinematic: a key didn't bring the panels back"));
   const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
-  if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour wasn't put back (${back.hour})`);
+  if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);
   if (errors.length) fail(`page errors in cinematic mode: ${errors.join("; ")}`);
   log.push(`cinematic: ${shots.join(", ")}, ${back.sound}`);
 

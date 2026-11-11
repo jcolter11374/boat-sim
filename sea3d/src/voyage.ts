@@ -827,7 +827,6 @@ if (PLACE) {
 })();
 
 // ---------- cinematic mode and sound ----------
-let held: { hour: number; playing: boolean } | null = null;
 const sunElAt = (h: number) => {
   if (!rep) return 0;
   const [la, lo] = positionAt(rep, h);
@@ -838,29 +837,11 @@ const cine = new Cinema({
   controls,
   water: (x, z) => heightAt(live.advance(last), x, z, last),
   yaw: () => smoothYaw ?? 0,
-  hour: () => hour,
-  // Live: never past the latest report. The game: never past where you've watched to,
-  // so no story beat comes early. Otherwise the whole voyage.
-  hours: () => [0, tracked ? tracked.nowHour : GAME ? hour : Math.max(endHour() - 0.1, 0)],
-  sunEl: sunElAt,
+  // What is happening now: the voyage clock runs on as it was (John, 11 Nov).
+  sunEl: () => sunElAt(hour),
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
   landmark: () => (island ? PLACE!.look : null),
-  hold: (on) => {
-    if (on) {
-      held = { hour, playing };
-      setPlaying(false);
-    } else if (held) {
-      hour = held.hour;
-      // Events the time-lapse ran past haven't happened yet.
-      for (const l of lanes) {
-        const i = l.rep.events.findIndex((e) => e.h > hour);
-        l.shown = i < 0 ? l.rep.events.length : Math.min(l.shown, i);
-      }
-      setPlaying(held.playing);
-      held = null;
-    }
-  },
   toggleSound: () => sound.toggle(),
   scale: () => viewScale,
 });
@@ -886,7 +867,6 @@ renderer.setAnimationLoop(() => {
     hour = Math.min(hour + dt * warp, endHour());
     if (hour >= endHour()) setPlaying(false);
   }
-  if (cine.lapseHour !== null) hour = cine.lapseHour;
   if (rep) {
     // Events reached since last frame, for every boat on screen.
     for (const [li, l] of lanes.entries()) {

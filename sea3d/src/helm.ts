@@ -684,30 +684,21 @@ function knownLanes(): { rep: Replay; colours: { main: string; beacon: string; g
 }
 
 // ---------- cinematic mode and sound ----------
-let heldHour: number | null = null;
 const cine = new Cinema({
   camera,
   controls,
   water: (x, z) => heightAt(live.advance(last), x, z, last),
   yaw: () => smoothYaw ?? 0,
-  hour: () => hour,
-  // Only hours already sailed: the films never show what's ahead of your clock.
-  hours: () => [0, page.ready && game.boat ? Math.min(shownTo, lastHour(game.boat)) : 0],
-  sunEl: (h) => {
+  // The moment on screen: cinematic mode never moves the clock (John, 11 Nov).
+  sunEl: () => {
     const r = game.boat;
     if (!r) return 0;
-    const [la, lo] = positionAt(r, Math.min(h, lastHour(r)));
+    const h = Math.min(hour, lastHour(r));
+    const [la, lo] = positionAt(r, h);
     return sunPosition(utc(r.start) + h * 3600e3, la, lo).el;
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
-  hold: (on) => {
-    if (on) heldHour = hour;
-    else if (heldHour !== null) {
-      hour = heldHour;
-      heldHour = null;
-    }
-  },
   toggleSound: () => sound.toggle(),
 });
 const sound = new OceanSound();
@@ -733,7 +724,6 @@ renderer.setAnimationLoop(() => {
     const rate = Math.max(span / Math.min(6, 0.6 + (2.5 * span) / 24), 6); // hours per second
     hour = Math.min(shownTo, hour + dt * rate);
   }
-  if (cine.lapseHour !== null) hour = cine.lapseHour;
   const r = rep();
   const h = r ? Math.min(hour, lastHour(r)) : 0;
   const hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;
