@@ -62,19 +62,25 @@ class Build:
 
 
 BOAT_NAMES = {"kayak": "v4 kayak", "revc": "Randolph Rev C", "revb": "Randolph Rev B"}
+# The names a player reads (docs/glossary.md): "our kayak", "Rev C (our model)".
+LABEL_NAMES = {"kayak": "Our kayak", "revc": "Rev C (our model)", "revb": "Rev B (our model)"}
 
 
 def _label(choices: dict) -> str:
+    """Plain words for a build: what it starts from, then only what differs, e.g.
+    "Our kayak", "Our kayak, 15 W cruise, Thrusters: one-t200", "Rev C as built (our model)"."""
     base = catalog.base_of(choices)
     picked, cruise = catalog.normalise(choices)
     if base != "kayak":
         names = catalog.RSLOT_NAMES
         diffs = [f"{names[s]}: {o}" for s, o in picked.items() if catalog.matters(s, o, base)]
-        what = f"{BOAT_NAMES[base]} as published (our model)"
-        return what if not diffs else f"{BOAT_NAMES[base]}, " + ", ".join(diffs)
+        if not diffs:
+            return LABEL_NAMES[base].replace(" (our model)", " as built (our model)")
+        return f"{LABEL_NAMES[base]}, " + ", ".join(diffs)
     diffs = [f"{catalog.SLOT_NAMES[s]}: {o}" for s, o in picked.items() if o != catalog.DEFAULTS[s]]
-    power = f"{cruise} W cruise" if cruise else "sail only"
-    return power + (", " + ", ".join(diffs) if diffs else ", kayak as it stands")
+    if cruise != catalog.DEFAULT_CRUISE_W:
+        diffs.insert(0, f"{cruise} W cruise" if cruise else "sail only")
+    return LABEL_NAMES["kayak"] + (", " + ", ".join(diffs) if diffs else "")
 
 
 def _kayak(choices: dict) -> Build:
