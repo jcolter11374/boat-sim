@@ -86,6 +86,10 @@ async function clickNamed(page, selector, what, opts = {}) {
 }
 
 // ---------- helm ----------
+// The functional helm checks run on Low quality, as the smoke test does: on the
+// runner's software graphics, High spends the frame in the browser's own raster work
+// (Sam's profile, #293), which starved clicks. visual-helm keeps the default look.
+const HELM = "helm.html?quality=low";
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   await setup(page);
@@ -149,9 +153,9 @@ const CHECKS = {
       return `${await page.evaluate(() => window.__sea3d.frames)} frames drawn`;
     },
   },
-  "helm-drop": { path: "helm.html", run: helm(async (p) => p.selectOption("#launch", "0")) },
+  "helm-drop": { path: HELM, run: helm(async (p) => p.selectOption("#launch", "0")) },
   "helm-port": {
-    path: "helm.html",
+    path: HELM,
     run: helm(async (p) => {
       await p.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN }).catch(() => {
         throw new CheckFail("the port picker never appeared");
@@ -161,7 +165,7 @@ const CHECKS = {
     }),
   },
   "helm-challenge": {
-    path: "helm.html",
+    path: HELM,
     run: helm(
       async (p) => {
         await p.waitForFunction(() => !document.querySelector("#chpick").hidden, null, { timeout: MIN }).catch(() => {
@@ -177,7 +181,7 @@ const CHECKS = {
   },
   // Sam's fragile spot 1: a fresh share link reopens the game at the same spot, in a fresh profile.
   "helm-share": {
-    path: "helm.html",
+    path: HELM,
     run: async (page) => {
       await helmStart(page, async (p) => p.selectOption("#launch", "1"));
       const before = await frameTimes(page);
@@ -187,7 +191,7 @@ const CHECKS = {
       await clickNamed(page, "#share", "Copy a share link");
       await page.waitForFunction(() => !!window.__helm.share, null, { timeout: 2 * MIN });
       const link = await page.evaluate(() => window.__helm.share);
-      const o = await open(page.context().browser(), link.slice(SITE.length));
+      const o = await open(page.context().browser(), `${link.slice(SITE.length)}&quality=low`);
       try {
         await o.page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
         if (!(await o.page.evaluate(() => window.__helm.ready))) {
@@ -206,19 +210,19 @@ const CHECKS = {
       }
     },
   },
-  "helm-base": { path: "helm.html", run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
+  "helm-base": { path: HELM, run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
 };
 
 // One helm check per boat the live picker offers (our kayak is helm-drop).
 const STOCK_BOATS = ["stock_cruiser31", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14", "stock_beachcat16"];
 for (const b of STOCK_BOATS)
   CHECKS[`helm-${b}`] = {
-    path: "helm.html",
+    path: HELM,
     optional: true, // only if the live picker offers it; the list of offered boats is checked in helm-boats
     run: helm(pickBoat(b)),
   };
 CHECKS["helm-boats"] = {
-  path: "helm.html",
+  path: HELM,
   run: async (page) => {
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
     const offered = await page.evaluate(() => [...document.querySelectorAll('input[name="boat"]')].map((r) => r.value || "kayak"));
