@@ -180,3 +180,5 @@ stored in git. Resampled by us.
   License (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/). The file
   is a derived database and stays under the ODbL, separate from this repo's MIT
   code; any public copy keeps this notice.
+  Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
+  work, with the OpenStreetMap / Overture credit on the page's credit line.

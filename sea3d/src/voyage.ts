@@ -48,8 +48,10 @@ import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
-import { PLACE, PLACES } from "./land/place";
+import { PLACE, PLACES, fetchSea } from "./land/place";
 import { Island } from "./land/island";
+import { Town } from "./land/town";
+import { Trees } from "./land/trees";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, MixedSea as LiveSea } from "./waves";
@@ -262,6 +264,15 @@ const seaFeed = new SeaStateFeed();
 void seaFeed.init();
 let seaNow: Systems | null = null; // what the Waves card describes
 function seaTarget(rep: Replay, hour: number): number {
+  if (PLACE?.fetch) {
+    // A sheltered harbour: only the local wind's chop, running downwind.
+    seaNow = null;
+    const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
+    const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+    const chop = fetchSea(Math.hypot(wu, wv), PLACE.fetch);
+    live.setSeaState(chop.hs, chop.tp, (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360);
+    return chop.hs;
+  }
   const [lat, lon] = positionAt(rep, hour);
   seaNow = LIVE ? null : seaFeed.at(new Date(utc(rep.start) + hour * 3600e3), lat, lon);
   if (seaNow) {
@@ -814,18 +825,29 @@ controls.target.set(0, 0.2, 0);
   });
 }
 let island: Island | null = null;
+let town: Town | null = null;
+let trees: Trees | null = null;
 if (PLACE) {
   // Look past the boat towards the land.
   const a = THREE.MathUtils.degToRad(PLACE.look);
   camera.position.set(-Math.sin(a) * 6.5, 1.6, Math.cos(a) * 6.5);
   controls.maxDistance = 120;
   $("credits").prepend(document.createTextNode(`${PLACE.credit} · `));
-  void Island.load(PLACE, quality).then((isl) => {
+  const shown = status as unknown as { land: boolean; surf: number; town: Town["shown"] | null; trees: number };
+  void Promise.all([Island.load(PLACE, quality), Town.load(PLACE, quality)]).then(async ([isl, tn]) => {
     island = isl;
+    town = tn;
     if (isl) scene.add(isl.group);
     else toast("The land files aren't published on this copy of the site yet, so there's only sea here.", PLACE!.name, "#8ab4ff");
-    (status as unknown as { land: boolean; surf: number }).land = !!isl;
-    (status as unknown as { land: boolean; surf: number }).surf = isl?.surfTriangles ?? 0;
+    if (tn) scene.add(tn.group);
+    shown.town = tn?.shown ?? null;
+    if (isl?.grid) {
+      trees = await Trees.load(PLACE!, quality, isl.grid, tn ? (x, z) => tn.blocked(x, z) : undefined);
+      if (trees) scene.add(trees.group);
+    }
+    shown.trees = trees?.count ?? 0;
+    shown.surf = isl?.surfTriangles ?? 0;
+    shown.land = !!isl; // last: the smoke test waits for it
   });
 }
 (async () => {
@@ -1079,6 +1101,8 @@ renderer.setAnimationLoop(() => {
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
     island?.update(t, atmos.fog.color, atmos.ambient, hs, storm);
+    town?.update(t, sp.el, hs, wu, wv);
+    trees?.update(t, Math.hypot(wu, wv), atmos.fog.color, storm);
     // The live cards overwrite some of the replay's, so they must update in the same frame:
     // drawn a frame apart, the battery, its bar and the captions flicker between the two.
     const fresh = hud(rep, stw, hs);
