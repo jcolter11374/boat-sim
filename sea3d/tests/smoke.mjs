@@ -539,8 +539,12 @@ try {
     if (both !== (card.margin_days !== null)) fail(`helm card: margin ${card.margin_days} with outcomes ${card.boat.outcome}/${card.ghost.outcome}`);
     if (both && (Math.abs(card.margin_days) < 1) !== (card.verdict === "draw")) fail(`helm card: draw rule broken (${card.margin_days} d, ${card.verdict})`);
     if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
+    // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
+    await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
+    const next = await page.evaluate(() => ({ head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-next .next a")].map((a) => a.getAttribute("href")) }));
+    if (!next.head || next.links.length !== 3 || !next.links[2].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
     await page.screenshot({ path: "test-output/helm-result.png" });
-    log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
+    log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
     // Start from a port (John hit "can't start from a port yet" when the page
     // got ahead of its simulator): the packed simulator must take the port.
     await page.goto(`${URL}helm.html?quality=low`);
