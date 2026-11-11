@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { apparentFlow, rudderFor, wingAngle } from "../src/boats/gear";
 import { failuresAt, partText, type Replay, type ReplayEvent } from "../src/replay/data";
+import { stroke } from "../src/boats/rowers";
 
 const near = (a: number, b: number, tol = 1e-9) => assert.ok(Math.abs(a - b) < tol, `${a} vs ${b}`);
 
@@ -72,4 +73,17 @@ test("failure pop-ups are plain English", () => {
       assert.match(s, /\.$/);
     }
   }
+});
+
+test("rowing stroke: blade forward and in at the catch, aft at the finish, lifted on the way back", () => {
+  const catchS = stroke(0.02);
+  const finish = stroke(0.4 - 1e-6);
+  const back = stroke(0.7);
+  assert.ok(catchS.sweep < -0.55 && finish.sweep > 0.4, "the drive sweeps the blade from the bow end to the stern end");
+  assert.ok(catchS.seat > 0.45 && finish.seat < 0.05, "slid up to the footplate at the catch, back at the finish");
+  assert.ok(catchS.lean > 0.3 && finish.lean < -0.2, "leaning towards the stern at the catch, back at the finish");
+  assert.ok(stroke(0.2).dip > 0.06, "blade buried mid-drive");
+  assert.ok(back.dip < 0, "blade clear of the water on the recovery");
+  assert.ok(back.sweep > catchS.sweep && back.sweep < finish.sweep, "swinging back towards the catch");
+  for (let p = 0; p < 1; p += 0.01) assert.ok(Math.abs(stroke(p).sweep - stroke((p + 0.001) % 1).sweep) < 0.05, `smooth at ${p}`);
 });

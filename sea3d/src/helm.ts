@@ -11,10 +11,10 @@ import { Sea } from "./water";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, PLAYABLE_STOCK, STOCK, isStock, type BoatSpec } from "./boats/specs";
+import { KAYAK, PLAYABLE_STOCK, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, SAIL_DRONE7, type HullParams } from "./motion";
+import { BoatMotion, KAYAK_V4, type HullParams } from "./motion";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
@@ -66,10 +66,7 @@ const place: Placement = { x: 0, z: 0, yaw: 0 };
 let spec: BoatSpec = KAYAK;
 const HULL: Partial<Record<BoatSpec["key"], HullParams>> = {
   kayak: KAYAK_V4,
-  stock_cruiser31: CRUISER31,
-  stock_dinghy14: DINGHY14,
-  stock_beachcat16: BEACHCAT16,
-  stock_sail_drone7: SAIL_DRONE7,
+  ...STOCK_HULL,
 };
 let motion = new BoatMotion(KAYAK_V4, place);
 let model: BoatModel | null = null;

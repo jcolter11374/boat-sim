@@ -404,6 +404,31 @@ export const SAIL_DRONE7: HullParams = {
   source: "configs/stock_sail_drone7.yaml (mass, max heel moment); curve, inertia and damping GUESS",
 };
 
+// 8.64 m ocean rowing boat for four (configs/stock_ocean_rower45.yaml; Theo's stats card).
+// Sealed cabins at both ends make it self-righting: GZ stays positive all the way round,
+// balanced upside down only at exactly 180 deg. Curve, inertia and damping GUESS.
+export const OCEAN_ROWER45: HullParams = {
+  name: "ocean rowing boat",
+  mass: 1500, // loaded: boat about 700, crew 340, food, water and kit
+  waterlineLength: 7.6,
+  waterlineBeam: 1.45, // GUESS
+  waterplaneCoeff: 0.72, // the config's 8.0 m2 waterplane over 7.6 x 1.45
+  gzTable: deg([0, 10, 20, 30, 45, 60, 90, 120, 150, 180], [0, 0.07, 0.13, 0.17, 0.18, 0.15, 0.08, 0.03, 0.01, 0]),
+  rollInertia: 1500 * 0.6 ** 2, // GUESS
+  pitchInertia: 1500 * (0.25 * 8.64) ** 2, // GUESS
+  cgBelowWaterline: 0.05, // GUESS: water and food stowed low, the cabins high
+  cgX: 4.3, // GUESS: a little aft of mid-length (the bigger stern cabin, the batteries)
+  addedHeave: 0.9, // GUESS
+  addedPitch: 0.6, // GUESS
+  addedRoll: 0.2, // GUESS
+  zetaHeave: 0.2, // GUESS
+  zetaPitch: 0.2, // GUESS
+  zetaRoll: 0.08, // GUESS: a round, shallow hull with a small daggerboard
+  // daggerboard 0.3 m chord from 0.35 to 0.9 m below the CG, and the long flat bilge
+  rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.3, 0.35, 0.9) + 7.6 * 0.15 * 0.7 ** 3),
+  source: "configs/stock_ocean_rower45.yaml (mass, waterplane); Theo's stats card (GZ curve); inertia and damping GUESS",
+};
+
 /** Righting arm (m) at heel phi (rad), any angle; odd and 360-periodic. */
 export function gz(p: HullParams, phi: number): number {
   let a = (((phi * 180) / Math.PI + 180) % 360 + 360) % 360 - 180; // -180..180
