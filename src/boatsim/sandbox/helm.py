@@ -51,7 +51,7 @@ import zlib
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from boatsim.autonomy.helm import HelmAutopilot, OrderMission
+from boatsim.autonomy.helm import HelmAutopilot, OrderMission, sail_orders_for
 from boatsim.autonomy.sailing import tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
@@ -221,12 +221,18 @@ class Game:
         mine = standard_components(self.design, env, env, seed=self.seed, land=land)
         prop = self.design.propulsion
         self.finish = (mine.finish.lat, mine.finish.lon)
+        # A boat with a polar (the stock sailboats) also takes sail and engine
+        # orders: its own sail plans, and the engine only if it has one.
+        self.sail_plans, self.has_engine = sail_orders_for(mine.vessel)
         self.helm = HelmAutopilot(
             finish=self.finish,
+            sail_plans=self.sail_plans,
+            has_engine=self.has_engine,
             thruster_count=int(prop.get("thruster_count", 2)),
             safe=safe,
             tactician=tactician_for(mine.vessel),  # None unless the boat has a polar
         )
+        self.sailboat = bool(self.sail_plans)
         if mode == "base":
             # Until the first order arrives the boat sails the launch route at
             # design cruise power, as it would after the drop.
@@ -267,16 +273,27 @@ class Game:
 
     # ---------------------------------------------------------------- orders
 
-    def order(self, heading: float | str, power: float) -> dict:
+    def order(
+        self,
+        heading: float | str,
+        power: float,
+        sails: str | None = None,
+        engine: bool | None = None,
+    ) -> dict:
         """heading: degrees, "finish" or "route"; power: 0 to 1 of full drive power.
+        Sailboats only (`sailboat` in the status): sails, one of this boat's own
+        sail plans (status "sailing"["plans"]), and engine True/False if it has
+        one ("sailing"["has_engine"]); None lets the boat decide.
 
         Hands on: takes effect now. Real base station: sent now if a day has
         passed since the last order (else refused, "accepted": False), and it
         reaches the boat at the boat's next mailbox check ("arrives")."""
         v = self.mine
         t = v.state.t
-        check = HelmAutopilot(self.finish)
-        check.set_order(heading, power)  # same validation in both modes
+        if (sails is not None or engine is not None) and not self.sailboat:
+            raise ValueError("this boat has no sails or engine to order")
+        check = HelmAutopilot(self.finish, sail_plans=self.sail_plans, has_engine=self.has_engine)
+        check.set_order(heading, power, sails, engine)  # same validation in both modes
         heading, power = check.heading, check.power
         o = {
             "t": _iso(t),
@@ -284,8 +301,10 @@ class Game:
             "heading": heading,
             "power": power,
         }
+        if sails is not None or engine is not None:
+            o["sails"], o["engine"] = sails, engine
         if self.mode == "hands_on":
-            self.helm.set_order(heading, power)
+            self.helm.set_order(heading, power, sails, engine)
             o["accepted"] = True
             self.orders.append(o)
             return o
@@ -293,11 +312,13 @@ class Game:
         if last is not None and t - datetime.fromisoformat(last) < ORDER_EVERY:
             nxt = datetime.fromisoformat(last) + ORDER_EVERY
             return {**o, "accepted": False, "next_allowed": _iso(nxt)}
-        o.update(self._send(heading, power))
+        o.update(self._send(heading, power, sails, engine))
         self.orders.append(o)
         return o
 
-    def _send(self, heading: float | str, power: float) -> dict:
+    def _send(
+        self, heading: float | str, power: float, sails: str | None, engine: bool | None
+    ) -> dict:
         """Uplink the order as a route from base (built from the last report
         base received) through the boat's own Iridium link."""
         v = self.mine
@@ -311,7 +332,7 @@ class Game:
             wps = [Waypoint(*self.finish)]
         else:
             wps = [Waypoint(*destination(lat, lon, heading, COMPASS_LEG_M))]
-        m = OrderMission(wps, power=power)
+        m = OrderMission(wps, power=power, sails=sails, engine=engine)
         env = v.env if v.env is not None else v.c.env.sample(v.state.t, v.state.lat, v.state.lon)
         down = Message(v.state.t, "down", {"waypoints": len(wps)}, size_bytes=mission_size_bytes(m))
         t_down = v.c.link.send(down, env, v.link_rng)
@@ -476,7 +497,22 @@ class Game:
             "show_true_position": True,
             "order": {"heading": self.helm.heading, "power": self.helm.power},
             "power_w": self.helm.power * self.max_drive_w,
+            "sailboat": self.sailboat,
         }
+        if self.sailboat:
+            st, tac = v.state, self.helm.tactician
+            out["order"].update(sails=self.helm.sails, engine=self.helm.engine)
+            out["sailing"] = {
+                "plans": list(self.sail_plans),  # what may be ordered, biggest sails first
+                "has_engine": self.has_engine,
+                "plan": getattr(st, "sail_plan", None),  # what is set now (auto or ordered)
+                "heel_deg": getattr(st, "heel_deg", None),
+                "engine_on": getattr(st, "engine_on", None),
+                "fuel_l": getattr(st, "fuel_l", None),
+                # "beat" (tacking upwind), "run" (gybing downwind) or "reach"
+                "tactic": tac.mode if tac is not None else None,
+                "tacks": tac.switches if tac is not None else 0,
+            }
         if self.mode == "base":
             # What steering from home looks like (Maya, 11 Nov): the page shows
             # the last report and a faint estimate, not the true boat; the true
@@ -624,7 +660,11 @@ class Game:
             "s": self.safe,
             "b": self.breakdowns,
             "d": self.max_days,
-            "o": [[o["min"], o["heading"], o["power"]] for o in self.orders],
+            "o": [
+                [o["min"], o["heading"], o["power"]]
+                + ([o["sails"], o["engine"]] if "sails" in o else [])
+                for o in self.orders
+            ],
             "at": round((self.mine.state.t - self.start).total_seconds() / 60),
             "p": [round(self.mine.state.lat, 4), round(self.mine.state.lon, 4)],
         }
@@ -656,9 +696,9 @@ class Game:
                 max_days=p["d"],
                 mode=p["m"],
             )
-            for minute, heading, power in p["o"]:
+            for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))
-                g.order(heading, power)
+                g.order(heading, power, *sail_orders[:2])
             g._advance_to(g.start + timedelta(minutes=p["at"]))
         except (KeyError, TypeError, IndexError, AttributeError) as err:
             # Valid JSON, but not a game this page can rebuild (a mangled link).
