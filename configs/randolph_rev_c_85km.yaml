@@ -1,0 +1,177 @@
+# VARIANT of configs/randolph_rev_c.yaml for one comparison run requested by the Randolph team on #50:
+# only the drop point differs (Rev B's, ~85 km out). Not used by the viewer.
+# boat-sim: the Randolph team's Rev C, for comparison only (issue #179). This file was
+# written by the Randolph team (MIT, see THIRD_PARTY_NOTICES.md) and is kept as they
+# wrote it. Like configs/randolph_rev_b.yaml, it is a model of their boat run in OUR
+# simulator, not their simulator; their own simulator is the authority on Rev C.
+#
+# Randolph Rev C in boat-sim's config format, written by the Randolph team (sheltonr2/drone-boat,
+# designs/boat-sim/randolph_rev_c.yaml, 10 Nov 2026) from boat-sim's own randolph_rev_b.yaml (MIT).
+# Offered for your replays and Boatyard; your call whether to adopt it. Rev C changes from Rev B:
+#   foam-filled hull behind two bulkheads + sealed battery box (a leak can't swamp it), twin rudders
+#   with separate servos (either steers alone), 30 x 26 mm spar on 6806 bearings, bulb D72 (~9.0-9.2 kg),
+#   YB3 and an all-round light on the stub. No thruster, no backup D-cell. All-up ~25.2 kg, DWL z 98 mm.
+# Numbers marked "# Rev C" come from our simulator (simulator/drone_sim, default_design() = Rev C) and
+# our build files (build-files/source/design.py). Lines marked "# GUESS" are still guesses, as before.
+# Same convention as your Rev B file: this models the Randolph boat for comparison; our own simulator
+# is the authority on it.
+name: Randolph Rev C (85 km drop)
+
+hull:
+  model: Randolph Rev C, 1.5 m self-righting wing-sail drone (a model of it, in our simulator)
+  length_m: 1.50             # design.py
+  beam_m: 0.40               # design.py
+  mass_kg: 25.2              # Rev C: all-up, simulator mass model
+  displacement_ref_kg: 25.2  # weight the drag numbers below are for (mass link: hull.py)
+  self_righting_dome: false  # no dome: righting arm stays positive to 180 deg (revB_gz_curve.csv)
+  keel_bulb_kg: 9.0          # Rev C: D72 bulb (simulator 8.98 kg; build formula 9.16 kg)
+  keel_bulb_depth_m: 0.43    # design.py: fin span below the hull bottom
+  # Drag and drift model (vessel/hull.py).
+  waterline_length_m: 1.43   # Rev C: simulator reference() at the 98 mm waterline
+  wetted_area_m2: 0.77       # Rev C: hull 0.46 + fin 0.14 + two rudders 0.11 + bulb 0.06 (simulator s_total 0.773)
+  form_factor: 1.15          # design.py hydro.form_factor
+  wave_making_frac: 0.05     # GUESS: their Froude-number term is tiny at 0.3-0.6 m/s
+  waterplane_area_m2: 0.38   # GUESS: your Rev B 0.36 scaled by the Rev C waterline length and beam (1.43 x 0.34 m)
+  # Windage: their VPP uses Cd 0.9 side-on (0.35 of that end-on) on hull plus
+  # 0.08 m^2 of fittings, in 0.75 of the wind; folded into the coefficients here.
+  air_side_area_m2: 0.31     # Rev C: topsides 0.21 m^2 (10 mm less freeboard) + 0.08 m^2 fittings + 0.02 m^2 YB3 platform and light
+  air_front_area_m2: 0.31
+  air_cd_side: 0.5           # vpp: 0.9 x 0.75^2
+  air_cd_front: 0.18         # vpp: 0.9 x 0.35 x 0.75^2
+  lateral_cd_area_m2: 0.235  # GUESS: hull 0.107 m^2 x Cd 0.8, + fin and two rudders broadside 0.124 m^2 x 1.2
+  keel_lift_slope_area_m2: 0.52  # Rev C: fin 4.4/rad x 0.069 m^2 + two rudders (0.055 m^2) + hull lift
+  # Rough water: matched to their added-resistance term at Hs 2 m, Tp 6.6 s, 0.5 m/s,
+  # and their (0.55 + 0.45 cos) direction shape. Our fraction-of-drag form is cruder.
+  wave_drag_frac_per_m2: 1.0     # GUESS
+  wave_drag_beam_factor: 0.55    # vpp
+  wave_drag_following_factor: 0.1  # vpp
+  fouling_onset_days: 0
+  fouling_frac_per_day: 0.004    # failures.py fouling_growth (theirs is at 20 C sea temperature)
+  # Dead boat: beam-on gives 3.1 % of the wind sideways with these numbers; their
+  # leeway model says 3.3 % (Breivik et al. 2010 small craft).
+  drift_heading_offset_deg: 90   # GUESS
+  stokes_drift: true
+
+# Wing sail (vessel/sail.py). Free-rotating NACA 0015 wing with a tail flap.
+sail:
+  area_m2: 0.30              # design.py wing 1.00 m span x 0.30 m chord
+  aspect_ratio: 5.33         # vpp: 1.6 x span / chord (deck acts as an end plate)
+  cd0: 0.012                 # vpp
+  max_alpha_deg: 20          # vpp: wing angles tried 0-20 deg
+  ce_height_m: 0.65          # vpp: root 0.30 m + 0.45 span, less the 0.098 m Rev C waterline
+  heel_arm_m: 0.9            # GUESS: centre of effort to centre of lateral resistance
+  max_heel_moment_nm: 19.7   # Rev C: 25.2 kg x g x GZ 0.080 m at the 25 deg heel limit (docs/data/revC_gz_curve.csv)
+  storm_wind_ms: 20          # design.py autopilot.storm_tws_ms: feather and run off
+  storm_run_twa_deg: 140     # autopilot.py
+  min_upwind_twa_deg: 50     # design.py autopilot
+  min_downwind_twa_deg: 165  # design.py autopilot
+  tack_hysteresis_deg: 20    # design.py autopilot
+  unsteered_twa_deg: 110     # sim.py: with both rudders limp it reaches ~110 deg off the wind
+
+power:
+  solar_wp: 40               # design.py
+  panels_w:                  # two deck panels (design.py SOLAR); the 20/20 split is a GUESS
+    panel_fwd: 20
+    panel_aft: 20
+  solar_system_derate: 0.6   # GUESS: used only by the M0 KinematicVessel stub
+  soiling_salt: 0.93         # design.py (their GUESS, after ours)
+  mounting_mismatch: 0.85    # GUESS: flat on the deck, but the wing and stern stub shade them at times
+  mppt_eff: 0.95             # design.py: Genasun GV-5 at part load
+  wiring_eff: 0.98           # design.py
+  temp_coeff_per_c: -0.0037  # design.py
+  noct_c: 55                 # design.py
+  charge_eff: 0.975          # GUESS
+  discharge_eff: 0.975       # GUESS
+  min_charge_temp_c: 2       # design.py cold_charge_cutoff_c
+  battery_wh: 192            # design.py, LiFePO4
+  mppt: Genasun GV-5
+
+propulsion:
+  # Sail only: their simulator's thruster is off by default (design.py
+  # thruster_policy.enabled false), so this model has none. Steering needs no
+  # drive power (vessel/kayak.py, sail designs).
+  thrusters: none
+  thruster_count: 0
+  cruise_drive_w: 0
+  max_drive_w: 35            # design.py thruster_w, for reference only (not fitted here)
+
+electronics:
+  autopilot: Pixhawk-class + ESP32 (their Build_Plan.md)
+  hotel_load_wh_per_day: 33  # design.py: 0.25 W asleep + 1.1 W autopilot ~ 1.35 W ("under 1.5 W", README)
+  nav_light_w: 0.3           # Rev C: all-round white LED on the stub (P20), switched on at night
+  nav_light_hours_per_day: 9 # GUESS: May-Oct nights at 40-50 N
+
+comms:
+  two_way: RockBLOCK 9603 (Iridium SBD), one box with the autopilot
+  report_interval_h: 4       # design.py; our runner still uses our own report schedule
+  # Backup tracker: a YB3 (Yellowbrick, Iridium SBD) in its own sealed compartment,
+  # own battery and antenna (Backup_Tracker.md; their reply on #50, #153). If the main
+  # box dies it keeps reporting, and the boat drifts on, tracked. Our runner pings it
+  # with our beacon model (every 6 h, GUESS); they plan 12 h, 3 h in the first week.
+  # Either is far inside the Microtransat 10-day silence limit.
+  beacon: true
+
+voyage:
+  # Rev C plan (10 Nov 2026): launch near the coast, ~10 km east of Ocean City Inlet.
+  # Comparison run (#50, 11 Nov 2026): Rev C from Rev B's drop point, ~85 km off Ocean City.
+  # Everything else is randolph_rev_c.yaml unchanged.
+  drop_lat: 38.02
+  drop_lon: -74.01
+  # Scored like ours, by the Microtransat rules (runner/arrival.py), on our target, so
+  # the two boats are compared alike. Their own goal is south-west Ireland, any
+  # European landfall.
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 1.50
+  hull_beam_m: 0.40
+  critical_wave_frac_of_length: 0.55
+  critical_wave_frac_of_beam: 1.2
+  breaker_height_frac_of_hs: 0.25
+  beam_on_share: 0.25
+  knockdown_scale: 1.0
+  damage_ref_hs_m: 3.0
+  beacon_name: YB3 backup tracker
+  beacon_per_day: 0.0007     # the YB3 dying on its own; the Randolph simulator uses the same 0.0007/day since 10 Nov 2026
+  p_inverted_stuck: 4.0e-5   # GUESS: as ours; their curve has no stable upside-down position
+  p_part:
+    panel_100w_a: 0          # our kayak's parts: not on this boat
+    panel_100w_b: 0
+    panel_50w: 0
+    ais_whip: 0              # no AIS (their Build_Plan.md: radar reflector, AIS "later")
+    panel_fwd: 4.0e-5        # GUESS: as ours
+    panel_aft: 4.0e-5        # GUESS
+    rudder: 1.5e-5           # GUESS: as ours
+    sail: 0.0003             # Rev C planning rig damage in YOUR (Hs/3 m)^2 form: our flat 0.0009 per knockdown (refitted
+    #                          10 Nov 2026 on ERA5/MFWAM seas so open-ocean rig losses are 0.0024/day) divided by the ~2.9
+    #                          mean (Hs/3)^2 at a knockdown that you measured (#50, 10 Nov). Use 0.0009 with
+    #                          damage_ref_hs_m ~5 instead if you prefer.
+  ship_speed_ms: 7.0         # GUESS
+  ship_beam_m: 32.0          # GUESS
+  p_avoid_with_ais: 0.95     # no AIS: same as without
+  p_avoid_without_ais: 0.95  # GUESS: as ours
+  p_lost_given_strike: 0.6   # failures.py: collisions 60 % fatal
+  p_leak_given_strike: 1.0   # failures.py
+  # Wear, water and people: the shared table (#89, their docs/Failure_Rates.md), the
+  # same planning set as ours, which assumes a 14-day shakedown (theirs too).
+  rate_set: planning
+  leak_per_day: 0.00135             # Rev C: our leak base refitted 10 Nov 2026 (x (1 + (Hs/3)^2) averages ~1.9 on real seas;
+  #                                    this keeps the real-sea mean at the glider 0.0026/day). Foam-filled: a leak can't sink it.
+  failures_enabled: true
+  near_land_km: 150
+  electronics_wet_multiplier: 6      # failures.py
+  electronics_boxes: 1               # one sealed box (autopilot + radio): an electronics failure is a loss
+  software_hang_per_day: 0.02        # failures.py
+  watchdog_recovers: 0.95            # failures.py
+  steering_per_day: 0.0021           # Rev C: tail (wing) servo 0.002 + both of the twin rudder servos failing (~0.0001 over a voyage), x (1 + Hs/4)
+  steering_jam_share: 0.6            # GUESS (as ours)
+  rudder_jam_drag_mult: 1.25         # GUESS
+  entangle_per_day: 0.003            # failures.py
+  entangle_extra_drag: 3.0           # GUESS (as ours)
+  entangle_clear_per_day: 0.15       # their value: no thruster to back off with
+  p_thruster_wrap: 0
+  thruster_per_day: 0                # no thrusters
+  early_life_tau_days: 7             # failures.py
+  unknown_shape: 0.5
