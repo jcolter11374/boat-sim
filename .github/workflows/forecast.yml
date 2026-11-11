@@ -4,8 +4,12 @@
 # simulator reads it.
 # Runs about 5 h 20 min after each GFS cycle (00/06/12/18 UTC), when the 120 h
 # files are out. If the newest cycle is already on the forecast-data release it
-# stops there; otherwise it publishes and asks "3D sea page" to redeploy, so the
-# site carries the new forecast. No secrets: NOAA's AWS bucket is public.
+# stops there; otherwise it publishes to the release. It no longer redeploys the
+# 3D sea page: no page reads the forecast yet (data audit, 11 Nov), so redeploying
+# every 6 h only rebuilt the site for nothing. The next deploy for any other reason
+# still copies the newest forecast in. When a page starts reading
+# public/forecast/, bring back the "redeploy" job from git history (#212).
+# No secrets: NOAA's AWS bucket is public.
 # Free runners only. GitHub pauses schedules after 60 days without commits.
 name: Today's weather
 on:
@@ -66,17 +70,3 @@ jobs:
           gh release edit forecast-data --notes-file NOTES.md
           gh release upload forecast-data site/forecast_* --clobber
           echo "Published GFS $ISSUED" >> "$GITHUB_STEP_SUMMARY"
-  # Its own job, so the token that can start workflows can do nothing else.
-  # sea3d.yml queues rather than cancels, so this never cuts off a merge deploy.
-  redeploy:
-    needs: bake
-    if: needs.bake.outputs.new == 'true' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Redeploy the 3D sea page
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run sea3d.yml -R "$GITHUB_REPOSITORY" --ref main
