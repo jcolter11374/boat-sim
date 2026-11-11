@@ -22,7 +22,7 @@ import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatS
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
-import { loadMyBoat, saveMyBoat, type MyBoat } from "./myboat";
+import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
@@ -40,6 +40,7 @@ import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
+import { maybeJson, renderNext, standing, type Board, type Grid } from "./results";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -220,6 +221,8 @@ const page = {
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
+  /** Where the finished build stands on Results: "board", "odds" or "none" ("" until shown; for tests). */
+  standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
   frames: 0,
   error: "",
@@ -704,6 +707,21 @@ async function finish(): Promise<void> {
   }
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
+  void showStanding(c.build);
+}
+
+/** Results, "where this leaves you" (one-game plan step 3): the build's place on
+ *  the design leaderboard, or the Boatyard's odds for it, and the ways on. Fills
+ *  in after the card shows, so a slow or missing file never holds the card up. */
+async function showStanding(build: string): Promise<void> {
+  const box = $("r-next");
+  box.replaceChildren();
+  const [board, grid] = await Promise.all([maybeJson<Board>("./leaderboard/board.json"), maybeJson<Grid>("./boatyard/index.json")]);
+  if (page.card?.build !== build) return; // a newer game has finished since
+  const mine = loadMyBoat();
+  const s = standing(build, board, grid);
+  renderNext(box, build, s, mine ? `./${myBoatYardLink(mine)}` : undefined);
+  page.standing = s.kind;
 }
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */

@@ -33,8 +33,8 @@
    "file": "voyage_wind-powered-ocean-drone_2020-04-01.json",
    "boat": "wind-powered ocean drone",
    "start": "2020-04-01T12:00",
-   "outcome": "lost",
-   "days": 127.5
+   "outcome": "timeout",
+   "days": 150.0
   },
   {
    "file": "voyage_2020-04-15.json",
@@ -69,7 +69,7 @@
    "boat": "wind-powered ocean drone",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 47.03
+   "days": 29.39
   },
   {
    "file": "voyage_2020-05-01.json",
@@ -139,7 +139,7 @@
    "boat": "wind-powered ocean drone",
    "start": "2020-05-15T12:00",
    "outcome": "arrived",
-   "days": 45.89
+   "days": 43.32
   },
   {
    "file": "voyage_2020-06-01.json",
@@ -209,7 +209,7 @@
    "boat": "wind-powered ocean drone",
    "start": "2020-06-15T12:00",
    "outcome": "arrived",
-   "days": 54.62
+   "days": 37.47
   }
  ]
 }
