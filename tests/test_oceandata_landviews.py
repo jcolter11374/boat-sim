@@ -89,3 +89,17 @@ def test_scene_url():
     assert lv._scene_url("S2B_26SLH_20240626", "TCI").endswith(
         "/26/S/LH/2024/6/S2B_26SLH_20240626_0_L2A/TCI.tif"
     )
+
+
+def test_coast_regions_fit_their_tiles_and_spacing():
+    for key, reg in lv.REGIONS.items():
+        zone = reg.epsg - 32600
+        for names in reg.scenes.values():
+            for sc in names:
+                assert sc.split("_")[1][:2] == str(zone), (key, sc)
+                assert lv._scene_url(sc, "TCI").startswith(lv.S2_COG)
+        lons, _lats, w, h = lv.grid(reg.box, reg.nx)
+        assert 10 < w / (len(lons) - 1) < 35, key  # metres between columns
+        assert w < 100e3 and h < 100e3, key  # inside one 110 km Sentinel tile
+    # The page's land files are named by these keys (sea3d/src/land/place.ts).
+    assert {"pico", "baymouth", "lisbon"} <= set(lv.REGIONS)
