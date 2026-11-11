@@ -483,7 +483,7 @@ $("launch").addEventListener("click", async () => {
   let line = "";
   const draw = () => {
     const s = Math.round((Date.now() - t0) / 1000);
-    const clock = s >= 3 ? ` · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "";
+    const clock = s >= 3 ? ` (${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} so far)` : "";
     box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: line + clock }));
   };
   const say = (text: string) => {
@@ -501,7 +501,9 @@ $("launch").addEventListener("click", async () => {
     // their voyages as built, said plainly.
     const useSandbox = await sandboxReady;
     let launcher: Launcher = useSandbox ? sandbox : grid;
-    const onProgress = (text: string, done: number, total: number) => say(done ? `${text} (${done} of ${total})` : `${text} This takes a minute or two.`);
+    // Plain words: the autopilot sails the design, once per real 2020 start date.
+    const onProgress = (text: string, done: number, total: number) =>
+      say(done ? `The autopilot is sailing your design from ${total} real 2020 start dates: ${done} done so far.` : `${text} This takes a minute or two.`);
     r = await launcher.launch(design, summarise(cat, design), onProgress);
     if (!r && base !== "kayak") {
       launcher = asBuilt[base];
@@ -516,7 +518,7 @@ $("launch").addEventListener("click", async () => {
       if (!p) {
         p = (await launcher.launch(plan, summarise(cat, plan), (text, done, total) => {
           const who = base === "kayak" ? "the planned build" : "the boat as built";
-          say(`Now ${who}, to compare: ${done ? `${text} (${done} of ${total})` : text}`);
+          say(`Now the autopilot sails ${who} from the same dates, to compare${done ? `: ${done} of ${total} done` : ""}.`);
         })) ?? undefined;
         if (p) plannedRuns.set(key, p);
       }

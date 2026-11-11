@@ -23,6 +23,7 @@ import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, posit
 import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
+import { localTime } from "./replay/localtime";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -188,6 +189,7 @@ function showStatus(): void {
   const fb = bearing([b.lat, b.lon], finish as [number, number]);
   $("day").textContent = `Day ${s.day.toFixed(1)}`;
   $("when").textContent = new Date(utc(b.t)).toUTCString().slice(5, 22) + " UTC";
+  $("local").textContent = localTime(utc(b.t), b.lat, b.lon);
   $("tofinish").textContent = `${Math.round(b.km_to_finish).toLocaleString()} km to the finish`;
   const lead = s.lead_km;
   $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${Math.round(lead)} km ahead of the ghost` : `${Math.round(-lead)} km behind the ghost`;
@@ -308,9 +310,27 @@ async function finish(): Promise<void> {
           : "Neither boat finished.";
   $("r-head").textContent = head;
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
-  const line = (who: string, x: Card["boat"]) =>
-    `<tr><th>${who}</th><td>${OUTCOME[x.outcome] ?? x.outcome}</td><td>${x.days.toFixed(1)} days</td><td>${Math.round(x.battery_low * 100)}%</td><td>${x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none"}</td></tr>`;
-  $("r-table").innerHTML = `<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>${line("You", me)}${line("Autopilot ghost", gh)}`;
+  const line = (who: string, x: Card["boat"]) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.textContent = who;
+    tr.append(th);
+    const cells = [
+      OUTCOME[x.outcome] ?? x.outcome,
+      `${x.days.toFixed(1)} days`,
+      `${Math.round(x.battery_low * 100)}%`,
+      x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none",
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.append(td);
+    }
+    return tr;
+  };
+  const table = $("r-table");
+  table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>";
+  table.append(line("You", me), line("Autopilot ghost", gh));
   const bits: string[] = [];
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
