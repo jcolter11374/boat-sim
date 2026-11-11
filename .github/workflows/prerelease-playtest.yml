@@ -1,9 +1,9 @@
 # Pre-release playtest: the blocking gate before anything reaches the live site.
-# Builds the WHOLE site from the pull request's own commit, the way the Pages
-# deploy does (page + simulator boatsim.zip packed from the same commit + the
-# published data releases), serves it on localhost on the runner, and plays it
-# in Chrome and Firefox: Ravi's live-site checks (tools/live_site_check.mjs) and
-# Nina's playtest (tools/playtest/play.mjs). A red run means the PR would break
+# Builds the WHOLE site from the pull request's own commit with the script the
+# Pages deploy runs (tools/build_site.sh: page + simulator boatsim.zip packed
+# from the same commit + the published data releases), serves it on localhost
+# on the runner, and plays it in Chrome and Firefox: Ravi's live-site checks
+# (tools/live_site_check.mjs) and Nina's playtest (tools/playtest/play.mjs). A red run means the PR would break
 # the live game. The post-deploy "Live site check" is the second gate.
 # No secrets: it only reads public releases and serves on the runner itself.
 name: Pre-release playtest
@@ -13,6 +13,8 @@ on:
       - "sea3d/**"
       - "src/boatsim/**"
       - "tools/playtest/**"
+      - "tools/build_site.sh"
+      - "configs/**"
       - "tools/live_site_check.mjs"
       - ".github/workflows/prerelease-playtest.yml"
   workflow_dispatch:
@@ -50,7 +52,7 @@ jobs:
       - name: Build the site from this commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: tools/playtest/build_site.sh
+        run: tools/build_site.sh
       - uses: actions/upload-artifact@v4
         with:
           name: site
