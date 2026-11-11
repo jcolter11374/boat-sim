@@ -19,9 +19,9 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
-import { BEACHCAT, CRUISER, DINGHY, KAYAK, RANDOLPH, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
+import { BEACHCAT, CRUISER, DINGHY, KAYAK, RANDOLPH, SAIL_DRONE, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
-import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
+import { BEACHCAT16, BoatMotion, CRUISER31, DINGHY14, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, SAIL_DRONE7, type HullParams } from "./motion";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import {
   angleAt,
@@ -112,6 +112,7 @@ const MODEL: Record<Rev, BoatKey> = {
   stock_cruiser31: "stock_cruiser31",
   stock_dinghy14: "stock_dinghy14",
   stock_beachcat16: "stock_beachcat16",
+  stock_sail_drone7: "stock_sail_drone7",
 };
 const SPEC: Record<BoatKey, BoatSpec> = {
   kayak: KAYAK,
@@ -119,6 +120,7 @@ const SPEC: Record<BoatKey, BoatSpec> = {
   stock_cruiser31: CRUISER,
   stock_dinghy14: DINGHY,
   stock_beachcat16: BEACHCAT,
+  stock_sail_drone7: SAIL_DRONE,
 };
 // Rev C rolls on Rev B's numbers until Theo's Rev C righting curve (their revC_gz_curve.csv) lands.
 const HULL: Record<Rev, HullParams> = {
@@ -128,6 +130,7 @@ const HULL: Record<Rev, HullParams> = {
   stock_cruiser31: CRUISER31,
   stock_dinghy14: DINGHY14,
   stock_beachcat16: BEACHCAT16,
+  stock_sail_drone7: SAIL_DRONE7,
 };
 const LABEL: Record<Rev, string> = {
   kayak: "Our kayak",
@@ -136,6 +139,7 @@ const LABEL: Record<Rev, string> = {
   stock_cruiser31: "A 31 ft cruiser (stock boat)",
   stock_dinghy14: "A 14 ft dinghy (stock boat)",
   stock_beachcat16: "A 16 ft beach cat (stock boat)",
+  stock_sail_drone7: "A wind-powered ocean drone (stock boat)",
 };
 const SHORT: Record<Rev, string> = {
   kayak: "Our kayak",
@@ -144,12 +148,14 @@ const SHORT: Record<Rev, string> = {
   stock_cruiser31: "31 ft cruiser",
   stock_dinghy14: "14 ft dinghy",
   stock_beachcat16: "16 ft beach cat",
+  stock_sail_drone7: "Ocean drone",
 };
 /** What the voyage menu calls each stock boat, with what it is in plain words. */
 const STOCK_MENU: Record<StockKey, string> = {
   stock_cruiser31: "31 ft cruiser (a stock sailing yacht, on autopilot)",
   stock_dinghy14: "14 ft dinghy (a stock sailing dinghy, nobody aboard)",
   stock_beachcat16: "16 ft beach cat (a stock catamaran, nobody aboard)",
+  stock_sail_drone7: "Wind-powered ocean drone (a stock 7 m sailing drone with a rigid wing)",
 };
 /** Which boat a replay's boat name is. The stock boats go by their names ("31 ft cruiser");
  * otherwise anything not Randolph is ours, and a Randolph boat is Rev B unless it says Rev C. */
@@ -754,6 +760,7 @@ const byKey: Record<Rev, Map<string, IndexEntry>> = {
   stock_cruiser31: new Map(),
   stock_dinghy14: new Map(),
   stock_beachcat16: new Map(),
+  stock_sail_drone7: new Map(),
 };
 const raceDates = (rev: "randolph" | "randolph_c" = "randolph") => [...byKey.kayak.keys()].filter((d) => byKey[rev].has(d)).sort();
 const OUT: Record<string, string> = { arrived: "finished", lost: "lost", aground: "aground", disqualified: "disqualified", timeout: "still at sea" };
@@ -783,7 +790,7 @@ loadDetailedModels().then((ok) => {
   status.detailed = ok;
   status.models = [hasDetailedKayak() && "kayak", hasDetailedRandolph() && "randolph"].filter((m): m is string => !!m);
   (status as unknown as { stockModels: () => string[] }).stockModels = () =>
-    (["stock_cruiser31", "stock_dinghy14", "stock_beachcat16"] as StockKey[]).filter(hasDetailedStock);
+    (["stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7"] as StockKey[]).filter(hasDetailedStock);
   if (ok) buildBoat(quality);
 });
 camera.position.set(-5.6, 2.0, 4.6);
@@ -1344,6 +1351,7 @@ const EQUIPMENT: Record<BoatKey, string[]> = {
   stock_cruiser31: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
   stock_dinghy14: ["sail", "rudder", "electronics_main", "comms", "beacon"],
   stock_beachcat16: ["sail", "rudder", "electronics_main", "comms", "beacon"],
+  stock_sail_drone7: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
 };
 let lastEquip = "";
 function equipment(r: Replay, failed: Map<string, string>): void {
