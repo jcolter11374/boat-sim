@@ -319,11 +319,15 @@ for (const [name, pageName] of Object.entries(VISUAL)) {
 }
 // Iris's find: in a small window the helm's start card must still let you reach "Take the helm".
 CHECKS["helm-small-window"] = {
-  path: "helm.html",
+  path: HELM,
   viewport: { width: 960, height: 540 },
   run: async (page) => {
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
-    await page.click("#go", { trial: true, timeout: 10_000 }).catch(() => {
+    // A trial click takes about a dozen frames of Playwright's own checks (visible,
+    // stable, scrolled, not covered); with software graphics at about a frame a second
+    // 10 s was too tight. Main's unscrollable card still fails at 30 s ("outside of
+    // the viewport"), so the check still catches the bug (#288).
+    await page.click("#go", { trial: true, timeout: 30_000 }).catch(() => {
       throw new CheckFail('"Take the helm" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
     });
     return '"Take the helm" is reachable at 960x540';
