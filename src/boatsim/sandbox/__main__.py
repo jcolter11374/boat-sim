@@ -17,7 +17,12 @@ import sys
 import zipfile
 from pathlib import Path
 
-PACK_FILES = ("configs/v4_kayak.yaml", "configs/randolph_rev_b.yaml", "data/land/land_mask_v1.npz")
+PACK_FILES = (
+    "configs/v4_kayak.yaml",
+    "configs/randolph_rev_b.yaml",
+    "configs/randolph_rev_c.yaml",
+    "data/land/land_mask_v1.npz",
+)
 
 
 def pack(out: Path, root: Path = Path(".")) -> int:

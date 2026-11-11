@@ -61,24 +61,34 @@ class Build:
     options: dict  # catalog slot -> option id, plus cruise_w (Rev B: {"wing": ...})
 
 
+BOAT_NAMES = {"kayak": "v4 kayak", "revc": "Randolph Rev C", "revb": "Randolph Rev B"}
+
+
 def _label(choices: dict) -> str:
+    base = catalog.base_of(choices)
     picked, cruise = catalog.normalise(choices)
+    if base != "kayak":
+        names = catalog.RSLOT_NAMES
+        diffs = [f"{names[s]}: {o}" for s, o in picked.items() if catalog.matters(s, o, base)]
+        what = f"{BOAT_NAMES[base]} as published (our model)"
+        return what if not diffs else f"{BOAT_NAMES[base]}, " + ", ".join(diffs)
     diffs = [f"{catalog.SLOT_NAMES[s]}: {o}" for s, o in picked.items() if o != catalog.DEFAULTS[s]]
     power = f"{cruise} W cruise" if cruise else "sail only"
     return power + (", " + ", ".join(diffs) if diffs else ", kayak as it stands")
 
 
 def _kayak(choices: dict) -> Build:
+    base = catalog.base_of(choices)
     picked, cruise = catalog.normalise(choices)
     label = _label(choices)
     changes = catalog.design_changes(choices)
     return Build(
         catalog.grid_id(choices),
-        "v4 kayak",
-        KAYAK,
+        BOAT_NAMES[base],
+        catalog.BASES[base],
         label,
         Variant("boatyard", label, changes),
-        {**picked, "cruise_w": cruise},
+        {**({"base": base} if base != "kayak" else {}), **picked, "cruise_w": cruise},
     )
 
 
@@ -114,14 +124,6 @@ def _builds() -> dict[str, Build]:
             Variant("boatyard", label, (*cat.variant.design, change)),
             {**cat.options, "stays_over": q},
         )
-    out["revb"] = Build(
-        "revb",
-        "Randolph Rev B",
-        REV_B,
-        "Randolph Rev B as published (our model)",
-        Variant("boatyard", "Rev B as published"),
-        {"wing": "published"},
-    )
     out["revb-spar"] = Build(
         "revb-spar",
         "Randolph Rev B",
