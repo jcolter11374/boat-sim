@@ -27,6 +27,10 @@ on:
       builds:
         description: "Entries (Boatyard build ids, space separated; empty = the default list)"
         default: ""
+      publish:
+        description: "Publish board.json to the leaderboard-data release (the page reads it); only a fair board is published"
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -47,6 +51,8 @@ jobs:
   board:  # one job on purpose: do not split this into a matrix (#197)
     runs-on: ubuntu-latest
     timeout-minutes: 355
+    permissions:
+      contents: write  # only for the publish step
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -82,3 +88,20 @@ jobs:
           name: leaderboard
           path: runs/lb/
           retention-days: 90
+      - name: Publish to the leaderboard-data release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > NOTES.md <<EOF
+          The design leaderboard's board (sea3d/leaderboard.html reads board.json), built by
+          the Design leaderboard workflow in one job (run ${{ github.run_id }}). Fairness
+          rules: boatsim.mc.leaderboard. Simulated results, not sea trials.
+
+          Data sources: ERA5 (Contains modified Copernicus Climate Change Service information),
+          GLORYS12 currents (E.U. Copernicus Marine Service Information).
+          EOF
+          gh release view leaderboard-data >/dev/null 2>&1 || gh release create leaderboard-data \
+            --title "Design leaderboard" --notes-file NOTES.md
+          gh release edit leaderboard-data --notes-file NOTES.md
+          gh release upload leaderboard-data runs/lb/board.json --clobber
