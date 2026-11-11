@@ -50,6 +50,11 @@ class HullParams:
     wetted_area_m2: float = 1.9  # design doc, hull plus keel, bulb and rudder
     form_factor: float = 1.3  # design doc (1 + k)
     wave_making_frac: float = 0.15  # design doc
+    # Optional "hull speed" wall for short, blunt hulls pushed hard (joke fleet): the
+    # wave-making share grows by (Fn / wave_wall_fn)^wave_wall_exp, Fn the Froude
+    # number on the waterline length. 0 = off (the kayak and Rev B/C never get near it).
+    wave_wall_fn: float = 0.0
+    wave_wall_exp: float = 4.0
     # Wind on the hull and dome (GUESS until measured):
     air_side_area_m2: float = 0.9  # topsides ~0.2 m x 3 m plus dome 0.2 m x 2.2 m
     air_front_area_m2: float = 0.25  # beam 0.79 m and dome 0.46 m, ~0.2 m high
@@ -115,7 +120,11 @@ def ittc57_cf(speed: float, length: float) -> float:
 def calm_drag(p: HullParams, speed: float) -> float:
     """Clean-hull, calm-water drag in N at `speed` (signed: opposes motion)."""
     cf = ittc57_cf(speed, p.waterline_length_m)
-    coeff = cf * p.form_factor * (1.0 + p.wave_making_frac)
+    wave = p.wave_making_frac
+    if p.wave_wall_fn > 0.0:
+        fn = abs(speed) / math.sqrt(9.81 * p.waterline_length_m)
+        wave *= 1.0 + (fn / p.wave_wall_fn) ** p.wave_wall_exp
+    coeff = cf * p.form_factor * (1.0 + wave)
     return 0.5 * RHO_WATER * p.wetted_area_m2 * coeff * speed * abs(speed)
 
 

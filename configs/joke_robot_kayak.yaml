@@ -1,0 +1,89 @@
+# JOKE FLEET: "robot-pedalled kayak". A humanoid robot pedals a generic 13 ft pedal-drive
+# kayak. Our own numbers (stock-vessels design note, joke-fleet sidebar). Honest physics:
+# the robot burns most of its power balancing and thinking, the sun pays for a few hours
+# of pedalling a day, and 60 kg of robot sitting high makes the kayak tippy. When a
+# breaking wave rolls it, a robot can't roll it back up. Anything unreferenced is a GUESS.
+name: robot-pedalled kayak
+
+stock:
+  label: robot-pedalled kayak
+  kind: pedal-drive kayak, a humanoid robot pedalling, nobody aboard
+  spec_card:
+    length_overall_m: 4.0    # GUESS: a common 13 ft pedal kayak
+    beam_m: 0.85             # GUESS
+    hull_kg: 30              # GUESS
+    robot_kg: 60             # GUESS: a mid-size humanoid robot
+    solar_m2: 1.0            # GUESS: one flexible panel on the bow deck
+  odd:
+    loss_words:
+      capsized and stayed upside down: rolled by a breaking wave; the robot can't roll a kayak back up, and drowns its own electronics
+      electronics box dead: the robot's computer died (salt water found it)
+
+hull:
+  model: 13 ft pedal-drive kayak with a robot aboard (joke fleet)
+  length_m: 4.0
+  beam_m: 0.85
+  mass_kg: 110               # kayak 30, robot 60, panel, battery, tracker 20 (GUESS)
+  displacement_ref_kg: 110
+  waterline_length_m: 3.8
+  wetted_area_m2: 2.3        # GUESS
+  form_factor: 1.2
+  wave_making_frac: 0.15
+  waterplane_area_m2: 2.0    # GUESS
+  air_side_area_m2: 0.9      # GUESS: a seated robot, side-on
+  air_front_area_m2: 0.5     # GUESS
+  air_cd_side: 1.0
+  air_cd_front: 1.0
+  lateral_cd_area_m2: 0.7    # GUESS: hull plus the pedal drive's fins
+  keel_lift_slope_area_m2: 0.4
+  fouling_onset_days: 10
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+power:
+  solar_wp: 200              # GUESS: 1 m2 flexible panel
+  panels_w: {panel_deck: 200}
+  mounting_mismatch: 0.8     # GUESS: flat, sometimes shaded by the robot
+  battery_wh: 500            # GUESS: the robot's own pack
+
+propulsion:
+  # The robot is the motor. It draws 190 W while pedalling: about 40 W reaches the
+  # pedals, the rest goes on balance, joints and thinking (GUESS). The pedal drive's
+  # flapping fins are about 60 % efficient (GUESS), so 40 W x 0.6 / 190 W ~ 0.13.
+  thrusters: humanoid robot on a pedal drive
+  thruster_count: 1
+  thruster_diameter_m: 0.5   # GUESS: water swept by the fins, as a disc
+  thruster_efficiency: 0.13
+  cruise_drive_w: 190
+  max_drive_w: 190
+  min_steer_w: 1.0
+
+electronics:
+  autopilot: the robot (it steers with the rudder lines)
+  hotel_load_wh_per_day: 720 # GUESS: 30 W standing by (sensors, balance, radio) all day
+  nav_light_w: 0.5
+  nav_light_hours_per_day: 10
+
+comms:
+  two_way: Iridium (the robot's own modem, GUESS)
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 4.0
+  hull_beam_m: 0.85
+  critical_wave_frac_of_length: 0.25  # GUESS: 60 kg sitting high, tiny stability: a 1 m breaker rolls it
+  critical_wave_frac_of_beam: 1.0
+  p_capsize_stays_over: 1.0  # a robot can't roll a kayak back up
+  damage_ref_hs_m: 3.0
+  p_part: {panel_deck: 4.0e-5}
+  rate_set: planning
+  failures_enabled: true
+  electronics_boxes: 1       # one robot
+  capture_per_day: 0.005     # GUESS: as the stock boats
