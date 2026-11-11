@@ -166,8 +166,8 @@
    "file": "voyage_31-ft-cruiser_2020-06-01.json",
    "boat": "31 ft cruiser",
    "start": "2020-06-01T12:00",
-   "outcome": "aground",
-   "days": 43.83
+   "outcome": "lost",
+   "days": 41.78
   },
   {
    "file": "voyage_wind-powered-ocean-drone_2020-06-01.json",

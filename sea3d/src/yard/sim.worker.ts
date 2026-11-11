@@ -7,7 +7,10 @@
 //               {id, type: "meta", base, choices}          the build's id, effects, nearest grid build
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 
-const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.mjs";
+// Pass the folder too: Firefox can't work it out from a module imported in a worker
+// ("Could not extract indexURL path from pyodide module location", #294).
+const PYODIDE_DIR = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+const PYODIDE = `${PYODIDE_DIR}pyodide.mjs`;
 
 interface Py {
   loadPackage(p: string[]): Promise<void>;
@@ -29,8 +32,8 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 function start(base: string): Promise<Py> {
   ready ??= (async () => {
     say("Loading Python in the browser...");
-    const mod = (await import(/* @vite-ignore */ PYODIDE)) as { loadPyodide: () => Promise<Py> };
-    const [py, zip, bundle] = await Promise.all([mod.loadPyodide(), fetchBytes(`${base}boatsim.zip`), fetchBytes(`${base}forcing_2020.npz`)]);
+    const mod = (await import(/* @vite-ignore */ PYODIDE)) as { loadPyodide: (o: { indexURL: string }) => Promise<Py> };
+    const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`), fetchBytes(`${base}forcing_2020.npz`)]);
     await py.loadPackage(["numpy", "pyyaml"]);
     py.FS.mkdirTree("/sandbox");
     py.FS.writeFile("/sandbox/boatsim.zip", zip);
