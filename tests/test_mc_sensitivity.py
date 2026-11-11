@@ -223,3 +223,47 @@ def test_drop_is_100km_out_and_variants_move_it():
     assert S.SensitivityVoyage(variant="drop_29km").drop_point() == (36.85, -75.70)
     assert S.SensitivityVoyage().drop_point() == DROP_POINT
     assert (36.79, -75.48) == pytest.approx(start_point("50km"), abs=0.01)
+
+
+def test_routing_variants_swap_only_base_and_its_forecast():
+    """#269 study: the routing rows change base (and the forecast's error), nothing else."""
+    from boatsim.basestation.isochrone import IsochroneReplanPolicy, SteadyPolar
+
+    def comps(name):
+        return S.SensitivityVoyage(
+            variant=name,
+            design_path="configs/stock_sail_drone7.yaml",
+            weather="constant",
+            unknown_p_by_60_days=0.0,
+        ).components(1)
+
+    base, iso, table = comps("baseline"), comps("isochrone"), comps("fan_table")
+    assert type(base.base) is ForecastReplanPolicy and base.base.polar is None
+    assert isinstance(iso.base, IsochroneReplanPolicy)
+    assert type(table.base) is ForecastReplanPolicy and isinstance(table.base.polar, SteadyPolar)
+    assert iso.forecast.scale == base.forecast.scale == 1.0
+    assert comps("isochrone_forecast_x2").forecast.scale == 2.0
+    assert type(iso.vessel.inner) is type(base.vessel.inner)
+    assert S.VARIANTS["isochrone_forecast_x2"].against == "fan_forecast_x2"
+
+
+def test_paired_days_saved_against_the_named_row():
+    rows = []
+    for name, days in [("fan_forecast_x2", (40.0, 50.0)), ("isochrone_forecast_x2", (35.0, 52.0))]:
+        for i, d in enumerate(days):
+            rows.append(
+                {
+                    "variant": name,
+                    "start": f"2020-04-0{i + 1}",
+                    "seed": i,
+                    "outcome": "arrived",
+                    "days": d,
+                    "min_soc": 1.0,
+                    "airtime_usd": 1.0,
+                }
+            )
+    base = [dict(r, variant="baseline") for r in rows[:2]]
+    t = S.compare(pd.DataFrame(base + rows)).set_index("variant")
+    r = t.loc["isochrone_forecast_x2"]
+    assert r["against"] == "fan_forecast_x2" and r["both_finished"] == 2
+    assert r["faster"] == 1 and r["slower"] == 1 and r["median_days_saved"] == pytest.approx(1.5)
