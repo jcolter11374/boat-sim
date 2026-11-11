@@ -214,6 +214,13 @@ def test_bundle_carries_the_storm_track_and_boosts_at_sample_time(tmp_path):
     far = (t, 40.0, -40.0)
     assert env.sample(*far) == b.sample(*far)
     assert env.meta == b.meta  # everything else is the bundle's
+    # The pages open bundles through open_bundle, so they get the boost too.
+    from boatsim.sandbox.run import open_bundle
+
+    assert open_bundle(plain.getvalue()).__class__ is F.BundleEnvironment
+    page = open_bundle(with_storms.getvalue())
+    assert isinstance(page, SB.StormBoost)
+    assert page.sample(t, fx.lat, fx.lon + dlon) == near
 
 
 def test_storm_arrays_round_trip(tracks):
