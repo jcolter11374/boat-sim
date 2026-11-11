@@ -67,3 +67,73 @@ between the two maps.
   (https://datacatalog.worldbank.org/search/dataset/0037580), from the IMF's
   World Seaborne Trade Monitoring System (Cerdeiro, Komaromi, Liu and Saeed,
   2020). Licence: CC BY 4.0.
+
+## Weather and ocean data
+
+The weather and current files in `data/era5/`, the voyage replays in
+`sea3d/public/voyages/` and `sea3d/public/boatyard/`, and the `sandbox-data`
+release all contain data derived from these sources. We thinned, regridded
+and quantised it.
+
+- **ERA5** hourly reanalysis (Hersbach et al. 2020, doi:10.1002/qj.3803), read
+  from Google's public ARCO-ERA5 copy. Contains modified Copernicus Climate
+  Change Service information. Neither the European Commission nor ECMWF is
+  responsible for any use that may be made of the Copernicus information or
+  data it contains. Licence: the
+  [Copernicus licence](https://cds.climate.copernicus.eu/licences/licence-to-use-copernicus-products),
+  which allows redistribution with this credit.
+- **GLORYS12** and **SMOC** surface currents: E.U. Copernicus Marine Service
+  Information. Licence: the
+  [Copernicus Marine service licence](https://marine.copernicus.eu/user-corner/service-commitments-and-licence),
+  which allows redistribution with this credit.
+- **NOAA NDBC buoy records** and **IBTrACS** storm tracks, used only to check
+  ERA5. They are US Government works in the public domain.
+
+## Land
+
+- **Natural Earth** 1:10m land, used for the land mask
+  (`data/land/land_mask_v1.npz`) and the coastline on the 3D pages. Made with
+  Natural Earth. Free vector and raster map data @ naturalearthdata.com. It is
+  in the public domain.
+
+## Software that ships in, or is loaded by, the 3D pages
+
+- **three.js** (MIT, Copyright 2010-2024 Three.js Authors). It is bundled into
+  the page scripts, and its licence header is kept in the built files.
+- **Pyodide** (Mozilla Public License 2.0), with the CPython (PSF licence) and
+  NumPy, pandas and PyYAML (BSD and MIT) builds it carries. The Boatyard loads
+  them unmodified from the jsDelivr CDN at run time. We don't copy or change
+  them.
+- **Blender** (GPL) is used only as a tool in CI to build the boat models.
+  Models made with Blender belong to whoever made them, so the GPL doesn't
+  cover our `.glb` files. Our build scripts that call Blender's Python API are
+  MIT, which is GPL-compatible.
+
+The Python packages in `pyproject.toml` (NumPy, pandas, PyYAML, xarray,
+netCDF4, zarr, gcsfs, copernicusmarine, rasterio, pyproj, requests, plotly,
+folium, pytest, ruff) are dependencies that users install themselves. We don't
+copy them into this repo. All of them use permissive licences (BSD, MIT,
+Apache 2.0), apart from copernicusmarine, which uses the EUPL 1.2. All of
+them can be used from MIT code.
+
+## Adding a new data source
+
+Before data from a new source is committed or published, check its licence
+allows redistribution. Then add it here and on the 3D pages' Credits line.
+Never use a source that needs an API key in the public pages. Known
+requirements for sources we are trying out:
+
+- **OpenStreetMap / Overture Maps** buildings and piers: ODbL. Credit
+  "© OpenStreetMap contributors" (and Overture Maps Foundation). If we publish
+  a derived *database* (for example a building tile set), it must stay under
+  ODbL. Pictures and 3D scenes made from it are "produced works", which can be
+  under any licence but must carry the credit.
+- **Sentinel-2** imagery: "Contains modified Copernicus Sentinel data [year]".
+- **AWS Terrain Tiles**: credit the underlying sources listed in the
+  [tile attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)
+  (SRTM, GMTED, ETOPO1 and USGS 3DEP are public domain; Copernicus EU-DEM and
+  some national surveys need a credit).
+- **GEBCO** grid: "GEBCO Compilation Group (year) GEBCO year Grid". It is free
+  to use and share.
+- **NOAA ETOPO, nautical charts and NAIP** imagery: US Government works,
+  public domain.
