@@ -2,8 +2,13 @@
 
 cut 2020 --out site/sandbox/forcing_2020.npz [--no-currents]
     the season's forcing bundle, from the ERA5/GLORYS caches (Actions)
-pack --out site/sandbox/boatsim.zip
-    the simulator's source, design files and land mask, for Pyodide
+pack --out site/sandbox/boatsim.zip [--commit SHA]
+    the simulator's source, design files and land mask, for Pyodide; the commit
+    goes into boatsim_build.json in the zip and boatsim.json beside it
+check-page --zip dist/sandbox/boatsim.zip --needs sea3d/sandbox-needs.json
+           --slots sea3d/public/sim-slots.json [--commit SHA]
+    fails if the zip lacks anything the pages ask for, or was packed from
+    another commit (sea3d.yml, before it deploys)
 reference --bundle forcing_2020.npz --out ref.json [--builds ...]
     every launch of the given grid builds (default: the kayak as it stands),
     in this Python; Actions runs the same in Node + Pyodide and compares
@@ -44,12 +49,20 @@ PACK_FILES = (
 )
 
 
-def pack(out: Path, root: Path = Path(".")) -> int:
+BUILD_FILE = "boatsim_build.json"  # in the zip: which commit it was packed from
+
+
+def pack(out: Path, root: Path = Path("."), commit: str | None = None) -> int:
     """Zip src/boatsim (Python files only) plus the files a voyage reads at run
-    time. The page unpacks it into Pyodide's file system and runs from there."""
+    time. The page unpacks it into Pyodide's file system and runs from there.
+    With a commit, it is written into the zip (boatsim_build.json) and beside it
+    (boatsim.json), so a deployed page can be checked against its simulator."""
     out.parent.mkdir(parents=True, exist_ok=True)
     n = 0
+    build = json.dumps({"commit": commit})
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(BUILD_FILE, build)
+        n += 1
         for f in sorted((root / "src").rglob("*.py")):
             if "__pycache__" not in f.parts:
                 z.write(f, f.relative_to(root / "src"))
@@ -57,7 +70,66 @@ def pack(out: Path, root: Path = Path(".")) -> int:
         for name in PACK_FILES:
             z.write(root / name, name)
             n += 1
+    out.with_name("boatsim.json").write_text(build)
     return n
+
+
+# Run in a fresh interpreter, inside the unpacked zip, the way the pages run it:
+# the zip's own code answers, never the working tree's.
+_CAPS_SCRIPT = """
+import json, os, sys, warnings, zipfile
+warnings.simplefilter("ignore")
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+sys.path.insert(0, sys.argv[2])
+os.chdir(sys.argv[2])
+try:
+    from boatsim.sandbox.caps import capabilities
+    caps = capabilities()
+except ImportError:
+    caps = []  # packed before the list existed
+build = json.loads(open("boatsim_build.json").read()) if os.path.exists("boatsim_build.json") else {}
+print(json.dumps({"caps": caps, "build": build}))
+"""
+
+
+def zip_capabilities(zip_path: Path) -> dict:
+    """{"caps": [...], "build": {"commit": ...}} of a packed simulator."""
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        r = subprocess.run(
+            [sys.executable, "-I", "-c", _CAPS_SCRIPT, str(Path(zip_path).resolve()), tmp],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    return json.loads(r.stdout)
+
+
+def page_needs(needs: dict, slots: dict | None = None) -> set[str]:
+    """Everything the pages ask of the simulator: sandbox-needs.json's features,
+    plus a "base:<id>" for every boat the pages offer (its "bases", and the
+    Boatyard's starting designs and stock boats in sim-slots.json)."""
+    out = {c for caps in needs.get("features", {}).values() for c in caps}
+    out |= {f"base:{b}" for b in needs.get("bases", [])}
+    for key in ("bases", "stock"):
+        out |= {f"base:{b}" for b in (slots or {}).get(key, {})}
+    return out
+
+
+def check_page(zip_path: Path, needs: dict, slots: dict | None, commit: str | None) -> list[str]:
+    """Problems that would make a deployed page ask its simulator for something
+    it can't do, or a zip packed from another commit. Empty = fine."""
+    got = zip_capabilities(zip_path)
+    problems = [
+        f"the pages need {c!r}, which this boatsim.zip can't do"
+        for c in sorted(page_needs(needs, slots) - set(got["caps"]))
+    ]
+    packed = got["build"].get("commit")
+    if commit and packed != commit:
+        problems.append(f"boatsim.zip was packed from {packed}, the page is {commit}")
+    return problems
 
 
 def reference(
@@ -176,6 +248,12 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("--storms", help="IBTrACS CSV: carry the window's storm tracks (#117)")
     k = sub.add_parser("pack")
     k.add_argument("--out", required=True)
+    k.add_argument("--commit", help="the commit packed (git SHA)")
+    cp = sub.add_parser("check-page")
+    cp.add_argument("--zip", required=True)
+    cp.add_argument("--needs", required=True, help="sea3d/sandbox-needs.json")
+    cp.add_argument("--slots", help="sea3d/public/sim-slots.json")
+    cp.add_argument("--commit", help="the page's commit: the zip must be packed from it")
     r = sub.add_parser("reference")
     r.add_argument("--bundle", required=True)
     r.add_argument("--builds", nargs="*", default=None)
@@ -207,8 +285,20 @@ def main(argv: list[str] | None = None) -> None:
         )
         print(f"{out}: {out.stat().st_size / 1e6:.1f} MB")
     elif a.cmd == "pack":
-        n = pack(Path(a.out))
+        n = pack(Path(a.out), commit=a.commit)
         print(f"{a.out}: {n} files, {Path(a.out).stat().st_size / 1e6:.2f} MB")
+    elif a.cmd == "check-page":
+        needs = json.loads(Path(a.needs).read_text())
+        slots = json.loads(Path(a.slots).read_text()) if a.slots else None
+        problems = check_page(Path(a.zip), needs, slots, a.commit)
+        for p_ in problems:
+            print(f"::error::{p_}")
+        if problems:
+            raise SystemExit(f"{len(problems)} problem(s): the page and its simulator differ")
+        print(
+            f"{a.zip}: everything the pages need is there"
+            + (f", packed from {a.commit}" if a.commit else "")
+        )
     elif a.cmd == "diverge":
         for line in diverge(json.loads(Path(a.a).read_text()), json.loads(Path(a.b).read_text())):
             print(line)
