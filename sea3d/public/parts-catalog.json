@@ -46,7 +46,7 @@
     {
      "id": "one-t200",
      "n": "One T200",
-     "d": "Steers with the rudder only. Simulator: 54% instead of 78%",
+     "d": "Steers with the rudder only",
      "cost": 378.8,
      "kg": -0.45,
      "thr": 1,

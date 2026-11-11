@@ -65,6 +65,10 @@
   .row { display: flex; justify-content: space-between; padding: 3px 0; font-variant-numeric: tabular-nums; }
   .row span:first-child { color: var(--dim); }
   .row b { font-weight: 650; }
+  .row.chance { font-size: 15px; align-items: baseline; }
+  .row.chance b { font-size: 20px; color: var(--good); }
+  .row.chance b.untested { font-size: 14px; color: var(--dim); font-weight: 600; }
+  #s-odds-note { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .row.total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; font-size: 15px; }
   #sum .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   #sum button, #launch { font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: #1b3352; border: 1px solid var(--line);
@@ -95,7 +99,7 @@
 <aside id="parts" class="glass">
   <header>
     <h1>Boatyard</h1>
-    <p id="intro">Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); <span class="badge est">ESTIMATE</span> marks figures nobody has measured or quoted yet.</p>
+    <p id="intro">Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); <span class="badge est">ROUGH</span> marks figures nobody has measured or quoted yet.</p>
     <div id="bases" role="group" aria-label="Start from">
       <span class="muted">Start from</span>
       <button data-base="kayak" aria-pressed="true">Our kayak</button>
@@ -107,7 +111,9 @@
   <p id="credit" class="muted credits"></p>
 </aside>
 <section id="sum" class="glass">
-  <h2>Your boat</h2>
+  <h2>Your build</h2>
+  <div class="row chance"><span>Odds</span><b id="s-odds">-</b></div>
+  <div class="muted" id="s-odds-note"></div>
   <div class="row"><span>Boat and parts</span><b id="s-cost">-</b></div>
   <div class="row"><span>Licences, airtime, trials</span><b id="s-prog">-</b></div>
   <div class="row total"><span>Total</span><b id="s-total">-</b></div>
@@ -119,7 +125,7 @@
   <div class="btns">
     <button id="share" title="Copy a link that opens this exact design">Copy share link</button>
     <button id="yaml" title="A file the simulator can run (the Randolph team can run it too)">Download design file</button>
-    <button id="reset">Back to the planned build</button>
+    <button id="reset">Reset to our kayak</button>
   </div>
   <div id="mine">
     <div class="mine-row">
@@ -128,7 +134,7 @@
     </div>
     <div class="muted" id="mb-line"></div>
   </div>
-  <button id="launch">Launch!</button>
+  <button id="launch">Test it</button>
   <div id="result"></div>
   <p class="muted" style="margin:10px 0 0"><a href="./voyage.html">Voyage replays &rarr;</a></p>
 </section>

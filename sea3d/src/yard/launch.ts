@@ -56,6 +56,8 @@ export interface GridBuild {
 interface GridIndex {
   schema: number;
   builds: GridBuild[];
+  /** Which launches the odds come from (boatsim.mc.boatyard). */
+  odds_source?: { years?: [number, number]; months?: number[] };
 }
 
 /** How far a grid build is from a design: [modelled slots that differ, cruise watts apart] (as boatsim.sandbox.catalog.nearest). */
@@ -67,11 +69,14 @@ export function gridDistance(b: GridBuild, cat: Catalog, d: Design): [number, nu
   const sail = sailOnly(d);
   for (const s of cat.slots) {
     if (sail && s.id === "thr") continue;
-    const want = d.picks[s.id];
     const def = (s.opts.find((o) => o.def) ?? s.opts[0]).id;
+    // What the simulator actually sails in this slot: a part it doesn't model yet
+    // sails as the default. So a grid build with full spares on Rev C (spares aren't
+    // modelled) is the same voyage as Rev C as built, which has none (#315).
+    const sails = (id: string) => ((s.opts.find((o) => o.id === id)?.effect ?? "wired") === "wired" ? id : def);
+    const want = d.picks[s.id] ?? def;
     const have = (b.options[s.id] as string | undefined) ?? def;
-    const opt = s.opts.find((o) => o.id === want);
-    if (have !== want && (opt?.effect ?? "wired") === "wired") slots++;
+    if (sails(have) !== sails(want)) slots++;
   }
   // The simulator ignores the cruise power on a Randolph boat.
   return [slots, sail || gridBase(b) !== "kayak" ? 0 : Math.abs(Number(b.options.cruise_w ?? 25) - d.cruiseW)];
@@ -98,6 +103,10 @@ export class GridLauncher implements Launcher {
   }
   async build(id: string): Promise<GridBuild | null> {
     return (await this.index)?.builds.find((b) => b.id === id) ?? null;
+  }
+  /** Which launches the odds come from, or null. */
+  async source(): Promise<GridIndex["odds_source"] | null> {
+    return (await this.index)?.odds_source ?? null;
   }
   async nearest(d: Design): Promise<{ build: GridBuild; exact: boolean } | null> {
     const idx = await this.index;
