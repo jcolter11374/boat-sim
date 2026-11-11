@@ -683,7 +683,8 @@ try {
     await page.click("#go");
     await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
     const rm = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, names: window.__race.status?.boats.map((b) => b.name) }));
-    if (!rm.ready || rm.err) fail(`race with my boat: ${JSON.stringify(rm)}`);
+    if (!rm.ready || rm.err || rm.names?.[0] !== "One motor") fail(`race with my boat: ${JSON.stringify(rm)}`);
+    if ((await page.locator("#boatA h3").textContent()) !== "One motor") fail("race: boat A's panel doesn't show my boat's name");
     await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
     log.push(`race with my boat: ${rm.names.join(" vs ")}`);
   } else {
