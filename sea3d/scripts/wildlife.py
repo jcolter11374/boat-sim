@@ -123,18 +123,13 @@ def main() -> None:
         & (lon[None, :] >= SURVEY_BOX[2])
         & (lon[None, :] <= SURVEY_BOX[3])
     )
-    strip = 2 * HALF_WIDTH_KM
     cet = raw["dolphins"][box].mean() + raw["whales"][box].mean()
     # Groups per km^2 in the survey box, cetaceans split by their share of OBIS records there.
     there = {
-        "dolphins": SURVEY_GROUPS["cetaceans"]
-        / SURVEY_KM
-        / strip
-        * raw["dolphins"][box].mean()
-        / cet,
-        "whales": SURVEY_GROUPS["cetaceans"] / SURVEY_KM / strip * raw["whales"][box].mean() / cet,
-        "birds": SURVEY_GROUPS["birds"] / SURVEY_KM / strip,
+        k: SURVEY_GROUPS["cetaceans"] * raw[k][box].mean() / cet / SURVEY_KM / (2 * w)
+        for k, w in CETACEAN_HALF_WIDTH_KM.items()
     }
+    there["birds"] = SURVEY_GROUPS["birds"] / SURVEY_KM / BIRD_STRIP_KM
     out = {
         "lat0": LAT0,
         "lon0": LON0,
