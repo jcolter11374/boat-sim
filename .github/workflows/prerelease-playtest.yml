@@ -89,10 +89,10 @@ jobs:
           curl -sf "$SITE" > /dev/null
       - name: Ravi's live-site checks
         if: matrix.suite == 'live-check'
-        run: node tools/live_site_check.mjs
+        run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/live_site_check.mjs
       - name: Nina's playtest
         if: matrix.suite == 'playtest'
-        run: node tools/playtest/play.mjs
+        run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

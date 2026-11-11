@@ -312,7 +312,15 @@ async function runCheck(browser, name) {
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
 for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
 // BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
-const browser = await pw[process.env.BROWSER ?? "chromium"].launch();
+// Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
+// headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.
+const LAUNCH = {
+  headless: !process.env.HEADED,
+  ...((process.env.BROWSER ?? "chromium") === "firefox"
+    ? { firefoxUserPrefs: { "webgl.force-enabled": true, "webgl.disabled": false, "webgl.enable-webgl2": true } }
+    : {}),
+};
+const browser = await pw[process.env.BROWSER ?? "chromium"].launch(LAUNCH);
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);
