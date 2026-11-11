@@ -69,6 +69,11 @@
   #sum .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   #sum button, #launch { font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: #1b3352; border: 1px solid var(--line);
     border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  #mine { margin-top: 10px; }
+  #mine .mine-row { display: flex; gap: 6px; margin-bottom: 4px; }
+  #mb-name { flex: 1; min-width: 0; font: 13px system-ui, sans-serif; color: var(--ink); background: #0e1d30;
+    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+  #mb-line a { color: var(--orange); }
   #launch { width: 100%; margin-top: 12px; padding: 10px; font-size: 15px; background: var(--good); color: #002a18; border: 0; }
   #result { margin-top: 10px; font-size: 13px; }
   #result .odds { font-size: 26px; font-weight: 750; }
@@ -115,6 +120,13 @@
     <button id="share" title="Copy a link that opens this exact design">Copy share link</button>
     <button id="yaml" title="A file the simulator can run (the Randolph team can run it too)">Download design file</button>
     <button id="reset">Back to the planned build</button>
+  </div>
+  <div id="mine">
+    <div class="mine-row">
+      <input id="mb-name" maxlength="40" aria-label="Your boat's name" placeholder="Name your boat">
+      <button id="mb-save" title="Remember this design in this browser, so the other pages can sail it">Save as my boat</button>
+    </div>
+    <div class="muted" id="mb-line"></div>
   </div>
   <button id="launch">Launch!</button>
   <div id="result"></div>
