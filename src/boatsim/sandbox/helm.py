@@ -492,21 +492,27 @@ class Game:
             p = json.loads(zlib.decompress(raw))
         except (ValueError, zlib.error) as err:
             raise ValueError("not a saved game") from err
+        if not isinstance(p, dict):
+            raise ValueError("not a saved game")  # noqa: TRY004 - one error type for the page
         if p.get("v") != SAVE_VERSION:
             raise ValueError(f"saved game format {p.get('v')}, this page reads {SAVE_VERSION}")
-        g = cls(
-            env,
-            choices=p["c"],
-            launch_index=p["l"],
-            safe=p["s"],
-            breakdowns=p["b"],
-            max_days=p["d"],
-            mode=p["m"],
-        )
-        for minute, heading, power in p["o"]:
-            g._advance_to(g.start + timedelta(minutes=minute))
-            g.order(heading, power)
-        g._advance_to(g.start + timedelta(minutes=p["at"]))
+        try:
+            g = cls(
+                env,
+                choices=p["c"],
+                launch_index=p["l"],
+                safe=p["s"],
+                breakdowns=p["b"],
+                max_days=p["d"],
+                mode=p["m"],
+            )
+            for minute, heading, power in p["o"]:
+                g._advance_to(g.start + timedelta(minutes=minute))
+                g.order(heading, power)
+            g._advance_to(g.start + timedelta(minutes=p["at"]))
+        except (KeyError, TypeError, IndexError, AttributeError) as err:
+            # Valid JSON, but not a game this page can rebuild (a mangled link).
+            raise ValueError("not a saved game") from err
         here = [round(g.mine.state.lat, 4), round(g.mine.state.lon, 4)]
         if here != p["p"]:
             raise ValueError("this saved game was sailed by a different simulator version")
