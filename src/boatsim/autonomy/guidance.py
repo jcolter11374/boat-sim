@@ -96,6 +96,10 @@ class WaypointAutopilot:
         # is drifting, the course it made good says nothing about the current
         # we'd need to crab into, so the estimate is frozen (no windup).
         self.hold_crab = False
+        # Set by the sailing tactician while it beats or runs (autonomy/sailing.py):
+        # the boat is zig-zagging on purpose, so its course made good isn't the
+        # current's doing either.
+        self.tacking = False
 
         # Internal state, also handy for logging.
         self.crab_deg = 0.0
@@ -113,6 +117,7 @@ class WaypointAutopilot:
         self.crab_deg = 0.0
         self.cross_track_m = 0.0
         self.hold_crab = False
+        self.tacking = False
         self._mission = None
         self._mission_version = None
         self._origin = None
@@ -164,7 +169,7 @@ class WaypointAutopilot:
 
     def _update_crab(self, sensors: Sensors) -> None:
         """Compare the course made good since the last fix with the course we wanted."""
-        if self.hold_crab or self.thrust_fraction <= 0 or sensors.soc <= 0.0:
+        if self.hold_crab or self.tacking or self.thrust_fraction <= 0 or sensors.soc <= 0.0:
             # Not under power: freeze the crab and drop the baseline fix, so the
             # first fix after power returns isn't compared with a drifting one.
             self._last_fix = None
