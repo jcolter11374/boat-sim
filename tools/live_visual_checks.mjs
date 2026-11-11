@@ -30,7 +30,12 @@
 /** Pixel statistics of the 3D (largest) canvas, panels hidden. */
 export async function pixels(page) {
   await page.evaluate(() => {
-    const big = [...document.querySelectorAll("canvas")].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    // The 3D view: the canvas covering the most of the window. Not the one with the most
+    // pixels: on software graphics the 3D canvas draws at half resolution, and the voyage
+    // page's chart (a 2D canvas) can then hold more pixels than it, so the check measured
+    // the chart and found no boat (#298).
+    const area = (c) => { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)); };
+    const big = [...document.querySelectorAll("canvas")].sort((a, b) => area(b) - area(a))[0];
     if (big) big.dataset.livecheck = "1";
     const s = document.createElement("style");
     s.id = "livecheck-hide";
