@@ -656,7 +656,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
 }
 
 /** Said wherever a number comes from the simulator in this browser (#335). */
-const BROWSER_WEATHER_NOTE = "Sailed in your browser on simplified weather; full-data runs (voyage replays, leaderboard) can differ.";
+const BROWSER_WEATHER_NOTE = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays and leaderboard.";
 const SIMPLIFIED_BACKEND = "simulator in the browser";
 
 function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | null = null): void {
@@ -683,9 +683,6 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
     box.append(big, range);
   }
   box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: r.note }));
-  // #335: the browser sails on a lighter weather file than the full runs behind the
-  // voyage replays and the leaderboard, so the same launch can come out differently.
-  if (status.backend === SIMPLIFIED_BACKEND) box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: BROWSER_WEATHER_NOTE }));
   if (r.credits) {
     const p = Object.assign(document.createElement("p"), { className: "muted credits", textContent: `${r.credits.text} ` });
     const a = Object.assign(document.createElement("a"), { href: r.credits.url, target: "_blank", rel: "noopener", textContent: "Sources" });
@@ -710,6 +707,9 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
       ul.append(li);
     }
     box.append(ul);
+    // #335, beside the day counts it explains: the browser sails on a lighter weather
+    // file than the full runs behind the voyage replays and the leaderboard.
+    if (status.backend === SIMPLIFIED_BACKEND) box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: BROWSER_WEATHER_NOTE }));
   }
   if (r.fingerprints?.length) {
     // Ravi's gate: these must match reference.json exactly (python -m boatsim.sandbox compare ... --exact).
