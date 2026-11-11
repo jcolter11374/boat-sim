@@ -312,6 +312,20 @@ try {
   await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
   const y2 = await page.evaluate(() => window.__yard.design.picks);
   if (y2.thr !== "one-t200" || y2.bat !== "two-100ah") fail(`boatyard link didn't reopen the design: ${JSON.stringify(y2)}`);
+  // My boat: save this design under a name, and the Boatyard remembers it and links back to it.
+  await page.fill("#mb-name", "Test <b>boat</b>");
+  await page.click("#mb-save");
+  const mb = await page.evaluate(() => ({ stored: JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"), btn: document.getElementById("mb-save").textContent }));
+  if (mb.stored?.hash !== y1.share || mb.stored?.name !== "Test <b>boat</b>" || mb.stored?.choices?.thr !== "one-t200" || mb.btn !== "Saved")
+    fail(`boatyard: saving my boat: ${JSON.stringify(mb)}`);
+  await page.goto(`${URL}boatyard.html?quality=low&mine=1`);
+  await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
+  const mb2 = await page.evaluate(() => ({ line: document.getElementById("mb-line").textContent, href: document.querySelector("#mb-line a")?.getAttribute("href"), tags: document.querySelectorAll("#mb-line b").length }));
+  if (!mb2.line.includes("Test <b>boat</b>") || mb2.href !== `boatyard.html${y1.share}` || mb2.tags) fail(`boatyard: my boat line: ${JSON.stringify(mb2)}`);
+  // On the live site the link only changes the hash (no query), and the page opens the design in place.
+  await page.evaluate((h) => (location.hash = h), y1.share);
+  await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 10000 }).catch(() => fail("boatyard: the my-boat link didn't reopen it"));
+  await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
   // Every choice looks different on the boat (spares stay ashore; one-option slots have nothing to swap).
   const looks = await page.evaluate(() => {
     const y = window.__yard;
