@@ -52,6 +52,8 @@ async function visibleNotices(page) {
 
 async function helmStart(page, setup = async () => {}) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+  // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
+  await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
   await setup(page);
   await page.click("#go");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });

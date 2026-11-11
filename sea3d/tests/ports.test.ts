@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { loadPorts, portLabel, type Port } from "../src/helm/ports";
+import { loadPorts, portHint, portLabel, portName, type Port } from "../src/helm/ports";
 
 const json = (body: string) => async () => new Response(body, { headers: { "content-type": "application/json" } });
 
@@ -30,4 +30,13 @@ test("ports dropped at the same point say so", () => {
   const all = [P("c", "Charlottetown", -59.59), P("p", "Pictou", -59.59), P("y", "Yarmouth", -65.87)];
   assert.equal(portLabel(all[0], all), "Charlottetown, launched 250 km out by water at 46.3°N 59.6°W, same start as Pictou");
   assert.equal(portLabel(all[2], all), "Yarmouth, launched 250 km out by water at 46.3°N 65.9°W");
+});
+
+test("the picker lists names only; the details come after picking (Nina's review)", () => {
+  const P = (id: string, name: string, lat: number, launch_lon: number): Port =>
+    ({ id, name, lat, lon: -62, launch_lat: 46.27, launch_lon, launch_km: 250, in_corridor: true, crosses_start: true });
+  const all = [P("c", "Charlottetown", 46, -59.59), P("p", "Pictou", 46, -59.59), P("a", "Portsmouth", 43, -65), P("b", "Portsmouth", 50, -66)];
+  assert.equal(portName(all[0], all), "Charlottetown");
+  assert.match(portName(all[2], all), /^Portsmouth \(43°N 62°W\)$/);
+  assert.equal(portHint(all[0], all), "The boat is put in the water 250 km out from Charlottetown by water, at 46.3°N 59.6°W, the same start as Pictou.");
 });

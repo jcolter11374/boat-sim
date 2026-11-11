@@ -93,8 +93,10 @@ async function clickNamed(page, selector, what, opts = {}) {
 const HELM = "helm.html?quality=low";
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+  // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
+  await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
   await setup(page);
-  await clickNamed(page, "#go", "Take the helm");
+  await clickNamed(page, "#go", "Set sail");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
   const s = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
@@ -328,9 +330,9 @@ CHECKS["helm-small-window"] = {
     // 10 s was too tight. Main's unscrollable card still fails at 30 s ("outside of
     // the viewport"), so the check still catches the bug (#288).
     await page.click("#go", { trial: true, timeout: 30_000 }).catch(() => {
-      throw new CheckFail('"Take the helm" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
+      throw new CheckFail('"Set sail" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
     });
-    return '"Take the helm" is reachable at 960x540';
+    return '"Set sail" is reachable at 960x540';
   },
 };
 
