@@ -125,7 +125,7 @@
   "voyages_per_build": 100,
   "note": "April to June launches every 10 days, real weather and currents, same seeds for every build; unknown failure off (odds_unknown_10 puts a 10% chance by day 60 back in). Microtransat finish on our target."
  },
- "commit": "900b157",
+ "commit": "c0b88ca",
  "builds": [
   {
    "id": "k-p25",
@@ -234,17 +234,17 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 67,
-    "odds": 0.67,
-    "low95": 0.573,
-    "high95": 0.754,
-    "within_150": 67,
-    "median_days": 108.4,
-    "odds_unknown_10": 0.582,
+    "finished": 66,
+    "odds": 0.66,
+    "low95": 0.563,
+    "high95": 0.745,
+    "within_150": 66,
+    "median_days": 107.5,
+    "odds_unknown_10": 0.573,
     "endings": {
-     "arrived": 67,
+     "arrived": 66,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
-     "still at sea": 10,
+     "still at sea": 11,
      "taken or snagged by fishermen [near land]": 3,
      "ran aground before the finish": 2,
      "both electronics boxes dead: silent and uncontrolled [near land]": 2,
@@ -322,7 +322,7 @@
     "low95": 0.646,
     "high95": 0.816,
     "within_150": 74,
-    "median_days": 84.6,
+    "median_days": 84.9,
     "odds_unknown_10": 0.652,
     "endings": {
      "arrived": 74,
@@ -857,7 +857,7 @@
      "file": "k-p25-bat.one-50ah/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 74.42
+     "days": 66.38
     },
     {
      "file": "k-p25-bat.one-50ah/2020-06-15.json",
@@ -893,16 +893,16 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 82,
-    "odds": 0.82,
-    "low95": 0.733,
-    "high95": 0.883,
-    "within_150": 82,
-    "median_days": 68.8,
-    "odds_unknown_10": 0.731,
+    "finished": 83,
+    "odds": 0.83,
+    "low95": 0.745,
+    "high95": 0.891,
+    "within_150": 83,
+    "median_days": 68.9,
+    "odds_unknown_10": 0.74,
     "endings": {
-     "arrived": 82,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "arrived": 83,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
      "still at sea": 3,
      "stuck inverted or keel lost [open ocean]": 2,
      "taken or snagged by fishermen [near land]": 1,
@@ -1272,7 +1272,7 @@
      "file": "k-p25-paint.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 92.49
+     "days": 112.94
     }
    ]
   },
@@ -1601,7 +1601,7 @@
      "file": "k-p25-material.fibreglass/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 78.0
+     "days": 77.98
     }
    ]
   },
@@ -1798,7 +1798,7 @@
     "low95": 0.711,
     "high95": 0.867,
     "within_150": 80,
-    "median_days": 74.0,
+    "median_days": 74.8,
     "odds_unknown_10": 0.711,
     "endings": {
      "arrived": 80,
@@ -1875,16 +1875,16 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 36,
-    "odds": 0.36,
-    "low95": 0.273,
-    "high95": 0.458,
-    "within_150": 36,
-    "median_days": 84.0,
-    "odds_unknown_10": 0.318,
+    "finished": 35,
+    "odds": 0.35,
+    "low95": 0.264,
+    "high95": 0.447,
+    "within_150": 35,
+    "median_days": 83.4,
+    "odds_unknown_10": 0.309,
     "endings": {
-     "capsized and stayed upside down (not self-righting) [open ocean]": 46,
-     "arrived": 36,
+     "capsized and stayed upside down (not self-righting) [open ocean]": 47,
+     "arrived": 35,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
      "still at sea": 3,
      "ran aground before the finish": 2,
@@ -1959,17 +1959,17 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 71,
-    "odds": 0.71,
-    "low95": 0.615,
-    "high95": 0.79,
-    "within_150": 71,
-    "median_days": 86.9,
-    "odds_unknown_10": 0.624,
+    "finished": 72,
+    "odds": 0.72,
+    "low95": 0.625,
+    "high95": 0.799,
+    "within_150": 72,
+    "median_days": 86.8,
+    "odds_unknown_10": 0.633,
     "endings": {
-     "arrived": 71,
+     "arrived": 72,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 14,
-     "still at sea": 8,
+     "still at sea": 7,
      "disqualified: silent too long": 3,
      "taken or snagged by fishermen [near land]": 2,
      "both electronics boxes dead: silent and uncontrolled [near land]": 1,
@@ -2295,9 +2295,9 @@
     "endings": {
      "arrived": 81,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 4,
      "disqualified: silent too long": 3,
-     "stuck inverted or keel lost [open ocean]": 1,
+     "still at sea": 3,
+     "stuck inverted or keel lost [open ocean]": 2,
      "taken or snagged by fishermen [near land]": 1
     }
    },
@@ -2339,6 +2339,337 @@
      "days": 61.03
     }
    ]
+  },
+  {
+   "id": "revc",
+   "boat": "Randolph Rev C",
+   "label": "Randolph Rev C as published (our model)",
+   "options": {
+    "base": "revc",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "twin",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-9kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revc-drive.wing-thruster",
+   "boat": "Randolph Rev C",
+   "label": "Randolph Rev C, Drive: wing-thruster",
+   "options": {
+    "base": "revc",
+    "drive": "wing-thruster",
+    "brain": "one-box",
+    "rudder": "twin",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-9kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 5
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revc-brain.two-box",
+   "boat": "Randolph Rev C",
+   "label": "Randolph Rev C, Electronics boxes: two-box",
+   "options": {
+    "base": "revc",
+    "drive": "wing",
+    "brain": "two-box",
+    "rudder": "twin",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-9kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revc-rudder.single",
+   "boat": "Randolph Rev C",
+   "label": "Randolph Rev C, Rudder: single",
+   "options": {
+    "base": "revc",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "single",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-9kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revc-rsol.deck-60w-rbat.lfp-384wh",
+   "boat": "Randolph Rev C",
+   "label": "Randolph Rev C, Solar panels: deck-60w, Battery: lfp-384wh",
+   "options": {
+    "base": "revc",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "twin",
+    "rsol": "deck-60w",
+    "rbat": "lfp-384wh",
+    "keel": "bulb-9kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revc-tracker.none",
+   "boat": "Randolph Rev C",
+   "label": "Randolph Rev C, Backup tracker: none",
+   "options": {
+    "base": "revc",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "twin",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-9kg",
+    "tracker": "none",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revb",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B as published (our model)",
+   "options": {
+    "base": "revb",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "single",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-8kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 5,
+    "odds": 0.05,
+    "low95": 0.022,
+    "high95": 0.112,
+    "within_150": 5,
+    "median_days": 117.6,
+    "odds_unknown_10": 0.043,
+    "endings": {
+     "still at sea": 75,
+     "taken or snagged by fishermen [near land]": 8,
+     "stuck inverted or keel lost [open ocean]": 5,
+     "arrived": 5,
+     "disqualified: silent too long": 4,
+     "electronics box dead: silent and uncontrolled [open ocean]": 2,
+     "ran aground before the finish": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "revb/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "revb/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 138.47
+    },
+    {
+     "file": "revb/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 104.17
+    },
+    {
+     "file": "revb/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    }
+   ]
+  },
+  {
+   "id": "revb-drive.wing-thruster",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B, Drive: wing-thruster",
+   "options": {
+    "base": "revb",
+    "drive": "wing-thruster",
+    "brain": "one-box",
+    "rudder": "single",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-8kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 5
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revb-brain.two-box",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B, Electronics boxes: two-box",
+   "options": {
+    "base": "revb",
+    "drive": "wing",
+    "brain": "two-box",
+    "rudder": "single",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-8kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revb-rudder.twin",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B, Rudder: twin",
+   "options": {
+    "base": "revb",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "twin",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-8kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revb-rsol.deck-60w-rbat.lfp-384wh",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B, Solar panels: deck-60w, Battery: lfp-384wh",
+   "options": {
+    "base": "revb",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "single",
+    "rsol": "deck-60w",
+    "rbat": "lfp-384wh",
+    "keel": "bulb-8kg",
+    "tracker": "yb3",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "revb-tracker.none",
+   "boat": "Randolph Rev B",
+   "label": "Randolph Rev B, Backup tracker: none",
+   "options": {
+    "base": "revb",
+    "drive": "wing",
+    "brain": "one-box",
+    "rudder": "single",
+    "rsol": "deck-40w",
+    "rbat": "lfp-192wh",
+    "keel": "bulb-8kg",
+    "tracker": "none",
+    "sat": "rockblock-9603n",
+    "light": "hella-naviled-360",
+    "paint": "micron-csc",
+    "spares": "spares-full",
+    "cruise_w": 0
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
   },
   {
    "id": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none",
@@ -2535,16 +2866,16 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 33,
-    "odds": 0.33,
-    "low95": 0.246,
-    "high95": 0.427,
-    "within_150": 33,
-    "median_days": 83.4,
-    "odds_unknown_10": 0.291,
+    "finished": 32,
+    "odds": 0.32,
+    "low95": 0.237,
+    "high95": 0.417,
+    "within_150": 32,
+    "median_days": 83.0,
+    "odds_unknown_10": 0.283,
     "endings": {
-     "capsized and stayed upside down (not self-righting) [open ocean]": 51,
-     "arrived": 33,
+     "capsized and stayed upside down (not self-righting) [open ocean]": 52,
+     "arrived": 32,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 7,
      "still at sea": 2,
      "ran aground before the finish": 2,
@@ -2590,72 +2921,6 @@
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
      "days": 65.68
-    }
-   ]
-  },
-  {
-   "id": "revb",
-   "boat": "Randolph Rev B",
-   "label": "Randolph Rev B as published (our model)",
-   "options": {
-    "wing": "published"
-   },
-   "current": false,
-   "odds": {
-    "voyages": 100,
-    "finished": 5,
-    "odds": 0.05,
-    "low95": 0.022,
-    "high95": 0.112,
-    "within_150": 5,
-    "median_days": 117.6,
-    "odds_unknown_10": 0.043,
-    "endings": {
-     "still at sea": 75,
-     "taken or snagged by fishermen [near land]": 8,
-     "stuck inverted or keel lost [open ocean]": 5,
-     "arrived": 5,
-     "disqualified: silent too long": 4,
-     "electronics box dead: silent and uncontrolled [open ocean]": 2,
-     "ran aground before the finish": 1
-    }
-   },
-   "replays": [
-    {
-     "file": "revb/2020-04-01.json",
-     "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
-    },
-    {
-     "file": "revb/2020-04-15.json",
-     "start": "2020-04-15T12:00",
-     "outcome": "timeout",
-     "days": 150.0
-    },
-    {
-     "file": "revb/2020-05-01.json",
-     "start": "2020-05-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
-    },
-    {
-     "file": "revb/2020-05-15.json",
-     "start": "2020-05-15T12:00",
-     "outcome": "lost",
-     "days": 138.47
-    },
-    {
-     "file": "revb/2020-06-01.json",
-     "start": "2020-06-01T12:00",
-     "outcome": "lost",
-     "days": 104.17
-    },
-    {
-     "file": "revb/2020-06-15.json",
-     "start": "2020-06-15T12:00",
-     "outcome": "timeout",
-     "days": 150.0
     }
    ]
   },
