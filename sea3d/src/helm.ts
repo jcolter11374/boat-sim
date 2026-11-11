@@ -24,6 +24,7 @@ import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type O
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
+import { loadPorts, portLabel } from "./helm/ports";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
@@ -116,6 +117,20 @@ const challengesReady = loadChallenges(challengesBase).then((list) => {
   challenges = list;
   showChallenges();
 });
+// Ports to start from (public/ports.json): the picker stays hidden without the file,
+// and for a shared game, which carries its own start.
+void loadPorts(new URL(params.get("ports") ?? "./ports.json", location.href).href).then((list) => {
+  page.ports = list.length;
+  if (!list.length || shared) return;
+  const sel = $<HTMLSelectElement>("port");
+  for (const p of list) {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = portLabel(p, list);
+    sel.appendChild(o);
+  }
+  $("portpick").hidden = false;
+});
 /** The chosen challenge, if any (a shared link names it with ?c=). */
 function chosenChallenge(): Challenge | undefined {
   const id = shared ? params.get("c") : $<HTMLSelectElement>("challenge").value;
@@ -140,6 +155,9 @@ const page = {
   share: "",
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
+  /** The port the game started from ("" = the usual drop), and how many the picker offers. */
+  startPort: "",
+  ports: 0,
   /** Points of interest: how many loaded, and the ids the track has reached (in order). */
   pois: { loaded: 0, shown: [] as string[] },
   /** The last run's stop reason (for tests). */
@@ -517,6 +535,7 @@ async function begin(): Promise<void> {
     return;
   }
   page.challenge = ch?.id ?? "";
+  page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
   $("start").hidden = true;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
   try {
@@ -527,7 +546,7 @@ async function begin(): Promise<void> {
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
     } else {
-      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) });
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, page.startPort);
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
@@ -558,7 +577,11 @@ async function begin(): Promise<void> {
     if (page.status?.over) await finish();
   } catch (e) {
     const err = String(e);
-    if (/NO_CHALLENGES/.test(err)) {
+    if (/NO_PORTS/.test(err)) {
+      page.error = "no ports in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site can't start from a port yet; it's being updated. Start from our usual drop for now.";
+    } else if (/NO_CHALLENGES/.test(err)) {
       page.error = "no challenges in the simulator";
       setBusy(false);
       $("startmsg").textContent = "The simulator published on this site doesn't know the weather challenges yet; it's being updated. Pick a 2020 launch for now.";

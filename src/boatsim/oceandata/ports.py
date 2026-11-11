@@ -209,6 +209,23 @@ def dumps(ports: list[Port]) -> str:
     )
 
 
+PORTS_JSON = "sea3d/public/ports.json"  # also in the browser pack (sandbox PACK_FILES)
+
+
+def load(path: str | Path | None = None) -> dict[str, dict]:
+    """The published ports by id. Looked for from the working directory (the
+    browser pack's root, or the repo) and then from the repo this file is in."""
+    tries = (
+        [Path(path)]
+        if path
+        else [Path(PORTS_JSON), Path(__file__).resolve().parents[3] / PORTS_JSON]
+    )
+    for f in tries:
+        if f.exists():
+            return {p["id"]: p for p in json.loads(f.read_text(encoding="utf-8"))["ports"]}
+    raise FileNotFoundError(PORTS_JSON)
+
+
 def main(argv: list[str] | None = None) -> None:
     import argparse
 

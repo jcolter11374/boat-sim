@@ -140,8 +140,9 @@ export class HelmGame {
   }
 
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
-   *  its weather (left out when it's the 2020 bundle). */
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }): Promise<Status> {
+   *  its weather (left out when it's the 2020 bundle). `startPort`: a port id from
+   *  ports.json to start from instead of the usual drop. */
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, startPort?: string): Promise<Status> {
     const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
       type: "new",
       launch,
@@ -150,6 +151,7 @@ export class HelmGame {
       mode,
       challenge: challenge?.id,
       bundle: challenge?.bundle,
+      start_port: startPort || undefined,
     });
     this.launches = v.launches;
     this.take(v);

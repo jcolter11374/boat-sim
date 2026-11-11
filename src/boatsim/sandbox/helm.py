@@ -168,6 +168,22 @@ class PlayerBase:
         }
 
 
+def port_start(port_id: str) -> tuple[float, float]:
+    """A port's launch point (oceandata/ports.py): where a support boat drops the
+    boat when it sails from that port. Only ports whose voyage crosses the race
+    start line and that the browser's weather covers."""
+    from boatsim.oceandata import ports
+
+    p = ports.load().get(port_id)
+    if p is None:
+        raise ValueError(f"no port called {port_id!r}")
+    if not (p["in_corridor"] and p["crosses_start"]):
+        raise ValueError(
+            f"can't sail from {p['name']}: its voyage wouldn't cross the start line here"
+        )
+    return float(p["launch_lat"]), float(p["launch_lon"])
+
+
 def _iso(t: datetime) -> str:
     return t.isoformat(timespec="minutes")
 
@@ -188,6 +204,7 @@ class Game:
         mode: str = "hands_on",
         day: str | None = None,
         challenge: str | None = None,
+        start_port: str | None = None,
     ):
         from boatsim.runner.land import default_land
 
@@ -214,7 +231,12 @@ class Game:
         else:
             self.start, self.seed = launches(env)[launch_index or 0]
         voyage = self.design.voyage
-        self.drop = (voyage["drop_lat"], voyage["drop_lon"])
+        # Where both boats start: the design's drop, or a port's launch point. The
+        # route (and base's "route" orders) start there too; the finish is unchanged.
+        self.start_port = start_port
+        self.drop = (
+            port_start(start_port) if start_port else (voyage["drop_lat"], voyage["drop_lon"])
+        )
         land = default_land()
         self.breakdowns = breakdowns
 
@@ -595,6 +617,7 @@ class Game:
             "build": catalog.grid_id(self.choices),
             "launch": _iso(self.start),
             "challenge": self.challenge,
+            "start_port": self.start_port,
             "seed": self.seed,
             "breakdowns_on": self.breakdowns,
             "mode": self.mode,
@@ -620,6 +643,7 @@ class Game:
             "l": self.launch_index,
             "day": self.day,
             "ch": self.challenge,
+            "sp": self.start_port,
             "m": self.mode,
             "s": self.safe,
             "b": self.breakdowns,
@@ -651,6 +675,7 @@ class Game:
                 launch_index=p["l"],
                 day=p.get("day"),
                 challenge=p.get("ch"),
+                start_port=p.get("sp"),  # older links: the usual drop
                 safe=p["s"],
                 breakdowns=p["b"],
                 max_days=p["d"],

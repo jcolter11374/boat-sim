@@ -330,3 +330,46 @@ def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     r = g.result()
     assert r["build"] == base
     assert r["boat"]["ending"]["boat"] == g.design.stock["label"]
+
+
+# ------------------------------------------------------------- start from a port
+
+
+def test_a_port_start_moves_both_boats_and_survives_save(env):
+    from boatsim.oceandata import ports
+
+    boston = ports.load()["boston"]
+    at = (boston["launch_lat"], boston["launch_lon"])
+    g = Game(env, launch_index=MAY1, start_port="boston", max_days=1.0)
+    assert g.drop == at
+    assert (g.mine.state.lat, g.mine.state.lon) == at == (g.ghost.state.lat, g.ghost.state.lon)
+    assert g._route[0].lat == at[0] and g.finish == FINISH  # the route starts there, same finish
+    g.order("finish", 0.5)
+    g.run(hours=6)
+    back = Game.load(env, g.save())
+    assert back.start_port == "boston" and back.mine.state == g.mine.state
+    assert g.result()["start_port"] == "boston"
+    # Old links (no "sp") start from the usual drop.
+    assert Game(env, launch_index=MAY1, max_days=0.5).start_port is None
+
+
+def test_ports_you_cannot_start_from(env):
+    with pytest.raises(ValueError, match="no port called"):
+        Game(env, launch_index=MAY1, start_port="atlantis")
+    with pytest.raises(ValueError, match="start line"):
+        Game(env, launch_index=MAY1, start_port="lisboa")  # east of the start line
+
+
+def test_a_port_start_still_logs_the_start_line(env, monkeypatch):
+    """The picker only offers ports west of the race's start line; a voyage from
+    one must still log the Microtransat start when it crosses it."""
+    from boatsim.oceandata import ports
+
+    near = {"id": "edge", "name": "Edge", "launch_lat": 40.0, "launch_lon": -65.04}
+    near |= {"in_corridor": True, "crosses_start": True}
+    monkeypatch.setattr(ports, "load", lambda path=None: {"edge": near})
+    g = Game(env, launch_index=MAY1, start_port="edge", breakdowns=False, max_days=1.0)
+    assert g.mine.log.t_start_line is None
+    g.order(90.0, 1.0)  # due east, across the line at 40N 65W
+    g.run(hours=12)
+    assert g.mine.log.t_start_line is not None

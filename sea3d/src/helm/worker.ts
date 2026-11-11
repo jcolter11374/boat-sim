@@ -2,9 +2,10 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?}
+// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?, start_port?}
 //                 mode: "hands_on" or "base"; challenge: an id from challenges.json, whose
-//                 weather is `bundle` (a URL; left out for the 2020 bundle)
+//                 weather is `bundle` (a URL; left out for the 2020 bundle); start_port:
+//                 a port id from ports.json, started from instead of the usual drop
 //               {id, type: "load", code, bundle?}         a shared game (Game.save's code)
 //               {id, type: "save"}
 //               {id, type: "order", heading, power}       heading: degrees, "finish" or "route"; power 0..1
@@ -64,6 +65,10 @@ G = None
 def takes_challenges():
     import inspect
     return Game is not None and "challenge" in inspect.signature(Game).parameters
+
+def takes_ports():
+    import inspect
+    return Game is not None and "start_port" in inspect.signature(Game).parameters
 
 def _f(x):
     # numpy numbers to plain ones, for json
@@ -149,6 +154,10 @@ if Game is None:
 kw = {"safe": m["safe"], "breakdowns": m["breakdowns"]}
 if m.get("mode", "hands_on") != "hands_on":
     kw["mode"] = m["mode"]  # older simulators only know hands on
+if m.get("start_port"):
+    if not takes_ports():
+        raise RuntimeError("NO_PORTS")
+    kw["start_port"] = m["start_port"]
 if m.get("challenge"):
     if not takes_challenges():
         raise RuntimeError("NO_CHALLENGES")
