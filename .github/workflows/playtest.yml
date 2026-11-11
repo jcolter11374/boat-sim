@@ -19,7 +19,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: playtest-${{ github.ref }}-${{ github.event_name }}
+  # As in live-site-check.yml: a pull request's page build (skipped) must not cancel the real run.
+  group: playtest-${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch != 'main' || github.event.workflow_run.event == 'pull_request') && format('skip-{0}', github.run_id) || format('{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: true
 jobs:
   play:
