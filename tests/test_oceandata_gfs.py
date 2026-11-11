@@ -85,7 +85,20 @@ def test_latest_cycle_falls_back_until_complete():
 
     c = gfs.latest_cycle(datetime(2026, 11, 11, 15, 40), get)
     assert c == datetime(2026, 11, 11, 6)
-    assert all(u.endswith(".f120.idx") or ".f120.grib2.idx" in u for u in asked)
+    # The running 12 UTC cycle fails on its last hour without asking for the rest.
+    assert all(".f120." in u for u in asked if "/12/" in u)
+
+
+def test_a_cycle_with_a_missing_middle_hour_is_not_complete():
+    """11 Nov 2026 00 UTC: f120 was out but the atmosphere's f111 wasn't."""
+
+    def get(u, byte_range=None):
+        if "/00/atmos/" in u and ".f111." in u:
+            raise urllib.error.HTTPError(u, 404, "not yet", None, None)
+        return b"x"
+
+    assert not gfs.cycle_complete(datetime(2026, 11, 11, 0), get)
+    assert gfs.latest_cycle(datetime(2026, 11, 11, 4, 15), get) == datetime(2026, 11, 10, 18)
 
 
 def test_bake_writes_seastate_layout_with_issue_time(tmp_path):
