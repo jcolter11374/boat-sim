@@ -355,6 +355,18 @@ def standard_components(
         cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
         thruster_count=int(prop.get("thruster_count", 2)),
     )
+    route = default_mission(drop).waypoints
+    polar = getattr(vessel, "polar", None)
+    if polar is None:
+        base = ForecastReplanPolicy(route=route)
+    else:
+        # A sailing boat: base costs legs from the polar and the forecast wind.
+        # Past the 3-day forecast it assumes a typical ocean speed: a beam
+        # reach in 7 m/s (14 kn), the autopilot at its usual share. GUESS.
+        f = ForecastReplanPolicy.polar_factor
+        base = ForecastReplanPolicy(
+            route=route, polar=polar, boat_speed=f * polar.speed_ms(7.0, 100.0)
+        )
     return Components(
         env=env,
         forecast=ErrorForecast(forecast_env, seed=seed, scale=forecast_error),
@@ -363,7 +375,7 @@ def standard_components(
         autopilot=wrap_for_sailing(autopilot, vessel),
         link=IridiumSBDLink(),
         pinger=GlobalstarPinger(),
-        base=ForecastReplanPolicy(route=default_mission(drop).waypoints),
+        base=base,
         land=land,
         finish=FinishTarget.from_voyage(design.voyage),
     )

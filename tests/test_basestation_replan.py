@@ -4,6 +4,8 @@ import itertools
 import math
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from boatsim.autonomy import Mode, SafeModeAutopilot
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation import ForecastReplanPolicy, HoldCoursePolicy
@@ -237,3 +239,51 @@ def test_keep_out_precheck_gives_the_same_answers_as_probing_every_point():
             assert p._inside(lat1, lon1, margin) == q._inside(lat1, lon1, margin)
             hits += got
     assert 0 < hits < 450  # both answers occur
+
+
+# ------------------------------------------- sailing boats (a VPP polar)
+
+
+def _cruiser_polar():
+    from boatsim.vessel import make_vessel
+
+    return make_vessel(load_design("configs/stock_cruiser31.yaml")).polar
+
+
+def test_vmc_tacks_upwind_and_reaches_across():
+    from boatsim.basestation.replan import VMC_ANGLES, vmc_ms
+
+    polar = _cruiser_polar()
+    east_wind = (-8.0, 0.0)  # blowing toward the west: from the east
+    reach = vmc_ms(polar, 0.0, *east_wind)  # line due north: wind on the beam
+    assert reach == pytest.approx(polar.speed_ms(8.0, 90.0))
+    # Due east is dead upwind: no straight line, but tacking still gains.
+    up = vmc_ms(polar, 90.0, *east_wind)
+    best = max(polar.speed_ms(8.0, a) * math.cos(math.radians(a)) for a in VMC_ANGLES)
+    assert up == pytest.approx(best) and 0.3 * reach < up < 0.8 * reach
+    assert vmc_ms(polar, 90.0, *east_wind, factor=0.5) == pytest.approx(0.5 * up)
+    assert vmc_ms(polar, 90.0, 0.0, 0.0) == 0.0
+
+
+class HeadwindBand:
+    """A light east wind (dead ahead on the route along 38N) north of 37.5N; a
+    fresh north wind (on the beam) south of it. No current anywhere."""
+
+    def sample(self, t, lat, lon):
+        return EnvState(
+            ghi=800.0, wind_u=-3.0 if lat > 37.5 else 0.0, wind_v=0.0 if lat > 37.5 else -8.0
+        )
+
+
+def test_a_sailing_boat_is_sent_round_a_headwind_a_motorboat_is_not():
+    env = HeadwindBand()
+    report = _report(T0, *START)
+    polar = _cruiser_polar()
+    sail = ForecastReplanPolicy(route=[GOAL], polar=polar, boat_speed=3.0, land=None)
+    mission = sail.on_report(report, env)
+    assert mission is not None and sail.sent
+    first = mission.waypoints[0]
+    assert first.lat < START[0] and first.lon > START[1]  # south-east: into the beam wind
+    motor = ForecastReplanPolicy(route=[GOAL], land=None)
+    motor.on_report(report, env)
+    assert motor.sent == []  # wind barely moves a motorboat's estimate
