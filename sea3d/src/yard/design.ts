@@ -37,6 +37,8 @@ export interface SimOption {
   est: boolean;
   basis: string;
   sim?: string[];
+  /** Weight change from the kayak as built, kg (the simulator's new slots). */
+  kg?: number;
 }
 export interface SimSlots {
   note: string;
@@ -102,7 +104,7 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
         n: o.n ?? OPTION_NAMES[o.id] ?? o.id,
         d: o.basis,
         cost: 0,
-        kg: 0,
+        kg: o.kg ?? 0,
         def: i === 0 ? 1 : undefined, // the first is the kayak as built
         est: o.est ? 1 : undefined,
         effect: o.effect,
