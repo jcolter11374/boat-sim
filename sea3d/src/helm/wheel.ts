@@ -357,3 +357,60 @@ export class Wheel {
     return this.s.heelDeg * (this.twa() >= 0 ? 1 : -1);
   }
 }
+
+/**
+ * The guided first spell (Leo): three prompts, each waiting until the player has done it.
+ * Pure: the session calls update() every frame with the wheel, and reef() when a reef
+ * changes; it shows `text` and hides the guide when `done`.
+ */
+export type GuideStep = "steer" | "trim" | "reef" | "go";
+export const GUIDE_WORDS: Record<GuideStep, string> = {
+  steer: "1 of 3 · Steer: hold Left or Right to turn the boat. Let go and the rudder centres.",
+  trim: "2 of 3 · We've put the sail out of trim. Up pulls it in, Down lets it out: get the needle into the green, until it says \"Drawing well\".",
+  reef: "3 of 3 · Leaning too far in a gust? Let the sail out (Down) or reef: press R now to make the sail smaller, then Shift+R to shake it out.",
+  go: "That's sailing! Keep the needle in the green and head for the mark.",
+};
+
+export class Guide {
+  step: GuideStep = "steer";
+  done = false;
+  private from: number | null = null;
+  private goodFor = 0;
+  private goShown = 0;
+
+  update(w: Wheel, dt: number): void {
+    if (this.done) return;
+    if (this.step === "steer") {
+      if (this.from === null) this.from = w.s.heading;
+      if (Math.abs(wrap180(w.s.heading - this.from)) >= 10) {
+        this.step = w.s.autoTrim ? "reef" : "trim";
+        // Put the sail out of trim, so the player sees it and fixes it: right out (flapping),
+        // or, running before the wind where right out is correct, pulled right in (stalled).
+        if (this.step === "trim") {
+          const sh = w.table.sheet_deg;
+          const b = w.best();
+          w.s.sheet = b.hi < sh[sh.length - 1] - 5 ? sh[sh.length - 1] : sh[0];
+        }
+      }
+    } else if (this.step === "trim") {
+      this.goodFor = w.sailState() === "good" ? this.goodFor + dt : 0;
+      if (this.goodFor >= 1.5 || w.s.autoTrim) this.step = "reef";
+    } else if (this.step === "go") {
+      this.goShown += dt;
+      if (this.goShown > 6) this.done = true;
+    }
+  }
+
+  /** A reef was tucked in or shaken out. */
+  reefed(): void {
+    if (this.step === "reef") this.step = "go";
+  }
+
+  skip(): void {
+    this.done = true;
+  }
+
+  get text(): string {
+    return GUIDE_WORDS[this.step];
+  }
+}
