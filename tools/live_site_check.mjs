@@ -312,7 +312,7 @@ for (const n of names) {
   results.push(r);
   const detail = Array.isArray(r.detail) ? r.detail.map((d) => `\n    - ${d}`).join("") : ` ${r.detail}`;
   console.log(`${r.status} ${n} (${r.secs} s):${detail}`);
-  for (const x of r.notes.slice(0, 15)) console.log(`    (${x})`);
+  for (const x of (r.notes ?? []).slice(0, 15)) console.log(`    (${x})`);
 }
 await browser.close();
 if (process.env.GITHUB_STEP_SUMMARY) {

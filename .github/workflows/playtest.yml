@@ -44,10 +44,10 @@ jobs:
         with:
           node-version: "22"
       # The runner image already has the browsers' system libraries; --with-deps only adds
-      # fonts from the Ubuntu mirrors, which can fail (deploy 43047737622). Fall back without.
+      # fonts from the Ubuntu mirrors, which can fail or hang on DNS (deploy 43047737622). Give it 2 min, then fall back.
       - run: |
           npm install --no-save playwright@1.49.1
-          npx playwright install --with-deps ${{ matrix.browser }} || npx playwright install ${{ matrix.browser }}
+          timeout 120 npx playwright install --with-deps ${{ matrix.browser }} || npx playwright install ${{ matrix.browser }}
       - if: github.event_name == 'workflow_run'
         run: sleep 90
       - run: node tools/playtest/play.mjs ${{ matrix.check }}
