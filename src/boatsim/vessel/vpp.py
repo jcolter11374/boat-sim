@@ -185,18 +185,35 @@ def _heel(p: VPPParams, m0):
     return np.where(excess(np.full_like(m0, top)) > 0, np.nan, 0.5 * (lo + hi))
 
 
-def _balance(p: VPPParams, plan: SailPlan, tws: float, twa: float, v: float, waves: float):
+def _balance(
+    p: VPPParams,
+    plan: SailPlan,
+    tws: float,
+    twa: float,
+    v: float,
+    waves: float,
+    sheet: float | None = None,
+):
     """Net forward force (N) for every trim at boat speed v, with heel and
-    side force: arrays over (flat, alpha). `waves` is the added resistance (N)."""
+    side force: arrays over (flat, alpha). `waves` is the added resistance (N).
+
+    sheet (rad): the sails held at this angle to the centreline, as a player
+    holds the sheet (trim_table). Then alpha is awa - sheet, a single column,
+    and an overpowered trim isn't ruled out: its heel is given as it is (the
+    top of the GZ curve where it can't balance, i.e. knocked flat)."""
     awx = tws * math.cos(twa) + v
     awy = tws * math.sin(twa)
     aws = math.hypot(awx, awy)
     awa = math.atan2(awy, awx)
     area = p.main_m2 * plan.main + p.jib_m2 * plan.jib
     share = area / (p.main_m2 + p.jib_m2)
-    lo = max(0.0, awa - math.pi / 2)
-    hi = max(awa - math.radians(p.sheet_min_deg), lo)
-    alpha = np.linspace(lo, hi, ALPHAS)[None, :]
+    if sheet is None:
+        lo = max(0.0, awa - math.pi / 2)
+        hi = max(awa - math.radians(p.sheet_min_deg), lo)
+        alpha = np.linspace(lo, hi, ALPHAS)[None, :]
+    else:
+        # Eased past the wind, the sail just flaps: no lift (alpha 0), only its drag.
+        alpha = np.array([[max(awa - sheet, 0.0)]])
     flat = np.asarray(FLATS)[:, None]
     cl, cd = _sail_coeffs(p, alpha, flat)
     q = 0.5 * RHO_AIR * aws * aws
@@ -206,11 +223,15 @@ def _balance(p: VPPParams, plan: SailPlan, tws: float, twa: float, v: float, wav
     heel0 = lift * math.cos(awa) + drag * math.sin(awa)
     arm = p.ce_height_m * math.sqrt(share) + p.clr_depth_m  # reefing lowers the sails
     heel = _heel(p, heel0 * arm)
+    if sheet is not None:
+        top = math.radians(p.gz_deg[int(np.argmax(p.gz_m))])
+        heel = np.where(np.isnan(heel), top, heel)
     c = np.cos(heel)
     drive = drive0 * c * c
     side = heel0 * c * c * c
     net = drive - _resistance(p, v, heel, side, waves)
-    net = np.where(np.isnan(heel) | (heel > math.radians(p.heel_max_deg)), -np.inf, net)
+    if sheet is None:
+        net = np.where(np.isnan(heel) | (heel > math.radians(p.heel_max_deg)), -np.inf, net)
     return net, heel, side, alpha, flat
 
 
@@ -270,6 +291,95 @@ def solve(
         math.log(r1 / r0) / math.log(1.02),
         m0,
     )
+
+
+TRIM_SHEETS = 12  # sheet angles in the trim table, from sheet_min_deg to 90
+
+
+@dataclass(frozen=True)
+class TrimPoint:
+    speed: float  # m/s through the water, the fastest the forces balance at
+    heel_deg: float
+    leeway_deg: float
+    alpha_deg: float  # the sails' angle to the apparent wind at that speed
+    overpowered: bool  # heeled past heel_max_deg: a real boat rounds up here
+
+
+def solve_trim(
+    p: VPPParams,
+    tws: float,
+    twa_deg: float,
+    plan: SailPlan,
+    sheet_deg: float,
+    hs: float | None = 0.0,
+) -> TrimPoint:
+    """Steady speed with the sails held at sheet_deg to the centreline (a
+    player's trim) rather than the best trim: the same force balance as
+    solve(), with alpha = apparent wind angle - sheet at every speed tried,
+    and "flat" still chosen by the boat (the crew flattening the sails).
+    Never faster than solve(), whose trim is the best of all sheets."""
+    twa = math.radians(twa_deg)
+    sheet = math.radians(sheet_deg)
+    if tws <= 0.0:
+        return TrimPoint(0.0, 0.0, 0.0, 0.0, False)
+    waves = added_resistance(p, pm_hs(tws) if hs is None else hs, twa_deg)
+    ok = lambda v: np.max(_balance(p, plan, tws, twa, v, waves, sheet)[0]) >= 0
+    grid = np.arange(SCAN_TOP, 0.0, -SCAN_STEP)
+    lo = next((float(v) for v in grid if ok(v)), 0.0)
+    if lo > 0.0:
+        hi = lo + SCAN_STEP
+        for _ in range(SPEED_ITERS):
+            mid = 0.5 * (lo + hi)
+            if ok(mid):
+                lo = mid
+            else:
+                hi = mid
+    net, heel, side, alpha, _ = _balance(p, plan, tws, twa, lo, waves, sheet)
+    i = int(np.argmax(net[:, 0]))
+    h, sd = float(heel[i, 0]), float(side[i, 0])
+    q = 0.5 * RHO_WATER * max(lo, 0.05) ** 2
+    leeway = math.degrees(sd / (q * p.keel_slope_area_m2)) if lo > 0.0 else 0.0
+    return TrimPoint(
+        lo,
+        math.degrees(h),
+        min(leeway, 15.0),
+        math.degrees(float(alpha[0, 0])),
+        h > math.radians(p.heel_max_deg),
+    )
+
+
+def trim_table(p: VPPParams, tws_kn=TWS_KN, twa_deg=None, sheets: int = TRIM_SHEETS) -> dict:
+    """Speeds for every sheet a player can hold (Take the wheel, sea3d/src/helm):
+    speed (kn), heel and leeway (deg) and overpowered (0/1) by plan, TWS, TWA and
+    sheet angle to the centreline, in flat water like polar(). Speeds are a
+    crew's, not the autopilot's: no autopilot_factor, which is given so the
+    page can show how the player compares with it. JSON-ready."""
+    twa_deg = list(twa_deg or range(30, 181, 10))
+    sheet_deg = [round(float(x), 1) for x in np.linspace(p.sheet_min_deg, 90.0, sheets)]
+    out = {
+        "tws_kn": list(tws_kn),
+        "twa_deg": twa_deg,
+        "sheet_deg": sheet_deg,
+        "alpha_stall_deg": p.alpha_stall_deg,
+        "heel_max_deg": p.heel_max_deg,
+        "autopilot_factor": p.autopilot_factor,
+        "disp_kg": p.disp_kg,
+        "plans": {},
+    }
+    for plan in p.plans:
+        cols = {k: [] for k in ("speed_kn", "heel_deg", "leeway_deg", "overpowered")}
+        for w in tws_kn:
+            rows = {k: [] for k in cols}
+            for a in twa_deg:
+                pts = [solve_trim(p, w * KNOT, a, plan, s) for s in sheet_deg]
+                rows["speed_kn"].append([round(x.speed / KNOT, 3) for x in pts])
+                rows["heel_deg"].append([round(x.heel_deg, 1) for x in pts])
+                rows["leeway_deg"].append([round(x.leeway_deg, 1) for x in pts])
+                rows["overpowered"].append([int(x.overpowered) for x in pts])
+            for k, col in cols.items():
+                col.append(rows[k])
+        out["plans"][plan.name] = {"main": plan.main, "jib": plan.jib, **cols}
+    return out
 
 
 def beat(
@@ -404,6 +514,9 @@ def main(argv=None) -> None:
     ap.add_argument("design")
     ap.add_argument("--fit", action="store_true", help="refit cl_max, cd0, rr_at_fn04 first")
     ap.add_argument("--out", help="polar JSON (default: the design's vpp.polar_file)")
+    ap.add_argument(
+        "--trim", action="store_true", help="also write <polar>_trim.json for hand trim"
+    )
     a = ap.parse_args(argv)
     raw = yaml.safe_load(Path(a.design).read_text())
     v = raw["vpp"]
@@ -433,6 +546,12 @@ def main(argv=None) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(table, separators=(",", ":")) + "\n")
     print(f"wrote {out}")
+    if a.trim:
+        trim = trim_table(solo)
+        trim["source"] = source + "; every sheet angle, a crew's speed (no autopilot_factor)"
+        t_out = out.with_name(out.stem + "_trim.json")
+        t_out.write_text(json.dumps(trim, separators=(",", ":")) + "\n")
+        print(f"wrote {t_out}")
 
 
 if __name__ == "__main__":
