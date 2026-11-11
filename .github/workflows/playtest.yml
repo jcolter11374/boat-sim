@@ -1,4 +1,4 @@
-# Nina's playtest: plays the deployed pages in Chrome and Firefox the way a
+# Nina's playtest, after each deploy: plays the deployed pages in Chrome and Firefox the way a
 # person does (cinematic mode, "sail until something happens", base-station
 # orders, Boatyard launch, race, leaderboard). Beside Ravi's live-site check.
 # Read-only: it only visits the public site. Screenshots are in the artifacts.
@@ -16,8 +16,6 @@ on:
     paths:
       - ".github/workflows/playtest.yml"
       - "tools/playtest/**"
-  push:
-    branches: [claude/project-thread-sohrlf]
 permissions:
   contents: read
 concurrency:

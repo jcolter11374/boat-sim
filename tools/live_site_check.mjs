@@ -9,7 +9,7 @@
 //
 // Each check prints one PASS/FAIL line plus its evidence, and writes
 // live-<check>.png. The exit code is the number of failed checks (capped at 1).
-import { chromium } from "playwright";
+import * as pw from "playwright";
 import { appendFileSync } from "node:fs";
 import { PAGES, checkPage } from "./live_visual_checks.mjs";
 
@@ -304,7 +304,8 @@ async function runCheck(browser, name) {
 
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
 for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
-const browser = await chromium.launch();
+// BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
+const browser = await pw[process.env.BROWSER ?? "chromium"].launch();
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);

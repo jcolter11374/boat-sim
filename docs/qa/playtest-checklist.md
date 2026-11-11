@@ -1,7 +1,16 @@
 # Playtest checklist (Nina, Playtest QA)
 
-Run after every deploy of the live site (https://jcolter11374.github.io/boat-sim/).
 Nothing is reported to John as done until its rows here pass on the live site.
+
+Three gates, in order:
+1. **Pre-release playtest** (`.github/workflows/prerelease-playtest.yml`, blocking): every PR
+   that touches `sea3d/` or `src/boatsim/` builds the whole site from its own commit (page and
+   simulator together, `tools/playtest/build_site.sh`), serves it on the runner, and plays it
+   in Chrome and Firefox with both scripts below. A PR doesn't merge red.
+2. **After each deploy** (`live-site-check.yml`, `playtest.yml`): the same scripts on the real
+   site (https://jcolter11374.github.io/boat-sim/).
+3. **John's PC, now and then** (not blocking): the day's main build in real Chrome and Firefox
+   on a real GPU, Windows fonts and drivers. Nothing is left running on it.
 
 Two automated layers run on GitHub's computers in a fresh browser profile:
 - **Live site check** (Ravi, `tools/live_site_check.mjs`): every page starts, and
