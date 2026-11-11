@@ -96,6 +96,12 @@ class KayakState(BoatState):
         return not self.damage.get("beacon", False)
 
 
+def has_brain(damage: dict) -> bool:
+    """Is any electronics box still working? A one-box boat loses both entries
+    at once (vessel/hazards.py), so this is "the main box is alive" there."""
+    return not (damage.get("electronics_main") and damage.get("electronics_safe"))
+
+
 @dataclass(frozen=True)
 class SpeedSolution:
     surge: float  # m/s through the water along the heading
@@ -329,7 +335,7 @@ class KayakVessel:
         frac = min(max(cmd.thrust_fraction, 0.0), 1.0)
         # No working electronics box at all (a one-box boat whose box died, kept
         # afloat and tracked by its beacon): nothing drives the motors.
-        brain = not (state.damage.get("electronics_main") and state.damage.get("electronics_safe"))
+        brain = has_brain(state.damage)
         drive_req = frac * self.thrusters.max_power_each_w * working if on and brain else 0.0
         hotel_req = 0.0
         if on:
@@ -362,9 +368,11 @@ class KayakVessel:
             # Rudder gone but autopilot alive: the tail still trims the wing, and the
             # boat weathervanes onto a reach ~110 deg off the wind (their sim), on
             # the side nearer its course (sail.unsteered_heading), so it keeps sailing.
-            # A dead electronics box (with a backup tracker still reporting) takes
-            # the autopilot with it: no rudder, no wing trim, so it drifts.
-            ap = on and not state.damage.get("electronics_main")
+            # With every electronics box dead (a one-box boat's box, kept tracked by
+            # its backup tracker) the autopilot goes too: no rudder, no wing trim, so
+            # it drifts. A second box (the kayak's safe box, a spare autopilot) takes
+            # over the steering when the main one dies.
+            ap = on and brain
             steering = ap and not state.damage.get("rudder")
             sailing = ap and not state.damage.get("sail") and not calm
             # Hybrid (wing plus thrusters): with the motors pushing it holds its

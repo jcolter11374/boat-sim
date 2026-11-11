@@ -91,7 +91,14 @@ from boatsim.config import Design
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
 from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT
-from boatsim.vessel.kayak import KayakState, KayakVessel, SpeedSolution, _boat_axes, solve_speed
+from boatsim.vessel.kayak import (
+    KayakState,
+    KayakVessel,
+    SpeedSolution,
+    _boat_axes,
+    has_brain,
+    solve_speed,
+)
 
 KNOT = 0.514444
 CONFIGS = Path(__file__).resolve().parents[3] / "configs"
@@ -284,8 +291,8 @@ class KeelboatVessel(KayakVessel):
         if self.alternator_w <= 0.0 or state.damage.get("engine"):
             return False
         alive = getattr(state, "electronics_on", True) and state.battery_wh > 0.0
-        if state.damage.get("electronics_main") or not alive:
-            return False  # no computer left to start it
+        if not has_brain(state.damage) or not alive:
+            return False  # no computer left to start it (either box can: GUESS)
         if fuel <= self.fuel_reserve_l:
             return False
         cap = state.battery_capacity_wh

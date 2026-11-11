@@ -261,6 +261,8 @@ def test_the_engine_charges_a_low_battery_out_of_gear(boat):
     assert not s2.charging and s2.battery_wh > 0.65 * s2.battery_capacity_wh
     rudderless = replace(s, damage={"rudder": True})
     assert boat.step(rudderless, Command(90, 0.0), night, timedelta(minutes=10), rng)[0].charging
-    dead = replace(s, damage={"electronics_main": True})
+    dead = replace(s, damage={"electronics_main": True, "electronics_safe": True})
     assert not boat.wants_charge(dead, s.fuel_l)
+    spare = replace(s, damage={"electronics_main": True})  # a spare autopilot box still works
+    assert boat.wants_charge(spare, s.fuel_l)
     assert not boat.wants_charge(s, boat.fuel_reserve_l)

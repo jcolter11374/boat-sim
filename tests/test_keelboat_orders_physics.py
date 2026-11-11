@@ -72,7 +72,8 @@ def test_healthy_boat_motors_on_course_in_a_calm(boat):
 
 @pytest.mark.parametrize(
     "broken",
-    [{"rudder": True}, {"electronics_main": True}, "flat"],
+    # A one-box boat's dead box: the hazard model marks both entries.
+    [{"rudder": True}, {"electronics_main": True, "electronics_safe": True}, "flat"],
     ids=["rudder gone", "autopilot dead", "battery flat"],
 )
 def test_engine_does_not_steer_without_rudder_or_autopilot(boat, broken):
