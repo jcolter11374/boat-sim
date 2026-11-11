@@ -213,3 +213,26 @@ def test_a_cat_is_fast_and_a_dinghy_has_no_engine():
     calm = EnvState(wind_u=1.0, wind_v=0.0, hs=0.2, tp=5, wave_dir=270)
     s = _run(dinghy, calm, Command(90, 1.0))
     assert not s.engine_on and s.speed_through_water < 1.0 * KNOT
+
+
+def test_cruiser_power_and_breakdowns_are_its_own(boat):
+    """Ravi's fairness check (docs/qa/stock-cruiser31-fairness.md): solar covers the
+    960 Wh/day load, one autopilot (no spare box), and a leak can sink it."""
+    hz = boat.hazards
+    assert hz.electronics_boxes == 1 and boat.p_sink_given_leak > 0
+    assert load_design(CFG).power["solar_wp"] >= 400
+    for cfg in SMALL:
+        v = make_vessel(load_design(cfg))
+        assert v.hazards.electronics_boxes == 1 and v.p_sink_given_leak == 0  # foam / sealed
+
+
+def test_a_leak_can_sink_the_cruiser_and_a_flat_battery_stops_the_pump(boat, monkeypatch):
+    beam = EnvState(wind_u=0.0, wind_v=6.2, hs=1.0, tp=6, wave_dir=0, ghi=300)
+    rng = np.random.default_rng(0)
+    s = boat.initial_state(T0, 36.65, -74.94)
+    s.damage["leak_main_tub"] = True  # an open leak the pump is coping with
+    s2, ev = boat.step(s, Command(90, 0.7), beam, timedelta(minutes=10), rng)
+    assert s2.alive  # not a new leak: the pump keeps up
+    s.battery_wh = 0.0
+    s3, ev = boat.step(s, Command(90, 0.7), replace(beam, ghi=0.0), timedelta(minutes=10), rng)
+    assert not s3.alive and any("bilge pump" in e.detail for e in ev)

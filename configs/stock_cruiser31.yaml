@@ -65,8 +65,11 @@ sail:
   unsteered_twa_deg: 60      # GUESS: rudder gone, it rounds up and lies about 60 deg off the wind
 
 power:
-  solar_wp: 200              # GUESS: two 100 W panels on the stern arch
-  panels_w: {panel_port: 100, panel_stbd: 100}
+  # GUESS: two 200 W panels on a stern arch, a common offshore fit. 200 W ran the
+  # batteries flat in 12 days against the 960 Wh/day load (Ravi, docs/qa/stock-cruiser31-
+  # fairness.md); 400 W holds them full in typical spring sun. (The engine doesn't charge.)
+  solar_wp: 400
+  panels_w: {panel_port: 200, panel_stbd: 200}
   soiling_salt: 0.93         # GUESS
   mounting_mismatch: 0.75    # GUESS: boom and sails shade the panels
   mppt_eff: 0.96             # GUESS
@@ -97,7 +100,7 @@ electronics:
 
 comms:
   two_way: Iridium
-  one_way: personal locator beacon
+  one_way: standalone satellite tracker with its own battery (GUESS fit)
   ais: Class B
 
 voyage:
@@ -119,6 +122,12 @@ hazards:
     sail: 2.0e-4             # torn sail or broken rig: sails no more (design note GUESS 7)
   rate_set: planning
   failures_enabled: true
+  # A stock yacht has ONE autopilot and one set of instruments, not the kayak's two
+  # sealed boxes: when it dies the boat drifts, tracked by its standalone tracker.
+  electronics_boxes: 1
+  electronics_per_day: 0.0025  # GUESS: about one autopilot failure per 400 days at sea
+  capture_per_day: 0.005     # GUESS: near land an unmanned yacht gets reported and towed in
+  leak_per_day: 0.0025       # GUESS: as the kayak; see vpp.p_sink_given_leak
 
 vpp:
   polar_file: polars/cruiser31.json   # written by python -m boatsim.vessel.vpp
@@ -148,6 +157,7 @@ vpp:
   waves_k: 0.0038            # added resistance per m^2 of wave height, x weight
   autopilot_factor: 0.93     # GUESS: autopilot steering and set-and-forget trim vs a race crew
   reef_heel_deg: 25          # GUESS: the boat reefs to stay under this heel
+  p_sink_given_leak: 0.3     # GUESS: a leak the electric bilge pump can't keep up with
   gz:                        # GZ (righting lever, m). GM 1.15 m from orc RM 78 kg.m at 1 deg;
     deg: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]   # the curve's shape is a
     m: [0, 0.19, 0.36, 0.50, 0.60, 0.65, 0.66, 0.62, 0.54, 0.43, 0.30, 0.16, 0.02, -0.12]  # GUESS

@@ -107,7 +107,7 @@ electronics:
 
 comms:
   two_way: Iridium
-  one_way: personal locator beacon
+  one_way: standalone satellite tracker with its own battery (GUESS fit)
 
 voyage:
   drop_lat: 36.65
@@ -128,3 +128,5 @@ hazards:
   p_part: {panel_deck: 4.0e-5, rudder: 1.5e-5, sail: 2.0e-4}
   rate_set: planning
   failures_enabled: true
+  electronics_boxes: 1       # one autopilot, no spare
+  capture_per_day: 0.005     # GUESS: as the cruiser

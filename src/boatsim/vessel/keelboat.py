@@ -43,6 +43,11 @@ sail force all the way to 90 deg, so this only bites dinghies and
 catamarans, whose stability comes from their crew (and there is none).
 After a capsize the boat stays over with p_capsize_stays_over (hazards
 block): 1 for a catamaran or a dinghy with nobody to right it.
+Flooding. A leak (the hazards' leak, a ship strike, ...) is water in the
+hull. A yacht's electric bilge pump keeps up with most leaks; with
+p_sink_given_leak (vpp block, GUESS) it can't, and the boat sinks. If the
+battery goes flat with a leak still open, the pump stops and it sinks too.
+Foam-filled dinghies and sealed catamaran hulls float holed (0).
 The dice come from the step's fixed block (hazards.SLOT), using the slots of
 thrusters a keelboat doesn't have, so paired runs stay in step.
 """
@@ -68,6 +73,8 @@ CONFIGS = Path(__file__).resolve().parents[3] / "configs"
 DOWN = "down"  # sails down (bare poles)
 GUST_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 1}"]  # a keelboat has no thrusters
 STAYS_OVER_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 2}"]
+SINK_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 3}"]
+LEAK = "leak_main_tub"  # the hazards' leak (vessel/hazards.py), here water in the hull
 
 
 @dataclass
@@ -180,6 +187,7 @@ class KeelboatVessel(KayakVessel):
         self.engine_resist_n = float(prop.get("engine_resist_n", 1.0))
         self.engine_below_wind_kn = float(prop.get("engine_below_wind_kn", 5.0))
         self.fuel_l = float(prop.get("fuel_l", 0.0))
+        self.p_sink_given_leak = float(v.get("p_sink_given_leak", 0.0))
         self.gust_sigma = float(v.get("gust_sigma", 0.085))  # WMO gust factor, see above
         self.gusts_per_hour = float(v.get("gusts_per_hour", 1200.0))  # 3-second gusts
         self.squall_sigma_per_mm_h = float(v.get("squall_sigma_per_mm_h", 0.03))  # GUESS
@@ -304,6 +312,13 @@ class KeelboatVessel(KayakVessel):
             heel_deg=self._step["heel"],
             engine_on=bool(used and engine > 0.0),
         )
+        if out.alive and out.damage.get(LEAK) and self.p_sink_given_leak > 0.0:
+            new_leak = not state.damage.get(LEAK)
+            pump_dead = out.battery_wh <= 0.0
+            if pump_dead or (new_leak and self._last_dice[SINK_SLOT] < self.p_sink_given_leak):
+                why = "flooded: the bilge pump lost power" if pump_dead else "flooded and sank"
+                events.append(Event(out.t, EventKind.LOST, why))
+                out.alive = False
         if out.alive:
             hours = dt.total_seconds() / 3600.0
             p = self.gust_capsize_p(self._step.get("m0", 0.0), hours, env.rain)
