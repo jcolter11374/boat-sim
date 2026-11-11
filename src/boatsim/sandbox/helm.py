@@ -330,6 +330,7 @@ class Game:
             self._auto = (mine.autopilot, mine.base)
             mine.autopilot = self._trim = Trimmed(mine.autopilot)
         self.trim_gain_m = 0.0  # distance helm spells gained (or lost) through the water
+        self.watch_gain_m = 0.0  # the same, for the latest watch only
         # The polar was built with this factor baked in (vessel/vpp.py); a spell's
         # share is clamped to within TRIM_BELOW of it, up to the crew's best.
         self.autopilot_factor = float(self.design.vpp.get("autopilot_factor", 1.0))
@@ -450,6 +451,7 @@ class Game:
         """Start a watch at `share` from `t` (an order that carries a spell's trim)."""
         if share is not None:
             self._trim.share, self._trim.until = share, t + timedelta(hours=TRIM_HOURS)
+            self.watch_gain_m = 0.0
             o["trim"], o["trim_until"] = share, _iso(self._trim.until)
         return o
 
@@ -458,7 +460,12 @@ class Game:
         tr = getattr(self, "_trim", None)
         if tr is None or tr.share is None or self.mine.state.t >= tr.until:
             return None
-        return {"share": tr.share, "until": _iso(tr.until), "factor": self.autopilot_factor}
+        return {
+            "share": tr.share,
+            "until": _iso(tr.until),
+            "factor": self.autopilot_factor,
+            "gain_km": self.watch_gain_m / 1000.0,  # this watch so far
+        }
 
     def _cruise(self) -> float:
         prop = self.design.propulsion
@@ -557,7 +564,9 @@ class Game:
             # speed is share / autopilot_factor of what the autopilot would make.
             s = self.mine.state
             ratio = 1.0 - self.autopilot_factor / tr["share"]
-            self.trim_gain_m += s.speed_through_water * self.mine.dt.total_seconds() * ratio
+            gain = s.speed_through_water * self.mine.dt.total_seconds() * ratio
+            self.trim_gain_m += gain
+            self.watch_gain_m += gain
         self._advance(self.ghost, self.mine.state.t)
         self.last_pass = self._update_leader()
         self.last_close = self._update_close()
@@ -756,6 +765,9 @@ class Game:
             "sailboat": self.sailboat,
             "silence": self.silence(),
             "trim": self.trim_status(),  # a helm spell's watch, or None
+            # Every watch so far (km through the water, + = gained): the page keeps
+            # showing the last watch's number after it ends by diffing this.
+            "trim_gain_km": getattr(self, "trim_gain_m", 0.0) / 1000.0,
         }
         if self.sailboat:
             st, tac = v.state, self.helm.tactician
