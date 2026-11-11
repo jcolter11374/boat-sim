@@ -19,6 +19,9 @@ on:
       spread:
         description: "Vary drag, solar loss and fouling per boat (true/false)"
         default: "true"
+      storm_boost:
+        description: "Blend hurricane cores into ERA5, #117 (true/false)"
+        default: "false"
   # On a PR that changes the batch itself: a one-year check (2020) of the whole pipeline.
   pull_request:
     paths:
@@ -51,6 +54,7 @@ jobs:
       BOATSIM_REQUIRE_SHIPS: "1"  # fail, not warn, if the ship map is missing (#13)
       MAX_DAYS: ${{ inputs.max_days || '150' }}
       SPREAD: ${{ inputs.spread || 'true' }}
+      BOOST: ${{ inputs.storm_boost || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -67,7 +71,7 @@ jobs:
       - name: Fetch weather (ERA5) for the same span
         run: python -m boatsim.oceandata fetch-era5 "$YEAR-01-01" "$((YEAR + 1))-05-20" --workers 4
       - name: Run every launch of the year
-        run: python -m boatsim.mc.months run "$YEAR" --max-days "$MAX_DAYS" --workers 4 --unknown-p 0 $([ "$SPREAD" = true ] && echo --spread) --out runs/months
+        run: python -m boatsim.mc.months run "$YEAR" --max-days "$MAX_DAYS" --workers 4 --unknown-p 0 $([ "$SPREAD" = true ] && echo --spread) $([ "$BOOST" = true ] && echo --storm-boost) --out runs/months
       - uses: actions/upload-artifact@v4
         with:
           name: voyages-${{ matrix.year }}

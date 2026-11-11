@@ -106,7 +106,7 @@ def run_many(
 
 
 @lru_cache(maxsize=8)
-def _environment(weather: str, currents: bool, for_forecast: bool = False):
+def _environment(weather: str, currents: bool, for_forecast: bool = False, storm_boost=False):
     """One environment per worker process and role, so in-memory tile caches are reused.
 
     The base station's forecast gets its own environment with a bigger cache: it
@@ -120,6 +120,10 @@ def _environment(weather: str, currents: bool, for_forecast: bool = False):
     # during the run into an error naming the missing file, instead of a silent
     # live fetch that could make a voyage depend on what the worker ran before.
     fetch = os.environ.get("BOATSIM_NO_FETCH") != "1"
+    if storm_boost:  # hurricane cores blended into ERA5 (#117); off by default
+        from boatsim.oceandata.stormboost import StormBoost, default_storm_tracks
+
+        return StormBoost(_environment(weather, currents, for_forecast), default_storm_tracks())
     if weather == "constant":
         return ConstantEnvironment()
     if weather == "reanalysis":
@@ -151,6 +155,7 @@ class StandardVoyage:
     max_days: float = 120.0
     land: bool = True  # end the voyage when it runs ashore (#70)
     forecast_error: float = 1.0  # 0 = base sees the future perfectly; 2 = twice the error
+    storm_boost: bool = False  # put hurricane cores back into ERA5 (oceandata/stormboost.py)
 
     def components(self, seed: int = 0) -> Components:
         from boatsim.config import load_design
@@ -158,8 +163,8 @@ class StandardVoyage:
 
         return standard_components(
             load_design(self.design_path),
-            _environment(self.weather, self.currents),
-            _environment(self.weather, self.currents, for_forecast=True),
+            _environment(self.weather, self.currents, storm_boost=self.storm_boost),
+            _environment(self.weather, self.currents, True, self.storm_boost),
             seed=seed,
             forecast_error=self.forecast_error,
             land=default_land() if self.land else None,

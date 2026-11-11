@@ -1,0 +1,34 @@
+# Does the storm boost (#117) bring ERA5's hurricane winds and waves closer to
+# what NOAA buoys measured? Paulette 2020 (over Bermuda) and Dorian 2019 (up
+# the US coast): buoy vs ERA5 vs boosted ERA5, by distance from the eye.
+# Run it by hand: Actions tab -> "Check storm boost against buoys" -> Run workflow.
+name: Check storm boost against buoys
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/check-storm-boost.yml"
+      - "src/boatsim/oceandata/stormboost.py"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[data]' requests
+      - name: Download IBTrACS North Atlantic (about 58 MB)
+        run: |
+          curl -sSL --retry 3 --max-time 600 \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" -o ibtracs.csv
+      - name: Compare (fetches ERA5 for each storm's days and the buoy files)
+        run: python -m boatsim.oceandata.stormboost check ibtracs.csv --workers 4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storm-boost-vs-buoys
+          path: runs/stormboost/
+          retention-days: 90
