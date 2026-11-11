@@ -378,6 +378,7 @@ function showOrder(): void {
         ? "Straight at the finish"
         : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
+  $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
   $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
   // On autopilot the autopilot sets its own power, as it does for the ghost.
   $<HTMLInputElement>("power").disabled = order === "auto";
@@ -773,6 +774,9 @@ async function begin(): Promise<void> {
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
   mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as Mode) ?? "hands_on";
+  // Hands on starts on the ghost's autopilot (#327); "auto" is a hands-on
+  // order, so base keeps its old first draft, straight at the finish.
+  order = mode === "base" ? "finish" : "auto";
   if (!(await sandboxThere(sandboxBase))) {
     page.error = "no simulator files";
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
@@ -797,6 +801,7 @@ async function begin(): Promise<void> {
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
       if (o) [order, power] = [o.heading, o.power];
+      else order = mode === "base" ? "finish" : "auto";
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
     } else {
