@@ -529,6 +529,16 @@ try {
     if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
     await page.screenshot({ path: "test-output/helm-result.png" });
     log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)})`);
+    // Start from a port (John hit "can't start from a port yet" when the page
+    // got ahead of its simulator): the packed simulator must take the port.
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ports >= 20, null, { timeout: 60000 });
+    await page.selectOption("#port", "baltimore");
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    const fromPort = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
+    if (!fromPort.ready || fromPort.err) fail(`helm: can't start from Baltimore: ${JSON.stringify(fromPort)}`);
+    log.push("helm started from Baltimore");
   } else {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");

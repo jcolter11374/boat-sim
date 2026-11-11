@@ -10,7 +10,9 @@
 #      numpy maths libraries differ in the last bit, and over 60-150 days at sea
 #      that can tip a voyage (a few of 12 in the first run).
 # Run it by hand: Actions tab -> "Sandbox data" -> Run workflow. Tick "publish"
-# to put the files on the sandbox-data release, where the page fetches them.
+# to put the files on the sandbox-data release, where the page fetches the
+# weather bundle. (The pages' boatsim.zip is packed by sea3d.yml from the page's
+# own commit, never taken from the release.)
 # It also runs on every push to main that changes the sandbox, which refreshes
 # the currents cache. Pull requests run sandbox-pr.yml instead: the same run on
 # the cached currents, with no secrets (secret-using workflows never run on
