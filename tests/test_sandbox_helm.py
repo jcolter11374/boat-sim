@@ -11,7 +11,7 @@ from test_sandbox import _fake_sources
 from boatsim.autonomy.helm import HelmAutopilot
 from boatsim.sandbox import forcing as F
 from boatsim.sandbox import run as R
-from boatsim.sandbox.helm import Game, launch_days
+from boatsim.sandbox.helm import LAND_CLOSE_KM, LAND_REARM_KM, LAND_WARN_KM, Game, launch_days
 from boatsim.types import Mission, Sensors, Waypoint
 
 MAY1 = 2  # launch index of 1 May 2020, inside the test bundle (1-4 May)
@@ -497,3 +497,35 @@ def test_base_station_sends_sail_orders_with_the_route(env):
     g.run(hours=1, ghost_passes=False, land_within_km=None, breakdown=False)
     assert g.helm.sails == "storm" and g.helm.engine is False
     assert g.status()["sailing"]["plan"] == "storm"
+
+
+# ------------------------------------------------------------- the near-land ring
+
+
+def test_a_port_start_still_stops_before_running_ashore(env):
+    """Ravi's port check (11 Nov): from Yarmouth, ~23 km off Nova Scotia and so
+    already inside the 50 km ring, a boat ran ashore with no "land" stop. The
+    10 km ring stops it the first time it closes in, with the boat still afloat."""
+    g = Game(env, launch_index=MAY1, start_port="yarmouth", breakdowns=False, max_days=3.0)
+    assert g._land_km() < LAND_WARN_KM  # starts inside the outer ring
+    g.order(0.0, 1.0)  # due north, onto the Nova Scotia shore
+    out = g.run(ghost_passes=False, breakdown=False)
+    assert out["stopped"] == "land" and not g.mine.done
+    assert g._land_km() <= LAND_CLOSE_KM
+    # Fires once: carrying on in, the next stop is the grounding itself.
+    assert g.run(ghost_passes=False, breakdown=False)["stopped"] == "over"
+    assert g.result()["boat"]["outcome"] == "aground"
+
+
+def test_the_near_ring_rearms_only_once_clear(env):
+    g = Game(env, launch_index=MAY1, start_port="yarmouth", breakdowns=False, max_days=3.0)
+    g.order(0.0, 1.0)
+    assert g.run(ghost_passes=False, breakdown=False)["stopped"] == "land"
+    g.order(180.0, 1.0)  # back out to sea
+    g.run(hours=3, ghost_passes=False, breakdown=False, land_within_km=None)
+    assert g._land_km() >= LAND_REARM_KM and g.close_armed
+    g.order(0.0, 1.0)  # and in again: a second warning
+    assert g.run(ghost_passes=False, breakdown=False)["stopped"] == "land"
+    # Saving and loading replays the ring the same way.
+    back = Game.load(env, g.save())
+    assert back.close_armed == g.close_armed and back.mine.state == g.mine.state

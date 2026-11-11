@@ -70,6 +70,13 @@ from boatsim.types import EventKind, Message, Outcome, Waypoint
 BREAKDOWNS = {EventKind.PART_FAILED, EventKind.CAPSIZE, EventKind.SHIP_STRIKE}
 DRAW_DAYS = 1.0  # a margin under this is "a draw, within the weather's luck" (docs/sandbox.md)
 LAND_WARN_KM = 50.0
+# A nearer ring, so a boat that starts inside LAND_WARN_KM (a port launch point
+# is ~20 km out) still gets a "land" stop before it runs ashore (Ravi, 11 Nov:
+# from Yarmouth on "finish", aground in 0.3 days with no stop). It fires the
+# first time the boat closes inside LAND_CLOSE_KM, and re-arms only once the boat
+# is back out past LAND_REARM_KM, so hugging the 10 km line doesn't stop every step.
+LAND_CLOSE_KM = 10.0
+LAND_REARM_KM = 15.0
 TRACK_STRIDE_H = 6.0
 UNTIL_CAP_H = 72.0  # "until something happens" stops by this at the latest (Maya, 11 Nov)
 MODES = ("hands_on", "base")
@@ -300,6 +307,8 @@ class Game:
         # leader is a pass, including the first one away from the drop.
         self.leader: str | None = None
         self.last_pass: str | None = None
+        self.close_armed = self._land_km() > LAND_CLOSE_KM
+        self.last_close = False
         self._route = default_mission(self.drop).waypoints
 
     # ---------------------------------------------------------------- orders
@@ -418,6 +427,24 @@ class Game:
         self._advance(self.mine)
         self._advance(self.ghost, self.mine.state.t)
         self.last_pass = self._update_leader()
+        self.last_close = self._update_close()
+
+    def _land_km(self) -> float:
+        from boatsim.vessel.coast import distance_to_land_km
+
+        return distance_to_land_km(self.mine.state.lat, self.mine.state.lon)
+
+    def _update_close(self) -> bool:
+        """True on the step the boat first closes inside LAND_CLOSE_KM; armed
+        again once it is back past LAND_REARM_KM. Kept per step (not per run
+        call) so Game.load replays it the same way."""
+        km = self._land_km()
+        if self.close_armed and km <= LAND_CLOSE_KM:
+            self.close_armed = False
+            return True
+        if not self.close_armed and km >= LAND_REARM_KM:
+            self.close_armed = True
+        return False
 
     def _update_leader(self) -> str | None:
         """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
@@ -452,7 +479,10 @@ class Game:
         Stop reasons: time, battery, wind, land, breakdown, ghost_passed,
         passed_ghost, order_arrived (Real base station mode), over. A pass
         means the lead changed hands by more than PASS_MARGIN_KM, after the
-        first PASS_QUIET_H (see _update_leader)."""
+        first PASS_QUIET_H (see _update_leader). "land" fires on entering
+        land_within_km, and also the first time the boat closes inside
+        LAND_CLOSE_KM (see _update_close), so a start near land still warns.
+        land_within_km=None turns both off."""
         from boatsim.vessel.coast import distance_to_land_km
 
         v = self.mine
@@ -494,7 +524,7 @@ class Game:
                 stopped = "wind"
             elif land_within_km is not None:
                 now_near = distance_to_land_km(v.state.lat, v.state.lon) <= land_within_km
-                if now_near and not near:
+                if (now_near and not near) or self.last_close:
                     stopped = "land"
                 near = now_near
             if stopped is None and ghost_passes and self.last_pass:
