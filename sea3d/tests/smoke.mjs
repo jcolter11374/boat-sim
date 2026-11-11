@@ -476,6 +476,18 @@ try {
   if (errors.length) fail(`page errors in a storm: ${errors.join("; ")}`);
   log.push(`storm: spindrift ${gale.spray.toFixed(2)}, ${gale.bands} rain bands in view`);
 
+  // The start panel fits every window: on a short laptop screen and on a phone either
+  // way up, "Take the helm" can be scrolled to and clicked (a trial click: Playwright's
+  // own checks that the button is visible, in the window and not covered).
+  for (const [w, h] of [[960, 540], [390, 844], [844, 390]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 0, null, { timeout: 60000 });
+    await page.click("#go", { trial: true, timeout: 15000 }).catch(() => fail(`helm at ${w}x${h}: "Take the helm" can't be clicked`));
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  log.push("helm start panel reachable at 960x540, 390x844, 844x390");
+
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
