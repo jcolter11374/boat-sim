@@ -92,3 +92,27 @@ def test_bake_depth_falls_back_and_flips(tmp_path):
     assert h["lat0"] == 36.5 and h["lon0"] == -77.5  # inside DEPTH_BOX, south first
     assert planes[0, 0] == -78  # elevation -77.5 rounded to whole metres
     assert any("failed" in m for m in log)
+
+
+def test_gebco_catalog_keeps_files_and_tiles_holding_the_box():
+    xml = (
+        '<dataset urlPath="bodc/gebco/global/gebco_2024/ice_surface_elevation/netcdf/'
+        'gebco_2024_n90.0_s0.0_w-90.0_e0.0.nc"/>'
+        '<dataset urlPath="bodc/gebco/global/gebco_2024/ice_surface_elevation/netcdf/'
+        'gebco_2024_n90.0_s0.0_w0.0_e90.0.nc"/>'
+        '<dataset urlPath="bodc/gebco/global/gebco_2024/ice_surface_elevation/netcdf/GEBCO_2024.nc"/>'
+    )
+
+    def fetch(url):
+        if "2023" in url:
+            raise OSError("gone")
+        return xml
+
+    got = seastate.gebco_catalog_sources(fetch=fetch, log=lambda m: None)
+    assert [u.rsplit("/", 1)[-1] for _, u in got] == [
+        "gebco_2024_n90.0_s0.0_w-90.0_e0.0.nc",
+        "GEBCO_2024.nc",
+    ]
+    assert got[0][0] == "GEBCO 2024" and got[0][1].startswith(
+        "https://dap.ceda.ac.uk/thredds/dodsC/"
+    )

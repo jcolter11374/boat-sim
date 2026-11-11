@@ -78,6 +78,11 @@ DEPTH_BOX = Box(lat_min=36.5, lat_max=39.7, lon_min=-77.5, lon_max=-74.0)
 _CEDA = "https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global"
 _NCEI = "https://www.ngdc.noaa.gov/thredds/dodsC/global/ETOPO2022"
 DEPTH_SOURCES = [  # GUESS at the exact OPeNDAP paths; the workflow log shows which answered
+    # GEBCO's 90 x 90 degree tile holding the box (its download naming), then whole grids.
+    (
+        "GEBCO 2024",
+        f"{_CEDA}/gebco_2024/ice_surface_elevation/netcdf/gebco_2024_n90.0_s0.0_w-90.0_e0.0.nc",
+    ),
     ("GEBCO 2024", f"{_CEDA}/gebco_2024/ice_surface_elevation/netcdf/GEBCO_2024.nc"),
     ("GEBCO 2023", f"{_CEDA}/gebco_2023/ice_surface_elevation/netcdf/GEBCO_2023.nc"),
     (
@@ -85,6 +90,43 @@ DEPTH_SOURCES = [  # GUESS at the exact OPeNDAP paths; the workflow log shows wh
         f"{_NCEI}/30s/30s_surface_elev_netcdf/ETOPO_2022_v1_30s_N90W180_surface.nc",
     ),
 ]
+_CEDA_CATALOG = (
+    "https://dap.ceda.ac.uk/thredds/catalog/bodc/gebco/global/{v}/ice_surface_elevation/netcdf/"
+    "catalog.xml"
+)
+
+
+def gebco_catalog_sources(versions=("gebco_2024", "gebco_2023"), fetch=None, log=print):
+    """GEBCO files CEDA's THREDDS catalog actually lists (OPeNDAP URLs), tried
+    before the guessed names. Tiles named like ..._n90.0_s0.0_w-90.0_e0.0.nc
+    are kept only if they hold DEPTH_BOX."""
+    import re
+    import urllib.request
+
+    fetch = fetch or (lambda u: urllib.request.urlopen(u, timeout=30).read().decode())
+    out = []
+    for v in versions:
+        try:
+            xml = fetch(_CEDA_CATALOG.format(v=v))
+        except Exception as e:  # noqa: BLE001  no catalog: fall back to the guesses
+            log(f"depth: no {v} catalog ({e!r})"[:200])
+            continue
+        paths = re.findall(r'urlPath="([^"]+\.nc)"', xml)
+        log(f"depth: {v} catalog lists {[p.rsplit('/', 1)[-1] for p in paths]}")
+        for path in paths:
+            m = re.search(
+                r"n(-?\d+(?:\.\d+)?)_s(-?\d+(?:\.\d+)?)_w(-?\d+(?:\.\d+)?)_e(-?\d+(?:\.\d+)?)", path
+            )
+            if m:
+                n, s_, w, e = map(float, m.groups())
+                b = DEPTH_BOX
+                if not (s_ <= b.lat_min and b.lat_max <= n and w <= b.lon_min and b.lon_max <= e):
+                    continue
+            year = v.split("_")[1]
+            out.append((f"GEBCO {year}", f"https://dap.ceda.ac.uk/thredds/dodsC/{path}"))
+    return out
+
+
 DEPTH_ATTRIBUTION = {
     "GEBCO": "GEBCO Compilation Group (2024) GEBCO 2024 Grid "
     "(doi:10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f)",
@@ -279,7 +321,12 @@ def bake_depth(out_dir: Path, sources=DEPTH_SOURCES, box: Box = DEPTH_BOX, opene
             "nlon": len(lo),
             "layout": "[lat][lon], lat south->north, lon west->east",
             "fields": [{"name": "elevation", "units": "m, negative below sea level", "scale": 1.0}],
-            "attribution": DEPTH_ATTRIBUTION.get(name.split()[0], name),
+            "attribution": (
+                f"GEBCO Compilation Group ({name.split()[1]}) {name} Grid"
+                + (" (doi:10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f)" if "2024" in name else "")
+                if name.startswith("GEBCO")
+                else DEPTH_ATTRIBUTION.get(name.split()[0], name)
+            ),
         }
         return write_grid(Path(out_dir) / "depth_chesapeake", header, pack(z, 1.0))
     raise RuntimeError(f"no depth source answered: {last!r}")
@@ -314,7 +361,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         write_index(a.out)
     else:
-        bake_depth(a.out)
+        bake_depth(a.out, sources=gebco_catalog_sources() + DEPTH_SOURCES)
 
 
 if __name__ == "__main__":
