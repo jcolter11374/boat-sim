@@ -134,7 +134,8 @@ export class HelmGame {
   ghost: Replay | null = null;
   status: Status | null = null;
   launches: string[] = [];
-  /** The boat being sailed: "" for our kayak, else a ready-made boat's id ("stock_cruiser31"). */
+  /** The boat being sailed: "" for our kayak, "revc"/"revb" for a design on our model of the Randolph boat,
+   *  else a ready-made boat's id ("stock_cruiser31"). */
   boatBase = "";
   onProgress: (text: string) => void = () => {};
   private worker: Worker;
@@ -188,9 +189,10 @@ export class HelmGame {
 
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
    *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
-   *  boat (e.g. "stock_cruiser31"); left out, it's our kayak. `startPort`: a port id
+   *  boat (e.g. "stock_cruiser31"), or is a Boatyard design's simulator choices
+   *  ("my boat"); left out, it's our kayak. `startPort`: a port id
    *  from ports.json to start from instead of the usual drop. */
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string, startPort?: string): Promise<Status> {
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string | Record<string, string | number>, startPort?: string): Promise<Status> {
     const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
       type: "new",
       launch,
@@ -199,7 +201,7 @@ export class HelmGame {
       mode,
       challenge: challenge?.id,
       bundle: challenge?.bundle,
-      choices: boat ? { base: boat } : undefined,
+      choices: typeof boat === "string" ? { base: boat } : boat && Object.keys(boat).length ? boat : undefined,
       start_port: startPort || undefined,
     });
     this.launches = v.launches;

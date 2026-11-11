@@ -18,10 +18,11 @@ import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, PLAYABLE_STOCK, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
+import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BoatMotion, KAYAK_V4, type HullParams } from "./motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
+import { loadMyBoat, saveMyBoat, type MyBoat } from "./myboat";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
@@ -102,11 +103,14 @@ const place: Placement = { x: 0, z: 0, yaw: 0 };
 // The boat you sail: our kayak, or a stock boat when the simulator offers one (the
 // game's replay names it, e.g. "31 ft cruiser").
 let spec: BoatSpec = KAYAK;
-const HULL: Partial<Record<BoatSpec["key"], HullParams>> = {
+const HULL: Partial<Record<string, HullParams>> = {
   kayak: KAYAK_V4,
+  revc: RANDOLPH_REVC,
+  revb: RANDOLPH_REVB,
   ...STOCK_HULL,
 };
-let motion = new BoatMotion(KAYAK_V4, place);
+let hull: HullParams = KAYAK_V4;
+let motion = new BoatMotion(hull, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
@@ -130,22 +134,26 @@ function buildBoat(): void {
   model = BUILDERS[spec.key](quality);
   reflectable(model.root);
   contact = new Contact(model.form, spec, quality);
-  contact.collar.visible = contact.spray.visible = !model.twinHull;
+  // The foam line fits single hulls the size of ours or bigger; not the twin hulls or the little Randolph boat.
+  contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
 }
-/** Sail the boat the game names ("" our kayak, or a stock id); stand the camera back for a bigger one. */
+/** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
+ *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
 function useBoat(base: string): void {
   const k = isStock(base) ? base : null;
-  const next = k ? STOCK[k] : KAYAK;
-  if (next === spec) return;
+  const next = k ? STOCK[k] : base === "revc" || base === "revb" ? RANDOLPH : KAYAK;
+  const nextHull = HULL[base] ?? KAYAK_V4;
+  if (next === spec && nextHull === hull) return;
   const scale = (b: BoatSpec) => THREE.MathUtils.clamp(b.length / KAYAK.length, 1, 3.4);
   const off = camera.position.clone().sub(controls.target).multiplyScalar(scale(next) / scale(spec));
   controls.target.y += (scale(next) - scale(spec)) * 2.2;
   camera.position.copy(controls.target).add(off);
   controls.minDistance = 1.5 * scale(next);
   spec = next;
-  motion = new BoatMotion(HULL[spec.key] ?? KAYAK_V4, place);
+  hull = nextHull;
+  motion = new BoatMotion(hull, place);
   buildBoat();
   if (k && !hasDetailedStock(k)) void loadStockModel(k).then((ok) => ok && spec.key === k && buildBoat());
 }
@@ -246,6 +254,10 @@ const page = {
   ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } } as Traffic["shown"],
   /** The wreck showing through the water below, if any (its id). */
   wreck: "",
+  /** The boat the game sails: the simulator's base ("" our kayak, "revc", a stock id) and the 3D model's key (for tests). */
+  get sailing() {
+    return { base: game.boatBase, spec: spec.key };
+  },
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -367,7 +379,7 @@ function showOrder(): void {
   const s = page.status;
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
-  const yacht = spec !== KAYAK; // a stock boat: the power is its engine's
+  const yacht = isStock(spec.key); // a stock boat: the power is its engine's
   $("powerlabel").textContent = yacht ? "Engine power" : "Motor power";
   $("powerhint").textContent = yacht
     ? "On Auto the boat motors only in a calm. The tank holds about 15 hours of diesel; once it's empty the boat waits for wind."
@@ -779,8 +791,12 @@ async function begin(): Promise<void> {
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
     } else {
-      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, chosenBoat() || undefined, page.startPort);
+      const pick = chosenBoat();
+      const mine = loadMyBoat();
+      const boat = pick === MINE && mine ? mine.choices : pick || undefined;
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort);
       useBoat(game.boatBase);
+      rememberBoat(pick, mine);
       if (mode !== (page.status.mode ?? "hands_on")) {
         mode = "hands_on";
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
@@ -807,6 +823,8 @@ async function begin(): Promise<void> {
     if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
+    else if (spec === RANDOLPH)
+      note(`You have the helm of ${loadMyBoat()?.name ?? "your boat"}. Its wing sail trims itself: pick a heading, then let time run. Power only matters if you fitted motors in the Boatyard.`, d, TONE_COLOUR.info);
     else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies, then let time run.`, d, TONE_COLOUR.info);
     else note("You have the helm. Pick a heading and a power, then let time run.", d, TONE_COLOUR.info);
     if (page.status?.over) await finish();
@@ -874,16 +892,43 @@ for (const k of PLAYABLE_STOCK) {
   label.append(input, " ", b, `: ${BOAT_BLURB[k] ?? "a ready-made boat, sailed as it comes."}`);
   $("boats").append(label);
 }
-/** The boat picked on the start card: "" for our kayak, else a stock id. */
+// "My boat" (saved in the Boatyard, or the boat sailed here last): it's ticked to start with. A Boatyard
+// design gets its own row; the planned kayak or a stock boat ticks the row that's already there.
+const MINE = "mine";
+const startMine = shared ? null : loadMyBoat();
+const isPlannedKayak = (b: MyBoat) => b.kind === "yard" && b.base === "kayak" && b.hash === "";
+const rowFor = (b: MyBoat) => (isPlannedKayak(b) ? "" : b.kind === "stock" ? b.base : MINE);
+const boatRow = (v: string) => document.querySelector<HTMLInputElement>(`input[name="boat"][value="${v}"]`);
+if (startMine) {
+  // A stock boat this page doesn't list gets its own row too.
+  const v = boatRow(rowFor(startMine)) ? rowFor(startMine) : MINE;
+  if (v === MINE) {
+    const label = document.createElement("label");
+    const input = Object.assign(document.createElement("input"), { type: "radio", name: "boat", value: MINE });
+    // The name is the player's own text: textContent only.
+    const b = Object.assign(document.createElement("b"), { textContent: startMine.name });
+    label.append(input, " ", b, startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.");
+    $("boats").querySelector("legend")!.after(label);
+  }
+  boatRow(v)!.checked = true;
+}
+/** The boat picked on the start card: "" for our kayak, "mine" for the saved Boatyard design, else a stock id. */
 function chosenBoat(): string {
   return document.querySelector<HTMLInputElement>('input[name="boat"]:checked')?.value ?? "";
 }
-for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="boat"]')))
-  r.addEventListener("change", () => {
-    // Start each boat at its autopilot's own power: 25% for the kayak, 70% engine for the yacht.
-    power = r.value ? 0.7 : 0.25;
-    $<HTMLInputElement>("power").value = String(Math.round(power * 100));
-  });
+/** Start each boat at its autopilot's own power: 25% for the kayak and Boatyard designs, 70% engine for a yacht. */
+function powerFor(pick: string): void {
+  power = isStock(pick === MINE ? String(startMine?.choices.base ?? "") : pick) ? 0.7 : 0.25;
+  $<HTMLInputElement>("power").value = String(Math.round(power * 100));
+}
+/** The boat a new game sails becomes "my boat" (unless it already is), so the other pages carry it on. */
+function rememberBoat(pick: string, mine: MyBoat | null): void {
+  if (pick === MINE || (mine && rowFor(mine) === pick)) return;
+  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: STOCK[pick].name.replace(/^\w/, (c) => c.toUpperCase()), choices: { base: pick } });
+  else saveMyBoat({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {} });
+}
+powerFor(chosenBoat());
+for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="boat"]'))) r.addEventListener("change", () => powerFor(r.value));
 
 // Base mode turns the boat's own battery guard on by default, as the simulator does.
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="mode"]')))

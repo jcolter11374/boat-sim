@@ -66,6 +66,7 @@ import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
+import { loadMyBoat } from "./myboat";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -969,8 +970,10 @@ if (PLACE) {
       openPicker();
     } else if (wantRace) await selectRace(wantRace, params.get("rev") === "c" ? "randolph_c" : "randolph");
     else {
-      // Default: our longest voyage, which has the most to watch.
-      const ours = [...byKey.kayak.values()];
+      // Default: the longest voyage (the most to watch) of my boat's kind, if it has replays; else our kayak's.
+      const mine = loadMyBoat();
+      const mineKey: Rev | null = !mine ? null : mine.base === "revb" ? "randolph" : mine.base === "revc" ? "randolph_c" : mine.base === "kayak" || isStock(mine.base) ? (mine.base as Rev) : null;
+      const ours = [...((mineKey && byKey[mineKey]?.size ? byKey[mineKey] : byKey.kayak).values())];
       const pool = ours.length ? ours : index;
       const longest = pool.reduce((m, v) => (v.days > m.days ? v : m), pool[0]);
       await selectVoyage(index.find((v) => v.file === want)?.file ?? longest.file);
