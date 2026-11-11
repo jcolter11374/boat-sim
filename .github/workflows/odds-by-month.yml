@@ -23,10 +23,6 @@ on:
         description: "Blend hurricane cores into ERA5, #117 (true/false)"
         default: "false"
   # On a PR that changes the batch itself: a one-year check (2020) of the whole pipeline.
-  pull_request:
-    paths:
-      - src/boatsim/mc/months.py
-      - .github/workflows/odds-by-month.yml
 permissions:
   contents: read
 jobs:

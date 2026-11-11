@@ -25,11 +25,6 @@ on:
       design:
         description: "Design every variant starts from (e.g. configs/stock_sail_drone7.yaml)"
         default: "configs/v4_kayak.yaml"
-  # On a PR that changes the study: a quick 2020 check of two variants.
-  pull_request:
-    paths:
-      - src/boatsim/mc/sensitivity.py
-      - .github/workflows/sensitivity.yml
 permissions:
   contents: read
 jobs:
@@ -58,7 +53,7 @@ jobs:
       EVERY_DAYS: ${{ inputs.every_days || '30' }}
       MAX_DAYS: ${{ inputs.max_days || '150' }}
       DESIGN: ${{ inputs.design || 'configs/v4_kayak.yaml' }}
-      VARIANTS: ${{ github.event_name == 'pull_request' && 'no_corrections' || inputs.variants }}
+      VARIANTS: ${{ inputs.variants }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

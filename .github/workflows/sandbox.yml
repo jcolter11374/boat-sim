@@ -11,8 +11,10 @@
 #      that can tip a voyage (a few of 12 in the first run).
 # Run it by hand: Actions tab -> "Sandbox data" -> Run workflow. Tick "publish"
 # to put the files on the sandbox-data release, where the page fetches them.
-# On a pull request that changes the sandbox it runs everything but publishing.
-# Free runners only.
+# It also runs on every push to main that changes the sandbox, which refreshes
+# the currents cache. Pull requests run sandbox-pr.yml instead: the same run on
+# the cached currents, with no secrets (secret-using workflows never run on
+# pull_request). The steps live in sandbox-run.yml. Free runners only.
 name: Sandbox data
 on:
   workflow_dispatch:
@@ -27,9 +29,11 @@ on:
         description: "Publish to the sandbox-data release"
         type: boolean
         default: false
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - ".github/workflows/sandbox.yml"
+      - ".github/workflows/sandbox-run.yml"
       - "src/boatsim/sandbox/**"
       - "tools/pyodide/**"
 permissions:
@@ -37,122 +41,16 @@ permissions:
 concurrency:
   group: sandbox-${{ github.ref }}
   cancel-in-progress: true
-env:
-  BOATSIM_REQUIRE_LAND: "1"
-  BOATSIM_REQUIRE_SHIPS: "1"
-  BOATSIM_NO_FETCH: "1"
-  COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
-  COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
-  YEAR: ${{ inputs.year || '2020' }}
-  BUILDS: ${{ inputs.builds || 'k-p25 revc k-p25-brain.one-box' }}
 jobs:
   sandbox:
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
     permissions:
       contents: write  # only for the publish step
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -e '.[data]'
-      # Bundle season: 1 April to 20 November (sandbox.forcing.FIRST/LAST).
-      - name: Fetch currents and weather
-        run: |
-          python -m boatsim.oceandata fetch-glorys "$YEAR-04" "$YEAR-11"
-          python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$YEAR-11-21" --workers 4
-      - name: Cut the bundle and pack the simulator
-        run: |
-          mkdir -p site
-          python -m boatsim.sandbox cut "$YEAR" --out "site/forcing_$YEAR.npz"
-          python -m boatsim.sandbox pack --out site/boatsim.zip
-          python -c "import zipfile; [print(f'{i.filename:22s} {i.compress_size/1e6:6.2f} MB') for i in zipfile.ZipFile('site/forcing_$YEAR.npz').infolist()]"
-      - name: Reference voyages in CPython
-        run: python -m boatsim.sandbox reference --bundle "site/forcing_$YEAR.npz" --builds $BUILDS --trace --out site/reference_cpython.json
-      # Ravi's control: how much does a nudge of rounding size (1e-9 deg at the
-      # drop, ~0.1 mm) change voyages within CPython itself? If it flips about
-      # as many as CPython vs Pyodide do, the cross-runtime differences are the
-      # sim's own sensitivity, not something Pyodide-specific.
-      - name: Control - CPython with the drop nudged 1e-9 deg
-        run: |
-          python -m boatsim.sandbox reference --bundle "site/forcing_$YEAR.npz" --builds $BUILDS --trace \
-            --nudge 1e-9 --out site/reference_cpython_nudged.json
-          python -m boatsim.sandbox compare site/reference_cpython.json site/reference_cpython_nudged.json || true
-          python -m boatsim.sandbox diverge site/reference_cpython.json site/reference_cpython_nudged.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Reference voyages in Node + Pyodide
-        working-directory: tools/pyodide
-        run: |
-          npm install --no-audit --no-fund
-          node reference.mjs --pack ../../site/boatsim.zip --bundle "../../site/forcing_$YEAR.npz" \
-            --builds $BUILDS --trace --out ../../site/reference.json
-      - name: CPython vs Pyodide (reported, not enforced)
-        run: |
-          python -m boatsim.sandbox compare site/reference_cpython.json site/reference.json \
-            || echo "::warning::CPython and Pyodide differ on some voyages (last-bit maths differences grow over a voyage); the exact gate is browser vs reference.json"
-          python -m boatsim.sandbox diverge site/reference_cpython.json site/reference.json
-      - name: Pyodide reference is deterministic (second run, exact)
-        working-directory: tools/pyodide
-        run: |
-          node reference.mjs --pack ../../site/boatsim.zip --bundle "../../site/forcing_$YEAR.npz" \
-            --builds $(echo $BUILDS | cut -d' ' -f1) --launches 0 --out /tmp/again.json
-          python - <<'PY'
-          import json
-          a = json.load(open("/tmp/again.json")); b = json.load(open("../../site/reference.json"))
-          b = [{k: v for k, v in r.items() if k != "track"} for r in b if (r["build"], r["start"]) in {(x["build"], x["start"]) for x in a}]
-          assert a == b, (a, b)
-          print("identical:", a[0]["build"], a[0]["start"])
-          PY
-      - name: Summary
-        if: always()
-        run: |
-          {
-            echo "| File | MB |"; echo "|---|---|"
-            for f in site/*; do echo "| $(basename $f) | $(du -m --apparent-size $f | cut -f1) |"; done
-            echo; echo "| Build | Launch | CPython | Pyodide |"; echo "|---|---|---|---|"
-            python - <<'PY'
-          import json, pathlib
-          a = json.loads(pathlib.Path("site/reference_cpython.json").read_text()) if pathlib.Path("site/reference_cpython.json").exists() else []
-          b = {(r["build"], r["start"]): r for r in json.loads(pathlib.Path("site/reference.json").read_text())} if pathlib.Path("site/reference.json").exists() else {}
-          for r in a:
-              o = b.get((r["build"], r["start"]), {})
-              print(f"| {r['build']} | {r['start'][:10]} | {r['outcome']} {r['days']} d, {r['events']} events | {o.get('outcome', '')} {o.get('days', '')} d, {o.get('events', '')} events |")
-          # Calibration (Ravi): the kayak as built, sandbox vs the full-resolution
-          # server replays of the same launches (sea3d/public/voyages, same seeds).
-          full = {v["start"]: v for v in json.loads(pathlib.Path("sea3d/public/voyages/index.json").read_text())["voyages"] if v["boat"] == "v4 kayak"}
-          print("\n| Kayak as built | Full resolution (server) | Sandbox, CPython | Sandbox, browser |\n|---|---|---|---|")
-          for r in a:
-              if r["build"] != "k-p25":
-                  continue
-              f, o = full.get(r["start"], {}), b.get((r["build"], r["start"]), {})
-              print(f"| {r['start'][:10]} | {f.get('outcome', '')} {f.get('days', '')} d | {r['outcome']} {r['days']} d | {o.get('outcome', '')} {o.get('days', '')} d |")
-          PY
-          } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: sandbox-${{ env.YEAR }}
-          path: site/
-          retention-days: 90
-      - name: Publish to the sandbox-data release
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cat > NOTES.md <<EOF
-          Forcing bundles, the packed simulator and reference voyages for the yard page's
-          sandbox (docs/sandbox.md). Rebuilt by the Sandbox data workflow.
-
-          Data sources (thinned and quantised by us):
-          - ERA5: Contains modified Copernicus Climate Change Service information $YEAR. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains.
-          - GLORYS12 currents (GLOBAL_MULTIYEAR_PHY_001_030): E.U. Copernicus Marine Service Information.
-          - Ship density: EMODnet Human Activities Vessel Density Map (Cogea Srl) and World Bank Global Shipping Traffic Density (dataset 0037580), CC BY 4.0, modified.
-          - Land mask: Made with Natural Earth. Free vector and raster map data @ naturalearthdata.com.
-          EOF
-          gh release view sandbox-data >/dev/null 2>&1 || gh release create sandbox-data \
-            --title "Boatyard sandbox data" --notes-file NOTES.md
-          gh release edit sandbox-data --notes-file NOTES.md
-          gh release upload sandbox-data site/* --clobber
+    uses: ./.github/workflows/sandbox-run.yml
+    with:
+      year: ${{ inputs.year || '2020' }}
+      builds: ${{ inputs.builds || 'k-p25 revc k-p25-brain.one-box' }}
+      publish: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+      currents: fetch
+    secrets:
+      COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+      COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}

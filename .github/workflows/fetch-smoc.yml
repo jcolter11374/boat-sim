@@ -8,10 +8,6 @@ on:
       months:
         description: "YYYY-MM months, space separated"
         default: "2020-10 2020-11 2022-04 2022-05 2022-08 2022-09"
-  pull_request:
-    paths:
-      - ".github/workflows/fetch-smoc.yml"
-      - "src/boatsim/oceandata/smoc.py"
 permissions:
   contents: read
 jobs:
