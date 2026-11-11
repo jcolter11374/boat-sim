@@ -4,6 +4,8 @@
 // results card and the season's paired verdict. All data goes in with
 // textContent, never innerHTML.
 
+import { sandboxThere } from "./sandbox";
+
 type Choices = Record<string, string>;
 interface Weather { wind_u: number; wind_v: number; hs: number }
 interface Boat {
@@ -273,6 +275,10 @@ async function startRace(): Promise<void> {
   const a = choicesFrom($<HTMLSelectElement>("baseA").value, $<HTMLInputElement>("shareA").value);
   const b = choicesFrom($<HTMLSelectElement>("baseB").value, $<HTMLInputElement>("shareB").value);
   if (!a || !b) return msg("That share link doesn't look like one from the Boatyard.", "bad");
+  if (!(await sandboxThere(sandboxBase))) {
+    page.error = "no simulator files";
+    return msg("The simulator files aren't published on this site yet, so races can't run here.", "bad");
+  }
   worker ??= new RaceWorker(sandboxBase, (t) => msg(t));
   page.ready = false;
   page.error = null;

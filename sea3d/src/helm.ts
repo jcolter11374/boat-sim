@@ -24,6 +24,7 @@ import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planA
 import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
+import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
@@ -516,21 +517,12 @@ function showChallenge(): void {
   // Storm boost (#117) is ignored for now: storms sail on plain ERA5, so say so.
   $("chnote").textContent = c.weather_note;
 }
-/** True when the page was published with the simulator files (as the Boatyard checks). */
-async function sandboxThere(): Promise<boolean> {
-  try {
-    const r = await fetch(new URL("boatsim.zip", sandboxBase).href, { method: "HEAD" });
-    return r.ok && !(r.headers.get("content-type") ?? "").includes("text/html");
-  } catch {
-    return false;
-  }
-}
 async function begin(): Promise<void> {
   const launch = Number($<HTMLSelectElement>("launch").value);
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
   mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as Mode) ?? "hands_on";
-  if (!(await sandboxThere())) {
+  if (!(await sandboxThere(sandboxBase))) {
     page.error = "no simulator files";
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
     return;

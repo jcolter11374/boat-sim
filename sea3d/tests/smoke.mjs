@@ -558,7 +558,9 @@ try {
     await page.screenshot({ path: "test-output/race.png", fullPage: true });
     log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
   } else {
-    if (!/aren't published|older than the race view/.test(rc0.msg)) fail(`race start: ${JSON.stringify(rc0)}`);
+    // No files: the page checks before loading Python (a preview server answers the
+    // missing zip with HTML, which Pyodide would choke on). An old simulator: NO_RACE.
+    if (!(rc0.err === "no simulator files" && /aren't published/.test(rc0.msg)) && !/older than the race view/.test(rc0.msg)) fail(`race start: ${JSON.stringify(rc0)}`);
     log.push("race: no simulator files, says so");
   }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
