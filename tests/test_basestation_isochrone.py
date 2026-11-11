@@ -172,3 +172,33 @@ def test_a_hybrid_wing_and_motor_boat_is_still_costed_as_a_motorboat():
     d.propulsion.update(thruster_count=2, cruise_drive_w=25, max_drive_w=50)  # add motors
     env = ConstantEnvironment(EnvState())
     assert standard_components(d, env, env, land=None, routing="isochrone").base.polar is None
+
+
+def test_only_the_real_25_km_finish_circle_counts():
+    """A plan used to stop anywhere within 50 km of the target, so it could end
+    downwind of it and call that done (Ravi's 10-year runs: drones beating back
+    ashore on Iberia and Morocco). Now the track must pass within 25 km."""
+    from boatsim.autonomy.sphere import destination
+    from boatsim.geo import distance_m
+
+    p = _policy()
+    assert p.finish_radius_m == 25_000.0
+    # 40 km dead downwind of the target, wind from the target: it has to beat up.
+    start = destination(GOAL.lat, GOAL.lon, 180.0, 40_000.0)
+
+    class FromGoal:
+        def sample(self, t, lat, lon):
+            return EnvState(wind_v=-7.0, hs=1.0)  # from the north
+
+    track, secs = p.plan(FromGoal(), T0, *start, p.boat_speed)
+    assert len(track) > 1 and math.isfinite(secs)
+    a, b = track[-2], track[-1]
+    assert p._reaches(*a, *b) is not None  # the last leg enters the circle
+    assert secs > 3600.0  # beating 15+ km upwind is not free
+    # A leg that passes the circle mid-way counts, at the fraction it got there.
+    west = destination(GOAL.lat, GOAL.lon, 270.0, 30_000.0)
+    east = destination(GOAL.lat, GOAL.lon, 90.0, 30_000.0)
+    f = p._reaches(*west, *east)
+    assert f is not None and 0.0 < f < 0.5
+    assert p._reaches(*west, *destination(*west, 0.0, 30_000.0)) is None
+    assert distance_m(*west, GOAL.lat, GOAL.lon) > p.finish_radius_m
