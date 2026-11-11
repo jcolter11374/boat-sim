@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+
 // Visual checks for the live-site test (Iris, for Ravi). What "working" looks like
 // on each 3D page, as assertions a Playwright run can make against the live site.
 //
@@ -30,8 +32,18 @@
 /** Pixel statistics of the 3D (largest) canvas, panels hidden. */
 export async function pixels(page) {
   await page.evaluate(() => {
-    const big = [...document.querySelectorAll("canvas")].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    // The 3D view: the canvas covering the most of the window. Not the one with the most
+    // pixels: on software graphics the 3D canvas draws at half resolution, and the voyage
+    // page's chart (a 2D canvas) can then hold more pixels than it, so the check measured
+    // the chart and found no boat (#298).
+    const area = (c) => { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)); };
+    const big = [...document.querySelectorAll("canvas")].sort((a, b) => area(b) - area(a))[0];
     if (big) big.dataset.livecheck = "1";
+    // For the failure report (#298): every canvas, and which one we judged.
+    window.__livecheckCanvases = [...document.querySelectorAll("canvas")].map((c) => {
+      const r = c.getBoundingClientRect();
+      return `${c === big ? "*" : ""}${c.id || c.parentElement?.id || "canvas"} ${Math.round(r.width)}x${Math.round(r.height)}css/${c.width}x${c.height}px`;
+    });
     const s = document.createElement("style");
     s.id = "livecheck-hide";
     s.textContent = "*{visibility:hidden!important;backdrop-filter:none!important} canvas[data-livecheck]{visibility:visible!important}";
@@ -43,7 +55,7 @@ export async function pixels(page) {
   } finally {
     await page.evaluate(() => document.getElementById("livecheck-hide")?.remove());
   }
-  return page.evaluate(async (b64) => {
+  const stats = await page.evaluate(async (b64) => {
     const img = new Image();
     img.src = "data:image/png;base64," + b64;
     await img.decode();
@@ -53,6 +65,8 @@ export async function pixels(page) {
     const d = g.getImageData(0, 0, W, H).data;
     const region = (y0, y1) => {
       let n = 0, s = 0, s2 = 0, black = 0, white = 0, magenta = 0, blue = 0, warm = 0;
+      // "Warm-ish" (a looser orange) for the failure report: how much, where, and what colour.
+      let wn = 0, wr = 0, wg = 0, wb = 0, x0 = W, x1 = -1, y0b = H, y1b = -1;
       for (let y = Math.floor(y0 * H); y < y1 * H; y += 2)
         for (let x = 0; x < W; x += 2) {
           const i = (y * W + x) * 4, r = d[i], gr = d[i + 1], b = d[i + 2];
@@ -63,12 +77,47 @@ export async function pixels(page) {
           if (r > 200 && b > 200 && gr < 60) magenta++;
           if (b > r + 10) blue++;
           if (r > b + 60 && r > gr + 20) warm++; // the kayak's orange hull
+          if (r > b + 25 && r > gr + 8) {
+            wn++; wr += r; wg += gr; wb += b;
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0b) y0b = y; if (y > y1b) y1b = y;
+          }
         }
       const mean = s / n;
-      return { mean, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)), black: black / n, white: white / n, magenta: magenta / n, blue: blue / n, warm: warm / n };
+      // density: how much of the warm-ish box is warm-ish (samples are every 2nd pixel each way).
+      const warmish = wn ? { share: wn / n, rgb: [wr, wg, wb].map((v) => Math.round(v / wn)), box: [x0, y0b, x1, y1b],
+        density: wn / (((x1 - x0) / 2 + 1) * ((y1b - y0b) / 2 + 1)) } : { share: 0, density: 0 };
+      return { mean, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)), black: black / n, white: white / n, magenta: magenta / n, blue: blue / n, warm: warm / n, warmish };
     };
-    return { all: region(0, 1), sky: region(0, 0.2), sea: region(0.8, 1) };
+    return { all: region(0, 1), sky: region(0, 0.2), sea: region(0.8, 1), size: [W, H] };
   }, png.toString("base64"));
+  stats.canvases = await page.evaluate(() => window.__livecheckCanvases ?? []);
+  stats.png = png;
+  return stats;
+}
+
+/** One line on what the judged picture held, for a failure report (#298). */
+export function describe(px) {
+  const w = px.all.warmish;
+  const f = (v) => v.toFixed(4);
+  return `[picture ${px.size?.join("x")}, canvases ${px.canvases?.join(", ")}; orange ${f(px.all.warm)}, warm-ish ${f(w.share)}` +
+    (w.share ? ` rgb(${w.rgb.join(",")}) in box ${w.box.join(",")}` : "") +
+    `; mean brightness ${px.all.mean.toFixed(0)}, sky ${px.sky.mean.toFixed(0)}, sea blue ${f(px.sea.blue)}]`;
+}
+
+/**
+ * Is the boat in the picture? Either plenty of strict orange (the hull in good light),
+ * or a compact patch of warm-ish colour: Firefox's software graphics draw the voyage
+ * hull paler and pinker (rgb 168,122,104 against Chromium's 148,82,57, #298), which
+ * misses strict orange. "Compact" (a small box, mostly filled) keeps a warm sunset sky
+ * or scattered glints from passing for a boat. Healthy: Chromium voyage warm-ish 0.0032
+ * at density 0.59; Firefox 0.0009 at 0.31.
+ */
+export function boatInView(px) {
+  const a = px.all, w = a.warmish;
+  if (a.warm >= 0.001) return true;
+  if (!w || !(w.share >= 0.0004) || !(w.density >= 0.15) || !px.size) return false;
+  const [W, H] = px.size;
+  return w.box[2] - w.box[0] <= 0.3 * W && w.box[3] - w.box[1] <= 0.3 * H;
 }
 
 /** What's wrong with these pixel statistics ([] = looks right). */
@@ -82,7 +131,7 @@ export function judge(px, { boat = true } = {}) {
   if (px.sky.white > 0.5) bad.push("blank sky: white");
   if (px.sky.sd < 1.5 && px.sky.blue < 0.1) bad.push(`blank sky: flat (sd ${px.sky.sd.toFixed(1)}) and not sky-coloured`);
   if (px.sea.blue < 0.5) bad.push(`no sea: only ${f(px.sea.blue)} of the bottom is blue`);
-  if (boat && px.all.warm < 0.001) bad.push(`no boat in view: ${f(px.all.warm)} orange`);
+  if (boat && !boatInView(px)) bad.push(`no boat in view: ${f(px.all.warm)} orange`);
   return bad;
 }
 
@@ -150,7 +199,7 @@ export const PAGES = [
 ];
 
 /** Run every check on one page. Returns a list of problems ([] = working). */
-export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300000 } = {}) {
+export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300000, shots = true } = {}) {
   const problems = [];
   const errors = [];
   const onErr = (e) => errors.push(String(e));
@@ -168,7 +217,14 @@ export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300
       await page.waitForTimeout(3000);
       if (!((await page.evaluate(p.frames)) > f0)) problems.push("the picture froze (no new frames in 3 s)");
     }
-    if (p.canvas !== false) problems.push(...judge(await pixels(page)));
+    if (p.canvas !== false) {
+      const px = await pixels(page);
+      // The exact picture judged, panels hidden (uploaded with the gate's live-*.png).
+      if (shots) await writeFile(`live-judged-${p.name.replace(/\W+/g, "-")}.png`, px.png).catch(() => {});
+      const bad = judge(px);
+      if (bad.length) bad.push(describe(px));
+      problems.push(...bad);
+    }
     const was = p.before ? await page.evaluate(p.before) : undefined;
     try {
       await p.act(page, { timeout: 15000 });
