@@ -19,9 +19,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# Deploys queue: a run on main never cancels another (a merge deploy and the
+# forecast redeploy from forecast.yml must not cut each other off halfway).
+# Only superseded pull-request checks are cancelled.
 concurrency:
   group: sea3d-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -94,6 +97,16 @@ jobs:
           gh release download land-data -R "$GITHUB_REPOSITORY" -D public/land \
             -p 'pico_*' -p 'annapolis*' \
             && ls -l public/land || echo "no land-data release yet: no land in the 3D views"
+      # Today's weather (forecast.yml, display only): the newest GFS forecast.
+      # Optional: without the release the page has no "now" weather.
+      - name: Fetch the forecast files
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download forecast-data -R "$GITHUB_REPOSITORY" -D public/forecast \
+            -p 'forecast_*' \
+            && ls -l public/forecast || echo "no forecast-data release yet: no 'now' weather"
       - name: Type-check and build
         run: npm run build
       - name: Wave-motion gate (roll period, righting curves, self-righting)

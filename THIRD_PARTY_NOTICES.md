@@ -153,6 +153,16 @@ not stored in git. Thinned and quantised by us.
   credit; or, if GEBCO's server didn't answer, NOAA NCEI ETOPO 2022 Global Relief
   Model (doi:10.25921/fd45-gt74), public domain. Each file's header names which.
 
+## Today's weather for the 3D view (`forecast-data` release)
+
+Built by `src/boatsim/oceandata/gfs.py` and the "Today's weather" workflow; not
+stored in git. Thinned and quantised by us.
+
+- NOAA Global Forecast System (GFS) and GFS-Wave (WAVEWATCH III),
+  NOAA/NWS/NCEP, via the NOAA Open Data Dissemination program on AWS
+  (https://registry.opendata.aws/noaa-gfs-bdp-pds/). US Government work,
+  public domain; credited as a courtesy. A forecast, not observations.
+
 ## Land for the 3D views (`land-data` release)
 
 Built by `src/boatsim/oceandata/landviews.py` and the "Land data" workflow; not
