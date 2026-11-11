@@ -7,6 +7,7 @@
 // The motion model sets that group's position and rotation; nothing in here
 // moves the boat.
 
+import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { applyFinishes } from "./finishes";
@@ -238,6 +239,8 @@ export function buildKayak(quality: Quality): BoatModel {
   // Builder frame: z is to port. Deck height for placing the light and signs.
   const kDeck = (x: number) => K.dz(x / K.L) + K.crown;
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // Its navigation light: the all-round white lantern on deck, under the comms light.
+  addNavLights(g, "all_round", V(3.0, kDeck(3.0) + 0.2, -0.11));
   const gear = new Gear(g, {
     props, // port first
     light: V(3.0, kDeck(3.0) + 0.27, -0.11), // on top of the all-round light
@@ -267,6 +270,7 @@ export function buildKayak(quality: Quality): BoatModel {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      disposeNavLights(root);
     },
   };
 }
@@ -345,6 +349,8 @@ export function buildRandolph(quality: Quality): BoatModel {
   }
 
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // Its navigation light: an all-round white on the antenna platform (GUESS: where Randolph's would go).
+  addNavLights(g, "all_round", V(1.53, 0.62, 0));
   const gear = new Gear(g, {
     props: [], // no motors: the wing sails it
     light: V(1.53, 0.585, 0), // on the antenna platform
@@ -371,6 +377,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      disposeNavLights(root);
     },
   };
 }

@@ -463,6 +463,8 @@ try {
   await page.evaluate(() => (window.__replay.force.wind = 30)); // force 11
   await page.waitForTimeout(3000);
   const gale = await page.evaluate(() => ({ spray: window.__replay.spindrift, bands: window.__replay.bands, frames: window.__replay.frames }));
+  const stars = await page.evaluate(() => window.__replay.stars);
+  if (!(stars > 9000)) fail(`night sky: ${stars} catalogue stars (stars.bin not loaded?)`);
   if (!(gale.spray > 0.9)) fail(`storm: no spindrift in force 11 (${JSON.stringify(gale)})`);
   if (!Number.isFinite(gale.bands)) fail(`storm: no rain-band count (${JSON.stringify(gale)})`);
   if (errors.length) fail(`page errors in a storm: ${errors.join("; ")}`);
