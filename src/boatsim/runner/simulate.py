@@ -337,14 +337,14 @@ def standard_components(
     from boatsim.basestation import ForecastReplanPolicy
     from boatsim.comms import GlobalstarPinger, IridiumSBDLink
     from boatsim.oceandata.forecast import ErrorForecast
-    from boatsim.vessel import KayakVessel
+    from boatsim.vessel import make_vessel
 
     prop = design.propulsion
     drop = (design.voyage["drop_lat"], design.voyage["drop_lon"])
     return Components(
         env=env,
         forecast=ErrorForecast(forecast_env, seed=seed, scale=forecast_error),
-        vessel=KayakVessel(design),
+        vessel=make_vessel(design),
         autopilot=SafeModeAutopilot(
             cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
             thruster_count=int(prop.get("thruster_count", 2)),

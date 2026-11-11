@@ -23,6 +23,8 @@ class Design:
     voyage: dict = field(default_factory=dict)
     hazards: dict = field(default_factory=dict)
     sail: dict = field(default_factory=dict)  # sailing designs only (vessel/sail.py)
+    vpp: dict = field(default_factory=dict)  # keelboats: VPP inputs and polar (vessel/vpp.py)
+    stock: dict = field(default_factory=dict)  # stock vessels: label, sources, spec card
 
 
 def load_design(path: str | Path) -> Design:
