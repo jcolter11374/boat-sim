@@ -146,8 +146,9 @@ export class RainBands {
     }
     this.mesh.geometry.attributes.position.needsUpdate = true;
     this.mesh.geometry.attributes.aShaft.needsUpdate = true;
-    // Around the logged mean: heavier under a band, lighter between (GUESS display tuning).
-    this.local = THREE.MathUtils.clamp(amount * (0.5 + 1.1 * under), 0, 1);
+    // Heavier under a band, a little lighter between, never far below what was logged
+    // at the boat: the logged rain is the hour's rain right here (GUESS display tuning).
+    this.local = THREE.MathUtils.clamp(amount * (0.75 + 0.5 * under), 0, 1);
     this.shown = amount > 0.02 ? shown : 0;
     this.mesh.visible = amount > 0.02;
     if (!this.mesh.visible) return;
