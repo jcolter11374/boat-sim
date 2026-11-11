@@ -23,6 +23,19 @@ def test_every_point_is_sourced_and_on_our_side_of_the_ocean():
     assert {p.kind for p in pois.POIS} == set(pois.KINDS)
 
 
+def test_wreck_depths_match_their_cards():
+    """The outline under the sea (sea3d) uses depth_m: it must say what the card says."""
+    for p in pois.POIS:
+        if p.depth_m is None:
+            assert p.size_m is None, p.id
+            continue
+        assert p.kind == "wreck" and p.size_m, p.id
+        length, beam = p.size_m
+        assert 10 < length < 300 and 2 < beam < length / 4, p.id
+        shown = f"{p.depth_m / 1000:g} km" if p.depth_m >= 1000 else f"{p.depth_m:g} m"
+        assert shown in p.text or f"{round(p.depth_m / 1000)} km" in p.text, (p.id, shown)
+
+
 def test_catalog_round_trips():
     d = json.loads(pois.dumps())
     assert [p["id"] for p in d["pois"]] == [p.id for p in pois.POIS]

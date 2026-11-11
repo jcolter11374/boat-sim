@@ -38,6 +38,7 @@ export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser3
   stock_ocean_rower45: { main: "#5aa9e6", beacon: "#d4ecff", glow: "rgba(90,169,230,0.9)" },
 };
 const SILENT = "#8a94a3";
+const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
 
 interface ChartLane {
   rep: Replay;
@@ -52,6 +53,7 @@ export class Chart {
   private dpr = 1;
   private rep: Replay | null = null; // the first lane's: course marks come from it
   private lanes: ChartLane[] = [];
+  private wrecks: [number, number][] = [];
   private focus = 0;
   /** The live tracker's forecast: middle path and spread (lat, lon, radius km). */
   private ghost: { median: [number, number][]; spread: [number, number, number][] } | null = null;
@@ -62,6 +64,12 @@ export class Chart {
     private readonly bounds: LandBounds,
   ) {
     this.g = canvas.getContext("2d")!;
+  }
+
+  /** Shipwrecks to mark (lat, lon), with the chart's wreck sign. */
+  setWrecks(at: [number, number][]): void {
+    this.wrecks = at;
+    this.base = null;
   }
 
   setReplay(rep: Replay): void {
@@ -202,6 +210,21 @@ export class Chart {
     g.shadowBlur = 6;
     g.drawImage(tint, lx0, ly0, lx1 - lx0, ly1 - ly0);
     g.shadowBlur = 0;
+
+    // Shipwrecks: a small version of the sea chart's wreck sign (a hull line with masts).
+    g.strokeStyle = WRECK_COLOUR;
+    g.lineWidth = 1.2;
+    for (const [la, lo] of this.wrecks) {
+      const [x, y] = this.xy(la, lo);
+      g.beginPath();
+      g.moveTo(x - 4, y);
+      g.lineTo(x + 4, y);
+      for (const dx of [-2, 0, 2]) {
+        g.moveTo(x + dx, y - 2.5);
+        g.lineTo(x + dx, y + 2.5);
+      }
+      g.stroke();
+    }
 
     const rep = this.rep;
     if (rep) {

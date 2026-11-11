@@ -105,6 +105,8 @@ uniform vec3 uGlow;
 uniform float uRough;
 uniform float uCover;
 uniform float uStreak;
+uniform vec4 uWreck;      // a wreck on the bottom: x, z, half its length, half its beam (m)
+uniform vec2 uWreckK;     // how clearly it shows (0 = not at all), how deep it lies (m)
 uniform vec2 uWind;
 uniform float uChop;
 uniform int uN;
@@ -182,6 +184,22 @@ vec2 swellSlope(vec2 p, float t, float fp) {
 
 const FRAG_COLOUR = /* glsl */ `
 float distXZ = length(vWPos.xz - cameraPosition.xz);
+// A wreck on the bottom, seen as a dark shape through clear, calm water; the
+// surface's movement makes it waver, and the deeper it lies the softer it is.
+float wreckShade = 0.0;
+float wreckRim = 0.0;
+if (uWreckK.x > 0.001) {
+  vec2 pw = vWPos.xz - uWreck.xy;
+  pw += (vec2(vnoise(vWPos.xz * 0.15 + uTime * 0.4), vnoise(vWPos.xz * 0.15 - uTime * 0.35 + 3.0)) - 0.5) * (0.4 + 0.02 * uWreckK.y);
+  vec2 aw = abs(pw);
+  // A hull: a long rounded shape, lying north-south (its real heading isn't in our sources).
+  float dw = length(max(aw - vec2(0.0, uWreck.z - uWreck.w), 0.0)) - uWreck.w;
+  float soft = 0.4 + 0.03 * uWreckK.y;
+  float inside = 1.0 - smoothstep(-soft, soft, dw);
+  float rim = 1.0 - smoothstep(0.0, soft, abs(dw - soft));
+  wreckShade = uWreckK.x * 0.6 * inside;
+  wreckRim = uWreckK.x * rim;
+}
 float farMix = smoothstep(${FADE_IN.toFixed(1)}, ${FADE_OUT.toFixed(1)}, length(vWPos.xz)) ;
 // Whitecaps: scattered by the wind everywhere (uCover is the share of sea
 // that is white), more on high crests (vFoam), drawn out into streaks along
@@ -246,6 +264,15 @@ const FRAG_GLOW = /* glsl */ `
 // The land, town and boats mirrored in calm water (mirror.ts): looked up where this
 // pixel of flat sea is, pushed about by the wave slopes, stronger at grazing angles.
 const FRAG_MIRROR = /* glsl */ `
+// The wreck darkens the light coming up out of the water, not the sky's reflection
+// off the top, so it shows looking down and fades at a glancing angle.
+if (wreckShade > 0.0) {
+  vec3 Vw = normalize(cameraPosition - vWPos);
+  float up = clamp(Vw.y, 0.0, 1.0);
+  outgoingLight *= 1.0 - wreckShade * (0.35 + 0.65 * up) * (1.0 - foamMask);
+  // Its edge catches a little light from above: a faint paler outline against the deep blue.
+  outgoingLight += vec3(0.05, 0.1, 0.1) * wreckRim * up * (1.0 - foamMask);
+}
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
@@ -275,6 +302,8 @@ export class Sea {
     uAmp: { value: 0.5 },
     uCover: { value: 0 },
     uStreak: { value: 0 },
+    uWreck: { value: new THREE.Vector4() },
+    uWreckK: { value: new THREE.Vector2() },
     uWind: { value: new THREE.Vector2(1, 0) },
     uChop: { value: 0 },
     uFoamAmt: { value: 0 },
@@ -319,7 +348,7 @@ export class Sea {
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
         .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>");
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v8";
+    material.customProgramCacheKey = () => "boatsim-sea-v9";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
@@ -413,6 +442,16 @@ export class Sea {
     this.uniforms.tMirror.value = tex;
     this.uniforms.uMirrorM.value.copy(m);
     this.uniforms.uMirror.value = tex ? strength : 0;
+  }
+
+  /**
+   * A wreck on the bottom to show through the water (pois.ts wreckBelow): where it lies
+   * from the boat (m east, m south), its length and beam (m), its depth (m), and how
+   * clearly it shows (0 hides it).
+   */
+  setWreck(x: number, z: number, length: number, beam: number, depth: number, clear: number): void {
+    this.uniforms.uWreck.value.set(x, z, length / 2, beam / 2);
+    this.uniforms.uWreckK.value.set(clear, depth);
   }
 
   /** Point the glitter and the glow at the scene's sun (world direction towards it). */

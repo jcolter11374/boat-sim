@@ -36,7 +36,7 @@ import { loadPorts, portLabel } from "./helm/ports";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
-import { loadPois, passes, PoiCards, type Poi } from "./pois";
+import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -231,6 +231,8 @@ const page = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
+  /** The wreck showing through the water below, if any (its id). */
+  wreck: "",
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -879,6 +881,7 @@ const landImg = new Image();
     }),
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
+  chart.setWrecks(wreckMarks());
 })().catch((e) => console.warn("chart:", e));
 
 /**
@@ -946,12 +949,28 @@ const proj = new THREE.Vector3();
 // ---------- points of interest (wrecks, history, ocean facts) ----------
 // Your boat's track only: a card pops up as the replayed hours reach it.
 let pois: Poi[] = [];
+
+/** Where the wrecks are, for the chart. */
+function wreckMarks(): [number, number][] {
+  return pois.filter((p) => p.kind === "wreck").map((p) => p.at[0]);
+}
+
+/** A wreck right below, seen through clear, calm water by day (pois.ts). */
+function showWreck(lat: number, lon: number): void {
+  const w = Number.isFinite(lat) ? wreckBelow(pois, lat, lon) : null;
+  const calm = 1 - THREE.MathUtils.smoothstep(sea.waveHeight, 0.6, 2.5);
+  const k = w ? w.clear * calm * THREE.MathUtils.smoothstep(atmos.sunLight, 0.05, 0.5) : 0;
+  if (w) sea.setWreck(w.x, w.z, w.poi.size_m![0], w.poi.size_m![1], w.poi.depth_m!, k);
+  else sea.setWreck(0, 0, 1, 1, 0, 0);
+  page.wreck = k > 0.01 ? w!.poi.id : "";
+}
 const poiSeen = new Set<string>();
 let poiH = 0;
 const poiCards = new PoiCards();
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   page.pois.loaded = p.length;
+  chart?.setWrecks(wreckMarks());
   resetPois();
 });
 /** A new or shared game: what the boat already passed counts as seen. */
@@ -1081,6 +1100,7 @@ renderer.setAnimationLoop(() => {
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
   atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.set(sp.el, sp.az, storm);
+  showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient);
   clouds.closeIn(atmos.fog);
   const rate = r?.rain ? valueAt(r, r.rain, h) : null;
