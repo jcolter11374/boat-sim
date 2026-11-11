@@ -480,6 +480,27 @@ try {
     fail(`leaderboard sample: ${JSON.stringify(lb)}`);
   await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
   log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
+  // Race view: with the simulator files it races our kayak against Rev C for a
+  // day from the same launch; without them (or with an older simulator) it says so.
+  await page.goto(`${URL}race.html`);
+  await page.selectOption("#launch", "4");
+  await page.click("#go");
+  await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
+  const rc0 = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, msg: document.querySelector("#msg").textContent }));
+  if (rc0.ready) {
+    await page.click("#day");
+    await page.waitForFunction(() => !window.__race.busy, null, { timeout: 240000 });
+    const r = await page.evaluate(() => ({ s: window.__race.status, stops: window.__race.stops, err: window.__race.error, tracks: window.__race.tracks.map((t) => t.length) }));
+    const names = r.s?.boats.map((b) => b.name) ?? [];
+    if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
+      || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
+      fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
+    await page.screenshot({ path: "test-output/race.png", fullPage: true });
+    log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
+  } else {
+    if (!/aren't published|older than the race view/.test(rc0.msg)) fail(`race start: ${JSON.stringify(rc0)}`);
+    log.push("race: no simulator files, says so");
+  }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();
