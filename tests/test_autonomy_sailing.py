@@ -252,6 +252,10 @@ def test_beats_up_a_channel_without_dithering(width_km, max_tacks):
     # still never touches land.
     if max_tacks is not None:
         assert tacks <= max_tacks
+    # And it keeps working up the channel: Ravi's check of #252 had it turn
+    # round and run 225 km back downwind once both tacks saw land.
+    made_good_km = distance_m(*start, start[0], track[-1][1]) / 1000.0
+    assert track[-1][1] > start[1] and made_good_km > 60.0
 
 
 def test_never_holds_on_to_the_shore_between_two_islands():
@@ -260,7 +264,7 @@ def test_never_holds_on_to_the_shore_between_two_islands():
     onto, it steers for open water instead. Here the leg itself runs through a
     gap between two islands, which base never sends (the lane, corridor_km,
     keeps the boat away from such places), so this is the look-ahead alone,
-    the backstop: it must stay off the land; it need not get through."""
+    the backstop: it stays off the land and still gets through."""
     start = (36.65, -74.94)
     mark = (36.65, -74.94 + 1.0)
     wind = bearing_deg(*start, *mark)
@@ -271,9 +275,11 @@ def test_never_holds_on_to_the_shore_between_two_islands():
         return max(0.0, min(distance_m(lat, lon, *i) / 1000.0 - radius_km for i in islands))
 
     seen: list = []
-    with pytest.raises(AssertionError, match="never reached"):
-        _sail_to(mark, wind, 12 * KN, hours=30, land_km=land_km, track=seen, corridor_km=math.inf)
+    took, _, _ = _sail_to(
+        mark, wind, 12 * KN, hours=30, land_km=land_km, track=seen, corridor_km=math.inf
+    )
     assert min(land_km(*p) for p in seen) >= 1.0
+    assert took < timedelta(hours=20)
 
 
 def test_the_lane_keeps_the_zig_zag_near_the_leg():

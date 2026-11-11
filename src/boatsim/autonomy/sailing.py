@@ -63,6 +63,7 @@ KN = 0.514444  # m/s per knot
 LAND_LOOKAHEAD_KM = 30.0  # GUESS: about 3-4 h of sailing; more than one min_switch_h leg
 LAND_STEP_KM = 1.0  # half the land mask's ~2 km cell
 LAND_URGENT_KM = 5.0  # GUESS: ~30 min of sailing; land this close ahead tacks at once
+LAND_EXIT_KM = 10.0  # GUESS: steering for open water ends once the wanted course has this much
 LAND_CLEAR_KM = 3.0  # GUESS: keep this far off: leeway, current and the mask's 2 km cells
 
 
@@ -295,13 +296,17 @@ class Tactician:
                 # so until the course wanted (a tack, or the reach) is clear for
                 # the whole look-ahead. Without the hold it bears away and heads
                 # back in by turns, getting nowhere.
+                # Out again once the wanted course has LAND_EXIT_KM of open
+                # water: enough to sail on for a while, short of the whole
+                # look-ahead (in a narrow channel that never comes, and it ran
+                # back downwind instead: Ravi's check of #252).
                 if mode == "reach":
-                    clear = [side] if math.isinf(here) else []
+                    clear = [side] if here >= LAND_EXIT_KM else []
                 else:
                     clear = [
                         s
                         for s in (side, -side)
-                        if math.isinf(open_water((wind_from + s * angle) % 360.0))
+                        if open_water((wind_from + s * angle) % 360.0) >= LAND_EXIT_KM
                     ]
                 if clear:
                     self.escaping = False
@@ -310,7 +315,7 @@ class Tactician:
                         heading = (wind_from + side * angle) % 360.0
                 else:
                     self.escaping = True
-                    heading = self._most_open_water(heading, wind_from, open_water, here)
+                    heading = self._most_open_water(heading, wind_from, open_water, here, to_mark)
         if mode != "reach" and self.side and side != self.side and self.mode == mode:
             self.last_switch = t
             self.switches += 1
@@ -323,16 +328,21 @@ class Tactician:
         wind_from: float,
         open_water: Callable[[float], float],
         here: float,
+        to_mark: float,
     ) -> float:
         """Of the headings every 10 deg the boat can sail (true wind angle
-        inside min_twa_deg..max_twa_deg), the one with the most open water;
-        the nearest to `wanted` wins a tie."""
-        best, best_km, best_turn = wanted, here, 0.0
+        inside min_twa_deg..max_twa_deg) that still close on the mark, the one
+        with the most open water; the nearest to `wanted` wins a tie. Only if
+        none closes on the mark, any heading (running back the way it came is
+        the last resort, not the first)."""
+        options = []
         for k in range(36):
             h = (wanted + 10.0 * k) % 360.0
-            twa = abs(wrap180(h - wind_from))
-            if not self.min_twa_deg <= twa <= self.max_twa_deg:
-                continue
+            if self.min_twa_deg <= abs(wrap180(h - wind_from)) <= self.max_twa_deg:
+                options.append(h)
+        onward = [h for h in options if abs(wrap180(h - to_mark)) < 90.0]
+        best, best_km, best_turn = wanted, here, 0.0
+        for h in onward or options:
             km, turn = open_water(h), abs(wrap180(h - wanted))
             if km > best_km or (km == best_km and turn < best_turn):
                 best, best_km, best_turn = h, km, turn
