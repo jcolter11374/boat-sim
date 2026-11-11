@@ -24,7 +24,7 @@
     border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
   input[type=text] { width: 100%; box-sizing: border-box; }
   main { max-width: 1180px; margin: 18px auto 30px; padding: 0 12px; display: grid; gap: 12px;
-    grid-template-columns: 300px 1fr; grid-template-areas: "head head" "setup map" "setup boats" "card card" "season season"; }
+    grid-template-columns: 300px 1fr; grid-template-areas: "head head" "setup map" "setup boats" "views views" "card card" "season season"; }
   header { grid-area: head; padding: 12px 18px; }
   header h1 { margin: 0; font-size: 22px; }
   header nav { float: right; font-size: 13px; }
@@ -51,7 +51,16 @@
   #season table { border-collapse: collapse; width: 100%; margin-top: 6px; }
   #season td, #season th { padding: 5px 8px; border-bottom: 1px solid rgba(160,200,255,.08); text-align: left; font-size: 13px; }
   #season th { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--dim); font-weight: 600; }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-areas: "head" "setup" "map" "boats" "card" "season"; } }
+  #views { grid-area: views; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  #views[hidden] { display: none; }
+  .view { position: relative; height: 320px; overflow: hidden; padding: 0; border-top: 4px solid var(--orange); }
+  .view.b { border-top-color: var(--blue); }
+  .view canvas { display: block; border-radius: 0 0 12px 12px; }
+  .view .tag { position: absolute; left: 10px; top: 8px; font-size: 12px; padding: 3px 8px; border-radius: 8px;
+    background: rgba(10,22,38,.6); pointer-events: none; }
+  .view .tag b { font-size: 13px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-areas: "head" "setup" "map" "boats" "views" "card" "season"; }
+    #views { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -100,6 +109,10 @@
   <div id="boats">
     <section class="glass boat" id="boatA"></section>
     <section class="glass boat b" id="boatB"></section>
+  </div>
+  <div id="views" hidden>
+    <section class="glass view" id="viewA"><div class="tag" id="tagA"></div></section>
+    <section class="glass view b" id="viewB"><div class="tag" id="tagB"></div></section>
   </div>
   <section id="card" class="glass" hidden></section>
   <section id="season" class="glass" hidden></section>

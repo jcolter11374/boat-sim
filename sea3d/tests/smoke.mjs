@@ -564,6 +564,12 @@ try {
     if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
       || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
       fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
+    // The 3D views: each boat on its own sea, drawing, and the right boat in each.
+    await page.locator("#views").scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => window.__race.views.length === 2 && window.__race.views.every((v) => v.frames > 3), null, { timeout: 60000 })
+      .catch(async () => fail(`race 3D views: ${JSON.stringify(await page.evaluate(() => window.__race.views))}`));
+    const vb = await page.evaluate(() => window.__race.views.map((v) => v.boat));
+    if (vb.join() !== "kayak,randolph") fail(`race 3D views show ${vb.join()}`);
     await page.screenshot({ path: "test-output/race.png", fullPage: true });
     log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
   } else {
