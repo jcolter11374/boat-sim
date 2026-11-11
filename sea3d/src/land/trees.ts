@@ -277,6 +277,8 @@ export class Trees {
     base = "./land",
   ): Promise<Trees | null> {
     const name = place.land ?? place.key;
+    // Only places baked with land cover have the files: don't ask for them elsewhere (a 404 in the console, #342).
+    if (!grid.meta.cover) return null;
     const get = async (f: string) => {
       const r = await fetch(`${base}/${name}_${f}`);
       if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) throw new Error(f);
