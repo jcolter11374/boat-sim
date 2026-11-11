@@ -1,0 +1,524 @@
+// Take the helm: you steer our kayak across the Atlantic on a real 2020 launch,
+// in hops of time, and the autopilot sails the same weather beside you as a
+// ghost. The simulator runs in the browser (helm/worker.ts, Sam's
+// boatsim.sandbox.helm); this page draws the boat, the chart, the forecast and
+// the results card. Display only: the physics is all in the simulator.
+
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Atmosphere, sunPosition } from "./atmosphere";
+import { Sea } from "./water";
+import { Clouds, cloudFromSun, fogChance } from "./clouds";
+import { Rain, rainFromRate, rainFromStorm } from "./rain";
+import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { KAYAK } from "./boats/specs";
+import { apparentFlow, rudderFor } from "./boats/gear";
+import { BoatMotion, KAYAK_V4 } from "./motion";
+import { Wake } from "./wake";
+import { Contact } from "./contact";
+import { heightAt, Sea as LiveSea } from "./waves";
+import type { Placement } from "./standin";
+import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
+import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
+import { HelmGame, OUTCOME, stopText, type Card, type Heading, type Status, type Stop } from "./helm/game";
+import { Compass } from "./helm/compass";
+import { drawForecast } from "./helm/forecast";
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const params = new URLSearchParams(location.search);
+const KN = 1.94384;
+const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : iso + "Z");
+const quality = params.get("quality") === "low" ? "low" : "high";
+
+// ---------- 3D ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.55;
+$("app").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 12000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 2;
+controls.maxDistance = 60;
+controls.maxPolarAngle = Math.PI * 0.495;
+camera.position.set(-6.5, 2.2, 3.5);
+controls.target.set(0, 0.3, 0);
+const atmos = new Atmosphere(renderer, scene, camera);
+const sea = new Sea(quality);
+scene.add(sea.mesh);
+const clouds = new Clouds();
+scene.add(clouds.group);
+const rain = new Rain();
+scene.add(rain.mesh);
+const place: Placement = { x: 0, z: 0, yaw: 0 };
+const motion = new BoatMotion(KAYAK_V4, place);
+let model: BoatModel | null = null;
+let wake: Wake | null = null;
+let contact: Contact | null = null;
+const ratio = quality === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
+renderer.setPixelRatio(ratio);
+atmos.setPixelRatio(ratio);
+atmos.setBloom(quality === "high");
+function buildBoat(): void {
+  if (model) {
+    scene.remove(model.root);
+    model.dispose();
+  }
+  if (wake) {
+    scene.remove(wake.points);
+    wake.dispose();
+  }
+  if (contact) {
+    scene.remove(contact.collar, contact.spray);
+    contact.dispose();
+  }
+  model = BUILDERS.kayak(quality);
+  contact = new Contact(model.form, KAYAK, quality);
+  wake = new Wake(quality, KAYAK.cruiseSpeed, KAYAK.beam, model.stern.x);
+  scene.add(model.root, wake.points, contact.collar, contact.spray);
+}
+buildBoat();
+void loadDetailedModels().then((ok) => ok && buildBoat());
+const live = new LiveSea(undefined, { n: quality === "high" ? 24 : 16, smoothing: 0.4 });
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  atmos.setSize(window.innerWidth, window.innerHeight);
+  chartDirty = true;
+  if (lastForecast) drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
+});
+
+// ---------- the game ----------
+const sandboxBase = new URL(params.get("sandbox") ?? "./sandbox/", location.href).href;
+const game = new HelmGame(sandboxBase);
+let startMs = 0;
+let hour = 0; // shown voyage hour
+let shownTo = 0; // hour the animation is heading for
+let watch: "boat" | "ghost" = "boat";
+let busy = false;
+let order: Heading = "finish";
+let power = 0.25; // the autopilot cruises at 25 W of its 100
+let maxW = 100; // full drive power, W (the simulator says, once there is an order)
+let lastForecast: Awaited<ReturnType<HelmGame["forecast"]>> | null = null;
+let chart: Chart | null = null;
+let chartDirty = true;
+let shownEvents = { boat: 0, ghost: 0 };
+const page = {
+  ready: false,
+  busy: false,
+  stops: [] as Stop[],
+  card: null as Card | null,
+  status: null as Status | null,
+  frames: 0,
+  error: "",
+  /** The last run's stop reason (for tests). */
+  get lastStop(): Stop | null {
+    return this.stops.at(-1) ?? null;
+  },
+};
+(window as unknown as { __helm: typeof page }).__helm = page;
+
+game.onProgress = (t) => ($("busytext").textContent = t);
+
+const compass = new Compass($<HTMLCanvasElement>("dial"), (deg) => setOrder(deg));
+
+function rep(which = watch): Replay | null {
+  return which === "boat" ? game.boat : game.ghost;
+}
+
+function setBusy(b: boolean, text = ""): void {
+  busy = b;
+  page.busy = b;
+  document.body.classList.toggle("busy", b);
+  $("busytext").textContent = text;
+  for (const el of Array.from(document.querySelectorAll<HTMLButtonElement>(".needs-idle"))) el.disabled = b || !!page.status?.over;
+}
+
+function fail(e: unknown): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  page.error = msg;
+  console.error(e);
+  note(`The simulator stopped: ${msg}`, "Error", TONE_COLOUR.bad);
+  setBusy(false);
+}
+
+async function setOrder(h: Heading, p = power): Promise<void> {
+  order = h;
+  power = p;
+  showOrder();
+  if (!page.ready) return;
+  try {
+    page.status = await game.order(h, p);
+    showStatus();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+function showOrder(): void {
+  compass.set({ order });
+  $("ordertext").textContent =
+    order === "finish" ? "Straight at the finish" : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+  $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
+  $("b-route").setAttribute("aria-pressed", String(order === "route"));
+  const s = page.status;
+  if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
+  const w = Math.round(power * maxW);
+  $("powertext").textContent = power === 0 ? "Motors off: drifting" : `${Math.round(power * 100)}% power, about ${w} W`;
+}
+
+function bearing(a: [number, number], b: [number, number]): number {
+  const [la1, lo1] = a.map((v) => (v * Math.PI) / 180);
+  const [la2, lo2] = b.map((v) => (v * Math.PI) / 180);
+  const y = Math.sin(lo2 - lo1) * Math.cos(la2);
+  const x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(lo2 - lo1);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+const compassWord = (deg: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+
+function showStatus(): void {
+  const s = page.status;
+  if (!s) return;
+  const b = s.boat;
+  const finish = game.boat?.course.target ?? [39.5, -13.5];
+  const fb = bearing([b.lat, b.lon], finish as [number, number]);
+  $("day").textContent = `Day ${s.day.toFixed(1)}`;
+  $("when").textContent = new Date(utc(b.t)).toUTCString().slice(5, 22) + " UTC";
+  $("tofinish").textContent = `${Math.round(b.km_to_finish).toLocaleString()} km to the finish`;
+  const lead = s.lead_km;
+  $("lead").textContent = Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${Math.round(lead)} km ahead of the ghost` : `${Math.round(-lead)} km behind the ghost`;
+  $("lead").className = lead >= 0 ? "good" : "bad";
+  const soc = Math.round(b.soc * 100);
+  $("battext").textContent = `Battery ${soc}%`;
+  $("batbar").style.width = `${soc}%`;
+  $("batbar").style.background = soc < 15 ? "var(--bad)" : soc < 35 ? "var(--warn)" : "var(--good)";
+  $("speed").textContent = `${(b.stw * KN).toFixed(1)} kn through the water`;
+  const w = s.weather;
+  let windTo: number | null = null;
+  let kn = 0;
+  if (w) {
+    kn = Math.hypot(w.wind_u, w.wind_v) * KN;
+    windTo = (Math.atan2(w.wind_u, w.wind_v) * 180) / Math.PI;
+    const from = compassWord(windTo + 180);
+    const cur = Math.hypot(w.current_u, w.current_v) * KN;
+    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
+  }
+  compass.set({ heading: b.heading, finish: fb, windTo, windKn: kn });
+  $("ghostline").textContent = `Ghost: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
+  showOrder();
+}
+
+// ---------- notes ----------
+function note(text: string, when: string, colour: string): void {
+  const el = document.createElement("div");
+  el.className = "note glass";
+  el.style.borderLeftColor = colour;
+  el.innerHTML = `<div class="when"></div><div class="txt"></div>`;
+  (el.querySelector(".when") as HTMLElement).textContent = when;
+  (el.querySelector(".txt") as HTMLElement).textContent = text;
+  const box = $("notes");
+  box.prepend(el);
+  while (box.children.length > 5) box.lastElementChild?.remove();
+  setTimeout(() => el.classList.add("old"), 12000);
+}
+
+function newEvents(): void {
+  for (const who of ["boat", "ghost"] as const) {
+    const r = rep(who);
+    if (!r) continue;
+    const evs = r.events.filter(isNotable);
+    for (const e of evs.slice(shownEvents[who])) {
+      const label = who === "boat" ? "You" : "Ghost";
+      note(describeEvent(e, who === "boat" ? "your boat" : "the ghost"), `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+    }
+    shownEvents[who] = evs.length;
+  }
+}
+
+// ---------- running time ----------
+async function sail(kind: "6h" | "day" | "event"): Promise<void> {
+  if (busy || !page.ready || page.status?.over) return;
+  setBusy(true, "Sailing...");
+  const from = hour;
+  try {
+    const opts =
+      kind === "6h"
+        ? { hours: 6, breakdown: false }
+        : kind === "day"
+          ? { hours: 24, breakdown: false }
+          : untilOptions();
+    const stopped = await game.run(opts);
+    page.status = game.status;
+    page.stops.push(stopped);
+    shownTo = Math.max(lastHour(game.boat!), from);
+    hour = from; // animate from where we were
+    showStatus();
+    newEvents();
+    chartDirty = true;
+    if (stopped === "breakdown") {
+      // The note for it is already up (newEvents): say so plainly instead of twice.
+      const e = game.boat!.events.filter(isNotable).at(-1);
+      note(e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, TONE_COLOUR.warn);
+    } else if (!(kind !== "event" && stopped === "time"))
+      note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" ? TONE_COLOUR.warn : TONE_COLOUR.info);
+    await refreshForecast();
+    if (page.status?.over) await finish();
+  } catch (e) {
+    fail(e);
+    return;
+  }
+  setBusy(false);
+}
+
+/** "Until something happens": a big change from now, at most 10 days. */
+function untilOptions(): Record<string, number | boolean> {
+  const st = page.status;
+  const soc = st?.boat.soc ?? 1;
+  const w = st?.weather;
+  const wind = w ? Math.hypot(w.wind_u, w.wind_v) : 0;
+  const o: Record<string, number | boolean> = { hours: 240, breakdown: true };
+  if (soc > 0.2) o.soc_below = Math.max(0.1, soc - 0.3); // a big drop, or the reserve
+  if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
+  return o;
+}
+
+async function refreshForecast(): Promise<void> {
+  if (page.status?.over) return;
+  lastForecast = await game.forecast();
+  drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
+}
+
+async function finish(): Promise<void> {
+  const c = await game.result();
+  page.card = c;
+  chartDirty = true;
+  const me = c.boat;
+  const gh = c.ghost;
+  const head =
+    c.verdict === "won"
+      ? "You beat the autopilot!"
+      : c.verdict === "lost"
+        ? "The autopilot won this one."
+        : c.verdict === "draw"
+          ? "A draw: within a day of each other, which is down to the weather's luck."
+          : "Neither boat finished.";
+  $("r-head").textContent = head;
+  const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
+  const line = (who: string, x: Card["boat"]) =>
+    `<tr><th>${who}</th><td>${OUTCOME[x.outcome] ?? x.outcome}</td><td>${x.days.toFixed(1)} days</td><td>${Math.round(x.battery_low * 100)}%</td><td>${x.breakdowns.length ? x.breakdowns.map((b) => trouble[b] ?? b.replace(/_/g, " ")).join("; ") : "none"}</td></tr>`;
+  $("r-table").innerHTML = `<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th></tr>${line("You", me)}${line("Autopilot ghost", gh)}`;
+  const bits: string[] = [];
+  if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
+  if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
+  bits.push(`${c.orders.length} orders given. Launch ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
+  $("r-notes").textContent = bits.join(" ");
+  $("result").hidden = false;
+}
+
+// ---------- start ----------
+/** True when the page was published with the simulator files (as the Boatyard checks). */
+async function sandboxThere(): Promise<boolean> {
+  try {
+    const r = await fetch(new URL("boatsim.zip", sandboxBase).href, { method: "HEAD" });
+    return r.ok && !(r.headers.get("content-type") ?? "").includes("text/html");
+  } catch {
+    return false;
+  }
+}
+async function begin(): Promise<void> {
+  const launch = Number($<HTMLSelectElement>("launch").value);
+  const safe = $<HTMLInputElement>("safe").checked;
+  const breakdowns = $<HTMLInputElement>("breakdowns").checked;
+  if (!(await sandboxThere())) {
+    page.error = "no simulator files";
+    $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
+    return;
+  }
+  $("start").hidden = true;
+  setBusy(true, "Loading the simulator (about 30 MB the first time)...");
+  try {
+    page.status = await game.start(launch, safe, breakdowns);
+    startMs = utc(game.boat!.start);
+    page.ready = true;
+    await game.order(order, power);
+    page.status = await game.order(order, power);
+    hour = shownTo = 0;
+    showStatus();
+    await refreshForecast();
+    chart?.setLanes([
+      { rep: game.boat!, colours: TRACK.kayak },
+      { rep: game.ghost!, colours: GHOST },
+    ]);
+    note("You have the helm. Pick a heading and a power, then let time run.", "Day 0", TONE_COLOUR.info);
+  } catch (e) {
+    const old = /NO_HELM/.test(String(e));
+    if (old) {
+      page.error = "no helm in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site doesn't have the helm game yet; it's being updated. Try again later.";
+    } else fail(e);
+    $("start").hidden = false;
+    return;
+  }
+  setBusy(false);
+}
+
+const GHOST = { main: "#c8d4e6", beacon: "#e0e8f4", glow: "rgba(200,212,230,0.7)" };
+
+for (const [id, h] of [["b-finish", "finish"], ["b-route", "route"]] as const) $(id).addEventListener("click", () => void setOrder(h));
+$<HTMLInputElement>("power").addEventListener("input", (e) => {
+  power = Number((e.target as HTMLInputElement).value) / 100;
+  showOrder();
+});
+$<HTMLInputElement>("power").addEventListener("change", () => void setOrder(order, power));
+$("s6").addEventListener("click", () => void sail("6h"));
+$("sday").addEventListener("click", () => void sail("day"));
+$("sevent").addEventListener("click", () => void sail("event"));
+$("go").addEventListener("click", () => void begin());
+$("again").addEventListener("click", () => location.reload());
+for (const w of ["boat", "ghost"] as const)
+  $(`w-${w}`).addEventListener("click", () => {
+    watch = w;
+    $("w-boat").setAttribute("aria-pressed", String(w === "boat"));
+    $("w-ghost").setAttribute("aria-pressed", String(w === "ghost"));
+    chartDirty = true;
+  });
+showOrder();
+compass.draw();
+
+const landImg = new Image();
+(async () => {
+  const [bounds] = await Promise.all([
+    fetch("./land.json").then((r) => r.json() as Promise<LandBounds>),
+    new Promise<void>((ok, bad) => {
+      landImg.onload = () => ok();
+      landImg.onerror = () => bad(new Error("land.png"));
+      landImg.src = "./land.png";
+    }),
+  ]);
+  chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
+})().catch((e) => console.warn("chart:", e));
+
+// ---------- frame ----------
+const clock = new THREE.Clock();
+const bowW = new THREE.Vector3();
+let last = 0;
+let smoothYaw: number | null = null;
+let storm = 0;
+let rigHeave = 0;
+const ghostTag = $("ghosttag");
+const proj = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const t = clock.getElapsedTime();
+  const dt = Math.min(t - last, 0.1);
+  last = t;
+  // Play the hours just sailed: about 2.5 s a day, at most 6 s.
+  if (hour < shownTo) {
+    const span = Math.max(shownTo - hour, 1);
+    const rate = Math.max(span / Math.min(6, 0.6 + (2.5 * span) / 24), 6); // hours per second
+    hour = Math.min(shownTo, hour + dt * rate);
+  }
+  const r = rep();
+  const h = r ? Math.min(hour, lastHour(r)) : 0;
+  const hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;
+  const tp = r ? Math.max(valueAt(r, r.tp, h) ?? 3 + 2.5 * Math.sqrt(hs), 2) : 6;
+  const from = r ? angleAt(r, r.wave_dir, h) ?? 270 : 270;
+  live.setSeaState(hs, tp, from);
+  const comps = live.advance(t);
+  const wu = r ? valueAt(r, r.wind_u, h) ?? 0 : 3;
+  const wv = r ? valueAt(r, r.wind_v, h) ?? 0 : 0;
+  sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv));
+  sea.update(comps, t);
+  const hdg = r ? angleAt(r, r.heading, h) ?? 90 : 90;
+  const yaw = THREE.MathUtils.degToRad(90 - hdg);
+  if (smoothYaw === null) smoothYaw = yaw;
+  const dyaw = Math.atan2(Math.sin(yaw - smoothYaw), Math.cos(yaw - smoothYaw));
+  const step = dyaw * Math.min(1, dt * 2.5);
+  smoothYaw += step;
+  place.yaw = smoothYaw;
+  motion.pose.yaw = smoothYaw;
+  const off = camera.position.clone().sub(controls.target);
+  off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
+  camera.position.copy(controls.target).add(off);
+  motion.advance(comps, t);
+  const stw = r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
+  if (model) {
+    model.root.position.set(0, motion.heave - KAYAK.cgBelowWaterline, 0);
+    model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
+    model.root.updateMatrixWorld();
+    if (contact) {
+      bowW.set(contact.bow[0], KAYAK.cgBelowWaterline, contact.bow[1]);
+      model.root.localToWorld(bowW);
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
+    }
+    model.gear.update(
+      {
+        speed: stw / KAYAK.cruiseSpeed,
+        rudder: rudderFor(dt > 0 ? step / dt : 0),
+        sun: r ? (valueAt(r, r.ghi, h) ?? 0) / 1000 : 0.5,
+        comms: r ? commsAt(r, h) ?? "" : "",
+        flow: apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)),
+        failed: r ? failuresAt(r, h) : new Map(),
+      },
+      t,
+    );
+  }
+  wake?.update(comps, t, place, stw);
+  const dy = motion.heave - rigHeave;
+  rigHeave = motion.heave;
+  camera.position.y += dy;
+  controls.target.y += dy;
+  const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * KN - 15) / 20, 0, 1);
+  storm += (target - storm) * Math.min(1, dt * 1.5);
+  const [lat, lon] = r ? positionAt(r, h) : [36.65, -74.94];
+  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
+  const sp = sunPosition(ms, lat, lon);
+  if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
+  atmos.set(sp.el, sp.az, storm);
+  clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient);
+  clouds.closeIn(atmos.fog);
+  const rate = r?.rain ? valueAt(r, r.rain, h) : null;
+  rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
+  sea.setSun(atmos.glintDir, atmos.glintLight);
+  wake?.setLight(atmos.ambient);
+  controls.update();
+  const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
+  if (camera.position.y < floor) camera.position.y = floor;
+  // The other boat: a tag on the horizon in its direction, with the distance.
+  const other = rep(watch === "boat" ? "ghost" : "boat");
+  if (r && other && page.ready) {
+    const me = positionAt(r, h);
+    const it = positionAt(other, Math.min(h, lastHour(other)));
+    const km = Math.hypot((it[0] - me[0]) * 111, (it[1] - me[1]) * 111 * Math.cos((me[0] * Math.PI) / 180));
+    const b = bearing(me, it);
+    const a = THREE.MathUtils.degToRad(b);
+    proj.set(Math.sin(a) * 2500, 2, -Math.cos(a) * 2500).project(camera);
+    const vis = proj.z < 1 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1;
+    ghostTag.hidden = !vis;
+    if (vis) {
+      ghostTag.style.left = `${((proj.x + 1) / 2) * window.innerWidth}px`;
+      ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
+      ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
+    }
+  } else ghostTag.hidden = true;
+  atmos.render();
+  if (chart && game.boat && game.ghost) {
+    if (chartDirty) {
+      chart.setLanes(
+        [
+          { rep: game.boat, colours: TRACK.kayak },
+          { rep: game.ghost, colours: GHOST },
+        ],
+        watch === "boat" ? 0 : 1,
+      );
+      chartDirty = false;
+    }
+    chart.draw(page.card ? 1e9 : hour, performance.now());
+  }
+  $("clock").textContent = r && page.ready ? `Day ${(h / 24).toFixed(1)}` : "";
+  page.frames++;
+});

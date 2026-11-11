@@ -354,6 +354,22 @@ try {
   await page.evaluate(() => window.__yard.setBase("kayak"));
   if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
   log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
+  // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
+  await page.goto(`${URL}helm.html?quality=low`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  await page.click("#go");
+  await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+  const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
+  if (hm.ready) {
+    await page.click("#s6");
+    await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
+    const day = await page.evaluate(() => window.__helm.status?.day);
+    if (!(Math.abs(day - 0.25) < 0.01) || (await page.evaluate(() => window.__helm.error))) fail(`helm: 6 hours sailed to day ${day}`);
+    log.push(`helm sailed 6 h`);
+  } else {
+    if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
+    log.push("helm: no simulator files, says so");
+  }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
   await browser.close();
