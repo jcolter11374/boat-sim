@@ -16,6 +16,7 @@ import * as THREE from "three";
 import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, type WaveComponent } from "./waves";
 import { PLACE } from "./land/place";
+import { foamStreaks, whitecaps } from "./storm";
 
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
@@ -103,6 +104,7 @@ uniform float uSunI;
 uniform vec3 uGlow;
 uniform float uRough;
 uniform float uCover;
+uniform float uStreak;
 uniform vec2 uWind;
 uniform float uChop;
 uniform int uN;
@@ -186,11 +188,28 @@ float farMix = smoothstep(${FADE_IN.toFixed(1)}, ${FADE_OUT.toFixed(1)}, length(
 // the wind.
 vec2 wd = uWind;
 vec2 q = vec2(dot(vWPos.xz, wd), dot(vWPos.xz, vec2(-wd.y, wd.x)));
+// Each octave gives way to its average once its blobs are smaller than the pixel, so
+// a wide white sea far off is an even white, not a shimmer of speckles.
+float fpF = max(length(fwidth(vWPos.xz)), 1e-4);
+float o2 = smoothstep(0.08, 0.3, fpF);
+float o3 = smoothstep(0.02, 0.1, fpF);
 float fn = vnoise(vec2(q.x * 0.5, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
-         + vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08) * 0.3
-         + vnoise(vWPos.xz * 7.0 + uTime * 0.2) * 0.2;
+         + mix(vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08), 0.5, o2) * 0.3
+         + mix(vnoise(vWPos.xz * 7.0 + uTime * 0.2), 0.5, o3) * 0.2;
 float thr = 0.8 - 1.4 * uCover - 0.35 * vFoam;
 float foamMask = smoothstep(thr, thr + 0.1, fn) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+// Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
+// downwind; where they're finer than a pixel, their average whiteness instead.
+if (uStreak > 0.001) {
+  vec2 qs = q - vec2(uTime * 1.2, 0.0);
+  // Wander the lanes sideways a little, so they meander and split instead of running as ruled bars.
+  qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
+  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 0.9)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 2.3) + 17.0), 0.5, smoothstep(0.1, 0.4, fpF)) * 0.4;
+  float thrS = 0.5 + 0.51 * (0.5 - uStreak); // that share of the noise is over it
+  float lanes = smoothstep(thrS - 0.03, thrS + 0.07, ns) * (0.7 + 0.3 * fn);
+  float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
+  foamMask = max(foamMask, 0.9 * streak);
+}
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.98), foamMask);
 `;
 
@@ -255,6 +274,7 @@ export class Sea {
     uRough: { value: 1 },
     uAmp: { value: 0.5 },
     uCover: { value: 0 },
+    uStreak: { value: 0 },
     uWind: { value: new THREE.Vector2(1, 0) },
     uChop: { value: 0 },
     uFoamAmt: { value: 0 },
@@ -299,7 +319,7 @@ export class Sea {
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
         .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>");
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v7";
+    material.customProgramCacheKey = () => "boatsim-sea-v8";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
@@ -370,8 +390,9 @@ export class Sea {
     this.uniforms.uAmp.value = hs / 2;
     this.uniforms.uRough.value = THREE.MathUtils.clamp(0.6 + hs / 5, 0.6, 1.4); // GUESS display tuning
     const u = windMs ?? Math.sqrt(hs / 0.0246);
-    // Share of the sea covered by whitecaps (Monahan & O'Muircheartaigh 1980).
-    this.uniforms.uCover.value = THREE.MathUtils.clamp(3.84e-6 * u ** 3.41, 0, 0.2);
+    // Share of the sea white with breaking crests, and under blown foam (storm.ts, Beaufort).
+    this.uniforms.uCover.value = whitecaps(u);
+    this.uniforms.uStreak.value = foamStreaks(u);
     if (towards && towards.lengthSq() > 0) this.uniforms.uWind.value.copy(towards).normalize();
     this.wind = u;
     this.uniforms.uChop.value = this.detail * this.chopFor(u);

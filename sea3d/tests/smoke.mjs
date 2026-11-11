@@ -457,6 +457,16 @@ try {
     if (errors.length) fail(`page errors at the helm off Cascais: ${errors.join("; ")}`);
     log.push(`helm near land: ${await page.evaluate(() => JSON.stringify(window.__helm.land))}`);
   } else log.push("helm near land: no land files");
+  // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });
+  await page.evaluate(() => (window.__replay.force.wind = 30)); // force 11
+  await page.waitForTimeout(3000);
+  const gale = await page.evaluate(() => ({ spray: window.__replay.spindrift, bands: window.__replay.bands, frames: window.__replay.frames }));
+  if (!(gale.spray > 0.9)) fail(`storm: no spindrift in force 11 (${JSON.stringify(gale)})`);
+  if (!Number.isFinite(gale.bands)) fail(`storm: no rain-band count (${JSON.stringify(gale)})`);
+  if (errors.length) fail(`page errors in a storm: ${errors.join("; ")}`);
+  log.push(`storm: spindrift ${gale.spray.toFixed(2)}, ${gale.bands} rain bands in view`);
 
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);

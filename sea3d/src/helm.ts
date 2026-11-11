@@ -12,6 +12,9 @@ import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { PLACES } from "./land/place";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
+import { Spindrift } from "./spindrift";
+import { RainBands } from "./rainbands";
+import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import { KAYAK, PLAYABLE_STOCK, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
@@ -80,6 +83,11 @@ const spot = (params.get("spot") ?? "").split(",").map(Number);
 const SPOT: [number, number] | null = spot.length === 2 && spot.every(Number.isFinite) ? [spot[0], spot[1]] : null;
 /** After a finish at the Lisbon line: the scene moves to the coast the line points at. */
 let arrival: [number, number] | null = null;
+const bands = new RainBands();
+scene.add(bands.mesh);
+const spray = new Spindrift(quality === "high" ? 5000 : 2000);
+scene.add(spray.points);
+const sprayBuf = new THREE.Vector2();
 const place: Placement = { x: 0, z: 0, yaw: 0 };
 // The boat you sail: our kayak, or a stock boat when the simulator offers one (the
 // game's replay names it, e.g. "31 ft cruiser").
@@ -220,6 +228,9 @@ const page = {
   arrival: false,
   /** Look the given compass bearing past the boat (for pictures and tests). */
   aim: (bearing: number) => aimAt(bearing),
+  /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
+  spindrift: 0,
+  bands: 0,
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -1067,11 +1078,19 @@ renderer.setAnimationLoop(() => {
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
+  atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
+  atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.set(sp.el, sp.az, storm);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient);
   clouds.closeIn(atmos.fog);
   const rate = r?.rain ? valueAt(r, r.rain, h) : null;
-  rain.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.ambient);
+  // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
+  bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
+  rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+  page.bands = bands.shown;
+  renderer.getDrawingBufferSize(sprayBuf);
+  spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
+  page.spindrift = spray.amount;
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.ambient);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
