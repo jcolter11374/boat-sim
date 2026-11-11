@@ -8,7 +8,7 @@
 //                 a port id from ports.json, started from instead of the usual drop
 //               {id, type: "load", code, bundle?}         a shared game (Game.save's code)
 //               {id, type: "save"}
-//               {id, type: "order", heading, power, sails?, engine?}  heading: degrees, "finish" or "route"; power 0..1
+//               {id, type: "order", heading, power, sails?, engine?, trim?}  heading: degrees, "finish" or "route"; power 0..1; trim 0..1 (a wheel spell)
 //               {id, type: "run", hours?, soc_below?, wind_above?, breakdown?}
 //               {id, type: "forecast"} | {id, type: "result"}
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
@@ -245,7 +245,7 @@ json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(EN
       code = `
 m = json.loads(msg_json)
 # Sail and engine orders (#242) go only when the page sends them, so older simulators still play.
-o = G.order(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []))
+o = G.order(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []), **({"trim": m["trim"]} if "trim" in m else {}))
 json.dumps({"order": o if isinstance(o, dict) else {"accepted": True}, "status": G.status()}, default=_f)
 `;
     } else if (m.type === "run") {
