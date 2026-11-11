@@ -56,14 +56,14 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 
 from boatsim.config import Design
-from boatsim.types import BoatState, Command, EnvState, Event, EventKind
+from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
 from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT
 from boatsim.vessel.kayak import KayakState, KayakVessel, SpeedSolution, _boat_axes, solve_speed
@@ -85,6 +85,11 @@ class KeelboatState(KayakState):
     sail_plan: str = "full"
     heel_deg: float = 0.0  # positive = leaning to starboard
     engine_on: bool = False
+    # The masthead wind vane's last reading, relative to the water (for the
+    # sailing tactician, autonomy/sailing.py): where the wind comes from (deg)
+    # and its speed (m/s). None before the first step.
+    wind_from_deg: float | None = None
+    wind_speed_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -311,6 +316,8 @@ class KeelboatVessel(KayakVessel):
             sail_plan=self._step["plan"],
             heel_deg=self._step["heel"],
             engine_on=bool(used and engine > 0.0),
+            wind_from_deg=_wind_from(env),
+            wind_speed_ms=math.hypot(env.wind_u - env.current_u, env.wind_v - env.current_v),
         )
         if out.alive and out.damage.get(LEAK) and self.p_sink_given_leak > 0.0:
             new_leak = not state.damage.get(LEAK)
@@ -331,3 +338,18 @@ class KeelboatVessel(KayakVessel):
                     events.append(Event(t, EventKind.LOST, "capsized in a gust and stayed over"))
                     out.alive = False
         return out, events
+
+    def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
+        """The kayak's sensors plus the wind vane (truth for now, like the GPS)."""
+        base = super().sense(state, rng)
+        return replace(
+            base,
+            wind_from_deg=getattr(state, "wind_from_deg", None),
+            wind_speed_ms=getattr(state, "wind_speed_ms", None),
+        )
+
+
+def _wind_from(env: EnvState) -> float:
+    """Where the wind blows from (deg), relative to the water."""
+    we, wn = env.wind_u - env.current_u, env.wind_v - env.current_v
+    return (math.degrees(math.atan2(we, wn)) + 180.0) % 360.0
