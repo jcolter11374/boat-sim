@@ -546,8 +546,8 @@ def _rudder(n: int, base: str) -> Option:
 
 def _bulb(kg: float, base: str) -> Option:
     ref = {"revc": 9.0, "revb": 8.2}[base]
-    heel = {"revc": 19.7, "revb": 17.4}[base]
-    mass = {"revc": 25.2, "revb": 20.8}[base]
+    heel = {"revc": 20.5, "revb": 17.4}[base]
+    mass = {"revc": 26.9, "revb": 20.8}[base]
     # GUESS: righting moment goes with the bulb's share of the weight; staying upside
     # down after a knockdown with the square of the shortfall (the kayak's bulb rule).
     p_stuck = 4.0e-5 * max(1.0, (ref / kg) ** 2)

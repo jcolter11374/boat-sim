@@ -8,7 +8,11 @@
 # Offered for your replays and Boatyard; your call whether to adopt it. Rev C changes from Rev B:
 #   foam-filled hull behind two bulkheads + sealed battery box (a leak can't swamp it), twin rudders
 #   with separate servos (either steers alone), 30 x 26 mm spar on 6806 bearings, bulb D72 (~9.0-9.2 kg),
-#   YB3 and an all-round light on the stub. No thruster, no backup D-cell. All-up ~25.2 kg, DWL z 98 mm.
+#   YB3 and an all-round light on the stub. No thruster, no backup D-cell.
+#   Rev C2 (11 Nov 2026): hardwood-cored keel fin with carbon strips and keel-box floors, +1.1 kg.
+#   Rev C3 (11 Nov 2026): YB3 in a foredeck well (off the stern post), fibreglass stern post and counterweight arm,
+#   servo-savers on both rudders, 30 x 22 spar on bearings 130 mm apart, +0.5 kg. docs/Structural_Review.md.
+#   All-up ~26.9 kg, DWL z 102 mm.
 # Numbers marked "# Rev C" come from our simulator (simulator/drone_sim, default_design() = Rev C) and
 # our build files (build-files/source/design.py). Lines marked "# GUESS" are still guesses, as before.
 # Same convention as your Rev B file: this models the Randolph boat for comparison; our own simulator
@@ -19,13 +23,13 @@ hull:
   model: Randolph Rev C, 1.5 m self-righting wing-sail drone (a model of it, in our simulator)
   length_m: 1.50             # design.py
   beam_m: 0.40               # design.py
-  mass_kg: 25.2              # Rev C: all-up, simulator mass model
-  displacement_ref_kg: 25.2  # weight the drag numbers below are for (mass link: hull.py)
+  mass_kg: 26.9              # Rev C3: all-up, simulator mass model
+  displacement_ref_kg: 26.9  # weight the drag numbers below are for (mass link: hull.py)
   self_righting_dome: false  # no dome: righting arm stays positive to 180 deg (revB_gz_curve.csv)
   keel_bulb_kg: 9.0          # Rev C: D72 bulb (simulator 8.98 kg; build formula 9.16 kg)
   keel_bulb_depth_m: 0.43    # design.py: fin span below the hull bottom
   # Drag and drift model (vessel/hull.py).
-  waterline_length_m: 1.43   # Rev C: simulator reference() at the 98 mm waterline
+  waterline_length_m: 1.43   # Rev C: simulator reference() (waterline 101 mm in C2; length change under 1 cm)
   wetted_area_m2: 0.77       # Rev C: hull 0.46 + fin 0.14 + two rudders 0.11 + bulb 0.06 (simulator s_total 0.773)
   form_factor: 1.15          # design.py hydro.form_factor
   wave_making_frac: 0.05     # GUESS: their Froude-number term is tiny at 0.3-0.6 m/s
@@ -56,9 +60,9 @@ sail:
   aspect_ratio: 5.33         # vpp: 1.6 x span / chord (deck acts as an end plate)
   cd0: 0.012                 # vpp
   max_alpha_deg: 20          # vpp: wing angles tried 0-20 deg
-  ce_height_m: 0.65          # vpp: root 0.30 m + 0.45 span, less the 0.098 m Rev C waterline
+  ce_height_m: 0.65          # vpp: root 0.30 m + 0.45 span, less the 0.10 m Rev C waterline
   heel_arm_m: 0.9            # GUESS: centre of effort to centre of lateral resistance
-  max_heel_moment_nm: 19.7   # Rev C: 25.2 kg x g x GZ 0.080 m at the 25 deg heel limit (docs/data/revC_gz_curve.csv)
+  max_heel_moment_nm: 20.5   # Rev C3: 26.9 kg x g x GZ 0.078 m at the 25 deg heel limit (docs/data/revC_gz_curve.csv)
   storm_wind_ms: 20          # design.py autopilot.storm_tws_ms: feather and run off
   storm_run_twa_deg: 140     # autopilot.py
   min_upwind_twa_deg: 50     # design.py autopilot
@@ -134,7 +138,7 @@ hazards:
   damage_ref_hs_m: 3.0
   beacon_name: YB3 backup tracker
   beacon_per_day: 0.0007     # the YB3 dying on its own; the Randolph simulator uses the same 0.0007/day since 10 Nov 2026
-  p_inverted_stuck: 4.0e-5   # GUESS: as ours; their curve has no stable upside-down position
+  p_inverted_stuck: 4.0e-5   # your placeholder kept. Our estimate for the C2 fin is lower (docs/Keel_Structure_Loads.md) but unproven until the proof test
   p_part:
     panel_100w_a: 0          # our kayak's parts: not on this boat
     panel_100w_b: 0
