@@ -42,6 +42,7 @@ import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/b
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
 import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
+import { chanceFor, type Chance } from "./yard/chance";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
@@ -148,6 +149,7 @@ const isAsBuilt = (d: Design) => !!cat && encodeDesign(cat, d) === "";
 const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
 const sandboxReady = sandbox.available();
 let launching = false;
+let chanceTurn = 0; // the latest "chance of finishing" lookup (a part changed since: drop the older)
 let planned: LaunchResult | null = null;
 const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
@@ -168,6 +170,8 @@ const status = {
   summary: {} as Record<string, unknown>,
   dressed: {} as Record<string, unknown>,
   share: "",
+  /** The odds "Your build" shows (#315). */
+  chance: null as Chance | null,
   /** The player's saved boat ("my boat"), as this page last drew it. */
   mine: null as MyBoat | null,
   yaml: "",
@@ -210,12 +214,14 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   top.className = "top";
   const name = document.createElement("span");
   name.textContent = o.n;
-  if (o.def) name.append(badge("plan", base === "kayak" ? "PLANNED" : "AS BUILT"));
-  if (o.est) name.append(badge("est", "ESTIMATE"));
+  // Tags in a player's words (#315 item 14): what we'd fit, rough figures, and parts
+  // that change only the price and weight on the list (the simulator doesn't sail them yet).
+  if (o.def) name.append(badge("plan", base === "kayak" ? "OUR PICK" : "AS BUILT", base === "kayak" ? "The part on our kayak" : "The part on their boat as built"));
+  if (o.est) name.append(badge("est", "ROUGH", "A rough figure: nobody has measured or quoted it yet"));
   if (o.effect === "no effect yet") {
-    name.append(badge("noeff", "NO EFFECT YET"));
+    name.append(badge("noeff", "PRICE ONLY"));
     b.classList.add("noeff");
-    b.title = `The simulator doesn't model this yet${o.basis ? `: ${o.basis}` : ""}. A launch sails it as built.`;
+    b.title = `Changes the price and parts list only: the simulator doesn't sail this part yet${o.basis ? ` (${o.basis})` : ""}, so a test sails the boat without it.`;
   }
   const price = document.createElement("span");
   price.className = "price";
@@ -228,10 +234,11 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   b.addEventListener("click", () => choose(slot.id, o.id));
   return b;
 }
-function badge(kind: string, text: string): HTMLSpanElement {
+function badge(kind: string, text: string, title = ""): HTMLSpanElement {
   const s = document.createElement("span");
   s.className = `badge ${kind}`;
   s.textContent = text;
+  if (title) s.title = title;
   return s;
 }
 
@@ -380,7 +387,8 @@ function redraw(): void {
   $("s-sol").textContent = `${s.solarW} W`;
   $("s-bat").textContent = `${s.batteryWh.toLocaleString("en-US")} Wh`;
   $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
-  $("s-est").textContent = s.estimates.length ? `Includes estimates: ${s.estimates.join(", ")}.` : "";
+  $("s-est").textContent = s.estimates.length ? `Includes rough figures: ${s.estimates.join(", ")}.` : "";
+  void drawChance();
   // The model.
   if (outfit && base === "kayak") {
     const lead = optionOf(cat, "lead", design);
@@ -405,6 +413,30 @@ function redraw(): void {
   $("result").replaceChildren();
   drawMine();
 }
+
+// ---------- chance of finishing (#315 item 12) ----------
+/** "Your build": the grid's odds when this design is a tested build, else "not tested yet". */
+async function drawChance(): Promise<void> {
+  if (!cat) return;
+  const turn = ++chanceTurn;
+  const [n, src] = await Promise.all([grid.nearest(design), grid.source()]);
+  if (turn !== chanceTurn) return; // the player has changed a part since
+  const c = chanceFor(n, src ?? null);
+  const v = $("s-odds");
+  v.textContent = c.value;
+  v.classList.toggle("untested", !c.tested);
+  $("s-odds-note").textContent = c.note;
+  status.chance = c;
+}
+// What "Test it" does, on the button (#315 item 13): the simulator in this browser
+// sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
+// slow computer; without it, the page shows the precomputed voyages at once.
+void sandboxReady.then((inBrowser) => {
+  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see its simulated voyages";
+  $("launch").title = inBrowser
+    ? "The autopilot sails your design from 6 real spring 2020 start dates, in this browser, and sails the boat you started from on the same dates to compare"
+    : "Shows the voyages our servers sailed for the closest tested build";
+});
 
 // ---------- my boat (remembered in this browser, carried to the other pages) ----------
 const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C", revb: "Rev B" };
@@ -460,11 +492,11 @@ window.addEventListener("hashchange", () => {
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
   kayak:
-    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ESTIMATE marks figures nobody has measured or quoted yet.",
+    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ROUGH marks figures nobody has measured or quoted yet.",
   revc:
-    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ESTIMATE marks our guesses.",
+    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ROUGH marks our guesses.",
   revb:
-    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ESTIMATE marks our guesses.",
+    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ROUGH marks our guesses.",
 };
 /** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
 function useBase(hash: string): void {
@@ -479,7 +511,7 @@ function useBase(hash: string): void {
   if (c.credit) {
     credit.append(`${c.credit.text} `, Object.assign(document.createElement("a"), { href: c.credit.url, target: "_blank", rel: "noopener", textContent: "Their repository" }));
   }
-  $("reset").textContent = base === "kayak" ? "Back to the planned build" : "Back to as built";
+  $("reset").textContent = base === "kayak" ? "Reset to our kayak" : `Reset to ${SHORT[base]} as built`;
   // The Randolph boat has no "see inside" yet (our model has no cut-away).
   const inside = document.querySelector<HTMLButtonElement>('#views button[data-view="inside"]');
   if (inside) inside.hidden = base !== "kayak";
@@ -547,7 +579,7 @@ $("launch").addEventListener("click", async () => {
     draw();
   };
   const tick = setInterval(draw, 1000);
-  say("Launching...");
+  say("Testing...");
   launching = true;
   btn.disabled = true;
   let r: LaunchResult | null = null;
@@ -581,7 +613,7 @@ $("launch").addEventListener("click", async () => {
       planned = p ?? null;
     } else planned = null;
   } catch (e) {
-    say(`The launch failed: ${e instanceof Error ? e.message : e}`);
+    say(`The test failed: ${e instanceof Error ? e.message : e}`);
     status.launchError = String(e);
     return;
   } finally {
