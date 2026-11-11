@@ -33,6 +33,8 @@ export interface CinemaHost {
   cloud?(): number;
   /** The sound toggle, for the M key. */
   toggleSound?(): void;
+  /** How much bigger than our 3 m kayak the boat is: the close shots stand back by this much. */
+  scale?(): number;
 }
 
 type ShotKind = "orbit" | "dolly" | "track" | "skim" | "wide" | "drone" | "vista" | "sunset" | "stars";
@@ -284,11 +286,12 @@ export class Cinema {
       camera.position.set(tg.x + Math.cos(ang) * r, tg.y + y, tg.z + Math.sin(ang) * r);
     const beamAng = Math.atan2(pz, px);
     let fov = 40;
+    const k0 = this.host.scale?.() ?? 1;
     this.look.copy(tg);
     switch (s.kind) {
       case "orbit": {
         const a = beamAng + (s.seed - 0.5) * 2 + s.side * u * 0.85;
-        at(a, 7.5 - u * 1.2, 1.5 + Math.sin(u * Math.PI) * 0.7);
+        at(a, (7.5 - u * 1.2) * k0, (1.5 + Math.sin(u * Math.PI) * 0.7) * k0);
         fov = 38;
         break;
       }
@@ -296,28 +299,28 @@ export class Cinema {
         // In from the quarter, easing to a close-up.
         const a = beamAng + s.side * (0.5 + s.seed * 0.7);
         const k = ease(u);
-        at(a, lerp(24, 5.5, k), lerp(1.6, 0.85, k));
+        at(a, lerp(24, 5.5, k) * k0, lerp(1.6, 0.85, k) * k0);
         fov = lerp(30, 42, k);
         break;
       }
       case "track": {
         // Alongside, sliding from the stern to past the bow.
-        const along = lerp(-6, 6, ease(u));
-        camera.position.set(tg.x + px * 5 + bx * along, tg.y + 0.9, tg.z + pz * 5 + bz * along);
-        this.look.set(tg.x + bx * along * 0.3, tg.y + 0.15, tg.z + bz * along * 0.3);
+        const along = lerp(-6, 6, ease(u)) * k0;
+        camera.position.set(tg.x + px * 5 * k0 + bx * along, tg.y + 0.9 * k0, tg.z + pz * 5 * k0 + bz * along);
+        this.look.set(tg.x + bx * along * 0.3, tg.y + 0.15 * k0, tg.z + bz * along * 0.3);
         fov = 45;
         break;
       }
       case "skim": {
         // Low over the water, crossing in front: the waves fill the bottom of the frame.
         const a = beamAng + s.side * lerp(-0.6, 0.6, u) + (s.seed - 0.5) * 0.8;
-        const r = 11 + s.seed * 4;
+        const r = (11 + s.seed * 4) * k0;
         const x = tg.x + Math.cos(a) * r;
         const z = tg.z + Math.sin(a) * r;
         const want = this.host.water(x, z) + 0.5;
         this.skimY = this.skimY === null ? want : lerp(this.skimY, want, 0.12);
         camera.position.set(x, Math.max(this.skimY, want - 0.1), z);
-        this.look.set(tg.x, tg.y + 0.35, tg.z);
+        this.look.set(tg.x, tg.y + 0.35 * k0, tg.z);
         fov = 52;
         break;
       }
@@ -332,7 +335,11 @@ export class Cinema {
       case "drone": {
         // Up and away from overhead, the wake trailing behind.
         const k = ease(u);
-        camera.position.set(tg.x - bx * lerp(3, 14, k) + px * 2, tg.y + lerp(4, 26, k), tg.z - bz * lerp(3, 14, k) + pz * 2);
+        camera.position.set(
+          tg.x + (-bx * lerp(3, 14, k) + px * 2) * k0,
+          tg.y + lerp(4, 26, k) * k0,
+          tg.z + (-bz * lerp(3, 14, k) + pz * 2) * k0,
+        );
         this.look.set(tg.x + bx * 2, tg.y, tg.z + bz * 2);
         fov = 48;
         break;
@@ -361,15 +368,15 @@ export class Cinema {
         const off = s.side * 0.35;
         const cx = sx * Math.cos(off) - sz * Math.sin(off);
         const cz = sx * Math.sin(off) + sz * Math.cos(off);
-        camera.position.set(tg.x - cx * 9, tg.y + 1.0, tg.z - cz * 9);
-        this.look.set(tg.x + cx * 30, tg.y + 2.2, tg.z + cz * 30);
+        camera.position.set(tg.x - cx * 9 * k0, tg.y + 1.0 * k0, tg.z - cz * 9 * k0);
+        this.look.set(tg.x + cx * 30 * k0, tg.y + 2.2 * k0, tg.z + cz * 30 * k0);
         fov = 50;
         break;
       }
       case "stars": {
         // Low beside the boat, tilted up at the turning sky.
         const a = beamAng + s.seed * 2 + u * 0.25;
-        at(a, 6, 0.9);
+        at(a, 6 * k0, 0.9 * k0);
         this.look.set(tg.x - Math.cos(a) * 10, tg.y + 9, tg.z - Math.sin(a) * 10);
         fov = 68;
         break;
