@@ -134,4 +134,4 @@ hazards:
   rate_set: planning
   failures_enabled: true
   electronics_boxes: 1       # one autopilot, no spare
-  capture_per_day: 0.005     # GUESS: as the cruiser
+  capture_per_day: 0.01      # GUESS: as the cruiser

@@ -318,8 +318,10 @@ class Game:
         self.orders: list[dict] = []
         self.left_data: set[int] = set()
         # Who is ahead, with hysteresis: None while level (as at the drop), then
-        # "me" or "ghost" once that boat is PASS_MARGIN_KM clear. Each change of
-        # leader is a pass, including the first one away from the drop.
+        # "me" or "ghost" once that boat is PASS_MARGIN_KM clear. The first
+        # leader is taken quietly (both boats start on top of each other, so
+        # one simply pulls ahead: Nina's playtest, 11 Nov); each change of
+        # leader after that is a pass.
         self.leader: str | None = None
         self.last_pass: str | None = None
         self.close_armed = self._land_km() > LAND_CLOSE_KM
@@ -517,15 +519,18 @@ class Game:
     def _update_leader(self) -> str | None:
         """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
         None. A lead of a few metres flips back and forth with every wave, so a
-        pass needs the other boat PASS_MARGIN_KM clear, and none counts in the
-        first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in)."""
+        pass needs the other boat PASS_MARGIN_KM clear, none counts in the
+        first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in),
+        and the first boat to get clear of the other is not a pass."""
         if self.mine.state.t < self.start + timedelta(hours=PASS_QUIET_H):
             return None
         lead = self.lead_km()
         now = "me" if lead > PASS_MARGIN_KM else "ghost" if lead < -PASS_MARGIN_KM else None
         if now is None or now == self.leader:
             return None
-        self.leader = now
+        first, self.leader = self.leader is None, now
+        if first:
+            return None
         return "ghost_passed" if now == "ghost" else "passed_ghost"
 
     def run(

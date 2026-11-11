@@ -138,7 +138,8 @@ jobs:
       # --with-deps also apt-installs fonts and libraries, which fails whenever
       # the runner can't reach the Ubuntu mirrors (11 Nov: "Temporary failure
       # resolving security.ubuntu.com"). The runner image already has what
-      # headless Chromium needs, so fall back to the browser alone.
+      # headless Chromium needs, so fall back to the browser alone. apt hangs
+      # about 10 minutes on the failed lookups first, so give it 2 minutes.
       - name: Install headless browser for the smoke test
         run: |
           npm install --no-save playwright@1

@@ -86,9 +86,10 @@ def test_run_stops_on_time_and_the_ghost_never_runs_ahead(env):
 def test_stop_conditions(env):
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order(270, 0.0)  # drifting, motors off: the autopilot pulls ahead
-    out = g.run(land_within_km=None, breakdown=False)
-    assert out["stopped"] == "ghost_passed" and out["status"]["lead_km"] < -1.0
-    assert g.mine.state.t >= g.start + timedelta(hours=1)
+    out = g.run(hours=6, land_within_km=None, breakdown=False)
+    # Pulling ahead from the drop is not a pass (Nina's playtest, 11 Nov).
+    assert out["stopped"] == "time" and out["status"]["lead_km"] < -1.0
+    assert g.leader == "ghost"
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order("finish", 1.0)
     out = g.run(soc_below=0.99, ghost_passes=False, land_within_km=None)
@@ -294,17 +295,18 @@ def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
     """Ravi, 1 May 2020: 'finish' at 25% stopped on a 2 m lead change 20 minutes in."""
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.order("finish", 0.25)
-    out = g.run(land_within_km=None, breakdown=False)
-    assert out["stopped"] == "passed_ghost" and out["status"]["lead_km"] > 1.0
-    assert g.mine.state.t >= g.start + timedelta(hours=1)
+    out = g.run(hours=6, land_within_km=None, breakdown=False)
+    assert out["stopped"] == "time" and out["status"]["lead_km"] > 1.0
+    assert g.leader == "me"  # ahead from the drop: noted, not a pass
 
     # Hysteresis: a lead wobbling inside +-1 km never stops the clock again.
+    # The first boat clear is no pass; a change of leader after that is.
     leads = iter([1.5, 0.2, -0.9, 0.4, -0.99, -1.2, 0.5, 0.9, 1.1])
     g.leader = None
     g.lead_km = lambda: next(leads)
     seen = [g._update_leader() for _ in range(9)]
     assert seen == [
-        "passed_ghost",
+        None,
         None,
         None,
         None,
@@ -607,3 +609,14 @@ def test_results_card_counts_satellite_airtime(env):
     assert a["beacon_pings"] >= 4  # every 6 hours
     assert a["usd"]["total"] >= 15.75 + 26.25  # a month's fee and activation
     assert g.result()["ghost"]["airtime"]["up"]["messages"] >= 1
+
+
+def test_the_first_hour_ends_without_a_pass_stop(env):
+    """Nina's playtest (11 Nov): the first "Sail 6 hours" stopped at 1 h with a
+    pass, as the quiet hour ended with one boat a kilometre or two ahead. That
+    was the first time either boat was clear, not a pass: the first leader is
+    taken quietly, and only a change of leader after that stops the clock."""
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    r = g.run(hours=6, ghost_passes=True)
+    assert r["stopped"] not in ("ghost_passed", "passed_ghost")
+    assert g.leader is not None  # someone is clear by now, and it was noted
