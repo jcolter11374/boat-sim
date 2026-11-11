@@ -32,6 +32,6 @@ export function chanceFor(
   return {
     tested: true,
     value: pct(o.odds),
-    note: `The share of ${o.voyages} launches${when} this exact build finished in the simulator. Likely range ${pct(o.low95)} to ${pct(o.high95)}.`,
+    note: `Tested over ${o.voyages} launches${when}. Likely range ${pct(o.low95)} to ${pct(o.high95)}.`,
   };
 }

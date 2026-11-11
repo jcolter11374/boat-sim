@@ -433,15 +433,21 @@ async function drawChance(): Promise<void> {
   shownOdds = e?.p ?? null;
   shownBase = base;
   // Tested: the grid's own figure. Untested: the quick estimate, said so (estimate.ts).
+  // The comparison as two odds side by side, not "points" (Leo): "Our kayak: 78%."
   const vsWhat = base === "kayak" ? "our kayak" : `${SHORT[base]} as built`;
-  const vs = e?.p != null && !(e.tested && e.p === e.planned) ? ` ${signedPts(e.p - e.planned)} ${vsWhat}.` : "";
+  const vs =
+    e?.p != null && !(e.tested && e.p === e.planned)
+      ? Math.abs(Math.round((e.p - e.planned) * 100)) < NOISE_PTS
+        ? ` About the same as ${vsWhat}.`
+        : ` ${vsWhat[0].toUpperCase()}${vsWhat.slice(1)}: ${Math.round(e.planned * 100)}%.`
+      : "";
   if (c.tested || !e || e.p === null) {
     v.textContent = c.value;
     $("s-odds-note").textContent =
       e && e.p === null && e.missing ? `No estimate yet: "${e.missing}" hasn't been tested. Press "Test it" to find out.` : `${c.note}${vs}`;
   } else {
     v.textContent = `about ${Math.round(e.p * 100)}%`;
-    $("s-odds-note").textContent = `Quick estimate from the builds we've tested.${vs} Press "Test it" to sail it for real.`;
+    $("s-odds-note").textContent = `Quick estimate from builds we've tested.${vs} Press "Test it" to sail it for real.`;
   }
   v.classList.toggle("untested", !c.tested && (!e || e.p === null));
   v.classList.toggle("estimate", !c.tested && !!e && e.p !== null);
@@ -453,16 +459,13 @@ async function drawChance(): Promise<void> {
   }
   status.chance = { ...c, estimate: e?.p ?? null } as Chance;
   drawDeltas(model);
+  $("legend").hidden = !model;
 }
 let shownOdds: number | null = null;
 let shownBase = "";
 // Under 3 points is inside the grid's own noise (100 launches a build), so it reads
 // "about the same" rather than suggesting, say, that dropping the AIS helps (Ravi's rule on #323).
 const NOISE_PTS = 3;
-const signedPts = (x: number) => {
-  const n = Math.round(x * 100);
-  return Math.abs(n) < NOISE_PTS ? "About the same as" : `${n > 0 ? "+" : "−"}${Math.abs(n)} points vs`;
-};
 const modelFor = new Map<BaseKey, OddsModel>();
 /** The quick-estimate model for the boat on show (null without the grid). */
 async function oddsModel(): Promise<OddsModel | null> {
