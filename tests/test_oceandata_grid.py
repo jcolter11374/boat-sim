@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import numpy as np
 import pytest
 
-from boatsim.oceandata.grid import Box, GridSeries, OutsideCoverage, TileCache
+from boatsim.oceandata.grid import Box, GridSeries, OutsideCoverage, TileCache, to_datetime64
 
 
 def _grid(fn=lambda t, y, x: 0 * x + 0 * y + t):
@@ -95,3 +95,11 @@ def test_fast_sampling_gives_the_same_bits_as_the_plain_form():
             want = _reference_sample(g, t, lat, lon, names)
             for n in names:
                 assert got[n] == want[n] or (np.isnan(got[n]) and np.isnan(want[n]))
+
+
+def test_to_datetime64_takes_aware_times_in_any_zone():
+    want = np.datetime64("2019-12-12T12:00:00", "s")
+    assert to_datetime64(datetime(2019, 12, 12, 12)) == want  # naive = UTC
+    assert to_datetime64(datetime(2019, 12, 12, 12, tzinfo=UTC)) == want  # crashed before
+    est = timezone(timedelta(hours=-5))
+    assert to_datetime64(datetime(2019, 12, 12, 7, tzinfo=est)) == want
