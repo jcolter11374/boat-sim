@@ -45,7 +45,9 @@ import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
-import { Sea } from "./water";
+import { HORIZON, Sea } from "./water";
+import { PLACE } from "./land/place";
+import { Island } from "./land/island";
 import { boatName, guessVerdict, outcomeLine, storyBeats, type Beat } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, MixedSea as LiveSea } from "./waves";
@@ -83,7 +85,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
 $("app").appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 12000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, PLACE ? HORIZON * 3 : 12000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -685,6 +687,22 @@ loadDetailedModels().then((ok) => {
 });
 camera.position.set(-5.6, 2.0, 4.6);
 controls.target.set(0, 0.2, 0);
+// ---------- real land (?place=pico) ----------
+let island: Island | null = null;
+if (PLACE) {
+  // Look past the boat towards the land.
+  const a = THREE.MathUtils.degToRad(PLACE.look);
+  camera.position.set(-Math.sin(a) * 6.5, 1.6, Math.cos(a) * 6.5);
+  controls.maxDistance = 120;
+  $("credits").prepend(document.createTextNode(`${PLACE.credit} · `));
+  void Island.load(PLACE, quality).then((isl) => {
+    island = isl;
+    if (isl) scene.add(isl.group);
+    else toast("The land files aren't published on this copy of the site yet, so there's only sea here.", PLACE!.name, "#8ab4ff");
+    (status as unknown as { land: boolean; surf: number }).land = !!isl;
+    (status as unknown as { land: boolean; surf: number }).surf = isl?.surfTriangles ?? 0;
+  });
+}
 (async () => {
   try {
     const [index, bounds] = await Promise.all([
@@ -754,6 +772,7 @@ const cine = new Cinema({
   sunEl: sunElAt,
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
+  landmark: () => (island ? PLACE!.look : null),
   hold: (on) => {
     if (on) {
       held = { hour, playing };
@@ -899,7 +918,8 @@ renderer.setAnimationLoop(() => {
     const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
     const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * 1.94384 - 15) / 20, 0, 1);
     storm += (target - storm) * Math.min(1, dt * 1.5);
-    const [lat, lon] = positionAt(rep, hour);
+    // Off real land the sky is the place's own (the replay still brings the weather).
+    const [lat, lon] = PLACE ? [PLACE.lat, PLACE.lon] : positionAt(rep, hour);
     const sp = sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
     // Moon, its phase and the stars where they really were from this spot at this time.
     if (Number.isFinite(lat)) atmos.setCelestial(utc(rep.start) + hour * 3600e3, lat, lon);
@@ -936,6 +956,7 @@ renderer.setAnimationLoop(() => {
     status.wet = wetNow;
     sea.setSun(atmos.glintDir, atmos.glintLight);
     wake?.setLight(atmos.ambient);
+    island?.update(t, atmos.fog.color, atmos.ambient, hs, storm);
     // The live cards overwrite some of the replay's, so they must update in the same frame:
     // drawn a frame apart, the battery, its bar and the captions flicker between the two.
     const fresh = hud(rep, stw, hs);
