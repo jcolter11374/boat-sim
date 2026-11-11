@@ -28,6 +28,7 @@ PACK_FILES = (
     "configs/stock_dinghy14.yaml",
     "configs/stock_beachcat16.yaml",
     "configs/stock_sail_drone7.yaml",
+    "configs/stock_ocean_rower45.yaml",
     "configs/polars/cruiser31.json",
     "configs/polars/dinghy14.json",
     "configs/polars/beachcat16.json",

@@ -1,0 +1,133 @@
+# STOCK VESSEL: "ocean rowing boat, crew of four", based on published specs of the
+# Rannoch R45 (an ocean rowing class raced across the Atlantic by trios, fours and fives).
+# Our own model and code: no logos, no brand styling, not official.
+# Sources:
+#   listing = https://theyachtmarket.com/en/boats-for-sale/2776382 (R45: 8.64 m x 1.74 m,
+#             built for crews of 3 to 5; two 104 W panels, lithium batteries, para-anchor,
+#             autohelm; a trio crossed the Atlantic in 60 days 13 hours)
+#   r45     = https://info.oceanrowing.com/boatsforsale/for-sale-row-west-2025-rannoch-r45-elite-ocean-rowing-boat
+#             (230 W solar, 2 x 100 Ah lithium, watermaker, autopilot, parachute sea anchor,
+#             two drogues, two cabins)
+#   navy    = https://www.royalnavy.mod.uk/news/2024/january/17/20240117-navy-team-win-worlds-toughest-rowing-race-after-crossing-atlantic
+#             (a crew of five, 3,000 miles La Gomera to Antigua in 35 days, 2.5 h on the
+#             oars and 1.5 h off)
+# Rowers' power, oar losses, loaded weight and the drag numbers are GUESSES, set so the
+# boat makes about 2.5 kn with two rowing in a calm (crossings above: 1.75 kn for a trio,
+# 3 kn for five with the trade winds behind them).
+# The crew rows in shifts (2 on, 2 off, around the clock), steers by hand when the
+# autopilot fails and puts out the para-anchor in head winds and gales
+# (vessel/oddboats.py). Anything not from a source above is a GUESS.
+name: ocean rowing boat
+
+stock:
+  label: ocean rowing boat, crew of four
+  based_on: published specs of the Rannoch R45
+  kind: ocean rowing boat, four rowers in shifts, two cabins
+  sources:
+    - https://theyachtmarket.com/en/boats-for-sale/2776382
+    - https://info.oceanrowing.com/boatsforsale/for-sale-row-west-2025-rannoch-r45-elite-ocean-rowing-boat
+    - https://www.royalnavy.mod.uk/news/2024/january/17/20240117-navy-team-win-worlds-toughest-rowing-race-after-crossing-atlantic
+  spec_card:
+    length_overall_m: 8.64   # listing
+    beam_m: 1.74             # listing
+    crew: 4                  # listing: built for 3 to 5
+    solar_w: 230             # r45
+    battery: 2 x 100 Ah lithium   # r45
+    loaded_kg: 1500          # GUESS: boat about 700 kg, crew 340 kg, food, water and kit
+  odd:
+    # Two of the four row at any time (2 h on, 2 h off), all day and night.
+    crew_w: 180              # GUESS: two rowers, about 90 W each at the oar handle, held for weeks
+    crew_hours: 24
+    crew_start_hour: 0
+    awake_hours: 24
+    fatigue_per_day: 0.004   # GUESS: rowers lose weight and sleep; about 0.4 % weaker a day
+    fatigue_floor: 0.75      # GUESS
+    # Para-anchor: out when the wind on the nose tops 14 kn, or in any gale (GUESS: the
+    # common practice in ocean rowing is not to fight a head wind above about 15 kn).
+    anchor_head_ms: 7.0      # GUESS
+    anchor_storm_ms: 15.0    # GUESS: about 30 kn, too rough to row safely
+    anchor_hysteresis_ms: 2.0
+    anchor_wind_share: 0.15  # GUESS: on the parachute the boat drifts at well under 1 kn
+    loss_words:
+      capsized and stayed upside down: rolled by a breaking wave and stayed over (the cabins flooded)
+      early-life defect or unknown failure: something gave out (the watermaker, the rudder lines, an oar gate)
+
+hull:
+  model: 8.6 m ocean rowing boat, two cabins (stock vessel)
+  length_m: 8.64             # listing
+  beam_m: 1.74               # listing
+  mass_kg: 1500              # GUESS (spec_card)
+  displacement_ref_kg: 1500
+  waterline_length_m: 7.6    # GUESS
+  wetted_area_m2: 13.0       # GUESS: hull 12 plus a small skeg and rudder
+  form_factor: 1.35          # GUESS: a full, heavily laden hull
+  wave_making_frac: 0.8      # GUESS: set so two rowers make about 2.5 kn in a calm (header)
+  waterplane_area_m2: 8.0    # GUESS
+  air_side_area_m2: 7.0      # GUESS: hull topsides plus two cabins, about 0.8 m tall
+  air_front_area_m2: 2.4     # GUESS: the bow cabin face and the rowers
+  air_cd_side: 0.9           # GUESS
+  air_cd_front: 0.8          # GUESS
+  lateral_cd_area_m2: 6.0    # GUESS: a long, shallow hull with a skeg
+  keel_lift_slope_area_m2: 2.0   # GUESS
+  wave_drag_frac_per_m2: 0.15    # GUESS: a long, heavy boat, slowed by waves less than the kayak
+  wave_drag_beam_factor: 0.55
+  wave_drag_following_factor: 0.1
+  fouling_onset_days: 30     # GUESS: antifouling; crews also scrape the hull mid-ocean
+  fouling_frac_per_day: 0.002
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+power:
+  # Two "batteries" in one: the crew's food (the rowing energy) is far bigger than the
+  # electrical system, so the food store is what's modelled; the solar and lithium
+  # batteries (r45) run the autopilot, watermaker and radios, which a crew can do without.
+  solar_wp: 0
+  panels_w: {}
+  battery_wh: 400000         # GUESS: rowing energy for about 90 days, so food doesn't end it first
+  charge_eff: 1.0
+  discharge_eff: 1.0
+
+propulsion:
+  thrusters: oars (two rowers at a time)
+  thruster_count: 1
+  thruster_diameter_m: 1.2   # GUESS: the water the blades work, as a disc
+  thruster_efficiency: 0.65  # GUESS: oar blades slip; about 0.7 for racing shells, less loaded
+  cruise_drive_w: 180
+  max_drive_w: 180
+  min_steer_w: 1.0
+
+electronics:
+  autopilot: tiller autopilot, with the crew steering by hand (foot steering) when it fails
+  hotel_load_wh_per_day: 0   # on the solar system (power block)
+  nav_light_w: 0
+  nav_light_hours_per_day: 0
+
+comms:
+  two_way: Iridium (satellite phone and tracker)
+  one_way: personal locator beacons and an EPIRB
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 8.64
+  hull_beam_m: 1.74
+  critical_wave_frac_of_length: 0.55
+  critical_wave_frac_of_beam: 1.2
+  # Sealed cabins and a self-righting hull: the boat rolls back up (the R45's selling
+  # point; GUESS for the share that stay over, e.g. a cabin hatch left open).
+  p_capsize_stays_over: 0.02
+  damage_ref_hs_m: 3.0
+  p_part: {}
+  ship_speed_ms: 7.0         # GUESS
+  ship_beam_m: 32.0          # GUESS
+  p_avoid_with_ais: 0.98     # GUESS: AIS plus a crew on watch
+  p_avoid_without_ais: 0.98
+  p_lost_given_strike: 0.6   # GUESS
+  p_leak_given_strike: 1.0
+  rate_set: planning
+  failures_enabled: false    # the crew steers and fixes; no electronics box to lose
