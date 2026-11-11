@@ -2,7 +2,7 @@
 
 Where: the Ocean Biodiversity Information System (OBIS, https://obis.org),
 records since 1990 of dolphins and porpoises (Delphinidae, Phocoenidae),
-whales (baleen whales, Mysticeti, and sperm whales, Physeteroidea) and birds
+whales (baleen whales, Mysticeti, and sperm whales, Physeteridae) and birds
 (Aves; OBIS holds marine records only), counted on OBIS's own geohash grid
 (the /v3/occurrence/grid API) and binned to RES degree cells over the route
 box. Records follow survey effort as well as animals (busy coasts are well
@@ -42,7 +42,7 @@ PRECISION = 4  # geohash cells about 0.35 x 0.18 degrees
 SINCE = "1990-01-01"  # leaves out the old whaling logbooks
 GROUPS = {
     "dolphins": ["Delphinidae", "Phocoenidae"],
-    "whales": ["Mysticeti", "Physeteroidea"],
+    "whales": ["Mysticeti", "Physeteridae"],
     "birds": ["Aves"],
 }
 # AMAPPS northeast shipboard, 27 June - 25 August 2016 (see module doc).
@@ -69,6 +69,8 @@ def get(url: str) -> dict:
 
 def taxon_id(name: str) -> int:
     r = get(f"{API}/taxon/{urllib.parse.quote(name)}")["results"]
+    if not r:
+        raise SystemExit(f"OBIS knows no taxon called {name}")
     hit = next((x for x in r if x.get("scientificName") == name), r[0])
     return int(hit["taxonID"])
 
