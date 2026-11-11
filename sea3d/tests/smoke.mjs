@@ -348,7 +348,9 @@ try {
   await page.click("#launch");
   await page.waitForFunction(() => window.__yard.launch || window.__yard.launchError, null, { timeout: 30000 });
   const rl = await page.evaluate(() => ({ backend: window.__yard.backend, n: window.__yard.launch?.replays.length ?? 0, err: window.__yard.launchError }));
-  if (rl.err || rl.backend !== "replays of the boat as built") fail(`boatyard Rev C launch: ${JSON.stringify(rl)}`);
+  // Any backend may answer: the browser simulator once sandbox-data carries Rev C (#187),
+  // else the grid, else the as-built replays (#190). It must answer with voyages, not an error.
+  if (rl.err || !rl.backend || rl.n < 1) fail(`boatyard Rev C launch: ${JSON.stringify(rl)}`);
   await page.evaluate(() => window.__yard.setBase("kayak"));
   if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
   log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
