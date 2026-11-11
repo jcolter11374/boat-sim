@@ -244,6 +244,30 @@ direction.
   seastate 2020 --months 4` (about a minute per month with 8 workers; one time
   step reads ~15 MB of global chunks, 2 s).
 
+## Today's weather for the 3D view (gfs.py)
+
+Display only. The newest NOAA GFS forecast, so the 3D sea and the helm can
+show "now" rather than a past year. GFS is NOAA's global weather model; it is
+re-run every 6 hours (a "cycle"), and GFS-Wave runs the sea alongside it.
+
+- `forecast_latest.json` + `.bin.gz`, the seastate layout: 10 m wind (u, v),
+  cloud cover (0-1), rain (mm/h), and the wind sea and two swells (height,
+  PEAK period `*_tp`, direction waves come from), over the corridor at whole
+  degrees, every 3 hours from the issue time to 120 h ahead. About 1 MB.
+  `forecast_index.json` holds `issued`, the cycle time: it is a forecast, and
+  the page must say when it was issued.
+- Source: NOAA's open bucket on AWS, no key. Only the needed fields are
+  fetched, by byte range from each file's `.idx`. Checked on a real run:
+  directions are "from" (the wind sea lines up with the wind within a median
+  3 degrees), and the wave periods are peak periods (equal to the sea's peak
+  period where one system dominates), unlike ERA5's mean periods.
+- Run: Actions -> "Today's weather", every 6 hours (about 5 h 20 min after
+  each cycle) or by hand. It skips everything when the newest cycle is already
+  on the `forecast-data` release; otherwise it publishes and redeploys the 3D
+  page, which copies the files into `public/forecast/`. Locally:
+  `python -m boatsim.oceandata.gfs --out /tmp/fc` (needs `pip install eccodes`;
+  about 40 s).
+
 ## Land for the 3D views (landviews.py)
 
 Display only. Two places the 3D pages can show from the water, in the formats
