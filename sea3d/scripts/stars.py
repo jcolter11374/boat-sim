@@ -59,7 +59,9 @@ def main() -> None:
             min(k, 65535),
         )
     OUT.write_bytes(bytes(out))
-    print(f"{len(stars)} stars, magnitude {stars[0][2]} to {stars[-1][2]}, {len(out)} bytes -> {OUT}")
+    print(
+        f"{len(stars)} stars, magnitude {stars[0][2]} to {stars[-1][2]}, {len(out)} bytes -> {OUT}"
+    )
 
 
 if __name__ == "__main__":
