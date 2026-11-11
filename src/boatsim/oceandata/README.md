@@ -215,3 +215,52 @@ No fix needed. The Chesapeake Bay Bridge-Tunnel is in neither coastline
 (its four islands are about 300 m long), so the simulator lets a boat drift
 through the bridge line. Between the islands that is open trestle, and a
 kayak would pass under it.
+
+## Sea state and depth for the 3D view (seastate.py)
+
+Display only: nothing in the simulator reads these. The 3D sea draws one wave
+train from each voyage replay's combined wave height; these files let it draw
+the real mix instead, the local wind-driven chop (the "wind sea") plus up to two
+long swells arriving from distant storms, each with its own height, period and
+direction.
+
+- **Sea state**, monthly `seastate_YYYY-MM.json` + `.bin.gz`: ERA5 wind sea and
+  first and second swell partitions (significant height, mean period, direction
+  waves come from) over the sandbox corridor, 28-50N 78-8W, at whole degrees,
+  every 3 hours, April to November. Header plus gzipped int16 grid; the header
+  gives the layout and each field's scale. About 3-4 MB per month (estimate,
+  23 x 71 points x 240 times x 9 fields).
+- **Depth**, `depth_chesapeake.json` + `.bin.gz`: elevation in metres
+  (negative below sea level) for 36.5-39.7N 77.5-74W, from GEBCO 2024 at about
+  450 m spacing, or ETOPO 2022 if GEBCO's server is down.
+- ERA5 gives mean periods. A peak period is roughly 1.2-1.3 times longer
+  (GUESS); the 3D sea's factor is Theo's call.
+- Where a sea point has some systems but not another, the missing one is
+  absent (height 0). About 1% of sea points have no wind sea in a spring 2020
+  check.
+- Run: Actions -> "Sea state data" (no secrets; ARCO-ERA5 is public). Tick
+  publish to update the `seastate-data` release; the 3D page's build copies
+  it into `public/seastate/`. Locally: `python -m boatsim.oceandata.seastate
+  seastate 2020 --months 4` (about a minute per month with 8 workers; one time
+  step reads ~15 MB of global chunks, 2 s).
+
+## Land for the 3D views (landviews.py)
+
+Display only. Two places the 3D pages can show from the water, in the formats
+Iris's land spikes read:
+
+- **Pico and Faial (Azores)**: `pico_meta.json`, `pico_height.bin` (int16
+  metres, about 30 m spacing, row 0 north) and `pico_colour.jpg` (Sentinel-2
+  median of 12 clear summer passes, clouds masked, gaps filled from
+  surroundings). Terrain is zoom-12 tiles, so peaks come out a little low:
+  Pico's summit reads about 2,290 m against its real 2,351 m.
+- **Annapolis waterfront**: `annapolis.json` (buildings with height and roof
+  type, piers, in metres from the harbour mouth, x east and z south) and
+  `annapolis_height.bin` (int16 decimetres, about 3 m spacing). Buildings come
+  from Overture Maps. Where Overture has no height or floor count, the height
+  is a GUESS from the footprint size (7, 10 or 13 m). `annapolis.json` is a
+  derived database under the ODbL and carries that notice.
+- Run: Actions -> "Land data" (no secrets). Tick publish to update the
+  `land-data` release; the 3D page's build copies it into `public/land/`.
+  Locally: `python -m boatsim.oceandata.landviews annapolis --out site/land`
+  (about 40 s; Pico takes a few minutes for the Sentinel reads).

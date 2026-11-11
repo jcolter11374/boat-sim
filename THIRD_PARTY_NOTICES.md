@@ -137,3 +137,34 @@ requirements for sources we are trying out:
   to use and share.
 - **NOAA ETOPO, nautical charts and NAIP** imagery: US Government works,
   public domain.
+
+## Sea state and depth for the 3D view (`seastate-data` release)
+
+Built by `src/boatsim/oceandata/seastate.py` and the "Sea state data" workflow;
+not stored in git. Thinned and quantised by us.
+
+- ERA5 wave partitions: Contains modified Copernicus Climate Change Service
+  information (Hersbach et al. 2020, doi:10.1002/qj.3803), read from Google's
+  ARCO-ERA5 public copy. Neither the European Commission nor ECMWF is
+  responsible for any use that may be made of the Copernicus information or
+  data it contains.
+- Depth: GEBCO Compilation Group (2024) GEBCO 2024 Grid
+  (doi:10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f), free to use with this
+  credit; or, if GEBCO's server didn't answer, NOAA NCEI ETOPO 2022 Global Relief
+  Model (doi:10.25921/fd45-gt74), public domain. Each file's header names which.
+
+## Land for the 3D views (`land-data` release)
+
+Built by `src/boatsim/oceandata/landviews.py` and the "Land data" workflow; not
+stored in git. Resampled by us.
+
+- Terrain: AWS Terrain Tiles (Mapzen/Tilezen), from SRTM, GMTED2010, ETOPO1,
+  USGS 3DEP and others; see
+  https://github.com/tilezen/joerd/blob/master/docs/attribution.md.
+- Colour of Pico and Faial: contains modified Copernicus Sentinel data 2023-2024
+  (Sentinel-2 L2A, via the Registry of Open Data on AWS).
+- Annapolis buildings and piers (`annapolis.json`): contains information from
+  OpenStreetMap and Overture Maps Foundation, available under the Open Database
+  License (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/). The file
+  is a derived database and stays under the ODbL, separate from this repo's MIT
+  code; any public copy keeps this notice.

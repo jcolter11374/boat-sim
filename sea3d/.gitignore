@@ -3,3 +3,5 @@ dist/
 test-output/
 public/models/
 public/sandbox/
+public/seastate/
+public/land/
