@@ -59,21 +59,20 @@ def test_wind_peaks_at_rmax_on_the_right_and_turns_anticlockwise(tracks):
     dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
     east = SB.vortex(fx, fx.lat, fx.lon + dlon)  # right of a north-moving storm
     west = SB.vortex(fx, fx.lat, fx.lon - dlon)
-    v10 = 0.93 * fx.vmax
-    # Peak = the 10-minute best-track wind (the inflow tilts it a little off the motion).
+    v10 = SB.PEAK * 0.93 * fx.vmax
+    # Peak = PEAK x the 10-minute best-track wind (the inflow tilts it a little off the motion).
     assert math.hypot(east.wind_u, east.wind_v) == pytest.approx(v10, rel=0.01)
     assert math.hypot(west.wind_u, west.wind_v) < v10 - 2  # motion subtracts on the left
     assert east.wind_v > 0 and west.wind_v < 0  # anticlockwise
     assert east.wind_u < 0  # spiralling in toward the eye
     inner = SB.vortex(fx, fx.lat, fx.lon + dlon / 4)
-    outer = SB.vortex(fx, fx.lat, fx.lon + 1.5 * dlon)
     assert math.hypot(inner.wind_u, inner.wind_v) < math.hypot(east.wind_u, east.wind_v)
-    assert outer.weight == pytest.approx(0.5)
-    assert SB.vortex(fx, fx.lat, fx.lon + 2.1 * dlon) is None
-    # Rankine: (Rmax / r)^0.6 outside, about 0.78 of the peak at 1.5 Rmax (before motion).
+    assert SB.vortex(fx, fx.lat, fx.lon + 1.25 * dlon).weight == pytest.approx(0.5)
+    assert SB.vortex(fx, fx.lat, fx.lon + 1.6 * dlon) is None  # ERA5 alone past 1.5 Rmax
+    # Rankine: (Rmax / r)^0.6 outside, about 0.87 of the peak at 1.25 Rmax (before motion).
     vs = v10 - SB.MOTION_SHARE * math.hypot(fx.cu, fx.cv)
-    north = SB.vortex(fx, fx.lat + 1.5 * fx.rmax_km / 111.0, fx.lon)  # wind blows west there
-    assert -north.wind_u == pytest.approx(vs * 1.5**-0.6 * math.cos(math.radians(20)), rel=0.01)
+    north = SB.vortex(fx, fx.lat + 1.25 * fx.rmax_km / 111.0, fx.lon)  # wind blows west there
+    assert -north.wind_u == pytest.approx(vs * 1.25**-0.6 * math.cos(math.radians(20)), rel=0.01)
 
 
 def test_holland_profile_is_still_there(monkeypatch, tracks):
@@ -81,7 +80,7 @@ def test_holland_profile_is_still_there(monkeypatch, tracks):
     fx = SB.storm_at(tracks.storms[0], (T - SB._EPOCH).total_seconds())
     dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
     east = SB.vortex(fx, fx.lat, fx.lon + dlon)
-    assert math.hypot(east.wind_u, east.wind_v) == pytest.approx(0.93 * fx.vmax, rel=0.01)
+    assert math.hypot(east.wind_u, east.wind_v) == pytest.approx(SB.PEAK * 0.93 * fx.vmax, rel=0.01)
 
 
 def test_young_waves(monkeypatch):
@@ -147,3 +146,86 @@ def test_check_pairs_and_summarises(tracks):
     out = SB.summarise_check(rows, log=lambda *_: None)
     near = [r for r in out if r["band_rmax"] == "0-1" and r["field"] == "ws10"]
     assert near and near[0]["n"] >= 1 and near[0]["boost_rms"] < near[0]["era5_rms"]
+
+
+def test_shape_knobs_shrink_the_core_and_the_blend(tracks):
+    a = tracks.storms[0]
+    fx = SB.storm_at(a, (T - SB._EPOCH).total_seconds())
+    dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
+    at = (fx.lat, fx.lon + 1.2 * dlon)
+    base = SB.vortex(fx, *at)
+    assert base == SB.vortex(fx, *at, SB.SHAPE)  # no shape = the default shape
+    small = SB.vortex(fx, *at, SB.Shape(core=0.65, outer=1.5, peak=SB.PEAK))
+    weak = SB.vortex(fx, *at, SB.Shape(outer=1.5, peak=0.8))
+    for b in (small, weak):
+        assert math.hypot(b.wind_u, b.wind_v) < math.hypot(base.wind_u, base.wind_v)
+    tight = SB.Shape(outer=1.5)
+    assert SB.vortex(fx, *at, tight).weight == pytest.approx(0.6)
+    assert SB.vortex(fx, fx.lat, fx.lon + 1.6 * dlon, tight) is None
+    assert all(s.inner == 1.0 for s in SB.SWEEP.values())
+
+
+def test_check_scores_every_swept_shape(tracks):
+    a = tracks.storms[0]
+
+    class Fake:
+        def sample(self, t, lat, lon):
+            return {"wind_u": 10.0, "wind_v": 0.0, "hs": 3.0, "tp": 9.0, "wave_dir": 270.0}
+
+    rows = SB.pair_case(a, [(datetime(2020, 9, 1, 3), 35.0, 9.0)], Fake(), 30.5, -59.8, "x:1")
+    assert all(f"sweep_{k}_ws10" in rows[0] for k in SB.SWEEP)
+    lines = []
+    SB.summarise_check(rows, log=lines.append)
+    assert any(line.startswith("c0.65_o1.5_p0.8") for line in lines)
+
+
+MAY_CSV = """SID,SEASON,NUMBER,NAME,ISO_TIME,LAT,LON,USA_WIND,USA_PRES,USA_RMW,USA_SSHS
+ ,Year, , ,,degrees_north,degrees_east,kts,mb,nmile,1
+M,2020,1,MAYDAY,2020-05-02 00:00:00,34.0,-70.0,90,960,20,2
+M,2020,1,MAYDAY,2020-05-02 06:00:00,34.5,-69.5,90,960,20,2
+M,2020,1,MAYDAY,2020-05-02 12:00:00,35.0,-69.0,85,965,20,2
+L,2020,2,LATER,2020-08-01 00:00:00,30.0,-60.0,90,960,20,2
+"""
+
+
+def test_bundle_carries_the_storm_track_and_boosts_at_sample_time(tmp_path):
+    from test_sandbox import _fake_sources
+
+    from boatsim.sandbox import forcing as F
+
+    csv_path = tmp_path / "ib.csv"
+    csv_path.write_text(MAY_CSV)
+    era5, glorys, ships = _fake_sources()
+    plain, with_storms = io.BytesIO(), io.BytesIO()
+    quiet = {"log": lambda *_: None, "first": (5, 1), "last": (5, 4)}
+    F.cut(2020, plain, era5, glorys, ships, **quiet)
+    F.cut(2020, with_storms, era5, glorys, ships, storms_csv=csv_path, **quiet)
+    a = F.BundleEnvironment(plain.getvalue())
+    b = F.BundleEnvironment(with_storms.getvalue())
+    assert a.storms is None and SB.boost_bundle(a) is a  # old bundles: unchanged
+    assert [s.name for s in b.storms] == ["MAYDAY"]  # August's storm is outside the window
+    assert len(b.storms[0].t) == 3
+    env = SB.boost_bundle(b)
+    t = datetime(2020, 5, 2, 6)
+    fx = SB.storm_at(b.storms[0], (t - SB._EPOCH).total_seconds())
+    dlon = fx.rmax_km / (111.0 * math.cos(math.radians(fx.lat)))
+    near = env.sample(t, fx.lat, fx.lon + dlon)
+    assert math.hypot(near.wind_u, near.wind_v) > 30.0  # the core is back
+    far = (t, 40.0, -40.0)
+    assert env.sample(*far) == b.sample(*far)
+    assert env.meta == b.meta  # everything else is the bundle's
+    # The pages open bundles through open_bundle, so they get the boost too.
+    from boatsim.sandbox.run import open_bundle
+
+    assert open_bundle(plain.getvalue()).__class__ is F.BundleEnvironment
+    page = open_bundle(with_storms.getvalue())
+    assert isinstance(page, SB.StormBoost)
+    assert page.sample(t, fx.lat, fx.lon + dlon) == near
+
+
+def test_storm_arrays_round_trip(tracks):
+    arrays = SB.storms_to_arrays(tracks.storms)
+    back = SB.storms_from_arrays(arrays)
+    assert [s.name for s in back] == [s.name for s in tracks.storms]
+    assert back[0].t == tracks.storms[0].t
+    assert back[0].lat == pytest.approx(tracks.storms[0].lat)

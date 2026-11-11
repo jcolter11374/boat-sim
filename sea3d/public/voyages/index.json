@@ -5,15 +5,15 @@
    "file": "voyage_2020-04-01.json",
    "boat": "v4 kayak",
    "start": "2020-04-01T12:00",
-   "outcome": "lost",
-   "days": 71.69
+   "outcome": "arrived",
+   "days": 120.68
   },
   {
    "file": "voyage_randolph-rev-b_2020-04-01.json",
    "boat": "Randolph Rev B",
    "start": "2020-04-01T12:00",
-   "outcome": "timeout",
-   "days": 150.0
+   "outcome": "lost",
+   "days": 13.12
   },
   {
    "file": "voyage_randolph-rev-c_2020-04-01.json",
@@ -23,11 +23,25 @@
    "days": 150.0
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-04-01.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-04-01T12:00",
+   "outcome": "aground",
+   "days": 28.58
+  },
+  {
+   "file": "voyage_wind-powered-ocean-drone_2020-04-01.json",
+   "boat": "wind-powered ocean drone",
+   "start": "2020-04-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
    "file": "voyage_2020-04-15.json",
    "boat": "v4 kayak",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 71.4
+   "days": 70.16
   },
   {
    "file": "voyage_randolph-rev-b_2020-04-15.json",
@@ -40,8 +54,22 @@
    "file": "voyage_randolph-rev-c_2020-04-15.json",
    "boat": "Randolph Rev C",
    "start": "2020-04-15T12:00",
-   "outcome": "timeout",
-   "days": 150.0
+   "outcome": "lost",
+   "days": 78.88
+  },
+  {
+   "file": "voyage_31-ft-cruiser_2020-04-15.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-04-15T12:00",
+   "outcome": "arrived",
+   "days": 16.7
+  },
+  {
+   "file": "voyage_wind-powered-ocean-drone_2020-04-15.json",
+   "boat": "wind-powered ocean drone",
+   "start": "2020-04-15T12:00",
+   "outcome": "arrived",
+   "days": 29.39
   },
   {
    "file": "voyage_2020-05-01.json",
@@ -65,6 +93,20 @@
    "days": 150.0
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-05-01.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-05-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
+   "file": "voyage_wind-powered-ocean-drone_2020-05-01.json",
+   "boat": "wind-powered ocean drone",
+   "start": "2020-05-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
+  },
+  {
    "file": "voyage_2020-05-15.json",
    "boat": "v4 kayak",
    "start": "2020-05-15T12:00",
@@ -76,7 +118,7 @@
    "boat": "Randolph Rev B",
    "start": "2020-05-15T12:00",
    "outcome": "lost",
-   "days": 138.47
+   "days": 28.14
   },
   {
    "file": "voyage_randolph-rev-c_2020-05-15.json",
@@ -86,32 +128,60 @@
    "days": 11.92
   },
   {
+   "file": "voyage_31-ft-cruiser_2020-05-15.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-05-15T12:00",
+   "outcome": "arrived",
+   "days": 22.42
+  },
+  {
+   "file": "voyage_wind-powered-ocean-drone_2020-05-15.json",
+   "boat": "wind-powered ocean drone",
+   "start": "2020-05-15T12:00",
+   "outcome": "arrived",
+   "days": 43.32
+  },
+  {
    "file": "voyage_2020-06-01.json",
    "boat": "v4 kayak",
    "start": "2020-06-01T12:00",
    "outcome": "arrived",
-   "days": 74.45
+   "days": 59.76
   },
   {
    "file": "voyage_randolph-rev-b_2020-06-01.json",
    "boat": "Randolph Rev B",
    "start": "2020-06-01T12:00",
    "outcome": "lost",
-   "days": 104.17
+   "days": 73.58
   },
   {
    "file": "voyage_randolph-rev-c_2020-06-01.json",
    "boat": "Randolph Rev C",
    "start": "2020-06-01T12:00",
    "outcome": "lost",
-   "days": 113.35
+   "days": 73.58
+  },
+  {
+   "file": "voyage_31-ft-cruiser_2020-06-01.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-06-01T12:00",
+   "outcome": "lost",
+   "days": 41.78
+  },
+  {
+   "file": "voyage_wind-powered-ocean-drone_2020-06-01.json",
+   "boat": "wind-powered ocean drone",
+   "start": "2020-06-01T12:00",
+   "outcome": "timeout",
+   "days": 150.0
   },
   {
    "file": "voyage_2020-06-15.json",
    "boat": "v4 kayak",
    "start": "2020-06-15T12:00",
    "outcome": "arrived",
-   "days": 63.99
+   "days": 66.67
   },
   {
    "file": "voyage_randolph-rev-b_2020-06-15.json",
@@ -126,6 +196,20 @@
    "start": "2020-06-15T12:00",
    "outcome": "aground",
    "days": 1.88
+  },
+  {
+   "file": "voyage_31-ft-cruiser_2020-06-15.json",
+   "boat": "31 ft cruiser",
+   "start": "2020-06-15T12:00",
+   "outcome": "arrived",
+   "days": 22.07
+  },
+  {
+   "file": "voyage_wind-powered-ocean-drone_2020-06-15.json",
+   "boat": "wind-powered ocean drone",
+   "start": "2020-06-15T12:00",
+   "outcome": "arrived",
+   "days": 37.47
   }
  ]
 }

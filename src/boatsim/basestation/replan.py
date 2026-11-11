@@ -38,6 +38,21 @@ What a person at base would do each morning, written down as a rule:
    counts until it is clear. Without the mask file it falls back to circles
    round the Azores island groups.
 
+8. **Sailing boats (a polar).** A boat with a VPP polar (vessel/keelboat.py)
+   can't hold a line into the wind, so for it each 3-hour step uses the best
+   speed made good along the line from the polar and the forecast wind:
+   sailing at any angle and tacking or gybing as needed, the boat makes
+   max over angles a of polar(a) cos(a - line angle off the wind), with a
+   kept between the tactician's own limits (`min_twa_deg`, `max_twa_deg`:
+   46 and 169 deg for the cruiser, autonomy/sailing.py) on a 1 deg grid.
+   That is what the tactician gets out of it, times `polar_factor`. The
+   polar file is already the autopilot boat's (vpp.py: the certificate's
+   crew taken off, then its autopilot_factor 0.93), so polar_factor is
+   only what base's forecast doesn't see: the real sea and fouling. The
+   current carries it as before; wind drift is already in the polar
+   (leeway), so `windage` isn't added. A motorboat (no polar) is costed
+   exactly as before.
+
 The forecast it reads already contains realistic error (oceandata's Forecast),
 so it can't cheat by seeing the future.
 
@@ -69,6 +84,49 @@ AZORES_KEEP_OUT: tuple[tuple[float, float, float], ...] = (
     (37.78, -25.50, 55_000.0),  # Sao Miguel
     (36.97, -25.10, 30_000.0),  # Santa Maria
 )
+
+
+def vmc_ms(
+    polar,
+    line_deg: float,
+    wind_u: float,
+    wind_v: float,
+    factor: float = 1.0,
+    min_twa_deg: float = 0.0,
+    max_twa_deg: float = 180.0,
+) -> float:
+    """Best speed (m/s) a sailing boat makes good along a line on `line_deg`,
+    in true wind (wind_u, wind_v): the best of every angle to the wind from
+    min_twa_deg to max_twa_deg (1 deg grid), tacking or gybing on both sides
+    so the sideways parts cancel. Never negative (a boat that can't gain just
+    holds on)."""
+    tws = math.hypot(wind_u, wind_v)
+    if tws <= 0.0:
+        return 0.0
+    return (
+        factor
+        * vmc_table(polar, tws, min_twa_deg, max_twa_deg)[
+            round(_off_wind(line_deg, wind_u, wind_v))
+        ]
+    )
+
+
+def _off_wind(line_deg: float, wind_u: float, wind_v: float) -> float:
+    """The line's angle off the wind, 0 (straight into it) to 180 deg."""
+    wind_from = math.degrees(math.atan2(-wind_u, -wind_v)) % 360.0
+    return abs((line_deg - wind_from + 180.0) % 360.0 - 180.0)
+
+
+def vmc_table(polar, tws: float, min_twa_deg: float, max_twa_deg: float) -> list[float]:
+    """Best speed made good (m/s) for a line 0, 1, ... 180 deg off the wind."""
+    lo, hi = max(math.ceil(min_twa_deg), 1), min(math.floor(max_twa_deg), 180)
+    angles = range(lo, hi + 1)
+    v = [polar.speed_ms(tws, float(a)) for a in angles]
+    cos = [math.cos(math.radians(d)) for d in range(181)]
+    return [
+        max([0.0, *(s * cos[abs(a - off)] for a, s in zip(angles, v, strict=True))])
+        for off in range(181)
+    ]
 
 
 def _ground_velocity(heading_deg: float, speed: float, ce: float, cn: float) -> tuple[float, float]:
@@ -108,6 +166,15 @@ class ForecastReplanPolicy:
     # 5 km waypoint radius.
     land_margin_m: float = 20_000.0
     land: object = "default"  # a runner.land.LandMask, "default" (the committed one) or None
+    # A sailing boat's VPP polar (anything with speed_ms(tws_ms, twa_deg)), or
+    # None for a motorboat. See rule 8 in the module doc.
+    polar: object = None
+    # GUESS: relative to the polar FILE, which is already the autopilot boat's
+    # (0.93 x the crewed certificate), so this only covers waves and fouling.
+    polar_factor: float = 0.9
+    min_twa_deg: float = 0.0  # the tactician's limits (autonomy/sailing.py)
+    max_twa_deg: float = 180.0
+    _vmc: dict = field(default_factory=dict, repr=False)  # tables by wind (0.25 m/s bins)
     sent: list[tuple[datetime, Mission]] = field(default_factory=list)  # route changes
     acks: list[datetime] = field(default_factory=list)
     _current: list[Waypoint] | None = None
@@ -119,6 +186,8 @@ class ForecastReplanPolicy:
         return ahead or [self.route[-1]]
 
     def _speed(self, soc: float) -> float:
+        if self.polar is not None:
+            return self.boat_speed  # the wind drives a sailing boat, not the battery
         # Safe mode (autonomy/safemode.py) runs at 60% power below 50% charge;
         # speed goes roughly with the cube root of power. GUESS.
         return self.boat_speed * (0.6 ** (1 / 3) if soc < self.low_soc else 1.0)
@@ -225,13 +294,30 @@ class ForecastReplanPolicy:
             if distance_m(lat, lon, wp.lat, wp.lon) < speed * secs:
                 break
             env = forecast.sample(t, lat, lon)
-            ce = env.current_u + self.windage * env.wind_u
-            cn = env.current_v + self.windage * env.wind_v
-            ve, vn = _ground_velocity(bearing_deg(lat, lon, wp.lat, wp.lon), speed, ce, cn)
+            line = bearing_deg(lat, lon, wp.lat, wp.lon)
+            if self.polar is None:
+                ce = env.current_u + self.windage * env.wind_u
+                cn = env.current_v + self.windage * env.wind_v
+                ve, vn = _ground_velocity(line, speed, ce, cn)
+            else:
+                v = self._vmc_ms(line, env.wind_u, env.wind_v)
+                ve, vn = _ground_velocity(line, v, env.current_u, env.current_v)
             lat, lon = move(lat, lon, ve * secs, vn * secs)
             path.append((lat, lon))
             t += self.step
         return path
+
+    def _vmc_ms(self, line_deg: float, wind_u: float, wind_v: float) -> float:
+        """vmc_ms with this policy's limits, from tables cached by wind speed."""
+        key = round(math.hypot(wind_u, wind_v) * 4)
+        if key <= 0:
+            return 0.0
+        table = self._vmc.get(key)
+        if table is None:
+            table = self._vmc[key] = vmc_table(
+                self.polar, key / 4, self.min_twa_deg, self.max_twa_deg
+            )
+        return self.polar_factor * table[round(_off_wind(line_deg, wind_u, wind_v))]
 
     # -------------------------------------------------------------- interface
 

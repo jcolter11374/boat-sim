@@ -39,6 +39,12 @@ class Command:
 
     heading: float  # deg, desired heading through the water
     thrust_fraction: float  # 0..1 of max thruster power
+    # Keelboats only (vessel/keelboat.py): None = the boat picks (auto reefing);
+    # or a sail plan name from its polar ("full", "reef1", "reef2", "storm", "down").
+    sail_plan: str | None = None
+    # Keelboats only: None = auto (motor in calms when thrust_fraction > 0),
+    # True = engine on at thrust_fraction, False = off.
+    engine: bool | None = None
 
 
 @dataclass
@@ -77,6 +83,10 @@ class Sensors:
     thrusters_ok: int | None = (
         None  # working thrusters, from motor-controller current; None = unknown
     )
+    # Masthead wind vane, sailboats only (None on boats without one): where the
+    # wind comes from (deg) and its speed (m/s), relative to the water.
+    wind_from_deg: float | None = None
+    wind_speed_ms: float | None = None
 
 
 @dataclass(frozen=True)

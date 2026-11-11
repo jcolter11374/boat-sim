@@ -31,9 +31,21 @@ PROFILE = "holland" uses Holland (1980, Mon. Wea. Rev. 108, 1212-1218) in
 its cyclostrophic form instead, V = Vs sqrt((Rmax/r)^B exp(1 - (Rmax/r)^B)),
 B = rho e Vmax^2 / dp clipped to 1-2.5. It was the first choice, but the
 buoy check (PR #215) found it far too broad: +12 m/s at 1-2 Rmax.
-Blend: weight 1 inside 1 Rmax, falling linearly to 0 at 2 Rmax (the buoys
-say ERA5 is already about right beyond 2 Rmax); the result is never weaker
-than ERA5's own wind at that point.
+Peak: PEAK (0.9) x that 10-minute wind. ERA5's hourly wind and the buoys'
+8-minute means are closer to an hourly mean than to a 10-minute peak, and
+buoys in big seas read low (their mast sits in the wave troughs).
+Blend: weight 1 inside 1 Rmax, falling linearly to 0 at 1.5 Rmax; the result
+is never weaker than ERA5's own wind at that point.
+Buoy check, round 2 (run 42965007818; Dorian 2019 and Paulette 2020, wind
+RMS error in m/s, bias in brackets; 10 and 20 buoy hours in the two inner
+bands, so a small sample from mostly one storm):
+    band (Rmax)        0-1           1-2           2-3          3-6
+    ERA5           10.9 (-8.4)    4.2 (-2.6)    2.7 (+1.0)   1.7 (0.0)
+    round 1         8.5 (+4.9)    4.5 (+2.8)    same as ERA5 beyond 2
+    this shape      6.7 (+2.2)    3.3 (-0.7)    same as ERA5 beyond 1.5
+A smaller core (0.8 or 0.65 x Rmax) made 0-1 Rmax worse at every peak. A
+peak of 0.8 scored best in-sample (5.9, 3.3) but 0.9 has the physical
+reason above and is less tuned to ten hours of one storm.
 
 Waves. Young (1988, J. Waterway Port Coastal Ocean Eng. 114(5), 637-652,
 doi:10.1061/(ASCE)0733-950X(1988)114:5(637)) "equivalent fetch" model, as
@@ -78,7 +90,8 @@ B_DEFAULT = 1.3  # GUESS: when the pressure is missing or the drop is tiny
 B_MIN, B_MAX = 1.0, 2.5  # Holland's range for real storms
 INFLOW_DEG = 20.0  # GUESS: typical surface inflow angle (about 20-25 deg over sea)
 MOTION_SHARE = 0.55  # GUESS: share of the storm's motion added to its winds
-INNER, OUTER = 1.0, 2.0  # blend: full vortex inside 1 Rmax, ERA5 beyond 2 Rmax
+INNER, OUTER = 1.0, 1.5  # blend: full vortex inside 1 Rmax, ERA5 beyond 1.5 Rmax
+PEAK = 0.9  # x the 10-minute best-track wind (buoy check, round 2: see the module doc)
 PROFILE = "rankine"  # or "holland" (too broad on the buoys, see above)
 DECAY = 0.6  # GUESS: Rankine fall-off beyond Rmax
 BOOST_WAVES = False  # see the module doc
@@ -230,25 +243,49 @@ class Boost:
     tp: float
 
 
-def vortex(fx: Fix, lat: float, lon: float) -> Boost | None:
-    """The parametric storm's wind and waves at (lat, lon), or None beyond OUTER Rmax."""
+@dataclass(frozen=True)
+class Shape:
+    """The knobs the buoy check sweeps (module constants are the defaults)."""
+
+    core: float = 1.0  # vortex Rmax = core x best-track Rmax
+    inner: float = 1.0  # full vortex inside inner x best-track Rmax
+    outer: float = 2.0  # ERA5 alone beyond outer x best-track Rmax
+    peak: float = 1.0  # x the 10-minute best-track wind
+
+
+SHAPE = Shape(inner=INNER, outer=OUTER, peak=PEAK)
+# Shapes the buoy check also scores (round 2, Maya: smaller core, blend inside
+# 1.5 Rmax, no worse than ERA5 in any band). Names: c<core>_o<outer>_p<peak>.
+SWEEP = {
+    f"c{c:g}_o{o:g}_p{pk:g}": Shape(core=c, inner=1.0, outer=o, peak=pk)
+    for c in (1.0, 0.8, 0.65)
+    for o in (2.0, 1.5)
+    for pk in (1.0, 0.9, 0.8)
+}
+
+
+def vortex(fx: Fix, lat: float, lon: float, shape: Shape | None = None) -> Boost | None:
+    """The parametric storm's wind and waves at (lat, lon), or None beyond OUTER Rmax.
+    Default shape SHAPE; the buoy check passes others (SWEEP)."""
+    sh = shape or SHAPE
     dy = (lat - fx.lat) * 111.0
     dx = (lon - fx.lon) * 111.0 * math.cos(math.radians(fx.lat))
     r = math.hypot(dx, dy)
-    if r >= OUTER * fx.rmax_km:
+    if r >= sh.outer * fx.rmax_km:
         return None
-    w = 1.0 if r <= INNER * fx.rmax_km else (OUTER - r / fx.rmax_km) / (OUTER - INNER)
+    w = 1.0 if r <= sh.inner * fx.rmax_km else (sh.outer - r / fx.rmax_km) / (sh.outer - sh.inner)
     r = max(r, 0.5)
+    rmax = sh.core * fx.rmax_km
     c = math.hypot(fx.cu, fx.cv)
     v10max = ONE_TO_TEN_MIN * fx.vmax
-    vs = max(v10max - MOTION_SHARE * c, 0.0)
+    vs = max(sh.peak * v10max - MOTION_SHARE * c, 0.0)
     if PROFILE == "holland":
-        x = (fx.rmax_km / r) ** fx.b
+        x = (rmax / r) ** fx.b
         speed = vs * math.sqrt(x * math.exp(1.0 - x))
-    elif r <= fx.rmax_km:
-        speed = vs * r / fx.rmax_km
+    elif r <= rmax:
+        speed = vs * r / rmax
     else:
-        speed = vs * (fx.rmax_km / r) ** DECAY
+        speed = vs * (rmax / r) ** DECAY
     # Northern hemisphere: anticlockwise, spiralling in by the inflow angle.
     a = math.radians(INFLOW_DEG)
     tu, tv = -dy / r, dx / r  # tangential (anticlockwise)
@@ -283,7 +320,9 @@ class StormTracks:
     def from_csv(cls, csv_path=DEFAULT_TRACKS, first_year: int = 1980, last_year: int = 2100):
         return cls(load_storms(csv_path, first_year, last_year))
 
-    def boost(self, t: datetime, lat: float, lon: float) -> Boost | None:
+    def boost(
+        self, t: datetime, lat: float, lon: float, shape: Shape | None = None
+    ) -> Boost | None:
         """The strongest-weighted storm's boost at (t, lat, lon), or None."""
         secs = (t.replace(tzinfo=None) - _EPOCH).total_seconds()
         best = None
@@ -291,7 +330,7 @@ class StormTracks:
             fx = storm_at(s, secs)
             if fx is None:
                 continue
-            b = vortex(fx, lat, lon)
+            b = vortex(fx, lat, lon, shape)
             if b is not None and (best is None or b.weight > best.weight):
                 best = b
         return best
@@ -354,6 +393,66 @@ def default_storm_tracks(path=DEFAULT_TRACKS) -> StormTracks:
     return _TRACKS[key]
 
 
+# ------------------------------------------- storm tracks in forcing bundles
+# A browser bundle is 1 degree every 6 hours, far too coarse to hold a core
+# about 40 km across, so the bundle carries each storm's best-track fixes
+# instead (a few hundred numbers) and the vortex is computed at sample time,
+# exactly as here (agreed with Priya, 11 Nov 2026).
+TRACK_KEYS = ("storm_t", "storm_lat", "storm_lon", "storm_vmax", "storm_pres", "storm_rmw")
+WINDOW_PAD_S = 86400.0  # keep fixes up to a day either side of the window
+
+
+def storms_in_window(csv_path, start: datetime, end: datetime) -> list[Storm]:
+    """Storms with a tropical-storm-strength fix between start and end (plus a
+    day's pad), trimmed to those fixes."""
+    t0 = (start - _EPOCH).total_seconds() - WINDOW_PAD_S
+    t1 = (end - _EPOCH).total_seconds() + WINDOW_PAD_S
+    out = []
+    for s in load_storms(csv_path, start.year, end.year):
+        keep = [i for i, t in enumerate(s.t) if t0 <= t <= t1]
+        if keep:
+            cols = ("t", "lat", "lon", "vmax", "pres", "rmw")
+            out.append(Storm(s.sid, s.name, *([getattr(s, c)[i] for i in keep] for c in cols)))
+    return out
+
+
+def storms_to_arrays(storms: list[Storm]) -> dict:
+    """Flat arrays for an npz: one row per fix, storm_index says whose it is.
+    Times are int64 seconds since 1970, like the bundle's t_weather."""
+    import numpy as np
+
+    idx = [k for k, s in enumerate(storms) for _ in s.t]
+    out = {
+        "storm_index": np.array(idx, dtype=np.int32),
+        "storm_names": np.array([f"{s.sid}|{s.name}" for s in storms], dtype=str),
+        "storm_t": np.array([t for s in storms for t in s.t], dtype=np.int64),
+    }
+    for key in TRACK_KEYS[1:]:
+        col = key[6:]
+        out[key] = np.array([v for s in storms for v in getattr(s, col)], dtype=np.float32)
+    return out
+
+
+def storms_from_arrays(z) -> list[Storm]:
+    """The inverse of storms_to_arrays (z: an open npz or a dict)."""
+    names = [str(n) for n in z["storm_names"]]
+    idx = [int(i) for i in z["storm_index"]]
+    cols = {k: [float(v) for v in z[k]] for k in TRACK_KEYS}
+    storms = []
+    for k, label in enumerate(names):
+        sid, _, name = label.partition("|")
+        rows = [i for i, j in enumerate(idx) if j == k]
+        storms.append(Storm(sid, name, *([cols[key][i] for i in rows] for key in TRACK_KEYS)))
+    return storms
+
+
+def boost_bundle(env):
+    """A bundle environment with its own storm tracks put back in (StormBoost),
+    or the environment unchanged if it carries none."""
+    storms = getattr(env, "storms", None)
+    return StormBoost(env, StormTracks(storms)) if storms else env
+
+
 # ------------------------------------------------- check against NDBC buoys
 
 CASES = {
@@ -385,6 +484,11 @@ def pair_case(storm: Storm, buoy_hours, src, lat: float, lon: float, station: st
         r = math.hypot(dx, dy)
         e = _sample(src, t, lat, lon)
         b = apply(e, tracks.boost(t, lat, lon))
+        sweep = {
+            f"sweep_{k}_ws10": math.hypot(bb.wind_u, bb.wind_v)
+            for k, sh in SWEEP.items()
+            for bb in [apply(e, tracks.boost(t, lat, lon, sh))]
+        }
         rows.append(
             {
                 "station": station,
@@ -399,6 +503,7 @@ def pair_case(storm: Storm, buoy_hours, src, lat: float, lon: float, station: st
                 "buoy_hs": hs,
                 "era5_hs": e.hs,
                 "boost_hs": b.hs,
+                **sweep,
             }
         )
     return rows
@@ -437,6 +542,17 @@ def summarise_check(rows: list[dict], log=print) -> list[dict]:
                 f"{lo:g}-{hi:g} Rmax  {what:4s} {n:4d}  {eb:+6.2f} / {er:5.2f} {unit:3s}"
                 f"   {bb:+6.2f} / {br:5.2f} {unit}"
             )
+    sweep_keys = [k for k in SWEEP if rows and f"sweep_{k}_ws10" in rows[0]]
+    if sweep_keys:
+        log("wind RMS (bias) by band for other shapes; ERA5 first:")
+        log("shape" + "".join(f"  {lo:g}-{hi:g} Rmax     " for lo, hi in BANDS))
+        for name, col in [("ERA5", "era5_ws10")] + [(k, f"sweep_{k}_ws10") for k in sweep_keys]:
+            cells = []
+            for lo, hi in BANDS:
+                band = [r for r in rows if lo <= r["dist_rmax"] < hi]
+                _, b, rms = _bias_rms([r["buoy_ws10"] for r in band], [r[col] for r in band])
+                cells.append(f"  {rms:5.2f} ({b:+5.2f})  ")
+            log(f"{name:5s}" + "".join(cells))
     for st in sorted({r["station"] for r in rows}):
         s = [r for r in rows if r["station"] == st]
 

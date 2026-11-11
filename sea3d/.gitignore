@@ -3,6 +3,9 @@ dist/
 test-output/
 public/models/
 public/sandbox/
+public/version.json
 public/seastate/
 public/land/
 public/forecast/
+public/challenges/
+public/leaderboard/

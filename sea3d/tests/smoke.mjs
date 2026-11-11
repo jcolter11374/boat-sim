@@ -22,7 +22,17 @@ try {
     await new Promise((r) => setTimeout(r, 200));
   }
   const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  // Thread sandboxes can't reach the Pyodide CDN: PYODIDE_DIR=<unpacked pyodide release>
+  // serves it from disk (CI reaches the CDN and leaves this unset).
+  if (process.env.PYODIDE_DIR) {
+    await context.route("https://cdn.jsdelivr.net/pyodide/v0.27.7/full/**", (route) => {
+      const name = new globalThis.URL(route.request().url()).pathname.split("/").pop();
+      const type = name.endsWith(".mjs") || name.endsWith(".js") ? "text/javascript" : name.endsWith(".wasm") ? "application/wasm" : name.endsWith(".json") ? "application/json" : "application/octet-stream";
+      route.fulfill({ body: readFileSync(`${process.env.PYODIDE_DIR}/${name}`), contentType: type, headers: { "access-control-allow-origin": "*" } });
+    });
+  }
+  const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   // Low quality throughout: CI draws with software graphics at about one frame a
@@ -236,13 +246,26 @@ try {
   log.push(`game ${game.beats.join("/")} -> ${game.result}`);
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 
-  // Weather: rain and a wet hull in the wettest hour of the log (hour 573, 7 mm/h of ERA5 rain in
-  // 5 m seas), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
+  // Weather: rain and a wet hull in the wettest hour of the log (found from the file, since the
+  // track and so the weather it meets change whenever the autopilot does; about 7 mm/h of ERA5
+  // rain), dry and clear on day 2. Rain follows the logged rain column since #172/#175.
   await page.goto(`${URL}voyage.html?voyage=voyage_2020-04-01.json&quality=low`);
   await page.waitForFunction(() => window.__replay?.ready, null, { timeout: 60000 });
-  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(573); });
+  // Points of interest: the card for the Bay mouth is up at the drop, with an https source link.
+  await page.waitForFunction(() => window.__replay.pois.shown.includes("cape-henry") && document.querySelector(".poi-card a"), null, { timeout: 30000 })
+    .catch(async () => fail(`no point-of-interest card at the drop: ${JSON.stringify(await page.evaluate(() => window.__replay.pois))}`));
+  const poiLink = await page.evaluate(() => document.querySelector(".poi-card a").href);
+  if (!poiLink.startsWith("https://")) fail(`point-of-interest link isn't https: ${poiLink}`);
+  log.push(`points of interest: ${await page.evaluate(() => window.__replay.pois.shown.join("/"))}`);
+  const wettest = await page.evaluate(async () => {
+    const r = await (await fetch("voyages/voyage_2020-04-01.json")).json();
+    let i = 0;
+    r.rain.forEach((v, k) => { if ((v ?? 0) > (r.rain[i] ?? 0)) i = k; });
+    return Math.floor(r.h[i]);
+  });
+  await page.evaluate((h) => { window.__replay.pause(); window.__replay.setHour(h); }, wettest);
   await page.waitForFunction(() => window.__replay.rain > 0.5 && window.__replay.wet > 0.5, null, { timeout: 30000 })
-    .catch(async () => fail(`no rain in the blow: ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
+    .catch(async () => fail(`no rain in the blow (hour ${wettest}): ${JSON.stringify(await page.evaluate(() => [window.__replay.rain, window.__replay.wet]))}`));
   await page.evaluate(() => window.__replay.setHour(30));
   await page.waitForFunction(() => window.__replay.rain < 0.05, null, { timeout: 30000 }).catch(() => fail("rain on a calm day"));
   log.push("rain in the blow, dry on a calm day");
@@ -289,6 +312,20 @@ try {
   await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
   const y2 = await page.evaluate(() => window.__yard.design.picks);
   if (y2.thr !== "one-t200" || y2.bat !== "two-100ah") fail(`boatyard link didn't reopen the design: ${JSON.stringify(y2)}`);
+  // My boat: save this design under a name, and the Boatyard remembers it and links back to it.
+  await page.fill("#mb-name", "Test <b>boat</b>");
+  await page.click("#mb-save");
+  const mb = await page.evaluate(() => ({ stored: JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"), btn: document.getElementById("mb-save").textContent }));
+  if (mb.stored?.hash !== y1.share || mb.stored?.name !== "Test <b>boat</b>" || mb.stored?.choices?.thr !== "one-t200" || mb.btn !== "Saved")
+    fail(`boatyard: saving my boat: ${JSON.stringify(mb)}`);
+  await page.goto(`${URL}boatyard.html?quality=low&mine=1`);
+  await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
+  const mb2 = await page.evaluate(() => ({ line: document.getElementById("mb-line").textContent, href: document.querySelector("#mb-line a")?.getAttribute("href"), tags: document.querySelectorAll("#mb-line b").length }));
+  if (!mb2.line.includes("Test <b>boat</b>") || mb2.href !== `boatyard.html${y1.share}` || mb2.tags) fail(`boatyard: my boat line: ${JSON.stringify(mb2)}`);
+  // On the live site the link only changes the hash (no query), and the page opens the design in place.
+  await page.evaluate((h) => (location.hash = h), y1.share);
+  await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 10000 }).catch(() => fail("boatyard: the my-boat link didn't reopen it"));
+  await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
   // Every choice looks different on the boat (spares stay ashore; one-option slots have nothing to swap).
   const looks = await page.evaluate(() => {
     const y = window.__yard;
@@ -355,23 +392,309 @@ try {
   await page.evaluate(() => window.__yard.setBase("kayak"));
   if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
   log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
+  // Cinematic mode: the panels fade, the camera cuts between shots of what is
+  // happening now (it never moves the voyage clock), and any key ends it.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 });
+  await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(150); });
+  await page.click("#cinebtn");
+  await page.waitForFunction(() => window.__replay.cine.on && getComputedStyle(document.getElementById("credits")).opacity === "0", null, { timeout: 30000 })
+    .catch(() => fail("cinematic: the panels and credits didn't fade"));
+  const shots = [];
+  for (const k of ["skim", "sunset", "drone"]) {
+    await page.evaluate((k) => window.__replay.cine.cut(k), k);
+    const f = await page.evaluate(() => window.__replay.frames);
+    await page.waitForFunction((n) => window.__replay.frames > n + 3, f, { timeout: 30000 });
+    shots.push(await page.evaluate(() => `${window.__replay.cine.current}@${window.__replay.hour.toFixed(1)}`));
+  }
+  if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
+    .catch(() => fail("cinematic: a key didn't bring the panels back"));
+  const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
+  if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);
+  if (errors.length) fail(`page errors in cinematic mode: ${errors.join("; ")}`);
+  log.push(`cinematic: ${shots.join(", ")}, ${back.sound}`);
+
+  // Off Pico: real land when the land files are there (the Pages build fetches them), sea only otherwise.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&place=pico&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.land !== undefined, null, { timeout: 120000 })
+    .catch(async () => fail(`Pico didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const pico = await page.evaluate(() => ({ land: window.__replay.land, surf: window.__replay.surf, credit: /Sentinel/.test(document.getElementById("credits").textContent) }));
+  if (!pico.credit) fail("Pico: no Sentinel credit on the page");
+  if (pico.land && !(pico.surf > 1000)) fail(`Pico: land but no surf (${pico.surf})`);
+  if (errors.length) fail(`page errors off Pico: ${errors.join("; ")}`);
+  log.push(pico.land ? `Pico: land, ${pico.surf} surf triangles` : "Pico: no land files, sea only");
+
+  // Annapolis: the town stands on the land, and its waterfront lights reach the water.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&place=annapolis&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.land !== undefined, null, { timeout: 120000 })
+    .catch(async () => fail(`Annapolis didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+  const ann = await page.evaluate(() => ({ land: window.__replay.land, town: window.__replay.town, trees: window.__replay.trees, mirror: window.__replay.mirror, credit: /ODbL/.test(document.getElementById("credits").textContent) }));
+  // The page reports how strongly the sea mirrors the town and the boat (mirror.ts).
+  if (!(ann.mirror >= 0 && ann.mirror <= 1)) fail(`Annapolis: no mirror strength (${ann.mirror})`);
+  if (!ann.credit) fail("Annapolis: no ODbL credit on the page");
+  if (ann.town && !(ann.town.buildings > 1000 && ann.town.lights > 100 && ann.town.moorings > 10)) fail(`Annapolis: a thin town ${JSON.stringify(ann.town)}`);
+  if (errors.length) fail(`page errors off Annapolis: ${errors.join("; ")}`);
+  log.push(
+    ann.town ? `Annapolis: ${ann.town.buildings} buildings, ${ann.town.lights} lights on the water, ${ann.town.moorings} moorings, ${ann.trees} trees, mirror ${ann.mirror.toFixed(2)}, land ${ann.land}` : "Annapolis: no town files",
+  );
+
+  // A stock boat: the cruiser's voyage, when the replays have one. It leans by the
+  // replay's heel, and its sails follow the logged sail plan and the wind.
+  const cruiser = await page.evaluate(async () => {
+    const idx = await (await fetch("./voyages/index.json")).json();
+    return idx.voyages.find((v) => /cruiser/i.test(v.boat))?.file ?? null;
+  });
+  if (cruiser) {
+    await page.goto(`${URL}voyage.html?voyage=${cruiser}&quality=low`);
+    await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2 && window.__replay.rig, null, { timeout: 120000 })
+      .catch(async () => fail(`stock cruiser didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
+    await page.evaluate(() => window.__replay.setHour(30));
+    await page.waitForTimeout(3000);
+    const st = await page.evaluate(() => ({ boats: window.__replay.boats, rig: window.__replay.rig, menu: [...document.getElementById("boat").options].map((o) => o.value) }));
+    if (!/cruiser/i.test(st.boats.join())) fail(`stock cruiser: the page shows ${st.boats}`);
+    if (!st.menu.includes("stock_cruiser31")) fail("stock cruiser: not in the boat menu");
+    if (typeof st.rig.plan !== "string" || !Number.isFinite(st.rig.heel)) fail(`stock cruiser: no rig (${JSON.stringify(st.rig)})`);
+    if (st.rig.plan === "down" ? st.rig.main !== 0 : !(st.rig.main > 0)) fail(`stock cruiser: sails don't match the plan (${JSON.stringify(st.rig)})`);
+    if (errors.length) fail(`page errors with the stock cruiser: ${errors.join("; ")}`);
+    log.push(`stock cruiser: ${st.rig.plan}, heel ${st.rig.heel.toFixed(1)}`);
+  } else log.push("stock cruiser: no replay yet");
+
+  // Take the helm near land: off Cascais, the Lisbon coast loads and the view reaches out to it.
+  await page.goto(`${URL}helm.html?quality=low&spot=38.668,-9.42`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.landKnown >= 0, null, { timeout: 60000 });
+  if (await page.evaluate(() => window.__helm.landKnown > 0)) {
+    await page.waitForFunction(() => window.__helm.land.place === "lisbon" && window.__helm.reach > 50000, null, { timeout: 120000 })
+      .catch(async () => fail(`helm: no Lisbon land off Cascais (${await page.evaluate(() => JSON.stringify({ land: window.__helm.land, reach: window.__helm.reach }))})`));
+    if (!(await page.evaluate(() => /Sentinel/.test(document.getElementById("landcredit").textContent)))) fail("helm: no land credit off Cascais");
+    if (errors.length) fail(`page errors at the helm off Cascais: ${errors.join("; ")}`);
+    log.push(`helm near land: ${await page.evaluate(() => JSON.stringify(window.__helm.land))}`);
+  } else log.push("helm near land: no land files");
+  // Other ships, from the traffic map: plenty in the English Channel, and no page errors.
+  await page.goto(`${URL}helm.html?quality=low&spot=50.0,-2.0`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ships.ships > 0, null, { timeout: 60000 })
+    .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
+  if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
+  log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+  // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
+  await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
+  await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });
+  await page.evaluate(() => (window.__replay.force.wind = 30)); // force 11
+  await page.waitForTimeout(3000);
+  const gale = await page.evaluate(() => ({ spray: window.__replay.spindrift, bands: window.__replay.bands, frames: window.__replay.frames }));
+  const stars = await page.evaluate(() => window.__replay.stars);
+  if (!(stars > 9000)) fail(`night sky: ${stars} catalogue stars (stars.bin not loaded?)`);
+  if (!(gale.spray > 0.9)) fail(`storm: no spindrift in force 11 (${JSON.stringify(gale)})`);
+  if (!Number.isFinite(gale.bands)) fail(`storm: no rain-band count (${JSON.stringify(gale)})`);
+  if (errors.length) fail(`page errors in a storm: ${errors.join("; ")}`);
+  log.push(`storm: spindrift ${gale.spray.toFixed(2)}, ${gale.bands} rain bands in view`);
+
+  // The start panel fits every window: on a short laptop screen and on a phone either
+  // way up, "Take the helm" can be scrolled to and clicked (a trial click: Playwright's
+  // own checks that the button is visible, in the window and not covered).
+  for (const [w, h] of [[960, 540], [390, 844], [844, 390]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 0, null, { timeout: 60000 });
+    await page.click("#go", { trial: true, timeout: 15000 }).catch(() => fail(`helm at ${w}x${h}: "Take the helm" can't be clicked`));
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  log.push("helm start panel reachable at 960x540, 390x844, 844x390");
+
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
   await page.goto(`${URL}helm.html?quality=low`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
+  const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
+  if (picks.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
+  // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
+  await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
+    .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));
+  if (!(await page.locator('#port option[value="baltimore"]').count())) fail("port picker has no Baltimore");
+  log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);
+  // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
+  // so a whole game fits in the smoke test.
+  await page.selectOption("#launch", "2");
   await page.click("#go");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
   const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   if (hm.ready) {
     await page.click("#s6");
     await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
-    const day = await page.evaluate(() => window.__helm.status?.day);
-    if (!(Math.abs(day - 0.25) < 0.01) || (await page.evaluate(() => window.__helm.error))) fail(`helm: 6 hours sailed to day ${day}`);
+    // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
+    // hits the same stops): then it must be a known reason, before hour 6.
+    const six = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error }));
+    const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
+    if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
+    if (await page.evaluate(() => !document.getElementById("sailrow").hidden)) fail("helm: sail and engine buttons show for the kayak");
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
-    log.push(`helm sailed 6 h, ${local}`);
+    // Ravi's gates in the page: the ghost never ahead of the player's clock, every
+    // stop a known reason, and the game ends in a results card that follows the draw rule.
+    const STOPS = ["time", "battery", "wind", "land", "breakdown", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"];
+    const ahead = (s) => s && s.ghost.t > s.boat.t; // ISO minutes, same zone: string order is time order
+    let st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop }));
+    if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
+    let hops = 0;
+    for (; hops < 40 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+      await page.click("#sevent");
+      await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
+      st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
+      if (st.err) fail(`helm hop ${hops}: ${st.err}`);
+      if (!STOPS.includes(st.stop)) fail(`helm hop ${hops}: unknown stop ${JSON.stringify(st.stop)}`);
+      if (ahead(st.s)) fail(`helm hop ${hops}: the ghost is ahead of the player's clock (${st.s.ghost.t} > ${st.s.boat.t})`);
+      if (st.stop === "over") await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 240000 });
+    }
+    const card = await page.evaluate(() => window.__helm.card);
+    if (!card) fail(`helm: no results card after ${hops} hops of "until something happens"`);
+    if (!["won", "lost", "draw", "neither_finished"].includes(card.verdict)) fail(`helm card verdict ${card.verdict}`);
+    const both = card.boat.outcome === "arrived" && card.ghost.outcome === "arrived";
+    if (both !== (card.margin_days !== null)) fail(`helm card: margin ${card.margin_days} with outcomes ${card.boat.outcome}/${card.ghost.outcome}`);
+    if (both && (Math.abs(card.margin_days) < 1) !== (card.verdict === "draw")) fail(`helm card: draw rule broken (${card.margin_days} d, ${card.verdict})`);
+    if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
+    // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
+    await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
+    const next = await page.evaluate(() => ({ head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-next .next a")].map((a) => a.getAttribute("href")) }));
+    if (!next.head || next.links.length !== 3 || !next.links[2].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
+    await page.screenshot({ path: "test-output/helm-result.png" });
+    log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
+    // Start from a port (John hit "can't start from a port yet" when the page
+    // got ahead of its simulator): the packed simulator must take the port.
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ports >= 20, null, { timeout: 60000 });
+    await page.selectOption("#port", "baltimore");
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    const fromPort = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
+    if (!fromPort.ready || fromPort.err) fail(`helm: can't start from Baltimore: ${JSON.stringify(fromPort)}`);
+    log.push("helm started from Baltimore");
+    // My boat: a Boatyard design saved in this browser is ticked on the start card (its name as text), and the game sails it.
+    await page.evaluate(() => localStorage.setItem("boatsim.myboat.v1", JSON.stringify({ v: 1, kind: "yard", base: "revc", hash: "#base=revc&rudder=single", name: "Test <i>Rev C</i>", choices: { base: "revc", rudder: "single", cruise_w: 25 }, saved: "2026-11-11T00:00:00.000Z" })));
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+    const mineRow = await page.evaluate(() => {
+      const r = document.querySelector('input[name="boat"]:checked');
+      return { v: r?.value, text: r?.parentElement.textContent, tags: r?.parentElement.querySelectorAll("i").length };
+    });
+    if (mineRow.v !== "mine" || !mineRow.text.includes("Test <i>Rev C</i>") || mineRow.tags) fail(`helm: my boat isn't offered first: ${JSON.stringify(mineRow)}`);
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, msg: document.querySelector("#startmsg").textContent }));
+    if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
+    // Picking another boat on the start card makes it my boat, for the other pages.
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+    await page.check('input[name="boat"][value="stock_cruiser31"]');
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"));
+    if (saved?.kind !== "stock" || saved.base !== "stock_cruiser31" || saved.choices.base !== "stock_cruiser31") fail(`helm: the boat sailed didn't become my boat: ${JSON.stringify(saved)}`);
+    await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
+    log.push("helm sailed my boat (Rev C design), and the cruiser became my boat");
   } else {
     if (!["no simulator files", "no helm in the simulator"].includes(hm.err) || !/published/.test(hm.msg)) fail(`helm start: ${JSON.stringify(hm)}`);
     log.push("helm: no simulator files, says so");
+  }
+  // Weather challenges start live: with the challenge files
+  // published, pick the first one with its own weather bundle from the picker and
+  // sail 6 hours on it. Without the files the picker stays hidden, and that's fine.
+  await page.goto(`${URL}helm.html?quality=low`);
+  await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  const chFile = await page.evaluate(async () => {
+    try {
+      const r = await fetch("./challenges/challenges.json");
+      if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return null;
+      return (await r.json()).challenges.find((c) => !c.season) ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const chPicker = await page.evaluate(() => !document.getElementById("chpick").hidden);
+  if (!chFile) {
+    if (chPicker) fail("helm: a challenge picker without challenges.json");
+    log.push("helm challenges: no challenge files, picker hidden");
+  } else if (!hm.ready) {
+    log.push(`helm challenges: files there but no simulator (${hm.err})`);
+  } else {
+    if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
+    await page.selectOption("#challenge", chFile.id);
+    await page.click("#go");
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
+    let ch = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, msg: document.querySelector("#startmsg").textContent }));
+    // Published challenge files with a simulator that can't sail them is a live bug: the picker offers a game that won't start.
+    if (!ch.ready || ch.err || ch.id !== chFile.id) fail(`helm challenge ${chFile.id} didn't start: ${JSON.stringify(ch)}`);
+    else {
+      await page.click("#s6");
+      await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
+      const s = await page.evaluate(() => ({ st: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
+      const known = ["time", "battery", "wind", "land", "breakdown", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"];
+      if (s.err || !known.includes(s.stop) || !(s.st.day > 0 && s.st.day <= 0.25 + 1e-6)) fail(`helm challenge ${chFile.id}: 6 hours went wrong: ${JSON.stringify({ day: s.st?.day, stop: s.stop, err: s.err })}`);
+      // Its own weather, not 2020's: the boat's clock is on the challenge's start day.
+      if (s.st.boat.t.slice(0, 10) !== chFile.start.slice(0, 10)) fail(`helm challenge ${chFile.id}: boat clock ${s.st.boat.t}, challenge starts ${chFile.start}`);
+      log.push(`helm challenge ${chFile.id}: started ${s.st.boat.t}, sailed to day ${s.st.day.toFixed(2)} (${s.stop})`);
+    }
+  }
+  // Design leaderboard: the published board if there is one, else it says so; the
+  // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
+  await page.goto(`${URL}leaderboard.html`);
+  await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 30000 });
+  const lb0 = await page.evaluate(() => ({ ...window.__leaderboard, banner: document.querySelector("#banner").textContent }));
+  if (lb0.error ? lb0.error !== "NO_BOARD" || !/No board published yet/.test(lb0.banner) : lb0.rows < 2 || lb0.sample) fail(`leaderboard: ${JSON.stringify(lb0)}`);
+  await page.goto(`${URL}leaderboard.html?board=leaderboard-sample/board.json`);
+  await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 30000 });
+  const lb = await page.evaluate(() => ({
+    ...window.__leaderboard,
+    banner: document.querySelector("#banner").textContent,
+    tiers: [...document.querySelectorAll("#rows tr")].map((r) => Number(r.dataset.tier)),
+    ref: document.querySelectorAll("#rows tr.ref").length,
+    model: [...document.querySelectorAll(".chip.model")].map((c) => c.textContent),
+  }));
+  const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
+  if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^our model of Randolph/.test(t)))
+    fail(`leaderboard sample: ${JSON.stringify(lb)}`);
+  await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
+  log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
+  // Race view: with the simulator files it races our kayak against Rev C for a
+  // day from the same launch; without them (or with an older simulator) it says so.
+  await page.goto(`${URL}race.html`);
+  await page.selectOption("#launch", "4");
+  await page.click("#go");
+  await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
+  const rc0 = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, msg: document.querySelector("#msg").textContent }));
+  if (rc0.ready) {
+    await page.click("#day");
+    await page.waitForFunction(() => !window.__race.busy, null, { timeout: 240000 });
+    const r = await page.evaluate(() => ({ s: window.__race.status, stops: window.__race.stops, err: window.__race.error, tracks: window.__race.tracks.map((t) => t.length) }));
+    const names = r.s?.boats.map((b) => b.name) ?? [];
+    if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
+      || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
+      fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
+    // The 3D views: each boat on its own sea, drawing, and the right boat in each.
+    await page.locator("#views").scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => window.__race.views.length === 2 && window.__race.views.every((v) => v.frames > 3), null, { timeout: 60000 })
+      .catch(async () => fail(`race 3D views: ${JSON.stringify(await page.evaluate(() => window.__race.views))}`));
+    const vb = await page.evaluate(() => window.__race.views.map((v) => v.boat));
+    if (vb.join() !== "kayak,randolph") fail(`race 3D views show ${vb.join()}`);
+    await page.screenshot({ path: "test-output/race.png", fullPage: true });
+    log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
+    // My boat is boat A to start with, and the race sails its own parts.
+    await page.evaluate(() => localStorage.setItem("boatsim.myboat.v1", JSON.stringify({ v: 1, kind: "yard", base: "kayak", hash: "#thr=one-t200", name: "One motor", choices: { thr: "one-t200", cruise_w: 25 }, saved: "2026-11-11T00:00:00.000Z" })));
+    await page.goto(`${URL}race.html`);
+    const selA = await page.evaluate(() => ({ v: document.getElementById("baseA").value, text: document.getElementById("baseA").selectedOptions[0]?.textContent }));
+    if (selA.v !== "mine" || selA.text !== "My boat: One motor") fail(`race: my boat isn't boat A: ${JSON.stringify(selA)}`);
+    await page.selectOption("#launch", "4");
+    await page.click("#go");
+    await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
+    const rm = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, names: window.__race.status?.boats.map((b) => b.name) }));
+    if (!rm.ready || rm.err) fail(`race with my boat: ${JSON.stringify(rm)}`);
+    await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
+    log.push(`race with my boat: ${rm.names.join(" vs ")}`);
+  } else {
+    // No files: the page checks before loading Python (a preview server answers the
+    // missing zip with HTML, which Pyodide would choke on). An old simulator: NO_RACE.
+    if (!(rc0.err === "no simulator files" && /aren't published/.test(rc0.msg)) && !/older than the race view/.test(rc0.msg)) fail(`race start: ${JSON.stringify(rc0)}`);
+    log.push("race: no simulator files, says so");
   }
   if (errors.length) fail(`page errors: ${errors.join("; ")}`);
 

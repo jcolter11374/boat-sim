@@ -17,13 +17,32 @@ from the server grid."** (See "The exactness gate" below for why.)
 
 ## What the page downloads
 
-From the `sandbox-data` release (workflow "Sandbox data", publish ticked):
+| File | Size | What | Where it comes from |
+|---|---|---|---|
+| `boatsim.zip` | ~0.5 MB | `src/boatsim`, the design files, the land mask and the ports | packed by `tools/build_site.sh` from the page's own commit |
+| `forcing_2020.npz` | 18 MB | The season's forcing bundle (below) | the `sandbox-data` release ("Sandbox data", publish ticked) |
+| `reference.json` | small | Reference voyages run in Node + Pyodide | the `sandbox-data` release |
 
-| File | Size | What |
-|---|---|---|
-| `forcing_2020.npz` | 18 MB | The season's forcing bundle (below) |
-| `boatsim.zip` | ~0.25 MB | `src/boatsim`, the design files and the land mask |
-| `reference.json` | small | Reference voyages run in Node + Pyodide |
+**The page and its simulator are always one commit.** `boatsim.zip` used to come
+from the release too, which only a hand-started run updated, so three times a
+page shipped a feature its simulator didn't have yet ("can't start from a port
+yet"). Now `tools/build_site.sh`, the one build both the deploy (`sea3d.yml`)
+and the pre-release playtest run, packs it with every page build (a change under
+`src/boatsim`, `configs` or `data/land` redeploys the pages), and:
+
+- before deploying, `python -m boatsim.sandbox check-page` unpacks the built
+  zip in a fresh interpreter and fails if it was packed from another commit, or
+  if it can't do something the pages ask for. The pages' needs are
+  `sea3d/sandbox-needs.json` (each page feature, and every boat a page offers);
+  what the zip can do is worked out from its own code (`boatsim/sandbox/caps.py`),
+  never from a hand-kept list. A page test checks every "the simulator can't do
+  this yet" error a worker raises is in the needs file.
+- after deploying, a live check reads the page's commit (`version.json`), the
+  simulator's (`sandbox/boatsim.json`) and the one stamped inside the zip
+  (`boatsim_build.json`), and fails if they differ.
+
+The weather bundle and the reference voyages change rarely and stay on the
+release; the zip on the release is only for the "Sandbox data" reference runs.
 
 Plus the Pyodide runtime with numpy and pyyaml (~13 MB, from the Pyodide CDN).
 Everything is cached after the first visit.
@@ -244,3 +263,22 @@ wave-making grows with displacement. At the design weight
 are exactly as before. The big batteries (+10 kg) add about 3 % calm-water drag;
 the 40 kg bulb takes about 3 % off but makes a knockdown that leaves the boat
 upside down more likely.
+
+**Stock boats and the joke fleet.** `"base"` can also name a ready-made boat,
+sailed as designed with no slots to change (`catalog.STOCK_BASES`):
+`stock_cruiser31`, `stock_dinghy14`, `stock_beachcat16`, `stock_sail_drone7`,
+`stock_ocean_rower45`, `joke_robot_kayak`,
+`joke_canoe`, `joke_pedalo`, `joke_bathtub`, `joke_flamingo`,
+`joke_wheelie_bin`. Its grid id is the base name. These boats aren't in the
+odds grid, so `nearest()` returns `(id, False)`. Their configs and polars are
+packed into `boatsim.zip`.
+
+**How it ends.** Each boat on the helm results card (`result()["boat"]` and
+`["ghost"]`) carries `ending`: `{"headline", "words", "where", "day", "boat"}`
+(`sandbox/endings.py`). `headline` is short for the card ("Swamped",
+"Burst", "Rolled over", "Ran ashore", "Finished", "Still at sea"). `words` is
+the cause in the boat's own words, from the joke fleet's `loss_words`.
+`where` is "near the coast" or "out in the open ocean", and `day` is the day
+it happened. `boat` is the design's `stock.label`, or null for the kayak and
+the Randolph boats. For example, the canoe gives
+`{"headline": "Swamped", "words": "swamped: waves over a 0.3 m edge filled it", "where": "near the coast", "day": 0.2}`.

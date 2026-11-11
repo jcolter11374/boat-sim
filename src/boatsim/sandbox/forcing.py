@@ -6,6 +6,10 @@ What is in it, and what that changes against the full-resolution runs:
 
 * ERA5 wind, waves and cloud at 1 deg every 6 h (full runs: 0.25 deg hourly);
   air temperature daily.
+* ERA5 rain at 1 deg but HOURLY, as the full runs read it: showers last an
+  hour or two, and the stock dinghy and beach cat capsize in squalls (gusts
+  grow with the rain rate; vessel/keelboat.py). Mostly zeros, so it packs
+  small. Bundles cut before rain was added read as dry.
 * Sunlight as a daily clearness index (the day's ERA5 sunlight over a clear-sky
   model's) times that clear-sky model at the boat's time and place. Hourly
   sunlight at sea would be far too big to ship.
@@ -49,6 +53,7 @@ SCALES = {
     "tp": 0.1,
     "wave_dir": 1.0,  # deg, "from"; read back as a unit vector so 359 and 1 average to 0
     "cloud_fraction": 0.02,
+    "rain": 0.01,  # mm/h, hourly (squalls: the stock dinghy and beach cat read it)
     "air_temp": 0.1,
     "clearness": 0.001,
     "current_u": 0.01,  # 1 cm/s: GLORYS itself is uncertain by ~10 cm/s; 1 mm/s doubled the bundle
@@ -145,6 +150,9 @@ class BundleEnvironment:
                 lon,
                 {k: _unpack(z, k) for k in ("air_temp", "clearness")},
             )
+            self.rain = None
+            if "rain" in z.files:
+                self.rain = GridSeries(_times(z, "t_rain"), lat, lon, {"rain": _unpack(z, "rain")})
             self.currents = None
             if "current_u" in z.files:
                 self.currents = GridSeries(
@@ -153,6 +161,11 @@ class BundleEnvironment:
                     z["lon_current"],
                     {k: _unpack(z, k) for k in ("current_u", "current_v")},
                 )
+            self.storms = None  # best-track fixes, if the bundle carries them
+            if "storm_t" in z.files:
+                from boatsim.oceandata.stormboost import storms_from_arrays
+
+                self.storms = storms_from_arrays(z)
             self.ships = None
             if "ship_density" in z.files:
                 self.ships = GridSeries(
@@ -173,6 +186,12 @@ class BundleEnvironment:
                 _clamp(self.currents, t64), lat, lon, ["current_u", "current_v"]
             )
             cu, cv = _or0(c["current_u"]), _or0(c["current_v"])
+        rain = 0.0
+        if self.rain is not None:
+            # Hourly totals stamped at the hour's end: sample half an hour on, as
+            # ERA5Source does, so each hour's rain falls in that hour.
+            tr = _clamp(self.rain, t64 + np.timedelta64(30, "m"))
+            rain = max(_or0(self.rain.sample(tr, lat, lon, ["rain"])["rain"]), 0.0)
         ships = 0.0
         if self.ships is not None:
             g = self.ships
@@ -192,6 +211,7 @@ class BundleEnvironment:
             cloud_fraction=min(max(_or0(w["cloud_fraction"]), 0.0), 1.0),
             air_temp=temp if _ok(temp) else 15.0,
             ship_density=ships,
+            rain=rain,
         )
 
 
@@ -218,6 +238,15 @@ def _q(a: np.ndarray, name: str) -> np.ndarray:
     return np.ascontiguousarray(np.moveaxis(out.view(np.uint8).reshape(*out.shape, 2), -1, 0))
 
 
+RAIN_TRACE = 0.05  # mm/h: ERA5 drizzle under this is stored as dry (packs smaller)
+
+
+def _dry_trace(r: np.ndarray) -> np.ndarray:
+    """Negative rounding noise and trace drizzle -> 0 (NaN stays: no data). At
+    0.05 mm/h the squall gust term adds 0.0015 to the gust spread: nothing."""
+    return np.where(r < RAIN_TRACE, 0.0, r)
+
+
 def _idx(axis: np.ndarray, lo: float, hi: float, res: float) -> np.ndarray:
     step = max(1, round(res / float(axis[1] - axis[0])))
     i = np.where((axis >= lo - 1e-6) & (axis <= hi + 1e-6))[0]
@@ -235,11 +264,15 @@ def cut(
     last=LAST,
     start: date | None = None,
     end: date | None = None,
+    storms_csv=None,
 ) -> dict:
     """Cut one season's bundle from the cached full data and save it to `out`
     (path or file). glorys=False / ships=False leave currents / ships out.
     start/end (dates) replace the season for any other window, e.g. a weather
     challenge that runs into the next year.
+    storms_csv: an IBTrACS CSV; if given, the best-track fixes of storms in the
+    window go into the bundle (oceandata/stormboost.py), so the page can put
+    hurricane cores back into the 1 degree weather at sample time.
     Returns the stored arrays' sizes in bytes."""
     from boatsim.oceandata import ERA5Source, GlorysSource
     from boatsim.oceandata.traffic import default_source
@@ -255,6 +288,7 @@ def cut(
 
     weather = {k: [] for k in ("wind_u", "wind_v", "hs", "tp", "wave_dir", "cloud_fraction")}
     daily = {"air_temp": [], "clearness": []}
+    rain, t_rain = [], []
     t_weather, t_daily = [], []
     li = lj = lat = lon = None
     for day in days:
@@ -274,6 +308,13 @@ def cut(
         # sum of clear-sky sunlight at the same instants (each ERA5 value is the
         # mean over the hour ending at its stamp: evaluate clear sky at hh-0:30).
         in_day = [int(k) for k in np.where((hours >= 1) & (hours <= 24))[0]]
+        # Rain: each stamp is the total over the hour ending there (mm/h); the
+        # day's stamps 1-24 joined end to end give the unbroken hourly series.
+        for k in in_day:
+            t_rain.append(tile.times[k])
+            rain.append(
+                f["rain"][k][np.ix_(li, lj)] if "rain" in f else np.full((len(li), len(lj)), np.nan)
+            )
         temp = np.nanmean(np.stack([f["air_temp"][k][np.ix_(li, lj)] for k in in_day]), axis=0)
         ghi = np.nansum(np.stack([f["ghi"][k][np.ix_(li, lj)] for k in in_day]), axis=0)
         cs = np.zeros_like(ghi, dtype=np.float64)
@@ -291,6 +332,8 @@ def cut(
         "t_daily": np.array(t_daily, dtype="datetime64[s]").astype(np.int64),
         **{k: _q(np.stack(v), k) for k, v in weather.items()},
         **{k: _q(np.stack(v), k) for k, v in daily.items()},
+        "t_rain": np.array(t_rain, dtype="datetime64[s]").astype(np.int64),
+        "rain": _q(_dry_trace(np.stack(rain)), "rain"),
     }
     log(f"weather {arrays['wind_u'].shape}, daily {arrays['air_temp'].shape}")
 
@@ -316,6 +359,14 @@ def cut(
         g = ships._g
         arrays["lat_ships"], arrays["lon_ships"] = g.lats, g.lons
         arrays["ship_density"] = g.fields["ship_density"][0].astype(np.float32)
+    if storms_csv is not None:
+        from boatsim.oceandata import stormboost as SB
+
+        a = datetime.combine(d0, datetime.min.time())
+        b = datetime.combine(d1, datetime.min.time()) + timedelta(days=1)
+        storms = SB.storms_in_window(storms_csv, a, b)
+        arrays.update(SB.storms_to_arrays(storms))
+        log(f"storm tracks: {len(storms)} storms, {len(arrays['storm_t'])} fixes")
     arrays["meta_year"] = np.array(year)
     arrays["meta_first"] = np.array(str(d0))
     arrays["meta_last"] = np.array(str(d1))

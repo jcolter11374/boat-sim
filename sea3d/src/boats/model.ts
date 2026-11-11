@@ -7,12 +7,14 @@
 // The motion model sets that group's position and rotation; nothing in here
 // moves the boat.
 
+import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
+import { buildStock, type StockRig } from "./stock";
 
 export interface BoatModel {
   spec: BoatSpec;
@@ -25,6 +27,10 @@ export interface BoatModel {
   gear: Gear;
   /** The hull's shape (builder frame), for the foam where hull meets water. */
   form: HullForm;
+  /** Sails and rudders of a stock sailing boat (boats/stock.ts), posed from the replay. */
+  rig?: StockRig;
+  /** Two hulls (the beach cat): the one-hull foam collar and deck drain don't fit. */
+  twinHull?: boolean;
   /** Showroom: everything working, a gentle breeze. */
   animate(t: number): void;
   dispose(): void;
@@ -233,6 +239,8 @@ export function buildKayak(quality: Quality): BoatModel {
   // Builder frame: z is to port. Deck height for placing the light and signs.
   const kDeck = (x: number) => K.dz(x / K.L) + K.crown;
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // Its navigation light: the all-round white lantern on deck, under the comms light.
+  addNavLights(g, "all_round", V(3.0, kDeck(3.0) + 0.2, -0.11));
   const gear = new Gear(g, {
     props, // port first
     light: V(3.0, kDeck(3.0) + 0.27, -0.11), // on top of the all-round light
@@ -262,6 +270,7 @@ export function buildKayak(quality: Quality): BoatModel {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      disposeNavLights(root);
     },
   };
 }
@@ -340,6 +349,8 @@ export function buildRandolph(quality: Quality): BoatModel {
   }
 
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // Its navigation light: an all-round white on the antenna platform (GUESS: where Randolph's would go).
+  addNavLights(g, "all_round", V(1.53, 0.62, 0));
   const gear = new Gear(g, {
     props: [], // no motors: the wing sails it
     light: V(1.53, 0.585, 0), // on the antenna platform
@@ -366,8 +377,17 @@ export function buildRandolph(quality: Quality): BoatModel {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      disposeNavLights(root);
     },
   };
 }
 
-export const BUILDERS = { kayak: buildKayak, randolph: buildRandolph };
+export const BUILDERS: Record<BoatSpec["key"], (q: Quality) => BoatModel> = {
+  kayak: buildKayak,
+  randolph: buildRandolph,
+  stock_cruiser31: (q) => buildStock("stock_cruiser31", q),
+  stock_dinghy14: (q) => buildStock("stock_dinghy14", q),
+  stock_beachcat16: (q) => buildStock("stock_beachcat16", q),
+  stock_sail_drone7: (q) => buildStock("stock_sail_drone7", q),
+  stock_ocean_rower45: (q) => buildStock("stock_ocean_rower45", q),
+};

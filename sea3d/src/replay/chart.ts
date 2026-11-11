@@ -27,12 +27,18 @@ export interface TrackColours {
   beacon: string;
   glow: string;
 }
-export const TRACK: Record<"kayak" | "randolph" | "randolph_c", TrackColours> = {
+export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45", TrackColours> = {
   kayak: { main: "#ff8a2a", beacon: "#9cc8ff", glow: "rgba(255,140,40,0.9)" },
   randolph: { main: "#2ec4b6", beacon: "#b4f0ea", glow: "rgba(46,196,182,0.9)" },
   randolph_c: { main: "#b78cff", beacon: "#e0d0ff", glow: "rgba(183,140,255,0.9)" },
+  stock_cruiser31: { main: "#5b9dff", beacon: "#c4dcff", glow: "rgba(91,157,255,0.9)" },
+  stock_dinghy14: { main: "#ffd84a", beacon: "#fff0b0", glow: "rgba(255,216,74,0.9)" },
+  stock_beachcat16: { main: "#ff5d6c", beacon: "#ffc4ca", glow: "rgba(255,93,108,0.9)" },
+  stock_sail_drone7: { main: "#f2d03d", beacon: "#fff2b8", glow: "rgba(242,208,61,0.9)" },
+  stock_ocean_rower45: { main: "#5aa9e6", beacon: "#d4ecff", glow: "rgba(90,169,230,0.9)" },
 };
 const SILENT = "#8a94a3";
+const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
 
 interface ChartLane {
   rep: Replay;
@@ -47,6 +53,7 @@ export class Chart {
   private dpr = 1;
   private rep: Replay | null = null; // the first lane's: course marks come from it
   private lanes: ChartLane[] = [];
+  private wrecks: [number, number][] = [];
   private focus = 0;
   /** The live tracker's forecast: middle path and spread (lat, lon, radius km). */
   private ghost: { median: [number, number][]; spread: [number, number, number][] } | null = null;
@@ -57,6 +64,12 @@ export class Chart {
     private readonly bounds: LandBounds,
   ) {
     this.g = canvas.getContext("2d")!;
+  }
+
+  /** Shipwrecks to mark (lat, lon), with the chart's wreck sign. */
+  setWrecks(at: [number, number][]): void {
+    this.wrecks = at;
+    this.base = null;
   }
 
   setReplay(rep: Replay): void {
@@ -197,6 +210,21 @@ export class Chart {
     g.shadowBlur = 6;
     g.drawImage(tint, lx0, ly0, lx1 - lx0, ly1 - ly0);
     g.shadowBlur = 0;
+
+    // Shipwrecks: a small version of the sea chart's wreck sign (a hull line with masts).
+    g.strokeStyle = WRECK_COLOUR;
+    g.lineWidth = 1.2;
+    for (const [la, lo] of this.wrecks) {
+      const [x, y] = this.xy(la, lo);
+      g.beginPath();
+      g.moveTo(x - 4, y);
+      g.lineTo(x + 4, y);
+      for (const dx of [-2, 0, 2]) {
+        g.moveTo(x + dx, y - 2.5);
+        g.lineTo(x + dx, y + 2.5);
+      }
+      g.stroke();
+    }
 
     const rep = this.rep;
     if (rep) {

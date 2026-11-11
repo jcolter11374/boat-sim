@@ -223,3 +223,82 @@ def test_drop_is_100km_out_and_variants_move_it():
     assert S.SensitivityVoyage(variant="drop_29km").drop_point() == (36.85, -75.70)
     assert S.SensitivityVoyage().drop_point() == DROP_POINT
     assert (36.79, -75.48) == pytest.approx(start_point("50km"), abs=0.01)
+
+
+def test_routing_variants_swap_only_base_and_its_forecast():
+    """#269 study: the routing rows change base (and the forecast's error), nothing else."""
+    from boatsim.basestation.isochrone import IsochroneReplanPolicy, SteadyPolar
+
+    def comps(name):
+        return S.SensitivityVoyage(
+            variant=name,
+            design_path="configs/stock_sail_drone7.yaml",
+            weather="constant",
+            unknown_p_by_60_days=0.0,
+        ).components(1)
+
+    base, iso, table = comps("fan"), comps("isochrone"), comps("fan_table")
+    assert type(base.base) is ForecastReplanPolicy and base.base.polar is None
+    assert isinstance(iso.base, IsochroneReplanPolicy)
+    # The drone's own default since 11 Nov 2026 (Ravi's gate, Maya).
+    assert isinstance(comps("baseline").base, IsochroneReplanPolicy)
+    assert type(table.base) is ForecastReplanPolicy and isinstance(table.base.polar, SteadyPolar)
+    assert iso.forecast.scale == base.forecast.scale == 1.0
+    assert comps("isochrone_forecast_x2").forecast.scale == 2.0
+    assert type(iso.vessel.inner) is type(base.vessel.inner)
+    assert S.VARIANTS["isochrone_forecast_x2"].against == "fan_forecast_x2"
+
+
+def test_paired_days_saved_against_the_named_row():
+    rows = []
+    for name, days in [("fan_forecast_x2", (40.0, 50.0)), ("isochrone_forecast_x2", (35.0, 52.0))]:
+        for i, d in enumerate(days):
+            rows.append(
+                {
+                    "variant": name,
+                    "start": f"2020-04-0{i + 1}",
+                    "seed": i,
+                    "outcome": "arrived",
+                    "days": d,
+                    "min_soc": 1.0,
+                    "airtime_usd": 1.0,
+                }
+            )
+    base = [dict(r, variant="baseline") for r in rows[:2]]
+    t = S.compare(pd.DataFrame(base + rows)).set_index("variant")
+    r = t.loc["isochrone_forecast_x2"]
+    assert r["against"] == "fan_forecast_x2" and r["both_finished"] == 2
+    assert r["faster"] == 1 and r["slower"] == 1 and r["median_days_saved"] == pytest.approx(1.5)
+
+
+def test_cli_trace_prints_one_launch_step_by_step(tmp_path, capsys):
+    """Chasing one voyage (Maya, 11 Nov 2026): the launch's seed is the one run
+    gives it, and the log shows its events and a row every so many hours."""
+    args = ["trace", "2020-04-21", "--constant", "--max-days", "2", "--every-hours", "24"]
+    S.main([*args, "--out", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert "== baseline: configs/v4_kayak.yaml, launch 2020-04-21 12:00, seed 2020002" in out
+    assert "outcome timeout after 2.0 days" in out
+    rows = [ln for ln in out.splitlines() if ln[:6].strip().replace(".", "").isdigit()]
+    assert [round(float(r.split()[0])) for r in rows] == [0, 1]  # a row a day
+    with pytest.raises(SystemExit, match="not a launch day"):
+        S.main(["trace", "2020-04-22", "--constant", "--out", str(tmp_path)])
+
+
+def test_no_tactician_puts_the_drone_back_on_its_wing_logic():
+    from boatsim.autonomy.sailing import tactician_for
+
+    def vessel(name):
+        return (
+            S.SensitivityVoyage(
+                variant=name,
+                design_path="configs/stock_sail_drone7.yaml",
+                weather="constant",
+                unknown_p_by_60_days=0.0,
+            )
+            .components(1)
+            .vessel
+        )
+
+    assert tactician_for(vessel("baseline")) is not None
+    assert tactician_for(vessel("no_tactician")) is None

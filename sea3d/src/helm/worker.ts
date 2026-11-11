@@ -2,16 +2,22 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode}   mode: "hands_on" or "base"
-//               {id, type: "load", code}                  a shared game (Game.save's code)
+// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?, choices?, start_port?}
+//                 mode: "hands_on" or "base"; challenge: an id from challenges.json, whose
+//                 weather is `bundle` (a URL; left out for the 2020 bundle); start_port:
+//                 a port id from ports.json, started from instead of the usual drop
+//               {id, type: "load", code, bundle?}         a shared game (Game.save's code)
 //               {id, type: "save"}
-//               {id, type: "order", heading, power}       heading: degrees, "finish" or "route"; power 0..1
+//               {id, type: "order", heading, power, sails?, engine?}  heading: degrees, "finish" or "route"; power 0..1
 //               {id, type: "run", hours?, soc_below?, wind_above?, breakdown?}
 //               {id, type: "forecast"} | {id, type: "result"}
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 // Replies that move time carry both boats' voyages so far as replays (hourly rows).
 
-const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.mjs";
+// Pass the folder too: Firefox can't work it out from a module imported in a worker
+// ("Could not extract indexURL path from pyodide module location", #294).
+const PYODIDE_DIR = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+const PYODIDE = `${PYODIDE_DIR}pyodide.mjs`;
 
 interface Py {
   loadPackage(p: string[]): Promise<void>;
@@ -32,8 +38,8 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 function start(base: string): Promise<Py> {
   ready ??= (async () => {
     say("Loading Python in the browser...");
-    const mod = (await import(/* @vite-ignore */ PYODIDE)) as { loadPyodide: () => Promise<Py> };
-    const [py, zip, bundle] = await Promise.all([mod.loadPyodide(), fetchBytes(`${base}boatsim.zip`), fetchBytes(`${base}forcing_2020.npz`)]);
+    const mod = (await import(/* @vite-ignore */ PYODIDE)) as { loadPyodide: (o: { indexURL: string }) => Promise<Py> };
+    const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`), fetchBytes(`${base}forcing_2020.npz`)]);
     await py.loadPackage(["numpy", "pyyaml"]);
     py.FS.mkdirTree("/sandbox");
     py.FS.writeFile("/sandbox/boatsim.zip", zip);
@@ -55,8 +61,17 @@ try:
 except ImportError:
     UNTIL_CAP = 240.0
 from boatsim.runner.replay import to_replay, QUIET_EVENTS
-ENV = open_bundle("forcing.npz")
+ENVS = {"": open_bundle("forcing.npz")}  # weather bundles by URL; "" = 2020
+ENV = ENVS[""]
 G = None
+
+def takes_challenges():
+    import inspect
+    return Game is not None and "challenge" in inspect.signature(Game).parameters
+
+def takes_ports():
+    import inspect
+    return Game is not None and "start_port" in inspect.signature(Game).parameters
 
 def _f(x):
     # numpy numbers to plain ones, for json
@@ -101,17 +116,38 @@ def run_until(kw):
             return out
 
 def voyages():
-    return {"boat": hourly(to_replay(G.mine.log, "You")), "ghost": hourly(to_replay(G.ghost.log, "Autopilot ghost"))}
+    # "base": which boat is sailing ("" for our kayak, else e.g. "stock_cruiser31"), so the 3D view draws it.
+    c = getattr(G, "choices", None) or {}
+    return {"boat": hourly(to_replay(G.mine.log, "You")), "ghost": hourly(to_replay(G.ghost.log, "Autopilot ghost")), "base": c.get("base", "")}
 `);
     return py;
   })();
   return ready;
 }
 
+const loaded = new Set<string>([""]);
+
+/** Point ENV at the weather a game needs: the 2020 bundle, or a challenge's own
+ *  (fetched once, then kept: about 20-30 MB each in memory). */
+async function useBundle(py: Py, url: string): Promise<void> {
+  if (!loaded.has(url)) {
+    say("Loading the challenge's weather...");
+    const name = `/sandbox/challenge_${loaded.size}.npz`;
+    py.FS.writeFile(name, await fetchBytes(url));
+    py.globals.set("bundle_url", url);
+    py.globals.set("bundle_path", name);
+    py.runPython(`ENVS[bundle_url] = open_bundle(bundle_path)`);
+    loaded.add(url);
+  }
+  py.globals.set("bundle_url", url);
+  py.runPython(`ENV = ENVS[bundle_url]`);
+}
+
 self.onmessage = async (ev: MessageEvent) => {
   const m = ev.data;
   try {
     const py = await start(m.base ?? "");
+    if (m.type === "new" || m.type === "load") await useBundle(py, m.bundle ?? "");
     py.globals.set("msg_json", JSON.stringify(m));
     let code: string;
     if (m.type === "new") {
@@ -121,9 +157,29 @@ m = json.loads(msg_json)
 if Game is None:
     raise RuntimeError("NO_HELM")
 kw = {"safe": m["safe"], "breakdowns": m["breakdowns"]}
+choices = m.get("choices")  # e.g. {"base": "stock_cruiser31"}; None sails our kayak
 if m.get("mode", "hands_on") != "hands_on":
     kw["mode"] = m["mode"]  # older simulators only know hands on
-G = Game(ENV, None, m["launch"], **kw)
+if m.get("start_port"):
+    if not takes_ports():
+        raise RuntimeError("NO_PORTS")
+    kw["start_port"] = m["start_port"]
+    from boatsim.sandbox.helm import port_start
+    try:
+        port_start(m["start_port"], ENV)  # a plain message for a port this weather can't sail from
+    except ValueError as err:
+        raise RuntimeError("BAD_PORT " + str(err))
+try:
+    if m.get("challenge"):
+        if not takes_challenges():
+            raise RuntimeError("NO_CHALLENGES")
+        G = Game(ENV, choices, challenge=m["challenge"], **kw)
+    else:
+        G = Game(ENV, choices, m["launch"], **kw)
+except KeyError as err:
+    if choices:
+        raise RuntimeError("NO_BOAT " + str(err))  # an older simulator without this boat
+    raise
 json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
 `;
     } else if (m.type === "load") {
@@ -143,7 +199,8 @@ json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(EN
     } else if (m.type === "order") {
       code = `
 m = json.loads(msg_json)
-o = G.order(m["heading"], m["power"])
+# Sail and engine orders (#242) go only when the page sends them, so older simulators still play.
+o = G.order(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []))
 json.dumps({"order": o if isinstance(o, dict) else {"accepted": True}, "status": G.status()}, default=_f)
 `;
     } else if (m.type === "run") {

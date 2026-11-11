@@ -5,8 +5,8 @@
 #
 # Run it by hand: Actions tab -> "Voyage replays" -> Run workflow, with "commit"
 # ticked to add the files to the chosen branch (main redeploys the page).
-# On a pull request that changes the exporter it replays May of 2020 and
-# commits the result to the PR branch, so the page always has sample voyages.
+# Hand-started only: secret-using workflows never run on pull_request, and a PR
+# run used to commit onto PR branches. Replay check guards the files on PRs.
 # Replay files are the one kind of run output kept in git: a few small JSON
 # files the page needs at build time (Maya, Lead call; CONTRIBUTING rule 6).
 name: Voyage replays
@@ -26,10 +26,6 @@ on:
         description: "Commit the replays to this branch"
         type: boolean
         default: false
-  pull_request:
-    paths:
-      - ".github/workflows/voyage-replays.yml"
-      - "src/boatsim/runner/replay.py"
 permissions:
   contents: read
 concurrency:
@@ -53,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+          ref: ${{ github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -74,10 +70,7 @@ jobs:
           path: sea3d/public/voyages/
           retention-days: 90
       - name: Commit the replays
-        if: >-
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository) ||
-          (github.event_name == 'workflow_dispatch' && inputs.commit)
+        if: ${{ inputs.commit }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

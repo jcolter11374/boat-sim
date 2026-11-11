@@ -1,0 +1,96 @@
+# JOKE FLEET: "bathtub with an outboard". A generic acrylic bathtub with a small 2.5 hp
+# petrol outboard clamped to the end, one rider. Our own numbers (stock-vessels design
+# note, joke-fleet sidebar). It floats only because acrylic floats. Waves over the rim
+# pour in; the rider bails. A 20 L can of fuel lasts about 20 hours. Unreferenced = GUESS.
+name: bathtub with an outboard
+
+stock:
+  label: bathtub with an outboard
+  kind: acrylic bathtub, small petrol outboard, one rider
+  spec_card:
+    length_overall_m: 1.7    # a standard bathtub
+    beam_m: 0.75
+    tub_kg: 30               # GUESS
+    motor_kg: 13             # GUESS: a typical 2.5 hp four-stroke
+    rider_kg: 80             # GUESS
+    fuel_l: 20               # GUESS: one jerry can
+  odd:
+    crew_hours: 0            # the rider steers and bails, the outboard pushes
+    awake_hours: 16
+    crew_start_hour: 7
+    freeboard_m: 0.35        # GUESS: rim above the water with a rider aboard
+    ship_l: 3                # GUESS: a small tub, a small slop
+    bail_l_per_h: 40         # GUESS: one person, a saucepan
+    swamp_l: 150             # GUESS: half full and it's going down to the rim
+    loss_words:
+      capsized and stayed upside down: "tipped over by a wave; the rider sits above the rim, so it has hardly any stability"
+
+hull:
+  model: acrylic bathtub with a 2.5 hp outboard (joke fleet)
+  length_m: 1.7
+  beam_m: 0.75
+  mass_kg: 140
+  displacement_ref_kg: 140
+  waterline_length_m: 1.5
+  wetted_area_m2: 1.6        # GUESS
+  form_factor: 1.6           # GUESS: a bath is not a hull
+  wave_making_frac: 0.6      # GUESS: short and blunt; it ploughs at 4 kn
+  wave_wall_fn: 0.35        # GUESS: a bath digs a hole past about 3 kn (hull speed)
+  wave_wall_exp: 6
+  waterplane_area_m2: 1.0    # GUESS
+  air_side_area_m2: 1.0      # GUESS: rider side-on
+  air_front_area_m2: 0.6     # GUESS
+  air_cd_side: 1.0
+  air_cd_front: 1.0
+  lateral_cd_area_m2: 0.5    # GUESS
+  keel_lift_slope_area_m2: 0.2
+  wave_drag_frac_per_m2: 0.6 # GUESS
+  fouling_onset_days: 10
+  fouling_frac_per_day: 0.005
+  drift_heading_offset_deg: 90
+  stokes_drift: true
+
+power:
+  # No battery: the "battery" is the fuel, counted as work at the propeller shaft.
+  # 20 L of petrol x 8.9 kWh/L x about 20 % (a small outboard flat out) ~ 36 kWh (GUESS).
+  solar_wp: 0
+  panels_w: {}
+  battery_wh: 36000
+  charge_eff: 1.0
+  discharge_eff: 1.0
+
+propulsion:
+  thrusters: 2.5 hp four-stroke outboard
+  thruster_count: 1
+  thruster_diameter_m: 0.19  # GUESS: a typical small outboard propeller
+  thruster_efficiency: 0.5   # GUESS: propeller losses at bath speeds
+  cruise_drive_w: 1800       # flat out: about 1 L an hour
+  max_drive_w: 1800
+  min_steer_w: 1.0
+
+electronics:
+  autopilot: the rider, on the tiller
+  hotel_load_wh_per_day: 0
+  nav_light_w: 0
+  nav_light_hours_per_day: 0
+
+comms:
+  one_way: personal satellite tracker (GUESS fit)
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 1.7
+  hull_beam_m: 0.75
+  critical_wave_frac_of_length: 0.4   # GUESS: the rider sits above the rim
+  critical_wave_frac_of_beam: 0.8
+  p_capsize_stays_over: 1.0
+  damage_ref_hs_m: 3.0
+  p_part: {}
+  rate_set: planning
+  failures_enabled: false    # the rider steers; nothing electronic to fail

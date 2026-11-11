@@ -51,10 +51,12 @@ import zlib
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from boatsim.autonomy.helm import HelmAutopilot, OrderMission
+from boatsim.autonomy.helm import HelmAutopilot, OrderMission, sail_orders_for
+from boatsim.autonomy.sailing import tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
 from boatsim.geo import distance_m
+from boatsim.runner import arrival
 from boatsim.runner.simulate import (
     Voyage,
     default_mission,
@@ -62,21 +64,37 @@ from boatsim.runner.simulate import (
     standard_components,
 )
 from boatsim.sandbox import catalog
+from boatsim.sandbox.endings import ending
 from boatsim.sandbox.run import MAX_DAYS, launches
 from boatsim.types import EventKind, Message, Outcome, Waypoint
 
 BREAKDOWNS = {EventKind.PART_FAILED, EventKind.CAPSIZE, EventKind.SHIP_STRIKE}
 DRAW_DAYS = 1.0  # a margin under this is "a draw, within the weather's luck" (docs/sandbox.md)
 LAND_WARN_KM = 50.0
+# A nearer ring, so a boat that starts inside LAND_WARN_KM (a port launch point
+# is ~20 km out) still gets a "land" stop before it runs ashore (Ravi, 11 Nov:
+# from Yarmouth on "finish", aground in 0.3 days with no stop). It fires the
+# first time the boat closes inside LAND_CLOSE_KM, and re-arms only once the boat
+# is back out past LAND_REARM_KM, so hugging the 10 km line doesn't stop every step.
+LAND_CLOSE_KM = 10.0
+LAND_REARM_KM = 15.0
+# The race's silence rule (runner/arrival.py SilenceClock, which ends the voyage
+# as disqualified): a "silence" stop warns the player first, once each, when
+# the boat has gone this long without a position reaching anyone.
+SILENCE_WARN_ROW_D = 7.0  # GUESS: 3 days before the 10-in-a-row limit
+SILENCE_WARN_TOTAL_D = 12  # GUESS: 3 days before the 15-in-total limit
 TRACK_STRIDE_H = 6.0
 UNTIL_CAP_H = 72.0  # "until something happens" stops by this at the latest (Maya, 11 Nov)
 MODES = ("hands_on", "base")
 ORDER_EVERY = timedelta(hours=24)  # "Real base station": one order a day
 COMPASS_LEG_M = 2_000_000.0  # GUESS: a compass order is a waypoint this far along the bearing
 SAVE_VERSION = 1
+ESTIMATE_MAX_H = 48.0  # GUESS: base stops extrapolating a silent boat after this
 LAUNCH_MONTHS = (4, 5, 6)  # the target window (John, 8 Nov): April to June
 LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the bundle
 SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
+PASS_MARGIN_KM = 1.0  # a lead change counts once the other boat is this far clear (Maya, 11 Nov)
+PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 11 Nov)
 
 
 def day_seed(start: datetime) -> int:
@@ -110,6 +128,23 @@ def launch_days(
     return out
 
 
+def challenge_start(env, cid: str) -> tuple[datetime, int]:
+    """A weather challenge's drop time and seed (oceandata.challenges), checked
+    against the bundle: the page must open that challenge's own bundle."""
+    from boatsim.oceandata.challenges import by_id
+
+    try:
+        c = by_id(cid)
+    except KeyError:
+        raise ValueError(f"no challenge called {cid!r}") from None
+    start = datetime(c.start.year, c.start.month, c.start.day, 12)
+    first = datetime.fromisoformat(env.meta["first"])
+    last = datetime.fromisoformat(env.meta["last"]) + timedelta(days=1)
+    if not first <= start < last:
+        raise ValueError(f"challenge {cid} needs its own weather ({c.bundle})")
+    return start, c.seed
+
+
 class PlayerBase:
     """Base station in "Real base station" mode: it only listens. It keeps the
     last report that reached it, which is all it knows about the boat when the
@@ -117,9 +152,67 @@ class PlayerBase:
 
     def __init__(self, t0: datetime, lat: float, lon: float):
         self.last = {"t": _iso(t0), "lat": lat, "lon": lon}
+        self.reports = [dict(self.last)]  # every report that reached base, the drop first
 
     def on_report(self, report, forecast):
-        self.last = dict(report)
+        """A daily Iridium report reached base."""
+        self.last = {**report, "source": "iridium"}
+        self.reports.append(dict(self.last))
+
+    def on_ping(self, t: datetime, lat: float, lon: float) -> None:
+        """A Globalstar backup-beacon position reached base while the main
+        Iridium link was down (Game._hear_beacon). The beacon has its own solar
+        cell and pings every 6 hours, so when the main box is dead or flat it is
+        all base hears."""
+        self.last = {"t": _iso(t), "lat": round(lat, 4), "lon": round(lon, 4), "source": "beacon"}
+        self.reports.append(dict(self.last))
+
+    def estimate(self, t: datetime) -> dict:
+        """Where base guesses the boat is at `t`: the last report carried on at
+        the speed and direction between the last two (dead reckoning), for at
+        most ESTIMATE_MAX_H. What the page shows as the faint "estimated" boat."""
+        a = self.reports[-1]
+        ta = datetime.fromisoformat(a["t"])
+        lat, lon = float(a["lat"]), float(a["lon"])
+        ahead_s = min(max((t - ta).total_seconds(), 0.0), ESTIMATE_MAX_H * 3600.0)
+        if len(self.reports) >= 2 and ahead_s > 0:
+            b = self.reports[-2]
+            span = (ta - datetime.fromisoformat(b["t"])).total_seconds()
+            if span > 0:
+                k = ahead_s / span
+                lat += (lat - float(b["lat"])) * k
+                lon += (lon - float(b["lon"])) * k
+        return {
+            "lat": lat,
+            "lon": lon,
+            "from_report": a["t"],
+            "age_h": (t - ta).total_seconds() / 3600.0,
+        }
+
+
+def port_start(port_id: str, env=None) -> tuple[float, float]:
+    """A port's launch point (oceandata/ports.py): where a support boat drops the
+    boat when it sails from that port. Only ports whose voyage crosses the race
+    start line, with the launch point and its launch route inside the weather
+    actually loaded (a challenge's own bundle included) and clear of its edge."""
+    from boatsim.oceandata import ports
+
+    p = ports.load().get(port_id)
+    if p is None:
+        raise ValueError(f"no port called {port_id!r}")
+    if not p["crosses_start"]:
+        raise ValueError(
+            f"can't sail from {p['name']}: its voyage wouldn't cross the start line here"
+        )
+    if not p["in_corridor"]:
+        raise ValueError(f"can't sail from {p['name']}: the boats would drift out of the weather")
+    lat, lon = float(p["launch_lat"]), float(p["launch_lon"])
+    w = getattr(env, "weather", None)  # a bundle's weather grid; full data has no edge to check
+    if w is not None:
+        box = (float(w.lats[0]), float(w.lats[-1]), float(w.lons[0]), float(w.lons[-1]))
+        if not ports.route_inside(lat, lon, box=box):  # same margin as the list's flag
+            raise ValueError(f"can't sail from {p['name']}: this weather doesn't reach it")
+    return lat, lon
 
 
 def _iso(t: datetime) -> str:
@@ -141,6 +234,8 @@ class Game:
         max_days: float = MAX_DAYS,
         mode: str = "hands_on",
         day: str | None = None,
+        challenge: str | None = None,
+        start_port: str | None = None,
     ):
         from boatsim.runner.land import default_land
 
@@ -149,12 +244,14 @@ class Game:
         if safe is None:
             safe = mode == "base"  # the boat's own safe mode acts between base orders
         self.mode, self.safe, self.max_days = mode, safe, max_days
-        if day is not None and launch_index is not None:
-            raise ValueError("give a launch day or a launch index, not both")
-        self.launch_index, self.day = launch_index, day
+        if sum(x is not None for x in (day, launch_index, challenge)) > 1:
+            raise ValueError("give one of a launch day, a launch index or a challenge")
+        self.launch_index, self.day, self.challenge = launch_index, day, challenge
         self.choices = choices
         self.design = catalog.design_for(choices)
-        if day is not None:
+        if challenge is not None:
+            self.start, self.seed = challenge_start(env, challenge)
+        elif day is not None:
             self.start = datetime.fromisoformat(day).replace(hour=12)
             # Any April to June noon inside the bundle; a voyage that later
             # sails past its end stops as "left_data_box", as in run_voyage.
@@ -165,18 +262,30 @@ class Game:
         else:
             self.start, self.seed = launches(env)[launch_index or 0]
         voyage = self.design.voyage
-        self.drop = (voyage["drop_lat"], voyage["drop_lon"])
+        # Where both boats start: the design's drop, or a port's launch point. The
+        # route (and base's "route" orders) start there too; the finish is unchanged.
+        self.start_port = start_port
+        self.drop = (
+            port_start(start_port, env) if start_port else (voyage["drop_lat"], voyage["drop_lon"])
+        )
         land = default_land()
         self.breakdowns = breakdowns
 
         mine = standard_components(self.design, env, env, seed=self.seed, land=land)
         prop = self.design.propulsion
         self.finish = (mine.finish.lat, mine.finish.lon)
+        # A boat with a polar (the stock sailboats) also takes sail and engine
+        # orders: its own sail plans, and the engine only if it has one.
+        self.sail_plans, self.has_engine = sail_orders_for(mine.vessel)
         self.helm = HelmAutopilot(
             finish=self.finish,
+            sail_plans=self.sail_plans,
+            has_engine=self.has_engine,
             thruster_count=int(prop.get("thruster_count", 2)),
             safe=safe,
+            tactician=tactician_for(mine.vessel),  # None unless the boat has a polar
         )
+        self.sailboat = bool(self.sail_plans)
         if mode == "base":
             # Until the first order arrives the boat sails the launch route at
             # design cruise power, as it would after the drop.
@@ -208,20 +317,43 @@ class Game:
         )
         self.orders: list[dict] = []
         self.left_data: set[int] = set()
+        # Who is ahead, with hysteresis: None while level (as at the drop), then
+        # "me" or "ghost" once that boat is PASS_MARGIN_KM clear. The first
+        # leader is taken quietly (both boats start on top of each other, so
+        # one simply pulls ahead: Nina's playtest, 11 Nov); each change of
+        # leader after that is a pass.
+        self.leader: str | None = None
+        self.last_pass: str | None = None
+        self.close_armed = self._land_km() > LAND_CLOSE_KM
+        self.last_close = False
+        self._events_seen = 0  # mine's log events already looked at (_step)
+        self.silence_warned: set[str] = set()  # "row" and/or "total": warned already
+        self.last_silence: str | None = None
         self._route = default_mission(self.drop).waypoints
 
     # ---------------------------------------------------------------- orders
 
-    def order(self, heading: float | str, power: float) -> dict:
+    def order(
+        self,
+        heading: float | str,
+        power: float,
+        sails: str | None = None,
+        engine: bool | None = None,
+    ) -> dict:
         """heading: degrees, "finish" or "route"; power: 0 to 1 of full drive power.
+        Sailboats only (`sailboat` in the status): sails, one of this boat's own
+        sail plans (status "sailing"["plans"]), and engine True/False if it has
+        one ("sailing"["has_engine"]); None lets the boat decide.
 
         Hands on: takes effect now. Real base station: sent now if a day has
         passed since the last order (else refused, "accepted": False), and it
         reaches the boat at the boat's next mailbox check ("arrives")."""
         v = self.mine
         t = v.state.t
-        check = HelmAutopilot(self.finish)
-        check.set_order(heading, power)  # same validation in both modes
+        if (sails is not None or engine is not None) and not self.sailboat:
+            raise ValueError("this boat has no sails or engine to order")
+        check = HelmAutopilot(self.finish, sail_plans=self.sail_plans, has_engine=self.has_engine)
+        check.set_order(heading, power, sails, engine)  # same validation in both modes
         heading, power = check.heading, check.power
         o = {
             "t": _iso(t),
@@ -229,8 +361,10 @@ class Game:
             "heading": heading,
             "power": power,
         }
+        if sails is not None or engine is not None:
+            o["sails"], o["engine"] = sails, engine
         if self.mode == "hands_on":
-            self.helm.set_order(heading, power)
+            self.helm.set_order(heading, power, sails, engine)
             o["accepted"] = True
             self.orders.append(o)
             return o
@@ -238,11 +372,13 @@ class Game:
         if last is not None and t - datetime.fromisoformat(last) < ORDER_EVERY:
             nxt = datetime.fromisoformat(last) + ORDER_EVERY
             return {**o, "accepted": False, "next_allowed": _iso(nxt)}
-        o.update(self._send(heading, power))
+        o.update(self._send(heading, power, sails, engine))
         self.orders.append(o)
         return o
 
-    def _send(self, heading: float | str, power: float) -> dict:
+    def _send(
+        self, heading: float | str, power: float, sails: str | None, engine: bool | None
+    ) -> dict:
         """Uplink the order as a route from base (built from the last report
         base received) through the boat's own Iridium link."""
         v = self.mine
@@ -256,7 +392,7 @@ class Game:
             wps = [Waypoint(*self.finish)]
         else:
             wps = [Waypoint(*destination(lat, lon, heading, COMPASS_LEG_M))]
-        m = OrderMission(wps, power=power)
+        m = OrderMission(wps, power=power, sails=sails, engine=engine)
         env = v.env if v.env is not None else v.c.env.sample(v.state.t, v.state.lat, v.state.lon)
         down = Message(v.state.t, "down", {"waypoints": len(wps)}, size_bytes=mission_size_bytes(m))
         t_down = v.c.link.send(down, env, v.link_rng)
@@ -310,6 +446,92 @@ class Game:
     def _step(self) -> None:
         self._advance(self.mine)
         self._advance(self.ghost, self.mine.state.t)
+        self.last_pass = self._update_leader()
+        self.last_close = self._update_close()
+        self._hear_beacon()
+        self.last_silence = self._update_silence()
+
+    def _hear_beacon(self) -> None:
+        """Real base station mode: hand base the beacon positions that got
+        through this step while the main Iridium link is down (flat battery,
+        dead box), so base falls back to the beacon's 6-hourly fixes only when
+        it is the one thing still talking. While Iridium works, its daily
+        report is what base plans from. simulate() logs pings as events
+        without a position; a ping uses the position at the step it was sent,
+        which is this one. Hands on: nothing to do, base doesn't steer."""
+        events = self.mine.log.events
+        new, self._events_seen = events[self._events_seen :], len(events)
+        if self.mode != "base":
+            return
+        s = self.mine.state
+        if getattr(s, "electronics_on", True) and getattr(s, "iridium_ok", True):
+            return
+        for e in new:
+            if e.kind == EventKind.MESSAGE_RECEIVED and e.detail == "globalstar ping":
+                self.base.on_ping(e.t, s.lat, s.lon)
+
+    def silence(self) -> dict:
+        """How long the boat has gone unheard, against the race's limits
+        (runner/arrival.py: more than 10 days in a row or 15 in total ends the
+        voyage as disqualified). Iridium reports and beacon pings both count."""
+        clock, t = self.mine.silence, self.mine.state.t
+        return {
+            "days_in_a_row": (t - clock.last_tx).total_seconds() / 86400.0,
+            "days_total": clock.silent_total(t),
+            "limit_in_a_row": arrival.SILENT_DAYS_IN_A_ROW,
+            "limit_total": arrival.SILENT_DAYS_TOTAL,
+        }
+
+    def _update_silence(self) -> str | None:
+        """'silence' on the step the boat first goes SILENCE_WARN_ROW_D days
+        unheard (warned again only after it has been heard since), or first
+        reaches SILENCE_WARN_TOTAL_D silent days in total (once)."""
+        if self.mine.done:
+            return None
+        s = self.silence()
+        if s["days_in_a_row"] < SILENCE_WARN_ROW_D:
+            self.silence_warned.discard("row")
+        elif "row" not in self.silence_warned:
+            self.silence_warned.add("row")
+            return "silence"
+        if s["days_total"] >= SILENCE_WARN_TOTAL_D and "total" not in self.silence_warned:
+            self.silence_warned.add("total")
+            return "silence"
+        return None
+
+    def _land_km(self) -> float:
+        from boatsim.vessel.coast import distance_to_land_km
+
+        return distance_to_land_km(self.mine.state.lat, self.mine.state.lon)
+
+    def _update_close(self) -> bool:
+        """True on the step the boat first closes inside LAND_CLOSE_KM; armed
+        again once it is back past LAND_REARM_KM. Kept per step (not per run
+        call) so Game.load replays it the same way."""
+        km = self._land_km()
+        if self.close_armed and km <= LAND_CLOSE_KM:
+            self.close_armed = False
+            return True
+        if not self.close_armed and km >= LAND_REARM_KM:
+            self.close_armed = True
+        return False
+
+    def _update_leader(self) -> str | None:
+        """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
+        None. A lead of a few metres flips back and forth with every wave, so a
+        pass needs the other boat PASS_MARGIN_KM clear, none counts in the
+        first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in),
+        and the first boat to get clear of the other is not a pass."""
+        if self.mine.state.t < self.start + timedelta(hours=PASS_QUIET_H):
+            return None
+        lead = self.lead_km()
+        now = "me" if lead > PASS_MARGIN_KM else "ghost" if lead < -PASS_MARGIN_KM else None
+        if now is None or now == self.leader:
+            return None
+        first, self.leader = self.leader is None, now
+        if first:
+            return None
+        return "ghost_passed" if now == "ghost" else "passed_ghost"
 
     def run(
         self,
@@ -320,6 +542,7 @@ class Game:
         breakdown: bool = True,
         ghost_passes: bool = True,
         order_arrives: bool = True,
+        silence: bool = True,
         max_hours: float = UNTIL_CAP_H,
     ) -> dict:
         """Let time run until `hours` pass or a stop condition fires. With
@@ -327,8 +550,15 @@ class Game:
         ("time"), so a quiet ocean never swallows weeks of the voyage at once.
         Returns why it stopped, the status, and both boats' new 6-hourly rows.
 
-        Stop reasons: time, battery, wind, land, breakdown, ghost_passed,
-        order_arrived (Real base station mode), over."""
+        Stop reasons: time, battery, wind, land, breakdown, silence,
+        ghost_passed, passed_ghost, order_arrived (Real base station mode), over. A pass
+        means the lead changed hands by more than PASS_MARGIN_KM, after the
+        first PASS_QUIET_H (see _update_leader). "land" fires on entering
+        land_within_km, and also the first time the boat closes inside
+        LAND_CLOSE_KM (see _update_close), so a start near land still warns.
+        "silence" warns before the race's silence limits disqualify the boat
+        (see _update_silence and silence()).
+        land_within_km=None turns both off."""
         from boatsim.vessel.coast import distance_to_land_km
 
         v = self.mine
@@ -339,7 +569,6 @@ class Game:
             land_within_km is not None
             and distance_to_land_km(v.state.lat, v.state.lon) <= land_within_km
         )
-        ahead = self.lead_km() >= 0.0
         stopped = None
         while stopped is None:
             if v.done:
@@ -371,14 +600,13 @@ class Game:
                 stopped = "wind"
             elif land_within_km is not None:
                 now_near = distance_to_land_km(v.state.lat, v.state.lon) <= land_within_km
-                if now_near and not near:
+                if (now_near and not near) or self.last_close:
                     stopped = "land"
                 near = now_near
-            if stopped is None and ghost_passes:
-                now_ahead = self.lead_km() >= 0.0
-                if ahead and not now_ahead:
-                    stopped = "ghost_passed"
-                ahead = now_ahead
+            if stopped is None and silence and self.last_silence:
+                stopped = self.last_silence
+            if stopped is None and ghost_passes and self.last_pass:
+                stopped = self.last_pass
         return {"stopped": stopped, "status": self.status(), "track": self.track(since=t0)}
 
     # -------------------------------------------------------------- reading
@@ -405,11 +633,37 @@ class Game:
             "ghost": self._boat(self.ghost),
             "lead_km": self.lead_km(),
             "mode": self.mode,
+            "show_true_position": True,
             "order": {"heading": self.helm.heading, "power": self.helm.power},
             "power_w": self.helm.power * self.max_drive_w,
+            "sailboat": self.sailboat,
+            "silence": self.silence(),
         }
+        if self.sailboat:
+            st, tac = v.state, self.helm.tactician
+            out["order"].update(sails=self.helm.sails, engine=self.helm.engine)
+            out["sailing"] = {
+                "plans": list(self.sail_plans),  # what may be ordered, biggest sails first
+                "has_engine": self.has_engine,
+                "plan": getattr(st, "sail_plan", None),  # what is set now (auto or ordered)
+                "heel_deg": getattr(st, "heel_deg", None),
+                "engine_on": getattr(st, "engine_on", None),
+                "fuel_l": getattr(st, "fuel_l", None),
+                # "beat" (tacking upwind), "run" (gybing downwind) or "reach"
+                "tactic": tac.mode if tac is not None else None,
+                "tacks": tac.switches if tac is not None else 0,
+            }
         if self.mode == "base":
-            out["base"] = {"last_report": dict(self.base.last), "waiting": self.waiting()}
+            # What steering from home looks like (Maya, 11 Nov): the page shows
+            # the last report and a faint estimate, not the true boat; the true
+            # track goes on the results card.
+            out["base"] = {
+                "last_report": dict(self.base.last),
+                "estimate": self.base.estimate(self.mine.state.t),
+                "reports": [dict(r) for r in self.base.reports],
+                "waiting": self.waiting(),
+            }
+            out["show_true_position"] = False
         if e is not None:
             out["weather"] = {
                 "wind_u": e.wind_u,
@@ -466,6 +720,21 @@ class Game:
             )
         return out
 
+    def _airtime(self, v: Voyage) -> dict | None:
+        """The satellite airtime counter (comms/iridium.py airtime()): Iridium
+        messages and bytes each way and their cost on the published contract
+        plan, plus the backup beacon's pings (a flat yearly fee, not per ping).
+        None for a stand-in boat or link without a ledger (QA's test games)."""
+        count = getattr(getattr(getattr(v, "c", None), "link", None), "airtime", None)
+        if count is None:
+            return None
+        pings = sum(
+            1
+            for e in v.log.events
+            if e.kind == EventKind.MESSAGE_RECEIVED and e.detail == "globalstar ping"
+        )
+        return {**count(self.start, v.state.t), "beacon_pings": pings}
+
     def result(self) -> dict:
         """The results card. Call when status()["over"] (it also works mid-game)."""
 
@@ -473,12 +742,19 @@ class Game:
             days = (v.state.t - self.start).total_seconds() / 86400.0
             socs = [r["soc"] for r in v.log.rows] or [v.state.soc]
             broke = sorted({e.kind.value for e in v.log.events if e.kind in BREAKDOWNS})
+            outcome = self._outcome(v)
             return {
-                "outcome": self._outcome(v),
+                "outcome": outcome,
                 "days": days,
                 "battery_low": min(socs),
                 "breakdowns": broke,
+                # How it ends, in the boat's own words (sandbox/endings.py).
+                "ending": ending(outcome, v.log.events, self.start, label),
+                "airtime": self._airtime(v),
             }
+
+        design = getattr(self, "design", None)  # QA's stand-in games have none
+        label = design.stock.get("label") if design is not None else None
 
         if self.mine.done:
             self._advance(
@@ -510,6 +786,8 @@ class Game:
         return {
             "build": catalog.grid_id(self.choices),
             "launch": _iso(self.start),
+            "challenge": self.challenge,
+            "start_port": self.start_port,
             "seed": self.seed,
             "breakdowns_on": self.breakdowns,
             "mode": self.mode,
@@ -534,14 +812,21 @@ class Game:
             "c": self.choices,
             "l": self.launch_index,
             "day": self.day,
+            "ch": self.challenge,
             "m": self.mode,
             "s": self.safe,
             "b": self.breakdowns,
             "d": self.max_days,
-            "o": [[o["min"], o["heading"], o["power"]] for o in self.orders],
+            "o": [
+                [o["min"], o["heading"], o["power"]]
+                + ([o["sails"], o["engine"]] if "sails" in o else [])
+                for o in self.orders
+            ],
             "at": round((self.mine.state.t - self.start).total_seconds() / 60),
             "p": [round(self.mine.state.lat, 4), round(self.mine.state.lon, 4)],
         }
+        if self.start_port:
+            payload["sp"] = self.start_port  # only when set, so other codes stay as they were
         raw = zlib.compress(json.dumps(payload, separators=(",", ":")).encode(), 9)
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -564,14 +849,16 @@ class Game:
                 choices=p["c"],
                 launch_index=p["l"],
                 day=p.get("day"),
+                challenge=p.get("ch"),
+                start_port=p.get("sp"),  # older links: the usual drop
                 safe=p["s"],
                 breakdowns=p["b"],
                 max_days=p["d"],
                 mode=p["m"],
             )
-            for minute, heading, power in p["o"]:
+            for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))
-                g.order(heading, power)
+                g.order(heading, power, *sail_orders[:2])
             g._advance_to(g.start + timedelta(minutes=p["at"]))
         except (KeyError, TypeError, IndexError, AttributeError) as err:
             # Valid JSON, but not a game this page can rebuild (a mangled link).

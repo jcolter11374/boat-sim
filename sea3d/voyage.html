@@ -20,6 +20,8 @@
   #top .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
   #top .row select { width: auto; padding: 2px 4px; }
   #top a { color: #8ab4ff; }
+  #top .row button { font: 600 12px system-ui, sans-serif; padding: 4px 10px; border-radius: 7px; cursor: pointer; color: var(--ink); background: #1b3352; border: 1px solid var(--line); }
+  #top .row button[aria-pressed="true"] { background: rgba(255,138,42,.18); border-color: var(--orange); }
   #top select + select { margin-top: 6px; }
   #focus { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
   #focus[hidden] { display: none; }
@@ -165,7 +167,12 @@
   <div class="row">
     <a href="?mode=game" id="playlink">&#127922; Play: pick your launch day</a>
     <a href="?live" id="livelink">&#128225; Live tracker</a>
+    <label id="placelabel" title="Real land from satellite pictures and height maps">&#9968; <select id="placepick" aria-label="Sail by real land"><option value="">Sail by real land&hellip;</option></select></label>
     <a href="./voyage.html" id="quitlink" hidden>Leave the game</a>
+  </div>
+  <div class="row">
+    <button id="cinebtn" title="The panels fade and the camera films the boat on its own. Any key or a click to leave.">&#127916; Cinematic</button>
+    <button id="soundbtn" aria-pressed="false" title="Wind, rain and waves, made from the weather">Sound off</button>
   </div>
 </div>
 <div id="hud">
@@ -187,7 +194,7 @@
 <div id="chartbox" class="glass" title="Click to enlarge">
   <canvas id="chart"></canvas>
   <div class="lbl">NORTH ATLANTIC</div>
-  <div id="legend"><i style="background:var(--orange)"></i><span id="lg-ours">track</span><span id="lg-theirs" hidden><i id="lg-theirs-dot" style="background:#2ec4b6"></i><span id="lg-theirs-name">Randolph (our model)</span></span><i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss</div>
+  <div id="legend"><i style="background:var(--orange)"></i><span id="lg-ours">track</span><span id="lg-theirs" hidden><i id="lg-theirs-dot" style="background:#2ec4b6"></i><span id="lg-theirs-name">Randolph (our model)</span></span><i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss<i style="background:#c9a46b"></i>wreck</div>
 </div>
 <div id="transport" class="glass">
   <button id="play" aria-label="Play or pause">&#9654;</button>

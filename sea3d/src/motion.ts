@@ -10,7 +10,9 @@
 //     the boat, as a real hull does.
 //   * Heave:  (m + a33) z''  = -rho g Awp (z - eta)        - c33 (z' - eta')
 //   * Pitch:  (Iyy + a55) th'' = -Disp g GM_L (th - slope_x) - c55 th'
-//   * Roll:   (Ixx + a44) ph'' = -Disp g GZ(ph - slope_z)   - c44 ph'
+//   * Roll:   (Ixx + a44) ph'' = Disp g (GZ(heel) - GZ(ph - slope_z)) - c44 ph'
+//     where heel is the steady lean the sails hold (0 for a motor boat), so
+//     the sail's heeling moment is the righting moment at that angle.
 //     GZ is the boat's full righting-arm curve (0 to 180 deg), so a knockdown
 //     or a capsize rights itself the way the stability numbers say it should.
 //   * Damping is set as a fraction of critical (zeta) for each motion, plus
@@ -216,8 +218,12 @@ export const RANDOLPH_REVB: HullParams = {
 // on the stern stub; 25.2 kg all up, waterline 0.098 m above the bottom. The GZ
 // curve is theirs (docs/data/revC_gz_curve.csv, free trim). Point masses are
 // their design.py equipment list plus Rev B's structure items above; they sum
-// to 25.26 kg. They haven't published Rev C inertias: ours are computed from
-// these masses and scaled by Rev B's published / computed ratio (GUESS).
+// to 25.26 kg. Inertias and the centre of gravity are their measured values
+// (designs/revC_geometry.json, 11 Nov 2026), about the CG with x aft, y port,
+// z up: Ixx 2.90, Iyy 5.00, Izz 2.15, Ixz -0.70 kg m^2; CG 0.853 m aft of the
+// bow and 0.034 m below the hull-bottom datum. Our roll-pitch model uses Ixx
+// and Iyy; Izz and Ixz (yaw, and the roll-yaw coupling) wait for a yaw model.
+// Our earlier point-mass estimates were within 3 % (2.86, 5.07, 0.847 m).
 export const REVC_MASS_ITEMS: MassItem[] = [
   [9.0, -0.436, "lead bulb, 0.32 m x 72 mm"],
   [0.9, -0.2, "keel fin and rod"],
@@ -251,9 +257,18 @@ const revcGz: [number, number][] = [
   [120, 0.3402], [125, 0.318], [130, 0.2927], [135, 0.2646], [140, 0.2347], [145, 0.2033], [150, 0.171], [155, 0.1383],
   [160, 0.1061], [165, 0.0753], [170, 0.0471], [175, 0.0225], [180, 0.0],
 ];
-// Rev B's published Ixx over the value its point masses give: how much the
-// spread-out structure adds that point masses miss (applied to Rev C, GUESS).
-const IXX_FIT = 2.487 / revbMass.rollInertia;
+// Their measured values (designs/revC_geometry.json).
+export const REVC_IXX = 2.9;
+export const REVC_IYY = 5.0;
+export const REVC_IZZ = 2.15; // not used yet (no yaw model)
+export const REVC_IXZ = -0.7; // not used yet (no yaw model)
+const REVC_CG_X = 0.853; // m aft of the bow
+const REVC_CG_BELOW_BOTTOM = 0.034; // m below the hull-bottom datum
+/** Our point-mass estimate of the CG and roll inertia, kept to check theirs. */
+export const REVC_POINT_MASS = {
+  ...revcMass,
+  cgX: REVC_X.reduce((s, x, i) => s + x * REVC_MASS_ITEMS[i][0], 0) / revcMass.mass,
+};
 
 export const RANDOLPH_REVC: HullParams = {
   name: "Randolph Rev C",
@@ -262,10 +277,10 @@ export const RANDOLPH_REVC: HullParams = {
   waterlineBeam: 0.34, // their randolph_rev_c.yaml
   waterplaneCoeff: 0.68, // GUESS: as Rev B
   gzTable: revcGz,
-  rollInertia: Math.round(revcMass.rollInertia * IXX_FIT * 1000) / 1000, // GUESS: ~2.86
-  pitchInertia: 5.07, // GUESS: point masses (x and z) scaled by Rev B's Iyy fit
-  cgBelowWaterline: REVC_WATERLINE - revcMass.cg,
-  cgX: REVC_X.reduce((s, x, i) => s + x * REVC_MASS_ITEMS[i][0], 0) / revcMass.mass,
+  rollInertia: REVC_IXX, // their measured Ixx about the CG
+  pitchInertia: REVC_IYY, // their measured Iyy about the CG
+  cgBelowWaterline: REVC_WATERLINE + REVC_CG_BELOW_BOTTOM,
+  cgX: REVC_CG_X,
   addedHeave: 1.0,
   addedPitch: 0.5,
   addedRoll: 0.15,
@@ -275,7 +290,143 @@ export const RANDOLPH_REVC: HullParams = {
   // as Rev B, with the CG ~0.07 m above the bottom and the D72 bulb (0.32 x 0.072 m)
   rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.16, -0.07, 0.43 - 0.07) + 0.023 * 0.5 ** 3),
   source:
-    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), simulator/drone_sim/design.py (masses); inertias GUESS",
+    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), simulator/drone_sim/design.py (masses), designs/revC_geometry.json (measured inertias and CG)",
+};
+
+// --- Stock vessels (Theo, configs/stock_*.yaml) ---------------------------------
+// The GZ curves are the configs' own (vpp.gz, as the simulator uses them), so the
+// boat leans and rights itself in the picture the way it does in the simulator.
+// Inertias and damping are GUESSES sized to typical roll periods.
+const deg = (d: number[], m: number[]): [number, number][] => d.map((a, i) => [a, m[i]]);
+
+// 31 ft cruiser: GM 1.15 m (ORC righting moment). Roll period about 3.5 s, a typical
+// figure for a 30 ft fin-keel yacht with its mast (radius of gyration ~1.75 m).
+export const CRUISER31: HullParams = {
+  name: "31 ft cruiser",
+  mass: 3887,
+  waterlineLength: 8.8,
+  waterlineBeam: 2.9, // GUESS: 3.21 m beam, a little less at the waterline
+  waterplaneCoeff: 0.7, // GUESS
+  gzTable: deg(
+    [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 180],
+    [0, 0.19, 0.36, 0.5, 0.6, 0.65, 0.66, 0.62, 0.54, 0.43, 0.3, 0.16, 0.02, -0.12, 0],
+  ),
+  rollInertia: 11800, // GUESS: 3887 kg x (1.75 m)^2
+  pitchInertia: 3887 * (0.25 * 9.45) ** 2, // GUESS
+  cgBelowWaterline: 0.15, // GUESS: a 1025 kg keel bulb 1.75 m down against the hull and rig
+  cgX: 4.5, // GUESS: over the keel
+  addedHeave: 0.8, // GUESS
+  addedPitch: 0.5, // GUESS
+  addedRoll: 0.15, // GUESS
+  zetaHeave: 0.2, // GUESS
+  zetaPitch: 0.2, // GUESS
+  zetaRoll: 0.1, // GUESS: fin keel yachts ~0.1
+  // keel 0.9 m chord from 0.4 to 1.75 m below the CG, bulb 1.6 x 0.34 m at 1.6 m
+  rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.9, 0.4, 1.75) + 0.54 * 1.6 ** 3),
+  source: "configs/stock_cruiser31.yaml (GZ, mass); inertia and damping GUESS",
+};
+
+// 14 ft dinghy, nobody aboard: form stability only, and it turtles past ~75 deg.
+export const DINGHY14: HullParams = {
+  name: "14 ft dinghy",
+  mass: 75,
+  waterlineLength: 3.9,
+  waterlineBeam: 1.1, // GUESS
+  waterplaneCoeff: 0.72, // GUESS: a flat, full board boat
+  gzTable: deg(
+    [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 120, 150, 180],
+    [0, 0.18, 0.27, 0.27, 0.22, 0.16, 0.1, 0.04, -0.02, -0.06, -0.1, -0.06, 0],
+  ),
+  rollInertia: 25, // GUESS: hull 75 kg x (0.45 m)^2 plus the spars
+  pitchInertia: 75 * (0.25 * 4.2) ** 2, // GUESS
+  cgBelowWaterline: -0.12, // GUESS: no crew or ballast, so it sits above the water
+  cgX: 2.0, // GUESS
+  addedHeave: 1.0, // GUESS
+  addedPitch: 0.5, // GUESS
+  addedRoll: 0.3, // GUESS: the daggerboard and the flat bottom push water
+  zetaHeave: 0.25, // GUESS
+  zetaPitch: 0.25, // GUESS
+  zetaRoll: 0.12, // GUESS
+  rollQuadDamping: 0.5 * RHO * 1.2 * finR3(0.3, 0.2, 0.95), // daggerboard
+  source: "configs/stock_dinghy14.yaml (GZ, mass); inertia and damping GUESS",
+};
+
+// 16 ft beach cat: very stiff (GM ~13 m) until a hull lifts, then over at ~30 deg.
+export const BEACHCAT16: HullParams = {
+  name: "16 ft beach cat",
+  mass: 170,
+  waterlineLength: 4.9,
+  waterlineBeam: 0.6, // two slim hulls, 0.3 m each at the waterline
+  waterplaneCoeff: 0.7, // GUESS
+  gzTable: deg(
+    [0, 2, 4, 6, 10, 20, 30, 40, 50, 60, 70, 90, 120, 150, 180],
+    [0, 0.45, 0.85, 0.98, 0.97, 0.84, 0.67, 0.49, 0.3, 0.08, -0.13, -0.5, -0.6, -0.4, 0],
+  ),
+  rollInertia: 400, // GUESS: hulls 1.05 m out, a tall mast
+  pitchInertia: 170 * (0.28 * 4.9) ** 2, // GUESS
+  cgBelowWaterline: -0.5, // GUESS: trampoline and rig well above the water
+  cgX: 2.5, // GUESS
+  addedHeave: 0.6, // GUESS
+  addedPitch: 0.4, // GUESS
+  addedRoll: 0.3, // GUESS
+  zetaHeave: 0.25, // GUESS
+  zetaPitch: 0.25, // GUESS
+  zetaRoll: 0.25, // GUESS: a hull pressed down and the other lifted is heavily damped
+  rollQuadDamping: 0.5 * RHO * 1.2 * 2 * 4.9 * 0.3 * 1.05 ** 3, // GUESS: hulls moving up and down
+  source: "configs/stock_beachcat16.yaml (GZ, mass); inertia and damping GUESS",
+};
+
+// 7 m wind-powered ocean drone: narrow and deep-ballasted, so it rights itself from
+// any angle (the config: no stable upside-down position). GZ 0.35 m at 25 deg from its
+// max heel moment (2600 N m over 750 kg); the rest of the curve is a GUESS of that shape.
+export const SAIL_DRONE7: HullParams = {
+  name: "wind-powered ocean drone",
+  mass: 750,
+  waterlineLength: 6.4,
+  waterlineBeam: 0.75, // GUESS: 0.9 m beam, a little less at the waterline
+  waterplaneCoeff: 0.65, // GUESS
+  gzTable: deg(
+    [0, 10, 20, 30, 40, 60, 90, 120, 150, 180],
+    [0, 0.15, 0.29, 0.4, 0.47, 0.53, 0.47, 0.32, 0.14, 0],
+  ),
+  rollInertia: 750 * 0.75 ** 2, // GUESS: the bulb 1.6 m down and the wing 3 m up about the CG
+  pitchInertia: 750 * (0.25 * 7) ** 2, // GUESS
+  cgBelowWaterline: 0.25, // GUESS: a 250 kg bulb 1.6 m down against the hull and the wing
+  cgX: 3.2, // GUESS: between the keel and the wing
+  addedHeave: 0.8, // GUESS
+  addedPitch: 0.5, // GUESS
+  addedRoll: 0.15, // GUESS
+  zetaHeave: 0.2, // GUESS
+  zetaPitch: 0.2, // GUESS
+  zetaRoll: 0.1, // GUESS: like a fin-keel yacht
+  // keel 0.85 m chord from 0.3 to 1.5 m below the CG, bulb 1.5 x 0.3 m at 1.45 m
+  rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.85, 0.3, 1.5) + 0.45 * 1.45 ** 3),
+  source: "configs/stock_sail_drone7.yaml (mass, max heel moment); curve, inertia and damping GUESS",
+};
+
+// 8.64 m ocean rowing boat for four (configs/stock_ocean_rower45.yaml; Theo's stats card).
+// Sealed cabins at both ends make it self-righting: GZ stays positive all the way round,
+// balanced upside down only at exactly 180 deg. Curve, inertia and damping GUESS.
+export const OCEAN_ROWER45: HullParams = {
+  name: "ocean rowing boat",
+  mass: 1500, // loaded: boat about 700, crew 340, food, water and kit
+  waterlineLength: 7.6,
+  waterlineBeam: 1.45, // GUESS
+  waterplaneCoeff: 0.72, // the config's 8.0 m2 waterplane over 7.6 x 1.45
+  gzTable: deg([0, 10, 20, 30, 45, 60, 90, 120, 150, 180], [0, 0.07, 0.13, 0.17, 0.18, 0.15, 0.08, 0.03, 0.01, 0]),
+  rollInertia: 1500 * 0.6 ** 2, // GUESS
+  pitchInertia: 1500 * (0.25 * 8.64) ** 2, // GUESS
+  cgBelowWaterline: 0.05, // GUESS: water and food stowed low, the cabins high
+  cgX: 4.3, // GUESS: a little aft of mid-length (the bigger stern cabin, the batteries)
+  addedHeave: 0.9, // GUESS
+  addedPitch: 0.6, // GUESS
+  addedRoll: 0.2, // GUESS
+  zetaHeave: 0.2, // GUESS
+  zetaPitch: 0.2, // GUESS
+  zetaRoll: 0.08, // GUESS: a round, shallow hull with a small daggerboard
+  // daggerboard 0.3 m chord from 0.35 to 0.9 m below the CG, and the long flat bilge
+  rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.3, 0.35, 0.9) + 7.6 * 0.15 * 0.7 ** 3),
+  source: "configs/stock_ocean_rower45.yaml (mass, waterplane); Theo's stats card (GZ curve); inertia and damping GUESS",
 };
 
 /** Righting arm (m) at heel phi (rad), any angle; odd and 360-periodic. */
@@ -412,6 +563,12 @@ export class BoatMotion {
   pitchRate = 0;
   rollRate = 0;
   t = 0;
+  /** Steady heel (rad, + = to starboard) the wind holds the boat at in flat water:
+   * a sailing boat leans on its sails, and the waves rock it about that angle. */
+  heel = 0;
+  /** Turned over for good (+1 rolled to starboard, -1 to port, 0 upright): it goes on
+   * over and floats upside down, rocking about 180 deg (a boat with nobody to right it). */
+  capsized = 0;
   private prevEta: number | null = null;
 
   constructor(p: HullParams, pose: Pose = { x: 0, z: 0, yaw: 0 }) {
@@ -444,8 +601,12 @@ export class BoatMotion {
       -kp * (this.pitch - Math.atan(s.slopeX)) - p.zetaPitch * crit(d.pitchInertia, kp) * this.pitchRate;
     // Sea rising to starboard tilts the deck to port: roll target -atan(slopeZ).
     const kr = W * gmOf(p);
+    const restore = this.capsized
+      ? // GUESS: as stiff upside down as its best righting arm (at least 0.3 m).
+        -W * Math.max(0.3, ...p.gzTable.map(([, g]) => g)) * Math.sin(this.roll - this.capsized * Math.PI + Math.atan(s.slopeZ))
+      : W * (gz(p, this.heel) - gz(p, this.roll + Math.atan(s.slopeZ)));
     const mr =
-      -W * gz(p, this.roll + Math.atan(s.slopeZ)) - p.zetaRoll * crit(d.rollInertia, kr) * this.rollRate -
+      restore - p.zetaRoll * crit(d.rollInertia, kr) * this.rollRate -
       p.rollQuadDamping * Math.abs(this.rollRate) * this.rollRate;
 
     this.heaveRate += (fz / d.heaveMass) * dt;

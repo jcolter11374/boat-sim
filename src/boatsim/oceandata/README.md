@@ -232,7 +232,8 @@ direction.
   23 x 71 points x 240 times x 9 fields).
 - **Depth**, `depth_chesapeake.json` + `.bin.gz`: elevation in metres
   (negative below sea level) for 36.5-39.7N 77.5-74W, from GEBCO 2024 at about
-  450 m spacing, or ETOPO 2022 if GEBCO's server is down.
+  450 m spacing, or ETOPO 2022 if GEBCO's server is down. Published but not
+  deployed: no page reads it yet.
 - ERA5 gives mean periods. A peak period is roughly 1.2-1.3 times longer
   (GUESS); the 3D sea's factor is Theo's call.
 - Where a sea point has some systems but not another, the missing one is
@@ -263,8 +264,9 @@ re-run every 6 hours (a "cycle"), and GFS-Wave runs the sea alongside it.
   period where one system dominates), unlike ERA5's mean periods.
 - Run: Actions -> "Today's weather", every 6 hours (about 5 h 20 min after
   each cycle) or by hand. It skips everything when the newest cycle is already
-  on the `forecast-data` release; otherwise it publishes and redeploys the 3D
-  page, which copies the files into `public/forecast/`. Locally:
+  on the `forecast-data` release; otherwise it publishes. It doesn't redeploy
+  the 3D page while no page reads the forecast; the next deploy copies the
+  files into `public/forecast/`. Locally:
   `python -m boatsim.oceandata.gfs --out /tmp/fc` (needs `pip install eccodes`;
   about 40 s).
 

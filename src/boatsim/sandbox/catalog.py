@@ -47,6 +47,7 @@ class Option:
     wh: float | None = None  # brain/AIS daily energy (catalog), for the hotel load
     kg: float = 0.0  # weight against the default option (catalog), for the mass link
     hotel_wh: float = 0.0  # extra daily energy (Wh/day) for parts with no catalog figure
+    cost: float = 0.0  # price against the default option, USD (parts list), for the page
 
 
 def _thr(n: int, kg: float = 0.0) -> Option:
@@ -423,6 +424,8 @@ def normalise(choices: dict | None) -> tuple[dict, int]:
         if opt not in slots[slot]:
             raise ValueError(f"unknown option {opt!r} for slot {slot!r}")
         out[slot] = opt
+    if base in STOCK_BASES:
+        return out, None  # sailed as designed, at its own cruise power
     if base != "kayak":
         return out, RAND_THRUSTER_CRUISE_W if out["drive"] == "wing-thruster" else 0
     # A wing-only boat has no thrusters, so the thruster and cruise power
@@ -444,7 +447,8 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
             if isinstance(val, dict):  # merge into the design's table (e.g. p_part)
                 val = {**getattr(base, sec).get(key, {}), **val}
             changes.append((sec, key, val))
-    changes.append(("propulsion", "cruise_drive_w", cruise))
+    if cruise is not None:
+        changes.append(("propulsion", "cruise_drive_w", cruise))
     if which == "kayak":
         brain, ais = SLOTS["brain"][picked["brain"]], SLOTS["ais"][picked["ais"]]
         d_wh = (brain.wh - BASE_BRAIN_WH) + (ais.wh - BASE_AIS_WH)
@@ -490,6 +494,25 @@ def effects(choices: dict | None) -> dict[str, dict]:
 REV_B = "configs/randolph_rev_b.yaml"
 REV_C = "configs/randolph_rev_c.yaml"
 BASES = {"kayak": KAYAK, "revc": REV_C, "revb": REV_B}
+# Ready-made boats you sail as they come, with no slots to change: the stock
+# vessels (vessel/keelboat.py) and the joke fleet (vessel/oddboats.py).
+STOCK_BASES = {
+    name: f"configs/{name}.yaml"
+    for name in (
+        "stock_cruiser31",
+        "stock_dinghy14",
+        "stock_beachcat16",
+        "stock_sail_drone7",
+        "stock_ocean_rower45",
+        "joke_robot_kayak",
+        "joke_canoe",
+        "joke_pedalo",
+        "joke_bathtub",
+        "joke_flamingo",
+        "joke_wheelie_bin",
+    )
+}
+BASES.update(STOCK_BASES)
 RAND_THRUSTER_CRUISE_W = (
     5  # GUESS: about what 40 W of deck panels leave after the 33 Wh/day hotel load
 )
@@ -630,6 +653,38 @@ RDEFAULTS = {
 }
 
 
+# --- Stock bases: a spare autopilot ---------------------------------------------
+# A stock boat comes with ONE autopilot (hazards.electronics_boxes: 1): when it dies
+# the boat drifts. The one part a player can add is a spare: a second electronics
+# box that takes over the steering when the first dies, as the kayak's safe box
+# does. Not fitted by default, so each stock boat as it comes is its yaml untouched.
+# Weight, power and price are the kayak's second box in the parts list
+# (build-plan/parts-catalog.json "brain": two-box minus one-box): +0.4 kg,
+# +4 Wh/day (31 - 27), +$83 (333 - 250). On a big boat it would steer the same
+# rudder drive; the radio and the Iridium modem stay on the first box, so after
+# a swap the boat is tracked by its backup tracker and gets no new route.
+SPARE_BOX = Option(
+    (("hazards", "electronics_boxes", 2),),
+    est=True,
+    basis="parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+    kg=0.4,
+    hotel_wh=4.0,
+    cost=83.0,
+)
+SPARE_SLOT = {
+    "none": Option(basis="as the boat comes: one autopilot"),
+    "spare-autopilot": SPARE_BOX,
+}
+# The stock boats steered by an autopilot box that can fail. The rower is steered
+# by its crew and the joke fleet's boxes are trackers, so they have no slot.
+STOCK_SLOTS = {
+    b: {"spare": SPARE_SLOT}
+    for b in ("stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7")
+}
+STOCK_SLOT_NAMES = {"spare": "Spare autopilot"}
+STOCK_DEFAULTS = {b: {"spare": "none"} for b in STOCK_SLOTS}
+
+
 def base_of(choices: dict | None) -> str:
     b = (choices or {}).get("base", "kayak")
     if b not in BASES:
@@ -638,10 +693,14 @@ def base_of(choices: dict | None) -> str:
 
 
 def slots_for(base: str) -> dict[str, dict[str, Option]]:
+    if base in STOCK_BASES:
+        return STOCK_SLOTS.get(base, {})
     return SLOTS if base == "kayak" else RSLOTS[base]
 
 
 def defaults_for(base: str) -> dict[str, str]:
+    if base in STOCK_BASES:
+        return STOCK_DEFAULTS.get(base, {})
     return DEFAULTS if base == "kayak" else RDEFAULTS[base]
 
 
@@ -727,6 +786,8 @@ def nearest(choices: dict | None) -> tuple[str, bool]:
     base = base_of(choices)
     picked, cruise = normalise(choices)
     want = grid_id(choices)
+    if base in STOCK_BASES:
+        return want, False  # not in the odds grid
 
     def dist(g):
         if base_of(g) != base:
@@ -804,4 +865,38 @@ def base_table() -> dict[str, dict]:
             ],
         }
         for b in RSLOTS
+    }
+
+
+def stock_table() -> dict[str, dict]:
+    """The stock bases with parts to add (sim-slots.json "stock"): per base its
+    design file, defaults and slots in slot_table()'s shape, each option with its
+    price against the default (USD, parts list)."""
+    return {
+        b: {
+            "design": BASES[b],
+            "defaults": STOCK_DEFAULTS[b],
+            "slots": [
+                {
+                    "id": slot,
+                    "name": STOCK_SLOT_NAMES[slot],
+                    "opts": [
+                        {
+                            "id": oid,
+                            "effect": o.effect,
+                            "est": o.est,
+                            "basis": o.basis,
+                            "sim": [f"{s}.{k}" for s, k, _ in o.changes]
+                            + (["electronics.hotel_load_wh_per_day"] if o.hotel_wh else [])
+                            + (["hull.mass_kg"] if o.kg else []),
+                            "kg": o.kg,
+                            "cost": o.cost,
+                        }
+                        for oid, o in opts.items()
+                    ],
+                }
+                for slot, opts in slots.items()
+            ],
+        }
+        for b, slots in STOCK_SLOTS.items()
     }

@@ -12,6 +12,7 @@ import {
   RANDOLPH_REVC,
   REVC_GM,
   REVC_MASS_ITEMS,
+  REVC_POINT_MASS,
   REVB_GM,
   derive,
   gmOf,
@@ -103,6 +104,12 @@ test("Rev C uses the Randolph team's own GZ curve, and its masses add up to 25.2
   // slightly lower GM (0.187 vs 0.201 m), so it rolls a little slower
   assert.ok(RANDOLPH_REVC.rollInertia > RANDOLPH_REVB.rollInertia && RANDOLPH_REVC.rollInertia < 3.5);
   assert.ok(derive(RANDOLPH_REVC).periodRoll > derive(RANDOLPH_REVB).periodRoll);
+  // their measured inertias and CG (revC_geometry.json); our point masses agree to 3 %
+  assert.equal(RANDOLPH_REVC.rollInertia, 2.9);
+  assert.equal(RANDOLPH_REVC.pitchInertia, 5.0);
+  assert.ok(Math.abs(RANDOLPH_REVC.cgBelowWaterline - 0.132) < 1e-9);
+  assert.ok(Math.abs(REVC_POINT_MASS.cgX / RANDOLPH_REVC.cgX - 1) < 0.03);
+  assert.ok(Math.abs(REVC_POINT_MASS.cg - (0.098 - 0.132)) < 0.01);
 });
 
 test("both curves are positive all the way to 180 deg (no stable upside-down position)", () => {

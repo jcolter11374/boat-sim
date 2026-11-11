@@ -19,7 +19,8 @@ What the real Pixhawk does, and what this copies:
   doesn't turn round to chase it.
 * **GPS loss.** With no fix, hold the last commanded heading (dead reckoning).
 
-**Pursuit steering (option, off by default: `steer="pursuit"`).** Far from land,
+**Pursuit steering (the default since 11 Nov 2026: `steer="pursuit"`;
+`steer="track"` is the old Rover behaviour everywhere).** Far from land,
 holding the track line costs time. When a cross-current pushes the boat off
 the line, the autopilot spends speed crabbing up to 60 degrees to get back,
 when the line itself doesn't matter out there. In pursuit mode, more than
@@ -29,7 +30,12 @@ waypoint every step and lets the current carry it sideways, crabbing at most
 track line as before, starting a fresh line from where it is. Found by the
 Take the helm survey (11 Nov 2026): on 14 April to June 2020 launches,
 re-aiming at the finish gave a 54.9-day median crossing against 67.0 for track
-holding, with the same arrivals.
+holding, with the same arrivals. On the paired 2012-21 April to June grid
+(sensitivity run 42956919967, 100 launches) it was about 7 days faster
+(median paired difference -7.3 days, 59 of 74 faster) with the same finish
+odds (80% against 78%, within noise); Ravi passed it and Maya made it the
+default. Never crabbing at all far from land was as fast but stays a
+variant: it alone had a grounding.
 
 What it does not copy, and why: Rover 4.2+ runs an S-curve path planner and a
 position controller at 50 Hz with metre-scale gains. The simulator steps every
@@ -67,7 +73,7 @@ class WaypointAutopilot:
         max_crab_deg: float = 60.0,  # GUESS: beyond this the current simply wins
         min_ground_speed: float = 0.1,  # m/s; GUESS: below this GPS course is noise
         max_fix_gap_s: float = 3_600.0,  # GUESS: older fixes say little about the current now
-        steer: str = "track",  # "track" (Rover) or "pursuit" far from land (see above)
+        steer: str = "pursuit",  # "pursuit" far from land (see above) or "track" (Rover)
         pursuit_crab_deg: float = 20.0,  # GUESS: largest crab angle in pursuit mode
         track_near_land_km: float = 150.0,  # GUESS: hold the track line this close to a coast
     ):
@@ -90,6 +96,10 @@ class WaypointAutopilot:
         # is drifting, the course it made good says nothing about the current
         # we'd need to crab into, so the estimate is frozen (no windup).
         self.hold_crab = False
+        # Set by the sailing tactician while it beats or runs (autonomy/sailing.py):
+        # the boat is zig-zagging on purpose, so its course made good isn't the
+        # current's doing either.
+        self.tacking = False
 
         # Internal state, also handy for logging.
         self.crab_deg = 0.0
@@ -107,6 +117,7 @@ class WaypointAutopilot:
         self.crab_deg = 0.0
         self.cross_track_m = 0.0
         self.hold_crab = False
+        self.tacking = False
         self._mission = None
         self._mission_version = None
         self._origin = None
@@ -158,7 +169,7 @@ class WaypointAutopilot:
 
     def _update_crab(self, sensors: Sensors) -> None:
         """Compare the course made good since the last fix with the course we wanted."""
-        if self.hold_crab or self.thrust_fraction <= 0 or sensors.soc <= 0.0:
+        if self.hold_crab or self.tacking or self.thrust_fraction <= 0 or sensors.soc <= 0.0:
             # Not under power: freeze the crab and drop the baseline fix, so the
             # first fix after power returns isn't compared with a drifting one.
             self._last_fix = None

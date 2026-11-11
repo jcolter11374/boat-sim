@@ -96,6 +96,12 @@ class KayakState(BoatState):
         return not self.damage.get("beacon", False)
 
 
+def has_brain(damage: dict) -> bool:
+    """Is any electronics box still working? A one-box boat loses both entries
+    at once (vessel/hazards.py), so this is "the main box is alive" there."""
+    return not (damage.get("electronics_main") and damage.get("electronics_safe"))
+
+
 @dataclass(frozen=True)
 class SpeedSolution:
     surge: float  # m/s through the water along the heading
@@ -211,6 +217,46 @@ def solve_speed(
     )
 
 
+class SteadyPolar:
+    """A speed table for a wing-sail boat with no VPP polar (the wind-powered
+    drone, a KayakVessel with a sail): its steady speed through the water at
+    each wind speed and angle, from the boat's own force balance
+    (vessel.kayak.solve_speed), so base plans with the physics the boat sails
+    with. Waves come from the wind with the height of a fully developed sea,
+    Hs = 0.0214 U^2 (Pierson & Moskowitz 1964, doi:10.1029/JZ069i024p05181),
+    capped at 6 m: a GUESS, since the planner asks by wind alone. No current,
+    no fouling (polar_factor covers both). Above the storm wind the wing is
+    feathered and the boat only runs off, so it counts as making no way."""
+
+    def __init__(self, vessel):
+        self.vessel = vessel
+        self._cache: dict[tuple[int, int], float] = {}
+
+    def speed_ms(self, tws_ms: float, twa_deg: float) -> float:
+        key = (round(tws_ms * 4), round(twa_deg))
+        got = self._cache.get(key)
+        if got is not None:
+            return got
+        v, sail = self.vessel, self.vessel.sail
+        tws, twa = key[0] / 4, math.radians(key[1])
+        if tws <= 0.0 or tws > sail.storm_wind_ms:
+            speed = 0.0
+        else:
+            env = EnvState(
+                wind_u=-tws * math.sin(twa),
+                wind_v=-tws * math.cos(twa),
+                hs=min(0.0214 * tws * tws, 6.0),
+                wave_dir=float(key[1]),
+            )
+            sol = solve_speed(
+                v.hull, v.thrusters, 0.0, 0.0, 0, env, 0.0, 0.0, 0.0,
+                sail=sail, sail_alpha_max_deg=sail.max_alpha_deg,
+            )  # fmt: skip
+            speed = max(sol.surge, 0.0)
+        self._cache[key] = speed
+        return speed
+
+
 class KayakVessel:
     """Physics for the v4 kayak. Drop-in for the Vessel protocol."""
 
@@ -227,6 +273,9 @@ class KayakVessel:
         self.base_hotel_w = (hotel_wh - self.nav_light_w * dark_hours) / 24.0
         self.dark_ghi = float(e.get("nav_light_on_below_ghi", 5.0))
         self.min_steer_w = float(design.propulsion.get("min_steer_w", 1.0))  # GUESS
+        # electronics.tactician: false keeps a design on its plain waypoint
+        # autopilot (Randolph's Rev B/C: their own autopilot's behaviour).
+        self.tactician_ok = bool(e.get("tactician", True))
         self.hazards = HazardParams.from_config(design.hazards)
         self.thruster_parts = thruster_parts(self.thrusters.count)
         self.panels_w = dict(design.power.get("panels_w", DEFAULT_PANELS_W))
@@ -270,6 +319,44 @@ class KayakVessel:
     def working_thrusters(self, state: BoatState) -> int:
         return sum(1 for k in self.thruster_parts if not state.damage.get(k, False))
 
+    # Hooks for other hull types (vessel/keelboat.py); the kayak's own physics.
+    def _motoring(
+        self, state: BoatState, cmd: Command, drive_w: float, working: int, rudder_ok: bool
+    ) -> bool:
+        """Is a sailing design under power (so it holds any course, even upwind)?
+        rudder_ok: the autopilot is alive and the rudder works. Twin thrusters
+        steer without it (differential thrust), so the kayak's hulls ignore it."""
+        can_motor = working >= (2 if state.damage.get("rudder") else 1)
+        return can_motor and drive_w >= self.min_steer_w
+
+    def _solve(
+        self,
+        heading: float,
+        push_w: float,
+        working: int,
+        env: EnvState,
+        foul: float,
+        cur_e: float,
+        cur_n: float,
+        extra_drag_mult: float,
+        sail_alpha_max: float,
+    ) -> SpeedSolution:
+        """Steady speed through the water this step."""
+        return solve_speed(
+            self.hull,
+            self.thrusters,
+            heading,
+            push_w,
+            working,
+            env,
+            foul,
+            cur_e,
+            cur_n,
+            extra_drag_mult=extra_drag_mult,
+            sail=self.sail,
+            sail_alpha_max_deg=sail_alpha_max,
+        )
+
     def step(
         self,
         state: BoatState,
@@ -291,7 +378,7 @@ class KayakVessel:
         frac = min(max(cmd.thrust_fraction, 0.0), 1.0)
         # No working electronics box at all (a one-box boat whose box died, kept
         # afloat and tracked by its beacon): nothing drives the motors.
-        brain = not (state.damage.get("electronics_main") and state.damage.get("electronics_safe"))
+        brain = has_brain(state.damage)
         drive_req = frac * self.thrusters.max_power_each_w * working if on and brain else 0.0
         hotel_req = 0.0
         if on:
@@ -324,9 +411,11 @@ class KayakVessel:
             # Rudder gone but autopilot alive: the tail still trims the wing, and the
             # boat weathervanes onto a reach ~110 deg off the wind (their sim), on
             # the side nearer its course (sail.unsteered_heading), so it keeps sailing.
-            # A dead electronics box (with a backup tracker still reporting) takes
-            # the autopilot with it: no rudder, no wing trim, so it drifts.
-            ap = on and not state.damage.get("electronics_main")
+            # With every electronics box dead (a one-box boat's box, kept tracked by
+            # its backup tracker) the autopilot goes too: no rudder, no wing trim, so
+            # it drifts. A second box (the kayak's safe box, a spare autopilot) takes
+            # over the steering when the main one dies.
+            ap = on and brain
             steering = ap and not state.damage.get("rudder")
             sailing = ap and not state.damage.get("sail") and not calm
             # Hybrid (wing plus thrusters): with the motors pushing it holds its
@@ -334,8 +423,7 @@ class KayakVessel:
             # wing adds whatever drive it can at that heading (best_alpha picks
             # feathered when it can't help). With a dead rudder, two thrusters
             # still steer by differential thrust, as on the kayak.
-            can_motor = working >= (2 if state.damage.get("rudder") else 1)
-            motoring = can_motor and es.drive_w >= self.min_steer_w
+            motoring = self._motoring(state, cmd, es.drive_w, working, steering)
             steering = steering or motoring
         else:
             motoring = False
@@ -343,6 +431,11 @@ class KayakVessel:
             steering = es.drive_w >= self.min_steer_w and can_steer
             sailing = False
         tws = math.hypot(env.wind_u, env.wind_v)
+        if self.sail is not None:
+            # The wing's wind vane (truth for now, like the GPS), relative to
+            # the water as the boat feels it; sense() reports it so the
+            # tactician can beat and run (autonomy/sailing.py).
+            self._vane = (wind_from, math.hypot(we, wn))
         feather = False
         if motoring:
             heading = cmd.heading % 360.0
@@ -367,9 +460,7 @@ class KayakVessel:
         # A boat that can't steer just turns circles: the power is spent (until the
         # autopilot cuts it) but it makes no headway, so it drifts.
         push_w = es.drive_w if steering else 0.0
-        sol = solve_speed(
-            self.hull,
-            self.thrusters,
+        sol = self._solve(
             heading,
             push_w,
             working,
@@ -377,9 +468,8 @@ class KayakVessel:
             foul,
             cur_e,
             cur_n,
-            extra_drag_mult=self.extra_drag_mult(state),
-            sail=self.sail,
-            sail_alpha_max_deg=sail_alpha_max,
+            self.extra_drag_mult(state),
+            sail_alpha_max,
         )
         ve, vn = _world_axes(heading, sol.surge, sol.sway)
         ge, gn = ve + cur_e, vn + cur_n
@@ -409,6 +499,7 @@ class KayakVessel:
         # One fixed block of dice per step, so the stream stays in step across
         # runs whose paths differ (hazards.SLOT).
         dice = draw_dice(rng)
+        self._last_dice = dice  # for subclasses' own hazards (keelboat gusts)
         hz = sample_hazards(self.hazards, env, hours, state.damage, new.t, dice)
         events += hz.events
         new.knockdowns = getattr(state, "knockdowns", 0) + hz.knockdowns
@@ -449,6 +540,7 @@ class KayakVessel:
 
     def sense(self, state: BoatState, rng: np.random.Generator) -> Sensors:
         # Truth for now; GPS and compass noise belong with the sensor-failure work.
+        vane = getattr(self, "_vane", None) if self.sail is not None else None
         return Sensors(
             t=state.t,
             lat=state.lat,
@@ -456,7 +548,18 @@ class KayakVessel:
             heading=state.heading,
             soc=state.soc,
             thrusters_ok=self.working_thrusters(state),
+            wind_from_deg=None if vane is None else vane[0],
+            wind_speed_ms=None if vane is None else vane[1],
         )
+
+    def steady_polar(self) -> SteadyPolar | None:
+        """A speed table for a sail-only design (a wing and no motors), else
+        None: a hybrid holds any course under power, a kayak has no sail."""
+        if self.sail is None or self.thrusters.count > 0:
+            return None
+        if getattr(self, "_polar", None) is None:
+            self._polar = SteadyPolar(self)
+        return self._polar
 
 
 def with_damage(state: KayakState, part: str) -> KayakState:

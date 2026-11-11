@@ -89,3 +89,60 @@ def test_scene_url():
     assert lv._scene_url("S2B_26SLH_20240626", "TCI").endswith(
         "/26/S/LH/2024/6/S2B_26SLH_20240626_0_L2A/TCI.tif"
     )
+
+
+def test_coast_regions_fit_their_tiles_and_spacing():
+    for key, reg in lv.REGIONS.items():
+        zone = reg.epsg - 32600
+        for names in reg.scenes.values():
+            for sc in names:
+                assert sc.split("_")[1][:2] == str(zone), (key, sc)
+                assert lv._scene_url(sc, "TCI").startswith(lv.S2_COG)
+        lons, _lats, w, h = lv.grid(reg.box, reg.nx)
+        assert 10 < w / (len(lons) - 1) < 35, key  # metres between columns
+        assert w < 100e3 and h < 100e3, key  # inside one 110 km Sentinel tile
+    # The page's land files are named by these keys (sea3d/src/land/place.ts).
+    assert {"pico", "baymouth", "lisbon", "annapolisbay"} <= set(lv.REGIONS)
+
+
+def test_tag_height():
+    assert lv.tag_height({"height": "12"}) == 12.0 and lv.tag_height({"height": "40 ft"}) == 12.2
+    assert lv.tag_height({"height": "tall"}) is None and lv.tag_height(None) is None
+
+
+def test_land_cover_greenness_then_osm_areas():
+    """Greenness sorts land into trees, grass and built; OSM areas paint over
+    it; water stays 0; OSM tree points and rows come back with heights."""
+    pytest.importorskip("rasterio")
+    from shapely.geometry import LineString, Point, box
+
+    lons, lats = np.linspace(-76.5, -76.4, 11), np.linspace(39.0, 38.9, 11)
+    hgt = np.full((11, 11), 5.0)
+    hgt[:, 8:] = -3.0  # the Bay on the east
+    ndvi = np.full((11, 11), 0.8)  # canopy
+    ndvi[:, 8:] = -0.1
+    ndvi[0:3, 0:3] = 0.45  # a lawn
+    ndvi[8:, 0:3] = 0.1  # a car park
+    rows = {
+        "land": [
+            {"subtype": "sand", "geometry": box(-76.435, 38.905, -76.425, 38.995).wkb},
+            {
+                "subtype": "tree",
+                "geometry": Point(-76.47, 38.95).wkb,
+                "source_tags": {"height": "9"},
+            },
+            {"subtype": "tree", "geometry": LineString([(-76.48, 38.95), (-76.46, 38.95)]).wkb},
+        ],
+        "land_use": [
+            {"subtype": "golf", "geometry": box(-76.465, 38.965, -76.445, 38.985).wkb},
+            {"subtype": "park", "geometry": box(-76.5, 38.9, -76.4, 39.0).wkb},  # not painted
+        ],
+    }
+    cover, trees = lv.land_cover(
+        None, lons, lats, hgt, ndvi, rows=lambda t: rows.get(t, []), log=lambda *_: None
+    )
+    assert cover.shape == (11, 11) and cover.dtype == np.uint8
+    assert cover[5, 1] == 1 and cover[1, 1] == 2 and cover[9, 1] == 5  # trees, lawn, car park
+    assert cover[3, 4] == 2  # golf over canopy (row 3 = 38.97N, column 4 = 76.46W)
+    assert cover[5, 7] == 4 and (cover[:, 8:] == 0).all()  # beach on land; the Bay stays 0
+    assert trees == {"points": [[-76.47, 38.95, 9.0]], "rows": [[[-76.48, 38.95], [-76.46, 38.95]]]}

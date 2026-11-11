@@ -1,0 +1,193 @@
+# STOCK VESSEL: "31 ft cruiser", based on published specs of the Beneteau First 31.7
+# (Finot-Conq design, built 1997-2010). Our own model and code: no logos, no brand
+# styling, not official. Design note: Theo, 11 Nov 2026 (stock-vessels-design-note.md).
+# Sources:
+#   orc   = ORC certificate 038800017LU (First 31.7, 2021),
+#           https://data.orc.org/public/WPub.dll/CC/038800017LU.pdf
+#   specs = https://boat-specs.com/sailing/sailboats/beneteau/first-31-7-deep-draft
+#   gob   = https://goodoldboat.com/saildata/boat/beneteau-first-317/
+# Where sources differ, we sail on the ORC-measured numbers and show the builder's on the card.
+# Anything not from one of those is marked GUESS.
+name: 31 ft cruiser
+stock:
+  label: 31 ft cruiser
+  based_on: published specs of the Beneteau First 31.7
+  kind: sailing yacht, single-handed under autopilot
+  sources:
+    - ORC certificate 038800017LU (2021), https://data.orc.org/public/WPub.dll/CC/038800017LU.pdf
+    - https://boat-specs.com/sailing/sailboats/beneteau/first-31-7-deep-draft
+    - https://goodoldboat.com/saildata/boat/beneteau-first-317/
+  spec_card:                 # builder's numbers, for the info text (specs, gob)
+    length_overall_m: 9.61
+    waterline_m: 8.80
+    beam_m: 3.23
+    draft_m: 1.90
+    displacement_kg: 3750
+    ballast_kg: 1025
+    main_m2: 23.6
+    genoa_m2: 28.9
+    mast_above_water_m: 13.9
+    engine: 21 hp inboard diesel
+    fuel_l: 30
+    water_l: 160
+    design_category: CE A (open ocean)
+
+# Drifting with the sails down and no engine, and the hazards' size (vessel/hull.py).
+hull:
+  model: 31 ft fin-keel cruiser-racer (stock vessel)
+  length_m: 9.50             # orc
+  beam_m: 3.21               # orc
+  mass_kg: 3887              # orc
+  waterline_length_m: 8.80   # specs
+  wetted_area_m2: 24.6       # GUESS (as vpp)
+  form_factor: 1.1           # GUESS
+  wave_making_frac: 0.10     # GUESS: only used drifting slowly
+  air_side_area_m2: 12.0     # GUESS: topsides 9.5 x 0.9 m plus mast and rigging
+  air_front_area_m2: 4.0     # GUESS
+  air_cd_side: 0.9           # GUESS
+  air_cd_front: 0.7          # GUESS
+  lateral_cd_area_m2: 12.0   # GUESS: hull, keel and rudder broadside
+  keel_lift_slope_area_m2: 11.0  # GUESS (as vpp)
+  fouling_onset_days: 30     # GUESS: antifouling paint holds about a month offshore
+  fouling_frac_per_day: 0.002  # GUESS
+  drift_heading_offset_deg: 60 # GUESS: a keelboat lying a-hull sits about 60 deg off the wind
+  stokes_drift: true
+
+# Steering limits (vessel/sail.py): the sails themselves come from the polar.
+sail:
+  area_m2: 53.0              # orc main + jib (display only here)
+  max_alpha_deg: 20
+  storm_wind_ms: 25          # GUESS: above about 50 kn, sails down and run off (bare poles)
+  storm_run_twa_deg: 150     # GUESS
+  min_upwind_twa_deg: 45     # GUESS: an autopilot sails a little wider than the ORC beat angle
+  min_downwind_twa_deg: 170  # GUESS: no dead run (risk of an accidental gybe)
+  tack_hysteresis_deg: 20
+  unsteered_twa_deg: 60      # GUESS: rudder gone, it rounds up and lies about 60 deg off the wind
+
+power:
+  # GUESS: two 200 W panels on a stern arch, a common offshore fit. 200 W ran the
+  # batteries flat in 12 days against the 960 Wh/day load (Ravi, docs/qa/stock-cruiser31-
+  # fairness.md); 400 W holds them full in typical spring sun. Cloudy spells still drain
+  # them, so the engine's alternator tops them up (propulsion block, vessel/keelboat.py).
+  solar_wp: 400
+  panels_w: {panel_port: 200, panel_stbd: 200}
+  soiling_salt: 0.93         # GUESS
+  mounting_mismatch: 0.75    # GUESS: boom and sails shade the panels
+  mppt_eff: 0.96             # GUESS
+  wiring_eff: 0.97           # GUESS
+  temp_coeff_per_c: -0.0037  # GUESS
+  noct_c: 50                 # GUESS
+  charge_eff: 0.95           # GUESS: lead-acid house bank
+  discharge_eff: 0.95        # GUESS
+  min_charge_temp_c: -10     # lead-acid
+  battery_wh: 2400           # GUESS: 2 x 100 Ah 12 V house bank
+  restart_soc: 0.3
+
+propulsion:
+  thruster_count: 0          # no electric drive: the engine is a diesel (vessel/keelboat.py)
+  cruise_drive_w: 0.7        # the autopilot's thrust fraction (0.7 / 1) = engine at 70 % in calms
+  max_drive_w: 1
+  engine_cruise_kn: 6.0      # GUESS: from the 21 hp diesel (design note)
+  engine_l_per_h: 2.0        # GUESS
+  engine_resist_n: 900       # GUESS: hull resistance at 6 kn, for the sea penalty under power
+  engine_below_wind_kn: 5    # GUESS: motors only in calms
+  fuel_l: 30                 # specs
+  alternator_w: 250          # GUESS: a 40 A alternator gives about 20 A at idle, 13 V (Ravi, #255)
+  charge_below_soc: 0.35     # GUESS: the autopilot starts the engine out of gear below this
+  charge_until_soc: 0.8      # GUESS: and idles it until the bank is back up to this
+  fuel_reserve_l: 5          # GUESS: never burns the last 5 L charging
+
+electronics:
+  autopilot: below-deck autopilot with a rudder ram, plus instruments
+  hotel_load_wh_per_day: 960 # GUESS: autopilot about 30 W averaged, instruments, fridge off
+  nav_light_w: 2.0           # GUESS: LED masthead tricolour
+  nav_light_hours_per_day: 10
+
+comms:
+  two_way: Iridium
+  one_way: standalone satellite tracker with its own battery (GUESS fit)
+  ais: Class B
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 9.50
+  hull_beam_m: 3.21
+  critical_wave_frac_of_length: 0.55  # Wolfson / Fastnet: breaker 55 % of length rolls a yacht
+  damage_ref_hs_m: 3.0
+  p_part:                    # GUESS: per knockdown at Hs 3 m
+    panel_port: 4.0e-5
+    panel_stbd: 4.0e-5
+    rudder: 1.5e-5
+    sail: 2.0e-4             # torn sail or broken rig: sails no more (design note GUESS 7)
+  rate_set: planning
+  failures_enabled: true
+  # A stock yacht has ONE autopilot and one set of instruments, not the kayak's two
+  # sealed boxes: when it dies the boat drifts, tracked by its standalone tracker.
+  electronics_boxes: 1
+  electronics_per_day: 0.0025  # GUESS: about one autopilot failure per 400 days at sea
+  # GUESS: within 150 km of land an empty yacht gets reported and towed in at least as
+  # often as the kayak, so it keeps the kayak's 1 % a day (Ravi, docs/qa/stock-cruiser31-fairness.md).
+  capture_per_day: 0.01
+  leak_per_day: 0.0025       # GUESS: as the kayak; see vpp.p_sink_given_leak
+  # GUESS: a ship that hits a 4 t yacht usually holes or dismasts it, as it does the
+  # kayak. A hit it survives leaves a leak (p_leak_given_strike), which can then sink it
+  # (vpp.p_sink_given_leak), so about 86 % of strikes end the voyage.
+  p_lost_given_strike: 0.8
+  p_leak_given_strike: 1.0
+
+vpp:
+  polar_file: polars/cruiser31.json   # written by python -m boatsim.vessel.vpp
+  disp_kg: 3887              # orc, as measured
+  lwl_m: 8.80                # specs
+  wetted_m2: 24.6            # GUESS: hull 21 + keel 2.6 + rudder 1.0 (design note)
+  main_m2: 25.76             # orc, rated
+  jib_m2: 27.25              # orc, measured
+  rig_height_m: 13.9         # specs: mast top above the water
+  ce_height_m: 5.6           # GUESS: about 0.39 x I above the deck plus freeboard
+  clr_depth_m: 0.85          # GUESS: about 0.45 x draft
+  keel_te_m: 1.6             # GUESS: effective draft (keel 1.95 m, less tip losses)
+  keel_slope_area_m2: 11.0   # GUESS: keel 2.6 + rudder 1.0 m^2 at about 3.1 per radian
+  form_factor: 1.1           # GUESS
+  rr_exp: 7.0                # GUESS: wave-making rises about as Froude^7 near hull speed
+  heel_drag_k: 0.5           # GUESS
+  cd_max: 1.3                # GUESS: stalled sail square to the wind
+  alpha_stall_deg: 20        # GUESS
+  sheet_min_deg: 12          # GUESS: closest the sheets pull the sails in
+  windage_cda_m2: 2.0        # GUESS: hull, mast and rigging drag area
+  heel_max_deg: 35           # GUESS: past this a fin-keel boat rounds up
+  # Fitted to the orc speeds with the crew on the rail (python -m boatsim.vessel.vpp
+  # --fit), not looked up. cd0 sits on its 0.015 floor (a smooth modern sail plan).
+  cl_max: 1.3627
+  cd0: 0.015
+  rr_at_fn04: 0.0395
+  waves_k: 0.0038            # added resistance per m^2 of wave height, x weight
+  autopilot_factor: 0.93     # GUESS: autopilot steering and set-and-forget trim vs a race crew
+  reef_heel_deg: 25          # GUESS: the boat reefs to stay under this heel
+  p_sink_given_leak: 0.3     # GUESS: a leak the electric bilge pump can't keep up with
+  gz:                        # GZ (righting lever, m). GM 1.15 m from orc RM 78 kg.m at 1 deg;
+    deg: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]   # the curve's shape is a
+    m: [0, 0.19, 0.36, 0.50, 0.60, 0.65, 0.66, 0.62, 0.54, 0.43, 0.30, 0.16, 0.02, -0.12]  # GUESS
+  plans:                     # GUESS: reef and furling sizes (design note GUESS list item 4)
+    - {name: full, main: 1.0, jib: 1.0}
+    - {name: reef1, main: 0.82, jib: 0.70}
+    - {name: reef2, main: 0.64, jib: 0.45}
+    - {name: storm, main: 0.45, jib: 0.18}
+  orc:                       # orc speed table, knots. Crew on the rail; spinnaker downwind.
+    crew_kg: 480             # GUESS: six crew of 80 kg (the certificate's figure to check)
+    crew_arm_m: 1.3          # GUESS: crew on the rail of a 3.2 m wide boat
+    tws_kn: [6, 8, 10, 12, 14, 16, 20]
+    beat_deg: [42.8, 41.3, 40.9, 39.4, 38.3, 38.1, 38.6]
+    beat_vmg: [3.14, 3.80, 4.32, 4.72, 4.89, 4.95, 4.92]
+    speeds:
+      52: [4.82, 5.72, 6.37, 6.72, 6.89, 6.95, 6.97]
+      75: [5.31, 6.25, 6.75, 7.03, 7.26, 7.45, 7.64]
+      90: [5.24, 6.23, 6.85, 7.17, 7.33, 7.59, 8.06]
+      110: [5.22, 6.35, 6.95, 7.33, 7.71, 8.07, 8.48]
+      135: [4.58, 5.64, 6.52, 7.00, 7.37, 7.79, 8.72]
+      150: [3.84, 4.88, 5.80, 6.56, 7.00, 7.34, 8.12]

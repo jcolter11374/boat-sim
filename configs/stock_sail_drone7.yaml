@@ -1,0 +1,170 @@
+# STOCK VESSEL: "wind-powered ocean drone", based on published specs of the Saildrone
+# Explorer (a 7 m uncrewed sailing drone, wind for propulsion, solar for the electronics).
+# Our own model and code: no logos, no brand styling, not official.
+# Sources:
+#   maker = https://www.saildrone.com/platform/explorer (length 7 m, wing height 5 m,
+#           draft 2 m, average speed 1-3 kn, endurance 12+ months)
+#   specs = https://www.wevolver.com/specs/saildrone (weight 750, average 2-3 kn, top 8+ kn)
+#   wiki  = https://en.wikipedia.org/wiki/Saildrone_(company) (SD 1021: Bermuda to the
+#           Solent, part of 3,402 nm in 68 days, Oct 2019; SD 1045 in Hurricane Sam, 2021)
+#   tech  = https://www.naval-technology.com/projects/saildrone-explorer-unmanned-surface-vessel-usv-usa/
+# The maker publishes very little else, so the wing's chord and area, the keel, the
+# righting moment and the power system are GUESSES. The wing physics are the same
+# free-rotating wing and tail-flap model as Randolph's Rev B (vessel/sail.py), scaled up.
+# Anything not from one of those sources is marked GUESS.
+name: wind-powered ocean drone
+
+stock:
+  label: wind-powered ocean drone
+  based_on: published specs of the Saildrone Explorer
+  kind: uncrewed sailing drone, rigid wing sail, solar-powered electronics
+  sources:
+    - https://www.saildrone.com/platform/explorer
+    - https://www.wevolver.com/specs/saildrone
+    - https://en.wikipedia.org/wiki/Saildrone_(company)
+    - https://www.naval-technology.com/projects/saildrone-explorer-unmanned-surface-vessel-usv-usa/
+  spec_card:                 # the maker's numbers, for the info text
+    length_overall_m: 7.0    # maker
+    wing_height_m: 5.0       # maker
+    draft_m: 2.0             # maker (tech says 6 ft, 1.8 m)
+    weight_kg: 750           # specs
+    average_speed_kn: 2-3    # specs (maker: 1-3)
+    top_speed_kn: 8          # specs: "+8"
+    endurance: 12+ months    # maker
+
+hull:
+  model: 7 m uncrewed wing-sail drone (stock vessel)
+  length_m: 7.0              # maker
+  beam_m: 0.9                # GUESS: a narrow, deep-keeled hull
+  mass_kg: 750               # specs
+  displacement_ref_kg: 750
+  self_righting_dome: false  # the deep weighted keel rights it (GUESS: no stable upside-down position)
+  keel_bulb_kg: 250          # GUESS: about a third of the weight low in the keel
+  keel_bulb_depth_m: 2.0     # maker: draft
+  waterline_length_m: 6.4    # GUESS
+  wetted_area_m2: 10.0       # GUESS: hull 7.5 + keel fin 2.0 + rudder 0.5
+  form_factor: 1.15          # GUESS (as Rev B)
+  wave_making_frac: 0.05     # GUESS: Froude number about 0.2 at 3 kn
+  waterplane_area_m2: 4.0    # GUESS: about 0.7 x 6.4 m x 0.9 m
+  air_side_area_m2: 3.0      # GUESS: topsides 7 m x 0.4 m plus fittings (the wing is the sail block's)
+  air_front_area_m2: 0.8     # GUESS
+  air_cd_side: 0.9           # GUESS
+  air_cd_front: 0.6          # GUESS
+  lateral_cd_area_m2: 4.5    # GUESS: hull 7 x 0.5 m plus keel fin 2 x 0.6 m broadside, Cd about 1
+  keel_lift_slope_area_m2: 6.0   # GUESS: keel fin about 1.2 m^2 and rudder at about 4 per radian
+  wave_drag_frac_per_m2: 0.25    # GUESS: Rev B's 1.0 scaled for a boat 4.7 x longer
+  wave_drag_beam_factor: 0.55    # as Rev B
+  wave_drag_following_factor: 0.1
+  fouling_onset_days: 30     # GUESS: antifouling paint holds about a month
+  fouling_frac_per_day: 0.002    # GUESS (as the cruiser)
+  drift_heading_offset_deg: 90   # GUESS
+  stokes_drift: true
+
+# Wing sail (vessel/sail.py): free-rotating wing, a tail flap sets its angle (wiki,
+# maker). The maker gives only its height.
+sail:
+  area_m2: 5.0               # GUESS: 5 m tall (maker) x about 1 m chord
+  aspect_ratio: 6.0          # GUESS: 5 x some end-plate effect from the deck (Rev B used 1.6 x)
+  cd0: 0.012                 # as Rev B's wing section
+  max_alpha_deg: 20          # as Rev B
+  ce_height_m: 3.0           # GUESS: root about 0.5 m above the water + half the span
+  heel_arm_m: 4.0            # GUESS: centre of effort to about 1 m below the waterline
+  max_heel_moment_nm: 2600   # GUESS: 750 kg x g x GZ 0.35 m at 25 deg, deep ballast
+  storm_wind_ms: 20          # GUESS (as Rev B): feather the wing and run off
+  storm_run_twa_deg: 140     # as Rev B
+  min_upwind_twa_deg: 50     # GUESS (as Rev B)
+  min_downwind_twa_deg: 165  # GUESS (as Rev B)
+  tack_hysteresis_deg: 20    # GUESS (as Rev B)
+  unsteered_twa_deg: 110     # GUESS (as Rev B): a limp rudder leaves it reaching
+
+power:
+  solar_wp: 120              # GUESS: panels on the deck and the wing
+  panels_w:
+    panel_deck: 60           # GUESS
+    panel_wing: 60           # GUESS
+  solar_system_derate: 0.6   # GUESS: used only by the M0 KinematicVessel stub
+  soiling_salt: 0.93         # GUESS (as ours)
+  mounting_mismatch: 0.75    # GUESS: the wing panels face sideways half the time
+  mppt_eff: 0.96             # GUESS
+  wiring_eff: 0.97           # GUESS
+  temp_coeff_per_c: -0.0037  # GUESS
+  noct_c: 50                 # GUESS
+  charge_eff: 0.975          # GUESS
+  discharge_eff: 0.975       # GUESS
+  min_charge_temp_c: 2       # GUESS
+  battery_wh: 2000           # GUESS: lithium, a few days of dark for the sensors
+
+propulsion:
+  # Wind only (maker: "Primary propulsion: Wind"). Steering needs no drive power
+  # (vessel/kayak.py, sail designs).
+  thrusters: none
+  thruster_count: 0
+  cruise_drive_w: 0
+  max_drive_w: 1             # no motor; 1 keeps the cruise fraction defined
+
+electronics:
+  autopilot: rudder and tail-flap servos, flight computer, science sensors
+  hotel_load_wh_per_day: 240 # GUESS: about 10 W for autopilot, sensors and satellite link
+  nav_light_w: 1.0           # GUESS
+  nav_light_hours_per_day: 10
+
+comms:
+  two_way: Iridium
+  report_interval_h: 4       # GUESS; our runner uses its own report schedule
+  beacon: true               # GUESS: an AIS and satellite position fit independent of the main box
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+  # Base routes with the 5-day isochrone weather router on the drone's own speed
+  # table (basestation/isochrone.py). Ravi's 2012-21 gate with the tactician:
+  # 80 finishes against 76 for the fan planner, 1 grounding each, about 10 days
+  # faster; Maya made it the drone's default (11 Nov 2026).
+  routing: isochrone
+
+hazards:
+  enabled: true
+  hull_length_m: 7.0
+  hull_beam_m: 0.9
+  critical_wave_frac_of_length: 0.55
+  critical_wave_frac_of_beam: 1.2
+  breaker_height_frac_of_hs: 0.25
+  beam_on_share: 0.25
+  knockdown_scale: 1.0
+  damage_ref_hs_m: 3.0
+  beacon_name: backup position beacon
+  beacon_per_day: 0.0007     # GUESS (as ours)
+  p_inverted_stuck: 4.0e-5   # GUESS (as ours)
+  p_part:                    # GUESS: per knockdown at Hs 3 m
+    panel_100w_a: 0          # our kayak's parts: not on this boat
+    panel_100w_b: 0
+    panel_50w: 0
+    panel_deck: 4.0e-5
+    panel_wing: 4.0e-5
+    rudder: 1.5e-5
+    sail: 2.0e-4             # GUESS: as the cruiser's rig (a carbon wing on a strong mast)
+  ship_speed_ms: 7.0         # GUESS
+  ship_beam_m: 32.0          # GUESS
+  p_avoid_with_ais: 0.97     # GUESS: it carries AIS
+  p_avoid_without_ais: 0.95
+  p_lost_given_strike: 0.6   # GUESS (as Rev B)
+  p_leak_given_strike: 1.0
+  rate_set: planning
+  failures_enabled: true
+  near_land_km: 150
+  electronics_boxes: 1       # GUESS: one flight computer, as a stock yacht's one autopilot
+  electronics_per_day: 0.0025  # GUESS (as the cruiser)
+  software_hang_per_day: 0.02  # GUESS (as Rev B)
+  watchdog_recovers: 0.95
+  steering_per_day: 0.002    # GUESS: rudder and tail servos, half Rev B's hobby-grade rate
+  steering_jam_share: 0.6
+  rudder_jam_drag_mult: 1.25
+  entangle_per_day: 0.003    # GUESS (as Rev B)
+  entangle_extra_drag: 3.0
+  entangle_clear_per_day: 0.15
+  p_thruster_wrap: 0
+  thruster_per_day: 0        # no thrusters
+  early_life_tau_days: 7
+  unknown_shape: 0.5

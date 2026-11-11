@@ -42,6 +42,11 @@ Sources (checked 2026-11-08):
     cheapest 12-month contract is $15.75/month with 5,000 bytes included.
     Prepaid credit bundle prices are not published there (quote on request).
     https://www.groundcontrol.com/products/iridium/short-burst-data-range/short-burst-data-service-plans/
+[3] Ground Control, "Short Burst Data Plans" (USD ex. tax, checked
+    2026-11-11): Low Usage 12-month contract (GC-SBD-5KB-1) $15.75/month with
+    5,000 bytes included, then $0.00315 a byte; activation $26.25; a mailbox
+    check with nothing waiting $0.02; every message billed at least 10 bytes.
+    https://www.groundcontrol.com/products/iridium/short-burst-data-range/short-burst-data-plans/
 
 Owner: Sam.
 """
@@ -60,6 +65,16 @@ from boatsim.types import EnvState, Message
 
 def _midnight(t: datetime) -> datetime:
     return t.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _months(start: datetime, end: datetime) -> list[str]:
+    """Every calendar month (YYYY-MM) from start to end, both included."""
+    months = []
+    t = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    while t <= end:
+        months.append(_month(t))
+        t = (t + timedelta(days=32)).replace(day=1)
+    return months
 
 
 def _month(t: datetime) -> str:
@@ -112,6 +127,13 @@ class IridiumSBDLink:
     credit_bytes: int = 50  # [1]: 1 credit per 50 bytes or part
     credit_usd: float = 0.12  # GUESS: bundle prices not published [2]; get a quote
     line_rental_usd_month: float = 17.0  # [2]: prepaid, all RockBLOCKs
+    # The published contract plan [3], for the airtime counter (airtime()).
+    plan_usd_month: float = 15.75  # [3] Low Usage
+    plan_bytes_month: int = 5_000  # [3]: included each month
+    plan_usd_per_byte: float = 0.00315  # [3]: past the included bytes
+    plan_activation_usd: float = 26.25  # [3]
+    plan_empty_check_usd: float = 0.02  # [3]
+    plan_min_bytes: int = 10  # [3]: each message billed at least this
     monthly_budget_usd: float | None = None  # no cap: measure cost, don't limit it
     ledger: list[LedgerEntry] = field(default_factory=list)
     # Periods when the boat's battery was flat and the modem had no power, as
@@ -159,25 +181,64 @@ class IridiumSBDLink:
         nothing (checks that collected a base message are paid by that message).
         No checks happen while the modem is unpowered (see `set_powered`).
         """
-        months = set()
-        t = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        while t <= end:
-            months.add(_month(t))
-            t = (t + timedelta(days=32)).replace(day=1)
-        rental = len(months) * self.line_rental_usd_month
+        rental = len(_months(start, end)) * self.line_rental_usd_month
         msgs = sum(e.cost_usd for e in self.ledger if e.status == "delivered")
+        empty = self._empty_checks(start, end) * self.credit_usd
+        return {
+            "line_rental": round(rental, 2),
+            "messages": round(msgs, 2),
+            "empty_mailbox_checks": round(empty, 2),
+            "total": round(rental + msgs + empty, 2),
+        }
+
+    def _empty_checks(self, start: datetime, end: datetime) -> int:
+        """Scheduled mailbox checks that found nothing waiting (none "with_report")."""
         checks = 0
         t = self.next_mailbox_check(start)
         while self.mailbox == "scheduled" and t <= end:
             checks += self._powered_at(t)
             t += self.mailbox_every
         down = sum(1 for e in self.ledger if e.status == "delivered" and e.direction == "down")
-        empty = max(0, checks - down) * self.credit_usd
+        return max(0, checks - down)
+
+    def airtime(self, start: datetime, end: datetime) -> dict:
+        """The airtime counter for a voyage: messages and bytes each way, and
+        what they cost on the published Low Usage contract plan [3] (monthly
+        fee with 5,000 bytes, then per byte, plus activation), the cheapest
+        plan with published prices. Only messages that got through are billed;
+        `lost` counts the ones that never did (the satellite charges nothing).
+        Both directions count toward the bytes (GUESS: the plan page doesn't
+        split them)."""
+        ok = [e for e in self.ledger if e.status == "delivered"]
+        out = {
+            d: {
+                "messages": sum(1 for e in ok if e.direction == d),
+                "bytes": sum(e.size_bytes for e in ok if e.direction == d),
+            }
+            for d in ("up", "down")
+        }
+        months = _months(start, end)
+        billed: dict[str, int] = dict.fromkeys(months, 0)
+        for e in ok:
+            m = _month(e.t_delivered or e.t_sent)
+            billed[m] = billed.get(m, 0) + max(e.size_bytes, self.plan_min_bytes)
+        fees = len(billed) * self.plan_usd_month
+        extra = sum(max(0, b - self.plan_bytes_month) for b in billed.values())
+        empty = self._empty_checks(start, end)
+        usd = {
+            "monthly_fees": round(fees, 2),
+            "extra_bytes": round(extra * self.plan_usd_per_byte, 2),
+            "empty_mailbox_checks": round(empty * self.plan_empty_check_usd, 2),
+            "activation": self.plan_activation_usd,
+        }
+        usd["total"] = round(sum(usd.values()), 2)
         return {
-            "line_rental": round(rental, 2),
-            "messages": round(msgs, 2),
-            "empty_mailbox_checks": round(empty, 2),
-            "total": round(rental + msgs + empty, 2),
+            **out,
+            "lost": sum(1 for e in self.ledger if e.status == "lost"),
+            "months": len(billed),
+            "bytes_billed": sum(billed.values()),
+            "usd": usd,
+            "plan": "Ground Control SBD Low Usage ($15.75 a month, 12-month term)",
         }
 
     def set_powered(self, t: datetime, on: bool) -> None:
