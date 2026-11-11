@@ -6,7 +6,9 @@
 
 (one boat per run: export() ends the process). Same frame and helpers as
 build_kayak.py: x aft from the bow, y up from the bottom of the hull (the
-canoe body; keels and boards hang below 0), z to starboard, metres.
+canoe body; keels and boards hang below 0), metres. The page turns the model
+half a turn about y to put the bow forward, so builder +z ends up to PORT
+(boats/gear.ts): the red port light sits at +z.
 
 Generic boats of three common kinds, with no maker's names, logos or sail
 insignia (Maya, 11 Nov):
@@ -65,7 +67,7 @@ def sail(name, tack, head, clew, depth, mat, n=24, m=14, parent=None):
     nrm = np.cross(head - tack, clew - tack)
     nrm /= np.linalg.norm(nrm)
     if nrm[2] < 0:
-        nrm = -nrm  # belly to starboard (the page turns the pivot for the other tack)
+        nrm = -nrm  # belly to builder +z, port (the page mirrors the pivot for the other tack)
     verts, faces = [], []
     for i in range(n + 1):
         t = i / n
@@ -242,8 +244,8 @@ def build_cruiser() -> list:
     # Navigation lights on the pulpit.
     red = material("red_light", base=hexcol(0xFF3030), rough=0.2, emit=(1.0, 0.1, 0.1))
     green = material("green_light", base=hexcol(0x30FF60), rough=0.2, emit=(0.1, 1.0, 0.3))
-    rounded_box("light_port", 0.42, 0.5, yb + 0.6, yb + 0.66, -0.5, -0.44, red, 0.005)
-    rounded_box("light_starboard", 0.42, 0.5, yb + 0.6, yb + 0.66, 0.44, 0.5, green, 0.005)
+    rounded_box("light_port", 0.42, 0.5, yb + 0.6, yb + 0.66, 0.44, 0.5, red, 0.005)
+    rounded_box("light_starboard", 0.42, 0.5, yb + 0.6, yb + 0.66, -0.5, -0.44, green, 0.005)
     return [(ob, img, rgb)]
 
 
@@ -325,13 +327,13 @@ def build_beachcat() -> list:
         return CAT["depth"] - 0.08 * s
 
     f = HullForm(L=L, n=2.0, crown=0.06, wl=CAT["wl"], hb=hb, kz=kz, dz=dz)
-    stbd, img, rgb = hull(f, CAT_PAINT, rough=0.25, coat=0.55, nx=160, nt=26, nd=12)
-    stbd.location = (0, -g, 0)  # Blender frame: builder +z is Blender -y
-    port = stbd.copy()
-    port.name = "hull_port"
-    bpy.context.collection.objects.link(port)
-    port.location = (0, g, 0)
+    port, img, rgb = hull(f, CAT_PAINT, rough=0.25, coat=0.55, nx=160, nt=26, nd=12)
+    port.location = (0, -g, 0)  # Blender frame: builder +z (port) is Blender -y
+    stbd = port.copy()
     stbd.name = "hull_starboard"
+    bpy.context.collection.objects.link(stbd)
+    stbd.location = (0, g, 0)
+    port.name = "hull_port"
 
     # Beams and the trampoline between them.
     yd = f.dz(0.3) + 0.02
@@ -361,12 +363,12 @@ def build_beachcat() -> list:
     sail("sail_main", m_t, m_h, m_c, 0.065, M["sail"], parent=mp)
     battens("batten", m_t, m_h, m_c, 0.065, 7, M["black"], parent=mp)
     # Rudders on both sterns with a tiller bar across.
-    for side, tag in ((1, "s"), (-1, "p")):
+    for side, tag in ((1, "p"), (-1, "s")):  # builder +z is port
         rp = pivot(f"rudder_pivot_{tag}", (L - 0.03, 0.25, side * g))
         foil(f"rudder_{tag}", 0.26, 0.2, L - 0.03, L + 0.0, 0.32, -0.55, 0.1, M["g10"], parent=rp)
         rod(f"tiller_arm_{tag}", (L + 0.02, CAT["depth"] - 0.05, side * g), (L - 0.25, CAT["depth"] + 0.05, side * (g - 0.15)), 0.015, M["alu"], parent=rp)
     rod("tiller_bar", (L - 0.25, CAT["depth"] + 0.05, g - 0.15), (L - 0.25, CAT["depth"] + 0.05, -g + 0.15), 0.018, M["alu"])
-    return [(stbd, img, rgb)]
+    return [(port, img, rgb)]
 
 
 BUILD = {"cruiser": build_cruiser, "dinghy": build_dinghy, "beachcat": build_beachcat}
