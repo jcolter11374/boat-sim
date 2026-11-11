@@ -154,16 +154,31 @@ export function safeUrl(u: string): string | null {
 
 const STYLE = `
 .poi-card { position: fixed; right: var(--poi-right, 12px); bottom: var(--poi-bottom, 100px); width: min(340px, calc(100vw - 24px)); z-index: 20;
-  padding: 10px 12px 9px; border-left: 4px solid var(--c, #5cc8e0); border-radius: 8px; color: #f2f6fa;
-  background: rgba(14, 24, 36, .86); backdrop-filter: blur(6px); font: 13px/1.4 system-ui, sans-serif;
-  box-shadow: 0 4px 18px rgba(0,0,0,.35); animation: poi-in .35s ease; }
-.poi-card .poi-k { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--c, #5cc8e0); }
-.poi-card .poi-t { font-weight: 600; font-size: 15px; margin: 2px 0 4px; }
-.poi-card .poi-src { margin-top: 6px; font-size: 11.5px; color: #aab8c6; }
-.poi-card .poi-src a { color: #cfe6ff; }
-.poi-card .poi-x { position: absolute; right: 6px; top: 4px; background: none; border: 0; color: #aab8c6; font-size: 18px; cursor: pointer; padding: 2px 6px; }
-.poi-card.poi-out { opacity: 0; transition: opacity .8s; }
-@keyframes poi-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  box-sizing: border-box; padding: 11px 14px 12px; border: 1px solid rgba(160,200,255,.18); border-left: 4px solid var(--c, #5cc8e0);
+  border-radius: 12px; color: #e9f1fb; background: rgba(10,22,38,.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); overflow: hidden;
+  animation: poi-in .45s cubic-bezier(.2,.8,.2,1); }
+.poi-card .poi-k { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .9px;
+  text-transform: uppercase; color: #9fb3c8; padding-right: 22px; }
+.poi-card .poi-k .poi-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; letter-spacing: .5px; }
+.poi-card .poi-k .poi-badge { flex: none;  color: #0b1726; background: var(--c, #5cc8e0); border-radius: 999px; padding: 1px 7px; letter-spacing: .6px; }
+.poi-card .poi-t { font-weight: 650; font-size: 15.5px; margin: 5px 0 4px; color: #fff; }
+.poi-card .poi-x-text { color: #d6e2ef; }
+.poi-card .poi-src { margin-top: 7px; font-size: 11.5px; color: #9fb3c8; }
+.poi-card .poi-src a { color: #8ab4ff; }
+.poi-card .poi-more { margin-top: 4px; font-size: 11px; color: #9fb3c8; }
+.poi-card .poi-more:empty { display: none; }
+.poi-card .poi-x { position: absolute; right: 6px; top: 5px; background: none; border: 0; color: #9fb3c8; font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 3px 6px; border-radius: 6px; }
+.poi-card .poi-x:hover { color: #fff; background: rgba(255,255,255,.08); }
+/* How long the card has left: a thin line along the bottom that runs down, and waits while you read (hover). */
+.poi-card .poi-time { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--c, #5cc8e0); opacity: .7;
+  transform-origin: left; animation: poi-time var(--poi-s, 25s) linear forwards; }
+.poi-card:hover .poi-time { animation-play-state: paused; }
+.poi-card.poi-out { opacity: 0; transform: translateY(6px); transition: opacity .8s, transform .8s; }
+@keyframes poi-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes poi-time { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .poi-card, .poi-card .poi-time { animation: none; } .poi-card.poi-out { transition: none; } }
 `;
 
 /** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom). Each stays SHOW_S seconds (or until closed); points passed
@@ -174,6 +189,9 @@ export class PoiCards {
   private el: HTMLElement | null = null;
   private timer = 0;
   private waiting: [Pass, string][] = [];
+  private more: HTMLElement | null = null;
+  private left = 0;
+  private since = 0;
   constructor(private doc: Document = document) {
     if (!doc.getElementById("poi-style")) {
       const s = doc.createElement("style");
@@ -185,8 +203,10 @@ export class PoiCards {
 
   /** Show it now, or after the cards already up or waiting. */
   add(p: Pass, when = ""): void {
-    if (this.el || this.waiting.length) this.waiting.push([p, when]);
-    else this.show(p, when);
+    if (this.el || this.waiting.length) {
+      this.waiting.push([p, when]);
+      this.countWaiting();
+    } else this.show(p, when);
   }
 
   show(p: Pass, when = ""): HTMLElement {
@@ -204,7 +224,14 @@ export class PoiCards {
       el.appendChild(e);
       return e;
     };
-    add("div", "poi-k", `${KIND_LABEL[p.poi.kind]} · ${whereFrom(p)}${when ? ` · ${when}` : ""}`);
+    const k = add("div", "poi-k", "");
+    const badge = d.createElement("span");
+    badge.className = "poi-badge";
+    badge.textContent = KIND_LABEL[p.poi.kind];
+    const where = d.createElement("span");
+    where.className = "poi-where";
+    where.textContent = `${whereFrom(p)}${when ? ` · ${when}` : ""}`;
+    k.append(badge, where);
     add("div", "poi-t", p.poi.title);
     add("div", "poi-x-text", p.poi.text);
     const src = add("div", "poi-src", "Source: ");
@@ -217,14 +244,35 @@ export class PoiCards {
       a.textContent = p.poi.source;
       src.appendChild(a);
     } else src.appendChild(d.createTextNode(p.poi.source));
+    this.more = add("div", "poi-more", "");
     const x = add("button", "poi-x", "×");
     x.setAttribute("aria-label", "Close");
     x.addEventListener("click", () => this.hide());
+    el.style.setProperty("--poi-s", `${PoiCards.SHOW_S}s`);
+    add("div", "poi-time", "");
     d.body.appendChild(el);
     this.el = el;
     this.shown.push(p.poi.id);
-    this.timer = window.setTimeout(() => this.hide(), PoiCards.SHOW_S * 1000);
+    this.countWaiting();
+    // It stays SHOW_S seconds, not counting the time the pointer rests on it (someone reading).
+    this.left = PoiCards.SHOW_S * 1000;
+    this.since = performance.now();
+    this.timer = window.setTimeout(() => this.hide(), this.left);
+    el.addEventListener("mouseenter", () => {
+      window.clearTimeout(this.timer);
+      this.left -= performance.now() - this.since;
+    });
+    el.addEventListener("mouseleave", () => {
+      if (this.el !== el) return;
+      this.since = performance.now();
+      this.timer = window.setTimeout(() => this.hide(), Math.max(this.left, 1500));
+    });
     return el;
+  }
+
+  /** "2 more nearby" under the card while others wait their turn. */
+  private countWaiting(): void {
+    if (this.more) this.more.textContent = this.waiting.length ? `${this.waiting.length} more nearby after this one` : "";
   }
 
   /** Take the card down: `now` at once (a jump in time), and `clear` drops the waiting ones too. */

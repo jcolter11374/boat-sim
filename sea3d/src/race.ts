@@ -5,11 +5,13 @@
 // textContent, never innerHTML.
 
 import { sandboxThere } from "./sandbox";
+import { BoatView, boatFor, type ViewState } from "./race/view3d";
+import { loadDetailedModels } from "./boats/model";
 
 type Choices = Record<string, string>;
-interface Weather { wind_u: number; wind_v: number; hs: number }
+interface Weather { wind_u: number; wind_v: number; hs: number; tp?: number; wave_dir?: number; ghi?: number; rain?: number }
 interface Boat {
-  name: string; build: string; t: string; lat: number; lon: number; stw: number; soc: number;
+  name: string; build: string; t: string; lat: number; lon: number; heading?: number; stw: number; soc: number;
   km_to_finish: number; outcome: string; breakdowns: string[]; weather?: Weather;
 }
 interface Status { launch: string; day: number; over: boolean; boats: [Boat, Boat]; lead_km: number; leader: number | null; drops: [number, number][] }
@@ -75,6 +77,8 @@ const page = {
   stops: [] as string[],
   card: null as Card | null,
   season: null as Season | null,
+  /** The two 3D views (for the smoke test): frames drawn and what each shows. */
+  views: [] as BoatView["shown"][],
 };
 declare global {
   interface Window { __race?: typeof page }
@@ -256,8 +260,54 @@ function drawSeason(progress?: { done: number; of: number; rows: { a: LaunchResu
   }
 }
 
+// ---------------------------------------------------------------- 3D views
+// Each boat on its own patch of sea, in its own weather, side by side.
+const quality = params.get("quality") === "low" ? "low" : "high";
+let views: [BoatView, BoatView] | null = null;
+let viewsOn = true; // false while the views are scrolled out of sight
+function draw3d(): void {
+  const st = page.status;
+  $("views").hidden = !st;
+  if (!st) return;
+  if (!views) {
+    views = [new BoatView($("viewA"), quality), new BoatView($("viewB"), quality)];
+    page.views = views.map((v) => v.shown);
+    void loadDetailedModels().then((ok) => ok && views?.forEach((v) => v.build()));
+    new IntersectionObserver((e) => (viewsOn = e.some((x) => x.isIntersecting))).observe($("views"));
+    window.addEventListener("resize", () => views?.forEach((v) => v.resize()));
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      if (viewsOn) for (const v of views!) v.frame(now / 1000, dt);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+  for (const i of [0, 1] as const) {
+    const b = st.boats[i];
+    const s: ViewState = { t: b.t, lat: b.lat, lon: b.lon, heading: b.heading ?? 90, stw: b.stw, outcome: b.outcome, weather: b.weather };
+    views[i].set(s);
+    const tag = $(i === 0 ? "tagA" : "tagB");
+    const name = el("b", undefined, b.name);
+    name.style.color = COLOURS[i];
+    const wind = b.weather ? `, wind ${(Math.hypot(b.weather.wind_u, b.weather.wind_v) * 1.944).toFixed(0)} kn, waves ${b.weather.hs.toFixed(1)} m` : "";
+    tag.replaceChildren(name, document.createTextNode(` · ${words(b.outcome)}${wind}`));
+  }
+}
+/** A new race: put each design's own boat in its view. */
+function boatsInViews(a: Choices, b: Choices): void {
+  draw3d();
+  if (!views) return;
+  for (const [i, c] of [a, b].entries()) {
+    const { spec, hull } = boatFor(c);
+    views[i].setBoat(spec, hull);
+  }
+}
+
 function drawAll(): void {
   drawMap();
+  draw3d();
   drawBoat(0);
   drawBoat(1);
   drawCard();
@@ -301,6 +351,7 @@ async function startRace(): Promise<void> {
     page.ready = true;
     msg("Both boats are in the water. Sail on, or race the whole season.");
     drawAll();
+    boatsInViews(a, b);
   } catch (e) {
     return fail(e);
   }
