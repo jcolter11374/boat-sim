@@ -335,12 +335,23 @@ def default_mission(drop: tuple[float, float] | None = None) -> Mission:
 
 
 def standard_components(
-    design, env, forecast_env, seed: int = 0, forecast_error: float = 1.0, land=None
+    design,
+    env,
+    forecast_env,
+    seed: int = 0,
+    forecast_error: float = 1.0,
+    land=None,
+    routing: str | None = None,
 ) -> Components:
     """The team's current components for one voyage of `design` (a config.Design)
     in `env`. Every voyage gets fresh vessel, autopilot, link and base objects
     (they keep per-voyage state such as the airtime ledger). Shared by the batch
-    runs (runner.parallel) and the browser sandbox (boatsim.sandbox)."""
+    runs (runner.parallel) and the browser sandbox (boatsim.sandbox).
+
+    routing: how base plans. "fan" (the default) tries a fan of 3-day legs
+    each morning (basestation/replan.py); "isochrone" runs the 5-day weather
+    router (basestation/isochrone.py). None reads the design's
+    `voyage.routing`, else "fan"."""
     from boatsim.autonomy import SafeModeAutopilot
     from boatsim.autonomy.sailing import wrap_for_sailing
     from boatsim.basestation import ForecastReplanPolicy
@@ -357,8 +368,33 @@ def standard_components(
     )
     route = default_mission(drop).waypoints
     polar = getattr(vessel, "polar", None)
-    if polar is None:
-        base = ForecastReplanPolicy(route=route)
+    routing = routing or design.voyage.get("routing", "fan")
+    if routing not in ("fan", "isochrone"):
+        raise ValueError(f"routing must be 'fan' or 'isochrone', not {routing!r}")
+    if routing == "isochrone":
+        from boatsim.basestation.isochrone import IsochroneReplanPolicy as Policy
+    else:
+        Policy = ForecastReplanPolicy
+    sail_only = getattr(vessel, "sail", None) is not None and prop["cruise_drive_w"] <= 0
+    if polar is None and routing == "isochrone" and sail_only:
+        # A wing-sail boat with no VPP polar and no motors (the drone): the
+        # router needs its speeds by wind angle, so it gets a table from the
+        # boat's own physics, and the wing's own angle limits (vessel/sail.py
+        # sail_heading). A hybrid (wing plus motors) holds any course under
+        # power, so it is costed as a motorboat, as before.
+        from boatsim.basestation.isochrone import SteadyPolar
+
+        polar = SteadyPolar(vessel)
+        f = ForecastReplanPolicy.polar_factor
+        base = Policy(
+            route=route,
+            polar=polar,
+            boat_speed=f * polar.speed_ms(7.0, 100.0),
+            min_twa_deg=vessel.sail.min_upwind_twa_deg,
+            max_twa_deg=vessel.sail.min_downwind_twa_deg,
+        )
+    elif polar is None:
+        base = Policy(route=route)
     else:
         # A sailing boat: base costs legs from the polar and the forecast wind,
         # within the tactician's angle limits. Past the 3-day forecast it
@@ -368,7 +404,7 @@ def standard_components(
 
         tac = tactician_for(vessel)
         f = ForecastReplanPolicy.polar_factor
-        base = ForecastReplanPolicy(
+        base = Policy(
             route=route,
             polar=polar,
             boat_speed=f * polar.speed_ms(7.0, 100.0),
