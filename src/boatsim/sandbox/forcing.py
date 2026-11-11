@@ -161,6 +161,11 @@ class BundleEnvironment:
                     z["lon_current"],
                     {k: _unpack(z, k) for k in ("current_u", "current_v")},
                 )
+            self.storms = None  # best-track fixes, if the bundle carries them
+            if "storm_t" in z.files:
+                from boatsim.oceandata.stormboost import storms_from_arrays
+
+                self.storms = storms_from_arrays(z)
             self.ships = None
             if "ship_density" in z.files:
                 self.ships = GridSeries(
@@ -259,11 +264,15 @@ def cut(
     last=LAST,
     start: date | None = None,
     end: date | None = None,
+    storms_csv=None,
 ) -> dict:
     """Cut one season's bundle from the cached full data and save it to `out`
     (path or file). glorys=False / ships=False leave currents / ships out.
     start/end (dates) replace the season for any other window, e.g. a weather
     challenge that runs into the next year.
+    storms_csv: an IBTrACS CSV; if given, the best-track fixes of storms in the
+    window go into the bundle (oceandata/stormboost.py), so the page can put
+    hurricane cores back into the 1 degree weather at sample time.
     Returns the stored arrays' sizes in bytes."""
     from boatsim.oceandata import ERA5Source, GlorysSource
     from boatsim.oceandata.traffic import default_source
@@ -350,6 +359,14 @@ def cut(
         g = ships._g
         arrays["lat_ships"], arrays["lon_ships"] = g.lats, g.lons
         arrays["ship_density"] = g.fields["ship_density"][0].astype(np.float32)
+    if storms_csv is not None:
+        from boatsim.oceandata import stormboost as SB
+
+        a = datetime.combine(d0, datetime.min.time())
+        b = datetime.combine(d1, datetime.min.time()) + timedelta(days=1)
+        storms = SB.storms_in_window(storms_csv, a, b)
+        arrays.update(SB.storms_to_arrays(storms))
+        log(f"storm tracks: {len(storms)} storms, {len(arrays['storm_t'])} fixes")
     arrays["meta_year"] = np.array(year)
     arrays["meta_first"] = np.array(str(d0))
     arrays["meta_last"] = np.array(str(d1))
