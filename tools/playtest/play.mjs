@@ -223,6 +223,13 @@ const CHECKS = {
       if (!(await page.$("#r-next"))) throw new SkipCheck("the deployed helm has no Results 'where this leaves you' yet");
       let hops = 0;
       for (; hops < 60 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+        // The voyage can end while the button is hidden behind the card: wait for the card then.
+        if (!(await page.locator("#sevent").isVisible())) {
+          await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN }).catch(() => {
+            throw new CheckFail(`"Sail until something happens" disappeared at hop ${hops} and no results card came`);
+          });
+          break;
+        }
         const st = await hop(page, "#sevent");
         if (st.stop === "over") await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN });
       }
@@ -243,7 +250,11 @@ const CHECKS = {
       // Follow the leaderboard link like a player: the board loads.
       const lb = next.links.find((l) => /leaderboard/.test(l.href));
       must(lb, "no Leaderboard link on the card");
-      await page.click(`#r-next .next a[href="${lb.href}"]`);
+      const link = page.locator(`#r-next .next a[href="${lb.href}"]`);
+      await link.scrollIntoViewIfNeeded().catch(() => {});
+      await link.click({ timeout: 15_000 }).catch((e) => {
+        throw new CheckFail(`the card's Leaderboard link can't be clicked: ${String(e).split("\n")[0]}`);
+      });
       await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: MIN }).catch(() => {
         throw new CheckFail(`the card's Leaderboard link (${lb.href}) didn't open a working board`);
       });
