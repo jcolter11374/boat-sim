@@ -393,6 +393,66 @@ def default_storm_tracks(path=DEFAULT_TRACKS) -> StormTracks:
     return _TRACKS[key]
 
 
+# ------------------------------------------- storm tracks in forcing bundles
+# A browser bundle is 1 degree every 6 hours, far too coarse to hold a core
+# about 40 km across, so the bundle carries each storm's best-track fixes
+# instead (a few hundred numbers) and the vortex is computed at sample time,
+# exactly as here (agreed with Priya, 11 Nov 2026).
+TRACK_KEYS = ("storm_t", "storm_lat", "storm_lon", "storm_vmax", "storm_pres", "storm_rmw")
+WINDOW_PAD_S = 86400.0  # keep fixes up to a day either side of the window
+
+
+def storms_in_window(csv_path, start: datetime, end: datetime) -> list[Storm]:
+    """Storms with a tropical-storm-strength fix between start and end (plus a
+    day's pad), trimmed to those fixes."""
+    t0 = (start - _EPOCH).total_seconds() - WINDOW_PAD_S
+    t1 = (end - _EPOCH).total_seconds() + WINDOW_PAD_S
+    out = []
+    for s in load_storms(csv_path, start.year, end.year):
+        keep = [i for i, t in enumerate(s.t) if t0 <= t <= t1]
+        if keep:
+            cols = ("t", "lat", "lon", "vmax", "pres", "rmw")
+            out.append(Storm(s.sid, s.name, *([getattr(s, c)[i] for i in keep] for c in cols)))
+    return out
+
+
+def storms_to_arrays(storms: list[Storm]) -> dict:
+    """Flat arrays for an npz: one row per fix, storm_index says whose it is.
+    Times are int64 seconds since 1970, like the bundle's t_weather."""
+    import numpy as np
+
+    idx = [k for k, s in enumerate(storms) for _ in s.t]
+    out = {
+        "storm_index": np.array(idx, dtype=np.int32),
+        "storm_names": np.array([f"{s.sid}|{s.name}" for s in storms], dtype=str),
+        "storm_t": np.array([t for s in storms for t in s.t], dtype=np.int64),
+    }
+    for key in TRACK_KEYS[1:]:
+        col = key[6:]
+        out[key] = np.array([v for s in storms for v in getattr(s, col)], dtype=np.float32)
+    return out
+
+
+def storms_from_arrays(z) -> list[Storm]:
+    """The inverse of storms_to_arrays (z: an open npz or a dict)."""
+    names = [str(n) for n in z["storm_names"]]
+    idx = [int(i) for i in z["storm_index"]]
+    cols = {k: [float(v) for v in z[k]] for k in TRACK_KEYS}
+    storms = []
+    for k, label in enumerate(names):
+        sid, _, name = label.partition("|")
+        rows = [i for i, j in enumerate(idx) if j == k]
+        storms.append(Storm(sid, name, *([cols[key][i] for i in rows] for key in TRACK_KEYS)))
+    return storms
+
+
+def boost_bundle(env):
+    """A bundle environment with its own storm tracks put back in (StormBoost),
+    or the environment unchanged if it carries none."""
+    storms = getattr(env, "storms", None)
+    return StormBoost(env, StormTracks(storms)) if storms else env
+
+
 # ------------------------------------------------- check against NDBC buoys
 
 CASES = {

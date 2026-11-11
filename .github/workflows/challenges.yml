@@ -74,10 +74,20 @@ jobs:
         run: |
           python -m boatsim.oceandata fetch-glorys "$M0" "$M1"
           python -m boatsim.oceandata fetch-era5 "$FIRST" "$(date -I -d "$LAST + 1 day")" --workers 4
+      # Hurricane challenges carry the storms' best-track fixes, so the page can put
+      # the cores back into the 1 degree weather (oceandata/stormboost.py, #117).
+      - name: Download IBTrACS North Atlantic (hurricane challenges)
+        if: matrix.c.storm_boost
+        run: |
+          curl -sSL --retry 3 --max-time 600 \
+            "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv" -o ibtracs.csv
       - name: Cut the bundle
+        env:
+          STORMS: ${{ matrix.c.storm_boost && 'ibtracs.csv' || '' }}
         run: |
           mkdir -p site
-          python -m boatsim.sandbox cut "${FIRST:0:4}" --start "$FIRST" --end "$LAST" --out "site/challenge_$ID.npz"
+          python -m boatsim.sandbox cut "${FIRST:0:4}" --start "$FIRST" --end "$LAST" \
+            --out "site/challenge_$ID.npz" ${STORMS:+--storms "$STORMS"}
       - uses: actions/upload-artifact@v4
         with:
           name: challenge-${{ matrix.c.id }}

@@ -186,6 +186,7 @@ def matrix() -> list[dict]:
                 "first": str(a),
                 "last": str(b),
                 "months": [f"{a.year:04d}-{a.month:02d}", f"{b.year:04d}-{b.month:02d}"],
+                "storm_boost": c.hurricane,  # the bake job then packs the storm tracks
             }
         )
     return out
