@@ -25,7 +25,25 @@ Engine: an inboard diesel with a fuel tank. With Command.thrust_fraction above
 zero it runs when the true wind is below engine_below_wind_kn (calms) and
 there is fuel, and the boat goes at whichever is faster, motor or sail. With
 the sails down and no engine, the boat drifts with the kayak model's
-windage and current (the hull block).
+windage and current (the hull block). Under power (QA, docs/qa/
+helm-sail-engine-orders.md):
+* One propeller can't steer: the engine only drives the boat while the
+  autopilot is alive and the rudder works. Otherwise it stays off.
+* A diesel never runs below idle: any throttle above zero is at least
+  engine_idle_frac (GUESS 0.2), for both fuel burn and speed. That keeps a
+  30 L tank to a couple of hundred miles at any throttle.
+* Thrust at a throttle f is the calm-water resistance at the speed f gives
+  (engine_resist_n at full, falling as f^(2/3)). The wind on the hull and rig
+  (air_front_area_m2, air_cd_front, the true wind's head-on part) uses some of
+  that thrust up, so a head wind slows the boat and a gale stops it.
+
+Overcanvassed. Each plan is cut for a wind range: flown so hard that it heels
+past reef_heel_deg, the sails are overloaded by x = heel / reef_heel_deg - 1.
+Each hour that costs a torn sail (damage "sail": no more sailing) with
+chance sail_overload_per_h x^2, and a broach (rounding up, knocked flat)
+with half that (GUESS both, set so full sail held for a day in 40 kn tears
+something most of the time). The boat's own reefing stays under the limit,
+so it never pays.
 
 Gusts. The wind is never steady. We treat 3-second gusts as independent
 draws (gusts_per_hour 1200) with spread gust_sigma 0.085 of the mean, which
@@ -74,6 +92,9 @@ DOWN = "down"  # sails down (bare poles)
 GUST_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 1}"]  # a keelboat has no thrusters
 STAYS_OVER_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 2}"]
 SINK_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 3}"]
+SAIL_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 4}"]
+BROACH_SLOT = SLOT[f"thruster_{MAX_THRUSTERS - 5}"]
+RHO_AIR = 1.225
 LEAK = "leak_main_tub"  # the hazards' leak (vessel/hazards.py), here water in the hull
 
 
@@ -191,6 +212,8 @@ class KeelboatVessel(KayakVessel):
         self.engine_l_per_h = float(prop.get("engine_l_per_h", 0.0))
         self.engine_resist_n = float(prop.get("engine_resist_n", 1.0))
         self.engine_below_wind_kn = float(prop.get("engine_below_wind_kn", 5.0))
+        self.engine_idle_frac = float(prop.get("engine_idle_frac", 0.2))  # GUESS
+        self.sail_overload_per_h = float(v.get("sail_overload_per_h", 1.0))  # GUESS
         self.fuel_l = float(prop.get("fuel_l", 0.0))
         self.p_sink_given_leak = float(v.get("p_sink_given_leak", 0.0))
         self.gust_sigma = float(v.get("gust_sigma", 0.085))  # WMO gust factor, see above
@@ -245,8 +268,10 @@ class KeelboatVessel(KayakVessel):
         return 1.0 - (1.0 - p) ** (self.gusts_per_hour * hours)
 
     # --- hooks into KayakVessel.step ---------------------------------------
-    def _motoring(self, state: BoatState, cmd: Command, drive_w: float, working: int) -> bool:
-        on = self._step["engine"] > 0.0
+    def _motoring(
+        self, state: BoatState, cmd: Command, drive_w: float, working: int, rudder_ok: bool
+    ) -> bool:
+        on = self._step["engine"] > 0.0 and rudder_ok  # one propeller: the rudder steers
         self._step["motoring"] = on
         return on
 
@@ -278,11 +303,18 @@ class KeelboatVessel(KayakVessel):
             heel, lee = pt.heel_deg, pt.leeway_deg
         motor_v = 0.0
         if self._step.get("motoring"):
-            v0 = self.engine_kn * KNOT * self._step["engine"] ** (1.0 / 3.0)
-            motor_v = v0 * (drag + aw / self.engine_resist_n) ** -0.5
+            f = self._step["engine"]
+            v0 = self.engine_kn * KNOT * f ** (1.0 / 3.0)
+            thrust = self.engine_resist_n * f ** (2.0 / 3.0)
+            head = -wx  # true wind's part on the nose, m/s (boat axes: x forward)
+            h = self.hull
+            air = 0.5 * RHO_AIR * h.air_cd_front * h.air_front_area_m2 * head * abs(head)
+            left = max(1.0 - air / thrust, 0.0)
+            motor_v = v0 * math.sqrt(left / (drag + aw / self.engine_resist_n))
         side = -1.0 if twa_signed > 0 else 1.0  # pushed away from the wind
         m0 = self.polar.at(plan, tws_kn, twa_signed).m0_nm if plan != DOWN else 0.0
         self._step.update(plan=plan, heel=side * heel, engine_used=motor_v > sail_v, m0=m0)
+        self._step["overload"] = max(heel / self.reef_heel_deg - 1.0, 0.0) if plan != DOWN else 0.0
         surge = max(sail_v, motor_v)
         if surge <= 0.0:  # bare poles, no engine: drift like any hull
             return solve_speed(
@@ -305,6 +337,8 @@ class KeelboatVessel(KayakVessel):
         tws_kn = math.hypot(env.wind_u - env.current_u, env.wind_v - env.current_v) / KNOT
         frac = min(max(cmd.thrust_fraction, 0.0), 1.0)
         wanted = cmd.engine if cmd.engine is not None else tws_kn < self.engine_below_wind_kn
+        if frac > 0.0:
+            frac = max(frac, self.engine_idle_frac)  # a diesel never runs below idle
         engine = frac if wanted and fuel > 0.0 and not state.damage.get("engine") else 0.0
         self._step = {"engine": engine, "asked": cmd.sail_plan, "plan": DOWN, "heel": 0.0}
         new, events = super().step(state, cmd, env, dt, rng)
@@ -326,10 +360,23 @@ class KeelboatVessel(KayakVessel):
                 why = "flooded: the bilge pump lost power" if pump_dead else "flooded and sank"
                 events.append(Event(out.t, EventKind.LOST, why))
                 out.alive = False
+        hours = dt.total_seconds() / 3600.0
+        dice = self._last_dice
+        x = self._step.get("overload", 0.0)
+        if out.alive and x > 0.0 and self.sail_overload_per_h > 0.0:
+            rate = self.sail_overload_per_h * x * x
+            if not out.damage.get("sail") and dice[SAIL_SLOT] < 1.0 - math.exp(-rate * hours):
+                out.damage["sail"] = True
+                why = f"sail (blown out: {self._step['plan']} flown at {abs(out.heel_deg):.0f} deg heel)"
+                events.append(Event(out.t, EventKind.PART_FAILED, why))
+            if dice[BROACH_SLOT] < 1.0 - math.exp(-0.5 * rate * hours):
+                events.append(Event(out.t, EventKind.CAPSIZE, "broached under too much sail"))
+                out.knockdowns += 1
+                if dice[STAYS_OVER_SLOT] < self.hazards.p_capsize_stays_over:
+                    events.append(Event(out.t, EventKind.LOST, "broached and stayed over"))
+                    out.alive = False
         if out.alive:
-            hours = dt.total_seconds() / 3600.0
             p = self.gust_capsize_p(self._step.get("m0", 0.0), hours, env.rain)
-            dice = self._last_dice
             if p > 0.0 and dice[GUST_SLOT] < p:
                 t = out.t
                 events.append(Event(t, EventKind.CAPSIZE, "knocked flat by a gust"))

@@ -271,8 +271,12 @@ class KayakVessel:
         return sum(1 for k in self.thruster_parts if not state.damage.get(k, False))
 
     # Hooks for other hull types (vessel/keelboat.py); the kayak's own physics.
-    def _motoring(self, state: BoatState, cmd: Command, drive_w: float, working: int) -> bool:
-        """Is a sailing design under power (so it holds any course, even upwind)?"""
+    def _motoring(
+        self, state: BoatState, cmd: Command, drive_w: float, working: int, rudder_ok: bool
+    ) -> bool:
+        """Is a sailing design under power (so it holds any course, even upwind)?
+        rudder_ok: the autopilot is alive and the rudder works. Twin thrusters
+        steer without it (differential thrust), so the kayak's hulls ignore it."""
         can_motor = working >= (2 if state.damage.get("rudder") else 1)
         return can_motor and drive_w >= self.min_steer_w
 
@@ -368,7 +372,7 @@ class KayakVessel:
             # wing adds whatever drive it can at that heading (best_alpha picks
             # feathered when it can't help). With a dead rudder, two thrusters
             # still steer by differential thrust, as on the kayak.
-            motoring = self._motoring(state, cmd, es.drive_w, working)
+            motoring = self._motoring(state, cmd, es.drive_w, working, steering)
             steering = steering or motoring
         else:
             motoring = False

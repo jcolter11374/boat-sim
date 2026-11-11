@@ -360,12 +360,20 @@ def standard_components(
     if polar is None:
         base = ForecastReplanPolicy(route=route)
     else:
-        # A sailing boat: base costs legs from the polar and the forecast wind.
-        # Past the 3-day forecast it assumes a typical ocean speed: a beam
-        # reach in 7 m/s (14 kn), the autopilot at its usual share. GUESS.
+        # A sailing boat: base costs legs from the polar and the forecast wind,
+        # within the tactician's angle limits. Past the 3-day forecast it
+        # assumes a typical ocean speed: a beam reach in 7 m/s (14 kn), times
+        # polar_factor. GUESS.
+        from boatsim.autonomy.sailing import tactician_for
+
+        tac = tactician_for(vessel)
         f = ForecastReplanPolicy.polar_factor
         base = ForecastReplanPolicy(
-            route=route, polar=polar, boat_speed=f * polar.speed_ms(7.0, 100.0)
+            route=route,
+            polar=polar,
+            boat_speed=f * polar.speed_ms(7.0, 100.0),
+            min_twa_deg=tac.min_twa_deg,
+            max_twa_deg=tac.max_twa_deg,
         )
     return Components(
         env=env,

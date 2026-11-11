@@ -251,7 +251,7 @@ def _cruiser_polar():
 
 
 def test_vmc_tacks_upwind_and_reaches_across():
-    from boatsim.basestation.replan import VMC_ANGLES, vmc_ms
+    from boatsim.basestation.replan import vmc_ms
 
     polar = _cruiser_polar()
     east_wind = (-8.0, 0.0)  # blowing toward the west: from the east
@@ -259,8 +259,15 @@ def test_vmc_tacks_upwind_and_reaches_across():
     assert reach == pytest.approx(polar.speed_ms(8.0, 90.0))
     # Due east is dead upwind: no straight line, but tacking still gains.
     up = vmc_ms(polar, 90.0, *east_wind)
-    best = max(polar.speed_ms(8.0, a) * math.cos(math.radians(a)) for a in VMC_ANGLES)
+    best = max(polar.speed_ms(8.0, a) * math.cos(math.radians(a)) for a in range(1, 91))
     assert up == pytest.approx(best) and 0.3 * reach < up < 0.8 * reach
+    # Kept to the tactician's limits it can only be slower, never faster.
+    tac = vmc_ms(polar, 90.0, *east_wind, min_twa_deg=46.0, max_twa_deg=169.0)
+    assert tac == pytest.approx(polar.speed_ms(8.0, 46.0) * math.cos(math.radians(46.0)))
+    assert tac <= up
+    down = vmc_ms(polar, 270.0, *east_wind, min_twa_deg=46.0, max_twa_deg=169.0)
+    deep = max(polar.speed_ms(8.0, a) * math.cos(math.radians(180 - a)) for a in range(46, 170))
+    assert down == pytest.approx(deep)  # dead downwind: gybing at the best angle up to 169
     assert vmc_ms(polar, 90.0, *east_wind, factor=0.5) == pytest.approx(0.5 * up)
     assert vmc_ms(polar, 90.0, 0.0, 0.0) == 0.0
 
