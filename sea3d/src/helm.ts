@@ -28,7 +28,7 @@ import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
-import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay } from "./replay/data";
+import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
@@ -231,6 +231,9 @@ const page = {
   standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
   frames: 0,
+  /** The voyage hour the picture shows, and the hour the simulator has reached (for tests). */
+  hour: 0,
+  simHour: 0,
   error: "",
   /** Base mode orders sent (accepted or not), and the last share link (for tests). */
   orders: [] as OrderResult[],
@@ -596,10 +599,63 @@ function newEvents(): void {
     const evs = r.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6);
     for (const e of evs.slice(shownEvents[who])) {
       const label = who === "boat" ? "You" : "Ghost";
-      note(describeEvent(e, who === "boat" ? "your boat" : "the ghost"), `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+      const text = describeEvent(e, who === "boat" ? "your boat" : "the ghost");
+      // The log can name one failure twice (the part, then what it means): one note is enough.
+      const key = `${who} ${text}`;
+      if (lastNote[key] !== undefined && e.h - lastNote[key] < 6) continue;
+      lastNote[key] = e.h;
+      note(text, `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+      if (who === "boat" && hour - e.h < 3) moment(e);
     }
     shownEvents[who] = evs.length;
   }
+}
+const lastNote: Record<string, number> = {};
+
+// ---------- moments (#329) ----------
+// What happens to the boat shows in the picture, not only in a note: time slows to an
+// hour a second for a few seconds, a knockdown throws the boat over with a crash of
+// water and a shake, a breakdown flashes a warning (the broken part already shows on
+// the model), and the finish sounds a horn. The results card waits for the picture.
+let kick = { t: -99, dir: 1 };
+let slowUntil = 0;
+let finishing = false;
+const shake = new THREE.Vector3();
+const stillCamera = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function moment(e: ReplayEvent): void {
+  const now = clock.getElapsedTime();
+  if (e.kind === "capsize") {
+    kick = { t: now, dir: Math.random() < 0.5 ? -1 : 1 };
+    sound.crash();
+    flash("spray");
+    slowUntil = now + 4;
+  } else if (["part_failed", "ship_strike", "one_motor", "motors_off", "battery_empty"].includes(e.kind)) {
+    sound.alarm();
+    flash("alarm");
+    slowUntil = now + 3;
+  } else if (e.kind === "arrived" || e.kind === "finish_line") {
+    sound.horn();
+    slowUntil = now + 4;
+  }
+}
+
+function flash(kind: "spray" | "alarm"): void {
+  const el = $("flash");
+  el.className = "";
+  void el.offsetWidth; // restart the animation
+  el.className = kind;
+}
+
+/** Play at an hour a second: during a moment, and over the last hours before the end. */
+function slowNow(t: number): boolean {
+  return t < slowUntil || (finishing && shownTo - hour < 3);
+}
+
+/** The knockdown's roll (rad) at time t: thrown over, then righting itself with a wobble. */
+function kickRoll(t: number): number {
+  const k = t - kick.t;
+  return k >= 0 && k < 5 ? kick.dir * 1.25 * Math.exp(-k * 1.2) * Math.cos(k * 2.6) : 0;
 }
 
 // ---------- running time ----------
@@ -632,7 +688,7 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
     } else if (!(kind !== "event" && stopped === "time"))
       note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
-    if (page.status?.over) await finish();
+    if (page.status?.over) finishing = true; // the results wait for the picture (#329)
   } catch (e) {
     fail(e);
     return;
@@ -663,7 +719,7 @@ let shown: Status | null = null;
 /** Show the simulator's latest status once the picture has got to it. */
 function present(st: Status | null = page.status): void {
   if (!st) return;
-  const at = st.day * 24;
+  const at = Math.min(st.day * 24, Math.max(shownTo, hour)); // the track's last row can fall short of the status hour
   while (pending.length && pending[pending.length - 1].at >= at - 1e-6) pending.pop(); // superseded
   if (hour >= at - 1e-6) {
     pending.length = 0;
@@ -727,9 +783,9 @@ async function clockRun(): Promise<void> {
       const d = `Day ${game.status!.day.toFixed(1)}`;
       if (stopped === "breakdown") {
         const e = game.boat!.events.filter(isNotable).at(-1);
-        note(`Paused: ${e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, d, TONE_COLOUR.warn);
+        whenAt(game.status!.day * 24, () => note(`Paused: ${e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, d, TONE_COLOUR.warn));
       } else if (stopped !== "over")
-        note(`Paused: ${stopText(stopped, game.status)}`, d, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
+        whenAt(game.status!.day * 24, () => note(`Paused: ${stopText(stopped, game.status)}`, d, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info));
     }
     // The forecast strip: fresh every half day of play, and at every pause.
     if (game.status!.day * 24 - forecastAt >= 12 || rate === 0) {
@@ -738,11 +794,10 @@ async function clockRun(): Promise<void> {
     }
     if (stopped === "time") maybeDecide();
     if (game.status?.over) {
-      setRate(0);
-      hour = shownTo;
-      applyPending(true);
-      newEvents();
-      await finish();
+      // The picture plays on to the end, slowing for the last hours; then the results (#329).
+      setRate(0, true);
+      drainRate = Math.max(drainRate, 6);
+      finishing = true;
     }
   } catch (e) {
     setRate(0);
@@ -755,7 +810,8 @@ function tickClock(dt: number): boolean {
   if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
   // Ease off as the simulator's lead runs down, so a slow computer sees slower, smooth time rather than stop-start.
   const ahead = shownTo - hour;
-  hour = Math.min(shownTo, hour + dt * (ahead >= rate / 2 ? rate : rate * Math.max(0.2, (2 * ahead) / rate)));
+  const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
+  hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
   if (!inFlight && shownTo - hour < rate)
     inFlight = clockRun().finally(() => {
       inFlight = null;
@@ -857,7 +913,9 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
     const gone = spell.kind === "gale" ? "The gale has passed" : "The big waves have passed";
     const how = flat ? `you were knocked flat ${flat === 1 ? "once" : `${flat} times`}` : "you stayed upright";
     const made = Math.round(spell.km - st.boat.km_to_finish);
-    note(`${gone}. You ${verb[spell.chose] ?? "carried on"}: ${how}, and made ${made.toLocaleString()} km towards the finish since.${spell.chose === "dodge" ? " Aim at the finish again when you're ready." : ""}`, `Day ${st.day.toFixed(1)}`, flat ? TONE_COLOUR.warn : TONE_COLOUR.good);
+    const progress = made > 0 ? `made ${made.toLocaleString()} km towards the finish since` : `the weather pushed you back ${(-made).toLocaleString()} km`;
+    const text = `${gone}. You ${verb[spell.chose] ?? "carried on"}: ${how}, and ${progress}.${spell.chose === "dodge" ? " Aim at the finish again when you're ready." : ""}`;
+    whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, flat ? TONE_COLOUR.warn : TONE_COLOUR.good));
     spell = null;
   }
   // Gale or big waves in the next 2 days, while it's not blowing yet.
@@ -911,7 +969,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
     const setTo = (Math.atan2(w.current_u, w.current_v) * 180) / Math.PI;
     const off = Math.abs(((st.boat.heading - setTo + 540) % 360) - 180);
     if (off < 90 || order === "route") {
-      note(`You're riding the Gulf Stream: ${kmh(cur)} of current carrying you ${towards(w.current_u, w.current_v)}, for free.`, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.good);
+      const text = `You're riding the Gulf Stream: ${kmh(cur)} of current carrying you ${towards(w.current_u, w.current_v)}, for free.`;
+      whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.good));
       return null;
     }
     return {
@@ -926,6 +985,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
   return null;
 }
 
+let decisionSeq = 0;
+
 /** Stop the clock and ask, when a decision is due. */
 function maybeDecide(): boolean {
   const st = game.status;
@@ -934,6 +995,16 @@ function maybeDecide(): boolean {
   if (!d) return false;
   setRate(0, true);
   page.decisions.push({ kind: d.kind, day: st.day });
+  // Asked once the picture gets there, so the question and the view agree. Carrying on
+  // before then skips it; a later question replaces it.
+  const seq = ++decisionSeq;
+  whenAt(st.day * 24, () => {
+    if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d);
+  });
+  return true;
+}
+
+function showDecision(d: { text: string; choices: Choice[] }): void {
   $("decidetext").textContent = d.text;
   const box = $("decidebtns");
   box.replaceChildren();
@@ -950,7 +1021,20 @@ function maybeDecide(): boolean {
   }
   $("decide").hidden = false;
   $("fcbox").classList.add("lit");
-  return true;
+}
+
+/** Things to say once the picture reaches a voyage hour: the simulator runs ahead of it. */
+const due: { h: number; fn: () => void }[] = [];
+function whenAt(h: number, fn: () => void): void {
+  h = Math.min(h, shownTo); // the track's last row can fall short of the status hour
+  if (hour >= h - 1e-6) fn();
+  else due.push({ h, fn });
+}
+function runDue(): void {
+  for (let i = 0; i < due.length; ) {
+    if (hour >= due[i].h - 1e-6) due.splice(i, 1)[0].fn();
+    else i++;
+  }
 }
 
 async function refreshForecast(): Promise<void> {
@@ -1467,13 +1551,20 @@ renderer.setAnimationLoop(() => {
   if (tickClock(dt)) {
     // the clock moved the picture on
   } else if (drainRate > 0 && hour < shownTo) {
-    hour = Math.min(shownTo, hour + dt * drainRate);
+    hour = Math.min(shownTo, hour + dt * (slowNow(t) ? Math.min(drainRate, 1) : drainRate));
     if (hour >= shownTo) drainRate = 0;
   } else if (hopPlay && hour < shownTo) {
     const span = Math.max(shownTo - hour, 1);
     const rate = Math.max(span / Math.min(6, 0.6 + (2.5 * span) / 24), 6); // hours per second
-    hour = Math.min(shownTo, hour + dt * rate);
+    hour = Math.min(shownTo, hour + dt * (slowNow(t) ? 1 : rate));
     if (hour >= shownTo) hopPlay = false;
+  }
+  runDue();
+  if (finishing && hour >= shownTo - 1e-6 && !inFlight) {
+    finishing = false;
+    applyPending(true);
+    newEvents();
+    void finish().catch(fail);
   }
   poisReached();
   const r = rep();
@@ -1504,7 +1595,7 @@ renderer.setAnimationLoop(() => {
   const stw = r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
-    model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
+    model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
@@ -1532,6 +1623,12 @@ renderer.setAnimationLoop(() => {
   const dy = motion.heave - rigHeave;
   rigHeave = motion.heave;
   camera.position.y += dy;
+  // A knockdown shakes the camera for a moment: undo last frame's shake, add this one's.
+  camera.position.sub(shake);
+  const sk = t - kick.t;
+  if (sk >= 0 && sk < 0.9 && !stillCamera) shake.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.35 * (1 - sk / 0.9));
+  else shake.set(0, 0, 0);
+  camera.position.add(shake);
   controls.target.y += dy;
   const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * KN - 15) / 20, 0, 1);
   storm += (target - storm) * Math.min(1, dt * 1.5);
@@ -1606,4 +1703,6 @@ renderer.setAnimationLoop(() => {
   }
   $("clock").textContent = r && page.ready ? `Day ${(h / 24).toFixed(1)}` : "";
   page.frames++;
+  page.hour = hour;
+  page.simHour = shownTo;
 });
