@@ -2,6 +2,8 @@
 # the same April to June launches through real weather (ERA5) and currents
 # (GLORYS12), one GitHub Actions job per year, then one combined report.
 # Run it by hand: Actions tab -> "Sensitivity study" -> Run workflow.
+# To chase one voyage, fill in "trace" with its launch day: the job prints that
+# launch step by step in its log (dispatch only, like the rest, as it needs the secrets).
 # Uses the Copernicus secrets for currents; GitHub masks them in logs.
 name: Sensitivity study
 on:
@@ -25,6 +27,9 @@ on:
       design:
         description: "Design every variant starts from (e.g. configs/stock_sail_drone7.yaml)"
         default: "configs/v4_kayak.yaml"
+      trace:
+        description: "Trace one launch instead (YYYY-MM-DD, a launch day every_days from April 1): prints it step by step in the log for the variants above (empty = baseline); the years are ignored"
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -34,7 +39,14 @@ jobs:
       list: ${{ steps.y.outputs.list }}
     steps:
       - id: y
-        run: echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2020' }}, ${{ inputs.last_year || '2020' }}+1))))")" >> "$GITHUB_OUTPUT"
+        env:
+          TRACE: ${{ inputs.trace }}
+        run: |
+          if [ -n "$TRACE" ]; then
+            echo "list=[${TRACE:0:4}]" >> "$GITHUB_OUTPUT"
+          else
+            echo "list=$(python3 -c "import json;print(json.dumps(list(range(${{ inputs.first_year || '2020' }}, ${{ inputs.last_year || '2020' }}+1))))")" >> "$GITHUB_OUTPUT"
+          fi
   run:
     needs: years
     runs-on: ubuntu-latest
@@ -54,6 +66,7 @@ jobs:
       MAX_DAYS: ${{ inputs.max_days || '150' }}
       DESIGN: ${{ inputs.design || 'configs/v4_kayak.yaml' }}
       VARIANTS: ${{ inputs.variants }}
+      TRACE: ${{ inputs.trace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -70,16 +83,21 @@ jobs:
             "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.NA.list.v04r01.csv"
       - name: Fetch weather (ERA5) for the same span
         run: python -m boatsim.oceandata fetch-era5 "$YEAR-04-01" "$((YEAR + 1))-01-05" --workers 4
+      - name: Trace the one launch
+        if: ${{ inputs.trace != '' }}
+        run: python -m boatsim.mc.sensitivity trace "$TRACE" --every-days "$EVERY_DAYS" --max-days "$MAX_DAYS" --design "$DESIGN" ${VARIANTS:+--variants $VARIANTS}
       - name: Run every variant over the year's April to June launches
+        if: ${{ inputs.trace == '' }}
         run: python -m boatsim.mc.sensitivity run "$YEAR" --every-days "$EVERY_DAYS" --max-days "$MAX_DAYS" --workers 4 --unknown-p 0 --design "$DESIGN" ${VARIANTS:+--variants $VARIANTS} --out runs/sensitivity
       - uses: actions/upload-artifact@v4
+        if: ${{ inputs.trace == '' }}
         with:
           name: sensitivity-${{ matrix.year }}
           path: runs/sensitivity/sensitivity_${{ matrix.year }}.csv
           retention-days: 90
   report:
     needs: run
-    if: always()
+    if: ${{ always() && inputs.trace == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

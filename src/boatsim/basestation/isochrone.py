@@ -73,50 +73,9 @@ from boatsim.basestation.replan import ForecastReplanPolicy, _ground_velocity
 from boatsim.geo import bearing_deg, distance_m, move
 from boatsim.oceandata.base import Environment
 from boatsim.oceandata.grid import OutsideCoverage
+from boatsim.runner.arrival import TARGET_RADIUS_M
 from boatsim.types import Mission, Waypoint
-
-
-class SteadyPolar:
-    """A speed table for a wing-sail boat with no VPP polar (the wind-powered
-    drone, a KayakVessel with a sail): its steady speed through the water at
-    each wind speed and angle, from the boat's own force balance
-    (vessel.kayak.solve_speed), so base plans with the physics the boat sails
-    with. Waves come from the wind with the height of a fully developed sea,
-    Hs = 0.0214 U^2 (Pierson & Moskowitz 1964, doi:10.1029/JZ069i024p05181),
-    capped at 6 m: a GUESS, since the planner asks by wind alone. No current,
-    no fouling (polar_factor covers both). Above the storm wind the wing is
-    feathered and the boat only runs off, so it counts as making no way."""
-
-    def __init__(self, vessel):
-        self.vessel = vessel
-        self._cache: dict[tuple[int, int], float] = {}
-
-    def speed_ms(self, tws_ms: float, twa_deg: float) -> float:
-        from boatsim.types import EnvState
-        from boatsim.vessel.kayak import solve_speed
-
-        key = (round(tws_ms * 4), round(twa_deg))
-        got = self._cache.get(key)
-        if got is not None:
-            return got
-        v, sail = self.vessel, self.vessel.sail
-        tws, twa = key[0] / 4, math.radians(key[1])
-        if tws <= 0.0 or tws > sail.storm_wind_ms:
-            speed = 0.0
-        else:
-            env = EnvState(
-                wind_u=-tws * math.sin(twa),
-                wind_v=-tws * math.cos(twa),
-                hs=min(0.0214 * tws * tws, 6.0),
-                wave_dir=float(key[1]),
-            )
-            sol = solve_speed(
-                v.hull, v.thrusters, 0.0, 0.0, 0, env, 0.0, 0.0, 0.0,
-                sail=sail, sail_alpha_max_deg=sail.max_alpha_deg,
-            )  # fmt: skip
-            speed = max(sol.surge, 0.0)
-        self._cache[key] = speed
-        return speed
+from boatsim.vessel.kayak import SteadyPolar  # noqa: F401  (moved; kept importable here)
 
 
 @dataclass
@@ -125,6 +84,7 @@ class _Node:
     lon: float
     parent: int  # index into the previous isochrone, -1 for the start
     left_m: float  # route distance still to go from here
+    done_s: float | None = None  # seconds from the plan's start to the finish circle, once reached
 
 
 @dataclass
@@ -141,7 +101,12 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
     # A route sent today reaches the boat with tomorrow's report (Iridium
     # mailbox="with_report", comms/iridium.py), so plans start a day ahead.
     delivery: timedelta = timedelta(hours=24)
-    finish_radius_m: float = 50_000.0  # a node this close to the goal stops expanding
+    # The race's finish circle (runner/arrival.py): a track counts as finished
+    # only once it passes this close to the target. (It used to be 50 km and
+    # costed the rest at typical speed, so a plan could stop downwind of the
+    # target and call it done: drones then beat back and some ran ashore on
+    # Iberia and Morocco, Ravi's 10-year runs.)
+    finish_radius_m: float = TARGET_RADIUS_M
     plans: list[tuple[datetime, list[tuple[float, float]], float]] = field(
         default_factory=list, repr=False
     )  # (time, planned track, seconds to the goal): for tests and plots
@@ -192,12 +157,9 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
             samples.clear()
             sectors: dict[int, _Node] = {}
             for j, node in enumerate(layers[-1]):
-                d_goal = distance_m(node.lat, node.lon, goal.lat, goal.lon)
-                if d_goal < self.finish_radius_m:
-                    # Close enough: cost the last bit at typical speed and stop here.
-                    score = i * secs + d_goal / speed
-                    if best is None or score < best[0]:
-                        best = (score, i, j)
+                if node.done_s is not None:  # finished on the way here: stop
+                    if best is None or node.done_s < best[0]:
+                        best = (node.done_s, i, j)
                     continue
                 key = (round(node.lat, 1), round(node.lon, 1))  # forecast is ~0.25 deg
                 if key not in samples:
@@ -220,10 +182,16 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
                     ):
                         continue
                     left, _ = self._route_after(nlat, nlon)
+                    hit = self._reaches(node.lat, node.lon, nlat, nlon)
+                    done = None if hit is None else (i + hit) * secs
                     s = int(bearing_deg(lat, lon, nlat, nlon) // self.sector_deg)
                     kept = sectors.get(s)
-                    if kept is None or left < kept.left_m:
-                        sectors[s] = _Node(nlat, nlon, j, left)
+                    better = kept is None or (
+                        (done if done is not None else math.inf, left)
+                        < (kept.done_s if kept.done_s is not None else math.inf, kept.left_m)
+                    )
+                    if better:
+                        sectors[s] = _Node(nlat, nlon, j, 0.0 if done is not None else left, done)
             if not sectors:
                 break
             layers.append(list(sectors.values()))
@@ -231,7 +199,9 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
         last = len(layers) - 1
         if last > 0:
             for j, node in enumerate(layers[last]):
-                score = last * secs + node.left_m / speed
+                score = (
+                    node.done_s if node.done_s is not None else last * secs + node.left_m / speed
+                )
                 if best is None or score < best[0]:
                     best = (score, last, j)
         if best is None:
@@ -245,6 +215,21 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
         track.reverse()
         return track, (score if len(track) > 1 else math.inf)
 
+    def _reaches(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float | None:
+        """Does the leg from point 1 to point 2 pass within the finish circle?
+        The fraction of the leg sailed when it first does (0 to 1), or None.
+        Checked at 8 points along the leg: a 6 h leg is at most about 60 km,
+        so the gaps are well inside the 25 km circle."""
+        goal = self.route[-1]
+        for k in range(9):
+            f = k / 8
+            if (
+                distance_m(lat1 + f * (lat2 - lat1), lon1 + f * (lon2 - lon1), goal.lat, goal.lon)
+                < self.finish_radius_m
+            ):
+                return f
+        return None
+
     def _follow(
         self, forecast: Environment, t0: datetime, lat: float, lon: float, wps, speed: float, n: int
     ) -> tuple[float, float, float | None] | None:
@@ -257,9 +242,8 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
         goal = self.route[-1]
         k, t = 0, t0
         for i in range(n):
-            d_goal = distance_m(lat, lon, goal.lat, goal.lon)
-            if d_goal < self.finish_radius_m:
-                return lat, lon, i * secs + d_goal / speed
+            if distance_m(lat, lon, goal.lat, goal.lon) < self.finish_radius_m:
+                return lat, lon, i * secs
             # A waypoint within the autopilot's 5 km radius counts as reached.
             while k < len(wps) - 1 and distance_m(lat, lon, wps[k].lat, wps[k].lon) < 5_000.0:
                 k += 1
@@ -273,6 +257,9 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
                 lat, lon, nlat, nlon, margin
             ):
                 return None
+            hit = self._reaches(lat, lon, nlat, nlon)
+            if hit is not None:
+                return nlat, nlon, (i + hit) * secs
             # Passing a waypoint mid-step: carry on from it toward the next.
             step_m = distance_m(lat, lon, nlat, nlon)
             if k < len(wps) - 1 and distance_m(lat, lon, wps[k].lat, wps[k].lon) <= step_m:

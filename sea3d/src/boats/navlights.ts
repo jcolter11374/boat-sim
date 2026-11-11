@@ -49,17 +49,37 @@ export function arcsFor(kind: NavLighting): Arc[] {
   ];
 }
 
+/** True when a bearing off the bow (degrees, clockwise) is inside an arc; an arc may run through dead ahead (from > to). */
+export function inArc(a: Pick<Arc, "from" | "to">, bearing: number): boolean {
+  const b = ((bearing % 360) + 360) % 360;
+  if (a.to - a.from >= 360) return true;
+  return a.from < a.to ? b >= a.from && b < a.to : b >= a.from || b < a.to;
+}
+
 /** Which colour you see from a bearing off the bow (degrees, clockwise), or null for none. */
 export function seenFrom(kind: NavLighting, bearing: number): number | null {
-  const b = ((bearing % 360) + 360) % 360;
-  for (const a of arcsFor(kind)) if (b >= a.from && b < a.to) return a.colour;
+  for (const a of arcsFor(kind)) if (inArc(a, bearing)) return a.colour;
   return null;
+}
+
+/** A lantern: its arcs, and where it sits in the builder frame. */
+export interface Lantern {
+  arcs: Arc[];
+  at: THREE.Vector3;
+}
+
+export interface LanternLook {
+  /** Size on screen (a fraction of the view's height). */
+  size?: number;
+  /** Fades out over the last part of this distance (m), when set: a light lost in the haze. */
+  range?: { value: number };
 }
 
 let glowTex: THREE.Texture | null = null;
 /** A soft round glow with a bright core. */
-function glow(): THREE.Texture {
+function glow(): THREE.Texture | null {
   if (glowTex) return glowTex;
+  if (typeof document === "undefined") return null; // no page (unit tests)
   const c = document.createElement("canvas");
   c.width = c.height = 64;
   const g = c.getContext("2d")!;
@@ -79,41 +99,58 @@ function glow(): THREE.Texture {
  * y up, z to port); `at` is the lantern's place in it.
  */
 export function addNavLights(group: THREE.Object3D, kind: NavLighting, at: THREE.Vector3): THREE.Group {
+  return addLanterns(group, [{ arcs: arcsFor(kind), at }]);
+}
+
+const NO_RANGE = { value: 0 };
+
+/** Lanterns anywhere on a model (builder frame), each lit only inside its arcs and only after dark. */
+export function addLanterns(group: THREE.Object3D, lanterns: Lantern[], look: LanternLook = {}): THREE.Group {
   const lights = new THREE.Group();
   lights.name = "nav_lights";
-  lights.position.copy(at);
-  for (const a of arcsFor(kind)) {
-    const m = new THREE.SpriteMaterial({ map: glow(), color: a.colour, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
-    m.onBeforeCompile = (sh) => {
-      sh.uniforms.uArc = { value: new THREE.Vector2(a.from, a.to) };
-      sh.uniforms.uNight = NAV_NIGHT;
-      sh.vertexShader = sh.vertexShader
-        .replace("void main() {", "uniform vec2 uArc;\nvarying float vLit;\nvoid main() {")
-        .replace(
-          "#include <logdepthbuf_vertex>",
-          `#include <logdepthbuf_vertex>
-          // Where the camera is from the lantern, against the boat's bow (builder -x)
-          // and starboard (builder -z); lit inside the arc, with a degree's soft edge.
-          vec3 fwd = (modelMatrix * vec4(-1.0, 0.0, 0.0, 0.0)).xyz;
-          vec3 stb = (modelMatrix * vec4(0.0, 0.0, -1.0, 0.0)).xyz;
-          vec3 rel = cameraPosition - modelMatrix[3].xyz;
-          float b = degrees(atan(dot(rel, stb), dot(rel, fwd)));
-          b = b < 0.0 ? b + 360.0 : b;
-          vLit = smoothstep(uArc.x - 1.0, uArc.x + 1.0, b) * (1.0 - smoothstep(uArc.y - 1.0, uArc.y + 1.0, b));
-          if (uArc.y - uArc.x >= 359.0) vLit = 1.0;`,
-        );
-      sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", "uniform float uNight;\nvarying float vLit;\nvoid main() {")
-        .replace("#include <opaque_fragment>", "diffuseColor.a *= vLit * uNight;\n#include <opaque_fragment>");
-    };
-    m.customProgramCacheKey = () => "boatsim-navlight-v1";
-    const s = new THREE.Sprite(m);
-    s.scale.setScalar(0.034);
-    s.renderOrder = 30;
-    lights.add(s);
+  for (const l of lanterns) {
+    for (const a of l.arcs) {
+      const s = new THREE.Sprite(lanternMaterial(a, look.range ?? NO_RANGE));
+      s.position.copy(l.at);
+      s.scale.setScalar(look.size ?? 0.034);
+      s.renderOrder = 30;
+      lights.add(s);
+    }
   }
   group.add(lights);
   return lights;
+}
+
+function lanternMaterial(a: Arc, range: { value: number }): THREE.SpriteMaterial {
+  const m = new THREE.SpriteMaterial({ map: glow(), color: a.colour, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uArc = { value: new THREE.Vector2(a.from, a.to) };
+    sh.uniforms.uNight = NAV_NIGHT;
+    sh.uniforms.uRange = range;
+    sh.vertexShader = sh.vertexShader
+      .replace("void main() {", "uniform vec2 uArc;\nuniform float uRange;\nvarying float vLit;\nvoid main() {")
+      .replace(
+        "#include <logdepthbuf_vertex>",
+        `#include <logdepthbuf_vertex>
+        // Where the camera is from the lantern, against the boat's bow (builder -x)
+        // and starboard (builder -z); lit inside the arc, with a degree's soft edge.
+        vec3 fwd = (modelMatrix * vec4(-1.0, 0.0, 0.0, 0.0)).xyz;
+        vec3 stb = (modelMatrix * vec4(0.0, 0.0, -1.0, 0.0)).xyz;
+        vec3 rel = cameraPosition - modelMatrix[3].xyz;
+        float b = degrees(atan(dot(rel, stb), dot(rel, fwd)));
+        b = b < 0.0 ? b + 360.0 : b;
+        float on = smoothstep(uArc.x - 1.0, uArc.x + 1.0, b);
+        float off = 1.0 - smoothstep(uArc.y - 1.0, uArc.y + 1.0, b);
+        vLit = uArc.x < uArc.y ? on * off : max(on, off); // an arc through dead ahead runs past 360
+        if (uArc.y - uArc.x >= 359.0) vLit = 1.0;
+        if (uRange > 0.0) vLit *= 1.0 - smoothstep(0.6 * uRange, uRange, length(rel));`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace("void main() {", "uniform float uNight;\nvarying float vLit;\nvoid main() {")
+      .replace("#include <opaque_fragment>", "diffuseColor.a *= vLit * uNight;\n#include <opaque_fragment>");
+  };
+  m.customProgramCacheKey = () => "boatsim-navlight-v2";
+  return m;
 }
 
 /** Free the lights' materials (the shared glow texture stays). */
