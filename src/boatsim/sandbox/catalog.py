@@ -501,6 +501,7 @@ STOCK_BASES = {
         "stock_cruiser31",
         "stock_dinghy14",
         "stock_beachcat16",
+        "stock_sail_drone7",
         "joke_robot_kayak",
         "joke_canoe",
         "joke_pedalo",
