@@ -530,9 +530,40 @@ function sailText(s: Status): string {
   return bits.join(" · ");
 }
 
+/** The trim chip under the time bar (Leo): "Your trim: +1.8 km" counting up through a wheel
+ * watch, held for a few seconds after it ends. Distance, not percent: it means more. */
+let chipGain: number | null = null;
+let chipBase: number | null = null;
+let chipHold: ReturnType<typeof setTimeout> | undefined;
+function showTrimChip(s: Status): void {
+  const c = $("trimchip");
+  const g = s.trim?.gain_km;
+  if (s.trim && g != null) {
+    clearTimeout(chipHold);
+    chipHold = undefined;
+    chipGain = g;
+    chipBase = (s.trim_gain_km ?? g) - g; // all watches before this one
+    c.hidden = false;
+  } else if (chipGain != null && !chipHold) {
+    // The watch ended between two looks (at 6 h/s it lasts under a second): its final
+    // gain is what the running total grew by since it began.
+    if (s.trim_gain_km != null && chipBase != null) chipGain = s.trim_gain_km - chipBase;
+    chipHold = setTimeout(() => {
+      c.hidden = true;
+      chipGain = null;
+      chipHold = undefined;
+    }, 5000);
+  }
+  if (chipGain == null) return;
+  const km = Math.abs(chipGain) < 10 ? Math.abs(chipGain).toFixed(1) : String(Math.round(Math.abs(chipGain)));
+  c.textContent = `Your trim: ${chipGain < 0 ? "−" : "+"}${km} km${s.trim ? "" : " (watch over)"}`;
+  c.classList.toggle("lost", chipGain < 0);
+}
+
 function showStatus(): void {
   const s = shown ?? page.status;
   if (!s) return;
+  showTrimChip(page.status ?? s);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
   const est = hidden() ? s.base?.estimate : undefined;

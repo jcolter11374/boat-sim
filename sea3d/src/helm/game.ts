@@ -72,7 +72,9 @@ export interface Status {
   /** False in base mode: the page shows what base knows, not the true boat (#214). */
   show_true_position?: boolean;
   /** A hand-trimmed watch running now (Take the wheel, phase 2): null when none; older simulators leave it out. */
-  trim?: { share: number; until: string; factor: number } | null;
+  trim?: { share: number; until: string; factor: number; gain_km?: number } | null;
+  /** What every wheel watch so far has gained (km through the water vs the autopilot's trim). */
+  trim_gain_km?: number;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
 }
 export interface ForecastRow {
