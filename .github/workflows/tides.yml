@@ -1,0 +1,38 @@
+# Tidal currents near the shore (src/boatsim/oceandata/tides.py): saves NOAA
+# CO-OPS current stations' harmonic constants (public domain) and three days of
+# NOAA's own predictions for the Bay mouth, Annapolis and the Gulf of Maine.
+# The thread sandboxes can't reach NOAA's API, so the fetch runs here. It runs on
+# pull requests that touch it, and by hand: Actions -> "Tide currents".
+name: Tide currents
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/tides.yml"
+      - "src/boatsim/oceandata/tides.py"
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . requests
+      - name: Fetch constants and NOAA's predictions
+        run: python -m boatsim.oceandata.tides fetch --out runs/tides
+      - name: Print the constants (for threads that can't download artifacts)
+        if: always()
+        run: |
+          cat runs/tides/summary.json
+          for f in runs/tides/harcon_*.json; do echo "== $f"; cat "$f"; echo; done
+          for f in runs/tides/pred_*.json; do echo "== $f"; python -c "import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d)[:6000])" "$f"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tide-currents
+          path: runs/tides/
+          retention-days: 90
