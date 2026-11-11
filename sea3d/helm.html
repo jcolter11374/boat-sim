@@ -63,7 +63,8 @@
   #timebar #t-pause { font-size: 13px; min-width: 38px; }
   #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
   #timestate { position: fixed; top: calc(var(--bar, 0px) + 84px); left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
-    text-shadow: 0 1px 4px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; }
+    text-shadow: 0 1px 4px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none;
+    background: rgba(10,18,30,.45); padding: 1px 9px; border-radius: 10px; } /* readable on a bright sky */
   #timestate:empty, #timestate[hidden] { display: none; }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
@@ -73,14 +74,18 @@
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
   #decidebtns button { text-align: left; white-space: normal; }
   #decidebtns button:first-child { font-weight: 600; }
+  #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
+  #soundask button { white-space: nowrap; }
+  #soundask[hidden] { display: none; }
   #flash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; }
   #flash.spray { background: radial-gradient(ellipse at 50% 60%, rgba(255,255,255,.75), rgba(220,235,245,.35) 60%, transparent); animation: flash-out 1.6s ease-out forwards; }
   #flash.alarm { box-shadow: inset 0 0 90px 18px rgba(255,60,40,.75); animation: flash-pulse .5s ease-in-out 4 alternate; }
   @keyframes flash-out { from { opacity: 1; } to { opacity: 0; } }
   @keyframes flash-pulse { from { opacity: 0; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { #flash.spray, #flash.alarm { animation-duration: .01s; } }
-  #keyhint { position: fixed; top: calc(var(--bar, 0px) + 102px); left: 50%; transform: translateX(-50%); font: 500 11.5px system-ui, sans-serif;
-    color: rgba(220,232,246,.75); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; }
+  #keyhint { position: fixed; top: calc(var(--bar, 0px) + 106px); left: 50%; transform: translateX(-50%); font: 500 11.5px system-ui, sans-serif;
+    color: rgba(220,232,246,.85); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s;
+    background: rgba(10,18,30,.4); padding: 1px 9px; border-radius: 10px; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
   @media (max-width: 700px) { #timebar .t { display: none; } #timebar button { padding: 5px 8px; } }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -163,6 +168,10 @@
   <div class="muted" style="font-size:11px">Time is paused until you choose. The forecast is open below.</div>
 </div>
 <div id="flash" aria-hidden="true"></div>
+<div id="soundask" class="glass" role="dialog" aria-label="Sound" hidden>
+  <span>The sea sounds good: wind, waves and rain, made from the weather. Turn sound on?</span>
+  <button id="soundyes">&#128266; Sound on</button><button id="soundno">No thanks</button>
+</div>
 <div id="timebar" class="glass" role="group" aria-label="How fast time runs" hidden>
   <span class="t">Time</span>
   <button id="t-pause" title="Pause or carry on (space bar)" aria-pressed="false">&#10074;&#10074;</button>

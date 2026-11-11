@@ -641,6 +641,26 @@ function newEvents(): void {
 }
 const lastNote: Record<string, number> = {};
 
+// ---------- "Sound on?" (#334) ----------
+// No autoplay, ever; but sound sells the sea, and it's easy to miss the button. So once you
+// set sail, ask once. "No thanks" is remembered (the sound module stores it as muted), and the
+// question goes away by itself after 20 seconds.
+function askSound(): void {
+  if (sound.on || sound.muted) return;
+  const box = $("soundask");
+  box.hidden = false;
+  const close = () => (box.hidden = true);
+  $("soundyes").onclick = () => {
+    sound.enable();
+    close();
+  };
+  $("soundno").onclick = () => {
+    sound.disable(true);
+    close();
+  };
+  setTimeout(close, 20_000);
+}
+
 // ---------- moments (#329) ----------
 // What happens to the boat shows in the picture, not only in a note: time slows to an
 // hour a second for a few seconds, a knockdown throws the boat over with a crash of
@@ -1325,6 +1345,7 @@ async function begin(): Promise<void> {
     setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
     $("keyhint").hidden = false;
     setTimeout(hideKeyHint, 60_000);
+    askSound();
   } catch (e) {
     $("loading").hidden = true;
     const err = String(e);
@@ -1699,7 +1720,10 @@ renderer.setAnimationLoop(() => {
   controls.target.y += dy;
   const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * KN - 15) / 20, 0, 1);
   storm += (target - storm) * Math.min(1, dt * 1.5);
-  const [lat, lon] = arrival ?? (r ? positionAt(r, h) : (SPOT ?? [36.65, -74.94]));
+  // Before the first hour is logged the track is empty (positionAt would be NaN, and a NaN sun
+  // turns the whole picture black, #334): stand at the boat's reported start instead.
+  const st0 = page.status?.boat;
+  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : (SPOT ?? [36.65, -74.94]));
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
