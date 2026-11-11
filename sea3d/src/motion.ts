@@ -212,58 +212,65 @@ export const RANDOLPH_REVB: HullParams = {
   source: "drone-boat docs/Simulation_RevB.md (mass, GM), docs/data/revB_gz_curve.csv (GZ, inertias), design.py (masses)",
 };
 
-// --- Randolph team Rev C (drone-boat simulator/drone_sim/design.py, MIT) -----
-// The Randolph team's Rev C (10 Nov 2026): foam-filled hull behind two
-// bulkheads, sealed battery box, twin rudders, D72 bulb, YB3 tracker and light
-// on the stern stub; 25.2 kg all up, waterline 0.098 m above the bottom. The GZ
-// curve is theirs (docs/data/revC_gz_curve.csv, free trim). Point masses are
-// their design.py equipment list plus Rev B's structure items above; they sum
-// to 25.26 kg. Inertias and the centre of gravity are their measured values
-// (designs/revC_geometry.json, 11 Nov 2026), about the CG with x aft, y port,
-// z up: Ixx 2.90, Iyy 5.00, Izz 2.15, Ixz -0.70 kg m^2; CG 0.853 m aft of the
-// bow and 0.034 m below the hull-bottom datum. Our roll-pitch model uses Ixx
-// and Iyy; Izz and Ixz (yaw, and the roll-yaw coupling) wait for a yaw model.
-// Our earlier point-mass estimates were within 3 % (2.86, 5.07, 0.847 m).
+// --- Randolph team Rev C (drone-boat designs/revC_geometry.json, MIT) ----------
+// The Randolph team's Rev C3 (11 Nov 2026): foam-filled hull behind two
+// bulkheads, sealed battery box, twin rudders with servo-savers, hardwood-cored
+// keel fin (C2), D72 bulb, YB3 in a foredeck well, fibreglass stern post and
+// counterweight arm, 30 x 22 mm spar (C3); 26.9 kg all up, waterline 0.102 m
+// above the bottom. The GZ curve is theirs (docs/data/revC_gz_curve.csv, C3,
+// free trim). Point masses are their mass_items list (revC_geometry.json); they
+// sum to 26.93 kg. Inertias and the centre of gravity are their values from the
+// same file, about the CG with x aft, y port, z up: Ixx 3.10, Iyy 5.26,
+// Izz 2.21, Ixz -0.45 kg m^2; CG 0.824 m aft of the bow and 0.028 m below the
+// hull-bottom datum. Our roll-pitch model uses Ixx and Iyy; Izz and Ixz (yaw,
+// and the roll-yaw coupling) wait for a yaw model.
 export const REVC_MASS_ITEMS: MassItem[] = [
-  [9.0, -0.436, "lead bulb, 0.32 m x 72 mm"],
-  [0.9, -0.2, "keel fin and rod"],
-  [0.9, -0.07, "two rudders and stocks"],
-  [2.4, 0.12, "hull and deck laminate, ~1.5 m^2 at 1.6 kg/m^2"],
-  [2.35, 0.65, "wing rig with counterweight, 30 x 26 mm spar"],
-  [2.0, 0.1, "battery"],
-  [1.1, 0.1, "electronics box"],
-  [1.0, 0.235, "solar panels"],
-  [0.45, 0.13, "mast tube and housing"],
-  [0.5, 0.14, "two rudder servos and trunks"],
-  [0.9, 0.42, "stern stub, vane, antenna, reflector"],
-  [0.5, 0.02, "keel box and backing"],
+  [2.316, 0.149, "hull + deck shell"],
+  [1.723, -0.196, "keel fin"],
+  [8.983, -0.424, "lead bulb"],
+  [0.992, -0.043, "rudders"],
+  [0.561, 0.8, "wing"],
+  [0.8, 0.75, "wing spar"],
+  [0.37, 0.35, "tail + servo housing"],
+  [0.066, 0.276, "tail boom"],
+  [0.018, 0.286, "counterweight arm tube"],
+  [0.11, 0.286, "counterweight pod shell"],
+  [0.798, 0.286, "rig counterweight (lead)"],
+  [2, 0.1, "battery"],
+  [1.1, 0.163, "electronics box"],
+  [0.08, 0.115, "electronics shelf"],
+  [1, 0.235, "solar panels"],
+  [0.52, 0.13, "mast tube and housing"],
+  [0.53, 0.14, "rudder servos and trunks"],
+  [1.65, 0.13, "foam fill xps"],
+  [0.2, 0.12, "bulkheads"],
+  [0.35, 0.1, "battery box"],
+  [0.45, 0.225, "yb3 tracker and platform"],
+  [0.06, 0.6, "nav light"],
+  [0.9, 0.42, "stern stub vane antenna reflector"],
+  [0.75, 0.02, "keel box and backing"],
   [0.6, 0.12, "misc fittings"],
-  [1.65, 0.13, "XPS foam fill, ~59 L"],
-  [0.2, 0.12, "two bulkheads"],
-  [0.35, 0.1, "sealed battery box"],
-  [0.4, 0.48, "YB3 tracker and platform"],
-  [0.06, 0.6, "all-round light"],
 ];
-const REVC_X = [0.74, 0.74, 1.4, 0.72, 0.6, 0.87, 1.1, 1.06, 0.6, 1.36, 1.53, 0.745, 0.8, 0.8, 0.78, 0.87, 1.53, 1.53];
-const REVC_WATERLINE = 0.098;
-const REVC_SPREAD = [0.072, 0.43, 0.23, 0.45, 1.0, 0, 0, 0.4, 0, 0, 0, 0, 0, 0.23, 0.2, 0, 0, 0];
+const REVC_X = [0.809, 0.73, 0.723, 1.428, 0.66, 0.6, 1.2, 0.9, 0.45, 0.3, 0.3, 0.87, 1.1, 1.1, 1.06, 0.6, 1.36, 0.8, 0.78, 0.87, 0.18, 1.53, 1.53, 0.745, 0.8];
+const REVC_WATERLINE = 0.102;
+const REVC_SPREAD = [0.45, 0.43, 0.072, 0.23, 1, 1.195, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0, 0, 0.23, 0.2, 0, 0, 0, 0, 0, 0]; // GUESS: item lengths for their own inertia
 const revcMass = massProperties(REVC_MASS_ITEMS, REVC_SPREAD);
-// GM from the curve's first step: 0.0163 m / sin 5 deg.
-export const REVC_GM = 0.187;
+// GM: the Rev C5 curve's first step, 0.0164 m / sin 5 deg = 0.188 (their revC_geometry.json stability.gm_m 0.188).
+export const REVC_GM = 0.188;
 const revcGz: [number, number][] = [
-  [0, 0.0], [5, 0.0163], [10, 0.0325], [15, 0.0486], [20, 0.0644], [25, 0.0798], [30, 0.0948], [35, 0.1092],
-  [40, 0.1231], [45, 0.1352], [50, 0.145], [55, 0.1524], [60, 0.1579], [65, 0.1609], [70, 0.1624], [75, 0.1629],
-  [80, 0.1639], [85, 0.1802], [90, 0.1791], [95, 0.2898], [100, 0.3672], [105, 0.3782], [110, 0.3722], [115, 0.3586],
-  [120, 0.3402], [125, 0.318], [130, 0.2927], [135, 0.2646], [140, 0.2347], [145, 0.2033], [150, 0.171], [155, 0.1383],
-  [160, 0.1061], [165, 0.0753], [170, 0.0471], [175, 0.0225], [180, 0.0],
+  [0, 0.0], [5, 0.0164], [10, 0.0327], [15, 0.0488], [20, 0.0647], [25, 0.0803], [30, 0.0954], [35, 0.11],
+  [40, 0.1239], [45, 0.1358], [50, 0.1453], [55, 0.1527], [60, 0.158], [65, 0.1609], [70, 0.1624], [75, 0.1626],
+  [80, 0.1629], [85, 0.1771], [90, 0.1781], [95, 0.2681], [100, 0.3554], [105, 0.3717], [110, 0.3687], [115, 0.3569],
+  [120, 0.3397], [125, 0.3182], [130, 0.2933], [135, 0.2655], [140, 0.2357], [145, 0.2046], [150, 0.1723],
+  [155, 0.1396], [160, 0.1072], [165, 0.0762], [170, 0.0477], [175, 0.023], [180, 0.0],
 ];
-// Their measured values (designs/revC_geometry.json).
-export const REVC_IXX = 2.9;
-export const REVC_IYY = 5.0;
-export const REVC_IZZ = 2.15; // not used yet (no yaw model)
-export const REVC_IXZ = -0.7; // not used yet (no yaw model)
-const REVC_CG_X = 0.853; // m aft of the bow
-const REVC_CG_BELOW_BOTTOM = 0.034; // m below the hull-bottom datum
+// Their values (designs/revC_geometry.json, C3).
+export const REVC_IXX = 3.1;
+export const REVC_IYY = 5.256;
+export const REVC_IZZ = 2.206; // not used yet (no yaw model)
+export const REVC_IXZ = -0.449; // not used yet (no yaw model)
+const REVC_CG_X = 0.824; // m aft of the bow
+const REVC_CG_BELOW_BOTTOM = 0.028; // m below the hull-bottom datum
 /** Our point-mass estimate of the CG and roll inertia, kept to check theirs. */
 export const REVC_POINT_MASS = {
   ...revcMass,
@@ -272,13 +279,13 @@ export const REVC_POINT_MASS = {
 
 export const RANDOLPH_REVC: HullParams = {
   name: "Randolph Rev C",
-  mass: 25.2,
-  waterlineLength: 1.43, // their simulator at the 98 mm waterline
+  mass: 26.9,
+  waterlineLength: 1.43, // their simulator (length change under 1 cm at the C3 waterline)
   waterlineBeam: 0.34, // their randolph_rev_c.yaml
   waterplaneCoeff: 0.68, // GUESS: as Rev B
   gzTable: revcGz,
-  rollInertia: REVC_IXX, // their measured Ixx about the CG
-  pitchInertia: REVC_IYY, // their measured Iyy about the CG
+  rollInertia: REVC_IXX, // their Ixx about the CG
+  pitchInertia: REVC_IYY, // their Iyy about the CG
   cgBelowWaterline: REVC_WATERLINE + REVC_CG_BELOW_BOTTOM,
   cgX: REVC_CG_X,
   addedHeave: 1.0,
@@ -290,7 +297,7 @@ export const RANDOLPH_REVC: HullParams = {
   // as Rev B, with the CG ~0.07 m above the bottom and the D72 bulb (0.32 x 0.072 m)
   rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.16, -0.07, 0.43 - 0.07) + 0.023 * 0.5 ** 3),
   source:
-    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), simulator/drone_sim/design.py (masses), designs/revC_geometry.json (measured inertias and CG)",
+    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), designs/revC_geometry.json (masses, inertias and CG)",
 };
 
 // --- Stock vessels (Theo, configs/stock_*.yaml) ---------------------------------
