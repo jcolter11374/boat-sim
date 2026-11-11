@@ -2,8 +2,10 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode}   mode: "hands_on" or "base"
-//               {id, type: "load", code}                  a shared game (Game.save's code)
+// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?}
+//                 mode: "hands_on" or "base"; challenge: an id from challenges.json, whose
+//                 weather is `bundle` (a URL; left out for the 2020 bundle)
+//               {id, type: "load", code, bundle?}         a shared game (Game.save's code)
 //               {id, type: "save"}
 //               {id, type: "order", heading, power}       heading: degrees, "finish" or "route"; power 0..1
 //               {id, type: "run", hours?, soc_below?, wind_above?, breakdown?}
@@ -55,8 +57,13 @@ try:
 except ImportError:
     UNTIL_CAP = 240.0
 from boatsim.runner.replay import to_replay, QUIET_EVENTS
-ENV = open_bundle("forcing.npz")
+ENVS = {"": open_bundle("forcing.npz")}  # weather bundles by URL; "" = 2020
+ENV = ENVS[""]
 G = None
+
+def takes_challenges():
+    import inspect
+    return Game is not None and "challenge" in inspect.signature(Game).parameters
 
 def _f(x):
     # numpy numbers to plain ones, for json
@@ -108,10 +115,29 @@ def voyages():
   return ready;
 }
 
+const loaded = new Set<string>([""]);
+
+/** Point ENV at the weather a game needs: the 2020 bundle, or a challenge's own
+ *  (fetched once, then kept: about 20-30 MB each in memory). */
+async function useBundle(py: Py, url: string): Promise<void> {
+  if (!loaded.has(url)) {
+    say("Loading the challenge's weather...");
+    const name = `/sandbox/challenge_${loaded.size}.npz`;
+    py.FS.writeFile(name, await fetchBytes(url));
+    py.globals.set("bundle_url", url);
+    py.globals.set("bundle_path", name);
+    py.runPython(`ENVS[bundle_url] = open_bundle(bundle_path)`);
+    loaded.add(url);
+  }
+  py.globals.set("bundle_url", url);
+  py.runPython(`ENV = ENVS[bundle_url]`);
+}
+
 self.onmessage = async (ev: MessageEvent) => {
   const m = ev.data;
   try {
     const py = await start(m.base ?? "");
+    if (m.type === "new" || m.type === "load") await useBundle(py, m.bundle ?? "");
     py.globals.set("msg_json", JSON.stringify(m));
     let code: string;
     if (m.type === "new") {
@@ -123,7 +149,12 @@ if Game is None:
 kw = {"safe": m["safe"], "breakdowns": m["breakdowns"]}
 if m.get("mode", "hands_on") != "hands_on":
     kw["mode"] = m["mode"]  # older simulators only know hands on
-G = Game(ENV, None, m["launch"], **kw)
+if m.get("challenge"):
+    if not takes_challenges():
+        raise RuntimeError("NO_CHALLENGES")
+    G = Game(ENV, None, challenge=m["challenge"], **kw)
+else:
+    G = Game(ENV, None, m["launch"], **kw)
 json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
 `;
     } else if (m.type === "load") {

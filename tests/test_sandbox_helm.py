@@ -242,6 +242,31 @@ def test_a_shared_early_loss_says_so_plainly(env):
     )
 
 
+def test_a_weather_challenge_sets_the_drop_and_seed_and_survives_a_share_link():
+    from boatsim.oceandata.challenges import by_id
+
+    era5, glorys, ships = _fake_sources()
+    buf = io.BytesIO()
+    F.cut(2020, buf, era5, glorys, ships, log=lambda *_: None, first=(6, 14), last=(6, 17))
+    june = R.open_bundle(buf.getvalue())
+    g = Game(june, challenge="gentle-june", max_days=1.0)
+    assert g.start == datetime(2020, 6, 15, 12) and g.seed == by_id("gentle-june").seed
+    g.order("finish", 0.5)
+    g.run(hours=6, ghost_passes=False, land_within_km=None, breakdown=False)
+    h = Game.load(june, g.save())
+    assert h.challenge == "gentle-june" and h.mine.state.t == g.mine.state.t
+    assert g.result()["challenge"] == "gentle-june"
+
+
+def test_a_challenge_needs_its_own_weather(env):
+    with pytest.raises(ValueError, match="own weather"):
+        Game(env, challenge="sandys-shadow")  # the May 2020 test bundle
+    with pytest.raises(ValueError, match="no challenge"):
+        Game(env, challenge="atlantis")
+    with pytest.raises(ValueError, match="one of"):
+        Game(env, launch_index=MAY1, challenge="gentle-june")
+
+
 def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
     g = Game(env, launch_index=MAY1, mode="base", max_days=2.5)
     assert Game(env, launch_index=MAY1, max_days=0.5).status()["show_true_position"]

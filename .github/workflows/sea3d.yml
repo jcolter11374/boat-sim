@@ -97,6 +97,17 @@ jobs:
           gh release download land-data -R "$GITHUB_REPOSITORY" -D public/land \
             -p 'pico_*' -p 'annapolis*' \
             && ls -l public/land || echo "no land-data release yet: no land in the 3D views"
+      # Weather challenges (challenges.yml): challenges.json and each challenge's
+      # own weather bundle, for the helm page's picker. Optional: without the
+      # release the picker stays hidden.
+      - name: Fetch the challenge files
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download challenge-data -R "$GITHUB_REPOSITORY" -D public/challenges \
+            -p 'challenge*' \
+            && ls -l public/challenges || echo "no challenge-data release yet: no challenge picker"
       # Today's weather (forecast.yml, display only): the newest GFS forecast.
       # Optional: without the release the page has no "now" weather.
       - name: Fetch the forecast files
