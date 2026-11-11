@@ -35,7 +35,7 @@ import { Compass } from "./helm/compass";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
-import { loadPorts, portLabel } from "./helm/ports";
+import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
@@ -197,10 +197,16 @@ void loadPorts(new URL(params.get("ports") ?? "./ports.json", location.href).hre
   for (const p of list) {
     const o = document.createElement("option");
     o.value = p.id;
-    o.textContent = portLabel(p, list);
+    o.textContent = portName(p, list);
     sel.appendChild(o);
   }
   $("portpick").hidden = false;
+  const hint = () => {
+    const p = list.find((q) => q.id === sel.value);
+    $("porthint").textContent = p ? portHint(p, list) : "The usual start: our support boat drops the drone here, then heads home.";
+  };
+  sel.addEventListener("change", hint);
+  hint();
 });
 /** The chosen challenge, if any (a shared link names it with ?c=). */
 function chosenChallenge(): Challenge | undefined {
@@ -257,6 +263,8 @@ const page = {
   get sailing() {
     return { base: game.boatBase, spec: spec.key };
   },
+  /** How fast time runs, in voyage hours per second (0 = paused). */
+  clock: 0,
   /** The last run's stop reason (for tests). */
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
@@ -264,7 +272,12 @@ const page = {
 };
 (window as unknown as { __helm: typeof page }).__helm = page;
 
-game.onProgress = (t) => ($("busytext").textContent = t);
+game.onProgress = (t) => {
+  $("busytext").textContent = t;
+  $("loadtext").textContent = t;
+};
+// Load the simulator while the player reads the start card, so Set sail starts at once (#322).
+void sandboxThere(sandboxBase).then((ok) => (ok ? game.warm() : undefined));
 
 const compass = new Compass($<HTMLCanvasElement>("dial"), (deg) => setOrder(deg));
 
@@ -302,7 +315,7 @@ async function setOrder(h: Heading, p = power): Promise<void> {
   try {
     await game.order(h, p, sailOrder, engineOrder);
     page.status = game.status;
-    showStatus();
+    present();
   } catch (e) {
     fail(e);
   }
@@ -330,7 +343,7 @@ async function sendOrder(): Promise<void> {
         TONE_COLOUR.info,
       );
     }
-    showStatus();
+    present();
   } catch (e) {
     fail(e);
   }
@@ -505,7 +518,7 @@ function sailText(s: Status): string {
 }
 
 function showStatus(): void {
-  const s = page.status;
+  const s = shown ?? page.status;
   if (!s) return;
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
@@ -535,7 +548,7 @@ function showStatus(): void {
   $("battext").textContent = socNow == null ? "Battery: no report yet" : est ? `Battery ${soc}% at last report` : `Battery ${soc}%`;
   $("batbar").style.width = `${soc}%`;
   $("batbar").style.background = soc < 15 ? "var(--bad)" : soc < 35 ? "var(--warn)" : "var(--good)";
-  $("speed").textContent = est ? "speed unknown" : `${(b.stw * KN).toFixed(1)} kn through the water`;
+  $("speed").textContent = est ? " · speed unknown" : ` · ${(b.stw * KN).toFixed(1)} kn through the water`;
   const w = s.weather;
   let windTo: number | null = null;
   let kn = 0;
@@ -577,7 +590,8 @@ function newEvents(): void {
   for (const who of ["boat", "ghost"] as const) {
     const r = rep(who);
     if (!r) continue;
-    const evs = r.events.filter(isNotable);
+    // Only what the picture has got to: the simulator runs ahead of it.
+    const evs = r.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6);
     for (const e of evs.slice(shownEvents[who])) {
       const label = who === "boat" ? "You" : "Ghost";
       note(describeEvent(e, who === "boat" ? "your boat" : "the ghost"), `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
@@ -589,7 +603,10 @@ function newEvents(): void {
 // ---------- running time ----------
 async function sail(kind: "6h" | "day" | "event"): Promise<void> {
   if (busy || !page.ready || page.status?.over) return;
+  setRate(0); // a skip pauses the clock: you see where it got to
   setBusy(true, "Sailing...");
+  if (inFlight) await inFlight; // the clock's own run finishes first
+  if (page.status?.over) return setBusy(false);
   const from = hour;
   try {
     const opts =
@@ -603,8 +620,8 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
     page.stops.push(stopped);
     shownTo = Math.max(lastHour(game.boat!), from);
     hour = from; // animate from where we were
-    showStatus();
-    newEvents();
+    hopPlay = true;
+    present();
     chartDirty = true;
     if (stopped === "breakdown") {
       // The note for it is already up (newEvents): say so plainly instead of twice.
@@ -619,6 +636,164 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
     return;
   }
   setBusy(false);
+}
+
+// ---------- the clock (John, 11 Nov) ----------
+// Once you set sail, time runs by itself at a speed picked on the time bar, like a
+// flight sim's time compression, and pauses when something happens (the stops of
+// "until something happens"). The simulator runs a little ahead of the picture in
+// short runs, so a new order takes effect within about a second of play.
+/** Voyage hours per second to start at: what a hop used to play at. Real time would show nothing happening for hours. */
+const DEFAULT_RATE = 6;
+let rate = 0;
+let lastRate = DEFAULT_RATE;
+/** The stop conditions armed when the clock started (so "a big battery drop" is measured from then). */
+let armed: Record<string, number | boolean> | null = null;
+let inFlight: Promise<void> | null = null;
+let forecastAt = -Infinity;
+/** The simulator runs ahead of the picture (the clock's runs, and a skip while it plays
+ *  out). The panels show each status once the picture gets to its hour, so they never
+ *  tell you the future, and the 3D day label and the panel agree (#322). page.status
+ *  is always the simulator's latest; `shown` is what the panels show. */
+const pending: { at: number; st: Status }[] = [];
+let shown: Status | null = null;
+
+/** Show the simulator's latest status once the picture has got to it. */
+function present(st: Status | null = page.status): void {
+  if (!st) return;
+  const at = st.day * 24;
+  while (pending.length && pending[pending.length - 1].at >= at - 1e-6) pending.pop(); // superseded
+  if (hour >= at - 1e-6) {
+    pending.length = 0;
+    shown = st;
+    showStatus();
+  } else pending.push({ at, st });
+}
+/** After a stop pauses the clock, the picture still plays on to the moment it happened, at this speed. A pause you press freezes it at once. */
+let drainRate = 0;
+/** A skip's hours playing out (the old hop playback). */
+let hopPlay = false;
+
+function applyPending(all = false): void {
+  let changed = false;
+  while (pending.length && (all || hour >= pending[0].at - 1e-6)) {
+    shown = pending.shift()!.st;
+    changed = true;
+  }
+  if (changed) showStatus();
+}
+
+function setRate(r: number, drain = false): void {
+  drainRate = drain && rate > 0 ? rate : 0;
+  if (r > 0) {
+    lastRate = r;
+    if (!rate) armed = untilOptions();
+  } else armed = null;
+  rate = r;
+  page.clock = r;
+  showClock();
+}
+
+function showClock(): void {
+  const off = !page.ready || !!page.status?.over;
+  $("timebar").hidden = off;
+  $("timestate").hidden = off;
+  if (off) $("keyhint").hidden = true;
+  $("timebar").classList.toggle("paused", rate === 0);
+  const pause = $("t-pause");
+  pause.setAttribute("aria-pressed", String(rate === 0));
+  pause.textContent = rate === 0 ? "▶" : "❚❚";
+  pause.title = rate === 0 ? "Carry on (space bar)" : "Pause (space bar)";
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && Number(b.dataset.rate) === rate));
+  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
+}
+
+/** One short run of the simulator, ahead of the picture. */
+async function clockRun(): Promise<void> {
+  const hours = Math.min(72, Math.max(1, rate * 1.5));
+  try {
+    const stopped = await game.run({ ...(armed ?? untilOptions()), hours });
+    page.stops.push(stopped);
+    page.status = game.status;
+    shownTo = Math.max(lastHour(game.boat!), shownTo);
+    present();
+    chartDirty = true;
+    if (stopped !== "time") {
+      setRate(0, true);
+      const d = `Day ${game.status!.day.toFixed(1)}`;
+      if (stopped === "breakdown") {
+        const e = game.boat!.events.filter(isNotable).at(-1);
+        note(`Paused: ${e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, d, TONE_COLOUR.warn);
+      } else if (stopped !== "over")
+        note(`Paused: ${stopText(stopped, game.status)}`, d, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
+    }
+    // The forecast strip: fresh every half day of play, and at every pause.
+    if (game.status!.day * 24 - forecastAt >= 12 || rate === 0) {
+      forecastAt = game.status!.day * 24;
+      await refreshForecast();
+    }
+    if (game.status?.over) {
+      setRate(0);
+      hour = shownTo;
+      applyPending(true);
+      newEvents();
+      await finish();
+    }
+  } catch (e) {
+    setRate(0);
+    fail(e);
+  }
+}
+
+/** This frame's share of the clock: move the picture on, and keep the simulator ahead of it. */
+function tickClock(dt: number): boolean {
+  if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
+  // Ease off as the simulator's lead runs down, so a slow computer sees slower, smooth time rather than stop-start.
+  const ahead = shownTo - hour;
+  hour = Math.min(shownTo, hour + dt * (ahead >= rate / 2 ? rate : rate * Math.max(0.2, (2 * ahead) / rate)));
+  if (!inFlight && shownTo - hour < rate)
+    inFlight = clockRun().finally(() => {
+      inFlight = null;
+    });
+  return true;
+}
+
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(Number(b.dataset.rate)));
+$("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
+// Keys, so it feels like steering rather than filling in a form (Leo's review): Space
+// pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
+const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 6, Digit3: 24, Digit4: 96, Numpad1: 1, Numpad2: 6, Numpad3: 24, Numpad4: 96 };
+/** The key hint under the time bar: for the first minute, or until a key is used. */
+function hideKeyHint(): void {
+  const k = $("keyhint");
+  if (k.hidden || k.classList.contains("gone")) return;
+  k.classList.add("gone");
+  setTimeout(() => (k.hidden = true), 1000);
+}
+addEventListener("keydown", (e) => {
+  const t = e.target as HTMLElement | null;
+  if (!page.ready || page.status?.over || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
+  if (e.code === "Space") {
+    if (t?.closest?.("button")) return; // Space presses the focused button instead
+    setRate(rate ? 0 : lastRate);
+  } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
+  else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+    const now = typeof order === "number" ? order : headingNow();
+    void setOrder((Math.round(now / 5) * 5 + (e.code === "ArrowLeft" ? -5 : 5) + 360) % 360);
+  } else if (e.code === "ArrowUp" || e.code === "ArrowDown") {
+    if (order === "auto") return; // the autopilot sets its own power (#327)
+    const p = Math.min(1, Math.max(0, Math.round(power * 20) / 20 + (e.code === "ArrowUp" ? 0.05 : -0.05)));
+    $<HTMLInputElement>("power").value = String(Math.round(p * 100));
+    void setOrder(order, p);
+  } else return;
+  e.preventDefault();
+  hideKeyHint();
+});
+/** The bearing the boat is being steered on now, when the order is "the finish" or "the route": where it's heading. */
+function headingNow(): number {
+  const s = page.status;
+  if (!s) return 90;
+  return Number.isFinite(s.boat.heading) ? s.boat.heading : bearing([s.boat.lat, s.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
 }
 
 /** "Until something happens": a big change from now, or an order arriving, at most 3 days. */
@@ -762,6 +937,7 @@ function showChallenge(): void {
   $<HTMLSelectElement>("launch").disabled = !!c || !!shared;
   $("chstory").hidden = !c;
   $("chnote").hidden = !c?.weather_note;
+  $("chover").hidden = !c;
   if (!c) return;
   $("chstory").textContent = `${c.story} The drop is at noon UTC on ${startLabel(c)}.`;
   // Storm boost (#117) is ignored for now: storms sail on plain ERA5, so say so.
@@ -792,7 +968,9 @@ async function begin(): Promise<void> {
   page.challenge = ch?.id ?? "";
   page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
   $("start").hidden = true;
+  $("loading").hidden = false;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
+  if (!/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
   try {
     if (shared) {
       const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
@@ -825,7 +1003,7 @@ async function begin(): Promise<void> {
     shownTo = shared ? lastHour(game.boat!) : 0;
     hour = shownTo;
     resetPois();
-    showStatus();
+    present();
     newEvents();
     await refreshForecast();
     chart?.setLanes([
@@ -838,14 +1016,23 @@ async function begin(): Promise<void> {
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
     else if (spec === RANDOLPH)
-      note(`You have the helm of ${loadMyBoat()?.name ?? "your boat"}. Its wing sail trims itself: pick a heading, then let time run. Power only matters if you fitted motors in the Boatyard.`, d, TONE_COLOUR.info);
-    else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies, then let time run.`, d, TONE_COLOUR.info);
-    else note("You have the helm. Pick a heading and a power, then let time run.", d, TONE_COLOUR.info);
+      note(`You have the helm of ${loadMyBoat()?.name ?? "your boat"}. Its wing sail trims itself: pick a heading; time is running (change its speed at the top). Power only matters if you fitted motors in the Boatyard.`, d, TONE_COLOUR.info);
+    else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies. Time is running: change its speed at the top.`, d, TONE_COLOUR.info);
+    else note("You're under way, at 6 hours a second. Steer with the dial or the arrow keys, and set the power; change the speed or pause at the top.", d, TONE_COLOUR.info);
     // #327: say why an untouched game stays level with the ghost.
     if (!shared && mode === "hands_on" && order === "auto")
       note("For now the autopilot is steering, exactly as it steers the ghost, so change nothing and the two boats stay level. Pick a heading on the dial, or Aim at the finish, to take over.", d, TONE_COLOUR.info);
     if (page.status?.over) await finish();
+    // Time runs from the start, at the speed a hop used to play at. A shared game opens
+    // paused where it was left; ?clock=paused starts paused (for tests).
+    forecastAt = page.status!.day * 24;
+    document.body.classList.add("sailing");
+    $("loading").hidden = true;
+    setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
+    $("keyhint").hidden = false;
+    setTimeout(hideKeyHint, 60_000);
   } catch (e) {
+    $("loading").hidden = true;
     const err = String(e);
     if (/NO_PORTS/.test(err)) {
       page.error = "no ports in the simulator";
@@ -872,7 +1059,10 @@ async function begin(): Promise<void> {
       setBusy(false);
       $("startmsg").textContent = `That share link didn't open: ${err.replace(/^.*BAD_CODE\s*/, "")}. Start a new game instead.`;
       history.replaceState(null, "", location.pathname);
-    } else fail(e);
+    } else {
+      fail(e);
+      $("startmsg").textContent = `The simulator couldn't start: ${e instanceof Error ? e.message : String(e)}`;
+    }
     $("start").hidden = false;
     return;
   }
@@ -1128,10 +1318,18 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(t - last, 0.1);
   last = t;
   // Play the hours just sailed: about 2.5 s a day, at most 6 s.
-  if (hour < shownTo) {
+  if (page.ready && pending.length) applyPending();
+  if (page.ready && game.boat) newEvents();
+  if (tickClock(dt)) {
+    // the clock moved the picture on
+  } else if (drainRate > 0 && hour < shownTo) {
+    hour = Math.min(shownTo, hour + dt * drainRate);
+    if (hour >= shownTo) drainRate = 0;
+  } else if (hopPlay && hour < shownTo) {
     const span = Math.max(shownTo - hour, 1);
     const rate = Math.max(span / Math.min(6, 0.6 + (2.5 * span) / 24), 6); // hours per second
     hour = Math.min(shownTo, hour + dt * rate);
+    if (hour >= shownTo) hopPlay = false;
   }
   poisReached();
   const r = rep();

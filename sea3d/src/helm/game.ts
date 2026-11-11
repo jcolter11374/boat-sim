@@ -187,6 +187,14 @@ export class HelmGame {
     if (v.ghost) this.ghost = v.ghost;
   }
 
+  /** Load Python, the simulator and the 2020 weather now, so Set sail starts at once. Errors are left for start() to report. */
+  warm(): Promise<void> {
+    return this.ask<null>({ type: "warm" }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
    *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
    *  boat (e.g. "stock_cruiser31"), or is a Boatyard design's simulator choices
