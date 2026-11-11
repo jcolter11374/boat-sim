@@ -16,11 +16,10 @@ doi:10.1175/2009BAMS2755.1), National Hurricane Center columns USA_WIND
 (1-minute sustained wind, knots), USA_PRES (central pressure, hPa), USA_RMW
 (radius of maximum wind, nautical miles) and USA_SSHS (category).
 
-Wind. Holland (1980, Mon. Wea. Rev. 108, 1212-1218) profile in its
-cyclostrophic form, scaled so the peak sits at Rmax:
-    V(r) = Vs * sqrt((Rmax/r)^B * exp(1 - (Rmax/r)^B))
-    B = rho * e * Vmax^2 / dp (Holland 1980 eq. 11), clipped to 1-2.5,
-    rho = 1.15 kg/m^3, dp = ENV_PRES_HPA - central pressure.
+Wind. A modified Rankine vortex (Hughes 1952, Depperman 1947): wind rises
+in a straight line from the eye to Rmax, then falls as (Rmax / r)^DECAY
+(DECAY 0.6, GUESS: observed storms run 0.4-0.7):
+    V(r) = Vs * r / Rmax inside Rmax,  Vs * (Rmax / r)^DECAY outside
     Vs = 0.93 * Vmax - 0.55 * c, so that adding 0.55 * c (the storm's
     motion, c) back on puts the peak at the 10-minute best-track wind on the
     storm's right-hand side. 0.93 converts 1-minute to 10-minute wind
@@ -28,8 +27,13 @@ cyclostrophic form, scaled so the peak sits at Rmax:
     Inflow: surface winds spiral inward, INFLOW_DEG off the circle.
     Rmax missing: Willoughby, Darling and Rahn (2006, Mon. Wea. Rev. 134,
     1102-1120) eq. 7a, Rmax = 46.4 exp(-0.0155 Vmax + 0.0169 lat) km.
-Blend: weight 1 inside 2 Rmax, falling linearly to 0 at 3 Rmax; the result
-is never weaker than ERA5's own wind at that point.
+PROFILE = "holland" uses Holland (1980, Mon. Wea. Rev. 108, 1212-1218) in
+its cyclostrophic form instead, V = Vs sqrt((Rmax/r)^B exp(1 - (Rmax/r)^B)),
+B = rho e Vmax^2 / dp clipped to 1-2.5. It was the first choice, but the
+buoy check (PR #215) found it far too broad: +12 m/s at 1-2 Rmax.
+Blend: weight 1 inside 1 Rmax, falling linearly to 0 at 2 Rmax (the buoys
+say ERA5 is already about right beyond 2 Rmax); the result is never weaker
+than ERA5's own wind at that point.
 
 Waves. Young (1988, J. Waterway Port Coastal Ocean Eng. 114(5), 637-652,
 doi:10.1061/(ASCE)0733-950X(1988)114:5(637)) "equivalent fetch" model, as
@@ -46,7 +50,11 @@ fixed fetch Hs grows in proportion to the wind) and Tp with sqrt(Hs), and is
 never below ERA5's. Hs_max is capped at HS_CAP_M (Maya, 11 Nov: keep it
 capped so we don't overshoot); `python -m boatsim.oceandata.stormboost
 check` compares both against NDBC buoys so HS_SCALE and the cap can be set
-from data.
+from data. Waves are OFF by default (BOOST_WAVES): on Dorian 2019 the buoys
+read ERA5's waves near the core as slightly HIGH already (+0.7 m inside
+1 Rmax), and Young's symmetric field added another 3-4 m. Those buoys are
+on the shelf, where depth limits waves, so the deep-water answer is still
+open; the code stays for when a deep-water check says otherwise.
 """
 
 from __future__ import annotations
@@ -70,7 +78,10 @@ B_DEFAULT = 1.3  # GUESS: when the pressure is missing or the drop is tiny
 B_MIN, B_MAX = 1.0, 2.5  # Holland's range for real storms
 INFLOW_DEG = 20.0  # GUESS: typical surface inflow angle (about 20-25 deg over sea)
 MOTION_SHARE = 0.55  # GUESS: share of the storm's motion added to its winds
-INNER, OUTER = 2.0, 3.0  # blend: full vortex inside 2 Rmax, ERA5 beyond 3 Rmax
+INNER, OUTER = 1.0, 2.0  # blend: full vortex inside 1 Rmax, ERA5 beyond 2 Rmax
+PROFILE = "rankine"  # or "holland" (too broad on the buoys, see above)
+DECAY = 0.6  # GUESS: Rankine fall-off beyond Rmax
+BOOST_WAVES = False  # see the module doc
 MIN_WIND_MS = 17.0  # tropical-storm strength (34 kt): weaker points are left to ERA5
 MAX_GAP_H = 7.0  # interpolate only between fixes at most this far apart
 YOUNG = (-2.175e-3, 1.506e-2, -1.223e-1, 2.190e-1, 6.737e-1, 7.980e-1)  # a..f
@@ -220,7 +231,7 @@ class Boost:
 
 
 def vortex(fx: Fix, lat: float, lon: float) -> Boost | None:
-    """The parametric storm's wind and waves at (lat, lon), or None beyond 3 Rmax."""
+    """The parametric storm's wind and waves at (lat, lon), or None beyond OUTER Rmax."""
     dy = (lat - fx.lat) * 111.0
     dx = (lon - fx.lon) * 111.0 * math.cos(math.radians(fx.lat))
     r = math.hypot(dx, dy)
@@ -231,8 +242,13 @@ def vortex(fx: Fix, lat: float, lon: float) -> Boost | None:
     c = math.hypot(fx.cu, fx.cv)
     v10max = ONE_TO_TEN_MIN * fx.vmax
     vs = max(v10max - MOTION_SHARE * c, 0.0)
-    x = (fx.rmax_km / r) ** fx.b
-    speed = vs * math.sqrt(x * math.exp(1.0 - x))
+    if PROFILE == "holland":
+        x = (fx.rmax_km / r) ** fx.b
+        speed = vs * math.sqrt(x * math.exp(1.0 - x))
+    elif r <= fx.rmax_km:
+        speed = vs * r / fx.rmax_km
+    else:
+        speed = vs * (fx.rmax_km / r) ** DECAY
     # Northern hemisphere: anticlockwise, spiralling in by the inflow angle.
     a = math.radians(INFLOW_DEG)
     tu, tv = -dy / r, dx / r  # tangential (anticlockwise)
@@ -297,7 +313,7 @@ def apply(e: EnvState, b: Boost | None) -> EnvState:
         u, v = e.wind_u, e.wind_v
     hs, tp, wave_dir = e.hs, e.tp, e.wave_dir
     boosted_hs = w * b.hs + (1 - w) * e.hs
-    if boosted_hs > e.hs:
+    if BOOST_WAVES and boosted_hs > e.hs:
         hs = boosted_hs
         tp = max(e.tp, w * b.tp + (1 - w) * e.tp)
         if w >= 0.5:  # GUESS: inside the core the sea runs with the wind
