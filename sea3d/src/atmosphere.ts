@@ -168,6 +168,8 @@ function deepenSky(m: THREE.ShaderMaterial): void {
     );
 }
 
+const RAIN_GREY = new THREE.Color();
+
 export class Atmosphere {
   readonly sky = new Sky();
   readonly sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
@@ -381,6 +383,11 @@ export class Atmosphere {
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
+    // Rain-filled air is a pale grey, lighter than the dark sea it hides (Elena). Set here,
+    // before the cloud sky and the overcast copy it, so sky and fogged sea stay one colour.
+    const c = this.fog.color;
+    const grey = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) * 1.35;
+    c.lerp(RAIN_GREY.setRGB(grey, grey, grey * 1.03), 0.6 * smooth(this.rain, 0.6, 1));
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = this.horizon * (0.9 - 0.77 * storm);
     // Spindrift in a severe gale closes the view in further (storm.ts sprayVisibility).
