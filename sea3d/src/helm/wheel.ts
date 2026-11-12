@@ -77,6 +77,15 @@ export const CRUISER_HANDLING: Handling = {
   fallOffDegS: 4,
 };
 
+// GUESS: the Pearson 31-2 (our model of Randolph's boat) is 17 % heavier on a shorter
+// waterline: a touch slower to turn and to get going again than the cruiser.
+export const PEARSON31_2_HANDLING: Handling = {
+  ...CRUISER_HANDLING,
+  turnDegS: 6,
+  accelS: 10,
+  decelS: 6,
+};
+
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const wrap180 = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 const wrap360 = (a: number) => ((a % 360) + 360) % 360;

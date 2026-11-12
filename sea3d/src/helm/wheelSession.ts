@@ -11,11 +11,16 @@
  * textContent. Reduced motion is respected by the page's camera code, not here.
  */
 
-import { CRUISER_HANDLING, Guide, SAIL_WORDS, Wheel, type Handling, type TrimTable } from "./wheel";
+import { CRUISER_HANDLING, Guide, PEARSON31_2_HANDLING, SAIL_WORDS, Wheel, type Handling, type TrimTable } from "./wheel";
 
 /** Boats that can be sailed by hand, and their trim tables (written by vpp.py --trim). */
 const TABLES: Record<string, { url: URL; handling: Handling; name: string }> = {
   stock_cruiser31: { url: new URL("../../../configs/polars/cruiser31_trim.json", import.meta.url), handling: CRUISER_HANDLING, name: "31 ft cruiser" },
+  stock_pearson31_2: {
+    url: new URL("../../../configs/polars/pearson31_2_trim.json", import.meta.url),
+    handling: PEARSON31_2_HANDLING,
+    name: "Pearson 31-2 (our model of Randolph's boat)",
+  },
 };
 
 export const canTakeWheel = (boatKey: string): boolean => boatKey in TABLES;
