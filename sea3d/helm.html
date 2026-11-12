@@ -121,6 +121,16 @@
   #r-trim:empty { display: none; }
   #practice-what { position: fixed; top: calc(var(--bar, 0px) + 14px); left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
   #practice-what[hidden], #practice-end[hidden] { display: none; }
+  #practice-courses[hidden], #practice-again[hidden] { display: none; }
+  #practice-courses button { margin: 3px 4px 3px 0; }
+  #practice-courses button small { display: block; font-weight: 400; font-size: 12px; opacity: .85; }
+  #practice-courses small[data-best]:empty { display: none; }
+  #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
+  .practice-note { font-size: 12px; opacity: .75; }
+  #wheel .w-depth { font-size: 12.5px; font-weight: 600; margin-left: 8px; }
+  #wheel .w-depth[hidden] { display: none; }
+  #wheel .w-depth[data-state="shallow"] { color: #ff8a2a; }
+  #wheel .w-depth[data-state="unknown"] { opacity: .7; font-weight: 400; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
     font: 600 12px system-ui, sans-serif; background: rgba(61,220,151,.2); border: 1px solid #3ddc97; color: #dff8ec; pointer-events: none; }
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
@@ -290,6 +300,13 @@
 <div id="practice-end" class="overlay" hidden><div class="card glass">
   <h1>Practice sailing</h1>
   <p id="practice-sum"></p>
+  <div id="practice-courses" hidden>
+    <p id="practice-breeze" role="group" aria-label="Breeze">Breeze: <button data-b="light">Light (8 kn)</button> <button data-b="good">Good (12 kn)</button> <button data-b="fresh">Fresh (18 kn)</button></p>
+    <p><button class="go" data-course="triangle">The triangle<small>three marks 800 m apart: upwind, across, back (about 15 min; try 5&times;)</small><small data-best="triangle"></small></button>
+      <button class="go" data-course="light">Sail to Thomas Point Light<small>about 7 km down the Bay (about 40 min; try 10&times;)</small><small data-best="light"></small></button>
+      <button data-course="drill">Drills<small>short spells: a reach, a beat, a run</small></button></p>
+    <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</p>
+  </div>
   <p><button id="practice-again" class="go">Sail another</button> <a href="helm.html">Take the helm: a whole crossing</a></p>
 </div></div>
 <div id="start" class="overlay">

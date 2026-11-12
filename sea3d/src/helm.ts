@@ -11,6 +11,9 @@ import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea } from "./water";
 import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
+import { BayDepths } from "./land/depth";
+import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon } from "./helm/course";
+import { Buoys } from "./helm/buoys";
 import { PLACES } from "./land/place";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
@@ -285,6 +288,8 @@ const page = {
   pois: { loaded: 0, shown: [] as string[] },
   /** Real land in view: the place, how far off its box (km), buildings and trees; and the view's reach (m). */
   land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0 } as NearbyLand["shown"],
+  /** Practice sailing: true once the Bay's depths are known to be on this copy of the site (Annapolis courses offered). */
+  practiceBay: false,
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
@@ -1041,6 +1046,8 @@ addEventListener("blur", () => {
 // time. The voyage clock waits while you do; for now a spell doesn't move the voyage.
 let wheelRate = 0; // the clock's speed before the spell, to carry on at
 let wheelNow: WheelFrame | null = null;
+/** Where the last wheel frame had the boat (metres from the spell's start). */
+let wheelLast: { x: number; y: number } | null = null;
 const wheel = new WheelSession({
   ended: (r) => void (PRACTICE ? practiceEnded(r) : wheelEnded(r)),
   note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
@@ -1076,44 +1083,146 @@ async function wheelEnded(r: WheelResult): Promise<void> {
   setRate(wheelRate);
 }
 // "Practice sailing" (Leo): helm.html?practice. The cruiser, no voyage and no simulator to
-// load: a spell to a mark in a steady wind, a new one each time (a reach, a beat, a run).
+// load. Off Annapolis (Leo's plan, Maya approved 12 Nov) it's a course: the triangle or the
+// run to Thomas Point Light, in a breeze you pick, timed against your best, and the Bay's
+// depths end the run in shallow water. Where this copy of the site has no Bay squares, it's
+// the old drills: a spell to a mark in a steady wind, a new one each time.
+// Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
 const PRACTICE = params.has("practice");
 let practiceWind: { u: number; v: number } | null = null;
 let practiceN = 0;
-async function practiceSpell(): Promise<void> {
+/** Where the practice spell began (the boat is there plus the wheel's x, y), or null. */
+let practiceAt: LatLon | null = null;
+/** The last place the boat was, so the view stays put between runs. */
+let practiceHere: LatLon | null = null;
+let practiceCourse: Course | null = null;
+let practiceBreeze: Breeze = "good";
+let depths: BayDepths | null = null;
+const buoys = new Buoys();
+scene.add(buoys.group);
+function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
+  const ms = kn / 1.943844;
+  const toward = ((fromDeg + 180) * Math.PI) / 180;
+  return { u: Math.sin(toward) * ms, v: Math.cos(toward) * ms };
+}
+async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
   $("practice-end").hidden = true;
-  const kinds = [
-    { kn: 12, off: 90, name: "a reach: the wind from the side" },
-    { kn: 10, off: 0, name: "a beat: the mark is upwind, so zigzag (tack) toward it" },
-    { kn: 16, off: 165, name: "a run: the wind behind you" },
-    { kn: 22, off: 70, name: "a fresh breeze: reef if she leans too far" },
-  ];
-  const k = kinds[practiceN++ % kinds.length];
-  const from = (practiceN * 137) % 360; // a different compass each time
-  const ms = k.kn / 1.943844;
-  const toward = ((from + 180) * Math.PI) / 180;
-  practiceWind = { u: Math.sin(toward) * ms, v: Math.cos(toward) * ms };
-  // Mark bearing: `off` degrees from the wind; for a beat the mark is straight upwind and the
-  // boat starts close-hauled.
-  const mark = (from + k.off + 360) % 360;
-  const heading = k.off === 0 ? (from + 50) % 360 : mark;
-  const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
-  if (ok) {
-    $("practice-what").textContent = `Practice ${practiceN}: ${k.kn} knots, ${k.name}.`;
-    $("practice-what").hidden = false;
+  buoys.set([]);
+  if (kind === "drill" || !depths?.known) {
+    const kinds = [
+      { kn: 12, off: 90, name: "a reach: the wind from the side" },
+      { kn: 10, off: 0, name: "a beat: the mark is upwind, so zigzag (tack) toward it" },
+      { kn: 16, off: 165, name: "a run: the wind behind you" },
+      { kn: 22, off: 70, name: "a fresh breeze: reef if she leans too far" },
+    ];
+    const k = kinds[practiceN++ % kinds.length];
+    const from = (practiceN * 137) % 360; // a different compass each time
+    practiceWind = windFrom(from, k.kn);
+    // Mark bearing: `off` degrees from the wind; for a beat the mark is straight upwind and the
+    // boat starts close-hauled.
+    const mark = (from + k.off + 360) % 360;
+    const heading = k.off === 0 ? (from + 50) % 360 : mark;
+    practiceCourse = null;
+    practiceAt = practiceHere = null;
+    const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
+    if (ok) {
+      $("practice-what").textContent = `Practice ${practiceN}: ${k.kn} knots, ${k.name}.`;
+      $("practice-what").hidden = false;
+    }
+    return;
   }
+  const from = BAY_WINDS[Math.floor(Math.random() * BAY_WINDS.length)];
+  const br = BREEZES[practiceBreeze];
+  practiceWind = windFrom(from, br.kn);
+  const c = kind === "triangle" ? triangle(from) : toTheLight();
+  practiceCourse = c;
+  practiceAt = practiceHere = c.start;
+  depths.prefetch(c.start.lat, c.start.lon, 3000);
+  const o = c.start;
+  buoys.set(c.kind === "triangle" ? c.marks.slice(0, 2).map((m) => toXY(o, m)).concat([{ x: 0, y: 0 }]) : []);
+  const ok = await wheel.start({
+    boatKey: "stock_cruiser31",
+    heading: c.heading,
+    speedMs: 0,
+    windU: practiceWind.u,
+    windV: practiceWind.v,
+    plan: practiceBreeze === "fresh" ? "reef1" : "full",
+    course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name })), radiusM: c.radiusM },
+    depthAt: (x, y) => {
+      const p = toLatLon(o, { x, y });
+      depths!.prefetch(p.lat, p.lon);
+      // The light's stones aren't in the survey: treat them as just awash.
+      const s = toXY(THOMAS_POINT, p);
+      if (Math.hypot(s.x, s.y) < LIGHT_STONES_M) return 0;
+      return depths!.at(p.lat, p.lon);
+    },
+  });
+  if (ok) {
+    const point = (d: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(d / 45) % 8];
+    $("practice-what").textContent =
+      c.kind === "triangle"
+        ? `Off Annapolis: the triangle, ${br.kn} knots from the ${point(from)}. Round the windward mark, the wing mark, then back to the finish.`
+        : `Off Annapolis: sail to Thomas Point Light, ${br.kn} knots from the ${point(from)}. The light stands on the end of a shoal: keep to deep water.`;
+    $("practice-what").hidden = false;
+  } else practiceAt = null;
 }
 function practiceEnded(r: WheelResult): void {
-  $("practice-sum").textContent = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
+  const c = practiceCourse;
+  if (practiceAt && wheelLast) practiceHere = toLatLon(practiceAt, wheelLast);
+  practiceAt = null;
+  buoys.set([]);
+  let text = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
+  if (c) {
+    const key = bestKey(c.kind, practiceBreeze);
+    const pct = Math.round(r.share * 100);
+    if (r.aground) text = `Shallow water: her keel touched the bottom ${r.markTimes.length ? `after ${r.markTimes.length} of ${r.marks} marks` : "before the first mark"}, so this run ends here. Watch the depth at the top of the wheel panel and steer for deeper water. Try again?`;
+    else if (!r.reached) text = `Handed back after ${runTime(r.seconds)}, with ${r.markTimes.length} of ${r.marks} marks. Try again?`;
+    else {
+      const before = saveBest(key, r.seconds);
+      const pb = before == null ? "Your first time on this course in this breeze." : r.seconds < before ? `A new best (it was ${runTime(before)})!` : `Your best: ${runTime(before)}.`;
+      const splits = c.kind === "triangle" ? ` Marks at ${r.markTimes.map(runTime).join(", ")}.` : "";
+      text = `Finished ${c.name} in ${runTime(r.seconds)} of boat time, trimmed at ${pct}% of her best speed.${splits} ${pb}`;
+    }
+  }
+  $("practice-sum").textContent = text;
+  if (c) practiceCard();
   $("practice-end").hidden = false;
   $("practice-what").hidden = true;
+}
+/** The course card: pick a course and a breeze. */
+function practiceCard(): void {
+  const annapolis = !!depths?.known;
+  $("practice-courses").hidden = !annapolis;
+  $("practice-again").hidden = annapolis;
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button"))) b.setAttribute("aria-pressed", String(b.dataset.b === practiceBreeze));
+  for (const b of Array.from(document.querySelectorAll<HTMLElement>("#practice-courses [data-best]"))) {
+    const t = readBest(bestKey(b.dataset.best as CourseKind, practiceBreeze));
+    b.textContent = t == null ? "" : `your best ${runTime(t)}`;
+  }
 }
 if (PRACTICE) {
   document.body.classList.add("practice");
   $("start").hidden = true;
   useBoat("stock_cruiser31");
-  $("practice-again").addEventListener("click", () => void practiceSpell());
-  void practiceSpell();
+  $("practice-again").addEventListener("click", () => void practiceSpell("drill"));
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-courses [data-course]"))) b.addEventListener("click", () => void practiceSpell(b.dataset.course as CourseKind | "drill"));
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button")))
+    b.addEventListener("click", () => {
+      practiceBreeze = b.dataset.b as Breeze;
+      practiceCard();
+    });
+  void BayDepths.create().then((d) => {
+    depths = d;
+    page.practiceBay = d.known;
+    if (d.known) {
+      // Open on the course card, the boat already off Annapolis with the town behind.
+      practiceHere = ANNAPOLIS_COURSE;
+      $("practice-sum").textContent = "Sail a 31 ft cruiser yourself off Annapolis, on the Chesapeake Bay. Pick a breeze and a course.";
+      practiceCard();
+      $("practice-end").hidden = false;
+      aimAt(290); // toward the town and the Naval Academy
+    } else void practiceSpell("drill");
+  });
 }
 
 /** Hand-trimmed watches this game, as hours from the start, for the chart. */
@@ -2045,6 +2154,7 @@ renderer.setAnimationLoop(() => {
   sea.update(comps, t);
   // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).
   wheelNow = wheel.on ? wheel.frame(dt) : null;
+  if (wheelNow) wheelLast = { x: wheelNow.x, y: wheelNow.y };
   const hdg = wheelNow ? wheelNow.heading : r ? angleAt(r, r.heading, h) ?? 90 : 90;
   const yaw = THREE.MathUtils.degToRad(90 - hdg);
   if (smoothYaw === null) smoothYaw = yaw;
@@ -2103,7 +2213,10 @@ renderer.setAnimationLoop(() => {
   // Before the first hour is logged the track is empty (positionAt would be NaN, and a NaN sun
   // turns the whole picture black, #334): stand at the boat's reported start instead.
   const st0 = page.status?.boat;
-  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : (SPOT ?? [36.65, -74.94]));
+  // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
+  const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
+  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  if (practiceAt && wheelNow) buoys.update(wheelNow, t);
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
