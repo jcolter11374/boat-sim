@@ -130,15 +130,30 @@ function build(): void {
 // Port quarter, a little above the deck: the panels, the dome and the keel all show.
 camera.position.set(-4.6, 1.9, 6.6);
 controls.target.set(0.1, -0.15, 0);
-// Centre the boat in the open space between the two panels.
+// Centre the boat in the open space between the two panels. Where that gap is too narrow for her
+// (1024 wide), she drops into the space under the build card instead, clear of both panels (Ines).
 function frameView(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const left = w > 900 ? 404 : 0;
-  const right = w > 900 ? 324 : 0;
-  camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+  if (w <= 900) {
+    camera.setViewOffset(w, h, 0, 0, w, h);
+    return;
+  }
+  const left = 404;
+  const right = 324;
+  if (w - left - right >= 520) {
+    camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+    return;
+  }
+  const sumBottom = document.getElementById("sum")?.getBoundingClientRect().bottom ?? h / 2;
+  const viewsTop = document.getElementById("views")?.getBoundingClientRect().top ?? h - 60;
+  const cx = (left + w) / 2;
+  const cy = Math.min((sumBottom + viewsTop) / 2, h * 0.78);
+  camera.setViewOffset(w, h, w / 2 - cx, h / 2 - cy, w, h);
 }
 frameView();
+// The build card grows (a test's result), so the space under it moves.
+new ResizeObserver(() => frameView()).observe(document.getElementById("sum")!);
 
 // ---------- the catalog and the design ----------
 let cat: Catalog | null = null;
@@ -267,31 +282,102 @@ function drawSlots(): void {
   for (const [title, ids] of groups) {
     const g = document.createElement("div");
     g.className = "slot";
+    // A section is one line until opened ("Power: 250 W solar, 1,280 Wh"); Driving starts open (Elena).
+    g.dataset.group = title;
     const h = document.createElement("h3");
-    h.textContent = title;
+    h.tabIndex = 0;
+    h.setAttribute("role", "button");
+    const gname = document.createElement("span");
+    gname.textContent = title;
+    const gsum = document.createElement("span");
+    gsum.className = "gsum";
+    gsum.id = `gsum-${title.replace(/\W+/g, "-")}`;
+    h.append(gname, gsum);
+    const flip = () => {
+      if (openGroups.has(title)) openGroups.delete(title);
+      else openGroups.add(title);
+      showOpenGroups();
+    };
+    h.addEventListener("click", flip);
+    h.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        flip();
+      }
+    });
     g.append(h);
     if (title === "Driving") g.append(cruiseControl());
     for (const id of ids) {
       const slot = cat.slots.find((s) => s.id === id)!;
       used.add(id);
-      const name = document.createElement("div");
-      name.className = "muted";
-      name.style.margin = "6px 2px 4px";
-      name.textContent = slot.name;
-      g.append(name);
       const shown = shownOptions(slot);
-      if (!shown.length) {
-        name.remove();
-        continue;
-      }
-      for (const o of shown) g.append(optionButton(slot, o));
+      if (!shown.length) continue;
+      // Each slot is one line until opened, "Thrusters: Two T200 ▸", so the boat gets the middle of
+      // the screen (Milo, M5); the open one stays open, so its options can be compared (Leo).
+      const sl = document.createElement("div");
+      sl.className = "sl";
+      sl.dataset.slot = slot.id;
+      const head = document.createElement("button");
+      head.className = "sl-head";
+      head.dataset.slot = slot.id;
+      head.setAttribute("aria-expanded", String(openSlot === slot.id));
+      head.setAttribute("aria-controls", `sl-body-${slot.id}`);
+      const nm = document.createElement("span");
+      nm.className = "sl-name";
+      nm.textContent = slot.name;
+      const pick = document.createElement("span");
+      pick.className = "sl-pick";
+      pick.id = `sl-pick-${slot.id}`;
+      head.append(nm, pick);
+      head.addEventListener("click", () => {
+        openSlot = openSlot === slot.id ? null : slot.id;
+        showOpenSlot();
+      });
+      const body = document.createElement("div");
+      body.className = "sl-body";
+      body.id = `sl-body-${slot.id}`;
+      for (const o of shown) body.append(optionButton(slot, o));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;
-      g.append(hints);
+      sl.append(head, body, hints);
+      g.append(sl);
     }
-    box.append(g);
+    if (g.querySelector(".sl") || title === "Driving") box.append(g); // no empty sections
   }
+}
+
+/** The sections that are open; the rest fold to one summary line. */
+const openGroups = new Set<string>(["Driving"]);
+function showOpenGroups(): void {
+  document.querySelectorAll<HTMLElement>(".slot[data-group]").forEach((g) => {
+    const on = openGroups.has(g.dataset.group!);
+    g.classList.toggle("gopen", on);
+    g.querySelector("h3")?.setAttribute("aria-expanded", String(on));
+  });
+}
+/** A folded section's one line: Power in figures, the others by their picks. */
+function groupSummaries(solarW: number, batteryWh: number): void {
+  document.querySelectorAll<HTMLElement>(".slot[data-group]").forEach((g) => {
+    const el = g.querySelector<HTMLElement>(".gsum");
+    if (!el) return;
+    if (g.dataset.group === "Power") {
+      el.textContent = `${solarW} W solar, ${batteryWh.toLocaleString("en-US")} Wh`;
+      return;
+    }
+    const names = Array.from(g.querySelectorAll<HTMLElement>(".sl-pick")).map((p) => p.textContent ?? "").filter(Boolean);
+    el.textContent = names.length > 1 ? `${names[0]} and ${names.length - 1} more` : (names[0] ?? "");
+  });
+}
+
+/** The slot whose options are showing; the rest are one line each. */
+let openSlot: string | null = null;
+function showOpenSlot(): void {
+  document.querySelectorAll<HTMLElement>(".sl").forEach((el) => {
+    const on = el.dataset.slot === openSlot;
+    el.classList.toggle("open", on);
+    el.querySelector(".sl-head")?.setAttribute("aria-expanded", String(on));
+  });
 }
 
 function cruiseControl(): HTMLElement {
@@ -371,6 +457,13 @@ function redraw(): void {
   document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) =>
     b.setAttribute("aria-pressed", String(design.picks[b.dataset.slot!] === b.dataset.opt)),
   );
+  for (const slot of cat.slots) {
+    const pick = document.getElementById(`sl-pick-${slot.id}`);
+    if (pick) pick.textContent = optionOf(cat, slot.id, design)?.n ?? "";
+  }
+  showOpenSlot();
+  showOpenGroups();
+  groupSummaries(s.solarW, s.batteryWh);
   for (const slot of cat.slots) {
     const ul = document.getElementById(`hints-${slot.id}`);
     if (!ul) continue;
@@ -543,8 +636,12 @@ function drawMine(): void {
   status.mine = mine;
   const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
   const input = $<HTMLInputElement>("mb-name");
-  if (!nameTyped) input.value = here ? mine.name : defaultName();
-  $("mb-save").textContent = here ? (input.value.trim() === mine.name ? "Saved" : "Rename my boat") : mine ? "Make this my boat" : "Save as my boat";
+  if (!nameTyped) input.value = here ? mine.name : ""; // empty until she's named: "Name her" (Elena)
+  const saved = here && input.value.trim() === mine.name;
+  $("mb-save").textContent = saved ? "Saved" : here ? "Rename my boat" : mine ? "Make this my boat" : "Save as my boat";
+  // "Saved" is a status, not a button (Milo, M3): a dim tick.
+  $("mb-save").classList.toggle("saved", saved);
+  $<HTMLButtonElement>("mb-save").disabled = saved;
   // The name is the player's own text: textContent only, never innerHTML.
   const line = $("mb-line");
   line.replaceChildren();
