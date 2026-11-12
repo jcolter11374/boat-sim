@@ -254,8 +254,6 @@ export function hintsFor(from: CatalogOption | undefined, to: CatalogOption, mmP
     const kg = `${Math.abs(dkg).toFixed(1)} kg ${dkg > 0 ? "heavier" : "lighter"}`;
     out.push(mm >= 1 ? `${kg}: sits ${mm} mm ${dkg > 0 ? "lower" : "higher"} in the water` : kg);
   }
-  const dc = to.cost - from.cost;
-  if (Math.abs(dc) >= 1) out.push(dc > 0 ? `$${Math.round(dc)} more` : `saves $${Math.round(-dc)}`);
   if (to.wp != null && from.wp != null && to.wp !== from.wp)
     out.push(to.wp > from.wp ? "more solar: more charge on cloudy days" : "less solar: slower charging, slower on cloudy days");
   if (to.bat != null && from.bat != null && to.bat !== from.bat)
@@ -269,7 +267,7 @@ export function hintsFor(from: CatalogOption | undefined, to: CatalogOption, mmP
   if (to.af === 0) out.push("weed and barnacles slow it down over the weeks");
   if (to.est) out.push("figure is an estimate");
   if (to.effect === "no effect yet") out.push("the simulator doesn't model this yet: a launch sails it as built");
-  if (to.priceTbd) out.push("price and weight not worked out yet");
+  if (to.priceTbd) out.push("weight not worked out yet");
   return out;
 }
 
@@ -315,8 +313,6 @@ export function designYaml(cat: Catalog, d: Design, name = "my boatyard design")
     "picks:",
     ...cat.slots.map((sl) => `  ${sl.id}: ${d.picks[sl.id]}`),
     "summary:",
-    `  parts_cost_usd: ${Math.round(s.partsCost)}`,
-    `  program_cost_usd: ${Math.round(s.programCost)}`,
     `  mass_kg: ${s.massKg.toFixed(1)}`,
     `  thrusters: ${s.thrusters}`,
     `  solar_w: ${s.solarW}`,

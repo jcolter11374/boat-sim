@@ -1,5 +1,5 @@
 // The sailing camera at the wheel (Rosa; plan approved by Elena, 12 Nov): a chase boat's
-// view. 30 degree lens, behind the boat and to leeward (she heels toward us and we see
+// view. 30 degree lens, behind the boat and about 42 degrees to leeward (she heels toward us and we see
 // her deck), raised a little, the boat a third off-centre with room ahead of her bow,
 // a level horizon on the upper third. It eases after the boat like a person holding it,
 // swings round slowly on a tack, and gives way to the mouse (drag to look, and it eases
@@ -15,7 +15,7 @@ export interface Shot {
 
 export const CHASE_FOV = 30;
 /** Off the stern line toward leeward (deg). */
-const OFF_DEG = 30;
+const OFF_DEG = 42;
 
 /**
  * The part of the screen the picture is composed in (px): the whole frame less the top bar and
@@ -113,8 +113,8 @@ export class ChaseCam {
     if (Math.abs(twa) < 165 && Math.sign(twa) !== this.side && twa !== 0) this.side = Math.sign(twa);
     const want = standAt(heading, this.side);
     if (this.around === null) this.around = want;
-    // Ease the bearing (about 1.2 s; a tack's 60 degree swing takes about 3 s). Reduced motion: quicker, no sway.
-    const tau = still ? 0.5 : 1.2;
+    // Ease the bearing (a tack swings it about 84 degrees, settled in about 3 s). Reduced motion: quicker, no sway.
+    const tau = still ? 0.5 : 1.05;
     const d = ((((want - this.around) % 360) + 540) % 360) - 180;
     this.around = (this.around + d * (1 - Math.exp(-dt / tau)) + 360) % 360;
     if (!this.active()) return null;
