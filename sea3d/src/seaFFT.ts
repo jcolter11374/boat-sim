@@ -21,7 +21,7 @@
 // seconds where it isn't topped up, so it breaks up as it fades.
 
 import { G, JONSWAP_GAMMA, jonswapShape } from "./waves";
-import { whitecaps } from "./storm";
+import { whiteCrests } from "./storm";
 
 /** In-place radix-2 complex FFT of length n (power of two), stride `s` from `off`. sign +1 = inverse (no 1/n). */
 function fft1(re: Float32Array, im: Float32Array, n: number, off: number, s: number, sign: number, rev: Uint32Array, tw: Float32Array): void {
@@ -107,11 +107,11 @@ export const BIG_WAVES_UP_TO = 3.5;
 export const FOAM_J = 0.55;
 /**
  * Fresh foam is laid on this share of the most-folded water, so the whitecap
- * cover follows the wind (storm.ts whitecaps(), Monahan's fit): the decay over
- * FOAM_HALF_LIFE spreads each patch out, so fresh foam is set to under half
- * of the cover. GUESS display tuning.
+ * cover follows the wind (storm.ts whiteCrests(), from Monahan's fit): the decay over
+ * FOAM_HALF_LIFE spreads each patch out, so fresh foam is set to about a third
+ * of the cover (measured: the cover then lands within ~10 % of whiteCrests()). GUESS display tuning.
  */
-export const FRESH_SHARE = 0.45;
+export const FRESH_SHARE = 0.3;
 /** Foam half-life on the water (s). GUESS: patches last a few seconds (Callaghan et al. 2012 measured 2-10 s). */
 export const FOAM_HALF_LIFE = 4;
 /** Sideways (choppy) scale: sharper crests, flatter troughs. 1 = Tessendorf's lambda of 1; less keeps it from folding everywhere. */
@@ -421,7 +421,7 @@ export class ShortWaves {
    * the boat has gone through it (seaSurface.ts), so the waves flow past.
    */
   update(t: number): void {
-    const q = FRESH_SHARE * whitecaps(this.wind);
+    const q = FRESH_SHARE * whiteCrests(this.wind);
     // The threshold is last frame's quantile: the sea changes little in a frame.
     for (const c of this.cascades) c.update(t, q > 1e-4 ? Math.min(FOAM_J + 0.3, c.jacobianQuantile(q)) : -Infinity);
   }

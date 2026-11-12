@@ -19,7 +19,7 @@ import * as THREE from "three";
 import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, heightAt, type WaveComponent } from "./waves";
 import { PLACE } from "./land/place";
-import { foamStreaks, whitecaps } from "./storm";
+import { foamStreaks, whiteCrests } from "./storm";
 import { SEA_SURFACE_PARS, seaUniforms, writeSeaUniforms } from "./seaSurface";
 import { RAIN_RINGS, rainUniforms } from "./rainRings";
 import { ShortWaveLayer, windSeaFrom, type Detail } from "./seaDetail";
@@ -365,6 +365,7 @@ float fn = vnoise(vec2(q.x * 0.5, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
          + mix(vnoise(vWPos.xz * 7.0 + uTime * 0.2), 0.5, o3) * 0.2;
 float thr = 0.8 - 1.4 * uCover - 0.35 * vFoam;
 float foamMask = smoothstep(thr, thr + 0.1, fn) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+float foamSunk = 0.0; // bubbles just under the surface round a fresh cap (Medium and up)
 if (SEA_DET_N > 0) {
   // Whitecaps where the FFT's crests fold over, fading over seconds; as a patch
   // fades it breaks up into flecks instead of shrinking as a blob (Elena). The big
@@ -384,12 +385,15 @@ if (SEA_DET_N > 0) {
   // Thick and opaque where it's piled up, thin and see-through elsewhere; the
   // edge softens with the pixel's footprint so it never cuts out sharp from afar.
   // A breaking crest has a crisp edge; old foam goes to lace (holes through it) (Ines, Elena).
-  float edge = mix(0.2, 0.04, smoothstep(0.3, 0.9, fresh)) + 1.5 * fpF;
+  float edge = mix(0.25, 0.1, smoothstep(0.3, 0.9, fresh)) + 1.5 * fpF; // soft even when fresh: no paper cut-outs (Ines, round 5)
   float lace = mix(smoothstep(0.35, 0.6, mix(vnoise(r2 * 13.0 + 5.0), 0.5, o3)), 1.0, 0.4 * smoothstep(0.25, 0.9, fresh)); // even a fresh cap is torn
   float young = smoothstep(th, th + edge, tex) * mix(0.35, 1.0, smoothstep(th + 0.08, th + 0.35, tex))
               * mix(0.6, 0.95, smoothstep(0.6, 1.0, fresh)) * lace;
   float near = young + 0.35 * vFoam * smoothstep(0.66, 0.78, tex + 0.3 * fresh) * step(0.002, uCover);
   foamMask = mix(clamp(near, 0.0, 1.0), 0.7 * uCover, detFar) * (1.0 - 0.5 * farMix);
+  // Round a fresh cap the water is milky with bubbles just under the surface, so the foam
+  // reads as sunk into the sea with soft edges, not laid on top of it (Ines, round 5).
+  foamSunk = smoothstep(0.02, 0.4, fresh) * (1.0 - clamp(near, 0.0, 1.0)) * (1.0 - detFar);
 }
 // Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
 // downwind; where they're finer than a pixel, their average whiteness instead.
@@ -427,6 +431,7 @@ if (uStreak > 0.001) {
   foamMask = max(foamMask, streak);
 }
 #endif
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.8 + vec3(0.02, 0.05, 0.05), 0.4 * foamSunk); // GUESS tint
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), foamMask * (SEA_DET_N > 0 ? 0.88 : 1.0)); // off-white, a little see-through
 /* boat wash (boatWash.ts) */
 `;
@@ -499,7 +504,15 @@ float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
 radiance = mix(radiance, uSeaSky.rgb, deckS);
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
 #else
-radiance = mix(seaColdSky(radiance), uSeaSky.rgb, deckS);
+// An overcast deck is not one flat grey: it is brighter overhead than at the horizon (the
+// CIE overcast sky, L ~ (1 + 2 sin h) / 3), and a face tipped to mirror the water beyond
+// sees darker sea. Mirrored as one flat colour, every ripple vanished and the near water read
+// as a smooth slab (Ines, round 5); a gentle gradient lets the chop show. Flat at the horizon,
+// so the far sea still meets the sky.
+vec3 Vd = normalize(cameraPosition - vWPos);
+vec3 Rd = reflect(-Vd, inverseTransformDirection(normal, viewMatrix));
+float deckG = (1.0 + 0.25 * clamp(Rd.y, 0.0, 1.0)) * mix(0.7, 1.0, smoothstep(-0.3, 0.05, Rd.y)); // GUESS strengths
+radiance = mix(seaColdSky(radiance), uSeaSky.rgb * deckG, deckS);
 // The sea's body is lit by the deck too, not the clear sky's blue: same brightness, the deck's hue.
 iblIrradiance = mix(iblIrradiance, uSeaSky.rgb * (dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722)) / max(dot(uSeaSky.rgb, vec3(0.2126, 0.7152, 0.0722)), 1e-3)), deckS);
 // Rain or a closed deck hides the sun: no bright spot of it left in the sky map's
@@ -568,17 +581,19 @@ if (uMirror > 0.001) {
 `;
 
 // Under a deck the far sea converges on the sky's own horizon colour (seaSky().rgb, Hana), over the last
-// ~1 degree below it (15-35 px at 720p, by lens), in the same space the fog and the sky's
+// ~1.7 degrees below it (about 20 rows at 720p), after the fog, in the space the sky's
 // haze are mixed in, so sea and sky meet without a knife edge (Ines, Hana).
 const FRAG_HAZE = /* glsl */ `
 #ifndef SEA_LITE
 if (uSeaSky.w > 0.2) { // uniform branch: only under a deck
   vec3 Vh = normalize(vWPos - cameraPosition);
-  float hz = 1.0 - smoothstep(0.0, 0.015, -Vh.y); // the last degree or so
+  // The last ~1.7 degrees (about 20 rows at 720p), and after the scene fog: the fog colour is
+  // a little paler than the sky's own horizon, which drew a thin pale line (Ines, round 5).
+  float hz = 1.0 - smoothstep(0.0, 0.03, -Vh.y);
   // Toward a break the sky's horizon is the break's light, not the haze: leave the sea be there.
   hz *= 1.0 - uSeaBreak.w * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)) * smoothstep(0.35, 0.97, dot(normalize(Vh.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
   // gl_FragColor is already in the output space here, so the haze goes there too.
-  gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * hz * smoothstep(0.2, 0.8, uSeaSky.w));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * smoothstep(0.2, 0.8, uSeaSky.w));
 }
 #endif
 `;
@@ -657,7 +672,7 @@ export class Sea {
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
         .replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n" + FRAG_SKY)
         .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>")
-        .replace("#include <fog_fragment>", FRAG_HAZE + "\n#include <fog_fragment>")
+        .replace("#include <fog_fragment>", "#include <fog_fragment>\n" + FRAG_HAZE)
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
     material.customProgramCacheKey = () => "boatsim-sea-v14";
@@ -812,7 +827,7 @@ export class Sea {
     this.uniforms.uRough.value = THREE.MathUtils.clamp(0.6 + hs / 5, 0.6, 1.4); // GUESS display tuning
     const u = windMs ?? Math.sqrt(hs / 0.0246);
     // Share of the sea white with breaking crests, and under blown foam (storm.ts, Beaufort).
-    this.uniforms.uCover.value = whitecaps(u);
+    this.uniforms.uCover.value = whiteCrests(u);
     this.uniforms.uStreak.value = foamStreaks(u);
     if (towards && towards.lengthSq() > 0) {
       this.uniforms.uWind.value.copy(towards).normalize();
