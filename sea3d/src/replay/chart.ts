@@ -190,7 +190,9 @@ export class Chart {
       px.data[i + 3] = on ? 255 : 0;
     }
     tg.putImageData(px, 0, 0);
-    return (this.tint = tint);
+    // Keep it only once the land picture has loaded, so an early draw can't fix an empty mask.
+    if (tint.width > 0) this.tint = tint;
+    return tint;
   }
 
   /** Static layer: sea, land, grid, course marks. */
