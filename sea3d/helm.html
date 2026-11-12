@@ -322,6 +322,19 @@
   #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
   #strip .meter[hidden] { display: none; }
   #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
+  #goalchip { margin-top: 2px; font-size: .86em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  #goalchip[hidden], #goalchip .g-sep[hidden], #goalchip .g-storm[hidden] { display: none; }
+  #goalchip .g-km[data-state="clear"] { color: #cfe3f5; }
+  #goalchip .g-km[data-state="near"] { color: #ffb347; }
+  #goalchip .g-km[data-state="danger"] { color: #ff6b5a; }
+  #chbrief ul { margin: .3em 0 .2em; padding-left: 0; list-style: none; }
+  #chbrief li { margin: .15em 0; }
+  #chbrief[hidden] { display: none; }
+  #r-stars { margin: .2em 0 .6em; }
+  #r-stars[hidden], #r-stars .s-real[hidden] { display: none; }
+  #r-stars .s-stars { font-size: 30px; letter-spacing: .12em; color: #ffd36b; }
+  #r-stars .s-why { margin: .2em 0; }
+  #r-stars .s-real { font-size: .92em; opacity: .85; }
   #timebar { display: flex; gap: 2px; margin-top: 3px; }
   #timebar[hidden] { display: none; }
   #timebar button { padding: .1em .5em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
@@ -480,6 +493,7 @@
 <section id="strip" class="hud" aria-label="Instruments">
   <div class="cell c-time">
     <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span></div>
+    <div id="goalchip" hidden><span class="g-day"></span><span class="g-sep"> · </span><span class="g-storm">storm centre <span class="g-km"></span></span></div>
     <div id="timebar" role="group" aria-label="How fast time runs" hidden>
       <button id="t-pause" title="Pause or carry on (Space)" aria-pressed="false">&#10074;&#10074;</button>
       <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second (key 1)">1h</button>
@@ -621,6 +635,7 @@
       <label id="chpick" hidden>Or a weather challenge <select id="challenge"><option value="">None: sail a 2020 launch</option></select></label>
       <p id="chover" class="muted" hidden>A challenge brings its own date and weather, so it replaces the launch day.</p>
       <p id="chstory" hidden></p>
+      <div id="chbrief" hidden><ul></ul><p class="honest muted"></p></div>
       <p id="chnote" class="muted" hidden></p>
       <fieldset id="modes"><legend>How you steer</legend>
         <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
@@ -651,6 +666,7 @@
     <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
     <p id="r-caveat" class="muted" hidden></p>
     <p id="r-story"></p>
+    <div id="r-stars" hidden><span class="s-stars"></span><p class="s-why"></p><p class="s-real"><b>What really happened.</b> <span class="s-text"></span> <a target="_blank" rel="noopener">Source</a></p></div>
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>

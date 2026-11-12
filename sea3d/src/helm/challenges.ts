@@ -4,6 +4,8 @@
 // into public/challenges/ at build time; the two 2020 ones use the Boatyard's
 // forcing_2020.npz. Without the files the picker stays hidden.
 
+import type { Goal } from "./mission";
+
 export interface Challenge {
   id: string;
   n: number;
@@ -18,6 +20,8 @@ export interface Challenge {
   /** Turn on the storm boost (#117) when it lands. Ignored for now (Maya, 11 Nov):
    *  the boost still runs hot near the eye, so storms sail on plain ERA5. */
   storm_boost: boolean;
+  /** A goal to meet (Sandy's shadow first): a deadline, a storm to keep clear of, stars. Older files leave it out. */
+  goal?: Goal;
 }
 
 export async function loadChallenges(base: string, get: (u: string) => Promise<Response> = (u) => fetch(u)): Promise<Challenge[]> {

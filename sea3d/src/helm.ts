@@ -46,6 +46,7 @@ import { askedChallenge } from "./sailLink";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
+import { CALLS, HONEST, briefing, callToast, goalChip, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
@@ -748,6 +749,7 @@ function drawWhen(force = false): void {
   whenDrawn = key;
   const day = `Day ${(h / 24).toFixed(1)}`;
   $("clock").textContent = day;
+  drawGoal(ms);
   if (!whenHere) return;
   $("day").textContent = day;
   $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
@@ -755,6 +757,26 @@ function drawWhen(force = false): void {
   // The strip's date beside the day: local, short; UTC on hover.
   $("c-date").textContent = shortLocal(ms, whenHere[0], whenHere[1]);
   $("c-date").title = $("when").textContent ?? "";
+}
+
+/** The challenge being sailed, when it has a goal. */
+function mission(): (Challenge & { goal: NonNullable<Challenge["goal"]> }) | null {
+  const c = challenges.find((x) => x.id === page.challenge);
+  return c?.goal ? (c as Challenge & { goal: NonNullable<Challenge["goal"]> }) : null;
+}
+/** The goal chip: "Day 4 of 9 · storm centre 380 km", at the hour the picture shows. */
+function drawGoal(ms: number): void {
+  const m = mission();
+  const chip = $("goalchip");
+  chip.hidden = !m || !whenHere;
+  if (!m || !whenHere) return;
+  const g = goalChip(m.goal, m.start, ms, whenHere[0], whenHere[1]);
+  chip.querySelector(".g-day")!.textContent = g.day;
+  chip.querySelector<HTMLElement>(".g-storm")!.hidden = !g.storm;
+  const km = chip.querySelector<HTMLElement>(".g-km")!; // only the figure takes the colour (Jonas)
+  km.textContent = g.km;
+  km.dataset.state = g.state;
+  chip.querySelector<HTMLElement>(".g-sep")!.hidden = !g.storm;
 }
 
 function showStatus(): void {
@@ -1735,6 +1757,9 @@ function untilOptions(): Record<string, number | boolean> {
   const o: Record<string, number | boolean> = { breakdown: true };
   if (soc > 0.2) o.soc_below = Math.max(0.1, soc - 0.3); // a big drop, or the reserve
   if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
+  // A challenge's big call: stop the clock on its day, so it's asked then and not days later.
+  const m = mission();
+  if (st && m?.goal.call_day != null && !asked.mission && st.day < m.goal.call_day) o.hours = Math.max(0.5, (m.goal.call_day - st.day) * 24);
   return o;
 }
 
@@ -1744,7 +1769,9 @@ function untilOptions(): Record<string, number | boolean> {
 // per spell (a gale is not asked again for 2 days, a night for a day, the Stream until you
 // leave it). Hands on only: from base, orders go by satellite and the forecast is the same.
 type Choice = { label: string; title: string; act: () => Promise<void> | void };
-const asked = { gale: -Infinity, night: -Infinity, stream: false };
+const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
+/** The challenge's call, once made: which, and when (voyage hours), for the toast two days on. */
+let missionCall: { key: string; h: number } | null = null;
 const KT = 1.943844; // knots per m/s
 const GALE_MS = 17; // 33 knots, gale force
 const BIG_WAVES_M = 4;
@@ -1770,6 +1797,30 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
   const w = st.weather;
   const motors = !st.sailboat && st.power_w > 0;
   const carryOn: Choice = { label: "Carry on as I am", title: "Keep the order you have", act: () => undefined };
+  // A challenge's one big call (Sandy: run east, or south-east?), once, on its day.
+  const m = mission();
+  const call = m && CALLS[m.id];
+  if (m && call && m.goal.call_day != null && !asked.mission && st.day >= m.goal.call_day) {
+    asked.mission = true;
+    return {
+      kind: "mission",
+      text: call.text,
+      choices: call.options.map((o) => ({
+        label: o.label,
+        title: o.title,
+        act: () => {
+          missionCall = { key: o.key, h };
+          return o.heading === "auto" ? setOrder("auto") : setOrder(o.heading, o.power ?? power);
+        },
+      })),
+    };
+  }
+  // Two days after it: what the call bought you, against the ghost.
+  if (missionCall && h - missionCall.h >= 48) {
+    const text = callToast(missionCall.key, st.boat.lon, st.ghost.lon, st.boat.lat);
+    whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.good));
+    missionCall = null;
+  }
   const nowWind = w ? Math.hypot(w.wind_u, w.wind_v) : 0;
   const t0 = utc(st.boat.t);
   const ahead = (fc ?? []).map((r) => ({ ...r, ah: (utc(r.t) - t0) / 3.6e6 }));
@@ -1917,6 +1968,24 @@ async function refreshForecast(): Promise<void> {
   drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
 }
 
+/** A challenge's stars on the result card, with why, and what really happened. */
+function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
+  const m = mission();
+  const box = $("r-stars");
+  box.hidden = !m || !c.stars;
+  if (!m || !c.stars) return;
+  const t = starsText(c.stars, m.goal, c.ghost_stars);
+  box.querySelector(".s-stars")!.textContent = t.stars;
+  box.querySelector(".s-stars")!.setAttribute("aria-label", `${c.stars.stars} of 3 stars`);
+  box.querySelector(".s-why")!.textContent = t.why.join(" ");
+  const real = box.querySelector<HTMLElement>(".s-real")!;
+  real.hidden = !m.goal.debrief;
+  if (m.goal.debrief) {
+    real.querySelector(".s-text")!.textContent = m.goal.debrief.text;
+    real.querySelector("a")!.href = m.goal.debrief.url;
+  }
+}
+
 async function finish(): Promise<void> {
   const c = await game.result();
   // The sound ask doesn't land on the results.
@@ -1974,6 +2043,7 @@ async function finish(): Promise<void> {
     }),
   );
   drawResultMap();
+  drawStars(c as Card & { stars?: Stars; ghost_stars?: Stars });
   $("r-trim").textContent = trimLine(c);
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
   const line = (who: string, x: Card["boat"]) => {
@@ -2270,10 +2340,27 @@ function showChallenge(): void {
   const c = chosenChallenge();
   $<HTMLSelectElement>("launch").disabled = !!c || !!shared;
   $("chstory").hidden = !c;
-  $("chnote").hidden = !c?.weather_note;
+  // A storm challenge's briefing has its own honesty note, so the shorter one would say it twice.
+  $("chnote").hidden = !c?.weather_note || !!c?.goal?.storm;
   $("chover").hidden = !c;
   if (!c) return;
   $("chstory").textContent = `${c.story} The drop is at noon UTC on ${startLabel(c)}.`;
+  // A challenge with a goal: the goal and the stars, in a few short lines, then the honesty note.
+  const brief = $("chbrief");
+  brief.hidden = !c.goal;
+  if (c.goal) {
+    const b = briefing(c.goal, c.start);
+    $("chstory").textContent = `${startLabel(c)}. ${b.lines.join(" ")}`;
+    const ul = brief.querySelector("ul")!;
+    ul.replaceChildren(
+      ...b.stars.map((t) => {
+        const li = document.createElement("li");
+        li.textContent = t;
+        return li;
+      }),
+    );
+    brief.querySelector(".honest")!.textContent = c.goal.storm ? HONEST : "";
+  }
   // Storm boost (#117) is ignored for now: storms sail on plain ERA5, so say so.
   $("chnote").textContent = c.weather_note;
 }
