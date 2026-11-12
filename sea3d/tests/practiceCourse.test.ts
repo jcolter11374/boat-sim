@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ANNAPOLIS_COURSE, LEG_M, THOMAS_POINT, harbourExit, toLatLon, toTheLight, toXY, triangle } from "../src/helm/course.ts";
+import { ANNAPOLIS_COURSE, LEG_M, LIGHT_STONES_M, THOMAS_POINT, lightGate, harbourExit, toLatLon, toTheLight, toXY, triangle } from "../src/helm/course.ts";
 import { depthState, sampleGrid } from "../src/land/depth.ts";
-import { CRUISER_HANDLING, Wheel, type TrimTable } from "../src/helm/wheel.ts";
+import { CRUISER_HANDLING, crosses, Wheel, type TrimTable } from "../src/helm/wheel.ts";
 import { aside } from "../src/helm/wheelSession.ts";
 
 const T: TrimTable = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31_trim.json", import.meta.url), "utf8"));
@@ -106,4 +106,22 @@ test("the way out of the harbour: four marks down the channel to the open Bay, a
     p = q;
   }
   assert.ok(m > 3500 && m < 4500, `${m} m`);
+});
+
+test("the finish gate off Thomas Point Light lies due east of it, clear of its stones, and is the run's finish", () => {
+  const [a, b] = lightGate().map((g) => toXY(THOMAS_POINT, g));
+  assert.ok(Math.abs(a.y) < 1);
+  assert.ok(a.x > LIGHT_STONES_M + 50);
+  assert.ok(b.x > a.x + 200);
+  assert.ok(toTheLight().marks.at(-1)?.gate);
+});
+
+test("the gate counts a crossing either way, and not one outside it or west of the light", () => {
+  const g0 = { x: 250, y: 0 };
+  const g1 = { x: 650, y: 0 };
+  assert.equal(crosses({ x: 400, y: 5 }, { x: 400, y: -5 }, g0, g1), true);
+  assert.equal(crosses({ x: 400, y: -5 }, { x: 400, y: 5 }, g0, g1), true);
+  assert.equal(crosses({ x: 800, y: 5 }, { x: 800, y: -5 }, g0, g1), false);
+  assert.equal(crosses({ x: -300, y: 5 }, { x: -300, y: -5 }, g0, g1), false);
+  assert.equal(crosses({ x: 400, y: 5 }, { x: 400, y: 1 }, g0, g1), false);
 });

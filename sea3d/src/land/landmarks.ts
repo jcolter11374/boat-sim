@@ -161,7 +161,12 @@ export function drawnLighthouse(focal: number): THREE.Group {
   return g;
 }
 
+/** Inside this (m) a landmark is drawn clear of the haze: the sea's fog is tuned for the horizon,
+ * and at 1-2 km it washed a white lighthouse into the sky (a clear day shows it plainly). */
+export const CLEAR_M = 4000;
+
 interface Shown {
+  near?: boolean;
   lm: Landmark;
   group: THREE.Group;
   glow: THREE.Sprite | null;
@@ -197,6 +202,18 @@ export class Landmarks {
       const { x, z } = offsetOf(s.lm, lat, lon);
       const d2 = x * x + z * z;
       s.group.position.set(x, -d2 / (2 * R_EARTH), z); // down with the earth's curve, as the land is
+      const near = d2 < CLEAR_M * CLEAR_M;
+      if (s.near !== near) {
+        s.near = near;
+        s.group.traverse((o) => {
+          const mats = (o as THREE.Mesh).material;
+          for (const m of mats ? (Array.isArray(mats) ? mats : [mats]) : []) {
+            if (m instanceof THREE.SpriteMaterial) continue; // the glow keeps its own rule
+            (m as THREE.Material & { fog?: boolean }).fog = !near;
+            m.needsUpdate = true;
+          }
+        });
+      }
       const light = s.lm.light;
       if (!light) continue;
       const colour = sectorColour(light, bearingTo(s.lm, lat, lon));
@@ -243,7 +260,7 @@ export class Landmarks {
       const mat = new THREE.SpriteMaterial({ map: glow(), color: WHITE, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false, opacity: 0 });
       sprite = new THREE.Sprite(mat);
       sprite.position.set(0, lm.light.focal, 0);
-      sprite.scale.setScalar(0.09);
+      sprite.scale.setScalar(0.05); // a point with a little bloom: at 0.09 the halo swamped the house and its tag (Rosa, night check)
       sprite.renderOrder = 30;
       sprite.visible = false;
       group.add(sprite);

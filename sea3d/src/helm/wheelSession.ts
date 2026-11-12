@@ -46,7 +46,7 @@ export interface WheelStart {
   /** Where the mark is (default: dead ahead). */
   markBearing?: number;
   /** A practice course instead: marks in order (metres east and north of the start), the last the finish. */
-  course?: { marks: { x: number; y: number; name: string }[]; radiusM: number };
+  course?: { marks: { x: number; y: number; name: string; gate?: [{ x: number; y: number }, { x: number; y: number }] }[]; radiusM: number };
   /** Practice off Annapolis: the ground's height (m, - is depth) at metres east and north of the start; null = not known there. */
   depthAt?: (x: number, y: number) => number | null;
   /** How fast time runs at first (default 1x), and the hand-back button's words (default "Hand back"). */

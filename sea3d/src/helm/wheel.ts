@@ -185,12 +185,23 @@ export interface Wind {
   fromDeg: number;
 }
 
+type P = { x: number; y: number };
+/** Did the step a -> b cross the line between g0 and g1 (either way)? A gate finish. */
+export function crosses(a: P, b: P, g0: P, g1: P): boolean {
+  const side = (p: P, q: P, r: P) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = side(g0, g1, a);
+  const d2 = side(g0, g1, b);
+  const d3 = side(a, b, g0);
+  const d4 = side(a, b, g1);
+  return ((d1 > 0 && d2 <= 0) || (d1 < 0 && d2 >= 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
 export interface Spell {
   /** The goal: a mark this far away, on this bearing from the start. */
   markM: number;
   markBearing: number;
   /** A course instead (practice off Annapolis): marks to reach in order, metres east and north of the start. */
-  marks?: { x: number; y: number }[];
+  marks?: { x: number; y: number; gate?: [{ x: number; y: number }, { x: number; y: number }] }[];
   /** How close counts as reaching a mark (default 40 m). */
   markRadiusM?: number;
 }
@@ -381,6 +392,8 @@ export class Wheel {
     this.wasOver = s.overNow;
     // Move.
     const m = s.speedKn * KNOT * dt;
+    const px = s.x;
+    const py = s.y;
     const hr = (s.heading * Math.PI) / 180;
     s.x += Math.sin(hr) * m;
     s.y += Math.cos(hr) * m;
@@ -390,7 +403,8 @@ export class Wheel {
       s.sumSecs += dt;
     }
     s.t += dt;
-    if (this.distToMark() < (this.spell.markRadiusM ?? 40)) {
+    const gate = this.spell.marks?.[Math.min(s.mark, this.spell.marks.length - 1)]?.gate;
+    if (gate ? crosses({ x: px, y: py }, s, gate[0], gate[1]) : this.distToMark() < (this.spell.markRadiusM ?? 40)) {
       if (this.spell.marks?.length) {
         s.markTimes.push(s.t);
         s.mark++;
