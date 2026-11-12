@@ -795,7 +795,7 @@ function setWarp(w: number): void {
   // The buttons carry rounded values (0.000277778 for 1/3600): light the nearest.
   const bs = Array.from(document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button"));
   const near = bs.reduce((m, b) => (Math.abs(Math.log(Number(b.dataset.warp) / w)) < Math.abs(Math.log(Number(m.dataset.warp) / w)) ? b : m), bs[0]);
-  // Real time is on both the strip and the drawer: light every button with the nearest value.
+  // Light every button with the nearest speed (the strip and the drawer's slower speeds).
   bs.forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.warp === near.dataset.warp)));
 }
 document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button").forEach((b) => b.addEventListener("click", () => setWarp(Number(b.dataset.warp))));
@@ -1585,7 +1585,8 @@ function skyGuide(): void {
     if (Math.abs(rel(b)) > RANGE) continue;
     const x = xOf(b);
     out.push(span(b % 15 === 0 ? "tick big" : "tick", "", x));
-    if (b % 15 === 0) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
+    // A label is drawn only where it fits whole: clear of the left edge, and of "VIEW" at the right (Elena).
+    if (b % 15 === 0 && x > 14 && x < W - 40) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
   }
   const night = sunEl < -6;
   const polaris = atmos.starDirs.get("North Star (Polaris)");
