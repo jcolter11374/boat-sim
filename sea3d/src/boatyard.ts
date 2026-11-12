@@ -198,6 +198,8 @@ const status = {
   planned: null as unknown,
   backend: "",
   frames: 0,
+  /** The Blender models: "loading" until they arrive (or don't). Their rebuild is a long frame on slow graphics. */
+  models: "loading" as "loading" | "detailed" | "simple",
   view: "afloat" as View,
   lift: 0,
   setView: (v: View) => setView(v),
@@ -1000,6 +1002,7 @@ function drawLabels(): void {
 build();
 loadDetailedModels().then((ok) => {
   if (ok) build();
+  status.models = ok ? "detailed" : "simple";
 });
 Promise.all([
   fetch("./parts-catalog.json").then((r) => {
