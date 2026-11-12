@@ -17,6 +17,7 @@ import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, type WaveComponent } from "./waves";
 import { PLACE } from "./land/place";
 import { foamStreaks, whitecaps } from "./storm";
+import { writeSeaUniforms } from "./seaSurface";
 
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
@@ -96,6 +97,10 @@ vFoam = uFoamAmt > 0.0 ? uFoamAmt * smoothstep(0.4, 1.3, hRel) : 0.0;
   vColor.rgb = mix(uDeep, uShallow, clamp(0.5 + 0.3 * hRel, 0.0, 1.0));
 #endif
 `;
+
+const POINT_LIGHTS_IF = "#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )";
+/** The light loop without point lights (the deck light lights the boat, not the sea). */
+const LIGHTS_NO_POINT = THREE.ShaderChunk.lights_fragment_begin.replace(POINT_LIGHTS_IF, "#if 0");
 
 const FRAG_HEAD = /* glsl */ `
 uniform float uTime;
@@ -229,6 +234,7 @@ if (uStreak > 0.001) {
   foamMask = max(foamMask, 0.9 * streak);
 }
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.98), foamMask);
+/* boat wash (boatWash.ts) */
 `;
 
 const FRAG_ROUGH = /* glsl */ `
@@ -341,14 +347,18 @@ export class Sea {
           .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\n" + VERT_NORMAL)
           .replace("#include <begin_vertex>", "#include <begin_vertex>\n" + VERT_POS)
           .replace("#include <project_vertex>", "#include <project_vertex>\n" + VERT_BODY);
+      // The boat's night deck light (helm.ts, #358) lights its deck and gear, not the
+      // sea: lit from a lamp a metre up, the sea's blue turned into a cyan pool under the
+      // hull that read as a hover light (Leo, Elena's audit item 12). Point lights skip it.
       sh.fragmentShader = (FRAG_HEAD + sh.fragmentShader)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
-        .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>");
+        .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>")
+        .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v9";
+    material.customProgramCacheKey = () => "boatsim-sea-v10";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
@@ -485,6 +495,8 @@ export class Sea {
     u.uN.value = n;
     u.uAmp.value = this.hs / 2;
     u.uFoamAmt.value = this.foamAmount;
+    // The same sea for every material that reads it (seaSurface.ts: boats' waterline, underwater fade).
+    writeSeaUniforms(comps, t, this.steepness);
   }
 
   dispose(): void {

@@ -33,9 +33,15 @@ test("page names come from the file name", () => {
   assert.equal(pageName("/race.html"), "race");
 });
 
-test("the boat chip offers to build one, or names my boat safely", () => {
-  assert.equal(boatChip(null).name, "build one");
-  assert.equal(boatChip(null).href, "./boatyard.html");
+test("the boat chip: Our kayak by default, build one only in the Boatyard, my boat named safely", () => {
+  for (const page of ["index", "helm", "voyage", "race", "leaderboard"]) {
+    const d = boatChip(null, page);
+    assert.equal(d.prefix + d.name, "My boat: Our kayak", page);
+    assert.equal(d.href, "./boatyard.html");
+  }
+  assert.equal(boatChip(null).name, "Our kayak");
+  assert.equal(boatChip(null, "boatyard").name, "build one");
+  assert.equal(boatChip(null, "boatyard").href, "./boatyard.html");
   const c = boatChip({ name: 'Rev C <b>"x"</b> & co', href: "./boatyard.html#base=revc" });
   assert.equal(c.href, "./boatyard.html#base=revc");
   // the name is passed through untouched; mountTopbar only ever sets it as textContent

@@ -1232,7 +1232,8 @@
   "stock_cruiser31": {
    "design": "configs/stock_cruiser31.yaml",
    "defaults": {
-    "spare": "none"
+    "spare": "none",
+    "tactician": "on"
    },
    "slots": [
     {
@@ -1260,6 +1261,34 @@
        ],
        "kg": 0.4,
        "cost": 83.0
+      }
+     ]
+    },
+    {
+     "id": "tactician",
+     "name": "Sailing tactician",
+     "opts": [
+      {
+       "id": "on",
+       "effect": "wired",
+       "est": false,
+       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "off",
+       "effect": "wired",
+       "est": true,
+       "basis": "steers straight for the next waypoint, clamped out of the no-go zone",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
       }
      ]
     }
@@ -1268,7 +1297,8 @@
   "stock_dinghy14": {
    "design": "configs/stock_dinghy14.yaml",
    "defaults": {
-    "spare": "none"
+    "spare": "none",
+    "tactician": "on"
    },
    "slots": [
     {
@@ -1296,6 +1326,34 @@
        ],
        "kg": 0.4,
        "cost": 83.0
+      }
+     ]
+    },
+    {
+     "id": "tactician",
+     "name": "Sailing tactician",
+     "opts": [
+      {
+       "id": "on",
+       "effect": "wired",
+       "est": false,
+       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "off",
+       "effect": "wired",
+       "est": true,
+       "basis": "steers straight for the next waypoint, clamped out of the no-go zone",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
       }
      ]
     }
@@ -1304,7 +1362,8 @@
   "stock_beachcat16": {
    "design": "configs/stock_beachcat16.yaml",
    "defaults": {
-    "spare": "none"
+    "spare": "none",
+    "tactician": "on"
    },
    "slots": [
     {
@@ -1334,13 +1393,42 @@
        "cost": 83.0
       }
      ]
+    },
+    {
+     "id": "tactician",
+     "name": "Sailing tactician",
+     "opts": [
+      {
+       "id": "on",
+       "effect": "wired",
+       "est": false,
+       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "off",
+       "effect": "wired",
+       "est": true,
+       "basis": "steers straight for the next waypoint, clamped out of the no-go zone",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      }
+     ]
     }
    ]
   },
   "stock_sail_drone7": {
    "design": "configs/stock_sail_drone7.yaml",
    "defaults": {
-    "spare": "none"
+    "spare": "none",
+    "tactician": "on"
    },
    "slots": [
     {
@@ -1368,6 +1456,34 @@
        ],
        "kg": 0.4,
        "cost": 83.0
+      }
+     ]
+    },
+    {
+     "id": "tactician",
+     "name": "Sailing tactician",
+     "opts": [
+      {
+       "id": "on",
+       "effect": "wired",
+       "est": false,
+       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "off",
+       "effect": "wired",
+       "est": true,
+       "basis": "steers straight for the next waypoint, clamped out of the no-go zone",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
       }
      ]
     }
