@@ -63,5 +63,5 @@ test("the result card's challenge headline says whether she was still sailing, n
 test("no stars: the card says what earns the first one", () => {
   const s = starsText({ stars: 0, closest_km: 125, end_lon: -69.3, battery_low: 0.6, sailing: true }, SANDY);
   assert.equal(s.stars, "☆☆☆");
-  assert.match(s.why[0], /^No stars this time: the first needs you never within \d+ km of the centre, and still sailing at the end\.$/);
+  assert.match(s.why[0], /^No stars this time\. To earn the first, stay more than \d+ km from the centre and keep sailing to the end\.$/);
 });
