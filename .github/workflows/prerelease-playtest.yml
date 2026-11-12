@@ -126,6 +126,9 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
+      # Two at a time (Maya, 12 Nov): one PR's four play jobs used to take four of the
+      # account's runners at once, and main's deploy waited behind them. Every job still runs.
+      max-parallel: 2
       matrix:
         browser: [chromium, firefox]
         suite: [live-check, playtest]
