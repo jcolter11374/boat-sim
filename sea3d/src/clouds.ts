@@ -85,6 +85,9 @@ const EMBER = new THREE.Color(0.85, 0.32, 0.3); // the break after the sun has g
  * steel hue. The break (warm light under the deck towards a low sun) is the brightest
  * thing in a stormy sky, gold by day, copper at sunset, ember just after.
  */
+/** Under a full deck the sky meets the sea at this share of the haze colour (shader hzC). */
+export const HORIZON_DECK = 0.86;
+
 export function skyColours(haze: THREE.Color, sunEl: number, storm: number, cover: number) {
   const lum = Math.max(0.2126 * haze.r + 0.7152 * haze.g + 0.0722 * haze.b, 0.003);
   const steel = STEEL.clone().multiplyScalar(lum * 1.4);
@@ -459,7 +462,10 @@ void main() {
   // Where the sky is haze it is the fog's own colour, put on after tone mapping as three
   // puts fog on the sea, so the fogged-out sea meets the sky without a line.
   float asFog = max(hz2 * deckAmt, hb);
-  gl_FragColor = vec4(mix(gl_FragColor.rgb, uHaze, asFog), max(gl_FragColor.a, asFog));
+  // Under a deck the horizon settles on the tone the mist band above it draws (HORIZON_DECK x
+  // haze), not the bare haze, which showed as a bright hairline over the sea (Ines, Priya).
+  vec3 hzC = uHaze * mix(1.0, 0.86, deckAmt);
+  gl_FragColor = vec4(mix(gl_FragColor.rgb, hzC, asFog), max(gl_FragColor.a, asFog));
 }`;
 
 const BANK_H = 70; // m, how tall a fog bank stands
@@ -664,7 +670,9 @@ export class Clouds {
     const u = this.layer.material.uniforms;
     const h = u.uHaze.value as THREE.Color;
     const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7), SM(this.rain, 0.05, 0.8));
-    return out.set(h.r, h.g, h.b, deck);
+    // The colour the sky actually draws at the horizon (the shader's hzC), so the sea can meet it.
+    const k = 1 - (1 - HORIZON_DECK) * deck;
+    return out.set(h.r * k, h.g * k, h.b * k, deck);
   }
 
   /**
