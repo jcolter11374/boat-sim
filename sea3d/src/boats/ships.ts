@@ -789,7 +789,8 @@ void main() {`,
   bool hullSkin = vMark.x < 0.01 && vMark.z < 0.5 && ((vMark.y > 0.5 && vMark.y < 1.5) || vLocal.y < uBoot.y + 0.05);
   // Shell plating: strakes uPlate.y tall, butts every uPlate.x, staggered strake to strake.
   vec2 pl = vLocal.xy / uPlate;
-  pl.x += 0.5 * mod(floor(pl.y), 2.0);
+  float strake = floor(pl.y);
+  pl.x = pl.x * mix(0.75, 1.3, sHash(vec2(strake, 5.3))) + sHash(vec2(strake, 9.1)); // plate lengths vary strake to strake
   vec2 pc = floor(pl), pf = fract(pl);
   float tone = sHash(pc + 17.0) - 0.5; // each plate a slightly different age of paint
   vec2 fw = fwidth(pl);
@@ -801,7 +802,7 @@ void main() {`,
     // Topsides: the ship's colour, plate by plate, chalkier high up where the sun works on it.
     vec3 paint = uPaint * (1.0 + 0.09 * tone) * (0.93 + 0.12 * seaN);
     paint = mix(paint, vec3(dot(paint, vec3(0.3, 0.59, 0.11))) * 1.25 + 0.01, 0.08 * smoothstep(2.0, 9.0, vLocal.y));
-    paint *= 1.0 - 0.07 * seam;
+    paint *= 1.0 - 0.035 * seam;
     // Rust weeping from the deck edge and its scuppers: thin runs, some long, most short.
     float top = uSheer.x + uSheer.z * (1.0 - smoothstep(uSheer.y - 2.0, uSheer.y + 2.0, vLocal.x));
     float cx = vLocal.x / 1.9;
@@ -809,26 +810,32 @@ void main() {`,
     float wid = 0.06 + 0.12 * sHash(vec2(ci, 7.7));
     float inCol = 1.0 - smoothstep(wid * 0.35, wid, abs(fract(cx) - 0.3 - 0.4 * sHash(vec2(ci, 2.9))));
     float down = top - 0.2 - vLocal.y;
-    float len = mix(1.2, 8.0, pow(sHash(vec2(ci, 1.3)), 2.0));
-    float run = inCol * step(0.72, sHash(vec2(ci, 3.1))) * (1.0 - smoothstep(0.0, len, down)) * step(-0.4, down);
+    float len = mix(0.8, 9.0, pow(sHash(vec2(ci, 1.3)), 1.5));
+    float run = inCol * step(0.8, sHash(vec2(ci, 3.1))) * (1.0 - smoothstep(0.0, len, down)) * step(-0.4, down);
     run *= 0.55 + 0.45 * sNoise(vec2(vLocal.x * 5.0, vLocal.y * 0.5));
     // Heavy rust under the hawse pipes, where the anchor chain scrapes.
     float hx = abs(vLocal.x - uHawse.x);
     float below = uHawse.y - vLocal.y;
-    float hawse = (1.0 - smoothstep(0.6 + below * 0.08, 1.6 + below * 0.14, hx)) * step(-0.3, below) * (1.0 - smoothstep(3.0, 12.0, below));
-    hawse *= 0.75 + 0.25 * sNoise(vec2(vLocal.x * 3.0, vLocal.y * 0.4));
+    // Narrow streaks that wander, fork and taper as they run down, darkest right under the pipe.
+    float spread = 0.7 + below * 0.12;
+    float hx2 = (vLocal.x - uHawse.x) + 0.25 * (sNoise(vec2(vLocal.y * 0.5, 3.0)) - 0.5) * below * 0.3;
+    float strands = smoothstep(0.3, 0.65, sNoise(vec2(hx2 * 2.6, vLocal.y * 0.08 + 7.0)));
+    float core = 1.0 - smoothstep(0.1, 0.35, abs(hx2) / max(spread, 0.2));
+    float env = (1.0 - smoothstep(spread * 0.6, spread, abs(hx2))) * step(-0.3, below) * (1.0 - smoothstep(1.5, 10.0 + 4.0 * sHash(vec2(floor(hx2 * 3.0), 4.0)), below));
+    float hawse = env * max(strands * (1.0 - smoothstep(0.0, 10.0, below) * 0.6), core * (1.0 - smoothstep(0.0, 4.0, below)));
     vec3 rustHi = vec3(0.17, 0.06, 0.022);
     vec3 rustLo = vec3(0.08, 0.04, 0.025);
     float rust = clamp(run * 0.5 + 0.85 * hawse, 0.0, 0.85);
     paint = mix(paint, mix(rustLo, rustHi, smoothstep(0.0, 4.0, vLocal.y - (top - 6.0))), rust);
     diffuseColor.rgb = paint;
-    shipRough = mix(0.52 + 0.12 * tone, 0.85, rust);
+    float lum = dot(uPaint, vec3(0.3, 0.59, 0.11));
+    shipRough = mix(mix(0.36, 0.52, smoothstep(0.01, 0.12, lum)) + 0.1 * tone, 0.85, rust);
   } else if (vMark.y > 1.5) {
     diffuseColor.rgb = uBand;
   } else if (hullSkin) {
     // Boot-top and antifouling: flatter paints; the red bleaches pink near the top, with weed at the old waterlines.
     bool anti = vLocal.y < uBoot.x;
-    diffuseColor.rgb *= (1.0 + 0.07 * tone) * (0.92 + 0.14 * seaN) * (1.0 - 0.07 * seam);
+    diffuseColor.rgb *= (1.0 + 0.07 * tone) * (0.92 + 0.14 * seaN) * (1.0 - 0.035 * seam);
     if (anti) diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.3 + vec3(0.02, 0.012, 0.01), 0.5 * smoothstep(uBoot.x - 4.0, uBoot.x, vLocal.y));
     float weed = smoothstep(0.5, 0.85, sNoise(vec2(vLocal.x * 0.6, vLocal.y * 2.5))) * (1.0 - smoothstep(0.0, 1.2, abs(vLocal.y - uBoot.x + 0.4)));
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.06, 0.03), weed * 0.6);
@@ -841,6 +848,8 @@ void main() {`,
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.06, 0.04), 0.45 * line);
     vec3 nW = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
     diffuseColor.rgb *= 0.66 + 0.42 * smoothstep(-0.6, 0.55, nW.y);
+    // The sky lights the upper topsides, the dark sea hardly lights the lower: a gentle fall-off down the side.
+    diffuseColor.rgb *= 0.78 + 0.3 * smoothstep(-2.0, uSheer.x + 1.0, vLocal.y);
   }
   if (vMark.z > 0.5) {
     // Boxes, hatches and deck: grime and a little rust, so no two read as clean plastic.
