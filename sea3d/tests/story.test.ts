@@ -60,7 +60,7 @@ test("each call says what it was worth until the next one", () => {
     ],
     80,
   );
-  assert.deepEqual(lines, ["Day 2.0 · Took the route that rides the Stream · +120 km on the ghost", "Day 9.0 · Dodged south-east (115°) · −40 km on the ghost"]);
+  assert.deepEqual(lines, ["Day 2.0 · Took the route that rides the Stream · 120 km ahead of the ghost", "Day 9.0 · Dodged south-east (115°) · 40 km behind the ghost"]);
   assert.match(callLines([], 10)[0], /You let the autopilot sail/);
   assert.equal(callName("Hold course: fastest, but a knockdown is likelier"), "Held course");
   assert.equal(callName("Dodge south-east (115°): safer, but a longer way round"), "Dodged south-east (115°)");
