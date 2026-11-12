@@ -711,6 +711,7 @@ const CHECKS = {
     run: async (page) => {
       const out = [];
       await page.setViewportSize({ width: 1280, height: 720 });
+      if (!process.env.NOLINK) {
       // #411/#412: the default crossing, a few seconds after Set sail.
       await helmStart(page);
       await page.evaluate(() => { if (!window.__helm.clock) document.getElementById("t-pause")?.click(); }); // let her move
@@ -733,7 +734,9 @@ const CHECKS = {
       await lookShot(page, `look-maya-${BROWSER}-practice.jpg`);
       must(/\d+:\d\d/.test(what) || /\d+ s\b/.test(what), `no clock in the practice banner: "${what}"`);
       out.push(`practice banner "${what.slice(0, 80)}"`);
+      }
       // #404: 1 May 2020, both boats lose the main box on day 3.9: the orders lock with "no link".
+      if (BROWSER !== "chromium" && process.env.NOLINK) throw new SkipCheck("one browser is enough for the lock");
       if (BROWSER === "chromium" && process.env.NOLINK) {
         await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
         await helmStart(page, async (p) => p.selectOption("#launch", "2"));
@@ -744,6 +747,11 @@ const CHECKS = {
           await openOrders(page);
           await page.click("#sevent");
           await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 4 * MIN });
+        }
+        // The picture plays up to the stop at its own pace; the lock lands when it gets there.
+        if (st?.nl) {
+          await page.evaluate(() => { if (!window.__helm.clock) document.getElementById("t-pause")?.click(); });
+          await page.waitForFunction((d) => parseFloat((document.getElementById("day")?.textContent ?? "").replace(/[^0-9.]/g, "")) >= d - 0.05 || !document.getElementById("nolink")?.hidden, st.day, { timeout: 6 * MIN }).catch(() => {});
         }
         await page.waitForTimeout(3000);
         if (await page.locator("#result").isVisible().catch(() => false)) await lookShot(page, `look-maya-${BROWSER}-nolink-card.jpg`).catch(() => {});
