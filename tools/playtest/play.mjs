@@ -513,7 +513,9 @@ const CHECKS = {
       out.push(`prologue: "${sum}", then the crossing started`);
       // The orders drawer.
       await page.click("#soundno", { timeout: 3000 }).catch(() => {});
-      if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 });
+      // The drawer slides in and out by itself at the start (and #406 shows one thing at a time),
+      // so the tab can be moving; openOrders waits for it to settle (Owen, 12 Nov).
+      await openOrders(page);
       const open = await page.waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 }).then(() => true).catch(() => false);
       must(open, "the Orders tab didn't open the orders drawer");
       out.push("orders drawer opens");
