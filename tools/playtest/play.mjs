@@ -879,6 +879,60 @@ const CHECKS = {
       return seen.join("; ");
     },
   },
+  // Manual (Omar, #378): the Watch a voyage history card at 1400x900, 1280x720 and 1024x700, in
+  // Chrome AND Firefox. The top line fits on one line with no day, the card hangs below the dials,
+  // doesn't cover Equipment and stops above the time bar. Each size is printed to the log like "look".
+  "look-378": {
+    manual: true,
+    path: "voyage.html",
+    run: async (page) => {
+      const ver = await page.evaluate(() => fetch("version.json", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})));
+      await page.waitForFunction(() => window.__replay && (window.__replay.frames ?? 0) > 30, null, { timeout: 3 * MIN });
+      await page.waitForSelector(".poi-card", { state: "visible", timeout: 2 * MIN }).catch(() => {
+        throw new CheckFail("no history card showed at the start of the replay");
+      });
+      // Pause so the card stays while we resize.
+      await page.evaluate(() => { const b = document.getElementById("play"); if (b && !b.textContent.includes("\u25B6")) b.click(); });
+      const out = [];
+      for (const [w, h] of [[1400, 900], [1280, 720], [1024, 700]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(2000);
+        const g = await page.evaluate(() => {
+          const r = (e) => e?.getBoundingClientRect();
+          const card = document.querySelector(".poi-card:not(.poi-out)") ?? document.querySelector(".poi-card");
+          const k = card?.querySelector(".poi-k");
+          const where = card?.querySelector(".poi-where");
+          const lh = where ? parseFloat(getComputedStyle(where).lineHeight) || 16 : 16;
+          return {
+            card: !!card, k: k?.textContent?.trim() ?? "",
+            kLines: where ? Math.round(r(where).height / lh) : 0,
+            when: !!card?.querySelector(".poi-when"),
+            top: r(card)?.top, bottom: r(card)?.bottom, right: r(card)?.right, left: r(card)?.left,
+            hud: r(document.getElementById("hud"))?.bottom,
+            tr: r(document.getElementById("transport"))?.top,
+            map: r(document.getElementById("chartbox"))?.right,
+            scrolls: card ? card.scrollHeight > card.clientHeight + 1 : false,
+            title: card?.querySelector(".poi-t")?.textContent ?? "",
+          };
+        });
+        const path = `look-378-${BROWSER}-${w}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        console.log(`GEOM ${w}x${h} ${JSON.stringify(g)}`);
+        must(g.card, `at ${w}x${h}: the history card went away`);
+        must(g.kLines <= 1, `at ${w}x${h}: top line "${g.k}" runs to ${g.kLines} lines`);
+        must(!g.when, `at ${w}x${h}: the day is still on the card`);
+        must(g.top >= g.hud - 1, `at ${w}x${h}: card top ${g.top} is above the dials/Equipment bottom ${g.hud}`);
+        must(!g.tr || g.bottom <= g.tr + 1, `at ${w}x${h}: card bottom ${g.bottom} runs into the time bar at ${g.tr}`);
+        must(g.right <= w + 1 && (!g.map || g.left >= g.map - 1), `at ${w}x${h}: card off screen or over the map`);
+        out.push(`${w}: "${g.k}"${g.scrolls ? " (scrolls)" : ""}`);
+      }
+      return `deploy ${String(ver.commit ?? ver.sha ?? JSON.stringify(ver)).slice(0, 12)}; ${out.join("; ")}`;
+    },
+  },
   leaderboard: {
     path: "leaderboard.html",
     run: async (page) => {
