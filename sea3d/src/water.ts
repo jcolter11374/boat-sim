@@ -364,7 +364,14 @@ float o3 = smoothstep(0.02, 0.1, fpF);
 float fn = vnoise(vec2(q.x * 0.5, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
          + mix(vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08), 0.5, o2) * 0.3
          + mix(vnoise(vWPos.xz * 7.0 + uTime * 0.2), 0.5, o3) * 0.2;
+#ifdef SEA_LITE
+// Low has only this noise mask for its caps, tuned for Monahan's few per cent: past that it
+// turned the whole sea white at force 8 (whiteCrests() is ~0.3 there). Medium and up get their
+// extra white from the short waves' foam instead.
+float thr = 0.8 - 1.4 * min(uCover, 0.12) - 0.35 * vFoam;
+#else
 float thr = 0.8 - 1.4 * uCover - 0.35 * vFoam;
+#endif
 float foamMask = smoothstep(thr, thr + 0.1, fn) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
 float foamSunk = 0.0; // bubbles just under the surface round a fresh cap (Medium and up)
 if (SEA_DET_N > 0) {
@@ -406,9 +413,12 @@ if (SEA_DET_N > 0) {
 if (uStreak > 0.001) {
   vec2 qs = q - vec2(uTime * 1.2, 0.0);
   qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
-  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 0.9)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 2.3) + 17.0), 0.5, smoothstep(0.1, 0.4, fpF)) * 0.4;
-  float thrS = 0.5 + 0.51 * (0.5 - uStreak);
-  float lanes = smoothstep(thrS - 0.03, thrS + 0.07, ns) * (0.7 + 0.3 * fn);
+  // Lanes a few tens of cm wide, not metres: main's drew as white slabs past a low camera
+  // (Ada's film, force 7-8). Same work, finer across the wind and a narrower edge.
+  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 4.0)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 9.0) + 17.0), 0.5, smoothstep(0.05, 0.25, fpF)) * 0.4;
+  float thrS = 0.58 + 0.4 * (0.5 - uStreak);
+  // Broken into dashes by the caps' own noise (no extra noise on Low).
+  float lanes = smoothstep(thrS, thrS + 0.04, ns) * smoothstep(0.3, 0.6, fn);
   float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
   foamMask = max(foamMask, 0.9 * streak);
 }
