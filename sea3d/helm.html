@@ -89,6 +89,40 @@
     background: rgba(10,18,30,.4); padding: 1px 9px; border-radius: 10px; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
   @media (max-width: 700px) { #timebar .t { display: none; } #timebar button { padding: 5px 8px; } }
+  /* Take the wheel (Rosa): the sailing panel, bottom centre. */
+  #b-wheel { background: rgba(61,220,151,.18); border-color: #3ddc97; font-weight: 600; }
+  #wheel { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 8; width: min(760px, calc(100vw - 24px)); padding: 10px 14px; font-size: 12.5px; }
+  #wheel[hidden] { display: none; }
+  #wheel.over { box-shadow: 0 0 0 2px #ff5a4f inset; }
+  #wheel .w-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  #wheel .w-goal { color: #3ddc97; font-weight: 600; }
+  #wheel .w-speeds { margin-left: auto; display: flex; gap: 3px; }
+  #wheel button { padding: 3px 8px; font-size: 12px; }
+  #wheel .w-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  #wheel .w-lbl { color: var(--dim); font-size: 11px; }
+  #wheel .w-big { font: 700 20px system-ui, sans-serif; }
+  #wheel .w-sub { color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; min-height: 1.2em; }
+  #wheel .w-bar, #wheel .w-gauge { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); margin: 4px 0 2px; }
+  #wheel .w-bar .w-now { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #8ab4ff; }
+  #wheel .w-bar .w-best { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #3ddc97; }
+  #wheel .w-heelbar .w-now { background: #ffc857; }
+  #wheel .w-heelbar .w-max { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #ff5a4f; }
+  #wheel .w-band { position: absolute; top: 0; bottom: 0; background: rgba(61,220,151,.55); border-radius: 4px; }
+  #wheel .w-band[hidden] { display: none; }
+  #wheel .w-needle { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: #fff; border-radius: 2px; }
+  #wheel .w-tell { font-weight: 600; min-height: 1.3em; }
+  #wheel .w-tell[data-state="good"] { color: #3ddc97; }
+  #wheel .w-tell[data-state="flapping"], #wheel .w-tell[data-state="stalled"] { color: #ff8a2a; }
+  #wheel .w-tell[data-state="in"], #wheel .w-tell[data-state="ease"] { color: #ffc857; }
+  #wheel .w-guide { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; background: rgba(61,220,151,.14); border-left: 3px solid #3ddc97; font-size: 13.5px; font-weight: 600; }
+  #wheel .w-guide[hidden] { display: none; }
+  #wheel .w-gskip { float: right; margin-left: 8px; }
+  #wheel .w-keys { color: var(--dim); font-size: 11px; margin-top: 6px; }
+  #wheel .w-btns { display: flex; gap: 5px; margin-top: 5px; }
+  /* While at the wheel the voyage controls wait. */
+  body.at-wheel #timebar, body.at-wheel #timestate, body.at-wheel #keyhint { display: none; }
+  body.at-wheel #orders, body.at-wheel #fcbox { visibility: hidden; }
+  @media (max-width: 700px) { #wheel .w-grid { grid-template-columns: 1fr 1fr; } }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
   #go.big { display: block; width: 100%; padding: 13px; font-size: 17px; margin: 14px 0 6px; border-radius: 11px; }
   /* Before you set sail only the start card shows (Nina's review, item 1): the game's
@@ -182,7 +216,7 @@
   <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second, for the empty middle of the ocean (key 4)">4 days/s</button>
 </div>
 <div id="timestate"></div>
-<div id="keyhint" hidden>Space pause · 1-4 speed · &larr;&rarr; steer · &uarr;&darr; power</div>
+<div id="keyhint" hidden>Space pause · 1-4 speed · &larr;&rarr; steer (hold to keep turning, Shift for 1&deg;) · &uarr;&darr; power · ? keys</div>
 <div id="ghosttag" hidden></div>
 
 <section id="status" class="glass">
@@ -209,6 +243,7 @@
       <button id="b-auto" aria-pressed="true" title="The autopilot sails your boat exactly as it sails the ghost. Leave it on and the two boats stay level.">Autopilot</button>
       <button id="b-finish" aria-pressed="false">Aim at the finish</button>
       <button id="b-route" aria-pressed="false" title="The autopilot's planned route, which allows for the current">Follow the route</button>
+      <button id="b-wheel" hidden title="Sail her yourself in real time: steer, trim the sail, reef (Enter)">Take the wheel ⏎</button>
       <div class="key muted"><i style="background:#ff8a2a"></i>your order<br><i style="background:#fff"></i>where the bow points<br><i style="background:#3ddc97"></i>the finish<br><i style="background:#8ab4ff"></i>the wind</div>
     </div>
   </div>
