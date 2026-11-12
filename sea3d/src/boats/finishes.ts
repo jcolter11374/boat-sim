@@ -5,6 +5,7 @@
 // physical material does the work; this only sets it up, once per material.
 
 import * as THREE from "three";
+import { NAV_NIGHT } from "./navlights";
 
 let grain: THREE.DataTexture | null = null;
 /** Fine value noise for "orange peel" and wear, as a roughness map (green channel). */
@@ -217,6 +218,7 @@ export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
         case "transom":
         case "cabin":
         case "cove_stripe":
+          nightFloor(m);
           if (p) {
             p.clearcoatRoughness = look.coatRough;
             if (look.fairing > 0) {
@@ -253,6 +255,29 @@ export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
   });
 }
 
+/**
+ * At night a hull's topsides still catch a little sky glow and starlight, so the boat
+ * shows as a faint shape and colour rather than a black cut-out (Elena, 12 Nov). Off by
+ * day (NAV_NIGHT is 0). Chains onto any earlier onBeforeCompile.
+ */
+export function nightFloor(m: THREE.MeshStandardMaterial): void {
+  if (m.userData.nightFloor) return;
+  m.userData.nightFloor = true;
+  const prev = m.onBeforeCompile.bind(m);
+  const prevKey = m.customProgramCacheKey.bind(m);
+  m.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    sh.uniforms.uHullNight = NAV_NIGHT;
+    sh.fragmentShader = sh.fragmentShader
+      .replace("void main() {", "uniform float uHullNight;\nvoid main() {")
+      .replace(
+        "#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * vec3(0.05, 0.066, 0.1) * 0.45 * uHullNight;",
+      );
+  };
+  m.customProgramCacheKey = () => `${prevKey()}|night-floor`;
+}
+
 export type Boat = "kayak" | "randolph";
 
 /** Give a detailed model's materials their real-world finish (each material once; they're shared). */
@@ -265,6 +290,7 @@ export function applyFinishes(root: THREE.Object3D, boat: Boat = "kayak"): void 
       const f = table[m.name];
       if (!f) continue;
       f(m);
+      if (m.name === "hull" || m.name === "transom") nightFloor(m);
       m.userData.finished = true;
       m.needsUpdate = true;
     }
