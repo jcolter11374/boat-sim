@@ -1548,6 +1548,78 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // M1 piece 7 (Jonas, qa/m1-30-second-check.md): title to sailing, timed, a fresh browser
+  // (empty cache) per run, 1280x720, three runs each of the crossing, practice and a challenge. Bar: 30 s.
+  "time30": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const RUNS = Number(process.env.TIME30_RUNS || 3);
+      const rows = [];
+      const rateNow = (p) => p.evaluate(() => document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent.trim() ?? "?");
+      const firstRate = (p) => p.evaluate(() => document.querySelector("#timebar .rate")?.textContent.trim() ?? "?");
+      const KINDS = {
+        crossing: async (p, mark) => {
+          await p.click("#t-setsail");
+          await p.waitForSelector("#go", { state: "visible", timeout: 2 * MIN });
+          mark("card");
+          await p.click("#go");
+          await p.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+          mark(`sailing (rate ${await rateNow(p)}, first on bar ${await firstRate(p)})`);
+        },
+        practice: async (p, mark) => {
+          await p.click("#t-practice");
+          await p.waitForFunction(() => !document.getElementById("start").hidden && !document.getElementById("ss-course").hidden, null, { timeout: 2 * MIN });
+          mark("card");
+          await p.click("#go");
+          await p.waitForFunction(() => window.__wheel?.on, null, { timeout: 4 * MIN });
+          mark(`at the wheel (rate ${await rateNow(p)})`);
+        },
+        challenge: async (p, mark) => {
+          await p.click("#t-setsail");
+          await p.waitForSelector("#ss-ch-opts .ss-pill:nth-child(2)", { state: "visible", timeout: 2 * MIN });
+          mark("card");
+          const pill = p.locator("#ss-ch-opts .ss-pill", { hasText: /Gentle June/ });
+          if (await pill.count()) await pill.first().click(); else { await p.click("#ss-ch-opts .ss-pill:nth-child(2)"); mark("(no Gentle June pill: took the first challenge)"); }
+          await p.click("#go");
+          await p.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+          mark(`sailing (challenge ${await p.evaluate(() => window.__helm.challenge)}, rate ${await rateNow(p)})`);
+        },
+      };
+      for (let i = 1; i <= RUNS; i++) {
+        for (const [kind, steps] of Object.entries(KINDS)) {
+          const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
+          const p = await ctx.newPage();
+          let bytes = 0;
+          p.on("response", async (r) => { try { const h = await r.headerValue("content-length"); if (h) bytes += Number(h); } catch {} });
+          const t0 = Date.now();
+          const marks = [];
+          const mark = (m) => marks.push(`${m} ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+          let total = null;
+          try {
+            await p.goto(SITE + "?quality=low", { timeout: 2 * MIN });
+            await p.waitForSelector("#t-setsail", { state: "visible", timeout: 2 * MIN });
+            mark("title");
+            await steps(p, mark);
+            total = (Date.now() - t0) / 1000;
+            if (await p.evaluate(() => window.__helm?.error).catch(() => "")) mark("ERROR " + (await p.evaluate(() => window.__helm.error)));
+          } catch (e) {
+            mark(`FAILED: ${String(e.message).split("\n")[0]}`);
+          }
+          const line = `TIME30 ${BROWSER} ${kind} run ${i}: ${total == null ? "no finish" : total.toFixed(1) + " s"} | ${marks.join(" | ")} | ${(bytes / 1e6).toFixed(1)} MB`;
+          console.log(line);
+          rows.push({ kind, total });
+          await ctx.close().catch(() => {});
+        }
+      }
+      const sum = Object.keys(KINDS).map((k) => {
+        const t = rows.filter((r) => r.kind === k && r.total != null).map((r) => r.total).sort((a, b) => a - b);
+        return `${k} ${t.map((x) => x.toFixed(1)).join("/")} s${t.length ? ` (median ${t[Math.floor(t.length / 2)].toFixed(1)})` : ""}`;
+      });
+      return sum.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
