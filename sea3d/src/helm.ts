@@ -5,6 +5,7 @@
 // the results card. Display only: the physics is all in the simulator.
 
 import * as THREE from "three";
+import { NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea } from "./water";
@@ -137,6 +138,32 @@ function buildBoat(): void {
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
+  placeDeckLight();
+}
+
+// Night (Leo's review, #334): the sky stays as dark as the night really is, but the boat's
+// own light (its all-round or masthead lantern) falls on its deck and on the foam beside it,
+// so you can still see your boat. Only your boat: a light per ship would cost every
+// material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
+const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
+deckLight.name = "deck_light";
+/** Candela at full night, and the foam's floor of light: tuned on the kayak at 1 AM, moonless. */
+const DECK_CD = 3.2;
+const FOAM_AT_NIGHT = 0.3;
+function placeDeckLight(): void {
+  if (!model) return;
+  deckLight.removeFromParent();
+  const nav = model.root.getObjectByName("nav_lights");
+  const lamp = nav?.children[0];
+  if (nav && lamp) {
+    deckLight.position.copy(lamp.position);
+    nav.add(deckLight);
+  } else {
+    const box = new THREE.Box3().setFromObject(model.root);
+    deckLight.position.set(0, box.max.y + 0.1, 0);
+    model.root.add(deckLight);
+  }
+  deckLight.distance = 6 * Math.max(1, spec.length / KAYAK.length);
 }
 /** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
@@ -256,6 +283,8 @@ const page = {
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
   arrival: false,
+  /** "arrival" while the finish scene plays, before the results card (for tests). */
+  scene: "",
   /** Look the given compass bearing past the boat (for pictures and tests). */
   aim: (bearing: number) => aimAt(bearing),
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
@@ -611,6 +640,26 @@ function newEvents(): void {
   }
 }
 const lastNote: Record<string, number> = {};
+
+// ---------- "Sound on?" (#334) ----------
+// No autoplay, ever; but sound sells the sea, and it's easy to miss the button. So once you
+// set sail, ask once. "No thanks" is remembered (the sound module stores it as muted), and the
+// question goes away by itself after 20 seconds.
+function askSound(): void {
+  if (sound.on || sound.muted) return;
+  const box = $("soundask");
+  box.hidden = false;
+  const close = () => (box.hidden = true);
+  $("soundyes").onclick = () => {
+    sound.enable();
+    close();
+  };
+  $("soundno").onclick = () => {
+    sound.disable(true);
+    close();
+  };
+  setTimeout(close, 20_000);
+}
 
 // ---------- moments (#329) ----------
 // What happens to the boat shows in the picture, not only in a note: time slows to an
@@ -1045,8 +1094,10 @@ async function refreshForecast(): Promise<void> {
 
 async function finish(): Promise<void> {
   const c = await game.result();
-  page.card = c;
   chartDirty = true;
+  // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
+  if (c.boat.outcome === "arrived" && finishesOffLisbon() && !shared) await arrivalScene(c);
+  page.card = c;
   const me = c.boat;
   const gh = c.ghost;
   const head =
@@ -1113,10 +1164,7 @@ async function finish(): Promise<void> {
   bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
   if (me.outcome === "arrived" && finishesOffLisbon()) {
-    const L = PLACES.lisbon;
-    arrival = [L.lat, L.lon];
-    page.arrival = true;
-    aimAt(L.look);
+    showArrival();
     bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   $("r-notes").textContent = bits.join(" ");
@@ -1139,6 +1187,44 @@ async function showStanding(build: string): Promise<void> {
 }
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
+function showArrival(): void {
+  const L = PLACES.lisbon;
+  if (!arrival) aimAt(L.look);
+  arrival = [L.lat, L.lon];
+  page.arrival = true;
+}
+
+/** The finish scene: the view cuts to the coast the finish points at, the camera
+ *  swings slowly round the boat, and a banner says so. The results follow after a
+ *  few seconds, or at once on a click or key. */
+async function arrivalScene(c: Card): Promise<void> {
+  showArrival();
+  page.scene = "arrival";
+  const ahead = c.margin_days !== null && c.margin_days > 0;
+  $("arrivehead").textContent = `You made it, after ${c.boat.days.toFixed(1)} days at sea${ahead ? `, ${c.margin_days!.toFixed(1)} days ahead of the ghost` : ""}!`;
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  controls.autoRotate = !still;
+  controls.autoRotateSpeed = 0.5;
+  const banner = $("arrive");
+  banner.hidden = false;
+  document.body.classList.add("arriving"); // the panels step aside for the view
+  await new Promise<void>((done) => {
+    const end = () => {
+      clearTimeout(timer);
+      removeEventListener("keydown", end);
+      $("arrivego").removeEventListener("click", end);
+      done();
+    };
+    const timer = setTimeout(end, 8000);
+    addEventListener("keydown", end);
+    $("arrivego").addEventListener("click", end);
+  });
+  banner.hidden = true;
+  document.body.classList.remove("arriving");
+  controls.autoRotate = false;
+  page.scene = "";
+}
+
 function finishesOffLisbon(): boolean {
   const t = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
   return kmTo(t, [39.5, -13.5]) < 100;
@@ -1259,6 +1345,7 @@ async function begin(): Promise<void> {
     setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
     $("keyhint").hidden = false;
     setTimeout(hideKeyHint, 60_000);
+    askSound();
   } catch (e) {
     $("loading").hidden = true;
     const err = String(e);
@@ -1596,11 +1683,12 @@ renderer.setAnimationLoop(() => {
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
+    deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
-      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: Math.max(atmos.ambient, FOAM_AT_NIGHT * NAV_NIGHT.value) });
     }
     model.gear.update(
       {
@@ -1632,7 +1720,10 @@ renderer.setAnimationLoop(() => {
   controls.target.y += dy;
   const target = THREE.MathUtils.clamp((Math.hypot(wu, wv) * KN - 15) / 20, 0, 1);
   storm += (target - storm) * Math.min(1, dt * 1.5);
-  const [lat, lon] = arrival ?? (r ? positionAt(r, h) : (SPOT ?? [36.65, -74.94]));
+  // Before the first hour is logged the track is empty (positionAt would be NaN, and a NaN sun
+  // turns the whole picture black, #334): stand at the boat's reported start instead.
+  const st0 = page.status?.boat;
+  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : (SPOT ?? [36.65, -74.94]));
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
