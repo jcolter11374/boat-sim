@@ -183,6 +183,11 @@
   #outcome p { color: var(--dim); margin: 6px 0; }
   #outcome button { font: 600 13px system-ui, sans-serif; margin: 10px 4px 0; padding: 7px 13px; border-radius: 8px;
     border: 1px solid var(--line); background: #1b3352; color: var(--ink); cursor: pointer; }
+  /* One bright next step on an end card (Elena's rule): Watch again / Play again. The rest stay quiet. */
+  #outcome #o-again { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #outcome #o-again:hover { background: #ff9c4a; }
+  #outcome #o-close, #outcome #o-postcard { background: transparent; color: var(--dim); }
+  #outcome #o-close:hover, #outcome #o-postcard:hover { color: var(--ink); border-color: #8ab4ff; }
   #error { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); padding: 16px 20px; display: none; max-width: 520px; }
   .muted { color: var(--dim); font-size: 12px; }
   /* "Pick your launch day" */
@@ -364,9 +369,9 @@
   <div class="muted" id="o-kicker">Voyage over</div>
   <div class="big" id="o-title"></div>
   <p id="o-text"></p>
-  <button id="o-postcard">Save postcard</button>
   <button id="o-again">Watch again</button>
   <button id="o-close">Look around</button>
+  <button id="o-postcard">Save postcard</button>
 </div>
 <div id="game">
   <div class="panel glass">
