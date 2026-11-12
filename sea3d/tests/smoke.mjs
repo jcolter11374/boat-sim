@@ -264,7 +264,15 @@ try {
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
     await openReplay(page); // the close-up buttons live in the replay drawer
-    await page.click('#focus button[data-lane="1"]');
+    await page.click('#focus button[data-lane="1"]', { timeout: 30000 }).catch(async (e) => {
+      // Say where the drawer and the button were, so a CI-only miss can be read from the log.
+      const at = await page.evaluate(() => {
+        const t = document.getElementById("top"), b = document.querySelector('#focus button[data-lane="1"]');
+        const r = (e) => (e ? [...Object.values(e.getBoundingClientRect().toJSON())].slice(0, 4).map(Math.round) : null);
+        return { top: t?.className, body: document.body.className, topBox: r(t), btn: r(b), scroll: t ? [t.scrollTop, t.scrollHeight, t.clientHeight] : null, view: [innerWidth, innerHeight], focusHidden: document.getElementById("focus")?.hidden, playing: window.__replay?.playing, hour: window.__replay?.hour };
+      });
+      fail(`close-up button for the Randolph boat couldn't be clicked (${e.message.split("\n")[0]}): ${JSON.stringify(at)}`);
+    });
     await page.waitForTimeout(800);
     if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
     // Its moving parts: wing, wind vane, rudder, comms light; no propellers.
