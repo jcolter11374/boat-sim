@@ -447,7 +447,7 @@ const B_FUNNEL = { x0: 183, x1: 190, top: 37 };
 
 const F_HULL: HullLines = {
   L: 24, B: 7, T: 2.8, F: 2.1, rake: 2.4, entrance: 9, run: 7, transom: 0.4, bilge: 0.7, sheerFwd: 1.6, fcsle: [6, 0.9],
-  colours: { anti: 0x2a2d31, boot: 0xe9e7e0, deck: 0x6c6f70 }, boot: [-0.25, 0.25],
+  colours: { anti: 0x2a2d31, boot: 0xe9e7e0, deck: 0x6c6f70 }, boot: [0.03, 0.21],
 };
 
 /** Each kind's hull lines (for the paint: boot-top, sheer, forecastle). */
@@ -805,14 +805,16 @@ void main() {`,
     paint *= 1.0 - 0.035 * seam;
     // Rust weeping from the deck edge and its scuppers: thin runs, some long, most short.
     float top = uSheer.x + uSheer.z * (1.0 - smoothstep(uSheer.y - 2.0, uSheer.y + 2.0, vLocal.x));
-    float cx = vLocal.x / 1.9;
+    // Each run wanders a little as it goes down, and splits into strands.
+    float cx = (vLocal.x + 0.3 * (sNoise(vec2(vLocal.y * 0.7, floor(vLocal.x / 1.9) * 3.7)) - 0.5)) / 1.9;
     float ci = floor(cx);
-    float wid = 0.06 + 0.12 * sHash(vec2(ci, 7.7));
+    float wid = (0.06 + 0.12 * sHash(vec2(ci, 7.7))) * min(1.0, uPlate.y / 2.0);
     float inCol = 1.0 - smoothstep(wid * 0.35, wid, abs(fract(cx) - 0.3 - 0.4 * sHash(vec2(ci, 2.9))));
     float down = top - 0.2 - vLocal.y;
     float len = mix(0.8, 9.0, pow(sHash(vec2(ci, 1.3)), 1.5));
     float run = inCol * step(0.8, sHash(vec2(ci, 3.1))) * (1.0 - smoothstep(0.0, len, down)) * step(-0.4, down);
     run *= 0.55 + 0.45 * sNoise(vec2(vLocal.x * 5.0, vLocal.y * 0.5));
+    run *= mix(1.0, smoothstep(0.25, 0.6, sNoise(vec2(vLocal.x * 14.0, vLocal.y * 0.25))), smoothstep(0.3, 2.0, down));
     // Heavy rust under the hawse pipes, where the anchor chain scrapes.
     float hx = abs(vLocal.x - uHawse.x);
     float below = uHawse.y - vLocal.y;
@@ -844,7 +846,7 @@ void main() {`,
   if (hullSkin) {
     // A brown salt-and-grime line where she usually floats, and the curve of the hull
     // shading towards the water: faces turned to the sky paler, the bilge and under the flare darker.
-    float line = 1.0 - smoothstep(0.0, 0.9 + 0.6 * seaN, abs(vLocal.y - 0.3));
+    float line = (1.0 - smoothstep(0.0, (0.9 + 0.6 * seaN) * uPlate.y / 2.6, abs(vLocal.y - 0.3))) * (1.0 - step(uBoot.x, vLocal.y) * step(vLocal.y, uBoot.y)); // not over the boot-top's crisp paint
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.06, 0.04), 0.45 * line);
     vec3 nW = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
     diffuseColor.rgb *= 0.66 + 0.42 * smoothstep(-0.6, 0.55, nW.y);
@@ -869,13 +871,14 @@ void main() {`,
     float edge = top * (0.65 + 0.5 * n);
     // Solid white where it heaps up against the stem, breaking into lace further aft.
     float solid = exp(-xs / (0.09 * uBow.y));
+    float sizeK = clamp(uBow.y / 150.0, 0.25, 1.0); // a small boat's collar is lower (the trawler's would cover her topsides)
     float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y + uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid * smoothstep(0.35, 0.6, n));
     // The stem itself, up to the crest, is all white: nothing dark pokes through where the two sides meet.
     foam = max(foam, (1.0 - smoothstep(2.0, 5.0, vLocal.x)) * (1.0 - smoothstep(top * 0.85, top, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * step(0.15, uBow.x) * smoothstep(0.25, 0.55, n + 0.25 * (1.0 - smoothstep(0.0, 1.5, vLocal.y + uBow.z))));
     // The stem edge itself (its thin end triangles carry the boot-top paint high up) is solid white to the crest.
     foam = max(foam, (1.0 - smoothstep(0.6, 1.6, vLocal.x)) * (1.0 - smoothstep(top * 0.8, top, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * step(0.15, uBow.x));
     // Right at the waterline forward the hull is buried in white water: no dark boot-top showing through.
-    foam = max(foam, (1.0 - smoothstep(1.2, 1.8, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
+    foam = max(foam, (1.0 - smoothstep(1.2 * sizeK, 1.8 * sizeK, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.95), foam * 0.95);
   }`,
       )
