@@ -339,17 +339,16 @@ function showOpenGroups(): void {
 }
 /** A folded section's one line: Power in figures, the others by their picks. */
 function groupSummaries(solarW: number, batteryWh: number): void {
-  if (!cat) return;
-  for (const [title, ids] of GROUPS) {
-    const el = document.getElementById(`gsum-${title.replace(/\W+/g, "-")}`);
-    if (!el) continue;
-    if (title === "Power") {
+  document.querySelectorAll<HTMLElement>(".slot[data-group]").forEach((g) => {
+    const el = g.querySelector<HTMLElement>(".gsum");
+    if (!el) return;
+    if (g.dataset.group === "Power") {
       el.textContent = `${solarW} W solar, ${batteryWh.toLocaleString("en-US")} Wh`;
-      continue;
+      return;
     }
-    const names = ids.filter((id) => cat!.slots.some((x) => x.id === id && shownOptions(x).length)).map((id) => optionOf(cat!, id, design)?.n ?? "").filter(Boolean);
+    const names = Array.from(g.querySelectorAll<HTMLElement>(".sl-pick")).map((p) => p.textContent ?? "").filter(Boolean);
     el.textContent = names.length > 1 ? `${names[0]} and ${names.length - 1} more` : (names[0] ?? "");
-  }
+  });
 }
 
 /** The slot whose options are showing; the rest are one line each. */
