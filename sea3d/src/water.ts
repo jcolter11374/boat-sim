@@ -422,7 +422,9 @@ if (uStreak > 0.001) {
   // wander noises already drawn (no extra noise on Low): not evenly spaced road markings (Elena).
   float thrS = 0.58 + 0.4 * (0.5 - uStreak) + 0.16 * (w2 - 0.5);
   float lanes = smoothstep(thrS, thrS + 0.04, ns) * smoothstep(0.2 + 0.3 * w1, 0.65, fn);
-  float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
+  // Give way to their average well before the dashes go finer than a few pixels: far off
+  // they drew as fine regular dashes (Elena).
+  float streak = mix(lanes, 0.5 * (uStreak + uCover), smoothstep(0.12, 0.6, fpF));
   foamMask = max(foamMask, 0.9 * streak);
 }
 #else
@@ -523,7 +525,8 @@ const FRAG_SKY = /* glsl */ `
 float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
 #ifdef SEA_LITE
 // Low: the deck's colour and no sun glitter under it, without branches (Maya's frame budget).
-radiance = mix(radiance, uSeaSky.rgb, deckS);
+// By day the mirrored deck comes back darker, so the far sea goes slate, not a pale band (Elena).
+radiance = mix(radiance, uSeaSky.rgb * (1.0 - 0.35 * smoothstep(0.1, 0.4, uSunDir.y)), deckS);
 // The body lit grey by the deck, not by the clear sky's blue (Elena: Low read bright blue under a grey deck).
 iblIrradiance = mix(iblIrradiance, vec3(dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722))), deckS);
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
