@@ -81,7 +81,7 @@ body.title #topbar .nav, body.title #topbar .more { display: none; }
 }
 @media (max-width: 480px) {
   #topbar { padding: 0 6px; font-size: 12.5px; } #topbar .brand { margin-right: 4px; } #topbar .brand .bw-mark { font-size: 17px; }
-  #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 78px; padding: 5px 8px; }
+  #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 40vw; padding: 5px 8px; }
   /* Phones: the same words as on a desktop, so Practice moves into More; the chip shows the boat's name (Elena). */
   #topbar .nav.ph-more { display: none; } #topbar .more .menu a.ph { display: block; }
 }
