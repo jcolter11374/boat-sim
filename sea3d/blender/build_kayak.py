@@ -90,7 +90,7 @@ PAINT = HullPaint(
     deck=0xE0601A,
     boot=0xF4F4EE,
     bottom=0x2F383F,
-    lettering="V4",
+    lettering=None,  # no internal name on the hull (Milo, usability, 12 Nov)
     letter_box=(0.42, 0.17, 0.30),
 )
 deck_y = K.deck_y

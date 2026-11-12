@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, type TrimTable } from "../src/helm/wheel.ts";
+import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, rollFromWheel, type TrimTable } from "../src/helm/wheel.ts";
 
 const T: TrimTable = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31_trim.json", import.meta.url), "utf8"));
 const POLAR = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31.json", import.meta.url), "utf8"));
@@ -153,4 +153,16 @@ test("with auto-trim on, the guide skips the trim step", () => {
     g.update(w, 1 / 30);
   }
   assert.equal(g.step, "reef");
+});
+
+test("she leans away from the wind: wind from port rolls her to starboard, and the other way", () => {
+  // Heading east with the wind from the north (on her port side): she leans to starboard (roll > 0).
+  const port = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 90, speedKn: 5 }, SPELL);
+  sail(port, 20);
+  assert.ok(port.s.heelDeg > 3, `she should heel in 12 kn on a reach (${port.s.heelDeg})`);
+  assert.ok(rollFromWheel(port.heelSigned()) > 0, "wind from port: roll to starboard");
+  // Heading west, the same wind is on her starboard side: she leans to port.
+  const stbd = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 270, speedKn: 5 }, SPELL);
+  sail(stbd, 20);
+  assert.ok(rollFromWheel(stbd.heelSigned()) < 0, "wind from starboard: roll to port");
 });

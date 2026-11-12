@@ -109,6 +109,7 @@ PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 
 # note (status "last_pass"). Leo's play, 12 Nov: a 1 km pass stopping the clock
 # felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
 PASS_STOP_SWING_KM = 25.0
+OUTLOOK_HOURS = 48.0  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
 def day_seed(start: datetime) -> int:
@@ -460,8 +461,6 @@ class Game:
         mean speed through the water (m/s), battery change (0-1), km made
         towards the finish, and the hours it actually sailed (shorter if it
         finished, ran aground or reached the end of the weather)."""
-        from boatsim.oceandata.grid import OutsideCoverage
-
         if self.mode != "hands_on":
             raise ValueError("a preview is for hands-on games")
         if heading == AUTO and (sails is not None or engine is not None):
@@ -470,15 +469,24 @@ class Game:
         c = v.c
         # Share what is read-only and big (the weather, the land); copy the rest.
         memo = {id(x): x for x in (c.env, c.forecast, c.land) if x is not None}
-        w = copy.deepcopy(v, memo)
-        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
-        _no_breakdowns(w.c)
         if heading == AUTO:
             steer, base = copy.deepcopy(self._auto, memo)
         else:
             steer = copy.deepcopy(self.helm, memo)
             steer.set_order(heading, power, sails, engine)
             base = copy.deepcopy(self.base, memo)
+        return self._sail_copy(v, steer, base, hours, memo)
+
+    def _sail_copy(self, v: Voyage, steer, base, hours: float, memo: dict) -> dict:
+        """Sail a throw-away copy of voyage `v` for `hours` in the forecast issued
+        now (never the truth), steered by `steer` with `base`, breakdowns off."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        c = v.c
+        memo = {**memo, **{id(x): x for x in (c.env, c.forecast, c.land) if x is not None}}
+        w = copy.deepcopy(v, memo)
+        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
+        _no_breakdowns(w.c)
         # A wrapper round the steerer (a running trim, #350) stays, with the new steerer inside it.
         if hasattr(w.c.autopilot, "inner"):
             w.c.autopilot.inner = steer
@@ -501,6 +509,48 @@ class Game:
             "soc": float(w.state.soc - soc0),
             "km": km0 - self._km_to_finish(w),
             "outcome": self._outcome(w) if w.done else "at_sea",
+        }
+
+    def outlook(self, orders: list[dict], hours: float = OUTLOOK_HOURS) -> dict:
+        """Each order's honest stake against the ghost, for a "Your call" card
+        (helm decisions plan, Leo and Rosa, 12 Nov): a copy of your boat sails
+        each order, and a copy of the ghost sails its autopilot, for `hours` in
+        the forecast issued now (the one the autopilot plans with; never the
+        true weather), breakdowns off. orders: [{"heading", "power"}, ...]
+        (heading may be "auto"). Returns the ghost's km and, for each order, km
+        made towards the finish and the forecast lead over the ghost then
+        (negative: behind). A forecast, so it can be wrong; the card says so."""
+        g = self.ghost
+        memo = {id(x): x for x in (g.c.env, g.c.forecast, g.c.land) if x is not None}
+        ghost = self._sail_copy(
+            g, copy.deepcopy(g.c.autopilot, memo), copy.deepcopy(g.c.base, memo), hours, memo
+        )
+        lead = self.lead_km()
+        out = []
+        for o in orders:
+            p = self.preview(o["heading"], float(o.get("power", self._cruise())), hours=hours)
+            out.append({**o, **p, "lead_km": lead + p["km"] - ghost["km"]})
+        return {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+
+    def best_heading(
+        self, hours: float = OUTLOOK_HOURS, fan=(-30, -20, -10, 0, 10, 20, 30)
+    ) -> dict:
+        """The route check (plan #10): the heading the forecast favours for the
+        next `hours`, from a fan around where the boat points now, at the power
+        in use. Returns the boat's heading now, the best heading, and the km
+        each makes towards the finish (forecast, breakdowns off)."""
+        now = self.mine.state.heading
+        power = self._cruise() if self.on_auto else self.helm.power
+        made = {}
+        for d in fan:
+            h = round(now + d) % 360
+            made[h] = self.preview(h, power, hours=hours)["km"]
+        best = max(made, key=made.get)
+        return {
+            "heading": now,
+            "best": best,
+            "km": made,
+            "gain_km": made[best] - made[round(now) % 360],
         }
 
     @property

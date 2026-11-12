@@ -36,6 +36,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
+import { rollFromWheel } from "./helm/wheel";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
@@ -47,7 +48,7 @@ import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
 import { Cinema, filmButtons } from "./cinema";
-import { OceanSound } from "./sound";
+import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { maybeJson, renderNext, standing, type Board, type Grid } from "./results";
 
@@ -793,7 +794,7 @@ const lastNote: Record<string, number> = {};
 // set sail, ask once. "No thanks" is remembered (the sound module stores it as muted), and the
 // question goes away by itself after 20 seconds.
 function askSound(): void {
-  if (sound.on || sound.muted) return;
+  if (sound.on || sound.muted || sound.remembered) return; // turned on last visit: it comes back at the first click
   const box = $("soundask");
   box.hidden = false;
   const close = () => (box.hidden = true);
@@ -827,7 +828,7 @@ function moment(e: ReplayEvent): void {
     flash("spray");
     slowUntil = now + 4;
   } else if (["part_failed", "ship_strike", "one_motor", "motors_off", "battery_empty"].includes(e.kind)) {
-    sound.alarm();
+    sound.breakdown(e.kind); // the part stopping, then the instrument's chirp
     flash("alarm");
     slowUntil = now + 3;
   } else if (e.kind === "arrived" || e.kind === "finish_line") {
@@ -1143,6 +1144,7 @@ const depthsReady = BayDepths.create().then((d) => {
 });
 const buoys = new Buoys();
 scene.add(buoys.group);
+(window as unknown as { __buoys: Buoys }).__buoys = buoys; // for the proof frames and tests
 function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
   const ms = kn / 1.943844;
   const toward = ((fromDeg + 180) * Math.PI) / 180;
@@ -1169,6 +1171,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
     practiceAt = practiceHere = null;
     const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
     if (ok) {
+      buoys.set([wheel.wheel!.markXY()]); // the drill's mark is a real buoy too
       banner(`Practice ${practiceN}: ${k.kn} knots, ${k.name}.`);
     }
     return;
@@ -1410,6 +1413,11 @@ function banner(text: string): void {
 }
 
 // A small pointer to the next mark (Leo): over it when it's in view, at the screen's edge when it isn't.
+/** The in-view tag fades between these distances (m): the real-size buoy is easy to see by then. GUESS */
+const MARK_TAG_FADE_M = 200;
+const MARK_TAG_GONE_M = 70;
+/** Beyond this (m) the in-view tag stays orange: the buoy is too small to see there. GUESS (Leo) */
+const MARK_TAG_FAR_M = 300;
 const markV = new THREE.Vector3();
 function markPointer(): void {
   const el = $("markptr");
@@ -1433,6 +1441,11 @@ function markPointer(): void {
   el.hidden = false;
   el.dataset.edge = inView ? "" : x < -0.85 ? "left" : x > 0.85 ? "right" : y < 0 ? "down" : "up";
   const d = w.distToMark();
+  // Over the buoy it's a quiet tag that fades once the buoy is plain to see (Elena, 12 Nov);
+  // at the edge it stays a bold orange arrow, as that's the only way to find the mark.
+  // Far off the buoy is a speck: keep the mark's orange so it reads as the mark (Leo); quiet once the buoy shows.
+  el.toggleAttribute("data-far", inView && d > MARK_TAG_FAR_M);
+  el.style.opacity = inView ? String(THREE.MathUtils.clamp((d - MARK_TAG_GONE_M) / (MARK_TAG_FADE_M - MARK_TAG_GONE_M), 0, 1)) : "1";
   el.textContent = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
   el.style.left = `${((x + 1) / 2) * innerWidth}px`;
   el.style.top = `${((1 - y) / 2) * innerHeight}px`;
@@ -1852,6 +1865,7 @@ async function finish(): Promise<void> {
   bits.unshift("Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.");
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
+  sound.settle(); // a soft knock, and the sea drops to half under the card
   void showStanding(c.build);
 }
 
@@ -2228,6 +2242,7 @@ const cine = new Cinema({
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
   toggleSound: () => sound.toggle(),
+  fade: (sec) => sound.duck(sec),
 });
 const sound = new OceanSound();
 filmButtons(cine, sound);
@@ -2521,7 +2536,7 @@ renderer.setAnimationLoop(() => {
   off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
   camera.position.copy(controls.target).add(off);
   // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
-  motion.heel = wheelNow ? THREE.MathUtils.degToRad(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  motion.heel = wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   if (model) {
@@ -2570,7 +2585,7 @@ renderer.setAnimationLoop(() => {
   // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
   const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
-  if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0);
+  if (PRACTICE && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
@@ -2593,7 +2608,11 @@ renderer.setAnimationLoop(() => {
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.ambient);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
-  sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target) });
+  sound.rig = rigOf(spec.key);
+  sound.length = spec.length;
+  if (contact?.splash) sound.splash(contact.splash);
+  const feel = smoothYaw != null ? apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)) : null;
+  sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target), stw, apparent: feel ? Math.hypot(feel.x, feel.z) : undefined, luff: (wheelNow as { luff?: number } | null)?.luff });
   wheelCamera(dt, t);
   markPointer();
   if (!cine.update(dt)) controls.update();
