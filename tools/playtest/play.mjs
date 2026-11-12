@@ -11,7 +11,7 @@
 // Each check prints one PASS/FAIL line with evidence, and saves
 // play-<browser>-<check>.png. Exit code 1 if anything failed.
 import * as pw from "playwright";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const BROWSER = process.env.BROWSER ?? "chromium";
@@ -550,6 +550,66 @@ const CHECKS = {
       return `menu: ${menu.join(" / ")}; sea panel back${way ? ' with "Sail this sea"' : ""}; ${links.length} bar links all open (${links.map((l) => l.text).join(", ")})`;
     },
   },
+  // Not a pass/fail check: run by name only (`play.mjs look`, or the playtest dispatch's
+  // "checks" input). Screenshots of the live pages at 1280x720 and High quality for
+  // the Creative Director, whose sandbox can't open github.io. The thread sandboxes
+  // can't fetch run artifacts either, so each JPEG is also printed to the log in base64
+  // between LOOK-BEGIN/LOOK-END lines, to be decoded back into files from the job log.
+  look: {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 82 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      const go = async (path, ready, settle = 4000) => {
+        await page.goto(SITE + path, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(ready, null, { timeout: 3 * MIN }).catch(() => {});
+        await page.waitForTimeout(settle);
+      };
+      // 1. Title screen over the sea.
+      await go("", () => window.__sea3d && window.__sea3d.frames > 30, 6000);
+      await shot("01-index-title");
+      // 2. Helm start card; 3. after Set sail, at about day 2, paused.
+      await go("helm.html", () => window.__helm && window.__helm.frames > 30, 5000);
+      await shot("02-helm-start-card");
+      await page.click("#go").catch(() => {});
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN }).catch(() => {});
+      await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+      await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 2 || window.__helm.clock === 0, null, { timeout: 4 * MIN }).catch(() => {});
+      if (!(await page.locator("#decide").isVisible().catch(() => false))) await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForTimeout(4000);
+      await shot("03-helm-sailing-day2");
+      // 4. Practice sailing.
+      await go("helm.html?practice", () => window.__helm && window.__helm.frames > 30, 6000);
+      await shot("04-practice-sailing");
+      // 5. Watch a voyage, default view; 6-8. cinematic, three frames 10 s apart.
+      await go("voyage.html", () => window.__replay && (window.__replay.frames ?? 0) > 30, 8000);
+      await shot("05-voyage-default");
+      await page.click("#cinebtn", { noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+      for (const n of ["06", "07", "08"]) {
+        await page.waitForTimeout(n === "06" ? 4000 : 10_000);
+        await shot(`${n}-voyage-cinematic`);
+      }
+      // 9. Boatyard, 10. race, 11. leaderboard.
+      await go("boatyard.html", () => window.__yard?.ready && window.__yard.frames > 30, 5000);
+      await shot("09-boatyard");
+      await go("race.html", () => document.readyState === "complete", 5000);
+      await shot("10-race");
+      await go("leaderboard.html", () => window.__leaderboard?.ready, 3000);
+      await shot("11-leaderboard");
+      return `${shots.length} looks: ${shots.join(", ")}`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
@@ -652,7 +712,7 @@ async function runCheck(browser, name) {
   return { name, ok: !problems.length, detail: problems.length ? problems : [result], notes: o?.notes ?? [], secs: Math.round((Date.now() - t0) / 1000) };
 }
 
-const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
+const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS).filter((n) => !CHECKS[n].manual);
 for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
 // Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
 // headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.
