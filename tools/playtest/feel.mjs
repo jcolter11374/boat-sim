@@ -75,8 +75,16 @@ async function watchInputs(page) {
 }
 
 /** Wall time of one sail button, and the frame rate while the simulator works. */
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if ((await page.locator("#orders-tab").count()) && !(await page.locator("#orders.open").count())) {
+    await page.click("#orders-tab");
+    await page.waitForTimeout(400); // it slides in
+  }
+}
 async function sail(page, button) {
   const t0 = Date.now();
+  await openOrders(page);
   const during = frames(page, 4); // overlaps the busy period
   await page.click(button, { noWaitAfter: true });
   await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 10 * MIN });
@@ -114,6 +122,7 @@ async function play(browser, sc) {
 
     // Controls: three clicks around the heading dial, then a power slider drag.
     await watchInputs(page);
+    await openOrders(page);
     const dial = await page.locator("#dial").boundingBox();
     if (dial) {
       const cx = dial.x + dial.width / 2, cy = dial.y + dial.height / 2, rad = Math.min(dial.width, dial.height) * 0.38;

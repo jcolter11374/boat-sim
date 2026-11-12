@@ -207,12 +207,25 @@ const STYLE = `
 @keyframes poi-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes poi-time { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .poi-card, .poi-card .poi-time { animation: none; } .poi-card.poi-out { transition: none; } }
+/* Compact (the helm): narrower, two lines and "Read more", then it shrinks to a tab at the edge. */
+.poi-card.poi-compact { width: min(300px, calc(100vw - 24px)); padding: 9px 12px 10px; font-size: 12.5px; background: rgba(8,16,28,.72); }
+.poi-card.poi-compact .poi-t { font-size: 14.5px; margin: 3px 0 2px; }
+.poi-card.poi-compact:not(.poi-open) .poi-x-text { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.poi-card.poi-compact:not(.poi-open) .poi-src, .poi-card.poi-compact:not(.poi-open) .poi-more { display: none; }
+.poi-card .poi-read { background: none; border: 0; padding: 0; margin-top: 3px; font: inherit; font-size: 11.5px; color: #8ab4ff; cursor: pointer; }
+.poi-card.poi-open .poi-read { display: none; }
+.poi-card.poi-tab { width: auto; max-width: 260px; padding: 6px 12px; cursor: pointer; }
+.poi-card.poi-tab > :not(.poi-t):not(.poi-time) { display: none !important; }
+.poi-card.poi-tab .poi-t { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poi-card.poi-tab .poi-t::after { content: " ›"; color: var(--c, #5cc8e0); }
 `;
 
 /** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom). Each stays SHOW_S seconds (or until closed); points passed
  *  together (three at the drop) wait their turn. */
 export class PoiCards {
   static SHOW_S = 25;
+  /** Compact cards shrink to a tab after this long (Leo's helm plan, item 7). */
+  static TAB_S = 12;
   readonly shown: string[] = [];
   private el: HTMLElement | null = null;
   private timer = 0;
@@ -220,7 +233,11 @@ export class PoiCards {
   private more: HTMLElement | null = null;
   private left = 0;
   private since = 0;
-  constructor(private doc: Document = document) {
+  private tabTimer = 0;
+  constructor(
+    private doc: Document = document,
+    private readonly opts: { compact?: boolean } = {},
+  ) {
     if (!doc.getElementById("poi-style")) {
       const s = doc.createElement("style");
       s.id = "poi-style";
@@ -262,6 +279,23 @@ export class PoiCards {
     k.append(badge, where);
     add("div", "poi-t", p.poi.title);
     add("div", "poi-x-text", p.poi.text);
+    if (this.opts.compact) {
+      el.classList.add("poi-compact");
+      const read = add("button", "poi-read", "Read more");
+      read.addEventListener("click", (e) => {
+        e.stopPropagation();
+        el.classList.add("poi-open");
+        window.clearTimeout(this.tabTimer);
+      });
+      el.addEventListener("click", () => {
+        if (!el.classList.contains("poi-tab")) return;
+        el.classList.remove("poi-tab");
+        el.classList.add("poi-open");
+      });
+      this.tabTimer = window.setTimeout(() => {
+        if (this.el === el && !el.matches(":hover") && !el.classList.contains("poi-open")) el.classList.add("poi-tab");
+      }, PoiCards.TAB_S * 1000);
+    }
     const src = add("div", "poi-src", "Source: ");
     const url = safeUrl(p.poi.url);
     if (url) {
@@ -306,6 +340,7 @@ export class PoiCards {
   /** Take the card down: `now` at once (a jump in time), and `clear` drops the waiting ones too. */
   hide(now = false, clear = now): void {
     window.clearTimeout(this.timer);
+    window.clearTimeout(this.tabTimer);
     if (clear) this.waiting = [];
     const el = this.el;
     this.el = null;

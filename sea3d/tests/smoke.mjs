@@ -14,6 +14,13 @@ const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
 const fail = (msg) => { console.error("FAIL:", msg); server.kill(); process.exit(1); };
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if ((await page.locator("#orders-tab").count()) && !(await page.locator("#orders.open").count())) {
+    await page.click("#orders-tab");
+    await page.waitForTimeout(400); // it slides in
+  }
+}
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
@@ -570,6 +577,7 @@ try {
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
     if (hm.ready) {
+      await openOrders(page);
       await page.click("#s6");
       await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
       // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
@@ -607,6 +615,7 @@ try {
       if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
       let hops = 0;
       for (; hops < 40 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+        await openOrders(page);
         await page.click("#sevent");
         await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
         st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
@@ -697,6 +706,7 @@ try {
       // Published challenge files with a simulator that can't sail them is a live bug: the picker offers a game that won't start.
       if (!ch.ready || ch.err || ch.id !== chFile.id) fail(`helm challenge ${chFile.id} didn't start: ${JSON.stringify(ch)}`);
       else {
+        await openOrders(page);
         await page.click("#s6");
         await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
         const s = await page.evaluate(() => ({ st: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));

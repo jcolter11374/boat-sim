@@ -72,9 +72,17 @@ async function helmStart(page, setup = async () => {}) {
   }
 }
 
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if ((await page.locator("#orders-tab").count()) && !(await page.locator("#orders.open").count())) {
+    await page.click("#orders-tab");
+    await page.waitForTimeout(400); // it slides in
+  }
+}
 async function hop(page, button) {
   const t0 = Date.now();
   const day0 = await page.evaluate(() => window.__helm.status?.day ?? 0);
+  await openOrders(page);
   await page.click(button);
   await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 10 * MIN });
   const st = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error, over: window.__helm.status?.over }));
@@ -268,6 +276,7 @@ const CHECKS = {
       const turned = ((h1 - h0 + 540) % 360) - 180;
       must(turned > 10, `holding the right arrow 1.5 s only turned from ${h0}° to ${h1}°`);
       out.push(`holding → turned ${h0}° to ${h1}°`);
+      await openOrders(page);
       const b = page.locator("#b-wheel");
       must(await b.isVisible(), `no "Take the wheel" button on the cruiser`);
       await b.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
@@ -420,6 +429,7 @@ const CHECKS = {
       let hops = 0;
       for (; hops < 60 && !(await page.evaluate(() => window.__helm.card)); hops++) {
         // The voyage can end while the button is hidden behind the card: wait for the card then.
+        if (!(await page.evaluate(() => window.__helm.card))) await openOrders(page);
         if (!(await page.locator("#sevent").isVisible())) {
           await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN }).catch(() => {
             throw new CheckFail(`"Sail until something happens" disappeared at hop ${hops} and no results card came`);

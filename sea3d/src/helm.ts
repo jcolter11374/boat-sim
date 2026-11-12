@@ -44,7 +44,8 @@ import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { loadPorts, portHint, portName } from "./helm/ports";
-import { localTime } from "./replay/localtime";
+import { localTime, shortLocal } from "./replay/localtime";
+import { Hud, showStrip } from "./helm/hud";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
@@ -269,6 +270,8 @@ const page = {
   standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
   frames: 0,
+  /** Where the lens has slid the boat (fractions of the screen; Leo's plan item 1). */
+  third: [0, 0] as number[],
   /** The voyage hour the picture shows, and the hour the simulator has reached (for tests). */
   hour: 0,
   simHour: 0,
@@ -331,6 +334,16 @@ game.onProgress = (t) => {
 void sandboxThere(sandboxBase).then((ok) => (ok ? game.warm() : undefined));
 
 const compass = new Compass($<HTMLCanvasElement>("dial"), (deg) => setOrder(deg));
+// The sailing screen's panels (src/helm/hud.ts): strip, drawer, corner map, toasts.
+const hud = new Hud({
+  mapResized: () => {
+    chartDirty = true;
+  },
+  forecastOpened: () => {
+    if (lastForecast) drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
+  },
+  keysOff: () => !page.ready || !!page.status?.over,
+});
 
 function rep(which = watch): Replay | null {
   return which === "boat" ? game.boat : game.ghost;
@@ -442,6 +455,7 @@ function showOrder(): void {
       : order === "finish"
         ? "Straight at the finish"
         : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+  $("c-orderv").textContent = order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
   $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
   $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
@@ -665,6 +679,9 @@ function drawWhen(force = false): void {
   $("day").textContent = day;
   $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
   $("local").textContent = localTime(ms, whenHere[0], whenHere[1]);
+  // The strip's date beside the day: local, short; UTC on hover.
+  $("c-date").textContent = shortLocal(ms, whenHere[0], whenHere[1]);
+  $("c-date").title = $("when").textContent ?? "";
 }
 
 function showStatus(): void {
@@ -710,6 +727,14 @@ function showStatus(): void {
     $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
   }
   compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
+  // The race with the ghost; in base mode, also what base knows (the picture's numbers would be the truth).
+  showStrip(
+    est
+      ? { lead, guess: true, heading: last?.hdg ?? null, speedKn: null, ...(s.sailing ? { heel: null } : { battery: socNow == null ? null : soc }) }
+      : { lead, guess: false },
+  );
+  $("m-togo").textContent = `${est ? "about " : ""}${Math.round(toGo).toLocaleString()} km to go`;
+  $("c-wind").title = `${$("weather").textContent}. Click for the 5-day forecast (F)`;
   if (s.mode === "base" && s.base) {
     const last = dayOf(s.base.last_report.t);
     const w = s.base.waiting;
@@ -723,17 +748,10 @@ function showStatus(): void {
 }
 
 // ---------- notes ----------
+/** A toast at the top (Leo's plan, item 6): gone on its own, longer for a warning; the reason
+ * the clock stopped stays until it runs again. All of them go into the big map's log. */
 function note(text: string, when: string, colour: string): void {
-  const el = document.createElement("div");
-  el.className = "note glass";
-  el.style.borderLeftColor = colour;
-  el.innerHTML = `<div class="when"></div><div class="txt"></div>`;
-  (el.querySelector(".when") as HTMLElement).textContent = when;
-  (el.querySelector(".txt") as HTMLElement).textContent = text;
-  const box = $("notes");
-  box.prepend(el);
-  while (box.children.length > 5) box.lastElementChild?.remove();
-  setTimeout(() => el.classList.add("old"), 12000);
+  hud.toast(text, when, colour, { warn: colour === TONE_COLOUR.warn || colour === TONE_COLOUR.bad, sticky: /^Paused:/.test(text) });
 }
 
 function newEvents(): void {
@@ -919,6 +937,8 @@ function setRate(r: number, drain = false): void {
   if (r > 0) {
     $("decide").hidden = true;
     $("fcbox").classList.remove("lit");
+    hud.unstick();
+    hud.clockRuns();
     lastRate = r;
     if (!rate) armed = untilOptions();
   } else armed = null;
@@ -1450,17 +1470,14 @@ $("b-wheel").addEventListener("click", (e) => {
   (e.currentTarget as HTMLElement).blur(); // the keys go to the wheel, not back to this button
   void takeWheel();
 });
-/** "?" (or K) brings the key list back, and hides it again. */
-function toggleKeyHint(): void {
-  const k = $("keyhint");
-  const showing = !k.hidden && !k.classList.contains("gone");
-  if (showing) return hideKeyHint();
-  clearTimeout(keyHintTimer);
-  k.classList.remove("gone");
-  k.hidden = false;
-}
 addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
+  // N: sound on or off, at the wheel or not (one key, one meaning: Elena).
+  if (e.code === "KeyN" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea") && document.body.classList.contains("sailing")) {
+    e.preventDefault();
+    sound.toggle();
+    return;
+  }
   // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's (practice has no game).
   if (wheel.on && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
     if (e.code === "KeyV" && !e.repeat) {
@@ -1479,18 +1496,31 @@ addEventListener("keydown", (e) => {
     void takeWheel();
     return;
   }
+  if (hud.key(e)) {
+    e.preventDefault();
+    return;
+  }
+  if (!e.repeat && e.code === "KeyC") {
+    e.preventDefault();
+    $("cinebtn").click();
+    return;
+  }
   const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
     setRate(rate ? 0 : lastRate);
   } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
   else if (e.key === "?" || e.code === "KeyK") {
-    toggleKeyHint();
+    hideKeyHint();
+    hud.keys();
     e.preventDefault();
     return;
   } else if (ax) {
     // The autopilot sets its own power (#327); steering takes the boat off it.
-    if (!(ax.axis === "power" && order === "auto") && !e.repeat) axes[ax.axis].down(ax.dir, e.shiftKey, performance.now());
+    if (!(ax.axis === "power" && order === "auto") && !e.repeat) {
+      axes[ax.axis].down(ax.dir, e.shiftKey, performance.now());
+      hud.peekOrders(); // the drawer peeks open to show the dial moving
+    }
   } else if (e.key === "Shift") {
     axes.heading.setFine(true);
     axes.power.setFine(true);
@@ -1682,6 +1712,7 @@ function showDecision(d: { text: string; choices: Choice[] }): void {
   }
   $("decide").hidden = false;
   $("fcbox").classList.add("lit");
+  hud.forecast(true, true);
 }
 
 /** Things to say once the picture reaches a voyage hour: the simulator runs ahead of it. */
@@ -1954,18 +1985,13 @@ async function begin(): Promise<void> {
     if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
-    else if (spec === RANDOLPH)
-      note(`You have the helm of ${loadMyBoat()?.name ?? "your boat"}. Its wing sail trims itself: pick a heading; time is running (change its speed at the top). Power only matters if you fitted motors in the Boatyard.`, d, TONE_COLOUR.info);
-    else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies. Time is running: change its speed at the top.`, d, TONE_COLOUR.info);
-    else note("You're under way, at 6 hours a second. Steer with the dial or the arrow keys, and set the power; change the speed or pause at the top.", d, TONE_COLOUR.info);
-    // #327: say why an untouched game stays level with the ghost.
-    if (!shared && mode === "hands_on" && order === "auto")
-      note("For now the autopilot is steering, exactly as it steers the ghost, so change nothing and the two boats stay level. Pick a heading on the dial, or Aim at the finish, to take over.", d, TONE_COLOUR.info);
+    // The game's hints are one coach line in the orders drawer, open for the first seconds (Leo's plan).
     if (page.status?.over) await finish();
     // Time runs from the start, at the speed a hop used to play at. A shared game opens
     // paused where it was left; ?clock=paused starts paused (for tests).
     forecastAt = page.status!.day * 24;
     document.body.classList.add("sailing");
+    hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "Steer here, or with ← →. O opens and closes this.");
     $("loading").hidden = true;
     setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
     $("keyhint").hidden = false;
@@ -2175,6 +2201,7 @@ const clock = new THREE.Clock();
 const bowW = new THREE.Vector3();
 let last = 0;
 let smoothYaw: number | null = null;
+let stripAt = -1;
 let storm = 0;
 let rigHeave = 0;
 const ghostTag = $("ghosttag");
@@ -2199,7 +2226,7 @@ function showWreck(lat: number, lon: number): void {
 }
 const poiSeen = new Set<string>();
 let poiH = 0;
-const poiCards = new PoiCards();
+const poiCards = new PoiCards(document, { compact: true });
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   page.pois.loaded = p.length;
@@ -2283,6 +2310,90 @@ function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: numb
     credit.dataset.text = text;
     credit.textContent = text ? `${text} · ` : "";
   }
+}
+
+// ---------- your order on the water, and the boat on a third (Leo's plan, items 1 and 4) ----------
+/** A faint orange line ahead of the boat along your order, lying on the waves, so you see where
+ * you're steering with the drawer shut. */
+const ORDER_PTS = 32;
+const orderGeo = new THREE.BufferGeometry();
+orderGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(ORDER_PTS * 2 * 3), 3));
+{
+  // A ribbon that fades out along its length: alpha in the vertex colours.
+  const col = new Float32Array(ORDER_PTS * 2 * 4);
+  for (let i = 0; i < ORDER_PTS; i++) {
+    const a = Math.min(1, i / 3) * (1 - i / (ORDER_PTS - 1)) ** 1.3;
+    for (const k of [0, 1]) col.set([1, 0.54, 0.16, a], (i * 2 + k) * 4);
+  }
+  orderGeo.setAttribute("color", new THREE.BufferAttribute(col, 4));
+  const idx: number[] = [];
+  for (let i = 0; i < ORDER_PTS - 1; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  orderGeo.setIndex(idx);
+}
+const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+orderLine.frustumCulled = false;
+orderLine.visible = false;
+orderLine.renderOrder = 11; // over the sea, like the wake
+scene.add(orderLine);
+function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: number): void {
+  const s = page.status;
+  const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare");
+  orderLine.visible = on;
+  if (!on || !s) return;
+  const to =
+    typeof order === "number"
+      ? order
+      : order === "finish"
+        ? bearing([s.boat.lat, s.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number])
+        : hdg;
+  const a = THREE.MathUtils.degToRad(to);
+  const dx = Math.sin(a);
+  const dz = -Math.cos(a);
+  const half = Math.max(0.07, spec.length * 0.012);
+  const from = spec.length * 0.7;
+  const len = Math.max(24, spec.length * 7);
+  const pos = orderGeo.getAttribute("position") as THREE.BufferAttribute;
+  for (let i = 0; i < ORDER_PTS; i++) {
+    const d = from + (len * i) / (ORDER_PTS - 1);
+    const x = dx * d;
+    const z = dz * d;
+    const y = heightAt(comps, x, z, t) + 0.08;
+    pos.setXYZ(i * 2, x - dz * half, y, z + dx * half);
+    pos.setXYZ(i * 2 + 1, x + dz * half, y, z - dx * half);
+  }
+  pos.needsUpdate = true;
+  // Faint: a hint on the water, not a beam. Fainter still at night.
+  (orderLine.material as THREE.MeshBasicMaterial).opacity = 0.18 + 0.32 * Math.min(1, atmos.ambient * 2);
+}
+
+/** The default view keeps the boat on the lower third, with room ahead of the bow and clear
+ * of the strip: the lens slides, the orbit doesn't (so dragging still turns about the boat). */
+const third = { x: 0, y: 0 };
+const ahead = new THREE.Vector3();
+const here0 = new THREE.Vector3();
+function frameBoat(dt: number): void {
+  const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
+  let tx = 0;
+  let ty = 0;
+  if (want && smoothYaw !== null) {
+    here0.set(0, 0, 0).project(camera);
+    ahead.set(Math.cos(smoothYaw) * 20, 0, -Math.sin(smoothYaw) * 20).project(camera);
+    const side = ahead.x - here0.x; // + when the bow points right on screen
+    // A boat that already fills much of the frame (zoomed in, or a big yacht) stays nearer the
+    // middle, so the strip never covers its hull.
+    const fill = spec.length / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    const room = THREE.MathUtils.clamp((0.5 - fill) / 0.3, 0, 1);
+    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.1 * room : 0;
+    ty = -0.1 * room;
+  }
+  const k = Math.min(1, dt * 1.2);
+  third.x += (tx - third.x) * k;
+  third.y += (ty - third.y) * k;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  if (Math.abs(third.x) < 1e-3 && Math.abs(third.y) < 1e-3) {
+    if (camera.view?.enabled) camera.clearViewOffset();
+  } else camera.setViewOffset(W, H, third.x * W, third.y * H, W, H);
 }
 
 /** Turn the camera to look the given compass bearing past the boat, keeping its distance. */
@@ -2433,6 +2544,7 @@ renderer.setAnimationLoop(() => {
   wheelCamera(dt, t);
   markPointer();
   if (!cine.update(dt)) controls.update();
+  frameBoat(dt);
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
   // The other boat: a tag on the horizon in its direction, with the distance.
@@ -2453,8 +2565,11 @@ renderer.setAnimationLoop(() => {
       ghostTag.style.left = `${((proj.x + 1) / 2) * window.innerWidth}px`;
       ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
       ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
+      if (km < 1) ghostTag.hidden = true; // the strip says "level"
     }
   } else ghostTag.hidden = true;
+  showOrderLine(hdg, comps, t);
+  page.third = [third.x, third.y];
   renderer.getDrawingBufferSize(bufSize);
   mirror.setSize(bufSize.x, bufSize.y);
   mirror.update(renderer, scene, camera, sea.waveHeight);
@@ -2479,6 +2594,21 @@ renderer.setAnimationLoop(() => {
   }
   if (!(r && page.ready)) $("clock").textContent = "";
   else drawWhen();
+  // The strip's instruments read the picture too, a few times a second (not in base mode: base only knows its reports).
+  if (r && page.ready && t - stripAt > 0.25) {
+    stripAt = t;
+    const live: Parameters<typeof showStrip>[0] = { windKn: Math.hypot(wu, wv) * KN, windTo: (Math.atan2(wu, wv) * 180) / Math.PI, waves: hs };
+    if (!hidden()) {
+      live.heading = wheelNow ? wheelNow.heading : hdg;
+      live.speedKn = stw * KN;
+      // Before the first logged hour there's no reading yet: the status's own stays.
+      const heel = r.heel ? valueAt(r, r.heel, h) : null;
+      const soc = r.heel ? null : valueAt(r, r.soc, h);
+      if (heel != null) live.heel = heel;
+      if (soc != null) live.battery = soc * 100;
+    }
+    showStrip(live);
+  }
   page.frames++;
   page.hour = hour;
   page.simHour = shownTo;

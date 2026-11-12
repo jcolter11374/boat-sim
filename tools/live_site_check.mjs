@@ -79,7 +79,17 @@ async function frameTimes(page, secs = 3) {
 }
 
 /** Click, and if it gets stuck say which control it was and why (Maya, #293). */
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if ((await page.locator("#orders-tab").count()) && !(await page.locator("#orders.open").count())) {
+    await page.click("#orders-tab");
+    await page.waitForTimeout(400); // it slides in
+  }
+}
+const IN_DRAWER = /^#(s6|sday|sevent|share|send|b-wheel|b-auto|b-finish|b-route)$/;
+
 async function clickNamed(page, selector, what, opts = {}) {
+  if (IN_DRAWER.test(selector)) await openOrders(page);
   try {
     await page.click(selector, opts);
   } catch (e) {

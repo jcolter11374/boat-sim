@@ -23,16 +23,8 @@
   button[aria-pressed="true"] { background: rgba(255,138,42,.18); border-color: var(--orange); }
   button:disabled { opacity: .5; cursor: progress; }
   button.go { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
-  #status { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; width: 330px; padding: 12px 14px; }
-  #status h1 { margin: 0; font-size: 18px; display: flex; justify-content: space-between; align-items: baseline; }
-  #status h1 span { font-size: 13px; color: var(--dim); font-weight: 600; }
-  #status .row { margin-top: 4px; font-size: 13px; }
   #bat { height: 6px; background: rgba(255,255,255,.1); border-radius: 3px; margin-top: 3px; overflow: hidden; }
   #batbar { height: 100%; width: 100%; background: var(--good); transition: width .4s; }
-  #orders { position: fixed; left: 12px; bottom: 12px; width: 330px; padding: 12px 14px; }
-  #orders h2, #mapbox h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: .9px; text-transform: uppercase; color: var(--dim); }
-  #dialrow { display: flex; gap: 12px; align-items: center; }
-  #dial { width: 150px; height: 150px; cursor: crosshair; touch-action: none; flex: none; }
   #dialrow .side { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
   #ordertext { font-weight: 700; font-size: 14px; }
   .key i { display: inline-block; width: 10px; height: 3px; margin-right: 5px; vertical-align: middle; }
@@ -52,23 +44,12 @@
   #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
   #arrive { position: fixed; top: calc(var(--bar, 0px) + 60px); left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
     padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
-  body.arriving #status, body.arriving #orders, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
-  body.arriving #timebar, body.arriving #timestate, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
+  body.arriving #strip, body.arriving #orders, body.arriving #orders-tab, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
+  body.arriving #keylist, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
   #arrive .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #3ddc97; }
   #arrivehead { font-size: 20px; font-weight: 650; margin: 2px 0 6px; }
   #arrive p { margin: 0 0 10px; font-size: 13px; color: var(--dim); }
   @keyframes arrive-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
-  #timebar { position: fixed; top: calc(var(--bar, 0px) + 46px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;
-    padding: 5px 6px 5px 12px; border-radius: 999px; z-index: 6; }
-  #timebar[hidden] { display: none; }
-  #timebar .t { font: 600 12px system-ui, sans-serif; color: var(--dim); margin-right: 4px; white-space: nowrap; }
-  #timebar button { padding: 5px 10px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; }
-  #timebar #t-pause { font-size: 13px; min-width: 38px; }
-  #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
-  #timestate { position: fixed; top: calc(var(--bar, 0px) + 84px); left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
-    text-shadow: 0 1px 4px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none;
-    background: rgba(10,18,30,.45); padding: 1px 9px; border-radius: 10px; } /* readable on a bright sky */
-  #timestate:empty, #timestate[hidden] { display: none; }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
   #decide[hidden] { display: none; } /* display:flex above would otherwise beat [hidden] */
@@ -86,11 +67,6 @@
   @keyframes flash-out { from { opacity: 1; } to { opacity: 0; } }
   @keyframes flash-pulse { from { opacity: 0; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { #flash.spray, #flash.alarm { animation-duration: .01s; } }
-  #keyhint { position: fixed; top: calc(var(--bar, 0px) + 106px); left: 50%; transform: translateX(-50%); font: 500 11.5px system-ui, sans-serif;
-    color: rgba(220,232,246,.85); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s;
-    background: rgba(10,18,30,.4); padding: 1px 9px; border-radius: 10px; }
-  #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
-  @media (max-width: 700px) { #timebar .t { display: none; } #timebar button { padding: 5px 8px; } }
   /* Take the wheel (Rosa): the sailing panel, bottom centre. */
   #b-wheel { background: rgba(61,220,151,.18); border-color: #3ddc97; font-weight: 600; }
   /* At the wheel (Rosa): one slim strip at the bottom edge, the goal in a banner at the top (Elena: the world gets the screen). */
@@ -164,14 +140,14 @@
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
   #trimchip[hidden] { display: none; }
   /* While at the wheel the voyage controls wait. */
-  body.at-wheel #timebar, body.at-wheel #timestate, body.at-wheel #keyhint { display: none; }
-  body.at-wheel #orders, body.at-wheel #fcbox { visibility: hidden; }
+  body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
+  body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
   #go.big { display: block; width: 100%; padding: 13px; font-size: 17px; margin: 14px 0 6px; border-radius: 11px; }
   /* Before you set sail only the start card shows (Nina's review, item 1): the game's
      own controls appear with the game. visibility, not display, so canvases keep their size. */
   body:not(.sailing) #status, body:not(.sailing) #orders, body:not(.sailing) #fcbox, body:not(.sailing) #mapbox,
-  body:not(.sailing) #notes, body:not(.sailing) #clock { visibility: hidden; }
+  body:not(.sailing) #notes, body:not(.sailing) #strip, body:not(.sailing) #orders-tab { visibility: hidden; }
   #loading { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 16px 22px; min-width: 280px; text-align: center; z-index: 7; }
   #loading[hidden] { display: none; }
   #loading .spin { width: 22px; height: 22px; margin: 0 auto 8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: var(--orange); animation: spin 1s linear infinite; }
@@ -195,23 +171,6 @@
   #baseline:empty { display: none; }
   #busy { display: none; margin-top: 6px; font-size: 12px; color: var(--warn); }
   body.busy #busy { display: block; }
-  #fcbox { position: fixed; left: 356px; right: 376px; bottom: 12px; padding: 8px 10px 6px; }
-  #fc { width: 100%; height: 70px; display: block; }
-  #clock:empty { display: none; }
-  #mapbox { position: fixed; right: 12px; bottom: 14px; width: 352px; padding: 10px 12px; }
-  #chart { width: 100%; height: 190px; display: block; border-radius: 8px; }
-  #watch { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; }
-  #watch button { padding: 4px 9px; font-size: 12px; }
-  #film { display: flex; gap: 6px; margin-top: 6px; } #film button { padding: 4px 9px; font-size: 12px; }
-  #notes { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; display: flex; flex-direction: column; gap: 6px; }
-  .note { padding: 7px 10px; border-left: 4px solid #8ab4ff; font-size: 13px; transition: opacity 1s; }
-  .note .when { font-size: 11px; color: var(--dim); }
-  .note.old { opacity: .55; }
-  #ghosttag { position: fixed; transform: translate(-50%, -120%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
-    background: rgba(10,22,38,.55); border: 1px solid rgba(200,212,230,.45); border-radius: 8px; padding: 2px 8px; pointer-events: none; white-space: nowrap; }
-  #ghosttag::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 1px; height: 6px; background: rgba(200,212,230,.6); }
-  #clock { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 50%; transform: translateX(-50%); font: 700 15px system-ui, sans-serif; background: rgba(10,22,38,.55); border-radius: 8px; padding: 2px 10px;
-    text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   .overlay { position: fixed; inset: 0; top: var(--bar, 0px); display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
   .overlay[hidden] { display: none; }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
@@ -231,14 +190,160 @@
   #r-table th { text-align: left; color: var(--dim); font-weight: 600; padding: 3px 5px; }
   #r-table td { padding: 4px 5px; border-top: 1px solid var(--line); }
   /* Point-of-interest cards (src/pois.ts): above the forecast strip, clear of the chart. */
-  :root { --poi-right: 376px; --poi-bottom: 150px; }
-  @media (max-width: 1100px) { #fcbox { left: 12px; right: 12px; bottom: 260px; } #notes { width: 240px; } }
-  @media (max-width: 1100px) { :root { --poi-right: 12px; --poi-bottom: 400px; } }
+
+  /* ---------- The sailing screen (Leo's layout plan, approved by Elena 12 Nov; built by Jonas) ----------
+     The world gets the screen: one instrument strip at the bottom, the orders in a drawer on the left,
+     a corner map top right, toasts top centre. Everything else is one key or one click away. */
+  :root { --hud: rgba(8,16,28,.46); --hud-solid: rgba(8,16,28,.82); --hud-line: rgba(200,220,245,.14);
+    --strip-w: min(960px, calc(100vw - 16px)); --strip-h: 58px; --edge: 10px; }
+  .hud { background: var(--hud); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); border-radius: 10px; }
+  .num, #strip .v, #wheel .w-cell b, #wheel-goal { font-variant-numeric: tabular-nums; }
+  button.x { background: none; border: 0; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--dim); }
+  button.x:hover { color: var(--ink); }
+  /* The site's bar slides up once you set sail; the mouse at the top edge or Esc brings it back. */
+  body.sailing.immersive { --bar: 0px; }
+  body.sailing.immersive #topbar { height: 40px; transform: translateY(-100%); transition: transform .35s ease; }
+  body.sailing.immersive.peek #topbar { transform: none; }
+  body.sailing #topbar { transition: transform .35s ease; }
+
+  /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
+  #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
+    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 26px; align-items: center; gap: 0; padding: 0 8px 0 14px; z-index: 6; }
+  #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; height: 42px; box-sizing: border-box;
+    border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
+  #strip .cell:first-child { border-left: 0; padding-left: 0; }
+  #strip .v { font: 650 17px/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .1px; }
+  #strip .v .sub { font-size: 12px; font-weight: 500; color: var(--dim); }
+  #strip .l { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  #strip button.cell { cursor: pointer; border: 0; border-left: 1px solid var(--hud-line); border-radius: 0; background: none; padding: 0 10px; }
+  #strip button.cell:hover .v, #strip button.cell[aria-expanded="true"] .v { color: #ffb070; }
+  #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: 13px; }
+  #strip .c-order[aria-expanded="true"] .v::after { content: " ◂"; }
+  #c-lead.ahead .v { color: var(--good); } #c-lead.behind .v { color: #ff8a7a; }
+  #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
+  #strip .meter[hidden] { display: none; }
+  #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
+  #timebar { display: flex; gap: 2px; margin-top: 3px; }
+  #timebar[hidden] { display: none; }
+  #timebar button { padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 16px; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
+  #timebar button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
+  #timebar #t-pause { min-width: 26px; }
+  #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #keysbtn { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
+  #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
+  #keylist[hidden] { display: none; }
+  #keylist .kh { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 2px 0 4px; }
+  #keylist:not([hidden]) { display: flex; gap: 22px; }
+  #keylist .kg { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+  #keylist kbd { font: 600 11px system-ui, sans-serif; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--hud-line); background: rgba(255,255,255,.06); text-align: center; white-space: nowrap; justify-self: start; min-width: 14px; }
+  #keyhint { position: fixed; left: 50%; bottom: calc(var(--edge) + var(--strip-h) + 8px); transform: translateX(-50%); font: 500 12px system-ui, sans-serif;
+    color: rgba(225,235,248,.9); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; z-index: 5; }
+  #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
+  #timestate { display: none !important; } /* the pause shows on the strip's button; a stop says why in a toast */
+  #clock { display: none !important; }
+
+  /* The orders drawer: left, from under the top edge to above the strip. */
+  #orders { position: fixed; left: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); bottom: calc(var(--edge) + var(--strip-h) + 8px); width: 318px; box-sizing: border-box;
+    padding: 12px 14px; overflow-y: auto; overscroll-behavior: contain; z-index: 7; background: var(--hud-solid); border-color: var(--hud-line);
+    transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; }
+  body.sailing #orders:not(.open) { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
+  #orders h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .9px; text-transform: uppercase; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
+  #coach { margin: 0 0 8px; padding: 6px 9px; border-radius: 7px; background: rgba(255,138,42,.14); border-left: 3px solid var(--orange); font-size: 13px; }
+  #coach[hidden] { display: none; }
+  #dialrow { display: flex; gap: 12px; align-items: center; }
+  #dial { width: 132px; height: 132px; cursor: crosshair; touch-action: none; flex: none; }
+  #dialrow .side { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
+  #powerrow { display: flex; justify-content: space-between; margin-top: 8px; }
+  #orders-tab { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 6; width: 26px; height: 92px; padding: 0; border-radius: 0 9px 9px 0;
+    border: 0; background: var(--hud); color: #ffb070; }
+  #orders-tab span { display: inline-block; transform: rotate(-90deg); font: 650 11px system-ui, sans-serif; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
+  #orders-tab:hover { background: var(--hud-solid); }
+  body.orders-open #orders-tab { visibility: hidden; }
+  #mapbtn { display: none; }
+
+  /* The forecast: a compact band right above the strip (Elena: no more than ~15 % of the frame). */
+  #fcbox { position: fixed; left: 50%; transform: translateX(-50%); width: var(--strip-w); bottom: calc(var(--edge) + var(--strip-h) + 6px); box-sizing: border-box;
+    padding: 5px 12px 4px; z-index: 6; background: var(--hud-solid); }
+  body.sailing #fcbox:not(.open) { display: none; }
+  #fcbox .fct { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); }
+  #fcbox .fct span { text-transform: none; letter-spacing: 0; }
+  #fc { width: 100%; height: 72px; display: block; }
+  #fcbox.lit { outline: 2px solid #ffb84d; }
+
+  /* The map: a corner map top right; M or a click makes it big, with the legend and the log. */
+  #mapbox { position: fixed; right: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); width: 232px; box-sizing: border-box; padding: 6px; z-index: 6; }
+  #mapbox .mhead { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 4px; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); }
+  #m-togo { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #map-x, #mside { display: none; }
+  #mbody { display: flex; gap: 12px; }
+  #chart { width: 100%; height: 132px; display: block; border-radius: 6px; cursor: zoom-in; }
+  #film { display: flex; gap: 4px; justify-content: flex-end; margin-top: 5px; }
+  #film button { width: 30px; height: 26px; padding: 0; font-size: 14px; line-height: 1; border-radius: 7px; background: rgba(255,255,255,.07); border-color: transparent; }
+  #film button:hover { border-color: var(--hud-line); background: rgba(255,255,255,.14); }
+  #mapbox.big { left: 50%; top: calc(var(--bar, 0px) + 50%); right: auto; transform: translate(-50%, -50%); width: min(1100px, calc(100vw - 40px)); height: min(640px, 72vh);
+    padding: 12px 14px; z-index: 12; background: var(--hud-solid); display: flex; flex-direction: column; }
+  #mapbox.big .mhead { font-size: 11px; }
+  #mapbox.big #m-togo { font-size: 14px; }
+  #mapbox.big #map-x { display: inline; margin-left: 8px; }
+  #mapbox.big #mbody { flex: 1; min-height: 0; }
+  #mapbox.big #chart { flex: 1; width: auto; min-width: 0; height: 100%; cursor: default; }
+  #mapbox.big #mside { display: flex; flex-direction: column; gap: 6px; width: 290px; flex: none; font-size: 13px; min-height: 0; }
+  #mapbox.big #film { display: none; }
+  .mleg i { display: inline-block; width: 12px; height: 3px; margin: 0 4px 0 8px; vertical-align: middle; } .mleg i:first-child { margin-left: 0; }
+  #watch { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--dim); }
+  #watch button { padding: 3px 8px; font-size: 12px; }
+  #status { font-size: 12.5px; border-top: 1px solid var(--hud-line); padding-top: 6px; }
+  #status .row { margin-top: 3px; }
+  #bat { height: 4px; background: rgba(255,255,255,.1); border-radius: 2px; margin-top: 3px; overflow: hidden; }
+  #batbar { height: 100%; width: 100%; background: var(--good); transition: width .4s; }
+  #mside .lh { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); border-top: 1px solid var(--hud-line); padding-top: 6px; }
+  #log { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; font-size: 12.5px; }
+  #log li { padding: 3px 0 3px 8px; border-left: 3px solid #8ab4ff; margin-bottom: 4px; }
+  #log li .when { color: var(--dim); font-size: 11px; display: block; }
+  #log:empty::before { content: "Nothing yet."; color: var(--dim); }
+
+  /* Toasts: top centre, at most two, gone on their own. */
+  #notes { position: fixed; top: calc(var(--bar, 0px) + var(--edge)); left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 520px)); min-width: 280px;
+    display: flex; flex-direction: column; gap: 6px; z-index: 7; pointer-events: none; }
+  body.at-wheel #notes { top: calc(var(--bar, 0px) + 52px); }
+  .note { padding: 6px 12px; border-left: 3px solid #8ab4ff; font-size: 13.5px; background: var(--hud-solid); border-radius: 9px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    animation: toast-in .35s cubic-bezier(.2,.8,.2,1); transition: opacity .6s, transform .6s; }
+  .note .when { font-size: 10.5px; color: var(--dim); letter-spacing: .3px; }
+  .note.out { opacity: 0; transform: translateY(-6px); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  #ghosttag { position: fixed; transform: translate(-50%, -120%); font: 600 11.5px system-ui, sans-serif; color: #dbe6f5; background: var(--hud); border-radius: 8px; padding: 2px 8px;
+    pointer-events: none; white-space: nowrap; z-index: 3; }
+  #ghosttag::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 1px; height: 6px; background: rgba(200,212,230,.6); }
+  #baretip { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; background: var(--hud); font-size: 12px; z-index: 6; pointer-events: none; transition: opacity .8s; }
+  #baretip[hidden] { display: none; } #baretip.gone { opacity: 0; }
+  /* H: the world and nothing else. */
+  body.bare #strip, body.bare #orders, body.bare #orders-tab, body.bare #fcbox, body.bare #mapbox, body.bare #notes, body.bare #keyhint, body.bare #keylist,
+  body.bare #ghosttag, body.bare #credits, body.bare .poi-card, body.bare #trimchip { visibility: hidden !important; }
+  /* History cards dock at the right edge, mid-height, clear of the boat (src/pois.ts compact). */
+  :root { --poi-right: var(--edge); --poi-bottom: calc(var(--edge) + var(--strip-h) + 120px); }
+
+  /* Rosa's wheel strip, in the same slot and the same style as the instrument strip. */
+  #wheel { bottom: var(--edge); width: var(--strip-w); background: var(--hud); border: 0; box-shadow: none; }
+  #wheel-goal { background: var(--hud); border: 0; box-shadow: none; }
+
+  /* Narrow windows: the strip wraps to two rows, the drawer takes the width, the map is a button. */
+  @media (max-width: 1100px) {
+    :root { --strip-h: 104px; }
+    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; grid-auto-rows: 48px; align-content: center; }
+    #strip #c-bat { border-left: 0; padding-left: 0; }
+    #keysbtn { justify-self: end; margin-right: 4px; }
+    #notes { width: min(420px, calc(100vw - 24px)); top: calc(var(--bar, 0px) + 54px); }
+    #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
+    #mapbox:not(.big) { width: auto; padding: 4px; }
+    #mapbox:not(.big) #film { margin-top: 0; }
+    #mapbtn { display: inline-block !important; }
+  }
+  @media (max-width: 700px) { #orders { width: auto; right: var(--edge); } #mapbox.big #mside { display: none; } }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<div id="clock"></div>
+<div id="clock" hidden></div>
 <div id="decide" class="glass" role="dialog" aria-live="polite" aria-labelledby="decidetext" hidden>
   <div class="t">Your call</div>
   <div id="decidetext"></div>
@@ -250,55 +355,67 @@
   <span>The sea sounds good: wind, waves and rain, made from the weather. Turn sound on?</span>
   <button id="soundyes">&#128266; Sound on</button><button id="soundno">No thanks</button>
 </div>
-<div id="timebar" class="glass" role="group" aria-label="How fast time runs" hidden>
-  <span class="t">Time</span>
-  <button id="t-pause" title="Pause or carry on (space bar)" aria-pressed="false">&#10074;&#10074;</button>
-  <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second: watch the waves (key 1)">1 h/s</button>
-  <button class="rate" data-rate="6" aria-pressed="true" title="Six hours every second: a day in 4 seconds (key 2)">6 h/s</button>
-  <button class="rate" data-rate="24" aria-pressed="false" title="A day every second (key 3)">1 day/s</button>
-  <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second, for the empty middle of the ocean (key 4)">4 days/s</button>
-</div>
-<div id="timestate"></div>
+<div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
-<div id="keyhint" hidden>Space pause · 1-4 speed · &larr;&rarr; steer (hold to keep turning, Shift for 1&deg;) · &uarr;&darr; power · ? keys</div>
+<div id="keyhint" hidden>&larr;&rarr; steer · &uarr;&darr; power · Space pause · ? all keys</div>
 <div id="ghosttag" hidden></div>
+<div id="baretip" hidden>H to show</div>
 
-<section id="status" class="glass">
-  <h1>Take the helm <span id="day">Day 0</span></h1>
-  <div class="muted" id="when">Our kayak, 2020 weather</div>
-  <div class="muted" id="local"></div>
-  <div class="row" id="lead">Level with the autopilot ghost</div>
-  <div class="row" id="tofinish"></div>
-  <div class="row"><span id="battext">Battery 100%</span><span id="speed"></span></div>
-  <div id="bat"><div id="batbar"></div></div>
-  <div class="row muted" id="weather"></div>
-  <div class="row muted" id="sailline" hidden></div>
-  <div class="row muted" id="ghostline"></div>
-  <div class="row muted" id="baseline"></div>
+<!-- The instrument strip (Leo's plan, approved by Elena 12 Nov): six cells, bottom centre. -->
+<section id="strip" class="hud" aria-label="Instruments">
+  <div class="cell c-time">
+    <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span></div>
+    <div id="timebar" role="group" aria-label="How fast time runs" hidden>
+      <button id="t-pause" title="Pause or carry on (Space)" aria-pressed="false">&#10074;&#10074;</button>
+      <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second (key 1)">1h</button>
+      <button class="rate" data-rate="6" aria-pressed="true" title="Six hours every second (key 2)">6h</button>
+      <button class="rate" data-rate="24" aria-pressed="false" title="A day every second (key 3)">1d</button>
+      <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second (key 4)">4d</button>
+    </div>
+  </div>
+  <button class="cell c-order" id="c-order" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span class="v" id="c-orderv">Autopilot</span><span class="l">order</span></button>
+  <div class="cell" id="c-head"><span class="v" id="c-headv">–</span><span class="l">heading</span></div>
+  <div class="cell" id="c-speed"><span class="v" id="c-speedv">–</span><span class="l">speed</span></div>
+  <div class="cell" id="c-bat"><span class="v" id="c-batv">–</span><span class="l" id="c-batl">battery</span><span class="meter"><i id="c-batbar"></i></span></div>
+  <button class="cell" id="c-wind" aria-controls="fcbox" aria-expanded="false" title="The 5-day forecast (F)"><span class="v" id="c-windv">–</span><span class="l" id="c-wavel">wind</span></button>
+  <div class="cell" id="c-lead"><span class="v" id="c-leadv">level</span><span class="l">vs the ghost</span></div>
+  <button id="keysbtn" aria-expanded="false" aria-controls="keylist" title="All the keys (?)">?</button>
 </section>
+<div id="keylist" class="hud" hidden>
+  <div class="kcol"><div class="kh">Keys</div>
+    <div class="kg"><kbd>&larr; &rarr;</kbd><span>steer (Shift for 1&deg;)</span><kbd>&uarr; &darr;</kbd><span>power</span>
+    <kbd>Space</kbd><span>pause or carry on</span><kbd>1&ndash;4</kbd><span>how fast time runs</span>
+    <kbd>O</kbd><span>orders</span><kbd>F</kbd><span>forecast</span><kbd>M</kbd><span>map</span>
+    <kbd>C</kbd><span>cinematic</span><kbd>N</kbd><span>sound</span><kbd>H</kbd><span>hide everything</span>
+    <kbd>Enter</kbd><span>take the wheel (sailboats)</span><kbd>Esc</kbd><span>close</span></div></div>
+  <div class="kcol"><div class="kh">At the wheel</div>
+    <div class="kg"><kbd>&larr; &rarr;</kbd><span>steer</span><kbd>&uarr; &darr;</kbd><span>sail in, sail out</span>
+    <kbd>R</kbd><span>reef (Shift+R shakes out)</span><kbd>T</kbd><span>auto-trim</span><kbd>V</kbd><span>chase or deck camera</span>
+    <kbd>N</kbd><span>sound</span><kbd>H</kbd><span>hide everything</span><kbd>Esc</kbd><span>hand back</span></div></div>
+</div>
 
-<section id="orders" class="glass">
-  <h2>Your orders</h2>
+<button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>
+<section id="orders" class="glass" aria-label="Your orders">
+  <h2>Your orders <button id="orders-x" class="x" aria-label="Close (O)" title="Close (O)">&times;</button></h2>
+  <div id="coach" hidden>Steer here, or with &larr; &rarr;. O opens and closes this.</div>
   <div id="dialrow">
-    <canvas id="dial" title="Tap or drag to steer"></canvas>
+    <canvas id="dial" title="Tap or drag to steer. Orange: your order · white: where the bow points · green: the finish · blue: the wind"></canvas>
     <div class="side">
-      <div class="muted" style="font-size:11px;margin-bottom:-4px">Your order now</div>
       <div id="ordertext">Autopilot steering, like the ghost</div>
       <button id="b-auto" aria-pressed="true" title="The autopilot sails your boat exactly as it sails the ghost. Leave it on and the two boats stay level.">Autopilot</button>
       <button id="b-finish" aria-pressed="false">Aim at the finish</button>
       <button id="b-route" aria-pressed="false" title="The autopilot's planned route, which allows for the current">Follow the route</button>
       <button id="b-wheel" hidden title="Sail her yourself in real time: steer, trim the sail, reef (Enter)">Take the wheel ⏎</button>
-      <div class="key muted"><i style="background:#ff8a2a"></i>your order<br><i style="background:#fff"></i>where the bow points<br><i style="background:#3ddc97"></i>the finish<br><i style="background:#8ab4ff"></i>the wind</div>
     </div>
   </div>
-  <label class="muted" for="power" style="display:block;margin-top:6px"><span id="powerlabel">Motor power</span>: <b id="powertext"></b></label>
+  <label class="muted" for="power" id="powerrow"><span id="powerlabel">Motor power</span> <b id="powertext"></b></label>
   <input id="power" type="range" min="0" max="100" step="5" value="25">
   <div id="sailrow" hidden>
     <div class="seg"><span class="muted">Sails</span><span id="sailbtns"></span></div>
     <div class="seg" id="enginerow"><span class="muted">Engine</span><span id="enginebtns"></span></div>
   </div>
   <div id="preview" aria-live="polite" title="A copy of your boat sails this order for a day in today's forecast (which can be wrong; no breakdowns), then is thrown away" hidden></div>
-  <div class="muted" id="powerhint">The autopilot cruises at 25%. More is faster, but the sun has to refill the battery, and at empty the motors stop until it does.</div>
+  <div class="muted" id="powerhint"></div>
   <div id="runs">
     <span class="lbl">Jump ahead (the clock pauses after)</span>
     <button id="s6" class="needs-idle" title="Sail 6 hours at once, then pause">6 hours</button>
@@ -310,16 +427,35 @@
   <div id="sharerow"><button id="share" class="needs-idle" title="A link that opens this game where it is now, for someone else to carry on">Copy a share link</button> <span class="muted" id="sharetext"></span></div>
 </section>
 
-<section id="fcbox" class="glass"><div class="muted" style="font-size:10.5px;margin-bottom:2px">Forecast at the boat for the next 5 days (it can be wrong): wind in knots and where it blows to, wave height, sunshine</div><canvas id="fc"></canvas></section>
+<section id="fcbox" class="hud" aria-label="5-day forecast"><div class="fct">5-day forecast <span>(can be wrong)</span></div><canvas id="fc"></canvas></section>
 
-<section id="mapbox" class="glass">
-  <h2>The chart <span class="muted" style="text-transform:none;letter-spacing:0">· orange you, grey the ghost</span></h2>
-  <canvas id="chart"></canvas>
-  <div id="watch">Watch: <button id="w-boat" aria-pressed="true">Your boat</button><button id="w-ghost" aria-pressed="false">The ghost</button></div>
-  <div id="film"><button id="cinebtn" title="The panels fade and the camera films the boat on its own. Any key or a click to leave.">&#127916; Cinematic</button><button id="soundbtn" aria-pressed="false" title="Wind, rain and waves, made from the weather">Sound off</button></div>
+<section id="mapbox" class="hud" aria-label="The chart">
+  <div class="mhead"><span class="mt">The chart</span><span id="m-togo"></span><button id="map-x" class="x" aria-label="Close the big map (M)" title="Close (M or Esc)">&times;</button></div>
+  <div id="mbody">
+    <canvas id="chart" title="The chart: click for the big map (M)"></canvas>
+    <aside id="mside">
+      <div class="mleg"><i style="background:#ff8a2a"></i>you <i style="background:#c8d4e6"></i>the ghost</div>
+      <div id="watch">Watch <button id="w-boat" aria-pressed="true">Your boat</button><button id="w-ghost" aria-pressed="false">The ghost</button></div>
+      <section id="status">
+        <div class="muted" id="when"></div>
+        <div class="muted" id="local"></div>
+        <div class="row" id="lead">Level with the autopilot ghost</div>
+        <div class="row" id="tofinish"></div>
+        <div class="row"><span id="battext">Battery 100%</span><span id="speed"></span></div>
+        <div id="bat"><div id="batbar"></div></div>
+        <div class="row muted" id="weather"></div>
+        <div class="row muted" id="sailline" hidden></div>
+        <div class="row muted" id="ghostline"></div>
+        <div class="row muted" id="baseline"></div>
+      </section>
+      <div class="lh">What happened</div>
+      <ol id="log" aria-label="What happened"></ol>
+    </aside>
+  </div>
+  <div id="film"><button id="mapbtn" title="The map (M)" aria-label="Map">&#128506;</button><button id="cinebtn" title="Cinematic: the panels fade and the camera films the boat (C). Any key or a click to leave." aria-label="Cinematic">&#127916;</button><button id="soundbtn" data-icon="1" aria-pressed="false" title="Sound: wind, rain and waves, made from the weather (N)">&#128263;</button><button id="hidebtn" title="Hide everything (H)" aria-label="Hide everything">&#128065;</button></div>
 </section>
 
-<div id="notes"></div>
+<div id="notes" aria-live="polite"></div>
 
 <div id="practice-what" class="glass" hidden></div>
 <div id="practice-end" class="overlay" hidden><div class="card glass">
