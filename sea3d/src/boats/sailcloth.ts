@@ -15,6 +15,7 @@
 
 import * as THREE from "three";
 import type { Quality } from "./parts";
+import { NAV_NIGHT } from "./navlights";
 
 /** Where the sun is (unit, scene), its colour, and how much it's shining (0 at night or under thick cloud). */
 export const SAIL_SUN = {
@@ -82,12 +83,14 @@ export function clothe<M extends THREE.MeshStandardMaterial>(m: M, size = new TH
     sh.uniforms.uSailSunCol = SAIL_SUN.colour;
     sh.uniforms.uSailSun = SAIL_SUN.strength;
     sh.uniforms.uSailTime = SAIL_TIME;
+    sh.uniforms.uSailNight = NAV_NIGHT;
     sh.uniforms.uLuff = u.uLuff;
     sh.uniforms.uSize = u.uSize;
     sh.vertexShader = sh.vertexShader
       .replace(
         "void main() {",
         `uniform float uSailTime;
+uniform float uSailNight;
 uniform float uLuff;
 uniform vec2 uSize;
 varying vec3 vSailWorld;
@@ -159,7 +162,7 @@ void main() {`,
   diffuseColor.rgb *= 1.0 - 0.02 * sailDbl.x - 0.04 * sailDbl.y; // barely there in front light
   // The cloth curves away towards the leech and gathers a little shade at the
   // foot (the boom, the deck and the other sail), so a full sail reads as a curve.
-  diffuseColor.rgb *= (1.0 - 0.09 * smoothstep(0.45, 1.0, vSailUv.x)) * (1.0 - 0.07 * (1.0 - smoothstep(0.0, 0.25, vSailUv.y)));
+  diffuseColor.rgb *= (1.0 - 0.15 * smoothstep(0.4, 1.0, vSailUv.x)) * (1.0 - 0.09 * (1.0 - smoothstep(0.0, 0.25, vSailUv.y))); // leech and foot a touch deeper so the curve reads at noon (Elena)
   // A flogging luff: the cloth folds, and the folds shade each other.
   diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);`,
       )
@@ -193,10 +196,12 @@ void main() {`,
   float sunLum = dot(uSailSunCol, vec3(0.2126, 0.7152, 0.0722));
   vec3 tint = mix(vec3(sunLum), uSailSunCol, 0.5);
   totalEmissiveRadiance += diffuseColor.rgb * tint
-    * (${TRANSLUCENCY.toFixed(2)} * uSailSun * pass * facing * behind * (0.3 + 0.7 * through));`,
+    * (${TRANSLUCENCY.toFixed(2)} * uSailSun * pass * facing * behind * (0.3 + 0.7 * through));
+  // On a dark night white cloth still holds a little starlight and sky glow: just off black (Ines).
+  totalEmissiveRadiance += diffuseColor.rgb * vec3(0.05, 0.066, 0.1) * 0.35 * uSailNight;`,
       );
   };
-  pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v2`;
+  pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v3`;
   pm.needsUpdate = true;
   return pm as THREE.MeshPhysicalMaterial | M;
 }
