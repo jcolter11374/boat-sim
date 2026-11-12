@@ -37,9 +37,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Blender boats (about 6 min when sea3d/blender changes) + smoke test (about
-    # 18 min) went past 25 min, and a timed-out job never saves the boats cache,
-    # so every deploy after #304 rebuilt them and timed out (11-12 Nov).
+    # Blender boats (about 6 min when sea3d/blender changes) + the smoke test
+    # went past 25 min, and a timed-out job never saves the boats cache, so every
+    # deploy after #304 rebuilt them and timed out (11-12 Nov). The smoke test is
+    # its own job now; the headroom stays for a Blender rebuild.
     timeout-minutes: 45
     defaults:
       run:
@@ -93,6 +94,42 @@ jobs:
           tools/build_site.sh
       - name: Wave-motion gate (roll period, righting curves, self-righting)
         run: npm run test:unit
+      # The smoke test runs in the next job, in two halves side by side, on this
+      # exact build (as the pre-release gate does).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: sea3d/dist
+          retention-days: 3
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: sea3d/dist
+  # Smoke test (animates, wave heights right, not blank, every page opens) on the
+  # build above, in two halves (SMOKE_PART in smoke.mjs): about 18 min in one job
+  # held every deploy for that long (Kai, 12 Nov). Deploy waits for both halves.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    defaults:
+      run:
+        working-directory: sea3d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sea3d/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: sea3d/dist
       # --with-deps also apt-installs fonts and libraries, which fails whenever
       # the runner can't reach the Ubuntu mirrors (11 Nov: "Temporary failure
       # resolving security.ubuntu.com"). The runner image already has what
@@ -104,18 +141,17 @@ jobs:
           timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Smoke test (animates, wave heights right, not blank)
         run: npm test
+        env:
+          SMOKE_PART: ${{ matrix.part }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sea3d-screenshots
+          name: sea3d-screenshots-${{ matrix.part }}
           path: sea3d/test-output/
           retention-days: 30
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: sea3d/dist
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, smoke]
     runs-on: ubuntu-latest
     permissions:
       pages: write
