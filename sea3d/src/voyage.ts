@@ -384,10 +384,10 @@ let rep: Replay | null = null; // lanes[focus].rep
 let hour = 0;
 let playing = false;
 let warp = 1 / 3600; // voyage hours per real second: real time (the game and the live tracker start here)
-/** A replay opens already playing at this speed: real time (John, 10 Nov, kept on
- * 11 Nov when Leo asked for faster). One constant, so it's a one-line change. */
-/** Replays open at 1 h/s: at under a knot, real time looks frozen (Leo's delta; Elena, 12 Nov). */
-const WATCH_WARP = 1;
+/** A replay opens already playing at this speed: real time. John's call (T2 in
+ * john-decisions.md: 10 Nov, kept 11 Nov, restored 12 Nov after #401 changed it).
+ * Don't change it without John's own OK. */
+const WATCH_WARP = 1 / 3600;
 /** Visitors who ask for less motion get the replay paused at the start instead. */
 const REDUCED_MOTION = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 let ended = false;
@@ -718,11 +718,12 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
     status.maxHour = endHour();
     status.outcome = r.outcome;
     status.shown = [];
-    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: tracked.simulated, fixes: tracked.fixes.length };
+    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: false, fixes: tracked.fixes.length };
     $<HTMLInputElement>("scrub").max = String(endHour());
     $("boat").hidden = $("voyage").hidden = true;
     $("now").hidden = $("c-report").hidden = $("c-eta").hidden = false;
-    $("h1").textContent = tracked.simulated ? "Live tracker (simulated voyage)" : "Live tracker";
+    // No "simulated" label, even on the demo feed: John's call S2 (11 Nov), the demo is obvious.
+    $("h1").textContent = "Live tracker";
     $("sub").textContent =
       "Where the kayak last reported (the main box's daily satellite report and the backup beacon's pings), then the simulator's forecast from that report: the dashed line on the chart, with the shaded band showing where most forecast runs end up. Wind and waves aren't reported, so the sea here is a stand-in.";
     $("lg-ours").textContent = "reported track";
@@ -839,10 +840,11 @@ function setWarp(w: number): void {
   // The buttons carry rounded values (0.000277778 for 1/3600): light the nearest.
   const bs = Array.from(document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button"));
   const near = bs.reduce((m, b) => (Math.abs(Math.log(Number(b.dataset.warp) / w)) < Math.abs(Math.log(Number(m.dataset.warp) / w)) ? b : m), bs[0]);
-  bs.forEach((x) => x.setAttribute("aria-pressed", String(x === near)));
+  // Real time is on both the strip and the drawer: light every button with the nearest value.
+  bs.forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.warp === near.dataset.warp)));
 }
 document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button").forEach((b) => b.addEventListener("click", () => setWarp(Number(b.dataset.warp))));
-/** With reduced motion a replay opens paused: say so once (the speed bar's hint went with the 1 h/s default). */
+/** With reduced motion a replay opens paused: say so once (replays open in real time, John T2). */
 function warpHint(): void {
   if (REDUCED_MOTION) toast("Paused at the start: press play (Space) when you're ready.", "Replay", "#8ab4ff");
 }
@@ -1611,7 +1613,9 @@ let sunAz = 180;
 let lastGuide = 0;
 const guideBox = $<HTMLInputElement>("skyguide");
 const showGuide = () => {
+  $("compass").hidden = !guideBox.checked;
   $("skylabels").hidden = !guideBox.checked;
+  $("lookup").hidden = !guideBox.checked;
 };
 // Look up: the camera orbits the boat, so it can't tilt far above the horizon on its own.
 // Raising the point it looks at tips the view up about 20 degrees: horizon near the bottom, about 50 degrees up at the top.
@@ -1642,6 +1646,8 @@ function setLookUp(on: boolean): void {
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
 guideBox.addEventListener("change", showGuide);
 showGuide();
+const CARD: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
+const RANGE = 75; // degrees either side of the view shown on the strip
 const viewDir = new THREE.Vector3();
 const proj = new THREE.Vector3();
 function bearingOf(v: THREE.Vector3): number {
@@ -1662,8 +1668,36 @@ function skyGuide(): void {
   lastGuide = now;
   viewDir.copy(controls.target).sub(camera.position);
   const view = bearingOf(viewDir);
+  // The compass strip (John's call L4): ticks every 5 degrees, and what's out there along it.
+  const W = $("compass").clientWidth || 420;
+  const px = W / (2 * RANGE);
+  const rel = (b: number) => ((b - view + 540) % 360) - 180;
+  const xOf = (b: number) => W / 2 + rel(b) * px;
+  const out: HTMLSpanElement[] = [];
+  for (let b = 0; b < 360; b += 5) {
+    if (Math.abs(rel(b)) > RANGE) continue;
+    const x = xOf(b);
+    out.push(span(b % 15 === 0 ? "tick big" : "tick", "", x));
+    if (b % 15 === 0) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
+  }
   const night = sunEl < -6;
   const polaris = atmos.starDirs.get("North Star (Polaris)");
+  const marks: [number, string, string][] = [];
+  if (model) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw ?? 0) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
+  if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
+  if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
+  if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
+  // Marks that would touch go up a row, so "bow" and "sun" never run together (Ines).
+  const shown = marks.filter(([b]) => Math.abs(rel(b)) <= RANGE).map(([b, text, colour]) => ({ x: xOf(b), half: text.length * 3.4 + 6, text, colour }));
+  shown.sort((a, c) => a.x - c.x);
+  const rowEnd = [-Infinity, -Infinity];
+  for (const m of shown) {
+    const row = m.x - m.half >= rowEnd[0] ? 0 : m.x - m.half >= rowEnd[1] ? 1 : 0;
+    rowEnd[row] = m.x + m.half;
+    const e = span(row ? "mk up" : "mk", m.text, m.x, m.colour);
+    out.push(e);
+  }
+  $("tape").replaceChildren(...out);
 
   // Labels in the sky itself.
   const labels: HTMLSpanElement[] = [];
