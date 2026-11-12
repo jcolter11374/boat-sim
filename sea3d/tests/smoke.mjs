@@ -857,7 +857,7 @@ try {
       const r = await page.evaluate(() => ({ s: window.__race.status, stops: window.__race.stops, err: window.__race.error, tracks: window.__race.tracks.map((t) => t.length) }));
       const names = r.s?.boats.map((b) => b.name) ?? [];
       if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
-        || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
+        || names[0] !== "Our kayak" || !/Rev C5 \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
         fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
       // The 3D views: each boat on its own sea, drawing, and the right boat in each.
       await page.locator("#views").scrollIntoViewIfNeeded();
