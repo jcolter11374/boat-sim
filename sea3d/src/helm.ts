@@ -284,7 +284,7 @@ const page = {
   /** Points of interest: how many loaded, and the ids the track has reached (in order). */
   pois: { loaded: 0, shown: [] as string[] },
   /** Real land in view: the place, how far off its box (km), buildings and trees; and the view's reach (m). */
-  land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0 } as NearbyLand["shown"],
+  land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0 } as NearbyLand["shown"],
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,

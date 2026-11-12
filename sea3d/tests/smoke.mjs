@@ -516,6 +516,11 @@ try {
       .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
     if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
     log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+    // Off Annapolis: Thomas Point Light stands on its shoal (the model, or its drawn stand-in), no page errors.
+    await page.goto(`${URL}helm.html?quality=low&spot=38.91,-76.45`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.land.landmarks > 0, null, { timeout: 60000 })
+      .catch(async () => fail(`helm: no Thomas Point Light off Annapolis (${await page.evaluate(() => JSON.stringify(window.__helm?.land))})`));
+    if (errors.length) fail(`page errors by Thomas Point Light: ${errors.join("; ")}`);
     // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
     await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });
