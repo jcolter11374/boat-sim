@@ -973,7 +973,9 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
 // flight sim's time compression, and pauses when something happens (the stops of
 // "until something happens"). The simulator runs a little ahead of the picture in
 // short runs, so a new order takes effect within about a second of play.
-/** Voyage hours per second to start at: what a hop used to play at. Real time would show nothing happening for hours. */
+/** Real time: a second of the voyage every second, in voyage hours per second. */
+const REAL_TIME = 1 / 3600;
+/** Voyage hours per second to start at: what a hop used to play at. (T4, the helm's starting speed, is John's call.) */
 const DEFAULT_RATE = 6;
 let rate = 0;
 let lastRate = DEFAULT_RATE;
@@ -985,6 +987,8 @@ let lastRate = DEFAULT_RATE;
  */
 let easeUpAt: number | null = null;
 const FIRST_HOURS = 6;
+/** The rate a speed button stands for ("rt" is real time). */
+const rateOf = (b: HTMLElement): number => (b.dataset.rate === "rt" ? REAL_TIME : Number(b.dataset.rate));
 /** The stop conditions armed when the clock started (so "a big battery drop" is measured from then). */
 let armed: Record<string, number | boolean> | null = null;
 let inFlight: Promise<void> | null = null;
@@ -1049,8 +1053,8 @@ function showClock(): void {
   pause.setAttribute("aria-pressed", String(rate === 0));
   pause.textContent = rate === 0 ? "▶" : "❚❚";
   pause.title = rate === 0 ? "Carry on (space bar)" : "Pause (space bar)";
-  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && Number(b.dataset.rate) === rate));
-  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && rateOf(b) === rate));
+  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
 }
 
 /** One short run of the simulator, ahead of the picture. */
@@ -1095,8 +1099,8 @@ async function clockRun(): Promise<void> {
 /** This frame's share of the clock: move the picture on, and keep the simulator ahead of it. */
 function tickClock(dt: number): boolean {
   if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
-  if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   // Ease off as the simulator's lead runs down, so a slow computer sees slower, smooth time rather than stop-start.
+  if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
   hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
@@ -1107,11 +1111,11 @@ function tickClock(dt: number): boolean {
   return true;
 }
 
-for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(Number(b.dataset.rate)));
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(rateOf(b)));
 $("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
 // Keys, so it feels like steering rather than filling in a form (Leo's review): Space
 // pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
-const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 6, Digit3: 24, Digit4: 96, Numpad1: 1, Numpad2: 6, Numpad3: 24, Numpad4: 96 };
+const SPEED_KEYS: Record<string, number> = { Digit1: REAL_TIME, Digit2: 1, Digit3: 6, Digit4: 24, Digit5: 96, Numpad1: REAL_TIME, Numpad2: 1, Numpad3: 6, Numpad4: 24, Numpad5: 96 };
 /** The key hint under the time bar: for the first minute, or until a key is used. */
 let keyHintTimer: ReturnType<typeof setTimeout> | undefined;
 function hideKeyHint(): void {
