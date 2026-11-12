@@ -1839,6 +1839,8 @@ let chaseAsked = false;
 const CHASE_UNTIL_H = 120; // looked for in the first 5 days only: each look pauses about a second
 const CHASE_EVERY_H = 12;
 const CHASE_GAIN_DAYS = 0.5;
+const CHASE_SEAS_M = 4;
+const CHASE_SOC = 0.25;
 
 /** Look for a better line; true if the clock was stopped to look. */
 function maybeRouteCheck(st: Status): boolean {
@@ -1870,8 +1872,10 @@ function maybeRouteCheck(st: Status): boolean {
     const better = gainDays >= ROUTE_GAIN_DAYS && turn >= ROUTE_MIN_TURN;
     // The chase is weighed against the autopilot (what the ghost does), not your order.
     const autoDays = pace > 1 ? (best.lead_km - auto.lead_km) / pace : 0;
-    const chaseRougher = (best.hs_max ?? 0) - (auto.hs_max ?? 0) >= 0.75;
-    const chaseDrains = (auto.soc_min ?? 1) - (best.soc_min ?? 1) >= 0.08;
+    // A price the player feels (Ines, Rosa): seas of 4 m or more and 0.75 m above the autopilot's,
+    // or a battery low point under the night-call line (25%) and 8 points below the autopilot's.
+    const chaseRougher = (best.hs_max ?? 0) >= CHASE_SEAS_M && (best.hs_max ?? 0) - (auto.hs_max ?? 0) >= 0.75;
+    const chaseDrains = (best.soc_min ?? 1) < CHASE_SOC && (auto.soc_min ?? 1) - (best.soc_min ?? 1) >= 0.08;
     const chase = early && autoDays > CHASE_GAIN_DAYS && turn >= ROUTE_MIN_TURN && (chaseRougher || chaseDrains);
     const ask = chase || (quiet && better && (rougher || drains));
     page.routeChecks.push({ day: st.day, best: b.best, gain: gainKm, turn, asked: ask });
@@ -2020,13 +2024,18 @@ function timeChange(km: number, kmPerDay: number): string {
   return km > 0 ? `about ${n} km gained on the ghost` : `about ${n} km lost to the ghost`;
 }
 /** Its cost beside it, where the options differ: the roughest sea, the lowest battery. */
-function costWords(p: Preview, all: Preview[], waves = false): string {
+function costWords(p: Preview, all: Preview[], waves = false, meaning = false): string {
   const out: string[] = [];
   const hs = all.map((x) => x.hs_max ?? 0);
   // On a storm card the waves are the risk being weighed, so they always show (Sam).
-  if (p.hs_max != null && (waves || Math.max(...hs) - Math.min(...hs) >= 0.5)) out.push(`waves to ${p.hs_max.toFixed(1)} m`);
+  // `meaning`: on the line that pays, say what the price means (Rosa, Ines). In the simulator
+  // a knockdown gets likelier with bigger waves, and under 15% the motors stop to keep the
+  // electronics and the radio going (autonomy/safemode.py hold_below_soc).
+  if (p.hs_max != null && (waves || Math.max(...hs) - Math.min(...hs) >= 0.5))
+    out.push(`waves to ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
   const soc = all.map((x) => x.soc_min ?? 1);
-  if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08) out.push(`battery down to ${Math.round(p.soc_min * 100)}%`);
+  if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08)
+    out.push(`battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
   return out.length ? ` · ${out.join(" · ")}` : "";
 }
 
@@ -2069,7 +2078,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       const shown = o!.orders.filter((_, j) => has[j]);
       // One tag in race terms, worded as a forecast so it can honestly be wrong (Maya, Leo).
       const pace = o!.hours > 0 ? (o!.ghost.km / o!.hours) * 24 : 0;
-      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves")}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves", d.kind === "chase" && i === 0)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
     const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
