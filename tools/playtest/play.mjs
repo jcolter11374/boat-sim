@@ -1300,15 +1300,16 @@ const CHECKS = {
         await page.evaluate(() => window.__proofClock.release());
       };
       const out = [];
+      // High quality throughout, to match Ada's sea shots (Low keeps faint bands on the sea).
       // 1. The title (4 s).
-      await page.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+      await page.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 2 * MIN });
       await page.waitForTimeout(3000);
       await film(4);
       out.push(`title ${n} frames`);
       // 2. The helm's start card (3 s), then Set sail on the real clock.
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-      await page.goto(SITE + "helm.html", { waitUntil: "load", timeout: 2 * MIN });
+      await page.goto(SITE + "helm.html?quality=high", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
       await page.waitForTimeout(3000);
       const n1 = n;
