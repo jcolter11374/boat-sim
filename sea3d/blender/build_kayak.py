@@ -92,8 +92,9 @@ PAINT = HullPaint(
     bottom=0x2F383F,
     # A small state registration number on both bows, as a real small craft carries
     # (Ines, 12 Nov): dark navy, no game or project name. Fictional number; 76 mm
-    # (3 in) tall, the US minimum for registration numbers.
-    lettering="MD 7351 KV",
+    # (3 in) tall, the US minimum for registration numbers. The letter Q is never issued
+    # in US registration numbers, so this cannot match a real boat.
+    lettering="MD 7351 QX",
     letter_box=(0.42, 0.21, 0.286),
 )
 deck_y = K.deck_y
