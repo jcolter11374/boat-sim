@@ -366,7 +366,31 @@ function fail(e: unknown): void {
   setBusy(false);
 }
 
+// ---------- no link (Maya, 12 Nov) ----------
+// The boat is unmanned: once its main box (with the satellite modem in it) dies, or the
+// satellite link goes silent for good, nothing from base reaches it. The orders drawer locks
+// with the reason; the clock and the camera keep working, and you watch the backup box sail.
+const NO_LINK_WORDS: Record<string, string> = {
+  main_box: "The main box has died, and the satellite modem with it. Your orders can't reach the boat any more. The backup box keeps it going east on the stored route.",
+  comms_silent: "The satellite link has gone silent for good. Your orders can't reach the boat any more. It sails on with the last order it heard.",
+};
+let linkCut = "";
+function lockOrders(why: string, announce: boolean): void {
+  if (linkCut) return;
+  linkCut = why;
+  document.body.classList.add("no-link");
+  $("orders").classList.add("locked");
+  $("nolink").hidden = false;
+  $("nolinktext").textContent = NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.";
+  $("orders-tab").dataset.badge = "No link";
+  if (announce) note(NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.", `Day ${(shown ?? page.status)!.day.toFixed(1)}`, TONE_COLOUR.bad);
+}
+
 async function setOrder(h: Heading, p = power): Promise<void> {
+  if (linkCut) {
+    note("No link: the boat can't hear you.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.warn);
+    return;
+  }
   order = h;
   power = p;
   if (mode === "base" && page.ready) {
@@ -396,7 +420,9 @@ async function sendOrder(): Promise<void> {
     page.status = game.status;
     page.orders.push(r);
     const d = page.status!.day;
-    if (!r.accepted) {
+    if (r.no_link) {
+      lockOrders(r.no_link, true);
+    } else if (!r.accepted) {
       note(`Base can send one order a day. The next can go on day ${dayOf(r.next_allowed!).toFixed(1)}; your draft is kept until then.`, `Day ${d.toFixed(1)}`, TONE_COLOUR.warn);
     } else {
       draft = false;
@@ -688,6 +714,8 @@ function drawWhen(force = false): void {
 function showStatus(): void {
   const s = shown ?? page.status;
   if (!s) return;
+  // The link goes when the picture gets there (a shared game opens with it already gone: no toast).
+  if (s.no_link && !linkCut) lockOrders(s.no_link, page.ready && hour > 0 && !shared);
   showTrimChip(page.status ?? s);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
@@ -1608,7 +1636,7 @@ let spell: { kind: string; h: number; chose: string; km: number } | null = null;
 
 /** The decision due now, if any. */
 function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text: string; choices: Choice[] } | null {
-  if (mode !== "hands_on" || st.over || shared) return null;
+  if (mode !== "hands_on" || st.over || shared || st.no_link) return null;
   const h = st.day * 24;
   const w = st.weather;
   const motors = !st.sailboat && st.power_w > 0;
