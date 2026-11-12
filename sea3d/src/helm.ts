@@ -2659,7 +2659,7 @@ orderGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((DA
   orderGeo.setAttribute("color", new THREE.BufferAttribute(col, 4));
   orderGeo.setIndex(idx);
 }
-const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, fog: false })); // a hint, not road paint (Ines, Rosa)
 orderLine.frustumCulled = false;
 orderLine.visible = false;
 orderLine.renderOrder = 11; // over the sea, like the wake
@@ -2680,7 +2680,7 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
   const a = THREE.MathUtils.degToRad(to);
   const dx = Math.sin(a);
   const dz = -Math.cos(a);
-  const half = Math.max(0.09, spec.length * 0.012);
+  const half = Math.max(0.06, spec.length * 0.008);
   const from = spec.length * 0.8;
   const len = THREE.MathUtils.clamp(spec.length * 5, 30, 60);
   const step = len / (DASHES + 0.5);
