@@ -333,6 +333,9 @@
   #keysbtn { width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
   #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
   #keylist[hidden] { display: none; }
+  #keylist:not([hidden]) { flex-wrap: wrap; }
+  #keylist .picq { flex-basis: 100%; display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hud-line); color: var(--dim); }
+  #keylist .picq select { font: inherit; color: var(--ink); background: rgba(27,51,82,.7); border: 1px solid var(--hud-line); border-radius: 6px; padding: 2px 6px; }
   #keylist .kh { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 2px 0 4px; }
   #keylist:not([hidden]) { display: flex; gap: 22px; }
   #keylist .kg { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
@@ -509,6 +512,7 @@
     <div class="kg"><kbd>&larr; &rarr;</kbd><span>steer</span><kbd>&uarr; &darr;</kbd><span>sail in, sail out</span>
     <kbd>R</kbd><span>reef (Shift+R shakes out)</span><kbd>T</kbd><span>auto-trim</span><kbd>V</kbd><span>chase or deck camera</span>
     <kbd>N</kbd><span>sound</span><kbd>H</kbd><span>hide everything</span><kbd>Esc</kbd><span>hand back</span></div></div>
+  <label class="picq" title="Lower draws faster on an older computer. Your pick is remembered.">Picture <select id="picq"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
 </div>
 
 <button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>

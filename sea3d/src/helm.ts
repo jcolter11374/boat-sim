@@ -37,6 +37,7 @@ import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, las
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
+import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { LIGHT_WIND_FROM, MEDAL_WORDS, ROBOT_SECS, clock as trialClock, ghostAt, medalFor, medalTime, readGhost, saveGhost, turnTrack, type Medal, type Track } from "./helm/trial";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
@@ -59,7 +60,6 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const params = new URLSearchParams(location.search);
 const KN = 1.94384;
 const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : iso + "Z");
-const quality = params.get("quality") === "low" ? "low" : "high";
 
 // ---------- 3D ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -77,6 +77,17 @@ controls.maxPolarAngle = Math.PI * 0.495;
 camera.position.set(-6.5, 2.2, -3.5); // from her port side, so she heads right-to-left before the start (Ines)
 controls.target.set(0, 0.3, 0);
 const atmos = new Atmosphere(renderer, scene, camera);
+// The picture's quality (src/helm/autoQuality.ts): ?quality= for tests, else the player's pick, else
+// Low on software graphics, else Medium, stepping down to Low once under the goal card if too slow.
+let storedLevel: string | null = null;
+try {
+  storedLevel = localStorage.getItem(PREF_KEY);
+} catch {
+  /* private mode: nothing remembered */
+}
+const qstat = { ...startLevel(location.search, storedLevel, atmos.software), median: NaN, typical: NaN, frames: 0, stepped: false };
+/** Geometry is built once: Low builds the light versions, Medium and High the full ones. */
+const quality = qstat.level === "low" ? "low" : "high";
 const sea = new Sea(quality);
 scene.add(sea.mesh);
 const clouds = new Clouds();
@@ -126,10 +137,39 @@ let motion = new BoatMotion(hull, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
-const ratio = quality === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
-renderer.setPixelRatio(ratio);
-atmos.setPixelRatio(ratio);
-atmos.setBloom(quality === "high");
+let seaLevel: "low" | "high" = quality;
+/** Draw at a level: its resolution, glow and sea mesh. The boats keep the geometry they were built with. */
+function applyLevel(l: Level): void {
+  qstat.level = l;
+  const q = levelSettings(l, window.devicePixelRatio, atmos.software);
+  renderer.setPixelRatio(q.ratio);
+  atmos.setPixelRatio(q.ratio);
+  atmos.setBloom(q.bloom);
+  if (q.sea !== seaLevel) {
+    seaLevel = q.sea;
+    sea.setQuality(q.sea);
+  }
+  const sel = document.getElementById("picq") as HTMLSelectElement | null;
+  if (sel) sel.value = l;
+}
+applyLevel(qstat.level);
+/** Times the frames under the goal card, once, while the level is still the automatic one. */
+const judge = new FrameJudge();
+let judging = false;
+// The player's own pick (the keys panel): it wins from now on, and is remembered.
+$<HTMLSelectElement>("picq").value = qstat.level;
+$<HTMLSelectElement>("picq").addEventListener("change", (e) => {
+  const v = (e.currentTarget as HTMLSelectElement).value;
+  if (!isLevel(v)) return;
+  judging = false;
+  qstat.source = "player";
+  applyLevel(v);
+  try {
+    localStorage.setItem(PREF_KEY, v);
+  } catch {
+    /* private mode: for this visit only */
+  }
+});
 function buildBoat(): void {
   if (model) {
     scene.remove(model.root);
@@ -268,6 +308,8 @@ let chart: Chart | null = null;
 let chartDirty = true;
 let shownEvents = { boat: 0, ghost: 0 };
 const page = {
+  /** The picture's level, where it came from, and the timed median frame (ms) if it was judged (for tests). */
+  quality: qstat,
   ready: false,
   busy: false,
   stops: [] as Stop[],
@@ -2096,6 +2138,7 @@ function goalCard(km: number): Promise<void> {
   $("goalkm").textContent = `${Math.round(km).toLocaleString("en-US")} km.`;
   card.hidden = false;
   document.body.classList.add("goal");
+  judging = qstat.source === "auto" && !qstat.stepped;
   requestAnimationFrame(() => card.classList.add("in"));
   page.scene = "goal";
   return new Promise((done) => {
@@ -2921,6 +2964,22 @@ function aimAt(bearing: number): void {
 
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
+  // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
+  if (judging && !document.hidden && !page.busy) {
+    // Unclamped frame time: the judge wants the real one.
+    const v = judge.tick((t - last) * 1000);
+    if (v !== "wait") {
+      judging = false;
+      qstat.median = Math.round(judge.median() * 10) / 10;
+      qstat.typical = Math.round(judge.typical() * 10) / 10;
+      qstat.frames = judge.frames;
+      // Too slow for Medium: Low, once, while the goal card still covers the switch. Never up.
+      if (v === "slow" && qstat.source === "auto" && qstat.level !== "low") {
+        qstat.stepped = true;
+        applyLevel("low");
+      }
+    }
+  }
   const dt = Math.min(t - last, 0.1);
   last = t;
   // Play the hours just sailed: about 2.5 s a day, at most 6 s.
