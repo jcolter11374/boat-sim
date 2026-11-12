@@ -33,14 +33,15 @@ async function openOrders(page) {
 /** Watch a voyage's replay drawer (it slides shut after 10 s of play): open it and wait until it's in place. Old builds: nothing. */
 async function openReplay(page) {
   if (!(await page.locator("#replay-tab").count())) return;
-  if (!(await page.locator("#top.open").count())) await page.click("#replay-tab");
+  // Pin first, then open, in one go in the page (replay/hud.ts): the after-play timer can fire
+  // between a check that the drawer is open and a later pin, which shut it under the next click on
+  // slow runners (#419's log: drawer at x -340, no "open", straight after this returned). A
+  // pointerenter pins it and clears the timer; the tab's own click pins and opens it.
+  await page.evaluate(() => {
+    document.getElementById("top")?.dispatchEvent(new PointerEvent("pointerenter"));
+    if (!document.getElementById("top")?.classList.contains("open")) document.getElementById("replay-tab")?.click();
+  });
   await page.waitForFunction(() => { const o = document.getElementById("top"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20000 });
-  // Pin it open (replay/hud.ts pin) so the after-play timer can't slide it shut mid-test. A hover only
-  // pins on a real pointerenter, which never fires when the mouse already sits there (flaky
-  // "outside of the viewport" clicks, Lena): move off and back, then pin directly as a backstop.
-  await page.mouse.move(1270, 360); // off the drawer (it is on the left)
-  await page.hover("#top h2").catch(() => {});
-  await page.evaluate(() => document.getElementById("top")?.dispatchEvent(new PointerEvent("pointerenter")));
 }
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
@@ -263,6 +264,12 @@ try {
     }
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+    // Hold the race near its start first: on a slow runner the real Randolph race (PR builds carry it;
+    // local runs use the short fixture) can reach its end card during the checks above, and the
+    // end card shuts the replay drawer whatever the pin (showOutcome, #422), so the close-up click
+    // missed with "outside of the viewport" (Maya, Lena).
+    await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(1); });
+    await page.waitForFunction(() => !document.querySelector("#outcome.show"), null, { timeout: 10000 });
     await openReplay(page); // the close-up buttons live in the replay drawer
     await page.click('#focus button[data-lane="1"]');
     await page.waitForTimeout(800);
