@@ -219,6 +219,7 @@ export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
         case "cabin":
         case "cove_stripe":
           nightFloor(m);
+          skyShade(m);
           if (p) {
             p.clearcoatRoughness = look.coatRough;
             if (look.fairing > 0) {
@@ -278,6 +279,43 @@ export function nightFloor(m: THREE.MeshStandardMaterial): void {
   m.customProgramCacheKey = () => `${prevKey()}|night-floor`;
 }
 
+/**
+ * Sky shading on white topsides (Ines, 12 Nov): a hull lit only by an even sky reads as
+ * flat plastic. Real topsides take most sky where they face up (deck, the flare), less
+ * as they turn under toward the bilge, which also sees the dark sea rather than the sky,
+ * and pick up a faint blue bounce off the water near the waterline. Scales the light
+ * the hull already gets, so it goes dark at night with everything else.
+ */
+export function skyShade(m: THREE.MeshStandardMaterial): void {
+  if (m.userData.skyShade) return;
+  m.userData.skyShade = true;
+  const prev = m.onBeforeCompile.bind(m);
+  const prevKey = m.customProgramCacheKey.bind(m);
+  m.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    sh.vertexShader = sh.vertexShader
+      .replace("void main() {", "varying vec3 vSkyN;\nvarying float vSkyY;\nvoid main() {")
+      .replace(
+        "#include <project_vertex>",
+        "#include <project_vertex>\n  vSkyN = normalize(mat3(modelMatrix) * objectNormal);\n  vSkyY = (modelMatrix * vec4(transformed, 1.0)).y;",
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace("void main() {", "varying vec3 vSkyN;\nvarying float vSkyY;\nvoid main() {")
+      .replace(
+        "#include <lights_fragment_end>",
+        `#include <lights_fragment_end>
+  {
+    float up = smoothstep(-0.75, 0.6, normalize(vSkyN).y);
+    // Low on the topsides the hull sees the sea, not the sky: less light, a cool blue cast.
+    float near = 1.0 - smoothstep(-0.1, 1.1, vSkyY);
+    reflectedLight.indirectDiffuse *= mix(0.4, 1.1, up) * mix(1.0, 0.72, near) * mix(vec3(1.0), vec3(0.7, 0.9, 1.15), 0.7 * near);
+    reflectedLight.directDiffuse *= mix(0.68, 1.0, up) * mix(1.0, 0.86, near);
+  }`,
+      );
+  };
+  m.customProgramCacheKey = () => `${prevKey()}|sky-shade`;
+}
+
 export type Boat = "kayak" | "randolph";
 
 /** Give a detailed model's materials their real-world finish (each material once; they're shared). */
@@ -290,7 +328,10 @@ export function applyFinishes(root: THREE.Object3D, boat: Boat = "kayak"): void 
       const f = table[m.name];
       if (!f) continue;
       f(m);
-      if (m.name === "hull" || m.name === "transom") nightFloor(m);
+      if (m.name === "hull" || m.name === "transom") {
+        nightFloor(m);
+        skyShade(m);
+      }
       m.userData.finished = true;
       m.needsUpdate = true;
     }
