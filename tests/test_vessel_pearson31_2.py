@@ -83,3 +83,14 @@ def test_sails_as_a_stock_base_and_replays_find_its_file():
     for _ in range(6):
         s, _ = v.step(s, Command(90, 0.0, engine=False), beam, timedelta(minutes=10), rng)
     assert 4.0 < s.speed_through_water / KNOT < 6.75
+
+
+def test_committed_trim_table_is_the_vpp_output(raw):
+    """Hand trim for "Take the wheel" (vpp.py --trim), as the cruiser's."""
+    p = V.VPPParams.from_config(raw["vpp"])
+    t = json.loads(Path("configs/polars/pearson31_2_trim.json").read_text())
+    assert set(t["plans"]) == {"full", "reef1", "reef2", "storm"}
+    assert t["autopilot_factor"] == p.autopilot_factor
+    i, j, k = t["tws_kn"].index(12), t["twa_deg"].index(90), 4
+    x = V.solve_trim(p, 12 * KNOT, 90, p.plans[0], t["sheet_deg"][k], 0.0)
+    assert t["plans"]["full"]["speed_kn"][i][j][k] == pytest.approx(x.speed / KNOT, abs=0.002)
