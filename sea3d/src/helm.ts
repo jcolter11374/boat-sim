@@ -1486,7 +1486,17 @@ function practiceEnded(r: WheelResult): void {
   }
   $("practice-sum").textContent = text;
   if (c) practiceCard();
-  if (card.classList.contains("trial")) $("practice-courses").hidden = true;
+  // The course and breeze are picked on the Set sail card now (M1 piece 3), so the end card only
+  // offers the same course again or the card ("Another course"); a drill offers "Sail another".
+  $("practice-courses").hidden = true;
+  const retry = !card.classList.contains("trial") && (c?.kind === "triangle" || c?.kind === "light");
+  if (retry) {
+    $("practice-ghost").textContent = "Try again";
+    $("practice-result").hidden = false;
+    // Only the buttons: no medal or time for a run that didn't finish (style, as .medal sets its own display).
+    for (const el of Array.from($("practice-result").children)) (el as HTMLElement).style.display = el.classList.contains("result-go") ? "" : "none";
+  } else for (const el of Array.from($("practice-result").children)) (el as HTMLElement).style.display = "";
+  $("practice-again").hidden = retry || card.classList.contains("trial");
   card.hidden = false;
   $("practice-what").hidden = true;
 }
@@ -1520,17 +1530,23 @@ function practiceCard(): void {
     b.textContent = t == null ? "" : `your best ${runTime(t)}`;
   }
 }
+/** Back to the Set sail card, Annapolis still picked with the course and breeze you last sailed (M1 piece 3). */
+function practiceToCard(): void {
+  $("practice-end").hidden = true;
+  $("practice-result").hidden = true;
+  $("practice-end").classList.remove("trial");
+  $("start").hidden = false;
+}
 if (PRACTICE) {
   document.body.classList.add("practice");
-  $("start").hidden = true;
+  // The Set sail card is practice's front door too (M1 piece 3): it opens with Annapolis picked,
+  // unless a link already chose (?go=1 with a course).
+  $("start").hidden = params.get("go") === "1" && !!SS.course;
   useBoat("stock_cruiser31");
-  $("practice-again").addEventListener("click", () => void practiceSpell("drill"));
+  // "Sail another" and "Another course" go back to the card; "Race your best" sails the same course again.
+  $("practice-again").addEventListener("click", practiceToCard);
   $("practice-ghost").addEventListener("click", () => void (lastTrial && practiceSpell(lastTrial)));
-  $("practice-other").addEventListener("click", () => {
-    $("practice-result").hidden = true;
-    $("practice-end").classList.remove("trial");
-    practiceCard();
-  });
+  $("practice-other").addEventListener("click", practiceToCard);
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-courses [data-course]"))) b.addEventListener("click", () => void practiceSpell(b.dataset.course as CourseKind | "drill"));
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button")))
     b.addEventListener("click", () => {
@@ -1540,14 +1556,11 @@ if (PRACTICE) {
   void depthsReady.then((d) => {
     page.practiceBay = d.known;
     if (d.known) {
-      // Open on the course card, the boat already off Annapolis with the town behind.
+      // Behind the Set sail card, the boat already off Annapolis with the town behind.
       practiceHere = ANNAPOLIS_COURSE;
-      $("practice-sum").textContent = "Sail a 31 ft cruiser yourself off Annapolis, on the Chesapeake Bay. Pick a breeze and a course.";
-      practiceCard();
-      $("practice-end").hidden = false;
       aimAt(290); // toward the town and the Naval Academy
       if (params.get("go") === "1" && SS.course) void practiceSpell(SS.course);
-    } else void practiceSpell("drill");
+    } else if (params.get("go") === "1") void practiceSpell("drill"); // no Bay squares on this copy: the old drills
   });
 }
 
@@ -3516,12 +3529,17 @@ if (!shared && !PRACTICE && SS.boat && boatRow(SS.boat)) {
 /** The choices the start card shows now. */
 function currentSetSail(): SetSail {
   if (PRACTICE) return { ...SS, where: "annapolis", breeze: practiceBreeze, course: lastTrial ?? SS.course };
+  return oceanSetSail();
+}
+/** The crossing's choices from the card's controls (on a practice page too, for its "Across the Atlantic" pill). */
+function oceanSetSail(): SetSail {
   const lv = $<HTMLSelectElement>("launch").value;
   return { ...SS, where: "ocean", boat: chosenBoat(), when: lv === LAUNCH.rough ? "rough" : "calm", challenge: $<HTMLSelectElement>("challenge").value, course: "" };
 }
 
 /** Set sail with these choices: the same page and screen for every mode; switching between the ocean and Annapolis reloads into the other. */
 async function startVoyage(s: SetSail): Promise<void> {
+  if (PRACTICE) $("start").hidden = true;
   if ((s.where === "annapolis") !== PRACTICE) {
     location.assign(`helm.html${withChoices(location.search, s, true)}`);
     return;
@@ -3563,6 +3581,17 @@ const previewBoat = (where: SetSail["where"]) => {
   const back = spec.length > 5 ? (window.innerWidth < 700 ? 6.5 : 4.5) : 2.8;
   camera.position.copy(controls.target).add(off.setLength(spec.length * back));
 };
-if (!shared && !PRACTICE) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat });
+if (!shared) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat });
+// On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
+// the crossing must not begin() here, among the Bay's marks, so it reloads into a voyage page.
+if (!shared && PRACTICE)
+  $("go").addEventListener(
+    "click",
+    (e) => {
+      e.stopImmediatePropagation();
+      void startVoyage(oceanSetSail());
+    },
+    true,
+  );
 // ?go=1: the card (or a link) already chose; set sail at once.
 if (!shared && !PRACTICE && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));
