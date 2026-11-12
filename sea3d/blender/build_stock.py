@@ -379,12 +379,12 @@ def build_cruiser() -> list:
         (mx + 0.08, ym + mh - 0.35, 0),
         (gx - 0.08, ym + 1.0, 0),
     )
-    sail("sail_main", main_t, main_h, main_c, 0.07, M["sail"], parent=mp)
+    sail("sail_main", main_t, main_h, main_c, 0.1, M["sail"], parent=mp)  # ~10% camber
     jp = pivot("jib_pivot", bow)
     jib_t = (0.3, y_deck(0.3) + 0.42, 0)
     jib_h = (mx - 0.25, ym + mh - 0.9, 0)
     jib_c = (4.95, y_deck(4.95) + 0.6, 0)
-    sail("sail_jib", jib_t, jib_h, jib_c, 0.09, M["sail"], parent=jp)
+    sail("sail_jib", jib_t, jib_h, jib_c, 0.12, M["sail"], parent=jp)
     # Winches by the cockpit.
     for side in (1, -1):
         cylinder(
@@ -1331,7 +1331,7 @@ def build_pearson() -> list:
         (mx + 0.1, boom_y + 0.05, 0),
         (mx + 0.08, boom_y + 11.22, 0),
         (gx - 0.08, boom_y + 0.05, 0),
-        0.07,
+        0.1,  # ~10% camber, a cruising main
         M["sail"],
         parent=mp,
     )
@@ -1342,7 +1342,7 @@ def build_pearson() -> list:
         (0.3, y_deck(0.3) + 0.4, 0),
         (mx - 0.25, ym + mh - 0.9, 0),
         (0.16 + 1.35 * 3.90, y_deck(5.4) + 0.55, 0),
-        0.09,
+        0.12,  # a genoa sets fuller than the main
         M["sail"],
         parent=jp,
     )

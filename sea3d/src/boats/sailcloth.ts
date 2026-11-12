@@ -153,6 +153,9 @@ void main() {`,
         `#include <color_fragment>
   vec2 sailDbl = sailLayers(vSailUv);
   diffuseColor.rgb *= 1.0 - 0.02 * sailDbl.x - 0.04 * sailDbl.y; // barely there in front light
+  // The cloth curves away towards the leech and gathers a little shade at the
+  // foot (the boom, the deck and the other sail), so a full sail reads as a curve.
+  diffuseColor.rgb *= (1.0 - 0.09 * smoothstep(0.45, 1.0, vSailUv.x)) * (1.0 - 0.07 * (1.0 - smoothstep(0.0, 0.25, vSailUv.y)));
   // A flogging luff: the cloth folds, and the folds shade each other.
   diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);`,
       )
@@ -169,22 +172,24 @@ void main() {`,
       .replace(
         "#include <emissivemap_fragment>",
         `#include <emissivemap_fragment>
-  // Light through the cloth. Only from the side away from the sun (the face we
-  // see must face away from it), a broad glow from any angle, plus a strong
-  // forward glow looking towards the sun. Brightest mid-sail, falling off to the
-  // luff and leech (more cloth edge-on, the boltrope and tapes); seams let
-  // through about two thirds, tapes and corner patches about half. The light
-  // keeps half the sun's tint, the rest is the cloth's own off-white.
+  // Light through the cloth, set by the angle between the sun, the sail and the
+  // camera, never by a place on the sail: only on the face turned away from the
+  // sun, and only when we look roughly towards the sun (a front-lit sail gets
+  // none). The glow rises smoothly with both angles, so it follows the cloth's
+  // own curve with no edge. Seams let through about two thirds, tapes and corner
+  // patches about half. The light keeps half the sun's tint; the rest is the
+  // cloth's own off-white.
   vec3 sunV = normalize((viewMatrix * vec4(uSailSunDir, 0.0)).xyz);
-  float behind = max(-dot(normal, sunV), 0.0);
+  float behind = clamp(-dot(normal, sunV), 0.0, 1.0);
   vec3 sailView = normalize(vSailWorld - cameraPosition);
-  float through = pow(max(dot(sailView, uSailSunDir), 0.0), 3.0);
+  float toSun = dot(sailView, uSailSunDir);
+  float through = pow(max(toSun, 0.0), 2.0);
+  float facing = smoothstep(-0.2, 0.4, toSun);
   float pass = (1.0 - 0.3 * sailDbl.x) * (1.0 - 0.5 * sailDbl.y);
-  float body = 0.55 + 0.45 * sin(3.14159 * clamp(vSailUv.x, 0.0, 1.0)) * (1.0 - 0.4 * vSailUv.y);
   float sunLum = dot(uSailSunCol, vec3(0.2126, 0.7152, 0.0722));
   vec3 tint = mix(vec3(sunLum), uSailSunCol, 0.5);
   totalEmissiveRadiance += diffuseColor.rgb * tint
-    * (${TRANSLUCENCY.toFixed(2)} * uSailSun * pass * body * smoothstep(0.0, 0.2, behind) * (0.45 * behind + through));`,
+    * (${TRANSLUCENCY.toFixed(2)} * uSailSun * pass * facing * behind * (0.3 + 0.7 * through));`,
       );
   };
   pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v2`;
