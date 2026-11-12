@@ -576,10 +576,14 @@ if (uMirror > 0.001) {
   // Three taps smeared up and down, as ripples stretch a reflection (Ines r5: not
   // mirror-crisp, no stair-stepped edge). The mirror clears to transparent black, so
   // un-premultiply or the edges go dark.
+#ifdef SEA_LITE
+  vec4 m = texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)));
+#else
   vec2 bl = vec2(0.0015, 0.004);
   vec4 m = (2.0 * texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)))
           + texture2D(tMirror, clamp(uv + bl, vec2(0.001), vec2(0.999)))
           + texture2D(tMirror, clamp(uv - bl, vec2(0.001), vec2(0.999)))) * 0.25;
+#endif
   m.rgb /= max(m.a, 0.05);
 #ifndef SEA_LITE
   m.rgb = seaColdSky(m.rgb);
