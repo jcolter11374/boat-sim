@@ -62,7 +62,9 @@ async function helmStart(page, setup = async () => {}) {
   // Time runs by itself once you set sail (#339): pause it, and let the picture settle, so a hop measures only the hop.
   await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
   // The status can lag the start by a frame or two: settle only once there's a day to read.
-  await page.waitForFunction(() => typeof window.__helm.status?.day === "number", null, { timeout: MIN }).catch(() => {});
+  // The status reads day 0 until the clock's first run (already under way when we paused) comes
+  // back, which can take a few seconds in Firefox: settle only after that (#368 gate, helm-until).
+  await page.waitForFunction(() => (window.__helm.status?.day ?? 0) > 0, null, { timeout: 30_000 }).catch(() => {});
   let last = -1;
   for (let i = 0; i < 60; i++) {
     const d = await page.evaluate(() => window.__helm.status?.day ?? 0);
