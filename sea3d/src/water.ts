@@ -571,14 +571,23 @@ if (wreckShade > 0.0) {
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
-  vec2 uv = pc.xy / pc.w + nWm.xz * (0.03 + 0.25 * (1.0 - uMirror));
+  vec2 uv = pc.xy / pc.w + nWm.xz * (0.06 + 0.25 * (1.0 - uMirror)); // the ripples break it up
   vec4 m = texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)));
 #ifndef SEA_LITE
   m.rgb = seaColdSky(m.rgb);
 #endif
   vec3 Vm = normalize(cameraPosition - vWPos);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(nWm, Vm), 0.0), 5.0);
-  float k = m.a * uMirror * clamp(0.25 + fres, 0.0, 0.95) * (1.0 - foamMask);
+  // A reflected hull is its own colour, darker and drawn toward the water's (Ines): it
+  // replaces the sky's reflection where it hides the sky, so it must dominate there
+  // rather than tint the bright sky-lit sea (a half mix of orange and sky reads pink).
+  // Darken it rather than mix blue into it: blue added to a bright orange reads pink,
+  // a darker orange reads as the hull seen in deep water (brown-orange).
+  float lumM = dot(m.rgb, vec3(0.2126, 0.7152, 0.0722));
+  m.rgb = mix(m.rgb, vec3(lumM), 0.15) * 0.55 + outgoingLight * 0.06;
+  // How smooth the water is sets how sharp the image is, not how much of it: a half-strength
+  // reflection is a tint, and tints shift the hue. Fade it only as the mirror switches off.
+  float k = m.a * smoothstep(0.0, 0.35, uMirror) * clamp(0.85 + fres, 0.0, 0.95) * (1.0 - foamMask);
   outgoingLight = mix(outgoingLight, m.rgb, k);
 }
 `;

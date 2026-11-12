@@ -58,7 +58,7 @@ export class ShortWaveRide implements ShortRide {
 
   /**
    * length, beam: waterline (m); bowX, sternX: their x in the boat frame (m).
-   * GUESS (by eye against Sam's checklist): full tilt for a 3 m hull, falling as 3/L
+   * GUESS (by eye against Sam's checklist): 1.4 x the slope for a 3 m hull, falling as 4.2/L
    * beyond; heave follows a little less than fully, so crests climb a low deck
    * ("awash"); the lag is 0.12 s per sqrt(m) of length (a kayak about 0.2 s).
    */
@@ -68,8 +68,10 @@ export class ShortWaveRide implements ShortRide {
     private readonly bowX: number,
     private readonly sternX: number,
   ) {
-    this.gain = Math.min(1, 3 / Math.max(length, 0.5));
-    this.heaveGain = 0.75 * this.gain;
+    // A small hull is livelier than the water slope alone: it's thrown about by the
+    // short crests (Sam: rolls and pitches about every second, never steady).
+    this.gain = Math.min(1.4, 4.2 / Math.max(length, 0.5));
+    this.heaveGain = 0.75 * Math.min(1, 3 / Math.max(length, 0.5));
     this.tau = 0.12 * Math.sqrt(Math.max(length, 0.5));
     this.shape = knockShape(length);
   }

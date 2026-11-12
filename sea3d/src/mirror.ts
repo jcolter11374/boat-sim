@@ -16,7 +16,17 @@ export const MIRROR_LAYER = 1;
 
 /** Put an object and everything under it in the sea's mirror. */
 export function reflectable(o: THREE.Object3D): void {
-  o.traverse((c) => c.layers.enable(MIRROR_LAYER));
+  o.traverse((c) => {
+    // Hair-thin parts (an antenna, a stay) alias into dashes in the small mirror: leave them out.
+    const g = (c as THREE.Mesh).geometry;
+    if ((c as THREE.Mesh).isMesh && g) {
+      if (!g.boundingBox) g.computeBoundingBox();
+      const d = g.boundingBox!.getSize(new THREE.Vector3()).multiply(c.getWorldScale(new THREE.Vector3()));
+      const [a, b] = [d.x, d.y, d.z].sort((x, y) => x - y);
+      if (a < 0.03 && b < 0.03) return;
+    }
+    c.layers.enable(MIRROR_LAYER);
+  });
 }
 
 /** How strongly a sea of this height (m) mirrors: fully in a flat calm, a third at 0.4 m, gone by 0.6 m. */

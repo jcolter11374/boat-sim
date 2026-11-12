@@ -53,7 +53,7 @@ const collarFrag = /* glsl */ `
     float aft = smoothstep(0.15, 0.9, vUV.x);
     float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
     a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
-    gl_FragColor = vec4(vec3(0.95, 0.97, 1.0) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.9));
+    gl_FragColor = vec4(vec3(0.84, 0.88, 0.9) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.6));
   }
 `;
 
@@ -114,6 +114,15 @@ export class Contact {
   /** This frame's splash for the sound, 0..1 (a slam's sheet or the bow meeting a steep face); 0 otherwise. */
   splash = 0;
   private pending = 0;
+  /** Green water over the deck: start time (s), how long, peak height (m), crest s from/to. */
+  private over = { t: -1e9, dur: 1, h: 0, from: 1.2, to: -1.2 };
+
+  /** A crest breaks over the deck now: water h metres deep sweeps aft along it. */
+  private greenWater(t: number, h: number): void {
+    const small = this.spec.length < 5;
+    // A small boat is swept end to end; a yacht takes it over the bow (GUESS by eye).
+    this.over = small ? { t, dur: 1.1, h, from: 1.3, to: -1.3 } : { t, dur: 0.9, h, from: 1.25, to: 0.15 };
+  }
 
   /** A breaking crest hits the boat now (a knockdown): a big sheet of spray next frame, 0..1. */
   slam(strength = 1): void {
@@ -284,13 +293,19 @@ export class Contact {
     const u = this.collar.material.uniforms;
     u.uTime.value = t;
     u.uFlow.value = this.flow;
-    u.uI.value = THREE.MathUtils.clamp(0.25 + 0.45 * speedK + 0.3 * seaK, 0, 1);
+    u.uI.value = THREE.MathUtils.clamp(0.15 + 0.4 * speedK + 0.22 * seaK, 0, 0.85); // broken and grey, never a bright rim (Ines)
     u.uLight.value = s.light;
     u.uDir.value.set(Math.cos(place.yaw), -Math.sin(place.yaw));
     this.shown.collar = u.uI.value;
 
     // The bow wave and wash in the sea, and the wet line on the hull, from the same speed and sea.
     const [cx, cz] = toWorld(this.wlMid, 0, place);
+    {
+      const u = (t - this.over.t) / this.over.dur;
+      const o = this.over;
+      if (u >= 0 && u <= 1) this.wash?.setOver(o.h * Math.sin(Math.PI * u), o.from + (o.to - o.from) * u);
+      else this.wash?.setOver(0, 0);
+    }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
     this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.05 * seaK, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
 
@@ -318,11 +333,15 @@ export class Contact {
         else {
           // just past the steepest part of the face: throw the sheet once for this face
           crest = this.risePeak;
+          // From force 6 a fast-rising face breaks over a low deck (Sam's checklist 3).
+          const gw = THREE.MathUtils.smoothstep(hs, 2.0, 4.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) * Math.min(0.5, 0.3 * (crest - CREST_RISE));
+          if (gw > 0.05 && t - this.over.t > this.over.dur) this.greenWater(t, gw);
           burst += Math.min(220, Math.round((this.risePeak - CREST_RISE) * 150 * (0.4 + speedK) * slamK * slamK));
           this.risePeak = -1;
         }
       }
       if (this.pending > 0) {
+        this.greenWater(t, 0.45 * this.pending);
         burst += Math.round(200 * this.pending);
         crest = Math.max(crest, 2.5 * this.pending);
         this.pending = 0;

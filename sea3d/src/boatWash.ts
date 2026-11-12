@@ -17,6 +17,9 @@ export const washUniforms = {
   uWashPos: { value: Array.from({ length: MAX_WASH_BOATS }, () => new THREE.Vector4()) },
   /** Per boat: half waterline length, half beam (m), bow-wave height (m), foam 0..1. */
   uWashDim: { value: Array.from({ length: MAX_WASH_BOATS }, () => new THREE.Vector4()) },
+  /** Per boat: green water over the deck now: height (m), crest centre and half width
+   *  along the hull (-1 stern .. 1 bow), and unused. */
+  uWashOver: { value: Array.from({ length: MAX_WASH_BOATS }, () => new THREE.Vector4()) },
 };
 
 /** Bow-wave height (m) for a hull at this speed: GUESS, 0.6 of the stagnation head
@@ -37,6 +40,7 @@ export class WashSlot {
     free[i] = false;
     washUniforms.uWashN.value = Math.max(washUniforms.uWashN.value, i + 1);
     washUniforms.uWashDim.value[i].set(0, 0, 0, 0);
+    washUniforms.uWashOver.value[i].set(0, 0, 1, 0);
     return new WashSlot(i);
   }
 
@@ -47,8 +51,15 @@ export class WashSlot {
     washUniforms.uWashDim.value[this.i].set(length / 2, beam / 2, bowWaveHeight(speed), foam);
   }
 
+  /** A crest breaking over the deck: height (m) of water over it, centred at s along
+   *  the hull (-1 stern .. 1 bow) with half width w; height 0 for none. */
+  setOver(height: number, s: number, w = 0.45): void {
+    washUniforms.uWashOver.value[this.i].set(height, s, w, 0);
+  }
+
   release(): void {
     washUniforms.uWashDim.value[this.i].set(0, 0, 0, 0);
+    washUniforms.uWashOver.value[this.i].set(0, 0, 1, 0);
     free[this.i] = true;
     let n = 0;
     for (let k = 0; k < MAX_WASH_BOATS; k++) if (!free[k]) n = k + 1;
@@ -61,6 +72,7 @@ export const BOAT_WASH_PARS = /* glsl */ `
 uniform int uWashN;
 uniform vec4 uWashPos[${MAX_WASH_BOATS}];
 uniform vec4 uWashDim[${MAX_WASH_BOATS}];
+uniform vec4 uWashOver[${MAX_WASH_BOATS}];
 float washHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float washNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -92,7 +104,7 @@ float boatWaveK(vec2 xz, float onHull) {
     if (i >= uWashN) break;
     vec4 dim = uWashDim[i];
     float H = dim.z;
-    if (H <= 0.0005) continue;
+    if (H <= 0.0005 && uWashOver[i].x <= 0.001) continue;
     vec4 l = washLocal(i, xz);
     float hl = dim.x;
     float s = l.x / hl;
@@ -106,6 +118,10 @@ float boatWaveK(vec2 xz, float onHull) {
     // spanning the hull side still reaches it; deeper inside, none (the hull hides it).
     k *= max(onHull, smoothstep(-0.45, -0.15, l.w));
     y += H * k;
+    // Green water: a crest breaking over the deck covers the hull itself for a moment
+    // (Ines, Sam: the kayak is buried by crests and pops back up), inside the outline too.
+    vec4 ov = uWashOver[i];
+    if (ov.x > 0.001) y += ov.x * exp(-pow((s - ov.y) / ov.z, 2.0)) * (1.0 - smoothstep(0.0, 0.8, l.w));
   }
   return y;
 }
@@ -160,6 +176,6 @@ export const BOAT_WASH_FRAGMENT = /* glsl */ `
 {
   float wash = boatFoam(vWPos.xz, uTime);
   foamMask = max(foamMask, wash);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.98), wash);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), 0.85 * wash);
 }
 `;

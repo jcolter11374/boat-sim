@@ -13,7 +13,7 @@ import { displace, type WaveComponent } from "./waves";
 const ALONG: Record<Quality, number> = { low: 20, high: 32 };
 const ACROSS = 7; // vertices across the strip
 const LIFE = 9; // s for foam to fade away
-const SPREAD = 0.22; // how fast the wake widens, m per m run
+const SPREAD = 0.28; // how fast the strip widens, m per m run: its edges (x 1.25) at Kelvin's 19.5 deg
 
 const vert = /* glsl */ `
   attribute vec2 aUV; // x: 0 at the stern .. 1 at the far end; y: -1 port edge .. 1 starboard edge
@@ -33,6 +33,7 @@ const frag = /* glsl */ `
   uniform float uI;     // strength 0..1
   uniform float uLight;
   uniform float uTime;
+  uniform float uBeam;  // hull beam, m
   varying vec2 vUV;
   varying vec3 vW;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -73,25 +74,29 @@ const frag = /* glsl */ `
     float d = vUV.x * uLen;
     vec2 q = vec2(uOdo - d, vUV.y * (0.6 + d * ${SPREAD.toFixed(2)}));
     float age = vUV.x;                                   // 0 fresh .. 1 old
-    // Ragged edges: the band's width wanders with the water, so it has no straight sides.
-    float across = abs(vUV.y) + (vnoise(q * vec2(0.45, 0.9) + 11.0) * 0.7 + vnoise(q * vec2(1.4, 2.6) + 4.0) * 0.3 - 0.5) * 0.75;
-    // A broad band of churned water, and the two fainter arms of the waves the hull pushes out.
-    float band = (1.0 - smoothstep(0.2, 0.62, across)) * (1.0 - smoothstep(0.1, 1.0, age));
-    float arms = smoothstep(0.55, 0.75, across) * (1.0 - smoothstep(0.8, 0.95, across)) * (1.0 - smoothstep(0.05, 0.7, age)) * 0.55;
-    float body = max(band, arms) * (1.0 - smoothstep(0.75, 1.0, abs(vUV.y))); // never up to the strip's own edge
-    // It breaks into islands as it spreads: big soft blobs, the gaps between them widening with age.
-    float isl = vnoise(q * vec2(0.6, 1.3) + 2.0) * 0.65 + vnoise(q * vec2(2.0, 3.2) + uTime * 0.05) * 0.35;
-    float keep = smoothstep(0.22 + 0.4 * age, 0.42 + 0.4 * age, isl + 0.18 * (1.0 - age));
-    float churn = body * keep;
-    float foam = churn * lumps(q + vec2(0.0, uTime * 0.02), age) * (1.0 - 0.5 * age);
-    // Fresh foam under the stern is a churned white mass.
-    float fresh = (1.0 - smoothstep(0.0, 0.2, age)) * (1.0 - smoothstep(0.3, 0.8, across));
-    foam = max(foam, fresh * lumps(q * 1.3 + 5.7, 0.0));
+    float across = abs(vUV.y);
+    // The turbulent wake straight behind the hull stays about the hull's width (as a
+    // share of the widening strip it narrows aft) and fades; the hull's own waves run
+    // off in a V at the strip's edges (Kelvin's 19.5 deg) and fade with distance (Ines).
+    float centreW = 0.7 * (0.5 * uBeam) / (1.25 * (0.42 * uBeam + d * ${SPREAD.toFixed(2)}));
+    float wob = (vnoise(q * vec2(0.3, 0.8) + 11.0) - 0.5) * 0.35; // no straight sides
+    float centre = (1.0 - smoothstep(0.3, 1.4, across / max(centreW, 0.05) + wob)) * (1.0 - smoothstep(0.0, 0.9, age));
+    float arms = exp(-pow((across + 0.6 * wob * 0.3 - 0.8) / 0.07, 2.0)) * (1.0 - smoothstep(0.0, 0.65, age)) * 0.7;
+    float body = max(centre, arms);
+    // Streaky, turbulent foam: noise stretched along the flow, thinning with age.
+    float st = vnoise(vec2(q.x * 0.22, q.y * 4.5) + 3.0) * 0.55 + vnoise(vec2(q.x * 0.7, q.y * 10.0) + uTime * 0.05) * 0.3 + vnoise(q * 3.0) * 0.15;
+    float isl = st;
+    float churn = body;
+    float foam = body * smoothstep(0.38 + 0.25 * age, 0.62 + 0.2 * age, st + 0.22 * (1.0 - age)) * (1.0 - 0.5 * age);
+    // Fresh foam under the stern is a churned white mass, the hull's width.
+    float fresh = (1.0 - smoothstep(0.0, 0.15, age)) * (1.0 - smoothstep(0.4, 1.1, across / max(centreW, 0.05) + wob));
+    foam = max(foam, fresh * lumps(q * 1.3 + 5.7, 0.35) * smoothstep(0.3, 0.6, st));
     float a = foam * uI * smoothstep(0.0, 0.04, age);   // soft start under the stern
     // Bubbles just under the surface make the whole band a pale, milky turquoise.
-    float milk = churn * uI * 0.22 * (1.0 - 0.6 * age) * (0.6 + 0.4 * isl);
+    float milk = centre * uI * 0.07 * (1.0 - 0.7 * age) * smoothstep(0.45, 0.8, isl);
     vec3 col = mix(vec3(0.55, 0.78, 0.8), vec3(0.86, 0.9, 0.91), clamp(a / max(a + milk, 1e-3), 0.0, 1.0));
-    float alpha = clamp(max(0.85 * a, milk), 0.0, 0.85);
+    // Never a hard-edged strip: fade out well inside its sides and ease in under the stern.
+    float alpha = clamp(max(0.85 * a, milk), 0.0, 0.85) * (1.0 - smoothstep(0.82, 0.98, across)) * smoothstep(0.0, 0.06, age);
     gl_FragColor = vec4(col * (uLight + foamLamp(vW)), alpha);
   }
 `;
@@ -135,7 +140,7 @@ export class Wake {
     const mat = new THREE.ShaderMaterial({
       vertexShader: vert,
       fragmentShader: frag,
-      uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 }, ...FOAM_LAMP_UNIFORMS },
+      uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 }, uBeam: { value: beam }, ...FOAM_LAMP_UNIFORMS },
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
