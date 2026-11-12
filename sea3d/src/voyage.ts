@@ -597,6 +597,7 @@ function showOutcome(): void {
     $("o-title").style.color = colour;
     $("o-text").textContent = `after ${rep.days.toFixed(1)} days. ${verdict(rep)}`;
   }
+  if (vhud.isDrawerOpen()) vhud.drawer(false); // the end card gets the screen; the drawer never covers it (Omar, Elena)
   $("outcome").classList.add("show");
 }
 
