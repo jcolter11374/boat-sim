@@ -59,39 +59,79 @@ class Build:
     label: str  # plain words for John
     variant: Variant
     options: dict  # catalog slot -> option id, plus cruise_w (Rev B: {"wing": ...})
+    note: str = ""  # behind the name's "i": our-model notes, the full list of changes
 
 
 BOAT_NAMES = {"kayak": "v4 kayak", "revc": "Randolph Rev C", "revb": "Randolph Rev B"}
-# The names a player reads (docs/glossary.md): "our kayak", "Randolph's Rev C (our model)".
-LABEL_NAMES = {
-    "kayak": "Our kayak",
-    "revc": "Randolph's Rev C (our model)",
-    "revb": "Randolph's Rev B (our model)",
+# The names a player reads (Leo, quality audit item 9). Our model of their boats is
+# said behind the "i" (MODEL_NOTE), not in the name. configs/randolph_rev_c.yaml is C5 (#304).
+LABEL_NAMES = {"kayak": "Our kayak", "revc": "Randolph Rev C5", "revb": "Randolph Rev B"}
+MODEL_NOTE = {
+    "revc": "Our model of the Randolph team's Rev C5, from their published design.",
+    "revb": "Our model of the Randolph team's earlier Rev B, from their published design.",
 }
+BARE_BONES = "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none"
+MAX_PHRASES = 2
+
+
+def _name(choices: dict) -> tuple[str, str]:
+    """A build's name and its "i" note, e.g. ("Our kayak + wing sail", ""),
+    ("Our kayak, bigger panels and batteries", ""), ("Randolph Rev C5, one rudder", "Our model ...").
+    The boat, then "+" for things added and a comma for other changes, at most two
+    phrases (the full list goes in the note)."""
+    base = catalog.base_of(choices)
+    picked, cruise = catalog.normalise(choices)
+    if base == "kayak":
+        changed = [(s, o) for s, o in picked.items() if o != catalog.DEFAULTS[s]]
+    else:
+        changed = [(s, o) for s, o in picked.items() if catalog.matters(s, o, base)]
+    head = LABEL_NAMES[base]
+    shape = dict(changed).get("shape")
+    if shape:
+        head = catalog.SHAPE_NAMES[shape]
+        changed = [c for c in changed if c[0] != "shape"]
+    for pair, words in catalog.MERGED.items():
+        if pair <= set(changed):
+            changed = [c for c in changed if c not in pair] + [("_merged", words)]
+    names = lambda cs: [w if s == "_merged" else catalog.CHANGE_NAMES[(s, w)] for s, w in cs]
+    added = names([c for c in changed if c in catalog.ADDED])
+    others = names([c for c in changed if c not in catalog.ADDED])
+    sail_only = picked.get("drive") == "wing-sail"
+    if base == "kayak" and cruise != catalog.DEFAULT_CRUISE_W and not sail_only:
+        others.append(catalog.cruise_name(cruise, alone=not others))
+    note = MODEL_NOTE.get(base, "")
+    phrases = len(added) + len(others)
+    if phrases > MAX_PHRASES:
+        every = added + others
+        note = (note + " " if note else "") + "Changes: " + ", ".join(every) + "."
+        keep = (added + others)[:1]
+        more = phrases - len(keep)
+        added, others = [p for p in keep if p in added], [p for p in keep if p not in added]
+        others.append(f"and {more} more changes")
+    name = head + "".join(f" + {a}" for a in added)
+    if others:
+        joined = ", ".join(others) if any(" and " in o for o in others) else " and ".join(others)
+        name += ", " + joined
+    elif base != "kayak" and not added and not shape:
+        name += ", as built"
+    return name, note
 
 
 def _label(choices: dict) -> str:
-    """Plain words for a build: what it starts from, then only what differs, e.g.
-    "Our kayak", "Our kayak, 15 W cruise, Thrusters: one-t200", "Randolph's Rev C as built (our model)"."""
-    base = catalog.base_of(choices)
-    picked, cruise = catalog.normalise(choices)
-    if base != "kayak":
-        names = catalog.RSLOT_NAMES
-        diffs = [f"{names[s]}: {o}" for s, o in picked.items() if catalog.matters(s, o, base)]
-        if not diffs:
-            return LABEL_NAMES[base].replace(" (our model)", " as built (our model)")
-        return f"{LABEL_NAMES[base]}, " + ", ".join(diffs)
-    diffs = [f"{catalog.SLOT_NAMES[s]}: {o}" for s, o in picked.items() if o != catalog.DEFAULTS[s]]
-    if cruise != catalog.DEFAULT_CRUISE_W:
-        diffs.insert(0, f"{cruise} W cruise" if cruise else "sail only")
-    return LABEL_NAMES["kayak"] + (", " + ", ".join(diffs) if diffs else "")
+    return _name(choices)[0]
 
 
 def _kayak(choices: dict) -> Build:
     base = catalog.base_of(choices)
     picked, cruise = catalog.normalise(choices)
-    label = _label(choices)
+    label, note = _name(choices)
     changes = catalog.design_changes(choices)
+    if catalog.grid_id(choices) == BARE_BONES:
+        label = "Our kayak, bare-bones build"
+        note = (
+            "Every cheaper part at once: one motor, 200 W of panels, one battery, one charge "
+            "controller, no backup autopilot, beacon or AIS, no bottom paint, motors at 15 W."
+        )
     return Build(
         catalog.grid_id(choices),
         BOAT_NAMES[base],
@@ -99,6 +139,7 @@ def _kayak(choices: dict) -> Build:
         label,
         Variant("boatyard", label, changes),
         {**({"base": base} if base != "kayak" else {}), **picked, "cruise_w": cruise},
+        note,
     )
 
 
@@ -124,7 +165,13 @@ def _builds() -> dict[str, Build]:
     # so a design never snaps to these; they come after the 0.5 build.
     cat = _kayak({"shape": "cat"})
     for q in CAT_STAYS_OVER:
-        label = f"{cat.label} (if {q:.0%} of rolls leave it upside down, not 50 %)"
+        label = f"{cat.label}, {'best' if q < 0.5 else 'worst'} case"
+        one_in = {0.2: "1 in 5", 0.8: "4 in 5"}[q]
+        note = (
+            f"If {'only ' if q < 0.5 else ''}{one_in} capsizes {'leaves' if q < 0.5 else 'leave'} it "
+            "upside down for good. "
+            "We don't know the real figure; 1 in 2 is our middle guess."
+        )
         change = ("hazards", "p_capsize_stays_over", q)
         out[f"{cat.id}-over{round(q * 100)}"] = Build(
             f"{cat.id}-over{round(q * 100)}",
@@ -133,14 +180,16 @@ def _builds() -> dict[str, Build]:
             label,
             Variant("boatyard", label, (*cat.variant.design, change)),
             {**cat.options, "stays_over": q},
+            note,
         )
     out["revb-spar"] = Build(
         "revb-spar",
         "Randolph Rev B",
         REV_B,
-        "Randolph Rev B with a stronger wing spar (our GUESS: a tenth of the wing damage)",
+        "Randolph Rev B, stronger wing spar",
         Variant("boatyard", "Rev B, stronger spar", (("hazards", "p_part", _rev_b_parts(0.1)),)),
         {"wing": "stronger spar"},
+        MODEL_NOTE["revb"] + " Our guess: a spar that takes a tenth of the damage.",
     )
     return out
 
@@ -304,6 +353,7 @@ def build_index(odds: dict[str, dict], replay_dir: Path, meta: dict) -> dict:
                 "id": bid,
                 "boat": b.boat,
                 "label": b.label,
+                **({"note": b.note} if b.note else {}),
                 "options": b.options,
                 "current": bid == CURRENT,
                 "odds": odds.get(bid),
@@ -356,6 +406,24 @@ def _units() -> dict:
     return {k: v for k, v in units.items() if k not in DROP_COLUMNS}
 
 
+def relabel(index: Path) -> int:
+    """Labels are words, not results: rewrite them in place without re-running."""
+    d = json.loads(index.read_text())
+    n = 0
+    for b in d["builds"]:
+        new = BUILDS.get(b["id"])
+        if new is None:
+            continue
+        before = (b["label"], b.get("note"))
+        b["label"] = new.label
+        b.pop("note", None)
+        if new.note:
+            b["note"] = new.note
+        n += before != (b["label"], b.get("note"))
+    index.write_text(json.dumps(d, indent=1))  # as `build` writes it
+    return n
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m boatsim.mc.boatyard")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -380,8 +448,16 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="partial regrid: merge these builds into the grid already in --out",
     )
+    rl = sub.add_parser(
+        "relabel", help="rewrite the grid's build labels from today's names (no runs)"
+    )
+    rl.add_argument("index", help="the page's boatyard/index.json")
     a = p.parse_args(argv)
 
+    if a.cmd == "relabel":
+        n = relabel(Path(a.index))
+        print(f"relabelled {n} builds")
+        return
     if a.cmd == "odds":
         ids = pick(a.builds, a.shard)
         df = run_odds(

@@ -16,6 +16,7 @@ import * as THREE from "three";
 import { applyStockFinishes } from "./finishes";
 import { DACRON, clotheSails, tickSails } from "./sailcloth";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { holdWires } from "./wire";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, PEARSON, SAIL_DRONE, STOCK, type StockKey } from "./specs";
@@ -135,6 +136,7 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
             }
           });
           applyStockFinishes(g, key); // gelcoat, bottom paint, non-skid (shared by every copy)
+          holdWires(g); // stays and lifelines stay a fine unbroken line at any distance
           detailed.set(key, g);
           return true;
         } catch {
