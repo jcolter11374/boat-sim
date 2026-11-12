@@ -235,3 +235,23 @@ test("the sea shader moves the water exactly as displace() does", () => {
     }
   }
 });
+
+test("flow: the sea moves past the boat by exactly the distance sailed", () => {
+  const a = new Sea(SEA_STATES.moderate);
+  const b = new Sea(SEA_STATES.moderate);
+  a.advance(0);
+  b.advance(0);
+  // b's boat sails 3.7 m east and 1.2 m south: b's sea at a point is a's sea 3.7 m east, 1.2 m south of it.
+  b.flow(3.7, 1.2);
+  const ca = a.advance(1 / 60);
+  const cb = b.advance(1 / 60);
+  for (const [x, z] of [[0, 0], [5, -3], [40, 22]]) {
+    const ya = displace(ca, x + 3.7, z + 1.2, 1 / 60)[1];
+    const yb = displace(cb, x, z, 1 / 60)[1];
+    assert.ok(Math.abs(ya - yb) < 1e-9, `${x},${z}: ${ya} vs ${yb}`);
+  }
+  // No flow: the same sea as before this change, bit for bit.
+  const c = new Sea(SEA_STATES.moderate);
+  c.advance(0);
+  assert.deepEqual(c.advance(1 / 60), ca);
+});
