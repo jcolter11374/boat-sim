@@ -67,9 +67,12 @@ function pills(box: HTMLElement, items: { key: string; label: string; sub?: stri
 export function mountSetSailCard(hooks: CardHooks): void {
   const card = document.getElementById("ss-card");
   if (!card) return;
-  let where: SetSail["where"] = "ocean";
-  let course: string = SET_SAIL.course[0].key;
-  let breeze: string = "good";
+  // Open on the page's own choices: a practice page (?practice, ?where=annapolis) opens with
+  // Annapolis picked and the course and breeze it last sailed (M1 piece 3).
+  const at = hooks.current();
+  let where: SetSail["where"] = at.where;
+  let course: string = at.course || SET_SAIL.course[0].key;
+  let breeze: string = at.breeze;
   let allChallenges = false;
   const launch = $<HTMLSelectElement>("launch");
   const challenge = $<HTMLSelectElement>("challenge");
