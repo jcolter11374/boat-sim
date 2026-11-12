@@ -43,6 +43,15 @@ export const LEG_M = 800;
 export const MARK_RADIUS_M = 40;
 /** "Reaching" the lighthouse: within this, staying in deep water off its shoal (GUESS). */
 export const LIGHT_RADIUS_M = 300;
+/**
+ * The finish off the light (Elena's #369 notes): a gate of two small yellow marks due east of it,
+ * so "pass the light on its east side" is a line you cross, not a circle you touch. The inner
+ * mark is clear of the stones (Iris: keep 200 m off); GUESS distances.
+ */
+export const LIGHT_GATE_IN_M = 250;
+export const LIGHT_GATE_OUT_M = 650;
+/** The finish words for the run to the light (Leo checks words). */
+export const LIGHT_FINISH_WORDS = "Finish: pass the light on its east side, between the two yellow marks";
 
 export type CourseKind = "triangle" | "light" | "harbour";
 export interface Course {
@@ -52,7 +61,7 @@ export interface Course {
   start: LatLon;
   heading: number;
   /** The marks, in order, the last being the finish. */
-  marks: (LatLon & { name: string })[];
+  marks: (LatLon & { name: string; gate?: [LatLon, LatLon] })[];
   radiusM: number;
 }
 
@@ -90,9 +99,14 @@ export function toTheLight(): Course {
     name: "the run to Thomas Point Light",
     start,
     heading: ((Math.atan2(v.x, v.y) * 180) / Math.PI + 360) % 360,
-    marks: [{ ...THOMAS_POINT, name: "Thomas Point Light" }],
+    marks: [{ ...THOMAS_POINT, name: "Thomas Point Light", gate: lightGate() }],
     radiusM: LIGHT_RADIUS_M,
   };
+}
+
+/** The finish gate's two marks, due east of the light: inner, then outer. */
+export function lightGate(): [LatLon, LatLon] {
+  return [offset(THOMAS_POINT, 90, LIGHT_GATE_IN_M), offset(THOMAS_POINT, 90, LIGHT_GATE_OUT_M)];
 }
 
 /** The breezes a player can pick (Leo: a beginner can ask for a gentle one). GUESS strengths. */
@@ -111,8 +125,8 @@ export const BAY_WINDS = [180, 200, 225, 160, 315, 340, 0, 135];
 
 /** Practice best times, per course and breeze, in this browser only. */
 const BEST_KEY = "boatsim.practice.best.v1";
-// The light run has had a fixed wind since the time trials (12 Nov), so its old times start afresh.
-export const bestKey = (c: CourseKind, b: Breeze) => `annapolis-${c === "light" ? "light-wsw" : c}-${b}`;
+// The light run has had a fixed wind since the time trials, and finishes through a gate (12 Nov): old times start afresh.
+export const bestKey = (c: CourseKind, b: Breeze) => `annapolis-${c === "light" ? "light-gate" : c}-${b}`;
 export function readBest(key: string): number | null {
   try {
     const all = JSON.parse(localStorage.getItem(BEST_KEY) ?? "{}") as Record<string, number>;

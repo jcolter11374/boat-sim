@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>boat-sim 3D: Boatyard</title>
+<title>Bluewater: Boatyard</title>
 <style>
   :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
@@ -66,7 +66,11 @@
   .row span:first-child { color: var(--dim); }
   .row b { font-weight: 650; }
   .row.chance { font-size: 15px; align-items: baseline; }
-  .row.chance b { font-size: 20px; color: var(--good); }
+  .row.chance b { font-size: 20px; color: var(--ink); }
+  .row.chance b[data-tier="best"] { color: var(--good); }
+  .row.chance b[data-tier="long"] { color: var(--warn); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .modeltag { font-weight: 500; font-size: 10.5px; color: var(--dim); margin-left: 4px; }
   .row.chance b.untested { font-size: 14px; color: var(--dim); font-weight: 600; }
   .row.chance b.estimate { color: var(--ink); }
   .row.chance b.up { animation: flash-up 0.9s ease-out; }
@@ -117,8 +121,8 @@
     <div id="bases" role="group" aria-label="Start from">
       <span class="muted">Start from</span>
       <button data-base="kayak" aria-pressed="true">Our kayak</button>
-      <button data-base="revc" aria-pressed="false" title="Our model of the Randolph team's Rev C5: a 1.5 m wing-sail boat">Randolph Rev C5 (our model)</button>
-      <button data-base="revb" aria-pressed="false" title="Our model of the Randolph team's earlier Rev B">Randolph Rev B</button>
+      <button data-base="revc" aria-pressed="false" title="Our model of the Randolph team's Rev C5: a 1.5 m wing-sail boat">Randolph Rev C5 <span class="modeltag">our model</span></button>
+      <button data-base="revb" aria-pressed="false" title="Our model of the Randolph team's earlier Rev B">Randolph Rev B <span class="modeltag">our model</span></button>
     </div>
   </header>
   <p id="legend" class="muted" hidden>Green and red numbers on a part: how your odds of finishing would change if you picked it.</p>
@@ -137,7 +141,7 @@
   <div class="btns">
     <button id="share" title="Copy a link that opens this exact design">Copy share link</button>
     <button id="yaml" title="A file the simulator can run (the Randolph team can run it too)">Download design file</button>
-    <button id="reset">Reset to our kayak</button>
+    <button id="reset">Start again from our kayak</button>
   </div>
   <div id="mine">
     <div class="mine-row">
@@ -148,7 +152,7 @@
   </div>
   <button id="launch">Test it</button>
   <div id="result"></div>
-  <p class="muted" style="margin:10px 0 0"><a href="./voyage.html">Voyage replays &rarr;</a></p>
+  <p class="muted" style="margin:10px 0 0"><a href="./voyage.html">Watch a voyage &rarr;</a></p>
 </section>
 <div id="views" class="glass" role="group" aria-label="How to look at the boat">
   <button data-view="afloat" aria-pressed="true" title="The boat as it floats">On the water</button>

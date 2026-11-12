@@ -350,12 +350,13 @@ try {
     log.push("water off the deck, fog and cloud");
 
     // Live tracker on the sample feed (Sam's replay mode, day 30: main box down, beacon only):
-    // the "simulated voyage" label, "now" at the latest report, and the forecast look past it.
+    // no "simulated" label even on the demo feed (John's call S2), "now" at the latest report,
+    // and the forecast look past it.
     await page.goto(`${URL}voyage.html?live&feed=feed-sample/&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 })
       .catch(async () => fail(`live tracker didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
     const lv = await page.evaluate(() => ({ ...window.__replay.live, hour: window.__replay.hour, label: /simulated voyage/.test(document.getElementById("h1").textContent), local: document.getElementById("w-local").textContent }));
-    if (!lv.simulated || !lv.label) fail(`simulated feed without its label: ${JSON.stringify(lv)}`);
+    if (!lv.simulated || lv.label || lv.banner) fail(`live tracker: demo feed must load with no "simulated" label (S2): ${JSON.stringify(lv)}`);
     if (!/^\d+:\d\d(:\d\d)? [AP]M local \(UTC/.test(lv.local)) fail(`no local time under the clock: ${JSON.stringify(lv)}`);
     if (Math.abs(lv.hour - lv.now) > 0.01 || lv.now < lv.lastFix || lv.fixes < 50) fail(`live tracker not at now: ${JSON.stringify(lv)}`);
     await page.evaluate((h) => window.__replay.setHour(h), lv.now + 24 * 5);
@@ -565,6 +566,11 @@ try {
       .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
     if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
     log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+    // Off Annapolis: Thomas Point Light stands on its shoal (the model, or its drawn stand-in), no page errors.
+    await page.goto(`${URL}helm.html?quality=low&spot=38.91,-76.45`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.land.landmarks > 0, null, { timeout: 60000 })
+      .catch(async () => fail(`helm: no Thomas Point Light off Annapolis (${await page.evaluate(() => JSON.stringify(window.__helm?.land))})`));
+    if (errors.length) fail(`page errors by Thomas Point Light: ${errors.join("; ")}`);
     // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
     await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });
@@ -672,7 +678,7 @@ try {
       if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
       // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
-      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Voyage replays.
+      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Watch a voyage.
       const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
       if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
       await page.screenshot({ path: "test-output/helm-result.png" });

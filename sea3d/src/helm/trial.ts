@@ -11,7 +11,7 @@ import type { Breeze, CourseKind } from "./course";
  */
 export const ROBOT_SECS: Record<"triangle" | "light", Record<Breeze, number>> = {
   triangle: { light: 980, good: 801, fresh: 721 },
-  light: { light: 2127, good: 1880, fresh: 1749 },
+  light: { light: 2220, good: 1952, fresh: 1816 }, // through the finish gate east of the light (#420), not just 300 m off it
 };
 
 /** The light run's wind always comes from here, so a best time means the same thing every time: a fast close reach down to the light. */
