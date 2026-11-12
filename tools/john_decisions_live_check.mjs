@@ -34,7 +34,7 @@ async function voyage(browser) {
     const local = (await page.locator("#w-local").textContent().catch(() => "")) ?? "";
     note("S1-voyage", local.trim().length > 0, "Boat's local time shown on Watch a voyage", JSON.stringify(local.trim()));
     const sky = s.sky ?? {};
-    note("L4-voyage", ["sun", "moon"].every((k) => k in sky), "Sun and moon bearings available (sky guide)", JSON.stringify(Object.keys(sky)));
+    note("L4-voyage", ["sunAz", "moonAz", "polarisAz"].every((k) => k in sky), "Sun, moon and North Star bearings available (sky guide)", JSON.stringify(Object.keys(sky)));
     note("C1-voyage", (await page.locator("#cinebtn").count()) > 0, "Cinematic button on Watch a voyage", "");
     await page.screenshot({ path: "jd-voyage.png" });
   } finally {
