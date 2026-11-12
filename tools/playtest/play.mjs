@@ -929,7 +929,10 @@ const CHECKS = {
       const left = (w) => /left|port/.test(w);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
       await practiceTriangle(page);
-      await page.click(".w-gskip", { timeout: 3000 }).catch(() => {});
+      // Skip every lesson step (step 2 puts the sail out of trim on purpose), and let the
+      // auto-trim keep the sail drawing so she sails through the turn instead of stalling head to wind.
+      for (let i = 0; i < 4; i++) await page.click(".w-gskip", { timeout: 2000 }).catch(() => {});
+      if (/\(off\)/.test(await page.evaluate(() => document.body.innerText.match(/auto-trim \((on|off)\)/i)?.[0] ?? ""))) await page.keyboard.press("t");
       await page.waitForTimeout(6000);
       const a = await wind();
       await shot("heel-tack-a");
@@ -937,13 +940,13 @@ const CHECKS = {
       // Tack: turn toward the wind (left when it's on the left) until it comes over to the other side (up to 25 s).
       const key = left(a) ? "ArrowLeft" : "ArrowRight";
       await page.keyboard.down(key);
-      await page.waitForFunction(([src, wasLeft]) => { const m = document.body.innerText.match(new RegExp(src)); return m && /left|port/.test(m[0]) !== wasLeft; }, [SIDE.source, left(a)], { timeout: 25_000 }).catch(() => {});
+      await page.waitForFunction(([src, wasLeft]) => { const m = document.body.innerText.match(new RegExp(src)); return m && /left|port/.test(m[0]) !== wasLeft; }, [SIDE.source, left(a)], { timeout: 45_000 }).catch(() => {});
       await page.waitForTimeout(1500);
       await page.keyboard.up(key);
       await page.waitForTimeout(6000);
       const b = await wind();
       await shot("heel-tack-b");
-      must(left(a) !== left(b), `didn't get onto the other tack: wind "${a}" then "${b}"`);
+      must(SIDE.test(b) && left(a) !== left(b), `didn't get onto the other tack: wind "${a}" then "${b}"`);
       return `tack A: "${a}"; tack B: "${b}"; ${shots.join(", ")}`;
     },
   },
