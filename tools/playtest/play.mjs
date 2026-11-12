@@ -850,6 +850,45 @@ const CHECKS = {
       return `${shots.length} looks: ${shots.join(", ")}`;
     },
   },
+  // Manual: #381, Take the wheel in Practice (triangle) on both tacks: the boat should lean away
+  // from the wind and the sail sit on the side away from it. Frames printed to the log; the
+  // wheel panel's wind line says which side the wind is on.
+  "look-heel": {
+    manual: true,
+    path: "helm.html?practice",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      const wind = () => page.evaluate(() => (document.body.innerText.match(/\d+° off the bow on the (port|starboard)[^\n]*/) || [""])[0]);
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
+      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 30_000 });
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN });
+      await page.click(".w-gskip", { timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(6000);
+      const a = await wind();
+      await shot("heel-tack-a");
+      // Turn through the wind onto the other tack: hold left until the wind changes side (up to 25 s).
+      const sideA = /port/.test(a) ? "port" : "starboard";
+      await page.keyboard.down(sideA === "port" ? "ArrowRight" : "ArrowLeft");
+      await page.waitForFunction((side) => { const m = document.body.innerText.match(/off the bow on the (port|starboard)/); return m && m[1] !== side; }, sideA, { timeout: 25_000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      await page.keyboard.up(sideA === "port" ? "ArrowRight" : "ArrowLeft");
+      await page.waitForTimeout(6000);
+      const b = await wind();
+      await shot("heel-tack-b");
+      return `tack A: "${a}"; tack B: "${b}"; ${shots.join(", ")}`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
