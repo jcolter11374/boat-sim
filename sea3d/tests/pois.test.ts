@@ -94,3 +94,12 @@ test("a wreck shows through the water only when it's shallow and right below", (
   const monitor = all.find((p) => p.id === "uss-monitor")!;
   assert.equal(wreckBelow(all, ...monitor.at[0]), null, "70 m down: too deep to see");
 });
+
+test("every story has a teaser: one whole sentence short enough for two lines of the docked card", () => {
+  const all = JSON.parse(readFileSync(new URL("../public/pois.json", import.meta.url), "utf8")).pois as Poi[];
+  for (const p of all) {
+    assert.ok(p.teaser, `${p.id} has no teaser`);
+    assert.ok(p.teaser!.length <= 72, `${p.id}: teaser is ${p.teaser!.length} characters`);
+    assert.match(p.teaser!, /[.!?]$/, `${p.id}: teaser isn't a whole sentence`);
+  }
+});

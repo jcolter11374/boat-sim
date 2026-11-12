@@ -63,11 +63,11 @@ export function pageName(pathname: string): string {
 
 /** The "my boat" chip's words and where it goes. The name is player data, so it is only ever set as text.
  *  With no boat saved you sail Our kayak (the helm and start card already treat it as yours), so
- *  the chip says so; "build one" only shows in the Boatyard, where it isn't a nag (Leo's audit A3). */
+ *  the chip says so on every page, the Boatyard included (audit A3; Milo, 12 Nov: the Boatyard is
+ *  where a new player first meets the chip, and "build one" there read as broken). */
 export function boatChip(boat: { name: string; href: string } | null, page = ""): { prefix: string; name: string; href: string; title: string } {
   // Practice sailing always sails the club's cruiser, whatever boat is yours (Elena: no nag there).
   if (page === "practice") return { prefix: "Practice: ", name: "31 ft cruiser", href: "./boatyard.html", title: "Practice sails a 31 ft cruiser; your own boat sails the voyages" };
-  if (!boat && page === "boatyard") return { prefix: "No boat of your own yet: ", name: "build one", href: "./boatyard.html", title: "Design a boat in the Boatyard" };
   if (!boat) return { prefix: "My boat: ", name: "Our kayak", href: "./boatyard.html", title: "Our kayak, until you build your own in the Boatyard" };
   return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }

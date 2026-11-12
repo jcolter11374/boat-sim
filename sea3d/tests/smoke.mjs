@@ -30,6 +30,13 @@ async function openOrders(page) {
     if (await page.locator("#orders.open").count()) return;
   }
 }
+/** Watch a voyage's replay drawer (it slides shut after 10 s of play): open it and wait until it's in place. Old builds: nothing. */
+async function openReplay(page) {
+  if (!(await page.locator("#replay-tab").count())) return;
+  if (!(await page.locator("#top.open").count())) await page.click("#replay-tab");
+  await page.waitForFunction(() => { const o = document.getElementById("top"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20000 });
+  await page.hover("#top h2").catch(() => {});
+}
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
@@ -84,7 +91,7 @@ try {
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
     if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
-    // No boat saved yet: you sail Our kayak, so the chip says so; "build one" is only for the Boatyard (audit A3).
+    // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
@@ -251,6 +258,7 @@ try {
     }
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+    await openReplay(page); // the close-up buttons live in the replay drawer
     await page.click('#focus button[data-lane="1"]');
     await page.waitForTimeout(800);
     if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
@@ -369,12 +377,18 @@ try {
     if (mb.stored?.hash !== y1.share || mb.stored?.name !== "Test <b>boat</b>" || mb.stored?.choices?.thr !== "one-t200" || mb.btn !== "Saved")
       fail(`boatyard: saving my boat: ${JSON.stringify(mb)}`);
     await page.goto(`${URL}boatyard.html?quality=low&mine=1`);
-    await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
+    // Ready, and the Blender boats in: their rebuild and first draw is one long frame on the
+    // runner's software graphics, and the hash step below waited behind it (deploy 43174294873).
+    await page.waitForFunction(() => window.__yard?.ready && window.__yard.models !== "loading" && window.__yard.frames > 2, null, { timeout: 60000 });
     const mb2 = await page.evaluate(() => ({ line: document.getElementById("mb-line").textContent, href: document.querySelector("#mb-line a")?.getAttribute("href"), tags: document.querySelectorAll("#mb-line b").length }));
     if (!mb2.line.includes("Test <b>boat</b>") || mb2.href !== `boatyard.html${y1.share}` || mb2.tags) fail(`boatyard: my boat line: ${JSON.stringify(mb2)}`);
     // On the live site the link only changes the hash (no query), and the page opens the design in place.
+    const tHash = Date.now();
     await page.evaluate((h) => (location.hash = h), y1.share);
-    await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 10000 }).catch(() => fail("boatyard: the my-boat link didn't reopen it"));
+    await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 30000 }).catch(async () =>
+      fail(`boatyard: the my-boat link didn't reopen it: ${JSON.stringify(await page.evaluate(() => ({ thr: window.__yard.design.picks.thr, btn: document.getElementById("mb-save").textContent, models: window.__yard.models, frames: window.__yard.frames })))}`),
+    );
+    log.push(`boatyard my-boat link reopened in ${Date.now() - tHash} ms (${await page.evaluate(() => window.__yard.models)} models)`);
     await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
     // Every choice looks different on the boat (spares stay ashore; one-option slots have nothing to swap).
     const looks = await page.evaluate(() => {
@@ -397,11 +411,15 @@ try {
       return same;
     });
     if (looks.length) fail(`boatyard: choices that look the same on the boat: ${looks.join("; ")}`);
+    // No money in the game (John, 12 Nov): no price, cost or $ anywhere on the page, and
+    // the choices that only ever changed the price are gone.
     const greyed = await page.evaluate(() => ({
       noeff: document.querySelectorAll(".opt.noeff").length,
       shape: !!document.querySelector('.opt[data-slot="shape"]'),
+      money: (document.getElementById("parts").innerText + " " + document.getElementById("sum").innerText).match(/\$\d|\bprices?\b|\bcosts?\b|\bcheaper\b|price TBD|PRICE ONLY|\bROUGH\b/i)?.[0] ?? "",
+      dead: document.querySelectorAll('.opt[data-slot="spares"], .opt[data-opt="lead-50-scrap"], .opt[data-slot="radar"]').length,
     }));
-    if (!greyed.shape || greyed.noeff < 3) fail(`boatyard: the simulator's new slots or "no effect yet" options are missing: ${JSON.stringify(greyed)}`);
+    if (!greyed.shape || greyed.noeff || greyed.money || greyed.dead) fail(`boatyard: money on screen, or price-only choices still shown: ${JSON.stringify(greyed)}`);
     // The other hull shapes show their own models (when the build has them), in place of the kayak.
     const shapes = await page.evaluate(async () => {
       const out = {};
@@ -422,7 +440,7 @@ try {
     await page.waitForFunction(() => window.__yard.backend && !document.querySelector("#launch").disabled, null, { timeout: 30000 });
     const how = await page.evaluate(() => ({ backend: window.__yard.backend, text: document.querySelector("#result").textContent }));
     if (!how.text || /failed/.test(how.text)) fail(`boatyard launch: ${JSON.stringify(how)}`);
-    log.push(`boatyard ${y1.share}, ${greyed.noeff} greyed options, launch via ${how.backend}`);
+    log.push(`boatyard ${y1.share}, no money on screen, launch via ${how.backend}`);
     // Start from the Randolph boat: its own slots and totals, the model dressing to the picks, a share link with the base.
     await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
     await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
@@ -462,7 +480,7 @@ try {
     }
     if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
+    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("strip") ?? document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
       .catch(() => fail("cinematic: a key didn't bring the panels back"));
     const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
     if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);
@@ -669,8 +687,9 @@ try {
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, clock: window.__helm.clock, lastStop: window.__helm.lastStop, msg: document.querySelector("#startmsg").textContent }));
       if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
-      // Without clock=paused, time runs from Set sail at 6 hours a second (unless something already paused it).
-      if (mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start at 6 h/s: ${JSON.stringify(mg)}`);
+      // Without clock=paused, time runs from Set sail: the first hours at 1 hour a second, then 6
+      // (unless something already paused it).
+      if (mg.clock !== 1 && mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start by itself: ${JSON.stringify(mg)}`);
       // Picking another boat on the start card makes it my boat, for the other pages.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });

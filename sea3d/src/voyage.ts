@@ -65,14 +65,24 @@ import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
-import { localTime } from "./replay/localtime";
+import { localTime, shortLocal } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { loadMyBoat } from "./myboat";
+import { VoyageHud, equipmentIcons, type Part } from "./replay/hud";
+import { focusBoat, type Focus } from "./focus";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+// The drawer, the map, the keys, the toasts (src/replay/hud.ts).
+const vhud = new VoyageHud({
+  mapResized: () => {
+    lastLog = "";
+    drawLog();
+  },
+  lookUp: () => setLookUp(!lifted),
+});
 const BASE = params.get("data") ?? "./voyages";
 /** "Pick your launch day": ?mode=game. Spoilers (outcomes, voyage length, event marks) stay hidden. */
 /** ?replay=path/to/file.json: play one replay file from anywhere on the site (the Boatyard's launches). */
@@ -362,8 +372,6 @@ function seaTarget(rep: Replay, hour: number): number {
 // ---------- chart ----------
 const land = new Image();
 let chart: Chart | null = null;
-const chartBox = $("chartbox");
-chartBox.addEventListener("click", () => chartBox.classList.toggle("big"));
 
 // ---------- state ----------
 /** One boat's voyage on the page; a race has two. */
@@ -381,7 +389,8 @@ let playing = false;
 let warp = 1 / 3600; // voyage hours per real second: real time (the game and the live tracker start here)
 /** A replay opens already playing at this speed: real time (John, 10 Nov, kept on
  * 11 Nov when Leo asked for faster). One constant, so it's a one-line change. */
-const REPLAY_WARP = 1 / 3600; // real time
+/** Replays open at 1 h/s: at under a knot, real time looks frozen (Leo's delta; Elena, 12 Nov). */
+const WATCH_WARP = 1;
 /** Visitors who ask for less motion get the replay paused at the start instead. */
 const REDUCED_MOTION = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 let ended = false;
@@ -522,12 +531,17 @@ function setPlaying(p: boolean): void {
   playing = p && !!rep;
   if (playing && rep && hour >= endHour()) seek(0);
   $("play").innerHTML = playing ? "&#10073;&#10073;" : "&#9654;";
+  $("play").classList.toggle("paused", !playing);
   status.playing = playing;
+  if (playing) vhud.played(false);
 }
 
 function seek(h: number): void {
   if (!rep) return;
   hour = Math.min(Math.max(h, 0), endHour());
+  eqQuiet = true; // a jump in time breaks nothing "now"
+  focusing?.cancel();
+  focusing = null;
   for (const l of lanes) l.shown = l.rep.events.filter((e) => e.h <= hour).length;
   beatIdx = beats.filter((b) => b.h < hour).length;
   hideBeat();
@@ -558,36 +572,7 @@ function showWreck(lat: number, lon: number): void {
 }
 const poiSeen = new Set<string>();
 let poiH = 0;
-const poiCards = new PoiCards();
-/** The history card hangs just below the dials, as wide as they are, and grows downward, so it
- *  never covers the Equipment rows and stops above the time bar (Leo, #378). */
-function poiPlace(): void {
-  const root = document.documentElement.style;
-  const hud = document.getElementById("hud")?.getBoundingClientRect();
-  if (!hud?.height) {
-    for (const k of ["--poi-top", "--poi-bottom", "--poi-max", "--poi-w"]) root.removeProperty(k);
-    document.documentElement.classList.remove("poi-tight");
-    return;
-  }
-  const tr = document.getElementById("transport")?.getBoundingClientRect();
-  const top = Math.round(hud.bottom + 6);
-  const floor = tr?.height ? tr.top - 6 : innerHeight - 12;
-  // Narrow windows: the Equipment rows wrap and push the card down, so it takes the free
-  // water between the map and the right edge instead, to keep long stories from scrolling.
-  const map = document.getElementById("chartbox")?.getBoundingClientRect();
-  const wide = map?.width && innerWidth < 1100 ? Math.min(520, innerWidth - 12 - (map.right + 12)) : 0;
-  root.setProperty("--poi-w", `${Math.round(Math.max(hud.width, wide))}px`);
-  document.documentElement.classList.toggle("poi-tight", innerWidth < 1100); // drops "N more nearby" there
-  root.setProperty("--poi-top", `${top}px`);
-  root.setProperty("--poi-bottom", "auto");
-  root.setProperty("--poi-max", `${Math.max(120, Math.round(floor - top))}px`);
-}
-{
-  const hud = document.getElementById("hud");
-  if (hud) new ResizeObserver(poiPlace).observe(hud);
-  addEventListener("resize", poiPlace);
-  poiPlace();
-}
+const poiCards = new PoiCards(document, { compact: true }); // docked at the right edge, as on the helm
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   status.pois.loaded = p.length;
@@ -609,17 +594,8 @@ function poisReached(): void {
   status.pois.shown.push(...ps.map((x) => x.poi.id));
 }
 
-function toast(text: string, when: string, colour: string): void {
-  const box = $("toasts");
-  const t = document.createElement("div");
-  t.className = "toast glass";
-  t.style.setProperty("--c", colour);
-  const b = document.createElement("b");
-  b.textContent = when;
-  t.append(b, document.createTextNode(text));
-  box.prepend(t);
-  while (box.children.length > 4) box.lastChild!.remove();
-  setTimeout(() => t.remove(), 6000);
+function toast(text: string, when: string, colour: string, warn = false): void {
+  vhud.toast(text, when, colour, warn);
 }
 
 const OUTCOME: Record<string, [string, string]> = {
@@ -720,7 +696,7 @@ async function load(files: string[], pick = files[0], autoplay = !REDUCED_MOTION
           ? `${LABEL[lanes[0].key]}, built from published specs of a common boat of its kind, on one simulated voyage in real weather and currents for that year. ${STOCK_ABOUT[lanes[0].key as StockKey]}`
           : lanes[0].key !== "kayak"
           ? `Our own model of the Randolph ${lanes[0].key === "randolph_c" ? "Rev C" : "Rev B"} boat (${lanes[0].key === "randolph_c" ? "from the config the Randolph team wrote in our format" : "built from their published design"}), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ.`
-          : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
+          : "Our kayak on one voyage through a real spring's weather, waves and currents, battery and breakdowns included.";
     setFocus(0, true);
     ticks();
     beats = GAME && gamePicked ? storyBeats(lanes[0].rep) : []; // none behind the picker
@@ -789,27 +765,20 @@ function setForecastLook(on: boolean): void {
   });
 }
 
-/** Live equipment card: what the boat's own latest report says, and which radios are heard. */
-let lastLiveEquip = "";
+/** Live equipment: what the boat's own latest report says, and which radios are heard. */
 function liveEquipment(tr: Tracked): void {
   const forecast = hour > tr.nowHour + 1e-3;
   const rpt = reportAt(tr, Math.min(hour, tr.nowHour));
   const f = rpt?.flags ?? {};
   const comms = commsAt(tr.rep, Math.min(hour, tr.nowHour));
-  const chips: [string, boolean][] = [
-    ["Satellite radio", comms !== "ok"],
-    ["Backup beacon", tr.rep.beacon_ok?.[locate(tr.rep.h, Math.min(hour, tr.nowHour))[0]] === 0],
-    [f.one_thruster ? "One motor down" : f.motors_off ? "Motors off (saving battery)" : "Motors", !!(f.one_thruster || f.motors_off)],
-    ["Backup box", !!f.safe_box_down],
-    [f.safe_mode ? "Backup steering" : "Main box", !!f.safe_mode || comms !== "ok"],
+  const parts: Part[] = [
+    { key: "thruster_port", name: f.one_thruster ? "One motor down" : f.motors_off ? "Motors off (saving battery)" : "Motors", bad: !!(f.one_thruster || f.motors_off) },
+    { key: "electronics_main", name: f.safe_mode ? "Backup steering" : "Main box", bad: !!f.safe_mode || comms !== "ok" },
+    { key: "electronics_safe", name: "Backup box", bad: !!f.safe_box_down },
+    { key: "comms", name: "Satellite radio", bad: comms !== "ok" },
+    { key: "beacon", name: "Backup beacon", bad: tr.rep.beacon_ok?.[locate(tr.rep.h, Math.min(hour, tr.nowHour))[0]] === 0 },
   ];
-  const html =
-    chips.map(([name, bad]) => `<span class="chip${bad ? " bad" : ""}"><i></i>${name}</span>`).join("") +
-    (forecast ? `<span class="chip"><i style="background:#cfe0ff"></i>Forecast: parts as at the last report</span>` : "");
-  if (html !== lastLiveEquip) {
-    lastLiveEquip = html;
-    $("eq").innerHTML = html; // constant names only
-  }
+  equipmentIcons(parts, true, forecast ? "as at last report" : "equipment");
 }
 
 /** Point the close-up and the cards at one boat. */
@@ -817,6 +786,7 @@ function setFocus(i: number, force = false): void {
   if (!lanes[i] || (i === focus && !force && rep === lanes[i].rep)) return;
   focus = i;
   status.focus = i;
+  eqQuiet = true;
   rep = lanes[i].rep;
   chart?.setLanes(lanes.map((l) => ({ rep: l.rep, colours: TRACK[l.key] })), i);
   laneRev = lanes[i].key;
@@ -853,7 +823,8 @@ function ticks(): void {
       const i = document.createElement("i");
       i.style.left = `${(100 * e.h) / max}%`;
       i.style.background = TONE_COLOUR[toneOf(e)];
-      i.title = (lanes.length > 1 ? `${SHORT[l.key]}: ` : "") + describeEvent(e, l.rep.boat);
+      i.title = `Day ${(e.h / 24).toFixed(1)}: ` + (lanes.length > 1 ? `${SHORT[l.key]}: ` : "") + describeEvent(e, l.rep.boat);
+      i.addEventListener("click", () => seek(Math.max(0, e.h - 0.25))); // a click on a tick goes to just before it
       box.appendChild(i);
     }
 }
@@ -871,29 +842,25 @@ $("now").addEventListener("click", () => tracked && seek(tracked.nowHour));
 function setWarp(w: number): void {
   warp = status.warp = w;
   // The buttons carry rounded values (0.000277778 for 1/3600): light the nearest.
-  const bs = Array.from(document.querySelectorAll<HTMLButtonElement>("#warp button"));
+  const bs = Array.from(document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button"));
   const near = bs.reduce((m, b) => (Math.abs(Math.log(Number(b.dataset.warp) / w)) < Math.abs(Math.log(Number(m.dataset.warp) / w)) ? b : m), bs[0]);
   bs.forEach((x) => x.setAttribute("aria-pressed", String(x === near)));
 }
-document.querySelectorAll<HTMLButtonElement>("#warp button").forEach((b) =>
-  b.addEventListener("click", () => {
-    setWarp(Number(b.dataset.warp));
-    $("warphint").hidden = true;
-  }),
-);
-/** A short hint by the speed bar as a replay opens, so the lit speed button gets noticed. */
+document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button").forEach((b) => b.addEventListener("click", () => setWarp(Number(b.dataset.warp))));
+/** With reduced motion a replay opens paused: say so once (the speed bar's hint went with the 1 h/s default). */
 function warpHint(): void {
-  const el = $("warphint");
-  // Over the faster buttons, not the lit "Real time" one, so it doesn't read as that button's label (Leo).
-  el.style.left = `${($("warp").children[2] as HTMLElement).offsetLeft}px`;
-  el.textContent = REDUCED_MOTION ? "Paused at the start: press play when you're ready." : "Playing in real time. Faster speeds →";
-  el.classList.remove("fade");
-  el.hidden = false;
-  window.setTimeout(() => el.classList.add("fade"), 6000); // fades out (at once with reduced motion)
-  window.setTimeout(() => (el.hidden = true), 7000);
+  if (REDUCED_MOTION) toast("Paused at the start: press play (Space) when you're ready.", "Replay", "#8ab4ff");
 }
 const scrub = $<HTMLInputElement>("scrub");
-scrub.addEventListener("input", () => seek(Number(scrub.value)));
+scrub.addEventListener("input", () => {
+  seek(Number(scrub.value));
+  scrubFill();
+});
+/** The played part of the scrubber in orange (WebKit has no range progress of its own). */
+function scrubFill(): void {
+  const max = Number(scrub.max) || 1;
+  scrub.style.setProperty("--p", `${(100 * Number(scrub.value)) / max}%`);
+}
 $<HTMLSelectElement>("voyage").addEventListener("change", (e) => {
   choose((e.target as HTMLSelectElement).value);
 });
@@ -927,16 +894,28 @@ $("o-postcard").addEventListener("click", () => {
 });
 $("o-close").addEventListener("click", () => $("outcome").classList.remove("show"));
 window.addEventListener("keydown", (e) => {
-  if (e.key === " " && !(e.target instanceof HTMLSelectElement)) {
+  if (e.key === " " && !(e.target instanceof HTMLSelectElement) && !(e.target instanceof HTMLButtonElement)) {
     e.preventDefault();
     setPlaying(!playing);
+    if (playing) vhud.played(true);
+    return;
   }
-  // N: sound on or off, as on every 3D page (one key, one meaning).
+  if (cine.on) return; // any key leaves the cinematic (cinema.ts)
+  if (vhud.key(e)) {
+    e.preventDefault();
+    return;
+  }
+  // C: cinematic; N: sound on or off, as on every 3D page (one key, one meaning).
   const t = e.target as HTMLElement | null;
-  if (e.code === "KeyN" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea")) return;
+  if (e.code === "KeyC") $("cinebtn").click();
+  else if (e.code === "KeyN") {
     e.preventDefault();
     sound.toggle();
   }
+});
+$("play").addEventListener("click", () => {
+  if (playing) vhud.played(true);
 });
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -949,6 +928,8 @@ window.addEventListener("resize", () => {
 if (!location.pathname.endsWith("voyage.html")) document.querySelector<HTMLElement>("#top a")!.style.display = "none";
 
 // ---------- voyage list ----------
+/** The replay opens on this launch day when the boat has one: the calmest start of the April-to-June window. */
+const CALM_START = "2020-06-01";
 /** Index entries by boat, keyed by launch date. */
 const byKey: Record<Rev, Map<string, IndexEntry>> = {
   kayak: new Map(),
@@ -1020,7 +1001,8 @@ if (PLACE) {
   const a = THREE.MathUtils.degToRad(PLACE.look);
   camera.position.set(-Math.sin(a) * 6.5, 1.6, Math.cos(a) * 6.5);
   controls.maxDistance = 120;
-  $("credits").prepend(document.createTextNode(`${PLACE.credit} · `));
+  $("landcredit").textContent = `${PLACE.credit} · `;
+  $("osm").hidden = !/OpenStreetMap|Overture/.test(PLACE.credit); // the OSM line stays in view (Maya's ruling)
   const shown = status as unknown as { land: boolean; surf: number; town: Town["shown"] | null; trees: number };
   void Promise.all([Island.load(PLACE, quality), Town.load(PLACE, quality)]).then(async ([isl, tn]) => {
     island = isl;
@@ -1080,7 +1062,7 @@ if (PLACE) {
       // The feed is rebuilt hourly; look again every 10 minutes.
       setInterval(() => loadLive(course, true), 10 * 60e3);
     } else if (REPLAY) {
-      setWarp(REPLAY_WARP);
+      setWarp(WATCH_WARP);
       await selectVoyage(REPLAY);
       warpHint();
     } else if (GAME) {
@@ -1089,18 +1071,21 @@ if (PLACE) {
       await selectVoyage(first.file, false);
       openPicker();
     } else if (wantRace) {
-      setWarp(REPLAY_WARP);
+      setWarp(WATCH_WARP);
       await selectRace(wantRace, params.get("rev") === "c" ? "randolph_c" : "randolph");
       warpHint();
     } else {
-      setWarp(REPLAY_WARP);
+      setWarp(WATCH_WARP);
       // Default: the longest voyage (the most to watch) of my boat's kind, if it has replays; else our kayak's.
       const mine = loadMyBoat();
       const mineKey: Rev | null = !mine ? null : mine.base === "revb" ? "randolph" : mine.base === "revc" ? "randolph_c" : mine.base === "kayak" || isStock(mine.base) ? (mine.base as Rev) : null;
       const ours = [...((mineKey && byKey[mineKey]?.size ? byKey[mineKey] : byKey.kayak).values())];
       const pool = ours.length ? ours : index;
       const longest = pool.reduce((m, v) => (v.days > m.days ? v : m), pool[0]);
-      await selectVoyage(index.find((v) => v.file === want)?.file ?? longest.file);
+      // A calm start, as the helm opens on one (Elena): 1 Jun 2020 sets out in 1.2 m seas and 17 kn,
+      // where 1 Apr starts in the tail of a gale. Replays exist only for the odds launch days, so not 23 Apr.
+      const calm = pool.find((v) => v.start.startsWith(CALM_START));
+      await selectVoyage(index.find((v) => v.file === want)?.file ?? (calm ?? longest).file);
       warpHint();
     }
   } catch (e) {
@@ -1131,6 +1116,81 @@ const cine = new Cinema({
 const sound = new OceanSound();
 filmButtons(cine, sound);
 (status as unknown as { cine: Cinema }).cine = cine;
+
+// ---------- the drawer keeps the boat in view; the camera moment; the log ----------
+/** True after a jump, a new voyage or a new boat: parts already broken don't count as breaking now. */
+let eqQuiet = true;
+let focusing: Focus | null = null;
+const shift = new THREE.Vector2();
+const here0 = new THREE.Vector3();
+const ahead = new THREE.Vector3();
+let lastSide = 1;
+/**
+ * Where the boat sits in the frame: never dead centre (Ines's first-pass rubric). While the replay
+ * drawer is open, on the third away from it (Elena). Otherwise on a third with its bow pointing into
+ * the open side, a little low, as on the helm; a bow pointing straight at or away from the camera
+ * keeps the side it had.
+ */
+function frameDrawer(dt: number): void {
+  let tx = 0;
+  let ty = 0;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  if (!cine.on && !vhud.isBig() && !lifted && W > 700 && smoothYaw !== null) {
+    const fill = (SPEC[boatKey].length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    ty = -0.08 * THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
+    // Aim the boat itself (not the point the camera orbits) at a third: where it would sit with
+    // no offset is where it sits now plus the offset already applied.
+    here0.set(0, 0, 0).project(camera);
+    ahead.set(Math.cos(smoothYaw) * 20, 0, -Math.sin(smoothYaw) * 20).project(camera);
+    const side = ahead.x - here0.x; // + when the bow points right on screen
+    if (Math.abs(side) > 0.03 && ahead.z < 1) lastSide = Math.sign(side);
+    const goal = vhud.isDrawerOpen() ? 2 / 3 : 0.5 - lastSide * 0.17;
+    const plain = (here0.x + 1) / 2 + shift.x;
+    tx = here0.z < 1 ? THREE.MathUtils.clamp(plain - goal, -0.3, 0.3) : 0;
+  }
+  const k = Math.min(1, dt * 1.2);
+  shift.x += (tx - shift.x) * k;
+  shift.y += (ty - shift.y) * k;
+  if (Math.abs(shift.x) < 1e-3 && Math.abs(shift.y) < 1e-3) {
+    if (camera.view?.enabled) camera.clearViewOffset();
+  } else camera.setViewOffset(W, H, shift.x * W, shift.y * H, W, H);
+}
+/** Breakdowns and the parts' troubles: what the "Equipment only" box keeps in the log. */
+const EQUIP_EVENTS = new Set(["part_failed", "one_motor", "motors_off", "safe_box_down", "safe_mode", "lost_comms", "beacon_quiet", "reports_stopped"]);
+let lastLog = "";
+/** The big map's log: what has happened so far, newest first. */
+function drawLog(): void {
+  if (!vhud.isBig() || !rep) return;
+  const only = $<HTMLInputElement>("logeq").checked;
+  const rows: { h: number; who: string; text: string; tone: string }[] = [];
+  for (const l of lanes)
+    for (const e of l.rep.events) {
+      if (e.h > hour) break;
+      if (!isNotable(e) || (only && !EQUIP_EVENTS.has(e.kind))) continue;
+      rows.push({ h: e.h, who: lanes.length > 1 ? `${SHORT[l.key]} · ` : "", text: describeEvent(e, l.rep.boat), tone: TONE_COLOUR[toneOf(e)] });
+    }
+  const key = `${rows.length}|${only}|${focus}`;
+  if (key === lastLog) return;
+  lastLog = key;
+  rows.sort((a, b) => b.h - a.h);
+  $("log").replaceChildren(
+    ...rows.map((r) => {
+      const li = document.createElement("li");
+      li.style.setProperty("--c", r.tone);
+      const w = document.createElement("span");
+      w.className = "when";
+      w.textContent = `${r.who}Day ${(r.h / 24).toFixed(1)}`;
+      li.append(w, document.createTextNode(r.text));
+      return li;
+    }),
+  );
+}
+$("logeq").addEventListener("change", drawLog);
+$("c-eq").addEventListener("click", () => {
+  $<HTMLInputElement>("logeq").checked = true;
+  vhud.map(true);
+});
 
 // ---------- loop ----------
 const guard = new FpsGuard();
@@ -1164,7 +1224,8 @@ renderer.setAnimationLoop(() => {
         // Too fast to see the roll: just show the water running off afterwards.
         else if (e.kind === "capsize" && li === focus && warp <= 600) drain?.pour();
         const who = lanes.length > 1 ? `${SHORT[l.key]} · ` : "";
-        toast(describeEvent(e, l.rep.boat), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+        const tone = toneOf(e);
+        toast(describeEvent(e, l.rep.boat), `${who}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[tone], tone === "warn" || tone === "bad");
       }
     }
     poisReached();
@@ -1264,7 +1325,12 @@ renderer.setAnimationLoop(() => {
       }
       status.gear = { parts: model.gear.parts(), now: model.gear.shown, failed: [...failed.keys()] };
       if (tracked) liveEquipment(tracked);
-      else equipment(rep, failed);
+      else {
+        const broke = equipment(rep, failed, eqQuiet);
+        // A breakdown is a story moment (Elena): at 1 h/s or slower, the camera goes to the boat for 2 s.
+        if (broke.length && playing && warp <= 1 && !cine.on && !focusing && !lifted) focusing = focusBoat(camera, () => controls.target);
+      }
+      eqQuiet = false;
     }
     wake?.update(comps, t, place, stw);
     // Camera rides the swell.
@@ -1338,6 +1404,7 @@ renderer.setAnimationLoop(() => {
     // The live cards overwrite some of the replay's, so they must update in the same frame:
     // drawn a frame apart, the battery, its bar and the captions flicker between the two.
     const fresh = hud(rep, stw, hs);
+    if (fresh) drawLog();
     if (tracked) {
       setForecastLook(hour > tracked.nowHour + 1e-3);
       if (fresh) liveHud(tracked);
@@ -1357,8 +1424,10 @@ renderer.setAnimationLoop(() => {
       apparent: feel ? Math.hypot(feel.x, feel.z) : undefined,
     });
   }
+  if (focusing && !focusing.update(dt)) focusing = null;
   if (photoBoat) camera.lookAt(controls.target); // the orbit controls would lift it above the boat
-  else if (!cine.update(dt)) controls.update();
+  else if (!focusing && !cine.update(dt)) controls.update();
+  frameDrawer(dt);
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;
@@ -1518,9 +1587,7 @@ let sunAz = 180;
 let lastGuide = 0;
 const guideBox = $<HTMLInputElement>("skyguide");
 const showGuide = () => {
-  $("compass").hidden = !guideBox.checked;
   $("skylabels").hidden = !guideBox.checked;
-  $("lookup").hidden = !guideBox.checked;
 };
 // Look up: the camera orbits the boat, so it can't tilt far above the horizon on its own.
 // Raising the point it looks at tips the view up about 20 degrees: horizon near the bottom, about 50 degrees up at the top.
@@ -1551,8 +1618,6 @@ function setLookUp(on: boolean): void {
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
 guideBox.addEventListener("change", showGuide);
 showGuide();
-const CARD: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
-const RANGE = 75; // degrees either side of the view shown on the strip
 const viewDir = new THREE.Vector3();
 const proj = new THREE.Vector3();
 function bearingOf(v: THREE.Vector3): number {
@@ -1573,27 +1638,8 @@ function skyGuide(): void {
   lastGuide = now;
   viewDir.copy(controls.target).sub(camera.position);
   const view = bearingOf(viewDir);
-  const W = 420;
-  const px = W / (2 * RANGE);
-  const rel = (b: number) => ((b - view + 540) % 360) - 180;
-  const xOf = (b: number) => W / 2 + rel(b) * px;
-  const out: HTMLSpanElement[] = [];
-  for (let b = 0; b < 360; b += 5) {
-    if (Math.abs(rel(b)) > RANGE) continue;
-    const x = xOf(b);
-    out.push(span(b % 15 === 0 ? "tick big" : "tick", "", x));
-    if (b % 15 === 0) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
-  }
-  // What's out there along the strip: the boat's heading, the sun, the moon, the North Star.
   const night = sunEl < -6;
-  const marks: [number, string, string][] = [];
-  if (model) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw ?? 0) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
-  if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
-  if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
   const polaris = atmos.starDirs.get("North Star (Polaris)");
-  if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
-  for (const [b, text, colour] of marks) if (Math.abs(rel(b)) <= RANGE) out.push(span("mk", text, xOf(b), colour));
-  $("tape").replaceChildren(...out);
 
   // Labels in the sky itself.
   const labels: HTMLSpanElement[] = [];
@@ -1628,111 +1674,117 @@ const EQUIPMENT: Record<BoatKey, string[]> = {
   stock_ocean_rower45: ["rudder", "electronics_main", "comms", "beacon", "leak"],
   stock_pearson31_2: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
 };
-let lastEquip = "";
-function equipment(r: Replay, failed: Map<string, string>): void {
+/** The parts as icons; true for the parts that have just broken. */
+function equipment(r: Replay, failed: Map<string, string>, quiet: boolean): Part[] {
   const comms = commsAt(r, hour);
-  const chips = EQUIPMENT[boatKey].map((p) => {
-    let bad: boolean;
-    let name: string;
-    if (p === "comms") {
-      bad = failed.has("comms_silent") || comms === "beacon" || comms === "silent";
-      name = PART_NAME.comms_silent;
-    } else if (p === "leak") {
-      bad = failed.has("leak_main_tub") || failed.has("leak_safe_tub");
-      name = PART_NAME.leak_main_tub;
-    } else {
-      bad = failed.has(p);
-      name =
-        p === "beacon" && boatKey === "randolph"
-          ? "Backup tracker"
-          : p === "sail" && isStock(boatKey)
-            ? "Sails"
-            : (PART_NAME[p] ?? p);
-    }
-    return `<span class="chip${bad ? " bad" : ""}" data-part="${p}"><i></i>${name}</span>`;
+  const parts = EQUIPMENT[boatKey].map((p): Part => {
+    if (p === "comms") return { key: p, name: PART_NAME.comms_silent, bad: failed.has("comms_silent") || comms === "beacon" || comms === "silent" };
+    if (p === "leak") return { key: p, name: PART_NAME.leak_main_tub, bad: failed.has("leak_main_tub") || failed.has("leak_safe_tub") };
+    if (p === "entangled") return { key: p, name: failed.has(p) ? "Snagged" : "No snags", bad: failed.has(p) };
+    const name = p === "beacon" && boatKey === "randolph" ? "Backup tracker" : p === "sail" && isStock(boatKey) ? "Sails" : (PART_NAME[p] ?? p);
+    return { key: p, name, bad: failed.has(p) };
   });
-  const html = chips.join("");
-  if (html !== lastEquip) {
-    lastEquip = html;
-    $("eq").innerHTML = html;
-  }
+  return equipmentIcons(parts, quiet);
 }
 
-/** The live tracker's cards: battery only from a fresh report, report age, forecast arrival. */
-/** The live tracker's cards, over the replay's; call only right after hud() updated. */
+/** A strip number with its unit in small type (text only, no markup from data). */
+function num(id: string, v: string, unit = ""): void {
+  const e = $(id);
+  if (e.dataset.v === `${v}|${unit}`) return;
+  e.dataset.v = `${v}|${unit}`;
+  e.textContent = v;
+  if (unit) {
+    const u = document.createElement("small");
+    u.textContent = unit;
+    e.append(u);
+  }
+}
+function battery(soc: number | null): void {
+  num("h-soc", soc == null ? "-" : String(Math.round(soc * 100)), soc == null ? "" : "%");
+  const bar = $("h-socbar");
+  bar.style.width = `${Math.round((soc ?? 0) * 100)}%`;
+  bar.style.background = soc == null ? "" : soc < 0.2 ? "var(--bad)" : soc < 0.4 ? "var(--warn)" : "var(--good)";
+}
+
+/** The live tracker's cells, over the replay's; call only right after hud() updated. */
 function liveHud(tr: Tracked): void {
   const forecast = hour > tr.nowHour + 1e-3;
   const rpt = forecast ? null : reportAt(tr, hour);
   const rptH = rpt ? (utc(rpt.t) - utc(tr.rep.start)) / 3600e3 : -1;
   const fresh = rpt && rpt.soc != null && hour - rptH <= 36;
-  $("h-soc").innerHTML = fresh ? `${Math.round(rpt.soc! * 100)}<small>%</small>` : "-";
-  const bar = $("h-socbar");
-  bar.style.width = fresh ? `${Math.round(rpt.soc! * 100)}%` : "0%";
-  bar.style.background = !fresh ? "" : rpt.soc! < 0.2 ? "var(--bad)" : rpt.soc! < 0.4 ? "var(--warn)" : "var(--good)";
-  $("h-charge").textContent = forecast ? "forecast: not known" : fresh ? `reported ${fmtAgo(hour - rptH)}` : "no recent report";
-  const sub = $("h-stw").nextElementSibling;
-  if (sub) sub.textContent = forecast ? "forecast" : "between reports";
+  battery(fresh ? rpt.soc! : null);
+  $("h-charge").textContent = forecast ? "not known" : "battery";
+  $("h-stwl").textContent = forecast ? "speed, forecast" : "speed between reports";
   const age = Math.min(hour, tr.nowHour) === tr.nowHour && !forecast ? tr.nowHour - tr.lastFixHour : reportAgeH(tr, Math.min(hour, tr.nowHour));
-  $("l-age").innerHTML = forecast ? "-" : `${age < 1 ? "<1" : age < 48 ? age.toFixed(age < 10 ? 1 : 0) : (age / 24).toFixed(1)}<small>${age < 48 ? "h ago" : "days ago"}</small>`;
+  if (forecast) num("l-age", "-");
+  else num("l-age", age < 1 ? "<1" : age < 48 ? age.toFixed(age < 10 ? 1 : 0) : (age / 24).toFixed(1), age < 48 ? "h ago" : "days ago");
   const comms = commsAt(tr.rep, Math.min(hour, tr.nowHour));
-  $("l-src").textContent = forecast ? "not there yet" : comms === "ok" ? "daily report + beacon" : comms === "beacon" ? "backup beacon only" : "silent";
-  $("h-sun").textContent = forecast ? "forecast" : comms === "ok" ? "reporting home" : comms === "beacon" ? "beacon only" : "SILENT";
+  $("l-src").textContent = forecast ? "not there yet" : comms === "ok" ? "report + beacon" : comms === "beacon" ? "beacon only" : "silent";
+  $("c-report").title = forecast ? "" : `Last report ${fmtAgo(age)}: ${comms === "ok" ? "daily report and backup beacon" : comms === "beacon" ? "backup beacon only" : "silent"}`;
+  $("c-bat").title = forecast ? "Forecast: the battery isn't known" : fresh ? `Reported ${fmtAgo(hour - rptH)}` : "No recent report";
   const g = tr.ghost;
   const d = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   $("l-eta").textContent = g ? d(g.eta.p50) : "-";
-  $("l-range").textContent = g ? `${d(g.eta.p10)} to ${d(g.eta.p90)} · ${Math.round(g.p_finish * g.runs)} of ${g.runs} runs finish` : "no forecast yet";
-  $("w-day").textContent = forecast ? `Forecast, day ${(hour / 24).toFixed(1)}` : `Day ${(hour / 24).toFixed(1)} · now is day ${(tr.nowHour / 24).toFixed(1)}`;
+  $("l-range").textContent = "forecast arrival";
+  $("c-eta").title = g ? `Forecast arrival ${d(g.eta.p50)}, likely ${d(g.eta.p10)} to ${d(g.eta.p90)}. ${Math.round(g.p_finish * g.runs)} of ${g.runs} runs finish.` : "No forecast yet";
+  if (forecast) num("w-day", `Forecast, day ${(hour / 24).toFixed(1)}`);
+  else num("w-day", `Day ${(hour / 24).toFixed(1)}`, ` · now ${(tr.nowHour / 24).toFixed(1)}`);
 }
 const fmtAgo = (h: number) => (h < 1 ? "under an hour ago" : h < 48 ? `${Math.round(h)} h ago` : `${(h / 24).toFixed(1)} days ago`);
 
 let lastHud = -1;
-/** The cards, ten times a second; true when they were redrawn this call. */
+/** The strip, ten times a second; true when it was redrawn this call. */
 function hud(r: Replay, stw: number, hs: number): boolean {
   const now = performance.now();
   if (now - lastHud < 100) return false;
   lastHud = now;
   const day = hour / 24;
-  $("h-day").textContent = day.toFixed(1);
-  $("h-date").textContent = fmtDate(r, hour);
-  $("w-day").textContent = GAME ? `Day ${day.toFixed(1)}` : `Day ${day.toFixed(1)} of ${(endHour() / 24).toFixed(1)}`;
-  $("w-date").textContent = fmtDate(r, hour);
+  num("w-day", `Day ${day.toFixed(1)}`, GAME ? "" : ` of ${(endHour() / 24).toFixed(1)}`);
   const [plat, plon] = positionAt(r, hour);
-  $("h-local").textContent = $("w-local").textContent = localTime(utc(r.start) + hour * 3600e3, plat, plon, warp < 1 / 60);
-  if (document.activeElement !== scrub) scrub.value = String(hour);
+  const ms = utc(r.start) + hour * 3600e3;
+  const local = localTime(ms, plat, plon, warp < 1 / 60);
+  $("w-local").textContent = local;
+  $("w-date").textContent = Number.isFinite(plat) ? shortLocal(ms, plat, plon) : fmtDate(r, hour);
+  $("c-day").title = `${fmtDate(r, hour)}\n${local}`;
+  if (document.activeElement !== scrub) {
+    scrub.value = String(hour);
+    scrubFill();
+  }
   const soc = valueAt(r, r.soc, hour);
-  $("h-soc").innerHTML = soc == null ? "-" : `${Math.round(soc * 100)}<small>%</small>`;
-  const bar = $("h-socbar");
-  bar.style.width = `${Math.round((soc ?? 0) * 100)}%`;
-  bar.style.background = soc == null ? "" : soc < 0.2 ? "var(--bad)" : soc < 0.4 ? "var(--warn)" : "var(--good)";
+  battery(soc);
   const sunNow = valueAt(r, r.ghi, hour);
-  $("h-charge").textContent = sunNow == null ? "" : sunNow > 50 ? "solar charging" : "night";
-  $("h-stw").innerHTML = `${(stw * 1.94384).toFixed(1)}<small>kt</small>`;
+  $("h-charge").textContent = sunNow != null && sunNow > 50 ? "charging" : "battery";
+  const hdg = angleAt(r, r.heading, hour);
+  num("h-head", hdg == null ? "-" : `${String(Math.round(((hdg % 360) + 360) % 360)).padStart(3, "0")}°`, hdg == null ? "" : ` ${compass(hdg)}`);
+  num("h-stw", (stw * 1.94384).toFixed(1), "kn");
   const u = valueAt(r, r.wind_u, hour);
   const v = valueAt(r, r.wind_v, hour);
+  let windWords = "";
   if (u != null && v != null) {
     const spd = Math.hypot(u, v) * 1.94384;
     const from = (THREE.MathUtils.radToDeg(Math.atan2(-u, -v)) + 360) % 360;
-    $("h-wind").innerHTML = `${spd.toFixed(0)}<small>kt</small><span class="arrow" style="transform:rotate(${from + 180}deg)">&#8593;</span>`;
-    $("h-winddir").textContent = `from the ${compass(from)}`;
+    num("h-wind", spd.toFixed(0), `kn ${compass(from)}`);
+    windWords = `Wind ${spd.toFixed(0)} knots from the ${compass(from)}. `;
   }
-  $("h-hs").innerHTML = `${hs.toFixed(1)}<small>m</small>`;
+  num("h-hs", `· ${hs.toFixed(1)}`, "m");
   const tp = valueAt(r, r.tp, hour);
   const wd = angleAt(r, r.wave_dir, hour);
   // With the real mix: the swell is what the boat feels most, so name it.
   const sw = seaNow?.s1 && seaNow.s1.hs >= 0.3 ? seaNow.s1 : null;
-  $("h-tp").textContent =
-    (tp != null ? `${tp.toFixed(0)} s apart` : "") +
+  $("c-wind").title =
+    `${windWords}Waves ${hs.toFixed(1)} m` +
+    (tp != null ? `, ${tp.toFixed(0)} s apart` : "") +
     (wd != null ? `, from the ${compass(wd)}` : "") +
-    (sw ? `; swell ${sw.hs.toFixed(1)} m from the ${compass(sw.dirFrom)}` : "");
+    (sw ? `; swell ${sw.hs.toFixed(1)} m from the ${compass(sw.dirFrom)}` : "") +
+    ".";
   const here = positionAt(r, hour);
   if (Number.isFinite(here[0])) {
     const km = Math.max(distanceKm(here, r.course.target) - r.course.target_radius_m / 1000, 0);
-    $("h-dist").innerHTML = `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("en-GB")}<small>km</small>`;
+    num("h-dist", km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("en-GB"), " km to go");
   }
-  const ghi = valueAt(r, r.ghi, hour);
-  const sunTxt = ghi == null ? "" : ghi > 20 ? "daylight" : "night";
+  const sunTxt = sunNow == null ? "" : sunNow > 20 ? "daylight" : "night";
   const comms = commsAt(r, hour);
   const commsTxt = comms === "ok" ? "reporting home" : comms === "beacon" ? "beacon only" : comms === "silent" ? "SILENT" : "";
-  $("h-sun").textContent = [commsTxt, sunTxt].filter(Boolean).join(" · ");
+  $("c-bat").title = [sunNow != null && sunNow > 50 ? "Solar charging" : "", commsTxt, sunTxt].filter(Boolean).join(" · ");
   return true;
 }

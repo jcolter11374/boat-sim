@@ -393,7 +393,8 @@ def letter(col, paint: HullPaint, x, height, side_s, side_p, f: HullForm):
             pass
     if font is None:
         return col
-    img = Image.new("L", (1000, 260), 0)
+    bb = font.getbbox(paint.lettering)
+    img = Image.new("L", (bb[2] + 40, 260), 0)  # wide enough for the whole text
     ImageDraw.Draw(img).text((10, 10), paint.lettering, fill=255, font=font)
     img = img.crop(img.getbbox())
     glyph = np.asarray(img, np.float32) / 255
