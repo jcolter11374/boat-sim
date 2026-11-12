@@ -263,6 +263,12 @@ try {
     }
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+    // Hold the race near its start first: on a slow runner the real Randolph race (PR builds carry it;
+    // local runs use the short fixture) can reach its end card during the checks above, and the
+    // end card shuts the replay drawer whatever the pin (showOutcome, #422), so the close-up click
+    // missed with "outside of the viewport" (Maya, Lena).
+    await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(1); });
+    await page.waitForFunction(() => !document.querySelector("#outcome.show"), null, { timeout: 10000 });
     await openReplay(page); // the close-up buttons live in the replay drawer
     await page.click('#focus button[data-lane="1"]');
     await page.waitForTimeout(800);
