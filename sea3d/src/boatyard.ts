@@ -68,8 +68,10 @@ controls.autoRotateSpeed = 0.4;
 renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false));
 const atmos = new Atmosphere(renderer, scene, camera);
 atmos.set(28, 215, 0, true);
-// ?quality=low for software graphics (tests); High otherwise.
-const quality: Quality = new URLSearchParams(location.search).get("quality") === "low" ? "low" : "high";
+// High on a graphics card; Low without one (software graphics drew the spectral sea at High at under
+// one frame a second, so a click could wait 30 s). ?quality=low|high overrides either way.
+const askedQuality = new URLSearchParams(location.search).get("quality");
+const quality: Quality = askedQuality === "low" || (askedQuality !== "high" && atmos.software) ? "low" : "high";
 renderer.setPixelRatio(quality === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.6 : 1);
 atmos.setBloom(quality === "high");
 atmos.setPixelRatio(renderer.getPixelRatio());

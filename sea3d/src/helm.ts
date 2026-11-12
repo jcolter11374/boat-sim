@@ -8,7 +8,9 @@ import * as THREE from "three";
 import { NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
-import { HORIZON, Sea } from "./water";
+import { HORIZON, Sea, inChesapeake } from "./water";
+import { forcedSea } from "./seaTest";
+import { seaUniforms } from "./seaSurface";
 import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
@@ -30,7 +32,8 @@ import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } f
 import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
-import { heightAt, Sea as LiveSea } from "./waves";
+import { heightAt, MixedSea as LiveSea } from "./waves";
+import { SeaStateFeed, type Systems } from "./seastate";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
@@ -251,6 +254,21 @@ function useBoat(base: string): void {
 buildBoat();
 void loadDetailedModels().then((ok) => ok && buildBoat());
 const live = new LiveSea(undefined, { n: quality === "high" ? 24 : 16, smoothing: 0.4 });
+// The real mix of wind sea and swells where they're deployed (Priya's sea-state
+// files): crossed seas, as the open Atlantic usually has (Elena).
+const seaFeed = new SeaStateFeed();
+void seaFeed.init();
+/** The 2020 launches the launch list names by number (the simulator's launch_index), at 12Z. */
+const LAUNCH_DAYS = ["2020-04-01", "2020-04-15", "2020-05-01", "2020-05-15", "2020-06-01", "2020-06-15"];
+/** When the chosen launch starts: the sea behind the start card is that day's. */
+function launchTime(): Date | null {
+  const v = ($("launch") as HTMLSelectElement | null)?.value ?? "";
+  const day = /^\d+$/.test(v) ? LAUNCH_DAYS[Number(v)] : /^\d{4}-\d\d-\d\d$/.test(v) ? v : undefined;
+  return day ? new Date(`${day}T12:00:00Z`) : null;
+}
+/** Where the boat is dropped (the start card's sea): 100 km ESE of the Bay mouth. */
+const DROP: [number, number] = [36.65, -74.94];
+let flowStw = 0; // the boat's speed through the water last frame (m/s)
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -324,6 +342,8 @@ const page = {
   /** The picture's level, where it came from, and the timed median frame (ms) if it was judged (for tests). */
   quality: qstat,
   ready: false,
+  /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
+  force: { wind: -1, hs: -1 },
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
@@ -3196,13 +3216,54 @@ renderer.setAnimationLoop(() => {
   poisReached();
   const r = rep();
   const h = r ? Math.min(hour, lastHour(r)) : 0;
-  const hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;
-  const tp = r ? Math.max(valueAt(r, r.tp, h) ?? 3 + 2.5 * Math.sqrt(hs), 2) : 6;
-  const from = r ? angleAt(r, r.wave_dir, h) ?? 270 : 270;
-  live.setSeaState(hs, tp, from);
+  // The sea: the deployed wind sea and swells for this hour and place when there
+  // are any; else the replay's one combined sea. Before the start, the chosen
+  // launch's first hour at the drop point, so the sea behind the start card is
+  // the one you'll sail into (not a stock 0.8 m).
+  const pre = !r && !PRACTICE ? launchTime() : null;
+  const at: [Date, number, number] | null = r && r.h.length
+    ? [new Date(utc(r.start) + h * 3600e3), ...positionAt(r, h)]
+    : pre ? [pre, SPOT?.[0] ?? DROP[0], SPOT?.[1] ?? DROP[1]] : null;
+  let sys: Systems | null = at ? seaFeed.at(at[0], at[1], at[2]) : null;
+  if (page.force.hs >= 0) {
+    // Forced for pictures: one wind sea of that height, running with the (forced) wind.
+    const fw = r ? [valueAt(r, r.wind_u, h) ?? 0, valueAt(r, r.wind_v, h) ?? 0] : [0, -1];
+    sys = { ws: forcedSea(page.force.hs, fw[0], fw[1]), s1: null, s2: null } as Systems;
+  }
+  let hs: number;
+  let tp: number;
+  if (sys && (sys.ws || sys.s1 || sys.s2)) {
+    live.setSystems(sys.ws, sys.s1, sys.s2);
+    hs = Math.max(Math.hypot(sys.ws?.hs ?? 0, sys.s1?.hs ?? 0, sys.s2?.hs ?? 0), 0.05);
+    const big = [sys.ws, sys.s1, sys.s2].reduce((a, b) => ((b?.hs ?? 0) > (a?.hs ?? 0) ? b : a));
+    tp = big?.tp ?? 6;
+  } else {
+    hs = r ? Math.max(valueAt(r, r.hs, h) ?? 0.4, 0.05) : 0.8;
+    tp = r ? Math.max(valueAt(r, r.tp, h) ?? 3 + 2.5 * Math.sqrt(hs), 2) : 6;
+    const from = r ? angleAt(r, r.wave_dir, h) ?? 270 : 270;
+    live.setSeaState(hs, tp, from);
+  }
+  sea.setWindSea(sys?.ws ?? null);
+  // Before the start the files hold no wind: the wind that would raise that wind
+  // sea when fully developed (Pierson-Moskowitz, Hs = 0.0246 U^2; GUESS, it is
+  // usually a little stronger), blowing the way the wind sea runs.
+  const preWind = pre && sys?.ws ? Math.min(Math.sqrt(sys.ws.hs / 0.0246), 30) : 0;
+  const preTo = sys?.ws ? THREE.MathUtils.degToRad(sys.ws.dirFrom + 180) : 0;
+  // The boat sails through the water: the water flows past it (it stays at the
+  // origin), at last frame's speed and heading, in real time whatever the warp.
+  if (smoothYaw !== null && flowStw > 0) {
+    const fx = flowStw * dt * Math.cos(smoothYaw);
+    const fz = -flowStw * dt * Math.sin(smoothYaw);
+    live.flow(fx, fz);
+    sea.flow(fx, fz);
+  }
   const comps = live.advance(t);
-  const wu = r ? valueAt(r, r.wind_u, h) ?? 0 : practiceWind?.u ?? 3;
-  const wv = r ? valueAt(r, r.wind_v, h) ?? 0 : practiceWind?.v ?? 0;
+  let wu = r ? valueAt(r, r.wind_u, h) ?? 0 : preWind ? preWind * Math.sin(preTo) : practiceWind?.u ?? 3;
+  let wv = r ? valueAt(r, r.wind_v, h) ?? 0 : preWind ? preWind * Math.cos(preTo) : practiceWind?.v ?? 0;
+  if (page.force.wind >= 0) {
+    const w = Math.hypot(wu, wv);
+    [wu, wv] = w > 0.01 ? [(wu * page.force.wind) / w, (wv * page.force.wind) / w] : [0, -page.force.wind];
+  }
   sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv));
   sea.update(comps, t);
   // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).
@@ -3223,6 +3284,7 @@ renderer.setAnimationLoop(() => {
   motion.heel = wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
+  flowStw = stw;
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
@@ -3286,12 +3348,16 @@ renderer.setAnimationLoop(() => {
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
+  if (Number.isFinite(lat)) sea.setBay(inChesapeake(lat, lon));
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
   atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.set(sp.el, sp.az, storm);
   showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient);
   clouds.closeIn(atmos.fog);
+  // The sea mirrors the cloud deck, so sea and sky meet without a line (Kai's Clouds.seaSky, sky PR).
+  (clouds as { seaSky?: (out: THREE.Vector4) => void }).seaSky?.(seaUniforms.uSeaSky.value);
+  (clouds as { seaBreak?: (out: THREE.Vector4) => void }).seaBreak?.(seaUniforms.uSeaBreak.value);
   const rate = r?.rain ? valueAt(r, r.rain, h) : null;
   // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
   bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
