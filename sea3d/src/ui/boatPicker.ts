@@ -1,0 +1,151 @@
+/**
+ * "Your boat": the one boat picker, opened from the "My boat" chip in the top bar and
+ * from the title screen (one-game plan, step 1; Leo's words in one-game-words.md §4).
+ *
+ * Picking a boat only sets "my boat" (src/myboat.ts); every page then sails it. A boat
+ * that needs the Boatyard to build it first (the Randolph Rev C5, a new design) is a link
+ * there instead. Names a player typed are only ever set as text.
+ */
+import { clearMyBoat, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
+import { PLAYABLE_STOCK, STOCK, type StockKey } from "../boats/specs";
+
+export interface PickerEntry {
+  /** "kayak", a stock id, "mine" (the saved design) or "yard:<base>" (a Boatyard link). */
+  id: string;
+  group: "Ours" | "Stock boats" | "Your designs";
+  name: string;
+  /** One plain fact line. */
+  fact: string;
+  /** Set when picking it means going to the Boatyard instead. */
+  href?: string;
+}
+
+/** One plain fact for each boat you can sail from the picker. */
+const STOCK_FACT: Partial<Record<StockKey, string>> = {
+  stock_pearson31_2: "the Randolph team's own boat",
+  stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small engine",
+};
+
+const capital = (s: string) => s.replace(/^\w/, (c) => c.toUpperCase());
+
+/** The picker's rows, in order, for the boat saved now (or none). */
+export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
+  const out: PickerEntry[] = [{ id: "kayak", group: "Ours", name: "Our kayak", fact: "finishes 83% of launch days" }];
+  // The Pearson first: it's the Randolph team's boat, and STOCK already says "(our model ...)".
+  const stock = [...PLAYABLE_STOCK].sort((a, b) => (a === "stock_pearson31_2" ? -1 : b === "stock_pearson31_2" ? 1 : 0));
+  for (const k of stock) {
+    const name = k === "stock_pearson31_2" ? "Pearson 31-2 (our model)" : capital(STOCK[k].name);
+    out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
+  }
+  out.push({ id: "yard:revc", group: "Stock boats", name: "Randolph Rev C5 (our model)", fact: "the Randolph team's wing-sail drone; opens in the Boatyard", href: "./boatyard.html#base=revc" });
+  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === ""))
+    out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
+  out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "", href: "./boatyard.html" });
+  return out;
+}
+
+/** Which row stands for the boat saved now. */
+export function pickedId(mine: MyBoat | null): string {
+  if (!mine || (mine.kind === "yard" && mine.base === "kayak" && mine.hash === "")) return "kayak";
+  return mine.kind === "stock" ? mine.base : "mine";
+}
+
+/** Make the picked row "my boat". Boatyard rows are links, so they never get here. */
+export function choose(id: string): void {
+  if (id === "mine") return; // already saved
+  if (id === "kayak") {
+    clearMyBoat(); // no boat saved = Our kayak, everywhere
+    return;
+  }
+  const k = id as StockKey;
+  if (STOCK[k]) saveMyBoat({ kind: "stock", base: k, hash: "", name: k === "stock_pearson31_2" ? "Pearson 31-2 (our model)" : capital(STOCK[k].name), choices: { base: k } });
+}
+
+const CSS = `
+#boatpick { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(4,10,18,.45); }
+#boatpick[hidden] { display: none; }
+#boatpick .card { width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto; box-sizing: border-box; padding: 18px 20px 16px;
+  border-radius: 14px; color: #e9f1fb; background: rgba(8,18,32,.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(160,200,255,.2); box-shadow: 0 10px 34px rgba(0,0,0,.4); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#boatpick h2 { margin: 0 0 8px; font: 800 26px/1.1 "Fraunces", Georgia, serif; }
+#boatpick .gh { margin: 12px 0 4px; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: #9fb3c8; }
+#boatpick label, #boatpick a.row { display: block; padding: 7px 10px; margin: 3px 0; border-radius: 9px; border: 1px solid rgba(160,200,255,.18); cursor: pointer; color: inherit; text-decoration: none; }
+#boatpick label:hover, #boatpick a.row:hover { border-color: #8ab4ff; }
+#boatpick label:has(input:checked) { border-color: #ff8a2a; background: rgba(255,138,42,.16); }
+#boatpick input { margin: 0 8px 0 0; accent-color: #ff8a2a; }
+#boatpick small { display: block; color: #9fb3c8; font-size: 12px; margin: 1px 0 0 22px; }
+#boatpick a.row small { margin-left: 0; }
+#boatpick .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+#boatpick .go { font: 700 15px system-ui, sans-serif; padding: 9px 20px; border-radius: 10px; border: 1px solid #ff8a2a; background: #ff8a2a; color: #1a0d02; cursor: pointer; }
+#boatpick .x { background: none; border: 0; color: #9fb3c8; font: 600 13px system-ui, sans-serif; cursor: pointer; }
+`;
+
+let root: HTMLElement | null = null;
+
+/** Open the picker (builds it the first time). */
+export function openBoatPicker(doc: Document = document): void {
+  if (!root) {
+    const style = doc.createElement("style");
+    style.textContent = CSS;
+    doc.head.appendChild(style);
+    root = doc.createElement("div");
+    root.id = "boatpick";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
+    root.setAttribute("aria-labelledby", "boatpick-h");
+    root.addEventListener("click", (e) => e.target === root && close());
+    doc.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && root && !root.hidden) {
+        e.stopPropagation();
+        close();
+      }
+    }, true);
+    doc.body.appendChild(root);
+  }
+  const mine = loadMyBoat();
+  const card = doc.createElement("div");
+  card.className = "card";
+  const h = Object.assign(doc.createElement("h2"), { id: "boatpick-h", textContent: "Your boat" });
+  card.append(h);
+  let group = "";
+  const picked = pickedId(mine);
+  for (const e of pickerEntries(mine)) {
+    if (e.group !== group) {
+      group = e.group;
+      card.append(Object.assign(doc.createElement("div"), { className: "gh", textContent: group }));
+    }
+    const fact = e.fact ? Object.assign(doc.createElement("small"), { textContent: e.fact }) : null;
+    if (e.href) {
+      const a = Object.assign(doc.createElement("a"), { className: "row", href: e.href, textContent: e.name });
+      if (fact) a.append(fact);
+      card.append(a);
+      continue;
+    }
+    const label = doc.createElement("label");
+    const input = Object.assign(doc.createElement("input"), { type: "radio", name: "boatpick", value: e.id, checked: e.id === picked });
+    label.append(input, Object.assign(doc.createElement("b"), { textContent: e.name }));
+    if (fact) label.append(fact);
+    card.append(label);
+  }
+  const foot = doc.createElement("div");
+  foot.className = "foot";
+  const x = Object.assign(doc.createElement("button"), { type: "button", className: "x", textContent: "Close" });
+  x.addEventListener("click", close);
+  const go = Object.assign(doc.createElement("button"), { type: "button", className: "go", textContent: "Sail this boat" });
+  go.addEventListener("click", () => {
+    const v = card.querySelector<HTMLInputElement>('input[name="boatpick"]:checked')?.value;
+    if (v) choose(v);
+    close();
+  });
+  foot.append(x, go);
+  card.append(foot);
+  root.replaceChildren(card);
+  root.hidden = false;
+  card.querySelector<HTMLInputElement>("input:checked")?.focus();
+  (window as unknown as { __boatpick?: unknown }).__boatpick = { open: true };
+}
+
+function close(): void {
+  if (root) root.hidden = true;
+  (window as unknown as { __boatpick?: unknown }).__boatpick = { open: false };
+}
