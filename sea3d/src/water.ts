@@ -130,9 +130,8 @@ transformed += gDisp;
 // The sea is flat, so its rim (3 km off) would sit a few pixels under the horizon with a
 // sliver of sky below it (Ines's hairline). Lift the rim to the eye's own level: the
 // last stretch then rises to the horizon line and fades into the haze there.
-#ifndef SEA_LITE
-if (edge > 0.5) transformed.y = cameraPosition.y - 1e-4 * length(transformed.xz - cameraPosition.xz);
-#endif
+// No branch: edge is 0 or 1, and a mix costs Low (software graphics) less than an if.
+transformed.y = mix(transformed.y, cameraPosition.y - 1e-4 * length(transformed.xz - cameraPosition.xz), edge);
 `;
 const VERT_BODY = /* glsl */ `
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
