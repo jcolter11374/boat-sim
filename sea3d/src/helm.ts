@@ -2102,13 +2102,13 @@ async function finish(): Promise<void> {
     w.textContent = who;
     const h = document.createElement("span");
     h.className = "head";
-    h.textContent = e.headline;
+    h.textContent = x.outcome === "goal" ? "Still sailing" : e.headline;
     const t = document.createElement("span");
     t.className = "words";
     const when = e.day != null && x.outcome !== "arrived" ? `day ${e.day.toFixed(1)}` : "";
     // Running aground names only the spot ("38.62N 27.91W"): say what happened there.
     const words = /^\d+(\.\d+)?[NS]\s/.test(e.words) ? `came ashore at ${e.words}` : e.words;
-    t.textContent = [words, e.where, when].filter(Boolean).join(", ");
+    t.textContent = x.outcome === "goal" ? "at the challenge's deadline" : [words, e.where, when].filter(Boolean).join(", ");
     row.append(w, h, t);
     ends.append(row);
   }

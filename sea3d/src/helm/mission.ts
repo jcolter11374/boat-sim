@@ -113,6 +113,8 @@ export interface Stars {
 /** The stars line and the reasons, plainly; with the ghost's stars, one plain line on how the autopilot fared (Elena). */
 export function starsText(s: Stars, goal: Goal, ghost?: Stars): { stars: string; why: string[] } {
   const why = [`Closest to the centre: ${Math.round(s.closest_km).toLocaleString("en-US")} km.`];
+  // No stars: say plainly what earns the first one, so three empty stars don't read as broken (Ines).
+  if (s.stars === 0) why.unshift(goal.storm ? `No stars this time: the first needs you never within ${goal.storm.clear_km} km of the centre, and still sailing at the end.` : "No stars this time: the first needs you still sailing at the end.");
   if (!s.sailing) why.push("The boat didn't make it to the end.");
   if (goal.stars3) why.push(`Ended at ${Math.abs(s.end_lon).toFixed(1)}°W, with the battery at ${Math.round(s.battery_low * 100)}% at its lowest.`);
   if (ghost && goal.storm) why.push(`The autopilot kept to its usual route, which crossed ${goal.storm.name}'s path: the ghost passed ${Math.round(ghost.closest_km).toLocaleString("en-US")} km from the eye.`);

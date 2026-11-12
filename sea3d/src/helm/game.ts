@@ -328,6 +328,7 @@ export function stopText(s: Stop, st: Status | null): string {
 /** Plain words for an outcome. */
 export const OUTCOME: Record<string, string> = {
   arrived: "reached the finish",
+  goal: "still sailing", // a weather challenge's goal: afloat and sailing at its deadline (Ines: not "goal", which reads as Portugal)
   at_sea: "still at sea",
   timeout: "still at sea",
   aground: "ran aground",

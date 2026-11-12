@@ -217,6 +217,9 @@
   body.busy #busy { display: block; }
   .overlay { position: fixed; inset: 0; top: var(--bar, 0px); display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
   .overlay[hidden] { display: none; }
+  /* The results sit above the bottom strip, never under it; a long card scrolls inside, with a fade at its foot (Ines, 12 Nov). */
+  #result { bottom: calc(var(--strip-h) + var(--edge) + 8px); }
+  #result .card { max-height: calc(100% - 16px); padding-bottom: 32px; -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
   .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .card select { max-width: 100%; }
