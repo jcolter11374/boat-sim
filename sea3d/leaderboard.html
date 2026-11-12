@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim: Design leaderboard</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html { background: #0b1726; }
@@ -15,7 +16,7 @@
   a { color: #8ab4ff; }
   .muted { color: var(--dim); font-size: 12px; }
   .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
-  main { max-width: 1060px; margin: 24px auto 40px; padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
+  main { max-width: 1060px; margin: calc(var(--bar, 0px) + 24px) auto 40px; padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
   header { padding: 14px 18px; }
   header h1 { margin: 0 0 2px; font-size: 22px; }
   header nav { float: right; font-size: 13px; }
@@ -62,7 +63,6 @@
 <body>
 <main>
   <header class="glass">
-    <nav><a href="./">Sea</a> · <a href="./boatyard.html">Boatyard</a> · <a href="./helm.html">Take the helm</a></nav>
     <h1>Design leaderboard</h1>
     <div class="muted">Which builds reach the finish most often, on the same launches with the same luck.</div>
     <details id="about"><summary>About this leaderboard</summary><div id="facts" class="muted"></div></details>
@@ -87,6 +87,7 @@
   </section>
 </main>
 <div id="credits" style="max-width:1060px;margin:-28px auto 12px;padding:0 12px;text-align:right;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.6)">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/leaderboard.ts"></script>
 </body>
 </html>

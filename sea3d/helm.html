@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim 3D: Take the helm</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1726; color: var(--ink);
@@ -21,7 +22,7 @@
   button[aria-pressed="true"] { background: rgba(255,138,42,.18); border-color: var(--orange); }
   button:disabled { opacity: .5; cursor: progress; }
   button.go { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
-  #status { position: fixed; top: 12px; left: 12px; width: 330px; padding: 12px 14px; }
+  #status { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; width: 330px; padding: 12px 14px; }
   #status h1 { margin: 0; font-size: 18px; display: flex; justify-content: space-between; align-items: baseline; }
   #status h1 span { font-size: 13px; color: var(--dim); font-weight: 600; }
   #status .row { margin-top: 4px; font-size: 13px; }
@@ -160,19 +161,19 @@
   #watch { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; }
   #watch button { padding: 4px 9px; font-size: 12px; }
   #film { display: flex; gap: 6px; margin-top: 6px; } #film button { padding: 4px 9px; font-size: 12px; }
-  #notes { position: fixed; top: 12px; right: 12px; width: 300px; display: flex; flex-direction: column; gap: 6px; }
+  #notes { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; display: flex; flex-direction: column; gap: 6px; }
   .note { padding: 7px 10px; border-left: 4px solid #8ab4ff; font-size: 13px; transition: opacity 1s; }
   .note .when { font-size: 11px; color: var(--dim); }
   .note.old { opacity: .55; }
   #ghosttag { position: fixed; transform: translate(-50%, -120%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
     background: rgba(10,22,38,.55); border: 1px solid rgba(200,212,230,.45); border-radius: 8px; padding: 2px 8px; pointer-events: none; white-space: nowrap; }
   #ghosttag::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 1px; height: 6px; background: rgba(200,212,230,.6); }
-  #clock { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); font: 700 15px system-ui, sans-serif; background: rgba(10,22,38,.55); border-radius: 8px; padding: 2px 10px;
+  #clock { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 50%; transform: translateX(-50%); font: 700 15px system-ui, sans-serif; background: rgba(10,22,38,.55); border-radius: 8px; padding: 2px 10px;
     text-shadow: 0 1px 4px rgba(0,0,0,.6); }
-  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
+  .overlay { position: fixed; inset: 0; top: var(--bar, 0px); display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
   .overlay[hidden] { display: none; }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
-  .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+  .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .card select { max-width: 100%; }
   @media (max-width: 480px), (max-height: 480px) { .card { padding: 14px 16px; } .card h1 { font-size: 19px; } }
   .card h1 { margin: 0 0 6px; font-size: 22px; }
@@ -330,6 +331,7 @@
 </div>
 
 <div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto"><span id="landcredit"></span>Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · Simulator in the browser: Pyodide · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/helm.ts"></script>
 </body>
 </html>

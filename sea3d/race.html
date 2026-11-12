@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim: Race two designs</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --blue: #5fb4ff; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html { background: #0b1726; }
@@ -23,7 +24,7 @@
   select, input[type=text] { font: 13px system-ui, sans-serif; color: var(--ink); background: rgba(27,51,82,.75);
     border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
   input[type=text] { width: 100%; box-sizing: border-box; }
-  main { max-width: 1180px; margin: 18px auto 30px; padding: 0 12px; display: grid; gap: 12px;
+  main { max-width: 1180px; margin: calc(var(--bar, 0px) + 18px) auto 30px; padding: 0 12px; display: grid; gap: 12px;
     grid-template-columns: 300px 1fr; grid-template-areas: "head head" "setup map" "setup boats" "views views" "card card" "season season"; }
   header { grid-area: head; padding: 12px 18px; }
   header h1 { margin: 0; font-size: 22px; }
@@ -69,7 +70,6 @@
 <body>
 <main>
   <header class="glass">
-    <nav><a href="./">Sea</a> · <a href="./boatyard.html">Boatyard</a> · <a href="./helm.html">Take the helm</a> · <a href="./leaderboard.html">Leaderboard</a></nav>
     <h1>Race two designs</h1>
     <div class="muted">Two boats, the same launch, the same weather and the same luck, side by side. One race is one roll of the dice; the season shows which design is really better.</div>
   </header>
@@ -128,6 +128,7 @@
   <section id="season" class="glass" hidden></section>
 </main>
 <div id="credits" style="max-width:1180px;margin:-18px auto 12px;padding:0 12px;text-align:right;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.6)">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · Simulator in the browser: Pyodide · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/race.ts"></script>
 </body>
 </html>

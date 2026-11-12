@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim 3D: both boats on a live sea</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc3dc;
     font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #17212b; }
   #app { position: fixed; inset: 0; }
-  #panel { position: fixed; top: 12px; left: 12px; background: rgba(255,255,255,.9);
+  #panel { position: fixed; top: calc(var(--bar, 0px) + 12px); max-height: calc(100vh - var(--bar, 0px) - 80px); overflow-y: auto; left: 12px; background: rgba(255,255,255,.9);
     border-radius: 10px; padding: 10px 14px 12px; width: 300px; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
   #panel h1 { font-size: 16px; margin: 0 0 4px; }
   #panel p { margin: 4px 0; }
@@ -31,6 +32,28 @@
   .tag b { display: block; font-weight: 600; }
   .tag span { color: #4d5965; font-size: 11.5px; }
   .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  /* Title screen (src/title.ts): the menu over the live sea. "Just watch the sea" swaps it for the sea panel. */
+  #title { position: fixed; left: max(16px, 5vw); top: calc(var(--bar, 0px) + 50% - var(--bar, 0px) / 2); transform: translateY(-50%);
+    width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - var(--bar, 0px) - 90px); overflow-y: auto; box-sizing: border-box;
+    padding: 22px 22px 18px; border-radius: 14px; color: #e9f1fb; background: rgba(8,18,32,.78);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(160,200,255,.2); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+  #title[hidden], body.title #panel, body.title #shots { display: none; }
+  #title h1 { margin: 0; font-size: 30px; letter-spacing: .3px; }
+  #title h1 i { display: inline-block; width: 20px; height: 20px; border-radius: 4px 4px 10px 10px; background: #ff8a2a; margin-right: 9px; vertical-align: -1px; }
+  #title .tag { position: static; display: block; background: none; box-shadow: none; border: 0; padding: 0; white-space: normal;
+    color: #b7c8dc; font-size: 14px; margin: 6px 0 16px; }
+  #title nav { display: flex; flex-direction: column; gap: 7px; }
+  #title nav a, #title nav button { display: block; text-align: left; text-decoration: none; cursor: pointer; font: 650 15px system-ui, sans-serif;
+    color: #e9f1fb; background: rgba(27,51,82,.7); border: 1px solid rgba(160,200,255,.2); border-radius: 10px; padding: 10px 14px; }
+  #title nav a:hover, #title nav button:hover { border-color: #8ab4ff; background: rgba(40,70,110,.8); }
+  #title nav small { display: block; font-weight: 400; font-size: 12px; color: #9fb3c8; margin-top: 2px; }
+  #title nav .main { background: #ff8a2a; border-color: #ff8a2a; color: #1a0d02; }
+  #title nav .main small { color: #4a2508; }
+  #title nav .main:hover { background: #ff9c4a; border-color: #ffd0a6; }
+  #title nav .quiet { background: transparent; font-weight: 600; font-size: 13.5px; color: #b7c8dc; }
+  #title .mine { display: flex; gap: 7px; } #title .mine[hidden] { display: none; } #title .mine a:first-child { flex: 1; }
+  #title .fine { color: #8197ad; font-size: 11.5px; margin: 14px 0 0; }
+  @media (max-height: 560px) { #title { padding: 14px 16px 12px; } #title h1 { font-size: 22px; } #title .tag { margin-bottom: 10px; } #title nav small { display: none; } }
   /* The way into the game (src/sailLink.ts): sail this sea at the helm, or build a boat first. */
   #ways { display: flex; gap: 8px; align-items: stretch; margin: 8px 0 6px; }
   #ways a { text-decoration: none; border-radius: 9px; padding: 8px 11px; font-weight: 650; }
@@ -44,6 +67,23 @@
 <body>
 <div id="app"></div>
 <div id="tags"></div>
+<section id="title" hidden aria-labelledby="title-h">
+  <h1 id="title-h"><i></i>boat-sim</h1>
+  <p class="tag">Design a small robot boat, then try to sail it across the Atlantic: from the Chesapeake Bay to a finish line off Portugal, on real weather.</p>
+  <nav>
+    <div class="mine" id="t-mine" hidden>
+      <a class="main" id="t-continue" href="./helm.html">Continue with my boat<small id="t-boatname"></small></a>
+      <a id="t-edit" href="./boatyard.html" title="Change my boat in the Boatyard">Change it</a>
+    </div>
+    <a id="t-build" href="./boatyard.html">Build a boat<small>Pick a hull, sails or motors, batteries and electronics</small></a>
+    <a href="./helm.html">Take the helm<small>Sail it yourself: you give the orders as the days pass</small></a>
+    <a href="./voyage.html">Watch a voyage<small>The autopilot sails; you watch it, sped up</small></a>
+    <a href="./race.html">Race two boats<small>Same start, same weather: who gets there first?</small></a>
+    <a href="./leaderboard.html">Leaderboard<small>Which designs reach the finish most often</small></a>
+    <button type="button" class="quiet" id="t-sea">Just watch the sea</button>
+  </nav>
+  <p class="fine">Free and open source. Our own simulator; the weather is real past weather.</p>
+</section>
 <div id="panel">
   <h1>Both boats on a live sea</h1>
   <p class="muted"><span class="key" style="background:#e8590c"></span>Our 3 m solar kayak and
@@ -90,6 +130,8 @@
   <button data-shot="low">Low over the water</button>
   <button data-shot="high">From above</button>
 </div>
+<script type="module" src="./src/topbar.ts"></script>
+<script type="module" src="./src/title.ts"></script>
 <script type="module" src="./src/main.ts"></script>
 <div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
 </body>
