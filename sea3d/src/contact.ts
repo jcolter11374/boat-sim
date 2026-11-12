@@ -284,6 +284,7 @@ export class Contact {
       const sink = dt > 0 ? (this.lastClear - s.bowClearance) / dt : 0; // m/s the bow is going down into the water
       this.lastClear = s.bowClearance;
       let burst = 0;
+      let crest = 0; // how fast the face the bow just met was rising (m/s), 0 if none
       // A slam throws a sheet of spray, big from force 6 (Hs ~3 m) up, a few drops below that.
       const slamK = 0.25 + 0.75 * THREE.MathUtils.smoothstep(hs, 1.5, 3.5);
       if (s.bowClearance < 0.04 && sink > 0.35) burst = Math.min(90, Math.round((sink - 0.35) * 45 * (0.5 + speedK) * slamK));
@@ -299,6 +300,7 @@ export class Contact {
         if (rise >= this.risePeak) this.risePeak = rise;
         else {
           // just past the steepest part of the face: throw the sheet once for this face
+          crest = this.risePeak;
           burst += Math.min(220, Math.round((this.risePeak - CREST_RISE) * 150 * (0.4 + speedK) * slamK * slamK));
           this.risePeak = -1;
         }
@@ -311,17 +313,17 @@ export class Contact {
         const i = this.next;
         this.next = (this.next + 1) % this.n;
         const sideSign = Math.random() < 0.5 ? -1 : 1;
-        const back = Math.random() * 0.25 * this.spec.length;
+        const back = Math.random() ** 1.5 * 0.25 * this.spec.length; // most of it right at the stem
         this.sp[i * 3] = bx - back;
         this.sp[i * 3 + 2] = bz + sideSign * (this.beam * 0.3 * Math.min(1, back * 4 + 0.2));
         const [wx, wz] = toWorld(this.sp[i * 3], this.sp[i * 3 + 2], place);
         this.sp[i * 3 + 1] = heightAt(comps, wx, wz, t) + 0.02 + bowWaveHeight(s.speed); // on the bow wave
-        const power = (0.6 + Math.min(sink, 2.5) * 0.8 + 0.6 * speedK) * (0.8 + 0.4 * slamK);
+        const power = (0.6 + Math.min(Math.max(sink, 1.3 * crest), 3) * 0.8 + 0.6 * speedK) * (0.8 + 0.4 * slamK) * Math.sqrt(this.sprayScale);
         this.sv[i * 3] = -s.speed * 0.4 + (Math.random() - 0.5) * 0.4; // drops fall behind as the boat moves on
         this.sv[i * 3 + 1] = power * (0.8 + 0.6 * Math.random()) + Math.max(rise, 0); // thrown off water that is itself rising
         this.sv[i * 3 + 2] = sideSign * power * (0.6 + 0.8 * Math.random());
         this.born[i] = t;
-        this.mist[i] = Math.random() < 0.35 ? 1 : 0;
+        this.mist[i] = Math.random() < 0.2 ? 1 : 0;
       }
       const ppos = this.spray.geometry.attributes.position.array as Float32Array;
       const alpha = this.spray.geometry.attributes.aAlpha.array as Float32Array;
@@ -345,8 +347,8 @@ export class Contact {
         // Drops spread into a mist as they fly: bigger, softer and fainter with age.
         // A sheet is many small drops and a few soft puffs of mist that hang a little longer.
         const m = this.mist[i];
-        alpha[i] = (m ? 0.3 * (1 - k) : 0.85 * (1 - k) ** 1.5) * Math.min(1, age * 10);
-        size[i] = (m ? 0.25 + 0.9 * k : 0.04 + 0.08 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
+        alpha[i] = (m ? 0.3 * (1 - k) : 0.95 * (1 - k) ** 1.2) * Math.min(1, age * 10);
+        size[i] = (m ? 0.25 + 0.9 * k : 0.05 + 0.1 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
         live++;
       }
       this.spray.geometry.attributes.position.needsUpdate = true;
