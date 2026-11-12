@@ -17,6 +17,10 @@ on:
         description: "Runs per cell (the median is reported)"
         required: true
         default: "3"
+      qualities:
+        description: "Quality levels to measure, comma-separated (low, high)"
+        required: true
+        default: "low,high"
 permissions:
   contents: read
 jobs:
@@ -44,6 +48,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REFS: ${{ inputs.refs }}
           RUNS: ${{ inputs.runs }}
+          QUALITIES: ${{ inputs.qualities }}
         run: |
           set -euo pipefail
           pip install -q numpy pyyaml
@@ -60,7 +65,7 @@ jobs:
             ( cd "$wt/sea3d/dist" && exec python3 -m http.server 4810 >/dev/null 2>&1 ) & srv=$!
             sleep 2
             # The harness runs from this checkout, where Playwright is installed.
-            node sea3d/tests/fps_budget.mjs http://localhost:4810/ "$RUNS" "$ref" | tee -a fps/results.jsonl
+            node sea3d/tests/fps_budget.mjs http://localhost:4810/ "$RUNS" "$ref" "$QUALITIES" | tee -a fps/results.jsonl
             kill $srv; wait $srv 2>/dev/null || true
           done
           python3 - <<'EOF' >> fps/table.md
@@ -70,6 +75,9 @@ jobs:
           for r in rows:
               cells = []
               for k in ("low/clear", "low/rain", "high/clear", "high/rain"):
+                  if k not in r["cells"]:
+                      cells.append("-")
+                      continue
                   ms, b = r["cells"][k]["median_ms"], base[k]["median_ms"]
                   cells.append(f"{ms}" if r is rows[0] else f"{ms} ({(ms - b) / b:+.0%})")
               print(f"| {r['label']} | " + " | ".join(cells) + " |")
