@@ -25,7 +25,7 @@ export const SAIL_SUN = {
 const SAIL_TIME = { value: 0 };
 
 /** How much light a sail lets through when the sun is straight behind it (Dacron passes a few per cent; seen against the sun that glows). */
-export const TRANSLUCENCY = 1.3;
+export const TRANSLUCENCY = 2.2;
 /** Dacron: warm off-white (sRGB). */
 export const DACRON = 0xe8e3d6;
 /** Cross-cut panel height, m (sails are sewn from horizontal strips about a metre wide). */
@@ -116,35 +116,40 @@ uniform vec2 uSize;
 varying vec3 vSailWorld;
 varying vec2 vSailUv;
 varying float vFlog;
-// Double cloth: 1 on a seam, tape or corner patch, 0 on single cloth.
-float sailDouble(vec2 uv) {
-  vec2 m = uv * uSize;                       // metres: across the chord, up the sail
+// The sail's layers: x = seam (two strips overlapping), y = tapes along the
+// edges and corner patches (several layers). 0 on single cloth.
+vec2 sailLayers(vec2 uv) {
   float chord = uSize.x * (1.0 - uv.y);      // the chord narrows towards the head
-  // Seams: a double-stitched line every panel, faded out where a pixel is wider
-  // than a few centimetres (far away), so they never shimmer.
-  float rowY = m.y / ${PANEL.toFixed(2)};
+  // A point on the sail in metres, tack at the origin, luff up the y axis.
+  vec2 p = vec2(uv.x * chord, uv.y * uSize.y);
+  // Cross-cut seams run square to the leech (clew to head), so they fan a little
+  // rather than lie flat. Thin, double-stitched, and faded out where a pixel is
+  // wider than a few centimetres (far away), so they never shimmer.
+  vec2 leech = normalize(vec2(-uSize.x, uSize.y));
+  float rowY = dot(p - vec2(uSize.x, 0.0), leech) / ${PANEL.toFixed(2)};
   float d = abs(fract(rowY + 0.5) - 0.5) * ${PANEL.toFixed(2)};
   float px = fwidth(rowY) * ${PANEL.toFixed(2)};
-  float seam = (1.0 - smoothstep(0.012, 0.03 + px, d)) * (1.0 - smoothstep(0.03, 0.09, px));
-  float luffTape = 1.0 - smoothstep(0.04, 0.07, uv.x * chord);
+  float seam = (1.0 - smoothstep(0.008, 0.02 + px, d)) * (1.0 - smoothstep(0.025, 0.08, px));
+  float luffTape = 1.0 - smoothstep(0.04, 0.07, p.x);
   float leechTape = 1.0 - smoothstep(0.03, 0.05, (1.0 - uv.x) * chord);
-  float footTape = 1.0 - smoothstep(0.04, 0.07, m.y);
+  float footTape = 1.0 - smoothstep(0.04, 0.07, p.y);
   // Corner patches, layered: tack, clew and head (two layers, the outer one fainter).
-  float tack = 0.6 * (1.0 - smoothstep(0.32, 0.36, length(vec2(uv.x * chord, m.y))))
-             + 0.4 * (1.0 - smoothstep(0.18, 0.22, length(vec2(uv.x * chord, m.y))));
-  float clew = 0.6 * (1.0 - smoothstep(0.36, 0.4, length(vec2((1.0 - uv.x) * chord, m.y))))
-             + 0.4 * (1.0 - smoothstep(0.2, 0.24, length(vec2((1.0 - uv.x) * chord, m.y))));
+  float tack = 0.6 * (1.0 - smoothstep(0.32, 0.36, length(p)))
+             + 0.4 * (1.0 - smoothstep(0.18, 0.22, length(p)));
+  float clew = 0.6 * (1.0 - smoothstep(0.36, 0.4, length(vec2((1.0 - uv.x) * chord, p.y))))
+             + 0.4 * (1.0 - smoothstep(0.2, 0.24, length(vec2((1.0 - uv.x) * chord, p.y))));
   float head = 0.6 * (1.0 - smoothstep(0.28, 0.32, (1.0 - uv.y) * uSize.y))
              + 0.4 * (1.0 - smoothstep(0.14, 0.18, (1.0 - uv.y) * uSize.y));
-  return clamp(max(max(seam, max(luffTape, leechTape)), max(footTape, max(tack, max(clew, head)))), 0.0, 1.0);
+  float edges = max(max(luffTape, leechTape), max(footTape, max(tack, max(clew, head))));
+  return clamp(vec2(seam, edges), 0.0, 1.0);
 }
 void main() {`,
       )
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
-  float sailDbl = sailDouble(vSailUv);
-  diffuseColor.rgb *= 1.0 - 0.07 * sailDbl; // faint in front light`,
+  vec2 sailDbl = sailLayers(vSailUv);
+  diffuseColor.rgb *= 1.0 - 0.02 * sailDbl.x - 0.04 * sailDbl.y; // barely there in front light`,
       )
       .replace(
         "#include <normal_fragment_maps>",
@@ -161,14 +166,20 @@ void main() {`,
         `#include <emissivemap_fragment>
   // Light through the cloth. Only from the side away from the sun (the face we
   // see must face away from it), a broad glow from any angle, plus a strong
-  // forward glow looking towards the sun. Double cloth lets through about half.
+  // forward glow looking towards the sun. Brightest mid-sail, falling off to the
+  // luff and leech (more cloth edge-on, the boltrope and tapes); seams let
+  // through about two thirds, tapes and corner patches about half. The light
+  // keeps half the sun's tint, the rest is the cloth's own off-white.
   vec3 sunV = normalize((viewMatrix * vec4(uSailSunDir, 0.0)).xyz);
   float behind = max(-dot(normal, sunV), 0.0);
   vec3 sailView = normalize(vSailWorld - cameraPosition);
   float through = pow(max(dot(sailView, uSailSunDir), 0.0), 3.0);
-  float pass = 1.0 - 0.45 * sailDbl;
-  totalEmissiveRadiance += diffuseColor.rgb * uSailSunCol
-    * (${TRANSLUCENCY.toFixed(2)} * uSailSun * pass * smoothstep(0.0, 0.2, behind) * (0.45 * behind + through));`,
+  float pass = (1.0 - 0.3 * sailDbl.x) * (1.0 - 0.5 * sailDbl.y);
+  float body = 0.55 + 0.45 * sin(3.14159 * clamp(vSailUv.x, 0.0, 1.0)) * (1.0 - 0.4 * vSailUv.y);
+  float sunLum = dot(uSailSunCol, vec3(0.2126, 0.7152, 0.0722));
+  vec3 tint = mix(vec3(sunLum), uSailSunCol, 0.5);
+  totalEmissiveRadiance += diffuseColor.rgb * tint
+    * (${TRANSLUCENCY.toFixed(2)} * uSailSun * pass * body * smoothstep(0.0, 0.2, behind) * (0.45 * behind + through));`,
       );
   };
   pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v2`;

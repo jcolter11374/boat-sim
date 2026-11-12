@@ -192,8 +192,8 @@ function fairingTexture(): THREE.DataTexture {
 
 /** Stock boats' own looks, by key: the Pearson is a kept-up 1970s hull, the cruiser a new one. */
 const STOCK_LOOK: Record<string, { fairing: number; coatRough: number }> = {
-  stock_pearson31_2: { fairing: 0.35, coatRough: 0.06 },
-  stock_cruiser31: { fairing: 0.12, coatRough: 0.03 },
+  stock_pearson31_2: { fairing: 0.35, coatRough: 0.22 },
+  stock_cruiser31: { fairing: 0.12, coatRough: 0.15 },
 };
 
 /**
@@ -203,7 +203,7 @@ const STOCK_LOOK: Record<string, { fairing: number; coatRough: number }> = {
  * carry: fairing in the reflections, satin teak, dull rigging wire. Each material once.
  */
 export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
-  const look = STOCK_LOOK[key] ?? { fairing: 0.15, coatRough: 0.04 };
+  const look = STOCK_LOOK[key] ?? { fairing: 0.15, coatRough: 0.1 };
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
