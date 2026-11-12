@@ -804,7 +804,11 @@ void main() {`,
     float edge = top * (0.65 + 0.5 * n);
     // Solid white where it heaps up against the stem, breaking into lace further aft.
     float solid = exp(-xs / (0.09 * uBow.y));
-    float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y - uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid);
+    float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y - uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid * smoothstep(0.35, 0.6, n));
+    // The stem itself, up to the crest, is all white: nothing dark pokes through where the two sides meet.
+    foam = max(foam, (1.0 - smoothstep(2.0, 5.0, vLocal.x)) * (1.0 - smoothstep(top * 0.85, top, vLocal.y - uBow.z)) * step(0.15, uBow.x) * (0.88 + 0.12 * n));
+    // Right at the waterline forward the hull is buried in white water: no dark boot-top showing through.
+    foam = max(foam, (1.0 - smoothstep(0.5, 1.4, vLocal.y - uBow.z)) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.95), foam * 0.95);
   }`,
       )
@@ -859,8 +863,8 @@ export function bowWaveOnStem(speed: number, length: number): number {
 // breaking into foam a third of the way down her length. Built at unit height and width;
 // the shader scales it by uBowH (the wave's height at the stem, m) so one mesh serves every speed.
 
-const BOW_ALONG = 24; // sections from the stem aft
-const BOW_ACROSS = 7; // from the hull out to the sea
+const BOW_ALONG = 48; // sections from the stem aft
+const BOW_ACROSS = 10; // from the hull out to the sea
 
 function bowWaveGeometry(kind: ShipKind): THREE.BufferGeometry {
   const h = kind === "container" ? C_HULL : kind === "tanker" ? T_HULL : kind === "bulk" ? B_HULL : F_HULL;
@@ -882,7 +886,8 @@ function bowWaveGeometry(kind: ShipKind): THREE.BufferGeometry {
         const lip = 0.45;
         const y = t < lip ? 0.15 + 0.85 * Math.sin((t / lip) * Math.PI * 0.5) : Math.cos(((t - lip) / (1 - lip)) * Math.PI * 0.5) - 0.12;
         const w = t < lip ? 0.25 * (t / lip) : 0.25 + 1.6 * Math.pow((t - lip) / (1 - lip), 1.4);
-        pos.push(x + 0.6 * w * u, y, sgn * (hb + 0.15 * Math.min(1, x / 3))); // z gets the outward width in the shader
+        const rake = stemX(h, 4) * Math.exp(-x / 6); // the stem rakes forward above the water: start the sheet on it
+        pos.push(x + rake + 0.6 * w * u, y, sgn * (hb + 0.15 * Math.min(1, x / 3))); // z gets the outward width in the shader
         uv.push(u, t);
         side.push(sgn * w);
       }
@@ -924,7 +929,10 @@ void main() {
         `#include <begin_vertex>
   // Height falls off aft of the stem; the sheet spreads wider as it peels away.
   float hk = uBowH * (0.25 + 0.75 * exp(-uv.x * 3.2)) * (1.0 + 0.08 * sin(uSeaTime * 3.0 + uv.x * 17.0));
-  transformed.y *= hk;
+  // A lumpy, torn crest: the lip rises and falls along the hull and over time.
+  float lump = sin(uv.x * 61.0 + uSeaTime * 2.3) * 0.5 + sin(uv.x * 23.0 - uSeaTime * 1.7 + 1.3) * 0.5;
+  float atLip = exp(-pow((uv.y - 0.45) / 0.15, 2.0));
+  transformed.y *= hk * (1.0 + 0.22 * lump * atLip);
   transformed.z += aOut * hk * (1.0 + 2.5 * uv.x);`,
       );
     sh.fragmentShader = sh.fragmentShader
@@ -944,24 +952,91 @@ void main() {`,
         "#include <alphamap_fragment>",
         `#include <alphamap_fragment>
   {
-    // Solid at the stem and along the lip; breaking into lace aft and towards the sea.
+    // White where it climbs the hull and along the lip, solid at the stem and lace aft; under
+    // the lip the face of the wave is dark, glassy water falling back to the sea (Elena).
     vec2 q = vec2(vBw.x * 38.0 - uSeaTime * 1.6, vBw.y * 5.0 + uSeaTime * 0.7);
     float n = bwNoise(q) * 0.6 + bwNoise(q * 2.7 + 3.1) * 0.4;
-    float solid = (1.0 - smoothstep(0.1, 0.6, vBw.x)) * (1.0 - smoothstep(0.45, 0.8, vBw.y));
+    float solid = (1.0 - smoothstep(0.05, 0.55, vBw.x)) * smoothstep(0.18, 0.36, vBw.y + 0.25 * n) * (1.0 - smoothstep(0.5, 0.66, vBw.y)); // the lip
     float lace = smoothstep(0.42, 0.62, n + 0.3 * solid);
-    float a = mix(lace, 0.92, solid * 0.8);
+    float white = mix(lace * (1.0 - smoothstep(0.55, 0.8, vBw.y)) * (0.55 + 0.45 * n), 0.95, solid * 0.85);
+    // Streaks of foam running down the dark face.
+    float streak = smoothstep(0.6, 0.85, bwNoise(vec2(vBw.x * 70.0, vBw.y * 1.5 - uSeaTime * 0.9))) * smoothstep(0.5, 0.7, vBw.y) * 0.7;
+    white = max(white, streak);
+    float face = smoothstep(0.42, 0.6, vBw.y) * (1.0 - smoothstep(0.85, 1.0, vBw.y)) * 0.9;
+    // Right at the stem it's all churned white, no glassy face yet.
+    white = max(white, (1.0 - smoothstep(0.04, 0.2, vBw.x)) * (0.7 + 0.3 * smoothstep(0.3, 0.6, n)));
+    // Dense where it climbs the hull near the stem: the hull's dark boot-top mustn't show through.
+    white = max(white, (1.0 - smoothstep(0.3, 0.48, vBw.y)) * (1.0 - smoothstep(0.2, 0.5, vBw.x)) * (0.82 + 0.18 * n));
+    float a = max(white, face);
     a *= 1.0 - smoothstep(0.7, 1.0, vBw.x);          // dies out aft
-    a *= 1.0 - smoothstep(0.85, 1.0, vBw.y);         // feathers into the sea
-    a *= smoothstep(0.0, 0.08, vBw.y);               // and into the hull
-    a *= mix(lace, 1.0, smoothstep(0.0, 0.05, vBw.x)); // ragged where the two sides meet at the stem
+    a *= smoothstep(0.0, 0.08, vBw.y);               // into the hull
+    // Glassy and dark under the lip aft; churned pale with air close to the stem.
+    vec3 water = mix(vec3(0.52, 0.66, 0.7), vec3(0.035, 0.12, 0.15), smoothstep(0.06, 0.3, vBw.x)) * (0.8 + 0.4 * n);
+    diffuseColor.rgb = mix(water, diffuseColor.rgb * (0.86 + 0.14 * n), clamp(white / max(a, 1e-3), 0.0, 1.0));
+    // Volume: lit on top of the roll, shadowed under it, a thin blue-green edge where the lip
+    // thins and the light comes through; torn into lumps along the crest.
+    float under = smoothstep(0.44, 0.52, vBw.y) * (1.0 - smoothstep(0.58, 0.8, vBw.y));
+    float lit = 1.0 - smoothstep(0.3, 0.45, vBw.y);
+    float edge = exp(-pow((vBw.y - 0.47) / 0.035, 2.0)) * smoothstep(0.04, 0.15, vBw.x);
+    diffuseColor.rgb *= mix(1.0, 0.5, under) * (1.0 + 0.18 * lit);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.26, 0.6, 0.58), edge * 0.7);
+    float tear = bwNoise(vec2(vBw.x * 95.0 - uSeaTime * 2.0, vBw.y * 14.0 + uSeaTime));
+    a *= 1.0 - exp(-pow((vBw.y - 0.42) / 0.06, 2.0)) * smoothstep(0.55, 0.75, tear) * smoothstep(0.03, 0.12, vBw.x);
     diffuseColor.a *= a;
-    diffuseColor.rgb *= 0.86 + 0.14 * n;
     if (diffuseColor.a < 0.02) discard;
   }`,
       );
   };
   m.customProgramCacheKey = () => "boatsim-bowwave-v1";
   return m;
+}
+
+/** Spray thrown off the top of the bow wave: specks rising and falling out from the lip. */
+function bowSprayPoints(kind: ShipKind): THREE.Points {
+  const h = kind === "container" ? C_HULL : kind === "tanker" ? T_HULL : kind === "bulk" ? B_HULL : F_HULL;
+  const len = 0.34 * h.L;
+  const N = 1400;
+  const pos: number[] = [];
+  const seed: number[] = [];
+  let r = 12345;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < N; k++) {
+    const sgn = k % 2 ? 1 : -1;
+    const u = Math.pow(rnd(), 2.0) * 0.4; // mostly near the stem
+    const x = Math.pow(u, 1.3) * len;
+    const hb = halfBreadth(h, Math.max(x, 0.2), 0);
+    pos.push(x, 1, sgn * (hb + 0.15 * Math.min(1, x / 3)));
+    seed.push(u, rnd(), sgn, 0.5 + rnd());
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("aSpray", new THREE.Float32BufferAttribute(seed, 4));
+  const m = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, sizeAttenuation: true, transparent: true, depthWrite: false, fog: false });
+  const u = { uBowH: { value: 0 }, uSeaTime: seaUniforms.uSeaTime, uNight: NAV_NIGHT, uFogAmt: { value: 0 } };
+  m.userData.u = u;
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace("void main() {", "uniform float uBowH;\nuniform float uSeaTime;\nuniform float uNight;\nuniform float uFogAmt;\nattribute vec4 aSpray;\nvarying float vSpray;\nvoid main() {")
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+  float ph = fract(uSeaTime * 0.7 * aSpray.w + aSpray.y);
+  float hk = uBowH * (0.25 + 0.75 * exp(-aSpray.x * 3.2));
+  transformed.y = hk * (0.95 + 1.2 * ph * (1.0 - ph) * aSpray.w);  // up and back down
+  transformed.z += aSpray.z * hk * (0.3 + 1.4 * ph) * smoothstep(0.0, 0.12, aSpray.x); // thrown outward (not across the stem)
+  transformed.x += 3.0 * ph;                                         // left behind as she goes on
+  vSpray = (1.0 - ph) * (1.0 - ph) * smoothstep(0.0, 0.08, ph) * (0.6 + 0.4 * step(0.93, fract(aSpray.y * 37.0))) * (1.0 - 0.6 * smoothstep(0.0, 0.25, uFogAmt)) * (1.0 - uNight) * step(0.15, uBowH);`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace("void main() {", "varying float vSpray;\nvoid main() {")
+      .replace("#include <color_fragment>", "#include <color_fragment>\n  diffuseColor.a *= vSpray * 0.75 * (1.0 - smoothstep(0.1, 0.5, length(gl_PointCoord - 0.5)));\n  if (diffuseColor.a < 0.02) discard;");
+  };
+  m.customProgramCacheKey = () => "boatsim-bowspray-v1";
+  const p = new THREE.Points(g, m);
+  p.name = "bowSpray";
+  p.frustumCulled = false;
+  return p;
 }
 
 export function makeShip(kind: ShipKind, range: { value: number }): THREE.Group {
@@ -975,6 +1050,10 @@ export function makeShip(kind: ShipKind, range: { value: number }): THREE.Group 
   bow.visible = false;
   bow.renderOrder = 2; // over the sea's foam
   s.add(bow);
+  const spray = bowSprayPoints(kind);
+  spray.visible = false;
+  spray.renderOrder = 3;
+  bow.add(spray);
   const l = shipLights(kind);
   // Big ships' lanterns are bigger and brighter than a yacht's: they carry 6 nautical miles.
   const size = kind === "fishing" ? 0.026 : 0.034;
@@ -1010,6 +1089,9 @@ export function dressShip(s: THREE.Group, kind: ShipKind, seed: number, anchored
   const bow = s.getObjectByName("bowWave") as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
   bow.material.userData.u.uBowH.value = u.uBow.value.x;
   bow.visible = u.uBow.value.x > 0.15;
+  const spray = bow.getObjectByName("bowSpray") as THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  spray.material.userData.u.uBowH.value = u.uBow.value.x;
+  spray.visible = bow.visible;
   bow.position.y = -s.userData.lift; // she rides higher in ballast; the wave stays on the sea
   s.getObjectByName("floods")!.visible = anchored && kind !== "fishing";
 }
