@@ -379,7 +379,8 @@ export class Clouds {
     if (cover != null) this.dayCover = cover;
     // Rain, mm/h: the logged rate, or (older replays) what the storm suggests.
     const rainWant = rainMmH ?? 6 * SM(storm, 0.4, 1);
-    const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7));
+    // Rain falls from a deck: steady rain covers the sky (and so dims the sun and its glitter on the sea).
+    const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7), SM(this.rain, 0.3, 2.5));
     const k = this.snapped ? 1 : Math.min(1, dt * 0.8);
     this.snapped = false;
     this.cover += (want - this.cover) * k;
@@ -449,11 +450,16 @@ export class Clouds {
     this.snapped = true;
   }
 
-  /** Thick fog closes the haze right in; call after the atmosphere has set its own. */
+  /** Thick fog and heavy rain close the haze in; call after the atmosphere has set its own. */
   closeIn(fog: THREE.Fog): void {
     const thick = SM(this.fog, 0.55, 1);
     fog.near = THREE.MathUtils.lerp(fog.near, 15, thick);
     fog.far = THREE.MathUtils.lerp(fog.far, 380, thick);
+    // Heavy rain is a mist of its own: the horizon goes and the haze closes to a few km
+    // (about 2.5 km in a 10 mm/h downpour), on the same haze colour as the sea's far fade.
+    const mist = SM(this.rain, 2, 10);
+    fog.near = Math.min(fog.near, THREE.MathUtils.lerp(fog.near, 60, mist));
+    fog.far = Math.min(fog.far, THREE.MathUtils.lerp(fog.far, 2500, mist));
   }
 
   dispose(): void {

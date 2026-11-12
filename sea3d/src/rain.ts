@@ -1,7 +1,9 @@
 // Rain in a blow: thin streaks falling round the camera, slanted by the wind.
 // Everything moves on the graphics card (each drop's place is worked out from
 // the time in the vertex shader), so it costs almost nothing on the CPU.
-// Cosmetic: the replay logs wind, not rain, so rain follows the wind (see rainFromStorm).
+// How hard it rains comes from the replay's logged rain (rainFromRate); older replays
+// without it follow the wind (rainFromStorm). Subtle on purpose: thin, varied streaks,
+// fewer and fainter in drizzle, never water on the lens.
 
 import * as THREE from "three";
 
@@ -16,6 +18,7 @@ attribute vec4 aSeed;   // x, y, z in 0..1, and a speed jitter
 attribute float aEnd;   // 0 = top of the streak, 1 = bottom
 varying float vEnd;
 varying float vFade;
+varying float vBright;
 void main() {
   float speed = uFall * (0.8 + 0.4 * aSeed.w);
   vec3 vel = vec3(uWind.x, -speed, uWind.y);
@@ -27,6 +30,7 @@ void main() {
   vEnd = aEnd;
   vec3 d = p - uCam;
   vFade = (1.0 - smoothstep(0.35 * uBox, 0.5 * uBox, length(d))) * smoothstep(0.6, 2.5, length(d));
+  vBright = 0.35 + 0.65 * fract(aSeed.w * 7.31 + aSeed.x * 3.7); // drops catch the light unevenly
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }`;
 const frag = /* glsl */ `
@@ -34,8 +38,11 @@ uniform float uAmount;
 uniform vec3 uColor;
 varying float vEnd;
 varying float vFade;
+varying float vBright;
 void main() {
-  float a = uAmount * vFade * (0.25 + 0.75 * vEnd);
+  // Tapered at both ends (a drop smeared over a short exposure), brightest just below the middle.
+  float taper = smoothstep(0.0, 0.35, vEnd) * (1.0 - smoothstep(0.75, 1.0, vEnd));
+  float a = uAmount * vFade * taper * vBright;
   if (a < 0.003) discard;
   gl_FragColor = vec4(uColor, a);
 }`;
@@ -106,8 +113,11 @@ export class Rain {
     u.uTime.value = t;
     u.uCam.value.copy(camera.position);
     // Drops drift with the wind, but slower than it (they're heavy and near the sea, where it's slower).
-    u.uWind.value.set(windX * 0.45, windZ * 0.45);
-    u.uAmount.value = 0.9 * amount;
+    // In a gale they fly nearly flat; in light air they barely lean.
+    const k = 0.4 + 0.3 * THREE.MathUtils.smoothstep(Math.hypot(windX, windZ), 8, 20);
+    u.uWind.value.set(windX * k, windZ * k);
+    u.uAmount.value = 0.75 * Math.sqrt(amount); // drizzle is faint, a downpour clear but never a wall
+    u.uLen.value = 0.35 + 0.5 * amount; // heavier drops, longer streaks
     // A little darker than the pale storm sky, so the streaks read against it as well as against the sea.
     u.uColor.value.setRGB(0.3 + 0.32 * light, 0.33 + 0.34 * light, 0.38 + 0.36 * light);
     // Show only a share of the drops in light rain.
