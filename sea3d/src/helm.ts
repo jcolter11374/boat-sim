@@ -50,7 +50,8 @@ import { Hud, showStrip } from "./helm/hud";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
-import { maybeJson, renderNext, standing, type Board, type Grid } from "./results";
+import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
+import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -1697,6 +1698,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
 }
 
 let decisionSeq = 0;
+/** The calls made when the clock stopped, for the results card. */
+const calls: Call[] = [];
 
 /** Stop the clock and ask, when a decision is due. */
 function maybeDecide(): boolean {
@@ -1725,6 +1728,8 @@ function showDecision(d: { text: string; choices: Choice[] }): void {
     b.title = c.title;
     b.addEventListener("click", async () => {
       $("decide").hidden = true;
+      // For the results card's "your calls": what was chosen, and the lead on the ghost then.
+      if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km });
       await c.act();
       setRate(lastRate);
     });
@@ -1758,20 +1763,52 @@ async function refreshForecast(): Promise<void> {
 async function finish(): Promise<void> {
   const c = await game.result();
   chartDirty = true;
+  hud.orders(false);
   // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
+  // Any other ending gets a quiet beat on the boat's last moment before the card (Leo's plan).
   if (c.boat.outcome === "arrived" && finishesOffLisbon() && !shared) await arrivalScene(c);
+  else if (!shared) await new Promise((ok) => setTimeout(ok, 2000));
   page.card = c;
   const me = c.boat;
   const gh = c.ghost;
-  const head =
-    c.verdict === "won"
-      ? "You beat the autopilot!"
-      : c.verdict === "lost"
-        ? "The autopilot won this one."
-        : c.verdict === "draw"
-          ? "A draw: within a day of each other, which is down to the weather's luck."
-          : "Neither boat finished.";
-  $("r-head").textContent = head;
+  $("r-head").textContent = headline(c);
+  $("r-story").textContent = story(c);
+  // The three big numbers: days at sea, km of the way covered, and against the ghost.
+  const st = game.status;
+  const rep = game.boat;
+  const target = (rep?.course.target ?? [39.5, -13.5]) as [number, number];
+  const radius = (rep?.course.target_radius_m ?? 25000) / 1000;
+  const way = rep && rep.lat.length ? Math.max(kmTo([rep.lat[0] as number, rep.lon[0] as number], target) - radius, 0) : 0;
+  const left = st ? st.boat.km_to_finish : way;
+  const lead = st ? st.lead_km : 0;
+  const nums = $("r-nums");
+  nums.replaceChildren(
+    ...numbers(c, me.outcome === "arrived" ? way : way - left, way, lead).map((n) => {
+      const d = document.createElement("div");
+      d.className = "n";
+      const b = document.createElement("b");
+      b.textContent = n.value;
+      if (n.unit) {
+        const u = document.createElement("small");
+        u.textContent = n.unit;
+        b.append(u);
+      }
+      const l = document.createElement("span");
+      l.textContent = n.label;
+      d.append(b, l);
+      return d;
+    }),
+  );
+  // Your calls (hands on only: from base, orders go by satellite and aren't calls).
+  $("r-calls").hidden = mode !== "hands_on" || !!shared;
+  $("r-calllist").replaceChildren(
+    ...callLines(calls, lead).map((t) => {
+      const li = document.createElement("li");
+      li.textContent = t;
+      return li;
+    }),
+  );
+  drawResultMap();
   $("r-trim").textContent = trimLine(c);
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
   const line = (who: string, x: Card["boat"]) => {
@@ -1832,9 +1869,14 @@ async function finish(): Promise<void> {
     bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   // #335: the browser sails on a lighter weather file than the full runs behind the voyage replays.
-  bits.unshift("Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.");
+  $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
   $("r-notes").textContent = bits.join(" ");
+  const mine = loadMyBoat();
+  if (mine) $<HTMLAnchorElement>("r-boat").href = `./${myBoatYardLink(mine)}`;
+  $<HTMLAnchorElement>("r-board").href = `./leaderboard.html#${encodeURIComponent(c.build)}`;
+  document.body.classList.add("results");
   $("result").hidden = false;
+  $("again").focus({ preventScroll: true });
   void showStanding(c.build);
 }
 
@@ -1846,10 +1888,33 @@ async function showStanding(build: string): Promise<void> {
   box.replaceChildren();
   const [board, grid] = await Promise.all([maybeJson<Board>("./leaderboard/board.json"), maybeJson<Grid>("./boatyard/index.json")]);
   if (page.card?.build !== build) return; // a newer game has finished since
-  const mine = loadMyBoat();
   const s = standing(build, board, grid);
-  renderNext(box, build, s, mine ? `./${myBoatYardLink(mine)}` : undefined);
+  const rate = s.kind === "board" ? s.row.finish_rate : s.kind === "odds" ? (s.build.odds?.odds ?? null) : null;
+  const mine = loadMyBoat();
+  const name = !mine ? "Our kayak" : "This build";
+  const p = document.createElement("p");
+  p.className = "standing";
+  p.textContent = leaves(page.card, rate, name);
+  box.append(p);
+  const t = standingText(s);
+  $("r-standing").textContent = `${t.head} ${t.detail}`;
   page.standing = s.kind;
+}
+
+/** The card's small map: both whole tracks, drawn once on the chart's land. */
+function drawResultMap(): void {
+  const cv = $<HTMLCanvasElement>("r-map");
+  if (!chartBounds || !game.boat || !game.ghost) {
+    cv.hidden = true;
+    return;
+  }
+  const m = new Chart(cv, landImg, chartBounds);
+  m.setLanes([
+    { rep: game.boat, colours: TRACK.kayak },
+    { rep: game.ghost, colours: GHOST },
+  ]);
+  // Drawn after the card lays out, so the canvas has its size.
+  requestAnimationFrame(() => m.draw(1e9, performance.now()));
 }
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
@@ -2137,7 +2202,57 @@ if (shared) {
   $("sharedmsg").textContent = "Someone shared this game with you: it opens where they left it, with the same weather and luck.";
   $("go").textContent = "Carry on from where they left it";
 }
-$("again").addEventListener("click", () => location.reload());
+// Play again: same boat, same day, same settings (you know what's coming). Another launch day:
+// the same, with the start card open on the launch picker. Kept for one reload in this tab only.
+const AGAIN_KEY = "boatsim.helm.again";
+function again(sameDay: boolean): void {
+  const val = (id: string) => $<HTMLInputElement | HTMLSelectElement>(id).value;
+  const chk = (id: string) => $<HTMLInputElement>(id).checked;
+  try {
+    sessionStorage.setItem(
+      AGAIN_KEY,
+      JSON.stringify({ launch: sameDay ? val("launch") : null, mode, safe: chk("safe"), breakdowns: chk("breakdowns"), port: val("port"), challenge: val("challenge"), pickDay: !sameDay }),
+    );
+  } catch {
+    /* private mode: a plain reload */
+  }
+  location.reload();
+}
+$("again").addEventListener("click", () => again(true));
+$("r-day").addEventListener("click", () => again(false));
+$("r-info").addEventListener("click", () => {
+  const t = $("r-caveat");
+  t.hidden = !t.hidden;
+  $("r-info").setAttribute("aria-expanded", String(!t.hidden));
+});
+{
+  let a: { launch: string | null; mode: Mode; safe: boolean; breakdowns: boolean; port: string; challenge: string; pickDay: boolean } | null = null;
+  try {
+    a = JSON.parse(sessionStorage.getItem(AGAIN_KEY) ?? "null");
+    sessionStorage.removeItem(AGAIN_KEY);
+  } catch {
+    a = null;
+  }
+  if (a && !shared) {
+    const sel = $<HTMLSelectElement>("launch");
+    if (a.launch !== null && Array.from(sel.options).some((o) => o.value === a!.launch)) sel.value = a.launch;
+    $<HTMLInputElement>("safe").checked = a.safe;
+    $<HTMLInputElement>("breakdowns").checked = a.breakdowns;
+    const m = document.querySelector<HTMLInputElement>(`input[name="mode"][value="${CSS.escape(a.mode)}"]`);
+    if (m) m.checked = true;
+    // The port and challenge pickers fill from files: set them once they're there.
+    const later = (id: string, v: string, tries = 40) => {
+      const e = $<HTMLSelectElement>(id);
+      if (Array.from(e.options).some((o) => o.value === v)) {
+        e.value = v;
+        e.dispatchEvent(new Event("change"));
+      } else if (v && tries > 0) setTimeout(() => later(id, v, tries - 1), 250);
+    };
+    later("port", a.port);
+    later("challenge", a.challenge);
+    if (a.pickDay) requestAnimationFrame(() => sel.focus());
+  }
+}
 $<HTMLSelectElement>("challenge").addEventListener("change", () => showChallenge());
 for (const w of ["boat", "ghost"] as const)
   $(`w-${w}`).addEventListener("click", () => {
@@ -2150,6 +2265,7 @@ showOrder();
 compass.draw();
 
 const landImg = new Image();
+let chartBounds: LandBounds | null = null;
 (async () => {
   const [bounds] = await Promise.all([
     fetch("./land.json").then((r) => r.json() as Promise<LandBounds>),
@@ -2160,6 +2276,7 @@ const landImg = new Image();
     }),
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
+  chartBounds = bounds;
   chart.setWrecks(wreckMarks());
 })().catch((e) => console.warn("chart:", e));
 
