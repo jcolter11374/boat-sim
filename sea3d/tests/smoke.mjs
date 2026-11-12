@@ -807,6 +807,16 @@ try {
     await page.waitForTimeout(500);
     const mod = await page.evaluate(() => ({ asked: window.__helm.asked, value: document.getElementById("challenge").value }));
     if (mod.asked || mod.value) fail(`a plain helm link preselected a challenge: ${JSON.stringify(mod)}`);
+    // The one Set sail card's choices ride in the URL (the one-game plan, step 1): a rough start
+    // fills in the 1 April launch, and an Annapolis link with go=1 is at the wheel at once.
+    await page.goto(`${URL}helm.html?quality=low&when=rough`);
+    await page.waitForFunction(() => window.__setsail, null, { timeout: 60000 });
+    const rough = await page.evaluate(() => ({ launch: document.getElementById("launch").value, ss: window.__setsail.current() }));
+    if (rough.launch !== "0" || rough.ss.when !== "rough") fail(`?when=rough didn't fill in the rough start: ${JSON.stringify(rough)}`);
+    await page.goto(`${URL}helm.html?quality=low&where=annapolis&course=triangle&go=1`);
+    await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 90000 }).catch(() => fail("an Annapolis Set sail link didn't put you at the wheel"));
+    if (new URL(page.url()).searchParams.has("go")) fail("go=1 stayed in the URL, so a reload would set sail again");
+    log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once");
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);

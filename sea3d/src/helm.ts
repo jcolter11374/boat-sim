@@ -28,6 +28,7 @@ import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
+import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
@@ -57,6 +58,10 @@ import { callLines, callName, headline, leaves, numbers, story, type Call } from
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** The Set sail card's choices this page opened with (the URL, old ?practice and ?challenge links included). */
+const SS: SetSail = fromUrl(location.search);
+// ?go=1 sets sail once: a reload (or Play again) comes back to the filled-in card.
+if (params.get("go") === "1") history.replaceState(null, "", `${location.pathname}${withChoices(location.search, SS)}${location.hash}`);
 const KN = 1.94384;
 const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : iso + "Z");
 const quality = params.get("quality") === "low" ? "low" : "high";
@@ -1231,7 +1236,7 @@ async function wheelEnded(r: WheelResult): Promise<void> {
 // depths end the run in shallow water. Where this copy of the site has no Bay squares, it's
 // the old drills: a spell to a mark in a steady wind, a new one each time.
 // Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
-const PRACTICE = params.has("practice");
+const PRACTICE = SS.where === "annapolis"; // ?where=annapolis, or the old ?practice
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
 let practiceWind: { u: number; v: number } | null = null;
@@ -1241,7 +1246,7 @@ let practiceAt: LatLon | null = null;
 /** The last place the boat was, so the view stays put between runs. */
 let practiceHere: LatLon | null = null;
 let practiceCourse: Course | null = null;
-let practiceBreeze: Breeze = "good";
+let practiceBreeze: Breeze = SS.breeze;
 let depths: BayDepths | null = null;
 const depthsReady = BayDepths.create().then((d) => {
   depths = d;
@@ -1416,6 +1421,7 @@ if (PRACTICE) {
       practiceCard();
       $("practice-end").hidden = false;
       aimAt(290); // toward the town and the Naval Academy
+      if (params.get("go") === "1" && SS.course) void practiceSpell(SS.course);
     } else void practiceSpell("drill");
   });
 }
@@ -3136,3 +3142,50 @@ renderer.setAnimationLoop(() => {
   page.hour = hour;
   page.simHour = shownTo;
 });
+
+// ---------- Set sail (the one-game plan, step 1; Rosa) ----------
+// One entry for every way to start: the ocean crossing, Annapolis practice, a weather
+// challenge. Jonas's Set sail card calls window.__setsail.start(choices); the URL carries
+// the same choices, so a link (the title, the Boatyard's "Test it", Play again) opens the
+// card filled in, and ?go=1 sets sail at once.
+if (!shared && !PRACTICE && SS.when !== "calm") $<HTMLSelectElement>("launch").value = LAUNCH[SS.when];
+if (!shared && !PRACTICE && SS.boat && boatRow(SS.boat)) {
+  boatRow(SS.boat)!.checked = true;
+  powerFor(SS.boat);
+}
+
+/** The choices the start card shows now. */
+function currentSetSail(): SetSail {
+  if (PRACTICE) return { ...SS, where: "annapolis", breeze: practiceBreeze, course: lastTrial ?? SS.course };
+  const lv = $<HTMLSelectElement>("launch").value;
+  return { ...SS, where: "ocean", boat: chosenBoat(), when: lv === LAUNCH.rough ? "rough" : "calm", challenge: $<HTMLSelectElement>("challenge").value, course: "" };
+}
+
+/** Set sail with these choices: the same page and screen for every mode; switching between the ocean and Annapolis reloads into the other. */
+async function startVoyage(s: SetSail): Promise<void> {
+  if ((s.where === "annapolis") !== PRACTICE) {
+    location.assign(`helm.html${withChoices(location.search, s, true)}`);
+    return;
+  }
+  history.replaceState(null, "", `helm.html${withChoices(location.search, s)}`);
+  if (PRACTICE) {
+    practiceBreeze = s.breeze;
+    practiceCard();
+    await depthsReady;
+    await practiceSpell(s.course || "triangle");
+    return;
+  }
+  if (boatRow(s.boat)) {
+    boatRow(s.boat)!.checked = true;
+    powerFor(s.boat);
+  }
+  $<HTMLSelectElement>("launch").value = LAUNCH[s.when];
+  await challengesReady;
+  const sel = $<HTMLSelectElement>("challenge");
+  sel.value = challenges.some((c) => c.id === s.challenge) ? s.challenge : "";
+  showChallenge();
+  await begin();
+}
+(window as unknown as { __setsail: unknown }).__setsail = { options: SET_SAIL, implied, current: currentSetSail, start: startVoyage };
+// ?go=1: the card (or a link) already chose; set sail at once.
+if (!shared && !PRACTICE && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));
