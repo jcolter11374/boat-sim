@@ -264,7 +264,24 @@ try {
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
     await openReplay(page); // the close-up buttons live in the replay drawer
-    await page.click('#focus button[data-lane="1"]');
+    // Where everything is just before the click (a runner-only "outside of the viewport", Maya).
+    const where = () => page.evaluate(() => {
+      const r = (id) => { const e = document.querySelector(id); if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]; };
+      const top = document.getElementById("top");
+      return JSON.stringify({ vw: innerWidth, vh: innerHeight, top: r("#top"), topCls: top?.className, topScroll: [top?.scrollTop, top?.scrollHeight, top?.clientHeight], focus: r("#focus"), lane1: r('#focus button[data-lane="1"]'), body: document.body.className });
+    });
+    console.log("race drawer before click:", await where());
+    // If something slid the drawer shut under us, log it, open it again and retry (up to 3 tries).
+    for (let tryN = 1; ; tryN++) {
+      try {
+        await page.click('#focus button[data-lane="1"]', { timeout: 8000 });
+        break;
+      } catch (e) {
+        console.log(`race drawer at failed click ${tryN}:`, await where());
+        if (tryN >= 3) throw e;
+        await openReplay(page);
+      }
+    }
     await page.waitForTimeout(800);
     if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
     // Its moving parts: wing, wind vane, rudder, comms light; no propellers.
