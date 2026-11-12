@@ -763,6 +763,61 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // First-10-minutes sweep (Elena, 12 Nov), Omar's part: Boatyard, a replay and results, at
+  // 1280x720 and 1920x1080, frames to the log. Also #383: no money anywhere in the Boatyard.
+  "sweep-omar": {
+    manual: true,
+    path: "boatyard.html",
+    run: async (page) => {
+      const out = [];
+      const money = () => page.evaluate(() => (document.body.innerText.match(/.{0,40}(\$\s?\d|\bprice|\bcost\b|\bbill\b|USD).{0,40}/gi) ?? []).slice(0, 8));
+      for (const [w, h] of [[1280, 720], [1920, 1080]]) {
+        await page.setViewportSize({ width: w, height: h });
+        // Boatyard: our kayak, then a swap, then Rev C5.
+        await page.goto(SITE + "boatyard.html", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 10, null, { timeout: 2 * MIN });
+        await page.waitForTimeout(3000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-boatyard.jpg`);
+        const m1 = await money();
+        await page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click().catch(() => {});
+        await page.waitForTimeout(3000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-boatyard-swap.jpg`);
+        await page.goto(SITE + "boatyard.html#base=revc", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 10, null, { timeout: 2 * MIN });
+        await page.waitForTimeout(3000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-boatyard-revc.jpg`);
+        const m2 = await money();
+        console.log(`MONEY ${w} ${JSON.stringify([...m1, ...m2])}`);
+        out.push(`${w}: Boatyard money hits ${m1.length + m2.length}`);
+        // A replay: default, a minute in at 1 d/s, and the end card.
+        await page.goto(SITE + "voyage.html", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__replay && (window.__replay.frames ?? 0) > 20, null, { timeout: 3 * MIN });
+        await page.waitForTimeout(4000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-replay-open.jpg`);
+        await page.waitForTimeout(12_000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-replay-15s.jpg`);
+        await page.evaluate(() => window.__replay.setHour?.(24 * 30));
+        await page.waitForTimeout(4000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-replay-day30.jpg`);
+        await page.evaluate(() => window.__replay.setHour?.(24 * 400));
+        await page.waitForTimeout(5000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-replay-end.jpg`);
+        // Results: Boatyard "Test it" results (in this browser), then the leaderboard it links to.
+        await page.goto(SITE + "boatyard.html", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 2 * MIN });
+        await page.click("#launch").catch(() => {});
+        await page.waitForTimeout(90_000);
+        await lookShot(page, `sweep-${BROWSER}-${w}-results-testit.jpg`);
+        const m3 = await money();
+        if (m3.length) console.log(`MONEY ${w} results ${JSON.stringify(m3)}`);
+        await page.goto(SITE + "leaderboard.html", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__leaderboard?.ready || window.__leaderboard?.error, null, { timeout: MIN }).catch(() => {});
+        await lookShot(page, `sweep-${BROWSER}-${w}-results-leaderboard.jpg`);
+        must(!m1.length && !m2.length, `money in the Boatyard at ${w}: ${JSON.stringify([...m1, ...m2].slice(0, 3))}`);
+      }
+      return out.join("; ");
+    },
+  },
   // #380 (audit item 9, Leo's copy): player names on the leaderboard and in the Boatyard.
   "names-380": {
     manual: true,
