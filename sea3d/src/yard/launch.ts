@@ -129,7 +129,7 @@ export class GridLauncher implements Launcher {
     if (!n) return null;
     return {
       exact: n.exact,
-      note: n.exact ? `Simulated as built: ${n.build.label}.` : `Closest simulated build: ${n.build.label}.`,
+      note: n.exact ? `Simulated: ${n.build.label}.` : `Closest build we've simulated: ${n.build.label}.`,
       odds: n.build.odds,
       replays: n.build.replays.map((r) => ({ url: `${this.base}/${r.file}`, start: r.start, outcome: r.outcome, days: r.days })),
     };
