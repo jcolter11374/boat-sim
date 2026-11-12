@@ -456,7 +456,7 @@ function showOrder(): void {
       : order === "finish"
         ? "Straight at the finish"
         : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
-  $("c-orderv").textContent = order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
+  $("c-orderv").textContent = document.body.classList.contains("at-wheel") ? "At the wheel" : order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
   $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
   $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
@@ -1083,6 +1083,9 @@ addEventListener("blur", () => {
   wheel.release();
 });
 
+/** Resolves after the browser has painted the current DOM, so a long simulator call can't hold it back. */
+const nextPaint = () => new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0)));
+
 // "Take the wheel" (Rosa, Gameplay; plan reviewed by Leo): sail the boat yourself in real
 // time. The voyage clock waits while you do; for now a spell doesn't move the voyage.
 let wheelRate = 0; // the clock's speed before the spell, to carry on at
@@ -1098,9 +1101,16 @@ const wheel = new WheelSession({
  * for the next watch, as an order the simulator sails (clamped there), never by moving the boat here. */
 async function wheelEnded(r: WheelResult): Promise<void> {
   wheelNow = null;
+  // Esc is answered in the frame it's pressed (Leo): the strip shows the order the boat goes back
+  // to now; the camera eases out on its own time. If the simulator still has to take the spell's
+  // trim, the cell says so ("Autopilot…") until it lands, and the page paints before it starts.
+  showOrder();
   let counts: { hours: number } | null = null;
   const st = page.status;
   if (r.sailedSecs >= COUNTS_AFTER_S && st?.sailboat && st.trim !== undefined && mode === "hands_on") {
+    const cell = $("c-orderv");
+    cell.textContent = `${cell.textContent}…`;
+    await nextPaint();
     try {
       if (inFlight) await inFlight;
       const o = await game.order(order, power, sailOrder, engineOrder, r.share);
