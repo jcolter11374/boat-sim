@@ -879,17 +879,22 @@ function kickRoll(t: number): number {
 async function sail(kind: "6h" | "day" | "event"): Promise<void> {
   if (busy || !page.ready || page.status?.over) return;
   setRate(0); // a skip pauses the clock: you see where it got to
+  ++decisionSeq; // a look under way is for a moment that is gone
+  looking = false;
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
   if (page.status?.over) return setBusy(false);
   const from = hour;
+  // The simulator can be some hours ahead of the picture: "until something happens" stops at
+  // most 3 days on from what you see (CI #391: day 0.375 to 4.125 with the battery stop gone).
+  const ahead = Math.max(0, lastHour(game.boat!) - from);
   try {
     const opts =
       kind === "6h"
         ? { hours: 6, breakdown: false }
         : kind === "day"
           ? { hours: 24, breakdown: false }
-          : untilOptions();
+          : { ...untilOptions(), hours: Math.max(1, UNTIL_H - ahead) };
     const stopped = await game.run(opts);
     page.status = game.status;
     page.stops.push(stopped);
@@ -1032,6 +1037,15 @@ async function clockRun(): Promise<void> {
   }
 }
 
+/** A forecast look (route check, chase, a Stream call that may be only a note) is under way:
+ * the simulator waits where it is so the answer fits the moment, but the clock is not
+ * paused. The picture plays on up to the simulator and the time bar keeps its speed; only a
+ * card, if the look ends in one, pauses the clock (CI #391: a look read as "Paused"). */
+let looking = false;
+
+/** "Until something happens" runs at most this long (the simulator's own cap, 72 h). */
+const UNTIL_H = 72;
+
 /** This frame's share of the clock: move the picture on, and keep the simulator ahead of it. */
 function tickClock(dt: number): boolean {
   if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
@@ -1039,7 +1053,7 @@ function tickClock(dt: number): boolean {
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
   hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
-  if (!inFlight && shownTo - hour < rate)
+  if (!inFlight && !looking && shownTo - hour < rate)
     inFlight = clockRun().finally(() => {
       inFlight = null;
     });
@@ -1836,6 +1850,7 @@ function orderWords(o: Heading): string {
  * best line beats the autopilot's by over half a day AND costs something, the route check asks
  * then and there instead of waiting out its quiet days. Once a voyage. */
 let chaseAsked = false;
+const CHASE_FROM_H = 12; // not on the start line: she sails a little first
 const CHASE_UNTIL_H = 120; // looked for in the first 5 days only: each look pauses about a second
 const CHASE_EVERY_H = 12;
 const CHASE_GAIN_DAYS = 0.5;
@@ -1847,13 +1862,22 @@ function maybeRouteCheck(st: Status): boolean {
   if (mode !== "hands_on" || st.over || shared) return false;
   const h = st.day * 24;
   const quiet = h - Math.max(lastCallH, 0) >= quietGapH() && h - routeLookedH >= 24;
-  const early = !chaseAsked && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
+  const early = !chaseAsked && h >= CHASE_FROM_H && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
   if (!quiet && !early) return false;
   routeLookedH = h;
-  setRate(0, true);
+  looking = true; // the simulator waits; the clock runs on (no "Paused" for a look)
   const seq = ++decisionSeq;
   const resume = () => {
-    if (seq === decisionSeq && rate === 0 && $("decide").hidden) setRate(lastRate);
+    if (seq === decisionSeq) looking = false;
+  };
+  /** The look ends in a card: now the clock pauses, the picture plays on to the look's moment, and it asks. */
+  const askAt = (show: () => void) => {
+    if (seq !== decisionSeq) return;
+    looking = false;
+    setRate(0, true);
+    whenAt(h, () => {
+      if (seq === decisionSeq && rate === 0 && !game.status?.over) show();
+    });
   };
   (async () => {
     const b: BestHeading | null = await game.bestHeading().catch(() => null);
@@ -1903,9 +1927,7 @@ function maybeRouteCheck(st: Status): boolean {
         ],
       };
       const view: Outlook = { ...o, orders: [best, auto] };
-      whenAt(h, () => {
-        if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, view, [true, true]);
-      });
+      askAt(() => showDecision(d, view, [true, true]));
       return;
     }
     if (!quiet) return resume(); // an early look that found no chase: nothing to say
@@ -1933,9 +1955,7 @@ function maybeRouteCheck(st: Status): boolean {
     const picks = order === "auto" || same ? [0, 1] : [0, 1, 2];
     d.choices = picks.map((k) => d.choices[k]);
     const view: Outlook = { ...o, orders: picks.map((k) => o.orders[k]) };
-    whenAt(h, () => {
-      if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, view, picks.map(() => true));
-    });
+    askAt(() => showDecision(d, view, picks.map(() => true)));
   })();
   return true;
 }
@@ -1977,7 +1997,11 @@ function maybeDecide(): boolean {
   const callBefore = lastCallH;
   lastCallH = st.day * 24;
   callCount++;
-  setRate(0, true);
+  // The Stream may come out as only a note (Elena's rule), so it looks first with the clock
+  // running and pauses only for a card; a storm always asks, so it pauses now.
+  const stream = d.kind === "stream";
+  if (stream) looking = true;
+  else setRate(0, true);
   page.decisions.push({ kind: d.kind, day: st.day });
   // See it coming (Rosa): over the last half day before the call the picture slows to an hour
   // a second and the camera turns toward the problem, so the pause lands on a picture of it.
@@ -1992,19 +2016,30 @@ function maybeDecide(): boolean {
     ? game.outlook(orders.map((o) => o ?? { heading: "auto" }), LOOK_H).catch(() => null)
     : Promise.resolve(null);
   const has = orders.map((x) => !!x);
-  whenAt(st.day * 24, async () => {
+  const h = st.day * 24;
+  if (stream) {
+    void stakes.then((o) => {
+      if (seq !== decisionSeq) return;
+      looking = false;
+      // The Stream asks only when there's something to weigh (Elena, 12 Nov); otherwise a
+      // note, and the clock never stopped.
+      const quiet = o ? notWorthAsking(d, o, has) : null;
+      if (quiet) {
+        lastCallH = callBefore; // no call was made: the cadence guard doesn't count it
+        page.decisions.at(-1)!.asked = false;
+        whenAt(h, () => note(quiet, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
+        return;
+      }
+      setRate(0, true);
+      whenAt(h, () => {
+        if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, o, has);
+      });
+    });
+    return true;
+  }
+  whenAt(h, async () => {
     const o = await stakes;
     if (seq !== decisionSeq || rate !== 0 || game.status?.over) return;
-    // The Stream asks only when there's something to weigh (Elena, 12 Nov); otherwise a note
-    // and the clock runs on. Storm cards always ask: the knockdown risk is the price.
-    const quiet = d.kind === "stream" && o ? notWorthAsking(d, o, has) : null;
-    if (quiet) {
-      lastCallH = callBefore; // no call was made: the cadence guard doesn't count it
-      page.decisions.at(-1)!.asked = false;
-      note(quiet, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info);
-      setRate(lastRate);
-      return;
-    }
     showDecision(d, o, has);
   });
   return true;
