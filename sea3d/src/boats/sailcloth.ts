@@ -42,6 +42,8 @@ interface SailUniforms {
   uLuff: { value: number };
   /** Sail's foot and height, m (seam spacing, ripple size). */
   uSize: { value: THREE.Vector2 };
+  /** 1 for a headsail (jib), 0 for a mainsail. */
+  uJib: { value: number };
 }
 
 /**
@@ -73,7 +75,7 @@ export function clothe<M extends THREE.MeshStandardMaterial>(m: M, size = new TH
     pm.sheenColor.set(0xfff6ea);
   }
   pm.side = THREE.DoubleSide;
-  const u: SailUniforms = { uLuff: { value: 0 }, uSize: { value: size.clone() } };
+  const u: SailUniforms = { uLuff: { value: 0 }, uSize: { value: size.clone() }, uJib: { value: 0 } };
   pm.userData.sail = u;
   const prev = pm.onBeforeCompile.bind(pm);
   const prevKey = pm.customProgramCacheKey.bind(pm);
@@ -86,11 +88,11 @@ export function clothe<M extends THREE.MeshStandardMaterial>(m: M, size = new TH
     sh.uniforms.uSailNight = NAV_NIGHT;
     sh.uniforms.uLuff = u.uLuff;
     sh.uniforms.uSize = u.uSize;
+    sh.uniforms.uJib = u.uJib;
     sh.vertexShader = sh.vertexShader
       .replace(
         "void main() {",
         `uniform float uSailTime;
-uniform float uSailNight;
 uniform float uLuff;
 uniform vec2 uSize;
 varying vec3 vSailWorld;
@@ -121,6 +123,8 @@ void main() {`,
         `uniform vec3 uSailSunDir;
 uniform vec3 uSailSunCol;
 uniform float uSailSun;
+uniform float uSailNight;
+uniform float uJib;
 uniform vec2 uSize;
 varying vec3 vSailWorld;
 varying vec2 vSailUv;
@@ -164,7 +168,15 @@ void main() {`,
   // foot (the boom, the deck and the other sail), so a full sail reads as a curve.
   diffuseColor.rgb *= (1.0 - 0.15 * smoothstep(0.4, 1.0, vSailUv.x)) * (1.0 - 0.09 * (1.0 - smoothstep(0.0, 0.25, vSailUv.y))); // leech and foot a touch deeper so the curve reads at noon (Elena)
   // A flogging luff: the cloth folds, and the folds shade each other.
-  diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);`,
+  diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);
+  // So jib and main read as two sails from the chase camera (Elena): a darker line of
+  // tape and stitching along each leech and foot, and the main's luff in the mast's lee,
+  // so the slot between the sails shows as a gap.
+  vec2 lw = vec2(0.08) / max(uSize, vec2(0.3));
+  float leechLine = 1.0 - smoothstep(lw.x * 0.4, lw.x, 1.0 - vSailUv.x);
+  float footLine = 1.0 - smoothstep(lw.y * 0.4, lw.y, vSailUv.y);
+  diffuseColor.rgb *= 1.0 - 0.3 * max(leechLine, footLine);
+  diffuseColor.rgb *= 1.0 - 0.14 * (1.0 - uJib) * (1.0 - smoothstep(0.0, 0.1, vSailUv.x));`,
       )
       .replace(
         "#include <normal_fragment_maps>",
@@ -201,7 +213,7 @@ void main() {`,
   totalEmissiveRadiance += diffuseColor.rgb * vec3(0.05, 0.066, 0.1) * 0.35 * uSailNight;`,
       );
   };
-  pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v3`;
+  pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v4`;
   pm.needsUpdate = true;
   return pm as THREE.MeshPhysicalMaterial | M;
 }
@@ -227,7 +239,12 @@ export function clotheSails(root: THREE.Object3D, quality: Quality = "high"): vo
       if (mat.userData.sailcloth && mat.userData.owner === mesh.uuid) return mat;
       const fresh = mat.clone();
       fresh.userData = { ...mat.userData, sailcloth: false, sail: undefined };
+      const jib = /jib|genoa|head/i.test(mesh.name) || /jib|genoa|head/i.test(mat.name);
+      // A headsail in a slightly warmer, heavier cloth than the main, so the two don't merge into one white triangle.
+      if (jib) fresh.color.multiply(new THREE.Color(0.92, 0.9, 0.85));
       const c = clothe(fresh, sizeOf(mesh), quality === "low");
+      const su = c.userData.sail as SailUniforms | undefined;
+      if (su) su.uJib.value = jib ? 1 : 0;
       c.userData.owner = mesh.uuid;
       return c;
     };
