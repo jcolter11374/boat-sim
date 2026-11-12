@@ -70,8 +70,10 @@
   #nolink .nlbtns a { color: #ffd0c8; font-size: 12px; }
   body.no-link #strip #c-order .v { color: #ff8a7a; }
   body.no-link #strip #c-order .v::after { content: none; }
-  #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
-  #soundask button { white-space: nowrap; }
+  /* A slim line at top centre, never over the boat or its wake (Elena); asked a minute in or after the first call (Leo). */
+  #soundask { position: fixed; top: calc(var(--bar, 0px) + var(--edge)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 14px; z-index: 8; font-size: 13px; white-space: nowrap; border-radius: 999px; background: var(--hud-solid); }
+  #soundask button { white-space: nowrap; font-size: 12.5px; padding: 3px 11px; border-radius: 999px; }
+  body.asking-sound #notes { top: calc(var(--bar, 0px) + var(--edge) + 42px); }
   #soundask[hidden] { display: none; }
   #flash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; }
   #flash.spray { background: radial-gradient(ellipse at 50% 60%, rgba(255,255,255,.75), rgba(220,235,245,.35) 60%, transparent); animation: flash-out 1.6s ease-out forwards; }
@@ -186,6 +188,12 @@
   body:not(.sailing) #notes, body:not(.sailing) #strip, body:not(.sailing) #orders-tab { visibility: hidden; }
   #loading { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 16px 22px; min-width: 280px; text-align: center; z-index: 7; }
   #loading[hidden] { display: none; }
+  /* One-click start: a slim line low on the screen, the boat in view above it (F2: the hero shot, not an empty card). */
+  body.oneclick #loading { top: auto; bottom: 22px; /* where the strip will be, clear of the boat (Ines) */ transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 16px; min-width: 0; border-radius: 999px; }
+  body.oneclick #loading .spin { width: 14px; height: 14px; margin: 0; border-width: 2px; }
+  body.oneclick #loading .muted { display: none; }
+  body.oneclick #loading[hidden] { display: none; }
+  body.oneclick:not(.sailing) #orders, body.oneclick:not(.sailing) #orders-tab, body.oneclick:not(.sailing) #strip, body.oneclick:not(.sailing) #mapbox { visibility: hidden; }
   #loading .spin { width: 22px; height: 22px; margin: 0 auto 8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: var(--orange); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #porthint { display: block; margin: -2px 0 6px; }
@@ -222,6 +230,58 @@
   .card p { color: #d4e1f0; margin: 8px 0; }
   .card label { display: block; margin: 8px 0; }
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+  /* F3: the goal card, over the opening view in the clear sky at the top left (Iris's box: top 45%, left 60%). */
+  #goalcard { position: fixed; left: 6vw; top: 5vh; max-width: min(64vw, 800px); z-index: 7; pointer-events: none; box-sizing: border-box;
+    padding: 20px 28px 22px; border-radius: 16px; background: rgba(8,18,32,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.14);
+    color: #fff; /* on its own glass, above the horizon: legible on any sky (Ines, r4) */ opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
+  #goalcard.in { opacity: 1; transform: none; }
+  #goalcard { isolation: isolate; }
+  /* While the goal card is up, the instruments wait (Leo): the sea and the goal, nothing else. */
+  body.goal #strip, body.goal #mapbox, body.goal #orders-tab, body.goal #orders, body.goal #poidock { opacity: 0; pointer-events: none; }
+  #strip, #mapbox, #orders-tab { transition: opacity .8s; }
+  #goalcard[hidden] { display: none; }
+  #goalcard h2 { margin: 0 0 8px; font-size: clamp(26px, 3.2vw, 46px); font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 144; /* the game's own voice: the wordmark's face at A's weight (Elena) */ font-weight: 800; line-height: 1.08; letter-spacing: -.01em; text-wrap: balance; }
+  #goalcard p { margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.4; color: rgba(255,255,255,.92); text-wrap: balance; }
+  #goalcard b { font-weight: 650; color: #fff; }
+  @media (prefers-reduced-motion: reduce) { #goalcard { transition: opacity .3s; transform: none; } }
+  /* Results, story first (Leo's plan, Elena 12 Nov): headline, story, map and three numbers, your calls, where this leaves you, one bright button. */
+  #result { justify-content: flex-start; padding-left: max(24px, 6vw); background: linear-gradient(90deg, rgba(5,12,22,.4), rgba(5,12,22,.1) 70%); transition: opacity .5s; z-index: 30; padding-bottom: calc(var(--edge) + var(--strip-h) * .5); box-sizing: border-box; }
+  #result .rc { width: min(640px, 94vw); padding: 22px 26px 16px; background: var(--hud-solid); max-height: calc(100dvh - var(--bar, 0px) - var(--edge) * 2 - var(--strip-h) * .5 - 16px); }
+  .rc-top { display: flex; align-items: flex-start; gap: 10px; }
+  .rc-top h1 { flex: 1; font-size: 24px; line-height: 1.2; margin: 0; text-wrap: balance; }
+  .rc .i { width: 22px; height: 22px; padding: 0; border-radius: 50%; font: italic 600 13px Georgia, serif; flex: none; margin-top: 4px; color: var(--dim); background: rgba(255,255,255,.06); border-color: var(--line); }
+  #r-caveat { font-size: 12.5px; }
+  #r-story { font-size: 15px; line-height: 1.45; color: var(--ink); margin: 10px 0 12px; }
+  #r-story:empty { display: none; }
+  .rc-mid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; margin: 4px 0 12px; }
+  #r-map { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; border: 1px solid var(--line); background: #0b1a2b; display: block; }
+  #r-nums { display: flex; flex-direction: column; gap: 10px; }
+  #r-nums .n { display: flex; flex-direction: column; }
+  #r-nums b { font-size: 28px; font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--ink); }
+  #r-nums b small { font-size: 14px; font-weight: 500; color: var(--dim); margin-left: 3px; }
+  #r-nums span { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .rc-h { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  #r-calllist { list-style: none; margin: 0 0 4px; padding: 0; }
+  #r-calllist li { padding: 3px 0; font-size: 14px; color: #d4e1f0; font-variant-numeric: tabular-nums; }
+  #result #r-next { border-top: 0; margin: 8px 0 12px; padding-top: 0; }
+  #result #r-next .standing { font-weight: 500; font-size: 14px; margin: 0; }
+  .rc-btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .rc-btns button, .rc-btns .btn { font-size: 14px; padding: 8px 14px; border-radius: 9px; }
+  .rc-btns .go { font-weight: 600; padding: 8px 20px; }
+  .rc-btns .btn { color: var(--ink); text-decoration: none; border: 1px solid var(--line); background: rgba(27,51,82,.6); }
+  .rc-links { display: flex; gap: 14px; margin: 10px 0 2px; font-size: 13px; }
+  .rc-links a { color: var(--dim); text-decoration: none; }
+  .rc-links a:hover, .rc-links a:focus-visible { color: var(--ink); text-decoration: underline; }
+  #r-details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; font-size: 13px; }
+  #r-details summary { cursor: pointer; color: var(--dim); list-style: none; }
+  #r-details summary::-webkit-details-marker { display: none; }
+  #r-details summary::after { content: " \25B8"; }
+  #r-details[open] summary::after { content: " \25BE"; }
+  #r-standing:empty { display: none; }
+  @media (max-width: 900px) { #result { justify-content: center; padding-left: 0; background: rgba(5,12,22,.3); } }
+  body.results #strip, body.results #mapbox { opacity: .18; transition: opacity .5s; pointer-events: none; }
+  body.results #keyhint, body.results #keylist, body.results #orders-tab, body.results #poidock, body.results .poi-card, body.results #notes { display: none !important; }
+  @media (max-width: 560px) { .rc-mid { grid-template-columns: 1fr; } #r-nums { flex-direction: row; justify-content: space-between; } .rc-top h1 { font-size: 21px; } }
   #r-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
   #r-table th { text-align: left; color: var(--dim); font-weight: 600; padding: 3px 5px; }
   #r-table td { padding: 4px 5px; border-top: 1px solid var(--line); }
@@ -240,6 +300,7 @@
   body.sailing.immersive { --bar: 0px; }
   body.sailing.immersive #topbar { height: 40px; transform: translateY(-100%); transition: transform .35s ease; }
   body.sailing.immersive.peek #topbar { transform: none; }
+  body.sailing.immersive:not(.peek) #topbar { box-shadow: none; } /* no dark band along the top while it's tucked away (Ines) */
   body.sailing #topbar { transition: transform .35s ease; }
   body.no-bar-anim #topbar { transition: none !important; }
 
@@ -268,7 +329,6 @@
   #timebar #t-pause { min-width: 2.2em; }
   #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
   #c-headv .sub { margin-left: .25em; }
-  .againrow { display: flex; align-items: center; gap: 16px; }
   #keysbtn { width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
   #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
   #keylist[hidden] { display: none; }
@@ -407,8 +467,8 @@
 </div>
 <div id="flash" aria-hidden="true"></div>
 <div id="soundask" class="glass" role="dialog" aria-label="Sound" hidden>
-  <span>The sea sounds good: wind, waves and rain, made from the weather. Turn sound on?</span>
-  <button id="soundyes">&#128266; Sound on</button><button id="soundno">No thanks</button>
+  <span title="Wind, waves and rain, made from the weather">Turn on sound?</span>
+  <button id="soundyes" class="go">Yes</button><button id="soundno">No thanks</button>
 </div>
 <div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
@@ -454,7 +514,7 @@
   <h2>Your orders <button id="orders-x" class="x" aria-label="Close (O)" title="Close (O)">&times;</button></h2>
   <div id="nolink" role="status" hidden><b>No link</b><span id="nolinktext"></span>
     <div class="nlbtns"><button id="nl-end" class="needs-idle go" title="Sail on to the end of the voyage">Watch her go (jump to the end)</button> <a href="helm.html">Try another launch day</a></div></div>
-  <div id="coach" hidden>Steer here, or with &larr; &rarr;. O opens and closes this.</div>
+  <div id="coach" hidden>The autopilot is steering, just like the ghost&rsquo;s. To get ahead, you&rsquo;ll have to make better calls than it does. The first one is coming.</div>
   <div id="dialrow">
     <canvas id="dial" title="Tap or drag to steer. Orange: your order · white: where the bow points · green: the finish · blue: the wind"></canvas>
     <div class="side">
@@ -582,15 +642,27 @@
   <p>The finish circle is 330 km out to sea, too far to see land from. So this is a view of where the boat was headed, not where it is: Cascais, near Lisbon, with Cabo da Roca (Europe's westernmost point) and the Sintra hills to the north-west. The boat itself is still out at the finish.</p>
   <button id="arrivego">See the results</button>
 </div>
+<div id="goalcard" role="status" aria-live="polite" hidden>
+  <h2>Beat the autopilot to Portugal.</h2>
+  <p><b id="goalkm">5,256 km.</b> It&rsquo;s sailing the same boat, from the same start.</p>
+</div>
 <div id="result" class="overlay" hidden>
-  <div class="card glass">
-    <h1 id="r-head"></h1>
-    <p id="r-trim" class="muted"></p>
-    <table id="r-table"></table>
-    <div id="r-ends"></div>
-    <p class="muted" id="r-notes"></p>
+  <div class="card glass rc" role="dialog" aria-labelledby="r-head">
+    <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
+    <p id="r-caveat" class="muted" hidden></p>
+    <p id="r-story"></p>
+    <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
+    <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="againrow"><button id="again" class="go">Play again</button><a href="./voyage.html">Voyage replays</a></div>
+    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a></div>
+    <div class="rc-links" id="r-links"><a href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a href="./voyage.html">Voyage replays</a></div>
+    <details id="r-details"><summary>Details</summary>
+      <p id="r-trim" class="muted"></p>
+      <table id="r-table"></table>
+      <div id="r-ends"></div>
+      <p class="muted" id="r-standing"></p>
+      <p class="muted" id="r-notes"></p>
+    </details>
   </div>
 </div>
 
