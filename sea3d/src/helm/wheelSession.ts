@@ -40,6 +40,8 @@ export interface WheelStart {
   windU: number;
   windV: number;
   plan?: string | null;
+  /** Where the mark is (default: dead ahead). */
+  markBearing?: number;
 }
 
 export interface WheelFrame {
@@ -157,7 +159,7 @@ export class WheelSession {
       // She was sailing on autopilot until now, so start at the best speed for this heading
       // (a new game reports 0 kn through the water before its first step).
       { heading: s.heading, speedKn: undefined, plan: s.plan ?? undefined, autoTrim: localStorage.getItem("boatsim.wheel.auto") === "1" },
-      { markM: 800, markBearing: s.heading }, // GUESS: 800 m, about 3 minutes at 1x (Leo: 2-4 minute spells)
+      { markM: 800, markBearing: s.markBearing ?? s.heading }, // GUESS: 800 m, about 3 minutes at 1x (Leo: 2-4 minute spells)
     );
     this.on = true;
     this.paused = false;
@@ -363,7 +365,7 @@ export function summary(r: WheelResult, counts: { hours: number } | null = null)
   const secs = Math.round(r.seconds % 60);
   const pct = Math.round(r.share * 100);
   const ap = Math.round(r.autopilot * 100);
-  const vs = pct > ap ? `better than the autopilot's ${ap}%` : pct === ap ? `level with the autopilot's ${ap}%` : `the autopilot manages ${ap}%`;
+  const vs = r.sailedSecs < 20 ? "too short to compare with the autopilot" : pct > ap ? `better than the autopilot's ${ap}%` : pct === ap ? `level with the autopilot's ${ap}%` : `the autopilot manages ${ap}%`;
   const pb = r.best && r.seconds > 20 ? (r.share > r.best ? " A new personal best!" : ` Your best: ${Math.round(r.best * 100)}%.`) : "";
   const extra = [r.tacks ? `${r.tacks} tack${r.tacks > 1 ? "s" : ""}` : "", r.roundUps ? `rounded up ${r.roundUps} time${r.roundUps > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ");
   return `${r.reached ? "Mark reached!" : "Handed back."} You sailed ${km} in ${mins} min ${secs} s at ${pct}% of the boat's best speed (${vs}).${extra ? ` ${extra[0].toUpperCase()}${extra.slice(1)}.` : ""}${pb} ${
