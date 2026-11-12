@@ -12,6 +12,8 @@ export interface Poi {
   id: string;
   kind: PoiKind;
   title: string;
+  /** One complete sentence that fits two lines of the docked card; "Read more" shows `text`. */
+  teaser?: string;
   /** (lat, lon) points; a line (the Gulf Stream, the ridge) is several. */
   at: [number, number][];
   radius_km: number;
@@ -214,8 +216,18 @@ const STYLE = `
 /* Compact (the helm): narrower, two lines and "Read more", then it shrinks to a tab at the edge. */
 .poi-card.poi-compact { width: min(300px, calc(100vw - 24px)); padding: 9px 12px 10px; font-size: 12.5px; background: rgba(8,16,28,.72); }
 .poi-card.poi-compact .poi-t { font-size: 14.5px; margin: 3px 0 2px; }
+.poi-card .poi-teaser { color: #d6e2ef; }
+.poi-card.poi-open .poi-teaser, .poi-card.poi-has-teaser:not(.poi-open) .poi-x-text { display: none !important; }
 .poi-card.poi-compact:not(.poi-open) .poi-x-text { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.poi-card.poi-compact:not(.poi-open) .poi-src, .poi-card.poi-compact:not(.poi-open) .poi-more { display: none; }
+.poi-card.poi-compact:not(.poi-open) .poi-src, .poi-card.poi-compact .poi-more { display: none; }
+/* "1 of 2 ›" by the close button: the next story is one click away and never scrolls out of sight (Leo). */
+.poi-card .poi-n { position: absolute; right: 30px; top: 8px; background: none; border: 0; padding: 1px 4px; border-radius: 6px; font: 600 10.5px system-ui, sans-serif;
+  letter-spacing: .4px; color: #9fb3c8; cursor: pointer; white-space: nowrap; }
+.poi-card .poi-n:hover { color: #fff; background: rgba(255,255,255,.08); }
+.poi-card .poi-n[hidden] { display: none; }
+.poi-card.poi-compact .poi-k { padding-right: 78px; }
+.poi-card.poi-compact.poi-open { display: flex; flex-direction: column; max-height: var(--poi-max, 70vh); overflow: hidden; }
+.poi-card.poi-compact.poi-open .poi-x-text { overflow-y: auto; min-height: 0; flex: 0 1 auto; scrollbar-width: thin; scrollbar-color: rgba(160,200,255,.35) transparent; }
 .poi-card .poi-read { background: none; border: 0; padding: 0; margin-top: 3px; font: inherit; font-size: 11.5px; color: #8ab4ff; cursor: pointer; }
 .poi-card.poi-open .poi-read { display: none; }
 .poi-card.poi-tab { width: auto; max-width: 260px; padding: 6px 12px; cursor: pointer; }
@@ -238,6 +250,11 @@ export class PoiCards {
   private left = 0;
   private since = 0;
   private tabTimer = 0;
+  /** Which story of the batch is up (1 of 2), for compact cards. */
+  private seq = 0;
+  /** The card just went because the next one is coming (so the count carries on). */
+  private chain = false;
+  private n: HTMLButtonElement | null = null;
   constructor(
     private doc: Document = document,
     private readonly opts: { compact?: boolean } = {},
@@ -259,6 +276,8 @@ export class PoiCards {
   }
 
   show(p: Pass, when = ""): HTMLElement {
+    this.seq = this.el || this.chain ? this.seq + 1 : 1;
+    this.chain = false;
     this.hide(true, false);
     const d = this.doc;
     const el = d.createElement("aside");
@@ -289,9 +308,11 @@ export class PoiCards {
     }
     k.append(badge, where);
     add("div", "poi-t", p.poi.title);
+    if (this.opts.compact && p.poi.teaser) add("div", "poi-teaser", p.poi.teaser);
     add("div", "poi-x-text", p.poi.text);
     if (this.opts.compact) {
       el.classList.add("poi-compact");
+      if (p.poi.teaser) el.classList.add("poi-has-teaser");
       const read = add("button", "poi-read", "Read more");
       read.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -318,6 +339,13 @@ export class PoiCards {
       src.appendChild(a);
     } else src.appendChild(d.createTextNode(p.poi.source));
     this.more = add("div", "poi-more", "");
+    if (this.opts.compact) {
+      this.n = add("button", "poi-n", "") as HTMLButtonElement;
+      this.n.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.next();
+      });
+    }
     const x = add("button", "poi-x", "×");
     x.setAttribute("aria-label", "Close");
     x.addEventListener("click", () => this.hide());
@@ -343,9 +371,25 @@ export class PoiCards {
     return el;
   }
 
-  /** "2 more nearby" under the card while others wait their turn. */
+  /** "2 more nearby" under the card while others wait their turn; "1 of 3 ›" in a compact card's header. */
   private countWaiting(): void {
     if (this.more) this.more.textContent = this.waiting.length ? `${this.waiting.length} more nearby after this one` : "";
+    if (this.n) {
+      const of = this.seq + this.waiting.length;
+      this.n.hidden = of < 2;
+      this.n.textContent = this.waiting.length ? `${this.seq} of ${of} ›` : `${this.seq} of ${of}`;
+      this.n.disabled = !this.waiting.length;
+      this.n.title = this.waiting.length ? "Next story" : "";
+    }
+  }
+
+  /** Straight on to the next story waiting. */
+  next(): void {
+    const n = this.waiting.shift();
+    if (!n) return;
+    this.hide(true, false);
+    this.chain = true;
+    this.show(...n);
   }
 
   /** Take the card down: `now` at once (a jump in time), and `clear` drops the waiting ones too. */
@@ -359,10 +403,12 @@ export class PoiCards {
     if (now) el.remove();
     else {
       el.classList.add("poi-out");
+      if (this.waiting.length) this.chain = true;
       window.setTimeout(() => {
         el.remove();
         const next = this.waiting.shift();
         if (next && !this.el) this.show(...next);
+        else this.chain = false;
       }, 900);
     }
   }
