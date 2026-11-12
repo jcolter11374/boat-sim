@@ -23,8 +23,10 @@ import { foamStreaks, whiteCrests } from "./storm";
 import { SEA_SURFACE_PARS, seaUniforms, writeSeaUniforms } from "./seaSurface";
 import { RAIN_RINGS, rainUniforms } from "./rainRings";
 import { ShortWaveLayer, windSeaFrom, type Detail } from "./seaDetail";
+import { BOAT_WASH_FRAGMENT, BOAT_WASH_PARS, BOAT_WASH_VERTEX, washUniforms } from "./boatWash";
 
-const SEA_OPACITY = 1;
+// The hulls' wash, all of it off on Low (the sea there is Low's whole frame budget).
+const WASH_PARS_FULL = `\n#ifndef SEA_LITE\n${BOAT_WASH_PARS}\n#endif\n`;
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
@@ -42,6 +44,10 @@ const FADE_OUT = 170;
 const FLAT_IN = 2000;
 const FLAT_OUT = 2800;
 
+// The sea hides what's under it (Elena's fix 3): at 0.95 every keel and pod showed as a
+// dark stilt from above, the sky drawn behind the sea being brighter than the hull. What
+// shows just under the surface comes from the hull side instead (boats/inWater.ts).
+const SEA_OPACITY = 1;
 const DEEP = new THREE.Color(0x041d33);
 const SHALLOW = new THREE.Color(0x135a7e);
 // Chesapeake Bay water: shallow and full of silt and plankton, a green-grey, not
@@ -125,9 +131,23 @@ void gerstner(vec2 p, float w) {
 const VERT_NORMAL = /* glsl */ `
 gerstner(position.xz, fade);
 objectNormal = gNorm;
+#ifndef SEA_LITE
+{
+  // The hulls' own waves (boatWash.ts) tilt the surface too (not on Low: five boatWave
+  // calls a vertex was Low's frame budget; Ravi, 12 Nov).
+  vec2 pw = (modelMatrix * vec4(position + gDisp, 1.0)).xz;
+  float e = 0.08;
+  float dx = (boatWave(pw + vec2(e, 0.0)) - boatWave(pw - vec2(e, 0.0))) / (2.0 * e);
+  float dz = (boatWave(pw + vec2(0.0, e)) - boatWave(pw - vec2(0.0, e))) / (2.0 * e);
+  objectNormal = normalize(objectNormal + vec3(-dx, 0.0, -dz));
+}
+#endif
 `;
 const VERT_POS = /* glsl */ `
 transformed += gDisp;
+#ifndef SEA_LITE
+${BOAT_WASH_VERTEX}
+#endif
 // The sea is flat, so its rim (3 km off) would sit a few pixels under the horizon with a
 // sliver of sky below it (Ines's hairline). Lift the rim to the eye's own level: the
 // last stretch then rises to the horizon line and fades into the haze there.
@@ -178,6 +198,7 @@ uniform vec2 uWd[${MAX_WAVES}];
 uniform sampler2D tMirror;
 uniform mat4 uMirrorM;
 uniform float uMirror;
+uniform float uMirrorY;
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
@@ -453,7 +474,9 @@ diffuseColor.rgb *= 1.0 - 0.2 * smoothstep(0.15, 0.6, uSeaSky.w) * smoothstep(0.
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.8 + vec3(0.02, 0.05, 0.05), 0.4 * foamSunk); // GUESS tint
 #endif
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), foamMask * (SEA_DET_N > 0 ? 0.88 : 1.0)); // off-white, a little see-through
-/* boat wash (boatWash.ts) */
+#ifndef SEA_LITE
+${BOAT_WASH_FRAGMENT}
+#endif
 `;
 
 const FRAG_ROUGH = /* glsl */ `
@@ -592,17 +615,41 @@ if (wreckShade > 0.0) {
   // Its edge catches a little light from above: a faint paler outline against the deep blue.
   outgoingLight += vec3(0.05, 0.1, 0.1) * wreckRim * up * (1.0 - foamMask);
 }
+#ifndef SEA_LITE
+// The hull hides the sky from the water right beside it: a soft dark contact line.
+outgoingLight *= 1.0 - 0.6 * washShade(vWPos.xz) * (1.0 - foamMask);
+#endif
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
-  vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
-  vec2 uv = pc.xy / pc.w + nWm.xz * (0.03 + 0.25 * (1.0 - uMirror));
+  vec4 pc = uMirrorM * vec4(vWPos.x, uMirrorY, vWPos.z, 1.0);
+  vec2 uv = pc.xy / pc.w + nWm.xz * (0.1 + 0.25 * (1.0 - uMirror)); // the ripples break it up
+  // Three taps smeared up and down, as ripples stretch a reflection (Ines r5: not
+  // mirror-crisp, no stair-stepped edge). The mirror clears to transparent black, so
+  // un-premultiply or the edges go dark.
+#ifdef SEA_LITE
   vec4 m = texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)));
+#else
+  vec2 bl = vec2(0.0015, 0.004);
+  vec4 m = (2.0 * texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)))
+          + texture2D(tMirror, clamp(uv + bl, vec2(0.001), vec2(0.999)))
+          + texture2D(tMirror, clamp(uv - bl, vec2(0.001), vec2(0.999)))) * 0.25;
+#endif
+  m.rgb /= max(m.a, 0.05);
 #ifndef SEA_LITE
   m.rgb = seaColdSky(m.rgb);
 #endif
   vec3 Vm = normalize(cameraPosition - vWPos);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(nWm, Vm), 0.0), 5.0);
-  float k = m.a * uMirror * clamp(0.25 + fres, 0.0, 0.95) * (1.0 - foamMask);
+  // A reflected hull is its own colour, darker and drawn toward the water's (Ines): it
+  // replaces the sky's reflection where it hides the sky, so it must dominate there
+  // rather than tint the bright sky-lit sea (a half mix of orange and sky reads pink).
+  // Darken it rather than mix blue into it: blue added to a bright orange reads pink,
+  // a darker orange reads as the hull seen in deep water (brown-orange).
+  float lumM = dot(m.rgb, vec3(0.2126, 0.7152, 0.0722));
+  m.rgb = mix(m.rgb, vec3(lumM), 0.15) * 0.55 + outgoingLight * 0.06;
+  // How smooth the water is sets how sharp the image is, not how much of it: a half-strength
+  // reflection is a tint, and tints shift the hue. Fade it only as the mirror switches off.
+  float k = m.a * smoothstep(0.0, 0.35, uMirror) * clamp(0.85 + fres, 0.0, 0.95) * (1.0 - foamMask);
   outgoingLight = mix(outgoingLight, m.rgb, k);
 }
 `;
@@ -661,6 +708,7 @@ export class Sea {
     tMirror: { value: null as THREE.Texture | null },
     uMirrorM: { value: new THREE.Matrix4() },
     uMirror: { value: 0 },
+    uMirrorY: { value: 0 },
   };
   private detail = 0; // wind chop on (High) or off (Low)
   /** The FFT short waves (seaDetail.ts); "off" keeps the old ripples. */
@@ -685,9 +733,10 @@ export class Sea {
       side: THREE.DoubleSide,
     });
     material.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, this.uniforms, seaUniforms, rainUniforms);
+      Object.assign(sh.uniforms, this.uniforms, seaUniforms, rainUniforms, washUniforms);
       sh.vertexShader =
         VERT_HEAD +
+        WASH_PARS_FULL +
         sh.vertexShader
           .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\n" + VERT_NORMAL)
           .replace("#include <begin_vertex>", "#include <begin_vertex>\n" + VERT_POS)
@@ -695,7 +744,7 @@ export class Sea {
       // The boat's night deck light (helm.ts, #358) lights its deck and gear, not the
       // sea: lit from a lamp a metre up, the sea's blue turned into a cyan pool under the
       // hull that read as a hover light (Leo, Elena's audit item 12). Point lights skip it.
-      sh.fragmentShader = (RAIN_RINGS + FRAG_HEAD + sh.fragmentShader)
+      sh.fragmentShader = (RAIN_RINGS + FRAG_HEAD + WASH_PARS_FULL + sh.fragmentShader)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
@@ -705,9 +754,9 @@ export class Sea {
         .replace("#include <fog_fragment>", "#include <fog_fragment>\n" + FRAG_HAZE)
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v14";
+    material.customProgramCacheKey = () => "boatsim-sea-v15-washlite";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-    this.mesh.renderOrder = 10; // after the hulls, so keels show through
+    this.mesh.renderOrder = 10; // after the hulls (and "See under the water" lets them show through)
     this.mesh.frustumCulled = false;
     this.quality = quality;
     this.setQuality(quality);
@@ -887,7 +936,8 @@ export class Sea {
   }
 
   /** Mirror the land and boats (mirror.ts): its texture, world-to-texture matrix and strength (0 off). */
-  setMirror(tex: THREE.Texture | null, m: THREE.Matrix4, strength: number): void {
+  setMirror(tex: THREE.Texture | null, m: THREE.Matrix4, strength: number, level = 0): void {
+    this.uniforms.uMirrorY.value = level;
     this.uniforms.tMirror.value = tex;
     this.uniforms.uMirrorM.value.copy(m);
     this.uniforms.uMirror.value = tex ? strength : 0;

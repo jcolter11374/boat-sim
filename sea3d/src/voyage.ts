@@ -48,6 +48,7 @@ import {
 } from "./replay/data";
 import type { Placement } from "./standin";
 import { Wake } from "./wake";
+import { ShortWaveRide } from "./boats/ride";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { forcedSea, seaTestFrom } from "./seaTest";
@@ -247,6 +248,8 @@ const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
+let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
+let pourAt = Infinity; // when a knockdown's water pours off the deck (page clock, s)
 let motion = new BoatMotion(HULL[laneRev], place);
 let wet: Wetness | null = null;
 let drain: Drain | null = null;
@@ -282,11 +285,14 @@ function buildBoat(q: Quality): void {
     controls.minDistance = 1.5 * k;
     viewScale = k;
   }
-  contact = new Contact(model.form, spec, q);
+  contact = new Contact(model.form, spec, q, model.root);
+  ride = new ShortWaveRide(spec.length, spec.beam, contact.bow[0], model.stern.x);
+  contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(contact.collar, contact.spray);
   // Two hulls: the collar and spray follow one centred hull, so leave them off.
   contact.collar.visible = contact.spray.visible = !model.twinHull;
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
+  wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
   reflectable(model.root);
@@ -1312,9 +1318,12 @@ renderer.setAnimationLoop(() => {
         if (e.kind === "message_sent" && li === focus) model?.gear.flashLight(t);
         if (!isNotable(e)) continue;
         status.shown.push(e.kind);
-        // A knockdown: give the boat a hard shove so the physics rolls it over and
-        // rights it again (the keel and dome do the righting, as designed).
-        if (e.kind === "capsize" && warp <= 24 && li === focus) motion.rollRate += (Math.random() < 0.5 ? -1 : 1) * 7;
+        // A knockdown, shown rather than simulated (boats/ride.ts): thrown flat, hangs, rights itself, and the
+        // water pours off as it comes up.
+        if (e.kind === "capsize" && warp <= 24 && li === focus && ride) {
+          pourAt = ride.knock(t, Math.random() < 0.5 ? -1 : 1).rising;
+          contact?.slam(1); // under a breaking crest
+        }
         // Too fast to see the roll: just show the water running off afterwards.
         else if (e.kind === "capsize" && li === focus && warp <= 600) drain?.pour();
         const who = lanes.length > 1 ? `${SHORT[l.key]} · ` : "";
@@ -1378,8 +1387,13 @@ renderer.setAnimationLoop(() => {
     if (!over) motion.capsized = 0;
     motion.advance(comps, t);
     if (model) {
-      model.root.position.set(0, motion.heave - SPEC[boatKey].cgBelowWaterline, 0);
-      model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
+      ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
+      if (t >= pourAt) {
+        pourAt = Infinity;
+        drain?.pour();
+      }
+      model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - SPEC[boatKey].cgBelowWaterline, 0);
+      model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);
     if (model && contact) {
@@ -1388,7 +1402,8 @@ renderer.setAnimationLoop(() => {
       bowW.set(contact.bow[0], SPEC[boatKey].cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
       const clear = bowW.y - heightAt(comps, bowW.x, bowW.z, t);
-      contact.update(comps, t, place, hs, { speed: stw, bowClearance: clear, light: atmos.ambient });
+      const [cwu, cwv] = windAt(rep, hour);
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: clear, light: atmos.foamLight, wind: [cwu, -cwv] });
       status.contact = { ...contact.shown };
     }
     if (model && drain) {
@@ -1490,7 +1505,7 @@ renderer.setAnimationLoop(() => {
     wet?.set(wetNow);
     status.wet = wetNow;
     sea.setSun(atmos.glintDir, atmos.glintLight);
-    wake?.setLight(atmos.ambient);
+    wake?.setLight(atmos.foamLight);
     island?.update(t, atmos.fog.color, atmos.ambient, hs, storm);
     town?.update(t, sp.el, hs, wu, wv);
     trees?.update(t, Math.hypot(wu, wv), atmos.fog.color, storm);
@@ -1546,8 +1561,8 @@ renderer.setAnimationLoop(() => {
   skyGuide();
   renderer.getDrawingBufferSize(bufSize);
   mirror.setSize(bufSize.x, bufSize.y);
-  mirror.update(renderer, scene, camera, sea.waveHeight);
-  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
+  mirror.update(renderer, scene, camera, sea.waveHeight, motion.heave);
+  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   status.mirror = mirror.strength;
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());

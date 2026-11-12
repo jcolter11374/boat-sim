@@ -5,7 +5,7 @@
 // the results card. Display only: the physics is all in the simulator.
 
 import * as THREE from "three";
-import { NAV_NIGHT } from "./boats/navlights";
+import { FOAM_LAMP_UNIFORMS, NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
@@ -31,6 +31,7 @@ import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { Wake } from "./wake";
+import { ShortWaveRide } from "./boats/ride";
 import { Contact } from "./contact";
 import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
@@ -141,6 +142,7 @@ let motion = new BoatMotion(hull, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
+let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
 let seaLevel: "low" | "high" = quality;
 /** Draw at a level: its resolution, glow and sea mesh. The boats keep the geometry they were built with. */
 function applyLevel(l: Level): void {
@@ -189,10 +191,13 @@ function buildBoat(): void {
   }
   model = BUILDERS[spec.key](quality);
   reflectable(model.root);
-  contact = new Contact(model.form, spec, quality);
+  contact = new Contact(model.form, spec, quality, model.root);
+  ride = new ShortWaveRide(spec.length, spec.beam, contact.bow[0], model.stern.x);
+  contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   // The foam line fits single hulls the size of ours or bigger; not the twin hulls or the little Randolph boat.
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
+  wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
   placeDeckLight();
 }
@@ -203,9 +208,11 @@ function buildBoat(): void {
 // material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
 const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
 deckLight.name = "deck_light";
-/** Candela at full night, and the foam's floor of light: tuned on the kayak at 1 AM, moonless. */
+/** Candela at full night, and the lamp's light on the foam right beside it (falling away
+ *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
 const FOAM_AT_NIGHT = 0.3;
+const lampW = new THREE.Vector3();
 /** A lantern higher than this (m) is a masthead light, not a deck lantern. */
 const MASTHEAD_LAMP_M = 5;
 /** The deck light is a low cockpit lamp (a yacht with a masthead lantern). */
@@ -1018,6 +1025,8 @@ function moment(e: ReplayEvent): void {
   const now = clock.getElapsedTime();
   if (e.kind === "capsize") {
     kick = { t: now, dir: Math.random() < 0.5 ? -1 : 1 };
+    ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
+    contact?.slam(1); // under a breaking crest
     sound.crash();
     flash("spray");
     slowUntil = now + 4;
@@ -1041,12 +1050,6 @@ function flash(kind: "spray" | "alarm"): void {
 /** Play at an hour a second: during a moment, and over the last hours before the end. */
 function slowNow(t: number): boolean {
   return t < slowUntil || (finishing && shownTo - hour < 3);
-}
-
-/** The knockdown's roll (rad) at time t: thrown over, then righting itself with a wobble. */
-function kickRoll(t: number): number {
-  const k = t - kick.t;
-  return k >= 0 && k < 5 ? kick.dir * 1.25 * Math.exp(-k * 1.2) * Math.cos(k * 2.6) : 0;
 }
 
 // ---------- running time ----------
@@ -2922,6 +2925,12 @@ const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
 (page as unknown as { cine: Cinema }).cine = cine;
+// For the cinema's Heel shot (Iris): heel now, deg (+ over to starboard), and the last
+// knockdown's timing in the page clock (boats/ride.ts KnockdownTiming), or null.
+Object.assign(page, {
+  heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
+  knockdown: () => ride?.knockdown ?? null,
+});
 
 // ---------- frame ----------
 const clock = new THREE.Clock();
@@ -3286,14 +3295,18 @@ renderer.setAnimationLoop(() => {
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
   if (model) {
-    model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
-    model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
+    ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
+    model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
+    model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 2 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
-      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: Math.max(atmos.ambient, FOAM_AT_NIGHT * NAV_NIGHT.value) });
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.foamLight, wind: [wu, -wv] });
+      deckLight.getWorldPosition(lampW);
+      FOAM_LAMP_UNIFORMS.uFoamLamp.value.set(lampW.x, lampW.y, lampW.z, FOAM_AT_NIGHT * NAV_NIGHT.value);
+      FOAM_LAMP_UNIFORMS.uFoamLampR.value = 1.5 * Math.max(1, spec.length / KAYAK.length);
     }
     model.gear.update(
       {
@@ -3369,7 +3382,7 @@ renderer.setAnimationLoop(() => {
   spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
   page.spindrift = spray.amount;
   sea.setSun(atmos.glintDir, atmos.glintLight);
-  wake?.setLight(atmos.ambient);
+  wake?.setLight(atmos.foamLight);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
   sound.rig = rigOf(spec.key);
   sound.length = spec.length;
@@ -3407,8 +3420,8 @@ renderer.setAnimationLoop(() => {
   page.third = [third.x, third.y];
   renderer.getDrawingBufferSize(bufSize);
   mirror.setSize(bufSize.x, bufSize.y);
-  mirror.update(renderer, scene, camera, sea.waveHeight);
-  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
+  mirror.update(renderer, scene, camera, sea.waveHeight, motion.heave);
+  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   page.mirror = mirror.strength;
   atmos.render();
   if (chart && game.boat && game.ghost) {

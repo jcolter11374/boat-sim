@@ -122,9 +122,11 @@ function buildBoats(q: Quality): void {
       b.contact.dispose();
     }
     b.model = BUILDERS[b.spec.key](q);
-    b.contact = new Contact(b.model.form, b.spec, q);
+    b.contact = new Contact(b.model.form, b.spec, q, b.model.root);
+    b.contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
     scene.add(b.contact.collar, b.contact.spray);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
+    b.wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
     shadowsOn(b.model.root);
     scene.add(b.model.root, b.wake.points);
   }
@@ -281,7 +283,7 @@ renderer.setAnimationLoop(() => {
     b.contact.update(comps, t, b.place, hsOf(comps), {
       speed: b.spec.cruiseSpeed,
       bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t),
-      light: atmos.ambient,
+      light: atmos.foamLight,
     });
     status.maxRoll[b.spec.key] = Math.max(status.maxRoll[b.spec.key] ?? 0, Math.abs(b.motion.roll));
     return {
