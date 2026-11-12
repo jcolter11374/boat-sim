@@ -412,13 +412,16 @@ if (SEA_DET_N > 0) {
 // Low keeps main's cheaper lanes (four noises instead of six), for its frame budget.
 if (uStreak > 0.001) {
   vec2 qs = q - vec2(uTime * 1.2, 0.0);
-  qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
+  float w1 = vnoise(qs * vec2(0.015, 0.08));
+  float w2 = vnoise(qs * vec2(0.06, 0.4));
+  qs.y += 2.5 * w1 + 0.8 * w2;
   // Lanes a few tens of cm wide, not metres: main's drew as white slabs past a low camera
   // (Ada's film, force 7-8). Same work, finer across the wind and a narrower edge.
   float ns = vnoise(vec2(qs.x * 0.03, qs.y * 4.0)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 9.0) + 17.0), 0.5, smoothstep(0.05, 0.25, fpF)) * 0.4;
-  float thrS = 0.58 + 0.4 * (0.5 - uStreak);
-  // Broken into dashes by the caps' own noise (no extra noise on Low).
-  float lanes = smoothstep(thrS, thrS + 0.04, ns) * smoothstep(0.3, 0.6, fn);
+  // Lanes come and go across the wind, and break into dashes of uneven length, from the
+  // wander noises already drawn (no extra noise on Low): not evenly spaced road markings (Elena).
+  float thrS = 0.58 + 0.4 * (0.5 - uStreak) + 0.16 * (w2 - 0.5);
+  float lanes = smoothstep(thrS, thrS + 0.04, ns) * smoothstep(0.2 + 0.3 * w1, 0.65, fn);
   float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
   foamMask = max(foamMask, 0.9 * streak);
 }
@@ -521,6 +524,8 @@ float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
 #ifdef SEA_LITE
 // Low: the deck's colour and no sun glitter under it, without branches (Maya's frame budget).
 radiance = mix(radiance, uSeaSky.rgb, deckS);
+// The body lit grey by the deck, not by the clear sky's blue (Elena: Low read bright blue under a grey deck).
+iblIrradiance = mix(iblIrradiance, vec3(dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722))), deckS);
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
 #else
 // An overcast deck is not one flat grey: it is brighter overhead than at the horizon (the
