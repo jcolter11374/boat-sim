@@ -55,7 +55,8 @@ import { Hud, showStrip } from "./helm/hud";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
-import { maybeJson, renderNext, standing, type Board, type Grid } from "./results";
+import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
+import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -76,7 +77,7 @@ controls.enableDamping = true;
 controls.minDistance = 2;
 controls.maxDistance = 60;
 controls.maxPolarAngle = Math.PI * 0.495;
-camera.position.set(-6.5, 2.2, 3.5);
+camera.position.set(-6.5, 2.2, -3.5); // from her port side, so she heads right-to-left before the start (Ines)
 controls.target.set(0, 0.3, 0);
 const atmos = new Atmosphere(renderer, scene, camera);
 const sea = new Sea(quality);
@@ -237,6 +238,8 @@ let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
 const shared = params.get("g");
+/** The title's one-click Set sail (F1): helm.html?sail. */
+const ONE_CLICK = params.has("sail") && !shared && !params.has("practice");
 // Weather challenges (challenge-data release, copied to public/challenges/).
 const challengesBase = new URL(params.get("challenges") ?? "./challenges/", location.href).href;
 let challenges: Challenge[] = [];
@@ -289,6 +292,8 @@ const page = {
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
+  /** Whether each boat crossed the race's start line, for the results card. */
+  started: { me: true, ghost: true },
   /** Where the finished build stands on Results: "board", "odds" or "none" ("" until shown; for tests). */
   standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
@@ -353,7 +358,9 @@ const page = {
 
 game.onProgress = (t) => {
   $("busytext").textContent = t;
-  $("loadtext").textContent = t;
+  // The one-click start says one plain thing while it loads, with how far along (F1/F2).
+  const pct = /(\d+)%/.exec(t)?.[1];
+  $("loadtext").textContent = ONE_CLICK ? `Getting the weather ready…${pct ? ` ${pct}%` : ""}` : t;
 };
 // Load the simulator while the player reads the start card, so Set sail starts at once (#322).
 void sandboxThere(sandboxBase).then((ok) => (ok ? game.warm() : undefined));
@@ -883,11 +890,25 @@ const lastNote: Record<string, number> = {};
 // No autoplay, ever; but sound sells the sea, and it's easy to miss the button. So once you
 // set sail, ask once. "No thanks" is remembered (the sound module stores it as muted), and the
 // question goes away by itself after 20 seconds.
+/** The sound ask waits: one thing to read at a time at the start (Leo). It comes a minute in, or after the first call, whichever is first. */
+let soundAskTimer = 0;
+function askSoundLater(): void {
+  if (sound.on || sound.muted || sound.remembered) return;
+  clearTimeout(soundAskTimer);
+  soundAskTimer = window.setTimeout(askSound, 60_000);
+}
+let soundAsked = false;
 function askSound(): void {
-  if (sound.on || sound.muted || sound.remembered) return; // turned on last visit: it comes back at the first click
+  clearTimeout(soundAskTimer);
+  if (soundAsked || page.card || sound.on || sound.muted || sound.remembered) return; // turned on last visit: it comes back at the first click
+  soundAsked = true;
   const box = $("soundask");
   box.hidden = false;
-  const close = () => (box.hidden = true);
+  document.body.classList.add("asking-sound");
+  const close = () => {
+    box.hidden = true;
+    document.body.classList.remove("asking-sound");
+  };
   $("soundyes").onclick = () => {
     sound.enable();
     close();
@@ -993,7 +1014,9 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
 // flight sim's time compression, and pauses when something happens (the stops of
 // "until something happens"). The simulator runs a little ahead of the picture in
 // short runs, so a new order takes effect within about a second of play.
-/** Voyage hours per second to start at: what a hop used to play at. Real time would show nothing happening for hours. */
+/** Real time: a second of the voyage every second, in voyage hours per second. */
+const REAL_TIME = 1 / 3600;
+/** Voyage hours per second to start at: what a hop used to play at. (T4, the helm's starting speed, is John's call.) */
 const DEFAULT_RATE = 6;
 let rate = 0;
 let lastRate = DEFAULT_RATE;
@@ -1005,6 +1028,8 @@ let lastRate = DEFAULT_RATE;
  */
 let easeUpAt: number | null = null;
 const FIRST_HOURS = 6;
+/** The rate a speed button stands for ("rt" is real time). */
+const rateOf = (b: HTMLElement): number => (b.dataset.rate === "rt" ? REAL_TIME : Number(b.dataset.rate));
 /** The stop conditions armed when the clock started (so "a big battery drop" is measured from then). */
 let armed: Record<string, number | boolean> | null = null;
 let inFlight: Promise<void> | null = null;
@@ -1069,8 +1094,8 @@ function showClock(): void {
   pause.setAttribute("aria-pressed", String(rate === 0));
   pause.textContent = rate === 0 ? "▶" : "❚❚";
   pause.title = rate === 0 ? "Carry on (space bar)" : "Pause (space bar)";
-  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && Number(b.dataset.rate) === rate));
-  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && rateOf(b) === rate));
+  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
 }
 
 /** One short run of the simulator, ahead of the picture. */
@@ -1115,8 +1140,8 @@ async function clockRun(): Promise<void> {
 /** This frame's share of the clock: move the picture on, and keep the simulator ahead of it. */
 function tickClock(dt: number): boolean {
   if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
-  if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   // Ease off as the simulator's lead runs down, so a slow computer sees slower, smooth time rather than stop-start.
+  if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
   hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
@@ -1127,11 +1152,11 @@ function tickClock(dt: number): boolean {
   return true;
 }
 
-for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(Number(b.dataset.rate)));
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(rateOf(b)));
 $("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
 // Keys, so it feels like steering rather than filling in a form (Leo's review): Space
 // pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
-const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 6, Digit3: 24, Digit4: 96, Numpad1: 1, Numpad2: 6, Numpad3: 24, Numpad4: 96 };
+const SPEED_KEYS: Record<string, number> = { Digit1: REAL_TIME, Digit2: 1, Digit3: 6, Digit4: 24, Digit5: 96, Numpad1: REAL_TIME, Numpad2: 1, Numpad3: 6, Numpad4: 24, Numpad5: 96 };
 /** The key hint under the time bar: for the first minute, or until a key is used. */
 let keyHintTimer: ReturnType<typeof setTimeout> | undefined;
 function hideKeyHint(): void {
@@ -1853,6 +1878,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
 }
 
 let decisionSeq = 0;
+/** The calls made when the clock stopped, for the results card. */
+const calls: Call[] = [];
 
 /** Stop the clock and ask, when a decision is due. */
 function maybeDecide(): boolean {
@@ -1881,8 +1908,11 @@ function showDecision(d: { text: string; choices: Choice[] }): void {
     b.title = c.title;
     b.addEventListener("click", async () => {
       $("decide").hidden = true;
+      // For the results card's "your calls": what was chosen, and the lead on the ghost then.
+      if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km });
       await c.act();
       setRate(lastRate);
+      if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
     });
     box.append(b);
   }
@@ -1913,21 +1943,61 @@ async function refreshForecast(): Promise<void> {
 
 async function finish(): Promise<void> {
   const c = await game.result();
+  // The sound ask doesn't land on the results.
+  clearTimeout(soundAskTimer);
+  soundAsked = true;
+  $("soundask").hidden = true;
+  document.body.classList.remove("asking-sound");
   chartDirty = true;
+  hud.orders(false);
   // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
+  // Any other ending gets a quiet beat on the boat's last moment before the card (Leo's plan).
   if (c.boat.outcome === "arrived" && finishesOffLisbon() && !shared) await arrivalScene(c);
+  else if (!shared) await new Promise((ok) => setTimeout(ok, 2000));
   page.card = c;
   const me = c.boat;
   const gh = c.ghost;
-  const head =
-    c.verdict === "won"
-      ? "You beat the autopilot!"
-      : c.verdict === "lost"
-        ? "The autopilot won this one."
-        : c.verdict === "draw"
-          ? "A draw: within a day of each other, which is down to the weather's luck."
-          : "Neither boat finished.";
-  $("r-head").textContent = head;
+  // Under the race rules a voyage starts at the western line, about 500 km out (Sam).
+  const started = { me: !!game.boat?.t_start_line || me.outcome === "arrived", ghost: !!game.ghost?.t_start_line || gh.outcome === "arrived" };
+  page.started = started;
+  $("r-head").textContent = headline(c, started);
+  $("r-story").textContent = story(c, started);
+  // The three big numbers: days at sea, km of the way covered, and against the ghost.
+  const st = game.status;
+  const rep = game.boat;
+  const target = (rep?.course.target ?? [39.5, -13.5]) as [number, number];
+  const radius = (rep?.course.target_radius_m ?? 25000) / 1000;
+  const way = rep && rep.lat.length ? Math.max(kmTo([rep.lat[0] as number, rep.lon[0] as number], target) - radius, 0) : 0;
+  const left = st ? st.boat.km_to_finish : way;
+  const lead = st ? st.lead_km : 0;
+  const nums = $("r-nums");
+  nums.replaceChildren(
+    ...numbers(c, me.outcome === "arrived" ? way : way - left, way, lead).map((n) => {
+      const d = document.createElement("div");
+      d.className = "n";
+      const b = document.createElement("b");
+      b.textContent = n.value;
+      if (n.unit) {
+        const u = document.createElement("small");
+        u.textContent = n.unit;
+        b.append(u);
+      }
+      const l = document.createElement("span");
+      l.textContent = n.label;
+      d.append(b, l);
+      return d;
+    }),
+  );
+  // Your calls (hands on only: from base, orders go by satellite and aren't calls).
+  $("r-calls").hidden = mode !== "hands_on" || !!shared;
+  $("r-calllist").replaceChildren(
+    ...callLines(calls, lead).map((t) => {
+      const li = document.createElement("li");
+      li.textContent = t;
+      return li;
+    }),
+  );
+  drawResultMap();
   $("r-trim").textContent = trimLine(c);
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
   const line = (who: string, x: Card["boat"]) => {
@@ -1991,10 +2061,15 @@ async function finish(): Promise<void> {
     bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   // #335: the browser sails on a lighter weather file than the full runs behind the voyage replays.
-  bits.unshift("Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.");
+  $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
   $("r-notes").textContent = bits.join(" ");
+  const mine = loadMyBoat();
+  if (mine) $<HTMLAnchorElement>("r-boat").href = `./${myBoatYardLink(mine)}`;
+  $<HTMLAnchorElement>("r-board").href = `./leaderboard.html#${encodeURIComponent(c.build)}`;
+  document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle(); // a soft knock, and the sea drops to half under the card
+  $("again").focus({ preventScroll: true });
   void showStanding(c.build);
 }
 
@@ -2006,10 +2081,149 @@ async function showStanding(build: string): Promise<void> {
   box.replaceChildren();
   const [board, grid] = await Promise.all([maybeJson<Board>("./leaderboard/board.json"), maybeJson<Grid>("./boatyard/index.json")]);
   if (page.card?.build !== build) return; // a newer game has finished since
-  const mine = loadMyBoat();
   const s = standing(build, board, grid);
-  renderNext(box, build, s, mine ? `./${myBoatYardLink(mine)}` : undefined);
+  const rate = s.kind === "board" ? s.row.finish_rate : s.kind === "odds" ? (s.build.odds?.odds ?? null) : null;
+  const mine = loadMyBoat();
+  const name = !mine || !mine.base || mine.base === "kayak" ? "Our kayak" : "This build";
+  const p = document.createElement("p");
+  p.className = "standing";
+  p.textContent = leaves(page.card, rate, name, page.started.me);
+  box.append(p);
+  const t = standingText(s);
+  $("r-standing").textContent = `${t.head} ${t.detail}`;
   page.standing = s.kind;
+}
+
+/** F3: the goal, on screen from second one (Leo's first five minutes, Elena). The ghost has no hull of
+ * its own on the sea (it's a tag on the horizon once apart), so the words say "from the same start" (Leo). Eight seconds over
+ * the opening view, in the clear sky at the top left; a click or a key lets it go early. */
+const GOAL_MS = 8000;
+function goalCard(km: number): Promise<void> {
+  const card = $("goalcard");
+  $("goalkm").textContent = `${Math.round(km).toLocaleString("en-US")} km.`;
+  card.hidden = false;
+  document.body.classList.add("goal");
+  requestAnimationFrame(() => card.classList.add("in"));
+  page.scene = "goal";
+  return new Promise((done) => {
+    let over = false;
+    const end = () => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      removeEventListener("keydown", end);
+      removeEventListener("pointerdown", end);
+      card.classList.remove("in");
+      document.body.classList.remove("goal");
+      page.scene = "";
+      setTimeout(() => (card.hidden = true), 800);
+      done();
+    };
+    // ?hold=goal keeps it up, for frames on slow software graphics.
+    const timer = params.get("hold") === "goal" ? 0 : setTimeout(end, GOAL_MS);
+    addEventListener("keydown", end);
+    addEventListener("pointerdown", end);
+  });
+}
+
+/** The card's small map: both whole tracks, drawn once on the chart's land. */
+function drawResultMap(): void {
+  const cv = $<HTMLCanvasElement>("r-map");
+  if (!chartBounds || !game.boat || !game.ghost) {
+    cv.hidden = true;
+    return;
+  }
+  const m = new Chart(cv, landImg, chartBounds);
+  m.setLanes([
+    { rep: game.boat, colours: TRACK.kayak },
+    { rep: game.ghost, colours: GHOST },
+  ]);
+  // Framed on what was sailed (Ines): both tracks with a margin, at the map's own shape, so a short
+  // voyage isn't a stub in the corner. The finish, when it's off the frame, is an arrow at the edge.
+  const pts: [number, number][] = [];
+  for (const r of [game.boat, game.ghost])
+    for (let i = 0; i < r.lat.length; i++) if (r.lat[i] != null && r.lon[i] != null) pts.push([r.lat[i] as number, r.lon[i] as number]);
+  const target = game.boat.course.target as [number, number];
+  const COS40 = Math.cos((40 * Math.PI) / 180);
+  let [la0, la1, lo0, lo1] = [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))];
+  const whole = lo1 - lo0 > 40;
+  if (!whole && pts.length) {
+    // At least 8 degrees of longitude, and the canvas's 16:10 shape.
+    const cx = (lo0 + lo1) / 2;
+    const cy = (la0 + la1) / 2;
+    let wLon = Math.max(8, (lo1 - lo0) * 1.5);
+    let hLat = Math.max((la1 - la0) * 1.5, (wLon * COS40 * 10) / 16);
+    wLon = Math.max(wLon, (hLat * 16) / 10 / COS40);
+    hLat = (wLon * COS40 * 10) / 16;
+    [la0, la1, lo0, lo1] = [cy - hLat / 2, cy + hLat / 2, cx - wLon / 2, cx + wLon / 2];
+    m.setView({ lonMin: lo0, lonMax: lo1, latMin: la0, latMax: la1 });
+  }
+  // Drawn after the card lays out, so the canvas has its size.
+  requestAnimationFrame(() => {
+    m.draw(1e9, performance.now());
+    if (whole || !pts.length) return;
+    const g = cv.getContext("2d")!;
+    const dpr = cv.width / Math.max(1, cv.getBoundingClientRect().width);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = cv.width / dpr;
+    const H = cv.height / dpr;
+    const [ex, ey] = m.xy(...(lastFix(game.boat!) ?? pts[0]));
+    // Where it ended, named (Ines): "Went silent", "Caught in fishing gear"...
+    const end = page.card?.boat;
+    if (end && end.outcome !== "arrived" && end.ending?.headline) {
+      g.font = "600 11px system-ui, sans-serif";
+      g.textAlign = ex > W * 0.6 ? "right" : "left";
+      g.fillStyle = "rgba(255,200,150,.95)";
+      g.fillText(end.ending.headline, ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10);
+    }
+    const [fx, fy] = m.xy(target[0], target[1]);
+    if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
+    // The finish, off the frame: in the top-right corner, "4,728 km to the finish ▶", the arrow
+    // pointing its way, clear of the end marker (Ines, Leo).
+    const ang = Math.atan2(fy - ey, fx - ex);
+    const ax = W - 12;
+    const ay = 14;
+    g.save();
+    g.translate(ax, ay);
+    g.rotate(ang);
+    g.fillStyle = "rgba(255,255,255,.9)";
+    g.beginPath();
+    g.moveTo(6, 0);
+    g.lineTo(-4, -5);
+    g.lineTo(-4, 5);
+    g.closePath();
+    g.fill();
+    g.restore();
+    g.font = "600 11px system-ui, sans-serif";
+    g.textAlign = "right";
+    g.textBaseline = "middle";
+    g.fillStyle = "rgba(235,242,250,.92)";
+    const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
+    g.fillText(`${left} km to the finish`, ax - 10, ay);
+    // The race's start line runs through the frame without its words on a small map: name it.
+    const west = game.boat!.course.west_line as [number, number][];
+    const seen: [number, number][] = [];
+    for (let k = 0; k + 1 < west.length; k++)
+      for (let f = 0; f <= 1; f += 0.05) {
+        const [x, y] = m.xy(west[k][0] + (west[k + 1][0] - west[k][0]) * f, west[k][1] + (west[k + 1][1] - west[k][1]) * f);
+        if (x > 70 && x < W - 4 && y > 34 && y < H - 8) seen.push([x, y]);
+      }
+    if (seen.length) {
+      // Halfway along the part in view, the words to its left so they never run off the edge.
+      const [x, y] = seen[Math.floor(seen.length / 2)];
+      g.textAlign = "right";
+      g.textBaseline = "middle";
+      g.font = "600 10px system-ui, sans-serif";
+      g.fillStyle = "rgba(255,255,255,.7)";
+      g.fillText("start line", x - 6, y);
+    }
+  });
+}
+
+/** The last position a replay has, for the results map. */
+function lastFix(r: Replay): [number, number] | null {
+  for (let i = r.lat.length - 1; i >= 0; i--) if (r.lat[i] != null && r.lon[i] != null) return [r.lat[i] as number, r.lon[i] as number];
+  return null;
 }
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
@@ -2119,7 +2333,7 @@ async function begin(): Promise<void> {
   $("start").hidden = true;
   $("loading").hidden = false;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
-  if (!/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
+  if (!ONE_CLICK && !/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
   try {
     if (shared) {
       const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
@@ -2171,7 +2385,7 @@ async function begin(): Promise<void> {
     // paused where it was left; ?clock=paused starts paused (for tests).
     forecastAt = page.status!.day * 24;
     document.body.classList.add("sailing");
-    hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "Steer here, or with ← →. O opens and closes this.");
+    const coach = shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "The autopilot is steering, just like the ghost's. To get ahead, you'll have to make better calls than it does. The first one is coming.";
     $("loading").hidden = true;
     if (shared || params.get("clock") === "paused" || page.status?.over) setRate(0);
     else {
@@ -2180,9 +2394,18 @@ async function begin(): Promise<void> {
       lastRate = DEFAULT_RATE; // a pause then carries on at the usual speed
       easeUpAt = hour + FIRST_HOURS;
     }
-    $("keyhint").hidden = false;
-    setTimeout(hideKeyHint, 60_000);
-    askSound();
+    // One thing to read at a time (Leo): the goal card first, then the drawer with its coach line
+    // and the key hint; the sound ask a minute in.
+    const opening = () => {
+      hud.sailing(coach);
+      $("keyhint").hidden = false;
+      setTimeout(hideKeyHint, 60_000);
+    };
+    if (!shared && mode === "hands_on" && !chosenChallenge() && finishesOffLisbon() && !page.status?.over) {
+      hud.sailing(null); // the bar steps away; the drawer waits for the card
+      void goalCard(page.status!.boat.km_to_finish).then(opening);
+    } else opening();
+    askSoundLater();
   } catch (e) {
     $("loading").hidden = true;
     const err = String(e);
@@ -2246,6 +2469,16 @@ $("orders").addEventListener("click", (ev) => {
 });
 $("sevent").addEventListener("click", () => void sail("event"));
 $("go").addEventListener("click", () => void begin());
+// F1 (Leo's first five minutes, Elena): the title's Set sail, helm.html?sail, goes straight to the sea
+// on the defaults (our kayak, or my boat; the good-weather launch day; the usual drop), no start card.
+// Any trouble starting brings the start card back with its message.
+if (ONE_CLICK) {
+  document.body.classList.add("oneclick");
+  $("start").hidden = true;
+  $("loadtext").textContent = "Getting the weather ready…";
+  $("loading").hidden = false;
+  void challengesReady.finally(() => void begin());
+}
 $("send").addEventListener("click", () => void sendOrder());
 $("share").addEventListener("click", () => void shareLink());
 // The boats you can sail: our kayak, and the stock boats Maya cleared for play.
@@ -2315,7 +2548,62 @@ if (shared) {
   $("sharedmsg").textContent = "Someone shared this game with you: it opens where they left it, with the same weather and luck.";
   $("go").textContent = "Carry on from where they left it";
 }
-$("again").addEventListener("click", () => location.reload());
+// Play again: same boat, same day, same settings (you know what's coming). Another launch day:
+// the same, with the start card open on the launch picker. Kept for one reload in this tab only.
+const AGAIN_KEY = "boatsim.helm.again";
+function again(sameDay: boolean): void {
+  const val = (id: string) => $<HTMLInputElement | HTMLSelectElement>(id).value;
+  const chk = (id: string) => $<HTMLInputElement>(id).checked;
+  try {
+    sessionStorage.setItem(
+      AGAIN_KEY,
+      JSON.stringify({ launch: sameDay ? val("launch") : null, mode, safe: chk("safe"), breakdowns: chk("breakdowns"), port: val("port"), challenge: val("challenge"), pickDay: !sameDay }),
+    );
+  } catch {
+    /* private mode: a plain reload */
+  }
+  // Another day means the start card: drop the title's one-click ?sail.
+  if (!sameDay && params.has("sail")) {
+    const u = new URL(location.href);
+    u.searchParams.delete("sail");
+    location.replace(u.href);
+  } else location.reload();
+}
+$("again").addEventListener("click", () => again(true));
+$("r-day").addEventListener("click", () => again(false));
+$("r-info").addEventListener("click", () => {
+  const t = $("r-caveat");
+  t.hidden = !t.hidden;
+  $("r-info").setAttribute("aria-expanded", String(!t.hidden));
+});
+{
+  let a: { launch: string | null; mode: Mode; safe: boolean; breakdowns: boolean; port: string; challenge: string; pickDay: boolean } | null = null;
+  try {
+    a = JSON.parse(sessionStorage.getItem(AGAIN_KEY) ?? "null");
+    sessionStorage.removeItem(AGAIN_KEY);
+  } catch {
+    a = null;
+  }
+  if (a && !shared) {
+    const sel = $<HTMLSelectElement>("launch");
+    if (a.launch !== null && Array.from(sel.options).some((o) => o.value === a!.launch)) sel.value = a.launch;
+    $<HTMLInputElement>("safe").checked = a.safe;
+    $<HTMLInputElement>("breakdowns").checked = a.breakdowns;
+    const m = document.querySelector<HTMLInputElement>(`input[name="mode"][value="${CSS.escape(a.mode)}"]`);
+    if (m) m.checked = true;
+    // The port and challenge pickers fill from files: set them once they're there.
+    const later = (id: string, v: string, tries = 40) => {
+      const e = $<HTMLSelectElement>(id);
+      if (Array.from(e.options).some((o) => o.value === v)) {
+        e.value = v;
+        e.dispatchEvent(new Event("change"));
+      } else if (v && tries > 0) setTimeout(() => later(id, v, tries - 1), 250);
+    };
+    later("port", a.port);
+    later("challenge", a.challenge);
+    if (a.pickDay) requestAnimationFrame(() => sel.focus());
+  }
+}
 $<HTMLSelectElement>("challenge").addEventListener("change", () => showChallenge());
 for (const w of ["boat", "ghost"] as const)
   $(`w-${w}`).addEventListener("click", () => {
@@ -2328,6 +2616,7 @@ showOrder();
 compass.draw();
 
 const landImg = new Image();
+let chartBounds: LandBounds | null = null;
 (async () => {
   const [bounds] = await Promise.all([
     fetch("./land.json").then((r) => r.json() as Promise<LandBounds>),
@@ -2338,6 +2627,8 @@ const landImg = new Image();
     }),
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
+  chart.toFinish = true;
+  chartBounds = bounds;
   chart.setWrecks(wreckMarks());
 })().catch((e) => console.warn("chart:", e));
 
@@ -2392,6 +2683,7 @@ const cine = new Cinema({
   fade: (sec) => sound.duck(sec),
 });
 const sound = new OceanSound();
+(window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
 (page as unknown as { cine: Cinema }).cine = cine;
 
@@ -2533,7 +2825,7 @@ orderGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((DA
   orderGeo.setAttribute("color", new THREE.BufferAttribute(col, 4));
   orderGeo.setIndex(idx);
 }
-const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, fog: false })); // a hint, not road paint (Ines, Rosa)
 orderLine.frustumCulled = false;
 orderLine.visible = false;
 orderLine.renderOrder = 11; // over the sea, like the wake
@@ -2542,8 +2834,8 @@ scene.add(orderLine);
  * bow that fades out, dimmer at night. Not a beam to the horizon. */
 function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: number): void {
   const s = page.status;
-  const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare");
-  orderLine.visible = on;
+  const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare") && !document.body.classList.contains("goal");
+  orderLine.visible = on; // not under the goal card: the opening frame is the boat and the sea (Ines)
   if (!on || !s) return;
   const to =
     typeof order === "number"
@@ -2554,7 +2846,7 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
   const a = THREE.MathUtils.degToRad(to);
   const dx = Math.sin(a);
   const dz = -Math.cos(a);
-  const half = Math.max(0.09, spec.length * 0.012);
+  const half = Math.max(0.06, spec.length * 0.008);
   const from = spec.length * 0.8;
   const len = THREE.MathUtils.clamp(spec.length * 5, 30, 60);
   const step = len / (DASHES + 0.5);
@@ -2587,6 +2879,9 @@ const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
 function frameBoat(dt: number): void {
   const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
+  // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
+  // the horizon lower, never dead centre (Ines).
+  const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on;
   let tx = 0;
   let ty = 0;
   if (want && smoothYaw !== null) {
@@ -2600,6 +2895,16 @@ function frameBoat(dt: number): void {
     const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
     tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
     ty = -0.1 * room;
+  } else if (waiting) {
+    // The boat at about two-thirds across, her bow into the open water on the left (Ines: 64-67%).
+    here0.set(0, 0, 0).project(camera);
+    tx = THREE.MathUtils.clamp((here0.x + 1) / 2 + third.x - 0.66, -0.4, 0.4);
+    ty = -0.1;
+  } else if (page.card && !arrival && !wheel.on && !cine.on && window.innerWidth > 900) {
+    // The results card sits on the left two-thirds: the boat's last moment on the right third (Leo, Elena).
+    here0.set(0, 0, 0).project(camera);
+    tx = THREE.MathUtils.clamp((here0.x + 1) / 2 + third.x - 0.82, -0.4, 0.4);
+    ty = -0.04;
   }
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
