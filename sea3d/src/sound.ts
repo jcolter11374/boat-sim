@@ -161,7 +161,8 @@ export function mixFor(w: SeaWeather, rig: Rig, gust = 0, set = 0.5): Mix {
     rigHz: shrouds ? clamp(380 + 45 * (fa - 5) + 60 * gust, 330, 700) : clamp(950 + 70 * (fa - 6) + 90 * gust, 900, 1400),
     hull: db(-44 + 24 * hullK) * Math.sqrt(hullK) * (0.8 + 0.4 * set) * lift,
     hullHz: 320 + 650 * hullK + 80 * clamp(hs / 4),
-    wash: db(table(WASH, hs)) * setK * lift,
+    // The lift fills silence; it never makes a swell in light air louder than a sailing breeze (Milo).
+    wash: Math.max(db(table(WASH, hs)), Math.min(db(table(WASH, hs)) * lift, db(-31))) * setK,
     washHz: Math.min(220 + 70 * hs, 650),
     sizzle: db(table(SIZZLE, f)) * (0.75 + 0.5 * set) * Math.max(0.6, g),
     rain: w.rain > 0.01 ? db(-38 + 24 * clamp(w.rain)) : 0,
