@@ -200,7 +200,7 @@ const STOCK_LOOK: Record<string, { fairing: number; coatRough: number }> = {
  * Finishes for the stock boats' Blender models (blender/build_stock.py names the
  * materials). The hull's gloss already varies by zone from its finish map
  * (glossy gelcoat, matte bottom paint, non-skid deck); this adds what glTF can't
- * carry: fairing in the reflections, satin teak, brushed steel. Each material once.
+ * carry: fairing in the reflections, satin teak, dull rigging wire. Each material once.
  */
 export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
   const look = STOCK_LOOK[key] ?? { fairing: 0.15, coatRough: 0.04 };
@@ -234,11 +234,6 @@ export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
             p.sheenRoughness = 0.7;
             p.sheenColor.set(0xd9b48a);
           }
-          break;
-        case "steel":
-          m.metalness = 1;
-          m.roughness = 0.36;
-          if (p) p.anisotropy = 0.5;
           break;
         case "wire":
           // Rigging wire is far thinner than a pixel at most distances: keep it dull,

@@ -129,10 +129,13 @@ float sailDouble(vec2 uv) {
   float luffTape = 1.0 - smoothstep(0.04, 0.07, uv.x * chord);
   float leechTape = 1.0 - smoothstep(0.03, 0.05, (1.0 - uv.x) * chord);
   float footTape = 1.0 - smoothstep(0.04, 0.07, m.y);
-  // Corner patches, layered: tack, clew and head.
-  float tack = 1.0 - smoothstep(0.35, 0.5, length(vec2(uv.x * chord, m.y)));
-  float clew = 1.0 - smoothstep(0.4, 0.55, length(vec2((1.0 - uv.x) * chord, m.y)));
-  float head = 1.0 - smoothstep(0.3, 0.45, (1.0 - uv.y) * uSize.y);
+  // Corner patches, layered: tack, clew and head (two layers, the outer one fainter).
+  float tack = 0.6 * (1.0 - smoothstep(0.32, 0.36, length(vec2(uv.x * chord, m.y))))
+             + 0.4 * (1.0 - smoothstep(0.18, 0.22, length(vec2(uv.x * chord, m.y))));
+  float clew = 0.6 * (1.0 - smoothstep(0.36, 0.4, length(vec2((1.0 - uv.x) * chord, m.y))))
+             + 0.4 * (1.0 - smoothstep(0.2, 0.24, length(vec2((1.0 - uv.x) * chord, m.y))));
+  float head = 0.6 * (1.0 - smoothstep(0.28, 0.32, (1.0 - uv.y) * uSize.y))
+             + 0.4 * (1.0 - smoothstep(0.14, 0.18, (1.0 - uv.y) * uSize.y));
   return clamp(max(max(seam, max(luffTape, leechTape)), max(footTape, max(tack, max(clew, head)))), 0.0, 1.0);
 }
 void main() {`,
