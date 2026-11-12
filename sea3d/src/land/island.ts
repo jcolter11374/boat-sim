@@ -24,6 +24,8 @@ export interface LandGrid {
   lon1: number;
   lat0: number;
   lat1: number;
+  /** Present only for places baked with land cover (landviews.py, cover=True): then <land>_cover.png and _trees.json exist. */
+  cover?: unknown;
 }
 
 export class Island {

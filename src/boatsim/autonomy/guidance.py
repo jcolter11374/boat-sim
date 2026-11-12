@@ -75,7 +75,9 @@ class WaypointAutopilot:
         max_fix_gap_s: float = 3_600.0,  # GUESS: older fixes say little about the current now
         steer: str = "pursuit",  # "pursuit" far from land (see above) or "track" (Rover)
         pursuit_crab_deg: float = 20.0,  # GUESS: largest crab angle in pursuit mode
-        track_near_land_km: float = 150.0,  # GUESS: hold the track line this close to a coast
+        # GUESS: hold the track line this close to a coast. 75 km was tried and rejected
+        # (more groundings for the drone and Rev C): docs/qa/near75-coastal-stall-2026-11.md
+        track_near_land_km: float = 150.0,
     ):
         if steer not in ("track", "pursuit"):
             raise ValueError(f"steer must be 'track' or 'pursuit', not {steer!r}")
@@ -153,6 +155,22 @@ class WaypointAutopilot:
                 self._origin = (prev.lat, prev.lon)
             else:
                 self._origin = (sensors.lat, sensors.lon)
+                self._skip_passed(sensors, mission)
+
+    def _skip_passed(self, sensors: Sensors, mission: Mission) -> None:
+        """A route from base is planned from the boat's report and reaches it
+        with the next one, about a day later, so its first waypoints can be
+        behind the boat by then (2020 runs: a third of new routes, 25 to 145 km
+        back). Waypoints the boat is already past, measured along the leg to
+        the waypoint after them, count as passed; without this the boat turned
+        round to fetch them."""
+        wps = mission.waypoints
+        while mission.active_index < len(wps) - 1:
+            wp, after = wps[mission.active_index], wps[mission.active_index + 1]
+            _, along = track_offsets(wp.lat, wp.lon, after.lat, after.lon, sensors.lat, sensors.lon)
+            if along <= 0.0:
+                break
+            mission.active_index += 1
 
     def _advance(self, sensors: Sensors, mission: Mission) -> None:
         wps = mission.waypoints

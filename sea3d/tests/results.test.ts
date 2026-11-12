@@ -34,7 +34,7 @@ test("a build on a fair board: the group leads, the place is only 'by finish rat
   assert.equal(t.head, "On the board of 11 Nov: in the 2nd of 3 groups, on its own there. It finishes 74% of 65 launches.");
   assert.equal(t.detail, "2nd of 4 by finish rate. Likely range 64% to 84%.");
   const top = standingText(standing("revc", board(), grid));
-  assert.equal(top.head, "On the board of 11 Nov: in the top of 3 groups, with 1 other boat it can't be told apart from. It finishes 74% of 65 launches.");
+  assert.equal(top.head, "On the board of 11 Nov: in the top of 3 groups, with 1 other build it can't be told apart from. It finishes 74% of 65 launches.");
   assert.doesNotMatch(top.head, /\d(st|nd|rd|th) of \d/); // no place in the headline
 });
 
@@ -42,13 +42,13 @@ test("one group only: no place at all", () => {
   const b = board();
   b.summary!.rows = b.summary!.rows.map((r) => ({ ...r, tier: 1 }));
   const t = standingText(standing("k-p10", b, grid));
-  assert.equal(t.head, "On the board of 11 Nov: all 4 boats are in one group, which these launches can't tell apart. It finishes 50% of 65 launches.");
+  assert.equal(t.head, "On the board of 11 Nov: all 4 builds are in one group, which these launches can't tell apart. It finishes 50% of 65 launches.");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th)/);
 });
 
-test("a board without its date says so (today's file)", () => {
+test("a board without its date just says \"On the leaderboard\" (older files)", () => {
   const b = board(true, { made: undefined, sha: undefined });
-  assert.match(standingText(standing("revb", b, grid)).head, /^On the leaderboard \(board date unknown\): in the 2nd of 3 groups/);
+  assert.match(standingText(standing("revb", b, grid)).head, /^On the leaderboard: in the 2nd of 3 groups/);
   assert.equal(boardDay("2026-01-05T00:10Z"), "5 Jan");
   assert.equal(boardDay("garbage"), null);
   assert.equal(boardDay("2026-13-01T00:00Z"), null);
@@ -82,7 +82,7 @@ test("off the board: the Boatyard's odds, with no place (another launch set)", (
 test("no board and no odds: says so; a grid build without odds doesn't count", () => {
   assert.equal(standing("k-p20", board(), grid).kind, "none");
   assert.equal(standing("anything", null, null).kind, "none");
-  assert.equal(standingText({ kind: "none" }).head, "No odds for this boat yet.");
+  assert.equal(standingText({ kind: "none" }).head, "No odds for this build yet.");
 });
 
 test("odds without the years still read cleanly", () => {
