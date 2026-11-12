@@ -510,9 +510,9 @@ try {
   const pre = await page.evaluate(() => ["status", "orders", "mapbox", "fcbox"].map((id) => getComputedStyle(document.getElementById(id)).visibility));
   if (pre.some((v) => v !== "hidden") || (await page.isVisible("#timebar"))) fail(`helm: game controls show before Set sail: ${pre}`);
   if ((await page.textContent("#go")).trim() !== "Set sail") fail(`helm: the start button says "${await page.textContent("#go")}"`);
-  // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
+  // The boat picker: our kayak and the stock boats cleared for play (the game below sails the kayak).
   const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
-  if (picks.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
+  if (picks.join() !== ",stock_cruiser31,stock_pearson31_2") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
   // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
   await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
     .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));

@@ -1409,6 +1409,8 @@ $("share").addEventListener("click", () => void shareLink());
 // The boats you can sail: our kayak, and the stock boats Maya cleared for play.
 const BOAT_BLURB: Partial<Record<string, string>> = {
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small diesel engine for calms. The sails trim and reef themselves; you steer and say how hard the engine works.",
+  stock_pearson31_2:
+    "the Randolph team's own 9.4 m yacht, as we've modelled it from the builder's numbers: heavier and steadier than the cruiser, with a deep keel and a diesel. The sails trim and reef themselves; you steer and say how hard the engine works.",
 };
 for (const k of PLAYABLE_STOCK) {
   const label = document.createElement("label");
