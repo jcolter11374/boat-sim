@@ -48,7 +48,7 @@ import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
 import { Cinema, filmButtons } from "./cinema";
-import { OceanSound } from "./sound";
+import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { maybeJson, renderNext, standing, type Board, type Grid } from "./results";
 
@@ -794,7 +794,7 @@ const lastNote: Record<string, number> = {};
 // set sail, ask once. "No thanks" is remembered (the sound module stores it as muted), and the
 // question goes away by itself after 20 seconds.
 function askSound(): void {
-  if (sound.on || sound.muted) return;
+  if (sound.on || sound.muted || sound.remembered) return; // turned on last visit: it comes back at the first click
   const box = $("soundask");
   box.hidden = false;
   const close = () => (box.hidden = true);
@@ -2199,6 +2199,7 @@ const cine = new Cinema({
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
   toggleSound: () => sound.toggle(),
+  fade: (sec) => sound.duck(sec),
 });
 const sound = new OceanSound();
 filmButtons(cine, sound);
@@ -2564,7 +2565,11 @@ renderer.setAnimationLoop(() => {
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.ambient);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
-  sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target) });
+  sound.rig = rigOf(spec.key);
+  sound.length = spec.length;
+  if (contact?.splash) sound.splash(contact.splash);
+  const feel = smoothYaw != null ? apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)) : null;
+  sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target), stw, apparent: feel ? Math.hypot(feel.x, feel.z) : undefined });
   wheelCamera(dt, t);
   markPointer();
   if (!cine.update(dt)) controls.update();
