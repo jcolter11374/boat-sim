@@ -163,6 +163,9 @@ export function bestSheet(t: TrimTable, plan: string, twsKn: number, twaDeg: num
 }
 
 /** The sails as the telltales show them, in words a non-sailor can act on. */
+/** How far outside the best sheets still counts as "Drawing well" (deg). */
+const GOOD_TOL = 0.5;
+
 export type SailState = "flapping" | "ease" | "good" | "in" | "stalled";
 export const SAIL_WORDS: Record<SailState, string> = {
   flapping: "Flapping: pull the sail in (Up)",
@@ -285,7 +288,7 @@ export class Wheel {
     // Judged against the sweet spot, not the raw angle: running before the wind the best
     // trim is a stalled sail (it pushes by drag), so "stalled" means too tight for here.
     const b = this.best();
-    if (this.s.sheet >= b.lo - 0.5 && this.s.sheet <= b.hi + 0.5) return "good";
+    if (this.s.sheet >= b.lo - GOOD_TOL && this.s.sheet <= b.hi + GOOD_TOL) return "good";
     if (this.s.sheet > b.hi) return "in";
     return alpha > this.table.alpha_stall_deg + 4 ? "stalled" : "ease";
   }
@@ -474,3 +477,22 @@ export class Guide {
  * flips: she always leans away from the wind (Sam, 12 Nov: she was leaning into it).
  */
 export const rollFromWheel = (heelDeg: number): number => (-heelDeg * Math.PI) / 180;
+
+/**
+ * The sail gauge as a spirit level (Ines, 12 Nov: a green word over an almost empty bar read
+ * wrong). The sweet spot is always the green band in the middle (40-60% of the gauge); the
+ * needle sits in it when the trim is right and slides off toward "pulled in" (left) or
+ * "let out" (right), reaching the end 30 degrees past the band. Percentages of the gauge.
+ */
+export function trimGauge(sheet: number, lo: number, hi: number): { needle: number; bandLeft: number; bandWidth: number } {
+  const SLACK = 30;
+  // The same tolerance as sailState()'s "good", so the needle is inside the green exactly when the
+  // label says "Drawing well" (Ines), and drawn well inside it (42-58%), never on its edge.
+  const a = lo - GOOD_TOL;
+  const b = hi + GOOD_TOL;
+  let needle: number;
+  if (sheet < a) needle = 38 - Math.min((a - sheet) / SLACK, 1) * 38;
+  else if (sheet > b) needle = 62 + Math.min((sheet - b) / SLACK, 1) * 38;
+  else needle = 42 + ((sheet - a) / (b - a)) * 16;
+  return { needle, bandLeft: 40, bandWidth: 20 };
+}

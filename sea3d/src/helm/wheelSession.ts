@@ -12,7 +12,7 @@
  */
 
 import { depthState, type DepthState } from "../land/depth";
-import { CRUISER_HANDLING, Guide, PEARSON31_2_HANDLING, SAIL_WORDS, Wheel, type Handling, type TrimTable } from "./wheel";
+import { CRUISER_HANDLING, Guide, PEARSON31_2_HANDLING, SAIL_WORDS, Wheel, trimGauge, type Handling, type TrimTable } from "./wheel";
 
 /** Boats that can be sailed by hand, their trim tables (written by vpp.py --trim) and their drafts (from their configs). */
 const TABLES: Record<string, { url: URL; handling: Handling; name: string; draftM: number }> = {
@@ -139,7 +139,7 @@ export class WheelSession {
       <div class="w-guide" hidden><span class="w-gtext"></span> <button class="w-gskip" title="Skip the guide">Skip</button></div>
       <div class="w-strip">
         <div class="w-cell" title="Speed through the water; the tick is the best she can do on this heading"><span class="w-lbl">speed</span> <b class="w-speed"></b><div class="w-bar"><i class="w-best"></i><i class="w-now"></i></div><span class="w-sub w-bestt"></span></div>
-        <div class="w-cell" title="How far the sail is let out. Green: the sweet spot."><span class="w-lbl">sail</span> <span class="w-tell"></span> <span class="w-sub w-plan"></span><div class="w-gauge"><i class="w-band"></i><i class="w-needle"></i></div></div>
+        <div class="w-cell" title="The sail's trim: keep the needle in the green. Left: pulled in too far. Right: let out too far."><span class="w-lbl">sail</span> <span class="w-tell"></span> <span class="w-sub w-plan"></span><div class="w-gauge"><i class="w-band"></i><i class="w-needle"></i></div></div>
         <div class="w-cell" title="How far she leans; the red tick is too far"><span class="w-lbl">heel</span> <b class="w-heel"></b> <span class="w-sub w-heelt"></span><div class="w-bar w-heelbar"><i class="w-now"></i><i class="w-max"></i></div></div>
         <div class="w-cell" title="The true wind"><span class="w-lbl">wind</span> <b class="w-wind"></b> <span class="w-sub w-twa"></span></div>
         <div class="w-cell w-ctl">
@@ -415,14 +415,12 @@ export class WheelSession {
     const tell = el(r, ".w-tell");
     tell.textContent = w.s.autoTrim ? "Auto-trim is setting the sail" : SAIL_WORDS[st];
     tell.dataset.state = w.s.autoTrim ? "good" : st;
-    const s0 = w.table.sheet_deg[0];
-    const s1 = w.table.sheet_deg[w.table.sheet_deg.length - 1];
-    const pos = (x: number) => `${((x - s0) / (s1 - s0)) * 100}%`;
+    const tg = trimGauge(w.s.sheet, b.lo, b.hi);
     const band = el(r, ".w-band");
     band.hidden = b.speedKn <= 0.2;
-    band.style.left = pos(b.lo);
-    band.style.width = `${Math.max(((b.hi - b.lo) / (s1 - s0)) * 100, 1.5)}%`;
-    el(r, ".w-needle").style.left = pos(w.s.sheet);
+    band.style.left = `${tg.bandLeft}%`;
+    band.style.width = `${tg.bandWidth}%`;
+    el(r, ".w-needle").style.left = `${tg.needle}%`;
     const heel = w.s.heelDeg;
     const hmax = w.table.heel_max_deg;
     el(r, ".w-heel").textContent = `${Math.round(heel)}°`;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, rollFromWheel, type TrimTable } from "../src/helm/wheel.ts";
+import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, rollFromWheel, trimGauge, type TrimTable } from "../src/helm/wheel.ts";
 
 const T: TrimTable = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31_trim.json", import.meta.url), "utf8"));
 const POLAR = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31.json", import.meta.url), "utf8"));
@@ -165,4 +165,17 @@ test("she leans away from the wind: wind from port rolls her to starboard, and t
   const stbd = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 270, speedKn: 5 }, SPELL);
   sail(stbd, 20);
   assert.ok(rollFromWheel(stbd.heelSigned()) < 0, "wind from starboard: roll to port");
+});
+
+test("the sail gauge is a level: the needle is inside the green exactly when the sail is drawing well", () => {
+  assert.equal(trimGauge(20, 15, 25).needle, 50);
+  for (const sheet of [14.5, 15, 25, 25.5]) {
+    const n = trimGauge(sheet, 15, 25).needle;
+    assert.ok(n >= 42 && n <= 58, `${sheet}: well inside the band (${n})`);
+  }
+  assert.ok(trimGauge(14, 15, 25).needle < 40, "pulled in too far: left of the band");
+  assert.ok(trimGauge(26, 15, 25).needle > 60, "let out too far: right of the band");
+  assert.equal(trimGauge(-90, 15, 25).needle, 0);
+  assert.equal(trimGauge(200, 15, 25).needle, 100);
+  assert.equal(trimGauge(12, 12, 12).needle, 50, "a band of one angle");
 });
