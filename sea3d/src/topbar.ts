@@ -10,6 +10,7 @@
  * `?bar=0` hides it too (for embeds and screenshots).
  */
 import { currentBoat, onBoatChange } from "./ui/myboatAdapter";
+import { MARK_SMALL, WORDMARK_CSS } from "./wordmark";
 
 export interface BarLink {
   /** Which page this is, matched against the page's file name. */
@@ -26,7 +27,7 @@ export const LINKS: BarLink[] = [
   { page: "index", href: "./", label: "Home", short: "Home", title: "The title screen, with the live sea behind it" },
   { page: "boatyard", href: "./boatyard.html", label: "Build", short: "Build", title: "Boatyard: design your boat" },
   { page: "helm", href: "./helm.html", label: "Take the helm", short: "Helm", title: "Sail it yourself: you give the orders as the days pass" },
-  { page: "voyage", href: "./voyage.html", label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail and watch it, sped up" },
+  { page: "voyage", href: "./voyage.html", label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail, and watch her go." },
   { page: "race", href: "./race.html", label: "Race", short: "Race", title: "Race two designs on the same weather" },
   { page: "leaderboard", href: "./leaderboard.html", label: "Leaderboard", short: "Board", title: "Which designs reach the finish most often" },
 ];
@@ -39,8 +40,8 @@ const CSS = `
   font: 600 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif; color: #e9f1fb; }
 #topbar::-webkit-scrollbar { display: none; }
 #topbar a { color: inherit; text-decoration: none; white-space: nowrap; }
-#topbar .brand { font-weight: 750; letter-spacing: .3px; margin-right: 10px; display: flex; align-items: center; gap: 7px; }
-#topbar .brand i { width: 14px; height: 14px; border-radius: 3px 3px 7px 7px; background: #ff8a2a; display: inline-block; }
+#topbar .brand { margin-right: 12px; display: flex; align-items: center; padding-bottom: 2px; }
+#topbar .brand .bw-mark { font-size: 24px; color: #f2f7fd; }
 #topbar .nav { padding: 7px 10px; border-radius: 8px; color: #b7c8dc; }
 #topbar .nav:hover { color: #fff; background: rgba(138,180,255,.12); }
 #topbar .nav[aria-current="page"] { color: #fff; background: rgba(255,138,42,.2); box-shadow: inset 0 -2px 0 #ff8a2a; }
@@ -51,7 +52,7 @@ const CSS = `
 #topbar .boat b { color: #ffb072; font-weight: 650; }
 @media (max-width: 760px) {
   #topbar .nav .l { display: none; } #topbar .nav .s { display: inline; }
-  #topbar .nav { padding: 7px 7px; } #topbar .brand span, #topbar .boat .p { display: none; } #topbar .boat { max-width: 130px; }
+  #topbar .nav { padding: 7px 7px; } #topbar .brand .bw-mark { font-size: 20px; } #topbar .boat .p { display: none; } #topbar .boat { max-width: 130px; }
 }
 `;
 
@@ -63,9 +64,11 @@ export function pageName(pathname: string): string {
 
 /** The "my boat" chip's words and where it goes. The name is player data, so it is only ever set as text.
  *  With no boat saved you sail Our kayak (the helm and start card already treat it as yours), so
- *  the chip says so; "build one" only shows in the Boatyard, where it isn't a nag (Leo's audit A3). */
+ *  the chip says so on every page, the Boatyard included (audit A3; Milo, 12 Nov: the Boatyard is
+ *  where a new player first meets the chip, and "build one" there read as broken). */
 export function boatChip(boat: { name: string; href: string } | null, page = ""): { prefix: string; name: string; href: string; title: string } {
-  if (!boat && page === "boatyard") return { prefix: "No boat of your own yet: ", name: "build one", href: "./boatyard.html", title: "Design a boat in the Boatyard" };
+  // Practice sailing always sails the club's cruiser, whatever boat is yours (Elena: no nag there).
+  if (page === "practice") return { prefix: "Practice: ", name: "31 ft cruiser", href: "./boatyard.html", title: "Practice sails a 31 ft cruiser; your own boat sails the voyages" };
   if (!boat) return { prefix: "My boat: ", name: "Our kayak", href: "./boatyard.html", title: "Our kayak, until you build your own in the Boatyard" };
   return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }
@@ -78,15 +81,16 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   if (doc.getElementById("topbar")) return doc.getElementById("topbar");
   const style = doc.createElement("style");
   style.id = "topbar-css";
-  style.textContent = CSS;
+  style.textContent = WORDMARK_CSS + CSS;
   doc.head.appendChild(style);
 
   const here = pageName(doc.location.pathname);
+  const chipPage = here === "helm" && new URLSearchParams(doc.location.search).has("practice") ? "practice" : here;
   const bar = doc.createElement("nav");
   bar.id = "topbar";
   bar.setAttribute("aria-label", "Game menu");
   bar.innerHTML =
-    `<a class="brand" href="./" title="boat-sim: design a boat, then sail it across the Atlantic"><i></i><span>boat-sim</span></a>` +
+    `<a class="brand" href="./" title="Bluewater: design a boat, then sail it across the Atlantic">${MARK_SMALL}</a>` +
     LINKS.slice(1)
       .map((l) => `<a class="nav" href="${l.href}" title="${l.title}"${l.page === here ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
       .join("") +
@@ -95,7 +99,7 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
 
   const chip = bar.querySelector<HTMLAnchorElement>("#topbar-boat")!;
   const draw = () => {
-    const c = boatChip(currentBoat(), here);
+    const c = boatChip(currentBoat(), chipPage);
     const p = doc.createElement("span");
     p.className = "p";
     p.textContent = c.prefix;

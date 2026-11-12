@@ -12,6 +12,8 @@ export interface Poi {
   id: string;
   kind: PoiKind;
   title: string;
+  /** One complete sentence that fits two lines of the docked card; "Read more" shows `text`. */
+  teaser?: string;
   /** (lat, lon) points; a line (the Gulf Stream, the ridge) is several. */
   at: [number, number][];
   radius_km: number;
@@ -181,14 +183,17 @@ export function safeUrl(u: string): string | null {
 }
 
 const STYLE = `
-.poi-card { position: fixed; right: var(--poi-right, 12px); bottom: var(--poi-bottom, 100px); width: min(340px, calc(100vw - 24px)); z-index: 20;
+.poi-card { position: fixed; right: var(--poi-right, 12px); bottom: var(--poi-bottom, 100px); top: var(--poi-top, auto); max-height: var(--poi-max, none);
+  width: min(var(--poi-w, 340px), calc(100vw - 24px)); z-index: 20;
   box-sizing: border-box; padding: 11px 14px 12px; border: 1px solid rgba(160,200,255,.18); border-left: 4px solid var(--c, #5cc8e0);
   border-radius: 12px; color: #e9f1fb; background: rgba(10,22,38,.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); overflow: hidden;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); overflow: hidden auto;
+  scrollbar-width: thin; scrollbar-color: rgba(160,200,255,.35) transparent;
   animation: poi-in .45s cubic-bezier(.2,.8,.2,1); }
-.poi-card .poi-k { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .9px;
+.poi-card .poi-k { display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .9px;
   text-transform: uppercase; color: #9fb3c8; padding-right: 22px; }
-.poi-card .poi-k .poi-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; letter-spacing: .5px; }
+.poi-card .poi-k .poi-where { min-width: 0; overflow-wrap: anywhere; letter-spacing: .5px; padding-top: 1px; }
+.poi-card .poi-k .poi-when { white-space: nowrap; }
 .poi-card .poi-k .poi-badge { flex: none;  color: #0b1726; background: var(--c, #5cc8e0); border-radius: 999px; padding: 1px 7px; letter-spacing: .6px; }
 .poi-card .poi-t { font-weight: 650; font-size: 15.5px; margin: 5px 0 4px; color: #fff; }
 .poi-card .poi-x-text { color: #d6e2ef; }
@@ -196,6 +201,7 @@ const STYLE = `
 .poi-card .poi-src a { color: #8ab4ff; }
 .poi-card .poi-more { margin-top: 4px; font-size: 11px; color: #9fb3c8; }
 .poi-card .poi-more:empty { display: none; }
+.poi-tight .poi-card .poi-more { display: none; }
 .poi-card .poi-x { position: absolute; right: 6px; top: 5px; background: none; border: 0; color: #9fb3c8; font-size: 18px; line-height: 1;
   cursor: pointer; padding: 3px 6px; border-radius: 6px; }
 .poi-card .poi-x:hover { color: #fff; background: rgba(255,255,255,.08); }
@@ -207,12 +213,35 @@ const STYLE = `
 @keyframes poi-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes poi-time { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .poi-card, .poi-card .poi-time { animation: none; } .poi-card.poi-out { transition: none; } }
+/* Compact (the helm): narrower, two lines and "Read more", then it shrinks to a tab at the edge. */
+.poi-card.poi-compact { width: min(300px, calc(100vw - 24px)); padding: 9px 12px 10px; font-size: 12.5px; background: rgba(8,16,28,.72); }
+.poi-card.poi-compact .poi-t { font-size: 14.5px; margin: 3px 0 2px; }
+.poi-card .poi-teaser { color: #d6e2ef; }
+.poi-card.poi-open .poi-teaser, .poi-card.poi-has-teaser:not(.poi-open) .poi-x-text { display: none !important; }
+.poi-card.poi-compact:not(.poi-open) .poi-x-text { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.poi-card.poi-compact:not(.poi-open) .poi-src, .poi-card.poi-compact .poi-more { display: none; }
+/* "1 of 2 ›" by the close button: the next story is one click away and never scrolls out of sight (Leo). */
+.poi-card .poi-n { position: absolute; right: 30px; top: 8px; background: none; border: 0; padding: 1px 4px; border-radius: 6px; font: 600 10.5px system-ui, sans-serif;
+  letter-spacing: .4px; color: #9fb3c8; cursor: pointer; white-space: nowrap; }
+.poi-card .poi-n:hover { color: #fff; background: rgba(255,255,255,.08); }
+.poi-card .poi-n[hidden] { display: none; }
+.poi-card.poi-compact .poi-k { padding-right: 78px; }
+.poi-card.poi-compact.poi-open { display: flex; flex-direction: column; max-height: var(--poi-max, 70vh); overflow: hidden; }
+.poi-card.poi-compact.poi-open .poi-x-text { overflow-y: auto; min-height: 0; flex: 0 1 auto; scrollbar-width: thin; scrollbar-color: rgba(160,200,255,.35) transparent; }
+.poi-card .poi-read { background: none; border: 0; padding: 0; margin-top: 3px; font: inherit; font-size: 11.5px; color: #8ab4ff; cursor: pointer; }
+.poi-card.poi-open .poi-read { display: none; }
+.poi-card.poi-tab { width: auto; max-width: 260px; padding: 6px 12px; cursor: pointer; }
+.poi-card.poi-tab > :not(.poi-t):not(.poi-time) { display: none !important; }
+.poi-card.poi-tab .poi-t { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poi-card.poi-tab .poi-t::after { content: " ›"; color: var(--c, #5cc8e0); }
 `;
 
-/** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom). Each stays SHOW_S seconds (or until closed); points passed
+/** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom, or hang it from --poi-top with --poi-bottom: auto and a --poi-max height). Each stays SHOW_S seconds (or until closed); points passed
  *  together (three at the drop) wait their turn. */
 export class PoiCards {
   static SHOW_S = 25;
+  /** Compact cards shrink to a tab after this long (Leo's helm plan, item 7). */
+  static TAB_S = 12;
   readonly shown: string[] = [];
   private el: HTMLElement | null = null;
   private timer = 0;
@@ -220,7 +249,16 @@ export class PoiCards {
   private more: HTMLElement | null = null;
   private left = 0;
   private since = 0;
-  constructor(private doc: Document = document) {
+  private tabTimer = 0;
+  /** Which story of the batch is up (1 of 2), for compact cards. */
+  private seq = 0;
+  /** The card just went because the next one is coming (so the count carries on). */
+  private chain = false;
+  private n: HTMLButtonElement | null = null;
+  constructor(
+    private doc: Document = document,
+    private readonly opts: { compact?: boolean } = {},
+  ) {
     if (!doc.getElementById("poi-style")) {
       const s = doc.createElement("style");
       s.id = "poi-style";
@@ -238,6 +276,8 @@ export class PoiCards {
   }
 
   show(p: Pass, when = ""): HTMLElement {
+    this.seq = this.el || this.chain ? this.seq + 1 : 1;
+    this.chain = false;
     this.hide(true, false);
     const d = this.doc;
     const el = d.createElement("aside");
@@ -258,10 +298,36 @@ export class PoiCards {
     badge.textContent = KIND_LABEL[p.poi.kind];
     const where = d.createElement("span");
     where.className = "poi-where";
-    where.textContent = `${whereFrom(p)}${when ? ` · ${when}` : ""}`;
+    where.textContent = whereFrom(p);
+    if (when) {
+      // The day stays in one piece when the line wraps ("Day 0.0", never "Day" / "0.0").
+      const day = d.createElement("span");
+      day.className = "poi-when";
+      day.textContent = `· ${when}`;
+      where.append(" ", day);
+    }
     k.append(badge, where);
     add("div", "poi-t", p.poi.title);
+    if (this.opts.compact && p.poi.teaser) add("div", "poi-teaser", p.poi.teaser);
     add("div", "poi-x-text", p.poi.text);
+    if (this.opts.compact) {
+      el.classList.add("poi-compact");
+      if (p.poi.teaser) el.classList.add("poi-has-teaser");
+      const read = add("button", "poi-read", "Read more");
+      read.addEventListener("click", (e) => {
+        e.stopPropagation();
+        el.classList.add("poi-open");
+        window.clearTimeout(this.tabTimer);
+      });
+      el.addEventListener("click", () => {
+        if (!el.classList.contains("poi-tab")) return;
+        el.classList.remove("poi-tab");
+        el.classList.add("poi-open");
+      });
+      this.tabTimer = window.setTimeout(() => {
+        if (this.el === el && !el.matches(":hover") && !el.classList.contains("poi-open")) el.classList.add("poi-tab");
+      }, PoiCards.TAB_S * 1000);
+    }
     const src = add("div", "poi-src", "Source: ");
     const url = safeUrl(p.poi.url);
     if (url) {
@@ -273,6 +339,13 @@ export class PoiCards {
       src.appendChild(a);
     } else src.appendChild(d.createTextNode(p.poi.source));
     this.more = add("div", "poi-more", "");
+    if (this.opts.compact) {
+      this.n = add("button", "poi-n", "") as HTMLButtonElement;
+      this.n.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.next();
+      });
+    }
     const x = add("button", "poi-x", "×");
     x.setAttribute("aria-label", "Close");
     x.addEventListener("click", () => this.hide());
@@ -298,14 +371,31 @@ export class PoiCards {
     return el;
   }
 
-  /** "2 more nearby" under the card while others wait their turn. */
+  /** "2 more nearby" under the card while others wait their turn; "1 of 3 ›" in a compact card's header. */
   private countWaiting(): void {
     if (this.more) this.more.textContent = this.waiting.length ? `${this.waiting.length} more nearby after this one` : "";
+    if (this.n) {
+      const of = this.seq + this.waiting.length;
+      this.n.hidden = of < 2;
+      this.n.textContent = this.waiting.length ? `${this.seq} of ${of} ›` : `${this.seq} of ${of}`;
+      this.n.disabled = !this.waiting.length;
+      this.n.title = this.waiting.length ? "Next story" : "";
+    }
+  }
+
+  /** Straight on to the next story waiting. */
+  next(): void {
+    const n = this.waiting.shift();
+    if (!n) return;
+    this.hide(true, false);
+    this.chain = true;
+    this.show(...n);
   }
 
   /** Take the card down: `now` at once (a jump in time), and `clear` drops the waiting ones too. */
   hide(now = false, clear = now): void {
     window.clearTimeout(this.timer);
+    window.clearTimeout(this.tabTimer);
     if (clear) this.waiting = [];
     const el = this.el;
     this.el = null;
@@ -313,10 +403,12 @@ export class PoiCards {
     if (now) el.remove();
     else {
       el.classList.add("poi-out");
+      if (this.waiting.length) this.chain = true;
       window.setTimeout(() => {
         el.remove();
         const next = this.waiting.shift();
         if (next && !this.el) this.show(...next);
+        else this.chain = false;
       }, 900);
     }
   }

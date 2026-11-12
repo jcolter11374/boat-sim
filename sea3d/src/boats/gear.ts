@@ -13,6 +13,7 @@
 
 import * as THREE from "three";
 import { Rowers } from "./rowers";
+import { NAV_NIGHT } from "./navlights";
 
 /** Part names as the replay's part_failed events give them. */
 export type Part =
@@ -80,7 +81,11 @@ export interface GearLayout {
   smoky: Part[];
 }
 
-const LIGHT_COLOUR = { ok: 0x3ddc97, beacon: 0xffb020, silent: 0xff3b30, "": 0x6b7a8a } as const;
+// The comms status lamp: a small LED dot that only shows close up, never a glowing light.
+// Never green or red: on the water those read as sidelights (Sam's sailor review, 12 Nov).
+// Lost comms blink slow amber; the HUD's equipment icons carry the state. The boat's real
+// light is its white all-round one (navlights.ts).
+const LIGHT_COLOUR = { ok: 0x9aa4ae, beacon: 0xffb020, silent: 0xffb020, "": 0x6b7a8a } as const;
 
 function glowTexture(): THREE.Texture {
   const c = document.createElement("canvas");
@@ -151,6 +156,8 @@ export class Gear {
   private readonly lamp: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly glow: THREE.Sprite;
   private readonly signs = new Map<Part, THREE.Sprite>();
+  /** The floating ⚠ over a broken part: off everywhere (Elena, 12 Nov); the strip's red icons and the toast carry the news. Broken parts still smoke and are listed in shown.signs. */
+  showSigns = false;
   private readonly smoke = new Map<Part, THREE.Sprite[]>();
   private spin: number[];
   private rudderAngle = 0;
@@ -286,10 +293,12 @@ export class Gear {
     // Wind vane on the stern pole: points straight downwind, with a little flutter.
     if (this.vane) this.vane.rotation.y = wingAngle(s.flow, 0) + 0.05 * Math.sin(t * 5.3);
 
-    // Solar panels: a cool sheen in strong sun.
+    // Solar panels: a cool sheen in strong sun. Only while the drawn sky is day: the logged
+    // sun can disagree with the picture (a forced night sky), and at night the panels lit
+    // up blue from inside, the brightest thing in the frame (Ines, 12 Nov).
     for (const m of this.panels) {
       m.emissive.setRGB(0.12, 0.25, 0.55);
-      m.emissiveIntensity = 0.5 * THREE.MathUtils.clamp(s.sun, 0, 1);
+      m.emissiveIntensity = 0.5 * THREE.MathUtils.clamp(s.sun, 0, 1) * (1 - NAV_NIGHT.value);
     }
     this.shown.sun = s.sun;
 
@@ -300,9 +309,11 @@ export class Gear {
     const since = t - this.flash;
     const blink = (t % 2) < 0.18 ? 0.8 : 0.15;
     const burst = since >= 0 && since < 0.7 ? 1.6 * (1 - since / 0.7) : 0;
-    const k = brainDead ? ((t % 1.2) < 0.6 ? 0.9 : 0.1) : Math.max(blink, burst);
-    this.glow.material.opacity = Math.min(1, k);
-    this.glow.scale.setScalar(0.12 + 0.35 * k);
+    const lost = brainDead || s.comms === "silent" || s.comms === "beacon";
+    const k = lost ? ((t % 3) < 1.2 ? 0.9 : 0.1) : Math.max(blink, burst);
+    this.glow.visible = false; // no halo: an LED, not a lamp
+    // Dim after dark, so the white all-round light is the one that reads.
+    this.lamp.material.color.multiplyScalar(1 - 0.5 * NAV_NIGHT.value);
     this.lamp.material.color.multiplyScalar(0.35 + 0.65 * Math.min(1, k));
     this.shown.light = brainDead ? "silent" : s.comms;
 
@@ -310,7 +321,7 @@ export class Gear {
     const signs: string[] = [];
     for (const [part, sign] of this.signs) {
       const on = failed(part);
-      sign.visible = on;
+      sign.visible = on && this.showSigns;
       if (on) {
         signs.push(part);
         const at = this.layout.spots[part]!;

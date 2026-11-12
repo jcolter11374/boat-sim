@@ -163,13 +163,18 @@ export function bestSheet(t: TrimTable, plan: string, twsKn: number, twaDeg: num
 }
 
 /** The sails as the telltales show them, in words a non-sailor can act on. */
-export type SailState = "flapping" | "ease" | "good" | "in" | "stalled";
+/** How far outside the best sheets still counts as "Drawing well" (deg). */
+const GOOD_TOL = 0.5;
+
+export type SailState = "flapping" | "ease" | "good" | "in" | "stalled" | "irons";
 export const SAIL_WORDS: Record<SailState, string> = {
-  flapping: "Flapping: pull the sail in (Up)",
-  in: "Drawing, a little loose: pull in (Up)",
+  // Short enough for the strip's sail cell at 1280 (Ines: no cut-off words).
+  flapping: "Flapping: pull in (Up)",
+  in: "A little loose: pull in (Up)",
   good: "Drawing well",
-  ease: "Drawing, a little tight: ease out (Down)",
-  stalled: "Stalled: ease the sail out (Down)",
+  ease: "A little tight: ease out (Down)",
+  stalled: "Stalled: ease out (Down)",
+  irons: "Too close to the wind",
 };
 
 export interface Inputs {
@@ -185,10 +190,25 @@ export interface Wind {
   fromDeg: number;
 }
 
+type P = { x: number; y: number };
+/** Did the step a -> b cross the line between g0 and g1 (either way)? A gate finish. */
+export function crosses(a: P, b: P, g0: P, g1: P): boolean {
+  const side = (p: P, q: P, r: P) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = side(g0, g1, a);
+  const d2 = side(g0, g1, b);
+  const d3 = side(a, b, g0);
+  const d4 = side(a, b, g1);
+  return ((d1 > 0 && d2 <= 0) || (d1 < 0 && d2 >= 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
 export interface Spell {
   /** The goal: a mark this far away, on this bearing from the start. */
   markM: number;
   markBearing: number;
+  /** A course instead (practice off Annapolis): marks to reach in order, metres east and north of the start. */
+  marks?: { x: number; y: number; gate?: [{ x: number; y: number }, { x: number; y: number }] }[];
+  /** How close counts as reaching a mark (default 40 m). */
+  markRadiusM?: number;
 }
 
 export interface WheelState {
@@ -211,6 +231,13 @@ export interface WheelState {
   tacks: number;
   side: -1 | 1; // which side the wind is on (port -1, starboard +1)
   done: boolean;
+  /** On a course: the mark sailing for now, and the time (s) each one was reached. */
+  mark: number;
+  markTimes: number[];
+  /** Ended in water too shallow for her keel. */
+  aground: boolean;
+  /** How much the sails luff, 0..1, eased (luffTarget()). */
+  luff: number;
 }
 
 export class Wheel {
@@ -247,6 +274,10 @@ export class Wheel {
       tacks: 0,
       side: wrap180(wind.fromDeg - start.heading) >= 0 ? 1 : -1,
       done: false,
+      mark: 0,
+      markTimes: [],
+      luff: 0,
+      aground: false,
     };
   }
 
@@ -268,14 +299,30 @@ export class Wheel {
   }
 
   sailState(): SailState {
+    // Pointing too close to the wind no trim fills the sail: say so, not "Drawing well" (Ines, 12 Nov).
+    const b = this.best();
+    if (b.speedKn <= 0.2) return "irons";
     const alpha = this.awa() - this.s.sheet;
     if (alpha < 2) return "flapping";
     // Judged against the sweet spot, not the raw angle: running before the wind the best
     // trim is a stalled sail (it pushes by drag), so "stalled" means too tight for here.
-    const b = this.best();
-    if (this.s.sheet >= b.lo - 0.5 && this.s.sheet <= b.hi + 0.5) return "good";
+    if (this.s.sheet >= b.lo - GOOD_TOL && this.s.sheet <= b.hi + GOOD_TOL) return "good";
     if (this.s.sheet > b.hi) return "in";
     return alpha > this.table.alpha_stall_deg + 4 ? "stalled" : "ease";
+  }
+
+  /**
+   * How much the sails are luffing (flapping at the front edge), 0..1, for the sail shader and
+   * the flog sound (agreed with Yuki and Felix, 12 Nov). From the sail's angle to the apparent
+   * wind: a flutter from 8 degrees, "Flapping" (0.6) by 2, and flogging (1) at -4 or head to wind.
+   */
+  luffTarget(): number {
+    const alpha = this.awa() - this.s.sheet;
+    const byTrim = alpha >= 8 ? 0 : alpha >= 2 ? 0.15 + ((8 - alpha) / 6) * 0.45 : Math.min(1, 0.6 + ((2 - alpha) / 6) * 0.4);
+    // Head to wind (closer than 25 degrees): the whole sail shakes, whatever the sheet.
+    const twa = Math.abs(this.twa());
+    const irons = twa >= 30 ? 0 : twa <= 25 ? 1 : (30 - twa) / 5;
+    return Math.max(byTrim, irons);
   }
 
   /** Tuck in a reef (deeper = +1) or shake one out (-1). */
@@ -287,7 +334,42 @@ export class Wheel {
     return true;
   }
 
+  /** Where the mark sailed for now is, metres east and north of the start. */
+  markXY(): { x: number; y: number } {
+    const m = this.spell.marks;
+    if (m?.length) return m[Math.min(this.s.mark, m.length - 1)];
+    const b = (this.spell.markBearing * Math.PI) / 180;
+    return { x: Math.sin(b) * this.spell.markM, y: Math.cos(b) * this.spell.markM };
+  }
+
+  /** Compass bearing from the boat to the mark. */
+  /** Where to steer for: the middle of the mark's finish gate when it has one, else the mark. */
+  aimBearing(): number {
+    const m = this.spell.marks?.[Math.min(this.s.mark, this.spell.marks.length - 1)];
+    if (!m?.gate) return this.markBearing();
+    const x = (m.gate[0].x + m.gate[1].x) / 2;
+    const y = (m.gate[0].y + m.gate[1].y) / 2;
+    return wrap360((Math.atan2(x - this.s.x, y - this.s.y) * 180) / Math.PI);
+  }
+
+  markBearing(): number {
+    const m = this.markXY();
+    return wrap360((Math.atan2(m.x - this.s.x, m.y - this.s.y) * 180) / Math.PI);
+  }
+
+  /** The keel touched: the spell ends there. */
+  ground(): void {
+    this.s.aground = true;
+    this.s.done = true;
+    this.s.speedKn = 0;
+  }
+
   distToMark(): number {
+    const m = this.spell.marks;
+    if (m?.length) {
+      const k = m[Math.min(this.s.mark, m.length - 1)];
+      return Math.hypot(k.x - this.s.x, k.y - this.s.y);
+    }
     const b = (this.spell.markBearing * Math.PI) / 180;
     return Math.hypot(Math.sin(b) * this.spell.markM - this.s.x, Math.cos(b) * this.spell.markM - this.s.y);
   }
@@ -337,12 +419,16 @@ export class Wheel {
     const tau = target > s.speedKn ? h.accelS : h.decelS;
     s.speedKn += (target - s.speedKn) * (1 - Math.exp(-dt / tau));
     // Heel follows the sails' push quickly (GUESS 1.5 s).
+    // The luff eases (about 0.3 s) so it doesn't jitter.
+    s.luff += (this.luffTarget() - s.luff) * (1 - Math.exp(-dt / 0.3));
     const heelTarget = s.overNow ? Math.max(l.heelDeg, this.table.heel_max_deg + 5) : l.heelDeg;
     s.heelDeg += (heelTarget - s.heelDeg) * (1 - Math.exp(-dt / 1.5));
     if (s.overNow && !this.wasOver) s.roundUps++;
     this.wasOver = s.overNow;
     // Move.
     const m = s.speedKn * KNOT * dt;
+    const px = s.x;
+    const py = s.y;
     const hr = (s.heading * Math.PI) / 180;
     s.x += Math.sin(hr) * m;
     s.y += Math.cos(hr) * m;
@@ -352,7 +438,14 @@ export class Wheel {
       s.sumSecs += dt;
     }
     s.t += dt;
-    if (this.distToMark() < 40) s.done = true;
+    const gate = this.spell.marks?.[Math.min(s.mark, this.spell.marks.length - 1)]?.gate;
+    if (gate ? crosses({ x: px, y: py }, s, gate[0], gate[1]) : this.distToMark() < (this.spell.markRadiusM ?? 40)) {
+      if (this.spell.marks?.length) {
+        s.markTimes.push(s.t);
+        s.mark++;
+        if (s.mark >= this.spell.marks.length) s.done = true;
+      } else s.done = true;
+    }
   }
   private wasOver = false;
 
@@ -422,4 +515,30 @@ export class Guide {
   get text(): string {
     return GUIDE_WORDS[this.step];
   }
+}
+
+/**
+ * The wheel's lean as the 3D boat's roll (radians). The wheel says + to port (wind from
+ * starboard pushes her over to port); the boat's motion rolls + to starboard. So the sign
+ * flips: she always leans away from the wind (Sam, 12 Nov: she was leaning into it).
+ */
+export const rollFromWheel = (heelDeg: number): number => (-heelDeg * Math.PI) / 180;
+
+/**
+ * The sail gauge as a spirit level (Ines, 12 Nov: a green word over an almost empty bar read
+ * wrong). The sweet spot is always the green band in the middle (40-60% of the gauge); the
+ * needle sits in it when the trim is right and slides off toward "pulled in" (left) or
+ * "let out" (right), reaching the end 30 degrees past the band. Percentages of the gauge.
+ */
+export function trimGauge(sheet: number, lo: number, hi: number): { needle: number; bandLeft: number; bandWidth: number } {
+  const SLACK = 30;
+  // The same tolerance as sailState()'s "good", so the needle is inside the green exactly when the
+  // label says "Drawing well" (Ines), and drawn well inside it (42-58%), never on its edge.
+  const a = lo - GOOD_TOL;
+  const b = hi + GOOD_TOL;
+  let needle: number;
+  if (sheet < a) needle = 38 - Math.min((a - sheet) / SLACK, 1) * 38;
+  else if (sheet > b) needle = 62 + Math.min((sheet - b) / SLACK, 1) * 38;
+  else needle = 42 + ((sheet - a) / (b - a)) * 16;
+  return { needle, bandLeft: 40, bandWidth: 20 };
 }

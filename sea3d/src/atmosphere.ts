@@ -7,6 +7,8 @@
 
 import { NAV_NIGHT } from "./boats/navlights";
 import * as THREE from "three";
+import { setNightLook } from "./boats/nightlook";
+import { setSailSun } from "./boats/sailcloth";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
@@ -230,6 +232,20 @@ export class Atmosphere {
   private dusk = 0;
   private pmrem: THREE.PMREMGenerator;
   private envScene = new THREE.Scene();
+  /** Reflections' sea: deep water straight down, the haze at the horizon. */
+  private readonly envSeaU = { uDeep: { value: new THREE.Color(0x041d33) }, uHaze: { value: new THREE.Color(0xabc3d7) } };
+  private readonly envSea = new THREE.Mesh(
+    new THREE.SphereGeometry(HORIZON * 2, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    new THREE.ShaderMaterial({
+      uniforms: this.envSeaU,
+      side: THREE.BackSide,
+      depthWrite: false,
+      vertexShader: "varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      // Fresnel on water: near the horizon the sea mirrors the sky, looking down it shows its own deep colour.
+      fragmentShader:
+        "uniform vec3 uDeep; uniform vec3 uHaze; varying vec3 vD; void main() { float d = clamp(-vD.y, 0.0, 1.0); float f = pow(1.0 - d, 5.0); gl_FragColor = vec4(mix(uDeep, uHaze, 0.08 + 0.92 * f), 1.0); }",
+    }),
+  );
   private envRT: THREE.WebGLRenderTarget | null = null;
   private envKey = [NaN, NaN, NaN];
   private envAt = -1e9;
@@ -253,6 +269,10 @@ export class Atmosphere {
     su.mieCoefficient.value = 0.004;
     su.mieDirectionalG.value = 0.85;
     this.envScene.add(this.sky.clone()); // shares the sky's material, so it follows it
+    // The sea below the horizon, for reflections only (Yuki): without it a hull's
+    // clear coat mirrors the sky's underside, so white topsides read flat and pale.
+    // Real topsides mirror the dark water below and the bright haze at the horizon.
+    this.envScene.add(this.envSea);
     this.pmrem = new THREE.PMREMGenerator(renderer);
 
     // Stars, placed on the sky's own sphere (equator and pole): setCelestial()
@@ -361,6 +381,7 @@ export class Atmosphere {
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;
     this.sun.position.copy(this.sunDir).multiplyScalar(100);
+    setSailSun(this.sunDir, this.sun.color, this.sunLight * smooth(elDeg, -1, 3));
     const moonUp = smooth(this.moonEl, -1, 4);
     // How much the moon lights the night: a half moon gives about a tenth of a full
     // moon's light (it falls off much faster than the lit fraction), a new moon none.
@@ -372,6 +393,7 @@ export class Atmosphere {
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
     for (const m of this.starMats) m.opacity = night * (1 - storm);
     NAV_NIGHT.value = 1 - smooth(elDeg, -6, 2); // boats' lights show from dusk
+    setNightLook(night, moonlight, MOON);
     if (this.catalogue) {
       const u = this.catalogue.material.uniforms;
       u.uOpacity.value = night * (1 - storm);
@@ -397,6 +419,8 @@ export class Atmosphere {
     this.exposure = (0.55 - 0.17 * storm) * (1 + (1 - day) * (0.15 + 0.35 * moonlight));
     this.renderer.toneMappingExposure = this.exposure;
     this.overcast.material.color.copy(this.fog.color);
+    this.envSeaU.uHaze.value.copy(this.fog.color);
+    this.envSeaU.uDeep.value.set(0x0a2a44).multiplyScalar(0.15 + 0.85 * day).lerp(this.fog.color, 0.25 * storm);
 
     // The moon makes the glints at night.
     if (day > 0.15 || this.moonEl < 0) {
@@ -415,6 +439,11 @@ export class Atmosphere {
     su.uTwilight.value = smooth(elDeg, -12, -4) * (1 - smooth(elDeg, -1, 5)) * (1 - 0.85 * storm);
     su.uWarm.value = (1 - smooth(elDeg, 1, 14)) * smooth(elDeg, -6, -1) * (1 - storm);
 
+    // Reflections fade with the light: on a moonless night the boat is barely there (Elena,
+    // 12 Nov: glossy panels must not glow as if under a spotlight); a full moon gives some back.
+    const nightEnv = 0.03 + 0.17 * moonlight;
+    this.scene.environmentIntensity = nightEnv + (1 - nightEnv) * day;
+
     // Re-light reflections when the sky has changed enough, a few times a second at most
     // (every few seconds on software graphics, where each re-light costs about a frame).
     const now = performance.now();
@@ -423,7 +452,6 @@ export class Atmosphere {
     if (forceEnv || (moved && now - this.envAt > (this.software ? 5000 : 250))) {
       const rt = this.pmrem.fromScene(this.envScene);
       this.scene.environment = rt.texture;
-      this.scene.environmentIntensity = 0.25 + 0.75 * day;
       this.envRT?.dispose();
       this.envRT = rt;
       this.envKey = [elDeg, azDeg, storm];
@@ -604,6 +632,13 @@ export class Atmosphere {
     if (this.ultra) {
       // A real lens: the boat sharp, the far sea and sky gently soft.
       this.bokeh = new BokehPass(this.scene, this.camera, { focus: 6, aperture: 0.00035, maxblur: 0.0035 });
+      // Nearer than the focus, no blur at all: water close to the lens is
+      // the sharpest thing in a storm shot, not smeared (Elena). Further off as before.
+      const mat = this.bokeh.materialBokeh;
+      mat.fragmentShader = mat.fragmentShader.replace(
+        "vec2 dofblur = vec2 ( clamp( factor * aperture, -maxblur, maxblur ) );",
+        "factor = min(factor, 0.0);\n\t\t\tvec2 dofblur = vec2 ( clamp( factor * aperture, -maxblur, maxblur ) );",
+      );
       composer.addPass(this.bokeh);
     }
     this.bloom = new UnrealBloomPass(size, 0.25, 0.55, 2.2);

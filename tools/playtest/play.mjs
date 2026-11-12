@@ -72,9 +72,26 @@ async function helmStart(page, setup = async () => {}) {
   }
 }
 
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if (!(await page.locator("#orders-tab").count())) return;
+  // At the start the drawer opens by itself for 10 s with a tip, then slides shut unless it's
+  // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
+  // until it has fully slid in, then point at it, which keeps it open (the player is using it).
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    const there = await page
+      .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
+      .then(() => true, () => false);
+    if (!there) continue;
+    await page.hover("#orders h2", { timeout: 10_000 }).catch(() => {});
+    if (await page.locator("#orders.open").count()) return;
+  }
+}
 async function hop(page, button) {
   const t0 = Date.now();
   const day0 = await page.evaluate(() => window.__helm.status?.day ?? 0);
+  await openOrders(page);
   await page.click(button);
   await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 10 * MIN });
   const st = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error, over: window.__helm.status?.over }));
@@ -200,24 +217,14 @@ const CHECKS = {
       });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       const out = [];
-      if (await page.locator("#soundask").count()) {
-        // Asked once on setting sail; it closes by itself after 20 s, which can pass while the
-        // simulator finishes starting on a slow runner. So: it was asked, and it goes away.
-        const asked = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
-        must(asked, `"Sound on?" was never asked after Set sail`);
-        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
-        const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
-        must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
-        out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
-      }
       const fast = page.locator('#timebar .rate[data-rate="96"]');
       let decided = null;
       for (let i = 0; i < 12 && !decided; i++) {
         if (await page.evaluate(() => window.__helm.card || window.__helm.status?.over)) break;
-        // Key 4 is "4 days a second" (the key hint); a key can't be blocked by a panel over the button.
+        // Key 5 is "4 days a second" (key 1 is real time since T1) (the key hint); a key can't be blocked by a panel over the button.
         if (await page.evaluate(() => window.__helm.clock === 0)) {
-          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => page.keyboard.press("4"));
-          else await page.keyboard.press("4");
+          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => page.keyboard.press("5"));
+          else await page.keyboard.press("5");
         }
         await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.error || window.__helm.card, null, { timeout: 4 * MIN }).catch(() => {});
         must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");
@@ -237,6 +244,17 @@ const CHECKS = {
       }
       if (!decided) out.push("no decision came up in this voyage (not a fail)");
       else out.push(decided);
+      // "Sound on?" (#334, then Leo's one-thing-at-a-time opening): asked once, a minute in or
+      // a few seconds after the first call, whichever comes first (older builds: on Set sail).
+      // It closes by itself after 20 s, so: it was asked, and it goes away.
+      if (await page.locator("#soundask").count()) {
+        const asked = await page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: 75_000 }).then(() => true).catch(() => false);
+        must(asked, `"Sound on?" was never asked (expected a minute in, or after the first call)`);
+        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
+        const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
+        must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
+        out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
+      }
       return out.join("; ");
     },
   },
@@ -268,6 +286,7 @@ const CHECKS = {
       const turned = ((h1 - h0 + 540) % 360) - 180;
       must(turned > 10, `holding the right arrow 1.5 s only turned from ${h0}° to ${h1}°`);
       out.push(`holding → turned ${h0}° to ${h1}°`);
+      await openOrders(page);
       const b = page.locator("#b-wheel");
       must(await b.isVisible(), `no "Take the wheel" button on the cruiser`);
       await b.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
@@ -320,6 +339,7 @@ const CHECKS = {
     path: "helm.html?quality=low",
     run: async (page) => {
       await helmStart(page, async (p) => p.locator('input[name="mode"][value="base"]').check());
+      await openOrders(page); // Send lives in the orders drawer
       const visible = await page.isVisible("#send");
       must(visible, "in base-station mode there's no Send button");
       await page.click("#send");
@@ -420,6 +440,7 @@ const CHECKS = {
       let hops = 0;
       for (; hops < 60 && !(await page.evaluate(() => window.__helm.card)); hops++) {
         // The voyage can end while the button is hidden behind the card: wait for the card then.
+        if (!(await page.evaluate(() => window.__helm.card))) await openOrders(page);
         if (!(await page.locator("#sevent").isVisible())) {
           await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN }).catch(() => {
             throw new CheckFail(`"Sail until something happens" disappeared at hop ${hops} and no results card came`);
@@ -440,15 +461,16 @@ const CHECKS = {
       const next = await page.evaluate(() => ({
         kind: window.__helm.standing,
         head: document.querySelector("#r-next .standing")?.textContent ?? "",
-        links: [...document.querySelectorAll("#r-next .next a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
+        // The ways on: under the standing line (before #406), or the card's button row and quiet links (#406).
+        links: [...document.querySelectorAll("#r-next .next a, #result .rc-btns a, #result .rc-links a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
       }));
       must(next.head.trim(), "the standing line is empty");
-      must(next.links.length === 3, `expected 3 ways on, got ${JSON.stringify(next.links)}`);
+      for (const want of [/boatyard/, /race/, /leaderboard/]) must(next.links.some((l) => want.test(l.href ?? "")), `no ${want.source} link among the ways on: ${JSON.stringify(next.links)}`);
       await page.screenshot({ path: `play-${BROWSER}-results-card.png` }).catch(() => {});
       // Follow the leaderboard link like a player: the board loads.
       const lb = next.links.find((l) => /leaderboard/.test(l.href));
       must(lb, "no Leaderboard link on the card");
-      const link = page.locator(`#r-next .next a[href="${lb.href}"]`);
+      const link = page.locator(`#result a[href="${lb.href}"]`).first();
       await link.scrollIntoViewIfNeeded().catch(() => {});
       await link.click({ timeout: 15_000 }).catch((e) => {
         throw new CheckFail(`the card's Leaderboard link can't be clicked: ${String(e).split("\n")[0]}`);
@@ -464,7 +486,10 @@ const CHECKS = {
     path: "boatyard.html?quality=low#base=revc",
     run: async (page) => {
       await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
-      const label = (await page.locator('#bases button[data-base="revc"]').textContent().catch(() => "")) ?? "";
+      // The button's accessible name: since #416 "our model" is said once for both Randolph boats,
+      // beside them and in each button's aria-label, rather than on every button's face.
+      const rc = page.locator('#bases button[data-base="revc"]');
+      const label = ((await rc.getAttribute("aria-label").catch(() => null)) || (await rc.textContent().catch(() => "")) || "");
       if (!/C5/.test(label)) throw new SkipCheck(`the deployed Boatyard has no Rev C5 preset yet ("${label.trim()}")`);
       const pressed = await page.getAttribute('#bases button[data-base="revc"]', "aria-pressed");
       must(pressed === "true", "opening #base=revc didn't select the Rev C5 preset");
@@ -511,6 +536,10 @@ const CHECKS = {
       const before = await page.evaluate(() => document.getElementById("s-odds").textContent.trim());
       const opt = page.locator(".opt:has(.delta.down), .opt:has(.delta.up)").first();
       const delta = (await opt.locator(".delta").textContent())?.trim();
+      // Sections and slots fold to one line (#416): open the ones holding this part first. Old builds: no-ops.
+      const where = await opt.evaluate((el) => ({ group: el.closest(".slot[data-group]")?.getAttribute("data-group") ?? null, gopen: !!el.closest(".slot[data-group]")?.classList.contains("gopen"), slot: el.closest(".sl")?.getAttribute("data-slot") ?? null, sopen: !!el.closest(".sl")?.classList.contains("open") }));
+      if (where.group && !where.gopen) await page.locator(`.slot[data-group="${where.group}"] h3`).click();
+      if (where.slot && !where.sopen) await page.locator(`.sl-head[data-slot="${where.slot}"]`).click();
       await opt.scrollIntoViewIfNeeded().catch(() => {});
       await opt.click({ noWaitAfter: true });
       const after = await page.waitForFunction((b) => { const t = document.getElementById("s-odds").textContent.trim(); return t !== b && /\d+%/.test(t) && t; }, before, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => "");
@@ -522,7 +551,8 @@ const CHECKS = {
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
-      const NAME = "<b>Nina</b> Rev C test";
+      // 20 characters at most: the Boatyard caps a name at 20 so it fits on the stern (#414).
+      const NAME = "<b>Nina</b> Rev C";
       await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
       if (!(await page.$("#mb-save"))) throw new SkipCheck("the deployed Boatyard has no \"my boat\" button yet");
       await page.click('#bases button[data-base="revc"]', { noWaitAfter: true });

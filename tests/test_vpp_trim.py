@@ -89,7 +89,7 @@ def test_committed_trim_table_is_the_vpp_output(p):
     shape = (len(t["tws_kn"]), len(t["twa_deg"]), len(t["sheet_deg"]))
     assert np.asarray(t["plans"]["reef1"]["speed_kn"]).shape == shape
     i, j, k = t["tws_kn"].index(12), t["twa_deg"].index(90), 4
-    x = V.solve_trim(p, 12 * KNOT, 90, p.plans[0], t["sheet_deg"][k], 0.0)
+    x = V.solve_trim(V.hand_sailed(p), 12 * KNOT, 90, p.plans[0], t["sheet_deg"][k], 0.0)
     assert t["plans"]["full"]["speed_kn"][i][j][k] == pytest.approx(x.speed / KNOT, abs=0.002)
 
 
@@ -105,7 +105,7 @@ def test_overpowered_points_are_capped_at_the_polar(p):
     t = json.loads(Path("configs/polars/cruiser31_trim.json").read_text())
     i, j = t["tws_kn"].index(25), t["twa_deg"].index(50)
     full = t["plans"]["full"]
-    best = V.solve(p, 25 * KNOT, 50, p.plans[0], 0.0).speed / KNOT
+    best = V.solve(V.hand_sailed(p), 25 * KNOT, 50, p.plans[0], 0.0).speed / KNOT
     over = [k for k, o in enumerate(full["overpowered"][i][j]) if o]
     assert over, "full sail at 25 kn, 50 deg is overpowered when sheeted hard"
     for k in over:

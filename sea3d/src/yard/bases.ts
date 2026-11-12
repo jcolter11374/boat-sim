@@ -25,11 +25,11 @@ export const BASE_LONG: Record<BaseKey, string> = {
 };
 
 export const RANDOLPH_CREDIT = {
-  text: "Randolph boat: parts, prices and design from the Randolph team's drone-boat (MIT licence, see THIRD_PARTY_NOTICES). Our model of it, not their own simulator.",
+  text: "Randolph boat: parts and design from the Randolph team's drone-boat (MIT licence, see THIRD_PARTY_NOTICES). Our model of it, not their own simulator.",
   url: "https://github.com/sheltonr2/drone-boat",
 };
 
-type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" | "boxes" | "beacon" | "thr" | "est" | "url" | "d">>;
+type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" | "boxes" | "beacon" | "thr" | "est" | "url" | "d" | "more">>;
 
 /**
  * Per option: cost (USD), kg (relative to Rev C as built), and what it adds.
@@ -37,9 +37,10 @@ type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" |
  */
 const FIGURES: Record<string, Record<string, Figures>> = {
   drive: {
-    wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a 30 x 22 mm carbon spar (Rev C3: stronger, bearings 130 mm apart; Rev C4: acetal ball bearings with glass balls, which can't rust, and plain lands that take a wave's load), balanced by a weight on a solid fibreglass arm. Rev C5: shorter and wider, 0.80 m tall by 0.375 m across, with the same area: it heels the boat less." },
+    wing: { cost: 155, kg: 0, thr: 0, d: "A rigid wing with a tail flap that turns itself to the wind.",
+      more: "Foam ribs and glass skin on a 30 x 22 mm carbon spar, balanced by a weight on a solid fibreglass arm. Rev C3: a stronger spar, bearings 130 mm apart. Rev C4: ball bearings that can't rust. Rev C5: shorter and wider (0.80 m tall, 0.375 m across) with the same area, so it heels the boat less." },
     // Their design.py has a 35 W thruster; no price in the build plan. GUESS: one of our T200s.
-    "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Price and weight are our guess." },
+    "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Weight is our guess." },
   },
   brain: {
     // The autopilot, GPS and companion computer are in the rest of the boat; this is the sealed box.
@@ -48,16 +49,21 @@ const FIGURES: Record<string, Record<string, Figures>> = {
     "two-box": { cost: 40 + 83, kg: 0.4, wh: 32, boxes: 2, est: 1, d: "A second, separate safe-mode box, like ours. Our guess for their boat." },
   },
   rudder: {
-    twin: { cost: 186, kg: 0, d: "Two spade rudders, each with its own servo: either one can steer alone. Rev C3: a spring servo-saver on each and stops at ±40°, so a wave can push a blade over without breaking its servo." },
+    twin: {
+      cost: 186,
+      kg: 0,
+      d: "Two spade rudders, each with its own servo: either one can steer alone.",
+      more: "Rev C3: a spring servo-saver on each and stops at ±40°, so a wave can push a blade over without breaking its servo.",
+    },
     single: { cost: 93, kg: -0.5, d: "One rudder and one servo, as on Rev B." },
   },
   rsol: {
     "deck-40w": { cost: 80, kg: 0, wp: 40, d: "Two 20 W semi-flexible ETFE panels on the deck." },
-    "deck-60w": { cost: 120, kg: 0.4, wp: 60, est: 1, d: "About 60 W: as much as fits the narrow deck. Our guess." },
+    "deck-60w": { cost: 120, kg: 0.4, wp: 60, est: 1, d: "About 60 W: as much as fits the narrow deck. Our estimate." },
   },
   rbat: {
     "lfp-192wh": { cost: 150, kg: 0, bat: 192, d: "Bioenno 12 V 15 Ah LiFePO4, in its own sealed box." },
-    "lfp-384wh": { cost: 300, kg: 1.9, bat: 384, est: 1, d: "Two of the same packs. Our guess." },
+    "lfp-384wh": { cost: 300, kg: 1.9, bat: 384, est: 1, d: "Two of the same packs. Our estimate." },
   },
   keel: {
     "bulb-9kg": { cost: 67, kg: 0, d: "About 9 kg of lead cast into the keel bulb (Rev C, design D72), on a hardwood-cored fin set in a keel box (Rev C2: about ten times stronger). Makes it right itself from upside down." },

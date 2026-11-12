@@ -6,6 +6,7 @@
 // The simple surface follower (standin.ts) is kept as a fallback.
 
 import * as THREE from "three";
+import { detailFor } from "./seaDetail";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
@@ -166,6 +167,7 @@ function setQuality(l: Look): void {
   const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
+  sea.setDetail(detailFor(l));
   buildBoats(q);
   // Low on software graphics (no graphics card) draws at half resolution to keep moving.
   const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;

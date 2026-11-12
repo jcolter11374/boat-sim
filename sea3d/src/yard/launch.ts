@@ -31,6 +31,9 @@ export interface LaunchResult {
   note: string;
   odds: LaunchOdds | null;
   replays: LaunchReplay[];
+  /** A second, smaller result shown folded away under the main one (the browser's own
+   *  six-launch run, when the server grid has the figure to trust; Omar's sweep). */
+  detail?: { summary: string; text: string };
   /** Data attribution to show with the results (the sandbox redistributes modified data). */
   credits?: { text: string; url: string };
   /** Sandbox runs, one per launch, in Theo's reference fingerprint shape (Ravi's exact-match gate). */
@@ -48,6 +51,8 @@ export interface GridBuild {
   id: string;
   boat: string;
   label: string;
+  /** The longer note behind a name; Randolph's builds start "Our model of" (catalog.CHANGE_NAMES). */
+  note?: string;
   options: Record<string, string | number>; // catalog slot -> option id, plus cruise_w
   current?: boolean;
   odds: LaunchOdds | null;
@@ -59,6 +64,10 @@ interface GridIndex {
   /** Which launches the odds come from (boatsim.mc.boatyard). */
   odds_source?: { years?: [number, number]; months?: number[] };
 }
+
+/** A grid build's name as read in a sentence: Randolph's builds keep "(our model)" in words (Maya, #380). */
+export const gridName = (b: Pick<GridBuild, "label" | "note">): string =>
+  /^our model of /i.test(b.note ?? "") ? `${b.label} (our model)` : b.label;
 
 /** How far a grid build is from a design: [modelled slots that differ, cruise watts apart] (as boatsim.sandbox.catalog.nearest). */
 export function gridDistance(b: GridBuild, cat: Catalog, d: Design): [number, number] {
@@ -129,7 +138,7 @@ export class GridLauncher implements Launcher {
     if (!n) return null;
     return {
       exact: n.exact,
-      note: n.exact ? `Simulated as built: ${n.build.label}.` : `Closest simulated build: ${n.build.label}.`,
+      note: n.exact ? `Simulated: ${gridName(n.build)}.` : `Closest build we've simulated: ${gridName(n.build)}.`,
       odds: n.build.odds,
       replays: n.build.replays.map((r) => ({ url: `${this.base}/${r.file}`, start: r.start, outcome: r.outcome, days: r.days })),
     };
@@ -326,10 +335,24 @@ export class SandboxLauncher implements Launcher {
       }));
     return {
       exact: meta.exact,
-      note:
-        `Sandbox (${meta.note}): ${finished} of ${runs.length} voyages finished, run here in your browser. ` +
-        "Browser runs can end differently from the same build run on our servers; the odds shown come from the server grid" +
-        (grid?.odds ? (meta.exact ? " (this exact build)." : ` (the closest build we've run: ${grid.label}).`) : ", which hasn't run this build yet."),
+      // One result to trust (Omar, Maya): with the server grid's figure, that's the
+      // headline and the browser's six launches fold away under it; without it, the
+      // browser run is all there is, so it's the note.
+      ...(grid?.odds
+        ? {
+            note: meta.exact
+              ? "Tested on our computers, this exact build."
+              : `Tested on our computers, the closest build we've tested: ${gridName(grid)}.`,
+            detail: {
+              summary: `Your quick test (${runs.length} launches)`,
+              text: `${finished} of ${runs.length} made it, in 2020's weather. Six launches are too few to judge by, so go by the figure above.`,
+            },
+          }
+        : {
+            note:
+              `Your quick test: ${finished} of ${runs.length} launches made it, in 2020's weather. ` +
+              "We haven't tested this build on our computers yet, so treat it as a rough guide.",
+          }),
       credits: SANDBOX_CREDITS,
       odds: grid?.odds ?? null,
       replays,

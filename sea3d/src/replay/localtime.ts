@@ -60,3 +60,10 @@ export function localTime(ms: number, lat: number, lon: number, seconds = false)
   const ss = seconds ? ":" + String(d.getUTCSeconds()).padStart(2, "0") : "";
   return `${h}:${mm}${ss} ${ampm} local (UTC${z.offset === 0 ? "" : sign(z.offset)}, ${z.name})`;
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "3 Apr 19:00": the boat's local date and time, short enough for an instrument (the helm's strip). */
+export function shortLocal(ms: number, lat: number, lon: number): string {
+  const d = new Date(ms + zoneAt(lat, lon, ms).offset * 3600e3);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}

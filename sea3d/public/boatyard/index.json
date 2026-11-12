@@ -212,7 +212,7 @@
   {
    "id": "k-p10",
    "boat": "v4 kayak",
-   "label": "Our kayak, 10 W cruise",
+   "label": "Our kayak, motors turned down (10 W)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -295,7 +295,7 @@
   {
    "id": "k-p15",
    "boat": "v4 kayak",
-   "label": "Our kayak, 15 W cruise",
+   "label": "Our kayak, motors turned down (15 W)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -378,7 +378,7 @@
   {
    "id": "k-p20",
    "boat": "v4 kayak",
-   "label": "Our kayak, 20 W cruise",
+   "label": "Our kayak, motors turned down (20 W)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -460,7 +460,7 @@
   {
    "id": "k-p30",
    "boat": "v4 kayak",
-   "label": "Our kayak, 30 W cruise",
+   "label": "Our kayak, motors turned up (30 W)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -541,7 +541,7 @@
   {
    "id": "k-p25-thr.one-t200",
    "boat": "v4 kayak",
-   "label": "Our kayak, Thrusters: one-t200",
+   "label": "Our kayak, one motor",
    "options": {
     "thr": "one-t200",
     "sol": "solar-250",
@@ -624,7 +624,7 @@
   {
    "id": "k-p25-sol.solar-200",
    "boat": "v4 kayak",
-   "label": "Our kayak, Solar panels: solar-200",
+   "label": "Our kayak, smaller panels",
    "options": {
     "thr": "two-t200",
     "sol": "solar-200",
@@ -707,7 +707,7 @@
   {
    "id": "k-p25-sol.solar-300",
    "boat": "v4 kayak",
-   "label": "Our kayak, Solar panels: solar-300",
+   "label": "Our kayak, bigger panels",
    "options": {
     "thr": "two-t200",
     "sol": "solar-300",
@@ -789,7 +789,7 @@
   {
    "id": "k-p25-bat.one-50ah",
    "boat": "v4 kayak",
-   "label": "Our kayak, Batteries: one-50ah",
+   "label": "Our kayak, one battery",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -872,7 +872,7 @@
   {
    "id": "k-p25-bat.two-100ah",
    "boat": "v4 kayak",
-   "label": "Our kayak, Batteries: two-100ah",
+   "label": "Our kayak, bigger batteries",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -953,7 +953,7 @@
   {
    "id": "k-p25-brain.one-box",
    "boat": "v4 kayak",
-   "label": "Our kayak, Autopilot: one-box",
+   "label": "Our kayak, no backup autopilot",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1035,7 +1035,7 @@
   {
    "id": "k-p25-beacon.none",
    "boat": "v4 kayak",
-   "label": "Our kayak, Backup beacon: none",
+   "label": "Our kayak, no backup beacon",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1116,7 +1116,7 @@
   {
    "id": "k-p25-ais.none",
    "boat": "v4 kayak",
-   "label": "Our kayak, AIS: none",
+   "label": "Our kayak, hidden from ships (no AIS)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1197,7 +1197,7 @@
   {
    "id": "k-p25-paint.none",
    "boat": "v4 kayak",
-   "label": "Our kayak, Antifouling paint: none",
+   "label": "Our kayak, no bottom paint",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1278,7 +1278,7 @@
   {
    "id": "k-p25-lead.lead-40",
    "boat": "v4 kayak",
-   "label": "Our kayak, Keel bulb: lead-40",
+   "label": "Our kayak, lighter keel (40 kg)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1359,7 +1359,7 @@
   {
    "id": "k-p25-drive.hybrid",
    "boat": "v4 kayak",
-   "label": "Our kayak, Drive: hybrid",
+   "label": "Our kayak + wing sail and motors",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1440,7 +1440,7 @@
   {
    "id": "k-p0-drive.wing-sail",
    "boat": "v4 kayak",
-   "label": "Our kayak, sail only, Drive: wing-sail",
+   "label": "Our kayak, wing sail only (no motors)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1524,7 +1524,7 @@
   {
    "id": "k-p25-material.fibreglass",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull material: fibreglass",
+   "label": "Our kayak, fibreglass hull",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1605,7 +1605,7 @@
   {
    "id": "k-p25-material.carbon",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull material: carbon",
+   "label": "Our kayak, carbon hull",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1687,7 +1687,7 @@
   {
    "id": "k-p25-material.plywood-epoxy",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull material: plywood-epoxy",
+   "label": "Our kayak, plywood hull",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1769,7 +1769,7 @@
   {
    "id": "k-p25-material.aluminium",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull material: aluminium",
+   "label": "Our kayak, aluminium hull",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1850,7 +1850,7 @@
   {
    "id": "k-p25-shape.cat",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull shape: cat",
+   "label": "Catamaran version",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1933,7 +1933,7 @@
   {
    "id": "k-p25-shape.semisub",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull shape: semisub",
+   "label": "Semi-submerged version",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -2015,7 +2015,7 @@
   {
    "id": "k-p25-shape.board",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull shape: board",
+   "label": "Surfboard version",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -2097,7 +2097,7 @@
   {
    "id": "k-p25-brain.one-box-beacon.none",
    "boat": "v4 kayak",
-   "label": "Our kayak, Autopilot: one-box, Backup beacon: none",
+   "label": "Our kayak, no backup autopilot or beacon",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -2178,7 +2178,7 @@
   {
    "id": "k-p25-sol.solar-300-bat.two-100ah",
    "boat": "v4 kayak",
-   "label": "Our kayak, Solar panels: solar-300, Batteries: two-100ah",
+   "label": "Our kayak, bigger panels and batteries",
    "options": {
     "thr": "two-t200",
     "sol": "solar-300",
@@ -2259,7 +2259,7 @@
   {
    "id": "k-p30-sol.solar-300-bat.two-100ah",
    "boat": "v4 kayak",
-   "label": "Our kayak, 30 W cruise, Solar panels: solar-300, Batteries: two-100ah",
+   "label": "Our kayak, bigger panels and batteries, motors turned up",
    "options": {
     "thr": "two-t200",
     "sol": "solar-300",
@@ -2341,7 +2341,7 @@
   {
    "id": "revc",
    "boat": "Randolph Rev C",
-   "label": "Randolph's Rev C as built (our model)",
+   "label": "Randolph Rev C5, as built",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2416,12 +2416,13 @@
      "outcome": "aground",
      "days": 1.17
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's Rev C5, from their published design."
   },
   {
    "id": "revc-drive.wing-thruster",
    "boat": "Randolph Rev C",
-   "label": "Randolph's Rev C (our model), Drive: wing-thruster",
+   "label": "Randolph Rev C5 + small motor",
    "options": {
     "base": "revc",
     "drive": "wing-thruster",
@@ -2494,12 +2495,13 @@
      "outcome": "aground",
      "days": 1.36
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's Rev C5, from their published design."
   },
   {
    "id": "revc-brain.two-box",
    "boat": "Randolph Rev C",
-   "label": "Randolph's Rev C (our model), Electronics boxes: two-box",
+   "label": "Randolph Rev C5 + backup autopilot",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2574,12 +2576,13 @@
      "outcome": "aground",
      "days": 1.17
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's Rev C5, from their published design."
   },
   {
    "id": "revc-rudder.single",
    "boat": "Randolph Rev C",
-   "label": "Randolph's Rev C (our model), Rudder: single",
+   "label": "Randolph Rev C5, one rudder",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2654,12 +2657,13 @@
      "outcome": "aground",
      "days": 1.1
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's Rev C5, from their published design."
   },
   {
    "id": "revc-rsol.deck-60w-rbat.lfp-384wh",
    "boat": "Randolph Rev C",
-   "label": "Randolph's Rev C (our model), Solar panels: deck-60w, Battery: lfp-384wh",
+   "label": "Randolph Rev C5, bigger panels and battery",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2733,12 +2737,13 @@
      "outcome": "aground",
      "days": 1.04
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's Rev C5, from their published design."
   },
   {
    "id": "revc-tracker.none",
    "boat": "Randolph Rev C",
-   "label": "Randolph's Rev C (our model), Backup tracker: none",
+   "label": "Randolph Rev C5, no backup tracker",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2813,12 +2818,13 @@
      "outcome": "aground",
      "days": 1.17
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's Rev C5, from their published design."
   },
   {
    "id": "revb",
    "boat": "Randolph Rev B",
-   "label": "Randolph's Rev B as built (our model)",
+   "label": "Randolph Rev B, as built",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -2891,12 +2897,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
   },
   {
    "id": "revb-drive.wing-thruster",
    "boat": "Randolph Rev B",
-   "label": "Randolph's Rev B (our model), Drive: wing-thruster",
+   "label": "Randolph Rev B + small motor",
    "options": {
     "base": "revb",
     "drive": "wing-thruster",
@@ -2969,12 +2976,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
   },
   {
    "id": "revb-brain.two-box",
    "boat": "Randolph Rev B",
-   "label": "Randolph's Rev B (our model), Electronics boxes: two-box",
+   "label": "Randolph Rev B + backup autopilot",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3048,12 +3056,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
   },
   {
    "id": "revb-rudder.twin",
    "boat": "Randolph Rev B",
-   "label": "Randolph's Rev B (our model), Rudder: twin",
+   "label": "Randolph Rev B, two rudders",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3127,12 +3136,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
   },
   {
    "id": "revb-rsol.deck-60w-rbat.lfp-384wh",
    "boat": "Randolph Rev B",
-   "label": "Randolph's Rev B (our model), Solar panels: deck-60w, Battery: lfp-384wh",
+   "label": "Randolph Rev B, bigger panels and battery",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3205,12 +3215,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
   },
   {
    "id": "revb-tracker.none",
    "boat": "Randolph Rev B",
-   "label": "Randolph's Rev B (our model), Backup tracker: none",
+   "label": "Randolph Rev B, no backup tracker",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3285,12 +3296,13 @@
      "outcome": "lost",
      "days": 138.48
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
   },
   {
    "id": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none",
    "boat": "v4 kayak",
-   "label": "Our kayak, 15 W cruise, Thrusters: one-t200, Solar panels: solar-200, Batteries: one-50ah, Solar charge controllers: one-mppt, Autopilot: one-box, Backup beacon: none, AIS: none, Antifouling paint: none",
+   "label": "Our kayak, bare-bones build",
    "options": {
     "thr": "one-t200",
     "sol": "solar-200",
@@ -3368,12 +3380,13 @@
      "outcome": "arrived",
      "days": 74.06
     }
-   ]
+   ],
+   "note": "Every cheaper part at once: one motor, 200 W of panels, one battery, one charge controller, no backup autopilot, beacon or AIS, no bottom paint, motors at 15 W."
   },
   {
    "id": "k-p25-shape.cat-over20",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull shape: cat (if 20% of rolls leave it upside down, not 50 %)",
+   "label": "Catamaran version, best case",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -3452,12 +3465,13 @@
      "outcome": "arrived",
      "days": 65.84
     }
-   ]
+   ],
+   "note": "If only 1 in 5 capsizes leaves it upside down for good. We don't know the real figure; 1 in 2 is our middle guess."
   },
   {
    "id": "k-p25-shape.cat-over80",
    "boat": "v4 kayak",
-   "label": "Our kayak, Hull shape: cat (if 80% of rolls leave it upside down, not 50 %)",
+   "label": "Catamaran version, worst case",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -3535,12 +3549,13 @@
      "outcome": "arrived",
      "days": 65.84
     }
-   ]
+   ],
+   "note": "If 4 in 5 capsizes leave it upside down for good. We don't know the real figure; 1 in 2 is our middle guess."
   },
   {
    "id": "revb-spar",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B with a stronger wing spar (our GUESS: a tenth of the wing damage)",
+   "label": "Randolph Rev B, stronger wing spar",
    "options": {
     "wing": "stronger spar"
    },
@@ -3602,7 +3617,8 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ]
+   ],
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design. Our guess: a spar that takes a tenth of the damage."
   }
  ]
 }

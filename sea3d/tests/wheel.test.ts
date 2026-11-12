@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, type TrimTable } from "../src/helm/wheel.ts";
+import { CRUISER_HANDLING, Guide, Wheel, bestSheet, look, rollFromWheel, trimGauge, type TrimTable } from "../src/helm/wheel.ts";
 
 const T: TrimTable = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31_trim.json", import.meta.url), "utf8"));
 const POLAR = JSON.parse(readFileSync(new URL("../../configs/polars/cruiser31.json", import.meta.url), "utf8"));
@@ -153,4 +153,46 @@ test("with auto-trim on, the guide skips the trim step", () => {
     g.update(w, 1 / 30);
   }
   assert.equal(g.step, "reef");
+});
+
+test("she leans away from the wind: wind from port rolls her to starboard, and the other way", () => {
+  // Heading east with the wind from the north (on her port side): she leans to starboard (roll > 0).
+  const port = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 90, speedKn: 5 }, SPELL);
+  sail(port, 20);
+  assert.ok(port.s.heelDeg > 3, `she should heel in 12 kn on a reach (${port.s.heelDeg})`);
+  assert.ok(rollFromWheel(port.heelSigned()) > 0, "wind from port: roll to starboard");
+  // Heading west, the same wind is on her starboard side: she leans to port.
+  const stbd = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 270, speedKn: 5 }, SPELL);
+  sail(stbd, 20);
+  assert.ok(rollFromWheel(stbd.heelSigned()) < 0, "wind from starboard: roll to port");
+});
+
+test("pointing straight into the wind the sail says so, never 'Drawing well'", () => {
+  const w = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 5 }, SPELL);
+  assert.equal(w.sailState(), "irons");
+});
+
+test("the sail gauge is a level: the needle is inside the green exactly when the sail is drawing well", () => {
+  assert.equal(trimGauge(20, 15, 25).needle, 50);
+  for (const sheet of [14.5, 15, 25, 25.5]) {
+    const n = trimGauge(sheet, 15, 25).needle;
+    assert.ok(n >= 42 && n <= 58, `${sheet}: well inside the band (${n})`);
+  }
+  assert.ok(trimGauge(14, 15, 25).needle < 40, "pulled in too far: left of the band");
+  assert.ok(trimGauge(26, 15, 25).needle > 60, "let out too far: right of the band");
+  assert.equal(trimGauge(-90, 15, 25).needle, 0);
+  assert.equal(trimGauge(200, 15, 25).needle, 100);
+  assert.equal(trimGauge(12, 12, 12).needle, 50, "a band of one angle");
+});
+
+test("the sails luff when let out too far or head to wind, and not when drawing well", () => {
+  const w = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 90, speedKn: 5 }, SPELL);
+  w.s.sheet = w.best().sheet;
+  assert.equal(w.luffTarget(), 0, "trimmed: no luff");
+  w.s.sheet = w.awa() - 1; // eased until the sail is nearly edge-on
+  assert.ok(w.luffTarget() > 0.6, `flapping: ${w.luffTarget()}`);
+  const irons = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 5, speedKn: 0 }, SPELL);
+  assert.equal(irons.luffTarget(), 1, "head to wind: flogging");
+  sail(w, 3);
+  assert.ok(w.s.luff > 0.3, "the eased value follows");
 });
