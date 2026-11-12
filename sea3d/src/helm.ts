@@ -1138,6 +1138,7 @@ const depthsReady = BayDepths.create().then((d) => {
 });
 const buoys = new Buoys();
 scene.add(buoys.group);
+(window as unknown as { __buoys: Buoys }).__buoys = buoys; // for the proof frames and tests
 function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
   const ms = kn / 1.943844;
   const toward = ((fromDeg + 180) * Math.PI) / 180;
@@ -1164,6 +1165,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
     practiceAt = practiceHere = null;
     const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
     if (ok) {
+      buoys.set([wheel.wheel!.markXY()]); // the drill's mark is a real buoy too
       banner(`Practice ${practiceN}: ${k.kn} knots, ${k.name}.`);
     }
     return;
@@ -1405,6 +1407,11 @@ function banner(text: string): void {
 }
 
 // A small pointer to the next mark (Leo): over it when it's in view, at the screen's edge when it isn't.
+/** The in-view tag fades between these distances (m): the real-size buoy is easy to see by then. GUESS */
+const MARK_TAG_FADE_M = 200;
+const MARK_TAG_GONE_M = 70;
+/** Beyond this (m) the in-view tag stays orange: the buoy is too small to see there. GUESS (Leo) */
+const MARK_TAG_FAR_M = 300;
 const markV = new THREE.Vector3();
 function markPointer(): void {
   const el = $("markptr");
@@ -1428,6 +1435,11 @@ function markPointer(): void {
   el.hidden = false;
   el.dataset.edge = inView ? "" : x < -0.85 ? "left" : x > 0.85 ? "right" : y < 0 ? "down" : "up";
   const d = w.distToMark();
+  // Over the buoy it's a quiet tag that fades once the buoy is plain to see (Elena, 12 Nov);
+  // at the edge it stays a bold orange arrow, as that's the only way to find the mark.
+  // Far off the buoy is a speck: keep the mark's orange so it reads as the mark (Leo); quiet once the buoy shows.
+  el.toggleAttribute("data-far", inView && d > MARK_TAG_FAR_M);
+  el.style.opacity = inView ? String(THREE.MathUtils.clamp((d - MARK_TAG_GONE_M) / (MARK_TAG_FADE_M - MARK_TAG_GONE_M), 0, 1)) : "1";
   el.textContent = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
   el.style.left = `${((x + 1) / 2) * innerWidth}px`;
   el.style.top = `${((1 - y) / 2) * innerHeight}px`;
@@ -2542,7 +2554,7 @@ renderer.setAnimationLoop(() => {
   // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
   const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
-  if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0);
+  if (PRACTICE && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
