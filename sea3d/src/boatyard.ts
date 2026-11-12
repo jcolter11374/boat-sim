@@ -233,7 +233,13 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   d.className = "d";
   d.textContent = o.d;
   // The longer story stays one hover away (Milo: the Rev C5 wing was a 9-line history).
-  if (o.more) d.append(" ", Object.assign(document.createElement("span"), { className: "info", textContent: "i", title: o.more }));
+  // The "i" sits inside the option's button, so it can't take focus itself: the same words go in
+  // hidden text that screen readers read with the button (Lena), and the "i" is for hover.
+  if (o.more) {
+    const i = Object.assign(document.createElement("span"), { className: "info", textContent: "i", title: o.more });
+    i.setAttribute("aria-hidden", "true");
+    d.append(" ", i, Object.assign(document.createElement("span"), { className: "sr", textContent: ` ${o.more}` }));
+  }
   b.append(top, d);
   b.addEventListener("click", () => choose(slot.id, o.id));
   return b;
