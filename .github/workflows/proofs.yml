@@ -158,6 +158,8 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      # At most 2 shards at once (Maya, 12 Nov): a wider render starved the main deploys.
+      max-parallel: 2
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
