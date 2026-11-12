@@ -29,7 +29,7 @@ export const RANDOLPH_CREDIT = {
   url: "https://github.com/sheltonr2/drone-boat",
 };
 
-type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" | "boxes" | "beacon" | "thr" | "est" | "url" | "d">>;
+type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" | "boxes" | "beacon" | "thr" | "est" | "url" | "d" | "more">>;
 
 /**
  * Per option: cost (USD), kg (relative to Rev C as built), and what it adds.
@@ -37,7 +37,8 @@ type Figures = Partial<Pick<CatalogOption, "cost" | "kg" | "wh" | "wp" | "bat" |
  */
 const FIGURES: Record<string, Record<string, Figures>> = {
   drive: {
-    wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a 30 x 22 mm carbon spar (Rev C3: stronger, bearings 130 mm apart; Rev C4: acetal ball bearings with glass balls, which can't rust, and plain lands that take a wave's load), balanced by a weight on a solid fibreglass arm. Rev C5: shorter and wider, 0.80 m tall by 0.375 m across, with the same area: it heels the boat less." },
+    wing: { cost: 155, kg: 0, thr: 0, d: "A rigid wing with a tail flap that turns itself to the wind.",
+      more: "Foam ribs and glass skin on a 30 x 22 mm carbon spar, balanced by a weight on a solid fibreglass arm. Rev C3: a stronger spar, bearings 130 mm apart. Rev C4: ball bearings that can't rust. Rev C5: shorter and wider (0.80 m tall, 0.375 m across) with the same area, so it heels the boat less." },
     // Their design.py has a 35 W thruster; no price in the build plan. GUESS: one of our T200s.
     "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Weight is our guess." },
   },
