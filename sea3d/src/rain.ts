@@ -124,7 +124,7 @@ export class Rain {
     // In a gale they fly nearly flat; in light air they barely lean.
     const k = 0.4 + 0.3 * THREE.MathUtils.smoothstep(Math.hypot(windX, windZ), 8, 20);
     u.uWind.value.set(windX * k, windZ * k);
-    u.uAmount.value = 0.9 * Math.sqrt(amount); // drizzle is faint, a downpour a texture but never a wall
+    u.uAmount.value = 0.9 * Math.sqrt(amount) * (1 + 0.7 * THREE.MathUtils.smoothstep(amount, 0.6, 1)); // drizzle faint, a downpour a dense texture, never a wall
     u.uLen.value = 0.16 + 0.24 * amount; // short streaks; heavier drops a little longer
     // A little darker than the pale storm sky, so the streaks read against it as well as against the sea.
     u.uColor.value.setRGB(0.3 + 0.32 * light, 0.33 + 0.34 * light, 0.38 + 0.36 * light);
