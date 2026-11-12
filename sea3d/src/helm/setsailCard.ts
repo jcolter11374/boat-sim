@@ -13,6 +13,13 @@ import { onMyBoatChange, type MyBoat } from "../myboat";
 export const CARD_WORDS = {
   where: { ocean: ["Across the Atlantic to Portugal", "5,256 km"], annapolis: ["Annapolis practice course", "about 10 min"] },
   when: { calm: ["Calm", "23 Apr 2020"], rough: ["Rough", "1 Apr 2020"] },
+  /** Annapolis (M1 piece 3, Leo): one plain line for the picked course, and the wind as the strip says it. */
+  course: {
+    triangle: "Three marks 800 m apart: into the wind, across, and back (about 15 min).",
+    light: "About 7 km down the Bay, finishing east of the lighthouse.",
+    drill: "Short spells: a reach, a beat and a run.",
+  } as Record<string, string>,
+  wind: { light: ["Light", "8 kn"], good: ["Steady", "12 kn"], fresh: ["Strong", "18 kn"] } as Record<string, readonly [string, string]>,
 } as const;
 
 /** One plain line per challenge for the card (Ines, Leo's rules): what the weather does, no
@@ -44,6 +51,8 @@ export interface CardHooks {
   challengesReady: Promise<unknown>;
   /** Put the boat this choice sails on the water behind the card. */
   preview?: (where: SetSail["where"]) => void;
+  /** Your best time on a course in a wind ("14:32"), or null before a first finish. */
+  best?: (course: string, breeze: string) => string | null;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -99,7 +108,9 @@ export function mountSetSailCard(hooks: CardHooks): void {
       course = k;
       draw();
     });
-    pills($("ss-breeze-opts"), SET_SAIL.breeze.map((o) => ({ key: o.key, label: o.label, sub: o.sub })), breeze, (k) => {
+    const best = hooks.best?.(course, breeze);
+    $("ss-course-line").textContent = `${CARD_WORDS.course[course] ?? ""}${best ? ` Your best: ${best}.` : ""}`;
+    pills($("ss-breeze-opts"), SET_SAIL.breeze.map((o) => ({ key: o.key, label: CARD_WORDS.wind[o.key]?.[0] ?? o.label, sub: CARD_WORDS.wind[o.key]?.[1] ?? o.sub })), breeze, (k) => {
       breeze = k;
       draw();
     });

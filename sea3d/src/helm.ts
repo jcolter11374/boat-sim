@@ -1487,7 +1487,7 @@ function practiceEnded(r: WheelResult): void {
   $("practice-sum").textContent = text;
   if (c) practiceCard();
   // The course and breeze are picked on the Set sail card now (M1 piece 3), so the end card only
-  // offers the same course again or the card ("Another course"); a drill offers "Sail another".
+  // offers the same course again or the card ("Another course"); a drill offers "Another course" too.
   $("practice-courses").hidden = true;
   const retry = !card.classList.contains("trial") && (c?.kind === "triangle" || c?.kind === "light");
   if (retry) {
@@ -1512,8 +1512,8 @@ function showResult(kind: "triangle" | "light", secs: number, before: number | n
   box.querySelector(".result-time")!.textContent = `${trialClock(secs)} · ${vs}`;
   const up: Medal | null = medal === "gold" ? null : medal === "silver" ? "gold" : medal === "bronze" ? "silver" : "bronze";
   box.querySelector(".result-next")!.textContent = up ? `${MEDAL_WORDS[up]}: under ${trialClock(medalTime(up, kind, practiceBreeze))}` : secs < ROBOT_SECS[kind][practiceBreeze] ? `Faster than the autopilot (${trialClock(ROBOT_SECS[kind][practiceBreeze])})` : `The autopilot: ${trialClock(ROBOT_SECS[kind][practiceBreeze])}. Beat it?`;
-  // The first run has no ghost to race yet (Leo): "Try again"; after that, "Race your best".
-  $("practice-ghost").textContent = before == null ? "Try again" : "Race your best";
+  // The first run has no ghost to race yet (Leo): "Try again"; after that, "Race your best run".
+  $("practice-ghost").textContent = before == null ? "Try again" : "Race your best run";
   box.hidden = false;
   $("practice-end").classList.add("trial");
   $("practice-end").querySelector("h1")!.textContent = `${kind === "triangle" ? "The triangle" : "Thomas Point Light"} · ${BREEZES[practiceBreeze].kn} knots`;
@@ -1543,7 +1543,7 @@ if (PRACTICE) {
   // unless a link already chose (?go=1 with a course).
   $("start").hidden = params.get("go") === "1" && !!SS.course;
   useBoat("stock_cruiser31");
-  // "Sail another" and "Another course" go back to the card; "Race your best" sails the same course again.
+  // Both "Another course" buttons go back to the card; "Race your best run" sails the same course again.
   $("practice-again").addEventListener("click", practiceToCard);
   $("practice-ghost").addEventListener("click", () => void (lastTrial && practiceSpell(lastTrial)));
   $("practice-other").addEventListener("click", practiceToCard);
@@ -3156,6 +3156,13 @@ function hideStandIn(): void {
   if (wake) wake.points.visible = show;
   if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
 }
+/** On a phone, the band of sea above the Set sail card: from the bar's foot to the card's top (px). */
+function phoneBand(): { top: number; bottom: number } {
+  const top = document.getElementById("topbar")?.getBoundingClientRect().bottom ?? 40;
+  const card = document.getElementById("ss-card");
+  const bottom = card && card.offsetParent ? card.getBoundingClientRect().top : window.innerHeight * 0.45;
+  return { top, bottom };
+}
 function frameBoat(dt: number): void {
   hideStandIn();
   const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
@@ -3189,11 +3196,15 @@ function frameBoat(dt: number): void {
   // Behind the Set sail card (Elena, Ines): her boat in the right two thirds beside the card, clear
   // of its glass; on a phone, where the card fills the width at the bottom, in the band under the bar.
   if (!page.ready && !$("start").hidden) {
-    here0.set(0, 0, 0).project(camera); // includes the lens's current slide, so this settles on the target
+    // Her waterline, where she is: the world's middle on the crossing, off Annapolis on a practice page.
+    here0.set(controls.target.x, 0, controls.target.z).project(camera); // includes the lens's current slide, so this settles on the target
     const phone = window.innerWidth < 700;
     tx = THREE.MathUtils.clamp(third.x + (here0.x * 0.5 + 0.5 - (phone ? 0.5 : 0.68)), -0.4, 0.4);
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
-    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - (phone ? (spec.length > 5 ? 0.36 : 0.2) : 0.5)), -0.4, 0.4);
+    // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
+    const band = phoneBand();
+    const at = !phone ? 0.5 : spec.length > 5 ? (band.bottom - 0.3 * (band.bottom - band.top)) / window.innerHeight : 0.2;
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
@@ -3574,14 +3585,24 @@ const previewBoat = (where: SetSail["where"]) => {
   const first = !previewed;
   previewed = key;
   useBoat(key);
-  if (first) return; // the page's own opening view
+  // The page's own opening view, except a practice page: it opens on the cruiser, who needs the
+  // same step back as when she's picked, or the camera sits under her sails (Rosa's frame 1).
+  if (first && key !== "stock_cruiser31") return;
   // Far enough back to see all of her, mast and sails included, beside the card.
   const off = camera.position.clone().sub(controls.target);
   // On a phone she sits in the band under the bar: further back again, so her masthead clears it.
-  const back = spec.length > 5 ? (window.innerWidth < 700 ? 6.5 : 4.5) : 2.8;
+  // The 6.5 is for the crossing card's band at 390x844 (328 px); a shorter band steps back further.
+  const band = phoneBand();
+  const back = spec.length > 5 ? (window.innerWidth < 700 ? 6.5 * Math.max(1, 328 / Math.max(120, band.bottom - band.top)) : 4.5) : 2.8;
   camera.position.copy(controls.target).add(off.setLength(spec.length * back));
 };
-if (!shared) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat });
+/** Your best time on a practice course in a wind, for the card ("Your best: 14:32"); null before a first finish. */
+const bestFor = (course: string, breeze: string): string | null => {
+  if (course !== "triangle" && course !== "light") return null;
+  const t = readBest(bestKey(course, breeze as Breeze));
+  return t == null ? null : trialClock(t);
+};
+if (!shared) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat, best: bestFor });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
 // the crossing must not begin() here, among the Bay's marks, so it reloads into a voyage page.
 if (!shared && PRACTICE)
