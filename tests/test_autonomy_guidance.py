@@ -273,3 +273,23 @@ def test_coming_back_near_land_starts_a_fresh_track_line_from_the_boat():
     ap.update(near, mission, near.t)
     assert not ap.pursuing and ap._origin == (38.2, -49.0)
     assert abs(ap.cross_track_m) < 1.0
+
+
+def test_a_late_route_does_not_send_the_boat_back_for_a_waypoint_it_has_passed():
+    """Base plans from a report and the route reaches the boat a day later, by
+    which time its first waypoint can be behind (2016-06-20 drone, days 11-13:
+    it beat west to fetch one). Already past it along the next leg: passed."""
+    o = (40.0, -58.0)
+    behind = destination(*o, 270.0, 60_000.0)  # planned from yesterday's report
+    nxt = destination(*o, 90.0, 300_000.0)
+    ap = WaypointAutopilot(acceptance_radius_m=5_000.0)
+    ap.update(Sensors(T0, *o, 90.0, 1.0), Mission([Waypoint(*nxt)]), T0)
+    late = Mission([Waypoint(*behind), Waypoint(*nxt)], version=1)
+    cmd = ap.update(Sensors(T0 + timedelta(days=1), *o, 90.0, 1.0), late, T0)
+    assert late.active_index == 1
+    assert 45.0 < cmd.heading < 135.0  # on east, not back west
+    # A first waypoint still ahead is kept.
+    ahead = destination(*o, 90.0, 60_000.0)
+    fresh = Mission([Waypoint(*ahead), Waypoint(*nxt)], version=2)
+    ap.update(Sensors(T0 + timedelta(days=2), *o, 90.0, 1.0), fresh, T0)
+    assert fresh.active_index == 0

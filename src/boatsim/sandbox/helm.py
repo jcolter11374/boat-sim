@@ -33,7 +33,12 @@ Fairness (design note, Maya's calls of 11 Nov 2026):
   same voyage for the same launch.
 * The ghost moves in step with the player's clock, so nothing it does is
   visible before the player gets there.
-* "Hands on" has no safe mode by default (`safe=True` turns it on). The
+* "Hands on" starts on "auto": the player's boat is sailed by the ghost's
+  own autopilot (safe mode and base route corrections included) until the
+  first other order, and "auto" hands it back. So a game with no orders is a
+  dead heat; before this the page's first order was "straight at the finish",
+  which beat the autopilot by about 11 days on its own (Leo, #327).
+* Once the player steers, "hands on" has no safe mode by default (`safe=True` turns it on). The
   hardware still cuts out at empty, as the vessel model does.
 * "Until something happens" always stops within `UNTIL_CAP_H` (3 game days).
 
@@ -45,6 +50,7 @@ Owner: Sam.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import math
 import zlib
@@ -86,6 +92,9 @@ SILENCE_WARN_TOTAL_D = 12  # GUESS: 3 days before the 15-in-total limit
 TRACK_STRIDE_H = 6.0
 UNTIL_CAP_H = 72.0  # "until something happens" stops by this at the latest (Maya, 11 Nov)
 MODES = ("hands_on", "base")
+TRIM_HOURS = 4.0  # a "Take the wheel" spell counts for one watch (Rosa, Theo, Sam: 11 Nov)
+TRIM_BELOW = 0.10  # GUESS (Theo): a clumsy spell costs at most this much below the autopilot
+AUTO = "auto"  # hands-on order: let the ghost's own autopilot sail the boat (#327)
 ORDER_EVERY = timedelta(hours=24)  # "Real base station": one order a day
 COMPASS_LEG_M = 2_000_000.0  # GUESS: a compass order is a waypoint this far along the bearing
 SAVE_VERSION = 1
@@ -219,6 +228,30 @@ def _iso(t: datetime) -> str:
     return t.isoformat(timespec="minutes")
 
 
+class Trimmed:
+    """The player's autopilot, plus how well the crew trims this watch.
+
+    Whoever steers (the player's helm or, on "auto", the ghost's own autopilot),
+    each Command carries trim_share while a "Take the wheel" spell's watch lasts,
+    and nothing at all otherwise, so with no spell the voyage is unchanged."""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.share: float | None = None
+        self.until: datetime | None = None
+
+    def update(self, sensors, mission, t: datetime):
+        cmd = self.inner.update(sensors, mission, t)
+        if self.share is not None and self.until is not None and t < self.until:
+            return replace(cmd, trim_share=self.share)
+        return cmd
+
+    def __getattr__(self, name):  # on_message_received and the like
+        if name == "inner" or name.startswith("__"):  # inner unset under copy; dunders stay ours
+            raise AttributeError(name)
+        return getattr(self.inner, name)
+
+
 def _no_breakdowns(c):
     c.vessel.hazards = replace(c.vessel.hazards, enabled=False, failures_enabled=False)
 
@@ -291,9 +324,19 @@ class Game:
             # design cruise power, as it would after the drop.
             self.helm.set_order("route", prop["cruise_drive_w"] / prop["max_drive_w"])
             mine.base = self.base = PlayerBase(self.start, *self.drop)
+            mine.autopilot = self.helm
         else:
-            mine.base = self.base = HoldCoursePolicy()  # no route corrections from base
-        mine.autopilot = self.helm
+            # Hands on starts on "auto": the player's boat runs the ghost's own
+            # autopilot and base route corrections until the first other order,
+            # so a game with no orders sails exactly the ghost's voyage (#327).
+            self.base = HoldCoursePolicy()  # no route corrections once the player steers
+            self._auto = (mine.autopilot, mine.base)
+            mine.autopilot = self._trim = Trimmed(mine.autopilot)
+        self.trim_gain_m = 0.0  # distance helm spells gained (or lost) through the water
+        self.watch_gain_m = 0.0  # the same, for the latest watch only
+        # The polar was built with this factor baked in (vessel/vpp.py); a spell's
+        # share is clamped to within TRIM_BELOW of it, up to the crew's best.
+        self.autopilot_factor = float(self.design.vpp.get("autopilot_factor", 1.0))
         ghost = standard_components(self.design, env, env, seed=self.seed, land=land)
         if not breakdowns:
             _no_breakdowns(mine)
@@ -339,11 +382,20 @@ class Game:
         power: float,
         sails: str | None = None,
         engine: bool | None = None,
+        trim: float | None = None,
     ) -> dict:
-        """heading: degrees, "finish" or "route"; power: 0 to 1 of full drive power.
+        """heading: degrees, "finish", "route" or "auto"; power: 0 to 1 of full
+        drive power. "auto" (hands on only, where every game starts) hands the
+        boat back to the ghost's own autopilot, power and all, so with no other
+        orders both boats sail the same voyage; power is then ignored.
         Sailboats only (`sailboat` in the status): sails, one of this boat's own
         sail plans (status "sailing"["plans"]), and engine True/False if it has
         one ("sailing"["has_engine"]); None lets the boat decide.
+
+        trim (hands on, sailboats only): the share of the boat's best speed the
+        player sailed at in a "Take the wheel" spell. For the next TRIM_HOURS the
+        boat sails at that share instead of its autopilot's (clamped to
+        [autopilot_factor - TRIM_BELOW, 1]). None leaves a running watch alone.
 
         Hands on: takes effect now. Real base station: sent now if a day has
         passed since the last order (else refused, "accepted": False), and it
@@ -352,6 +404,9 @@ class Game:
         t = v.state.t
         if (sails is not None or engine is not None) and not self.sailboat:
             raise ValueError("this boat has no sails or engine to order")
+        share = self._check_trim(trim)
+        if heading == AUTO:
+            return self._set_trim(self._order_auto(t, sails, engine), share, t)
         check = HelmAutopilot(self.finish, sail_plans=self.sail_plans, has_engine=self.has_engine)
         check.set_order(heading, power, sails, engine)  # same validation in both modes
         heading, power = check.heading, check.power
@@ -365,14 +420,137 @@ class Game:
             o["sails"], o["engine"] = sails, engine
         if self.mode == "hands_on":
             self.helm.set_order(heading, power, sails, engine)
+            self._trim.inner, v.c.base = self.helm, self.base
             o["accepted"] = True
             self.orders.append(o)
-            return o
+            return self._set_trim(o, share, t)
         last = self.orders[-1]["t"] if self.orders else None
         if last is not None and t - datetime.fromisoformat(last) < ORDER_EVERY:
             nxt = datetime.fromisoformat(last) + ORDER_EVERY
             return {**o, "accepted": False, "next_allowed": _iso(nxt)}
         o.update(self._send(heading, power, sails, engine))
+        self.orders.append(o)
+        return o
+
+    def preview(
+        self,
+        heading: float | str,
+        power: float,
+        sails: str | None = None,
+        engine: bool | None = None,
+        hours: float = 24.0,
+    ) -> dict:
+        """What an order would do, without doing it (#330): a copy of your boat
+        sails on with it for `hours` in today's forecast (the one base would get
+        now, as forecast() shows, never the true weather: the ghost only ever
+        sees forecasts, so the preview gives the player no peek it doesn't get),
+        and is thrown away. Issuing a forecast is pure (its errors come from the
+        seed and the issue time), so the game's own forecasts don't change.
+        Breakdowns and knockdowns are off in the copy, so the preview neither
+        spends nor shows the voyage's dice. Hands on only. Returns the copy's
+        mean speed through the water (m/s), battery change (0-1), km made
+        towards the finish, and the hours it actually sailed (shorter if it
+        finished, ran aground or reached the end of the weather)."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        if self.mode != "hands_on":
+            raise ValueError("a preview is for hands-on games")
+        if heading == AUTO and (sails is not None or engine is not None):
+            raise ValueError("on auto the autopilot sets the sails and engine")
+        v = self.mine
+        c = v.c
+        # Share what is read-only and big (the weather, the land); copy the rest.
+        memo = {id(x): x for x in (c.env, c.forecast, c.land) if x is not None}
+        w = copy.deepcopy(v, memo)
+        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
+        _no_breakdowns(w.c)
+        if heading == AUTO:
+            steer, base = copy.deepcopy(self._auto, memo)
+        else:
+            steer = copy.deepcopy(self.helm, memo)
+            steer.set_order(heading, power, sails, engine)
+            base = copy.deepcopy(self.base, memo)
+        # A wrapper round the steerer (a running trim, #350) stays, with the new steerer inside it.
+        if hasattr(w.c.autopilot, "inner"):
+            w.c.autopilot.inner = steer
+        else:
+            w.c.autopilot = steer
+        w.c.base = base
+        t0, soc0, km0 = w.state.t, w.state.soc, self._km_to_finish(w)
+        stw, n = 0.0, 0
+        end = t0 + timedelta(hours=hours)
+        try:
+            while not w.done and w.state.t < end:
+                w.step()
+                stw += w.state.speed_through_water
+                n += 1
+        except OutsideCoverage:  # the forecast ran past the end of the weather: a shorter preview
+            pass
+        return {
+            "hours": (w.state.t - t0).total_seconds() / 3600,
+            "stw": stw / n if n else 0.0,
+            "soc": float(w.state.soc - soc0),
+            "km": km0 - self._km_to_finish(w),
+            "outcome": self._outcome(w) if w.done else "at_sea",
+        }
+
+    @property
+    def on_auto(self) -> bool:
+        """True while the player's boat is sailed by the ghost's own autopilot."""
+        return self.mode == "hands_on" and self._trim.inner is self._auto[0]
+
+    def _check_trim(self, trim: float | None) -> float | None:
+        if trim is None:
+            return None
+        if self.mode != "hands_on":
+            raise ValueError("a helm spell's trim is a hands-on order")
+        if not self.sailboat:
+            raise ValueError("only a boat with sails takes a helm spell's trim")
+        trim = float(trim)
+        if not math.isfinite(trim):
+            raise ValueError("trim is a share of the boat's best speed, 0 to 1")
+        # Clamped here, not only on the page: a share link can carry anything.
+        return min(1.0, max(self.autopilot_factor - TRIM_BELOW, trim))
+
+    def _set_trim(self, o: dict, share: float | None, t: datetime) -> dict:
+        """Start a watch at `share` from `t` (an order that carries a spell's trim)."""
+        if share is not None:
+            self._trim.share, self._trim.until = share, t + timedelta(hours=TRIM_HOURS)
+            self.watch_gain_m = 0.0
+            o["trim"], o["trim_until"] = share, _iso(self._trim.until)
+        return o
+
+    def trim_status(self) -> dict | None:
+        """The running watch's trim, or None (no spell, or its watch is over)."""
+        tr = getattr(self, "_trim", None)
+        if tr is None or tr.share is None or self.mine.state.t >= tr.until:
+            return None
+        return {
+            "share": tr.share,
+            "until": _iso(tr.until),
+            "factor": self.autopilot_factor,
+            "gain_km": self.watch_gain_m / 1000.0,  # this watch so far
+        }
+
+    def _cruise(self) -> float:
+        prop = self.design.propulsion
+        return float(prop["cruise_drive_w"]) / float(prop["max_drive_w"])
+
+    def _order_auto(self, t: datetime, sails: str | None, engine: bool | None) -> dict:
+        """Hand the boat back to the autopilot (hands on only): the same
+        steering, power, safe mode and base route corrections as the ghost."""
+        if self.mode != "hands_on":
+            raise ValueError("auto is a hands-on order; from base, send the route instead")
+        if sails is not None or engine is not None:
+            raise ValueError("on auto the autopilot sets the sails and engine")
+        self._trim.inner, self.mine.c.base = self._auto
+        o = {
+            "t": _iso(t),
+            "min": round((t - self.start).total_seconds() / 60),
+            "heading": AUTO,
+            "power": self._cruise(),
+            "accepted": True,
+        }
         self.orders.append(o)
         return o
 
@@ -444,7 +622,16 @@ class Game:
         return v.log.outcome.value if v.done else "at_sea"
 
     def _step(self) -> None:
+        tr = self.trim_status()
         self._advance(self.mine)
+        if tr is not None and not getattr(self.mine.state, "engine_on", False):
+            # What the watch's trim was worth this step, through the water: sail
+            # speed is share / autopilot_factor of what the autopilot would make.
+            s = self.mine.state
+            ratio = 1.0 - self.autopilot_factor / tr["share"]
+            gain = s.speed_through_water * self.mine.dt.total_seconds() * ratio
+            self.trim_gain_m += gain
+            self.watch_gain_m += gain
         self._advance(self.ghost, self.mine.state.t)
         self.last_pass = self._update_leader()
         self.last_close = self._update_close()
@@ -634,14 +821,25 @@ class Game:
             "lead_km": self.lead_km(),
             "mode": self.mode,
             "show_true_position": True,
-            "order": {"heading": self.helm.heading, "power": self.helm.power},
-            "power_w": self.helm.power * self.max_drive_w,
+            "order": (
+                {"heading": AUTO, "power": self._cruise()}
+                if self.on_auto
+                else {"heading": self.helm.heading, "power": self.helm.power}
+            ),
+            "power_w": (self._cruise() if self.on_auto else self.helm.power) * self.max_drive_w,
             "sailboat": self.sailboat,
             "silence": self.silence(),
+            "trim": self.trim_status(),  # a helm spell's watch, or None
+            # Every watch so far (km through the water, + = gained): the page keeps
+            # showing the last watch's number after it ends by diffing this.
+            "trim_gain_km": getattr(self, "trim_gain_m", 0.0) / 1000.0,
         }
         if self.sailboat:
             st, tac = v.state, self.helm.tactician
-            out["order"].update(sails=self.helm.sails, engine=self.helm.engine)
+            if self.on_auto:
+                out["order"].update(sails=None, engine=None)  # the autopilot decides
+            else:
+                out["order"].update(sails=self.helm.sails, engine=self.helm.engine)
             out["sailing"] = {
                 "plans": list(self.sail_plans),  # what may be ordered, biggest sails first
                 "has_engine": self.has_engine,
@@ -799,6 +997,10 @@ class Game:
             "shared_loss": shared,  # both lost early to the same thing: not the player's doing
             "note": note,
             "orders": self.orders,
+            # Helm spells (Rosa): how many watches a spell set, and what they were
+            # worth through the water against the autopilot's own trim (km, + = gained).
+            "trim_watches": sum("trim" in o for o in self.orders),
+            "trim_gain_km": getattr(self, "trim_gain_m", 0.0) / 1000.0,
         }
 
     # ------------------------------------------------------- save and resume
@@ -819,7 +1021,13 @@ class Game:
             "d": self.max_days,
             "o": [
                 [o["min"], o["heading"], o["power"]]
-                + ([o["sails"], o["engine"]] if "sails" in o else [])
+                + (
+                    [o.get("sails"), o.get("engine"), o["trim"]]
+                    if "trim" in o
+                    else [o["sails"], o["engine"]]
+                    if "sails" in o
+                    else []
+                )
                 for o in self.orders
             ],
             "at": round((self.mine.state.t - self.start).total_seconds() / 60),
@@ -858,7 +1066,8 @@ class Game:
             )
             for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))
-                g.order(heading, power, *sail_orders[:2])
+                sails, engine, trim = (*sail_orders[:3], None, None, None)[:3]
+                g.order(heading, power, sails, engine, trim)
             g._advance_to(g.start + timedelta(minutes=p["at"]))
         except (KeyError, TypeError, IndexError, AttributeError) as err:
             # Valid JSON, but not a game this page can rebuild (a mangled link).

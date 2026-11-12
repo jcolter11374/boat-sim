@@ -42,6 +42,8 @@ import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/b
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
 import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
+import { chanceFor, type Chance } from "./yard/chance";
+import { OddsModel } from "./yard/estimate";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
@@ -148,6 +150,7 @@ const isAsBuilt = (d: Design) => !!cat && encodeDesign(cat, d) === "";
 const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
 const sandboxReady = sandbox.available();
 let launching = false;
+let chanceTurn = 0; // the latest "chance of finishing" lookup (a part changed since: drop the older)
 let planned: LaunchResult | null = null;
 const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
@@ -168,6 +171,8 @@ const status = {
   summary: {} as Record<string, unknown>,
   dressed: {} as Record<string, unknown>,
   share: "",
+  /** The odds "Your build" shows (#315). */
+  chance: null as Chance | null,
   /** The player's saved boat ("my boat"), as this page last drew it. */
   mine: null as MyBoat | null,
   yaml: "",
@@ -210,13 +215,19 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   top.className = "top";
   const name = document.createElement("span");
   name.textContent = o.n;
-  if (o.def) name.append(badge("plan", base === "kayak" ? "PLANNED" : "AS BUILT"));
-  if (o.est) name.append(badge("est", "ESTIMATE"));
+  // Tags in a player's words (#315 item 14): what we'd fit, rough figures, and parts
+  // that change only the price and weight on the list (the simulator doesn't sail them yet).
+  if (o.def) name.append(badge("plan", base === "kayak" ? "OUR PICK" : "AS BUILT", base === "kayak" ? "The part on our kayak" : "The part on their boat as built"));
+  if (o.est) name.append(badge("est", "ROUGH", "A rough figure: nobody has measured or quoted it yet"));
   if (o.effect === "no effect yet") {
-    name.append(badge("noeff", "NO EFFECT YET"));
+    name.append(badge("noeff", "PRICE ONLY"));
     b.classList.add("noeff");
-    b.title = `The simulator doesn't model this yet${o.basis ? `: ${o.basis}` : ""}. A launch sails it as built.`;
+    b.title = `Changes the price and parts list only: the simulator doesn't sail this part yet${o.basis ? ` (${o.basis})` : ""}, so a test sails the boat without it.`;
   }
+  // What this part would do to the odds, filled in by drawChance (Leo: see which swap is worth trying).
+  const delta = document.createElement("span");
+  delta.className = "delta";
+  name.append(delta);
   const price = document.createElement("span");
   price.className = "price";
   price.textContent = o.priceTbd ? "price TBD" : o.cost ? usd(o.cost) : "$0";
@@ -228,10 +239,11 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   b.addEventListener("click", () => choose(slot.id, o.id));
   return b;
 }
-function badge(kind: string, text: string): HTMLSpanElement {
+function badge(kind: string, text: string, title = ""): HTMLSpanElement {
   const s = document.createElement("span");
   s.className = `badge ${kind}`;
   s.textContent = text;
+  if (title) s.title = title;
   return s;
 }
 
@@ -380,7 +392,8 @@ function redraw(): void {
   $("s-sol").textContent = `${s.solarW} W`;
   $("s-bat").textContent = `${s.batteryWh.toLocaleString("en-US")} Wh`;
   $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
-  $("s-est").textContent = s.estimates.length ? `Includes estimates: ${s.estimates.join(", ")}.` : "";
+  $("s-est").textContent = s.estimates.length ? `Includes rough figures: ${s.estimates.join(", ")}.` : "";
+  void drawChance();
   // The model.
   if (outfit && base === "kayak") {
     const lead = optionOf(cat, "lead", design);
@@ -405,6 +418,95 @@ function redraw(): void {
   $("result").replaceChildren();
   drawMine();
 }
+
+// ---------- chance of finishing (#315 item 12) ----------
+/** "Your build": the grid's odds when this design is a tested build, else "not tested yet". */
+async function drawChance(): Promise<void> {
+  if (!cat) return;
+  const turn = ++chanceTurn;
+  const [n, src, model] = await Promise.all([grid.nearest(design), grid.source(), oddsModel()]);
+  if (turn !== chanceTurn) return; // the player has changed a part since
+  const c = chanceFor(n, src ?? null);
+  const e = model?.odds(design) ?? null;
+  const v = $("s-odds");
+  const was = shownBase === base ? shownOdds : null; // no flash when switching boats
+  shownOdds = e?.p ?? null;
+  shownBase = base;
+  // Tested: the grid's own figure. Untested: the quick estimate, said so (estimate.ts).
+  // The comparison as two odds side by side, not "points" (Leo): "Our kayak: 78%."
+  const vsWhat = base === "kayak" ? "our kayak" : `${SHORT[base]} as built`;
+  const vs =
+    e?.p != null && !(e.tested && e.p === e.planned)
+      ? Math.abs(Math.round((e.p - e.planned) * 100)) < NOISE_PTS
+        ? ` About the same as ${vsWhat}.`
+        : ` ${vsWhat[0].toUpperCase()}${vsWhat.slice(1)}: ${Math.round(e.planned * 100)}%.`
+      : "";
+  if (c.tested || !e || e.p === null) {
+    v.textContent = c.value;
+    $("s-odds-note").textContent =
+      e && e.p === null && e.missing ? `No estimate yet: "${e.missing}" hasn't been tested. Press "Test it" to find out.` : `${c.note}${vs}`;
+  } else {
+    v.textContent = `about ${Math.round(e.p * 100)}%`;
+    $("s-odds-note").textContent = `Quick estimate from builds we've tested.${vs} Press "Test it" to sail it for real.`;
+  }
+  v.classList.toggle("untested", !c.tested && (!e || e.p === null));
+  v.classList.toggle("estimate", !c.tested && !!e && e.p !== null);
+  // A short flash when the figure moves: green up, red down (Leo).
+  v.classList.remove("up", "down");
+  if (was !== null && shownOdds !== null && Math.round(was * 100) !== Math.round(shownOdds * 100)) {
+    void v.offsetWidth; // restart the animation
+    v.classList.add(shownOdds > was ? "up" : "down");
+  }
+  status.chance = { ...c, estimate: e?.p ?? null } as Chance;
+  drawDeltas(model);
+  $("legend").hidden = !model;
+}
+let shownOdds: number | null = null;
+let shownBase = "";
+// Under 3 points is inside the grid's own noise (100 launches a build), so it reads
+// "about the same" rather than suggesting, say, that dropping the AIS helps (Ravi's rule on #323).
+const NOISE_PTS = 3;
+const modelFor = new Map<BaseKey, OddsModel>();
+/** The quick-estimate model for the boat on show (null without the grid). */
+async function oddsModel(): Promise<OddsModel | null> {
+  const builds = await grid.all();
+  if (!cat || !builds.length) return null;
+  let m = modelFor.get(base);
+  if (!m) modelFor.set(base, (m = new OddsModel(cat, builds)));
+  return m;
+}
+/** Each part's effect on the odds if you picked it now: "+6", "−24", "no data yet". */
+function drawDeltas(model: OddsModel | null): void {
+  const here = model?.odds(design)?.p ?? null;
+  document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => {
+    const span = b.querySelector<HTMLSpanElement>(".delta");
+    if (!span) return;
+    const slot = b.dataset.slot!;
+    const opt = b.dataset.opt!;
+    let text = "";
+    let cls = "delta";
+    if (model && here !== null && design.picks[slot] !== opt && !b.classList.contains("na")) {
+      const p = model.odds({ ...design, picks: { ...design.picks, [slot]: opt } })?.p ?? null;
+      if (p === null) [text, cls] = ["no data yet", "delta none"];
+      else {
+        const n = Math.round((p - here) * 100);
+        [text, cls] = Math.abs(n) < NOISE_PTS ? ["about the same", "delta same"] : [`${n > 0 ? "+" : "−"}${Math.abs(n)}`, n > 0 ? "delta up" : "delta down"];
+      }
+    }
+    span.textContent = text;
+    span.className = cls;
+    span.title = text && text !== "no data yet" ? "Change in the odds if you pick this part (quick estimate)" : "";
+  });
+}
+// What "Test it" does, on the button (#315 item 13): the simulator in this browser
+// sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
+// slow computer; without it, the page shows the precomputed voyages at once.
+void sandboxReady.then((inBrowser) => {
+  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see its simulated voyages";
+  $("launch").title = inBrowser
+    ? "The autopilot sails your design from 6 real spring 2020 start dates, in this browser, and sails the boat you started from on the same dates to compare"
+    : "Shows the voyages our servers sailed for the closest tested build";
+});
 
 // ---------- my boat (remembered in this browser, carried to the other pages) ----------
 const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C", revb: "Rev B" };
@@ -460,11 +562,11 @@ window.addEventListener("hashchange", () => {
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
   kayak:
-    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ESTIMATE marks figures nobody has measured or quoted yet.",
+    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ROUGH marks figures nobody has measured or quoted yet.",
   revc:
-    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ESTIMATE marks our guesses.",
+    "Our model of the Randolph team's Rev C5 (11 Nov 2026): a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ROUGH marks our guesses.",
   revb:
-    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ESTIMATE marks our guesses.",
+    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ROUGH marks our guesses.",
 };
 /** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
 function useBase(hash: string): void {
@@ -479,7 +581,7 @@ function useBase(hash: string): void {
   if (c.credit) {
     credit.append(`${c.credit.text} `, Object.assign(document.createElement("a"), { href: c.credit.url, target: "_blank", rel: "noopener", textContent: "Their repository" }));
   }
-  $("reset").textContent = base === "kayak" ? "Back to the planned build" : "Back to as built";
+  $("reset").textContent = base === "kayak" ? "Reset to our kayak" : `Reset to ${SHORT[base]} as built`;
   // The Randolph boat has no "see inside" yet (our model has no cut-away).
   const inside = document.querySelector<HTMLButtonElement>('#views button[data-view="inside"]');
   if (inside) inside.hidden = base !== "kayak";
@@ -547,7 +649,7 @@ $("launch").addEventListener("click", async () => {
     draw();
   };
   const tick = setInterval(draw, 1000);
-  say("Launching...");
+  say("Testing...");
   launching = true;
   btn.disabled = true;
   let r: LaunchResult | null = null;
@@ -581,7 +683,7 @@ $("launch").addEventListener("click", async () => {
       planned = p ?? null;
     } else planned = null;
   } catch (e) {
-    say(`The launch failed: ${e instanceof Error ? e.message : e}`);
+    say(`The test failed: ${e instanceof Error ? e.message : e}`);
     status.launchError = String(e);
     return;
   } finally {
@@ -655,6 +757,10 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   box.append(t);
 }
 
+/** Said wherever a number comes from the simulator in this browser (#335). */
+const BROWSER_WEATHER_NOTE = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays and leaderboard.";
+const SIMPLIFIED_BACKEND = "simulator in the browser";
+
 function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | null = null): void {
   box.replaceChildren();
   if (!r) {
@@ -703,6 +809,9 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
       ul.append(li);
     }
     box.append(ul);
+    // #335, beside the day counts it explains: the browser sails on a lighter weather
+    // file than the full runs behind the voyage replays and the leaderboard.
+    if (status.backend === SIMPLIFIED_BACKEND) box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: BROWSER_WEATHER_NOTE }));
   }
   if (r.fingerprints?.length) {
     // Ravi's gate: these must match reference.json exactly (python -m boatsim.sandbox compare ... --exact).

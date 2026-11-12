@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim 3D: voyage replay</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.72); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1726; color: var(--ink);
@@ -12,7 +13,7 @@
   #app { position: fixed; inset: 0; }
   .glass { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
-  #top { position: fixed; top: 12px; left: 12px; padding: 10px 14px; width: 330px; }
+  #top { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; padding: 10px 14px; width: 330px; }
   #top h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: .2px; }
   #top .sub { color: var(--dim); font-size: 12px; margin: 0 0 8px; }
   #top select { width: 100%; font: inherit; padding: 5px 6px; border-radius: 7px; background: #13263d;
@@ -29,7 +30,7 @@
     border: 1px solid var(--line); background: #1b3352; color: var(--ink); }
   #focus button[data-lane="0"][aria-pressed="true"] { background: #ff8a2a; color: #1a0d00; border-color: #ff8a2a; }
   #focus button[data-lane="1"][aria-pressed="true"] { background: #2ec4b6; color: #002420; border-color: #2ec4b6; }
-  #hud { position: fixed; top: 12px; right: 12px; display: grid; grid-template-columns: repeat(3, 134px); gap: 8px; }
+  #hud { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; display: grid; grid-template-columns: repeat(3, 134px); gap: 8px; }
   .card { padding: 8px 11px 9px; }
   .card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
   .card .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 1px; white-space: nowrap; }
@@ -57,14 +58,21 @@
     border-radius: 8px; padding: 6px 11px; cursor: pointer; }
   #transport button[aria-pressed="true"] { background: var(--orange); color: #1a0d00; border-color: var(--orange); }
   #play { width: 44px; font-size: 16px !important; }
-  #warp { display: flex; gap: 4px; }
+  #warp { display: flex; gap: 4px; position: relative; }
+  /* A few seconds' hint by the speed bar when a replay opens (Leo, 11 Nov). */
+  #warphint { position: absolute; bottom: calc(100% + 10px); left: 0; white-space: nowrap; font-size: 12.5px; padding: 5px 9px;
+    border-radius: 6px; background: rgba(10, 22, 40, .92); border-left: 3px solid var(--orange); pointer-events: none;
+    transition: opacity .8s; }
+  #warphint.fade { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { #warphint { transition: none; } }
+  #warphint[hidden] { display: none; }
   #scrubwrap { position: relative; flex: 1; height: 28px; }
   #scrub { position: absolute; inset: 0; width: 100%; margin: 0; accent-color: var(--orange); }
   #ticks { position: absolute; left: 8px; right: 8px; top: 0; height: 6px; pointer-events: none; }
   #ticks i { position: absolute; top: 0; width: 2px; height: 6px; border-radius: 1px; }
   #when { min-width: 168px; text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12.5px; }
   #when b { color: var(--ink); font-size: 14px; }
-  #toasts { position: fixed; right: 12px; top: 262px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+  #toasts { position: fixed; right: 12px; top: calc(var(--bar, 0px) + 262px); width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
   .toast { padding: 7px 11px; border-left: 4px solid var(--c); font-size: 12.5px; animation: in .3s ease; }
   .toast b { display: block; font-size: 11px; color: var(--dim); font-weight: 500; }
   @keyframes in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
@@ -79,7 +87,7 @@
   #error { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); padding: 16px 20px; display: none; max-width: 520px; }
   .muted { color: var(--dim); font-size: 12px; }
   /* "Pick your launch day" */
-  #game { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 8;
+  #game { position: fixed; inset: 0; top: var(--bar, 0px); display: none; align-items: center; justify-content: center; z-index: 8;
     background: radial-gradient(ellipse at center, rgba(8,18,32,.35), rgba(8,18,32,.75)); }
   #game.show { display: flex; }
   #game .panel { width: min(640px, 92vw); padding: 24px 28px 22px; text-align: center; }
@@ -119,7 +127,7 @@
   #o-postcard { display: none; }
   body.game #o-postcard { display: inline-block; background: var(--orange); color: #1a0d00; border-color: var(--orange); }
   /* Sky guide: compass strip and labels on the sun, moon and North Star */
-  #compass { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); width: 420px; height: 46px; overflow: hidden; padding: 0; }
+  #compass { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 50%; transform: translateX(-50%); width: 420px; height: 46px; overflow: hidden; padding: 0; }
   #compass[hidden], #skylabels[hidden] { display: none; }
   #tape { position: absolute; inset: 0; }
   #tape span { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
@@ -200,6 +208,7 @@
   <button id="play" aria-label="Play or pause">&#9654;</button>
   <button id="now" hidden title="Back to the latest report">Now</button>
   <div id="warp" role="group" aria-label="Time warp">
+    <div id="warphint" role="status" hidden></div>
     <button data-warp="0.000277778" title="Real time: one second of voyage per second" aria-pressed="true">Real time</button>
     <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
     <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
@@ -246,6 +255,7 @@
   <div class="row"><div class="timer"><i id="b-timer"></i></div><button id="b-next">Keep going &#9654;</button></div>
 </div>
 <div id="error" class="glass"></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/voyage.ts"></script>
 <div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
 </body>

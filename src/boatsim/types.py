@@ -45,6 +45,9 @@ class Command:
     # Keelboats only: None = auto (motor in calms when thrust_fraction > 0),
     # True = engine on at thrust_fraction, False = off.
     engine: bool | None = None
+    # Keelboats only: share of the crew's best speed this watch (a helm spell);
+    # None = the autopilot's own (autopilot_factor). Sail speed only.
+    trim_share: float | None = None
 
 
 @dataclass
