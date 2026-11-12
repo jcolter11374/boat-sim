@@ -258,6 +258,7 @@ export class OceanSound {
   private nextTap = 0;
   private nextSlat = 0;
   private nextFlog = 0;
+  private ironsFor = 0;
   private lastSplash = -99;
   private lastMix: Mix | null = null;
   private armed = false;
@@ -795,12 +796,15 @@ export class OceanSound {
     // A sail flogging: the cloth cracking and banging as it shakes in the wind, faster and
     // harder the more it luffs and the stronger the wind it shakes in. Masted boats only.
     const luff = clamp(w.luff ?? 0);
+    // Stuck head to wind a long time, the flogging eases about 2 dB after 10 s so it can't grate (Milo).
+    this.ironsFor = luff > 0.8 ? this.ironsFor + dt : 0;
+    const tire = 1 - 0.2 * clamp((this.ironsFor - 10) / 5);
     if (this.rig === "shrouds" && luff > 0.1) {
       if (this.nextFlog < t) this.nextFlog = t;
       const wk = clamp(beaufort(w.apparent ?? w.wind) / 6, 0.25, 1.3);
       while (this.nextFlog < t + dt) {
         const d = this.nextFlog - t;
-        const k = luff * wk * (0.6 + 0.4 * r());
+        const k = luff * wk * tire * (0.6 + 0.4 * r());
         this.burst("brown", "lowpass", 220 + r() * 160, 0.45 * k, 0.008, 0.14, d);
         this.burst("white", "bandpass", 800 + r() * 500, 0.14 * k, 0.006, 0.07, d + 0.005, 1.2);
         this.nextFlog += 1 / (2.5 + 5 * luff * wk) * (0.7 + 0.6 * r());
