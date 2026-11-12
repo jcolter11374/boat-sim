@@ -1344,6 +1344,53 @@ const CHECKS = {
       return `${out.join(", ")} frames at ${FPS} fps: film-opening.mp4, ${(b64.length * 0.75 / 1e6).toFixed(1)} MB`;
     },
   },
+  // Manual: the new sea up close (Maya, 12 Nov): at forces 5, 6 and 8 on High, in daylight, is the
+  // wake a bright veined web ("cracked glass"), and are there flat pale foam slabs with hard edges
+  // in the near water? Frames from the replay's proof hooks (force.wind/hs/sea/cloud, cam, setHour).
+  "look-sea": {
+    manual: true,
+    path: "voyage.html?voyage=2020-04-15&quality=high",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        if (!(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 3 * MIN });
+      if (!(await page.evaluate(() => "cam" in window.__replay && Array.isArray(window.__replay.force?.sea)))) throw new SkipCheck("this build has no proof hooks (force.sea, cam)");
+      // Midday on day 2: the sun high, so foam and wake read in plain light.
+      await page.evaluate(() => {
+        const r = window.__replay;
+        r.pause();
+        let best = 30, el = -90;
+        for (let h = 24; h < 48; h += 0.25) { const e = r.sunAt?.(h) ?? -90; if (e > el) [best, el] = [h, e]; }
+        r.setHour(best);
+      });
+      const SEAS = { f5: [9.8, 2.5, 6.3, 0.45], f6: [12.9, 4.0, 8.0, 0.6], f8: [19.0, 6.0, 9.8, 0.9] };
+      const VIEWS = { chase: { az: 180, dist: 9, h: 2.2, fov: 45, look: 0.3 }, over: { az: 180, dist: 2, h: 18, fov: 45 }, low: { az: 150, dist: 7, h: 0.4, fov: 35, look: 0.3 } };
+      for (const [sea, [wind, hs, tp, cloud]] of Object.entries(SEAS)) {
+        await page.evaluate(([wind, hs, tp, cloud]) => {
+          const f = window.__replay.force;
+          f.wind = wind; f.cloud = cloud; f.fog = 0; f.sea = [hs, tp, -1];
+          window.__replay.setHour(window.__replay.hour); // re-seek so the forced sea is built now
+        }, [wind, hs, tp, cloud]);
+        await page.waitForTimeout(6000);
+        for (const [view, cam] of Object.entries(VIEWS)) {
+          await page.evaluate((cam) => { window.__replay.cam = cam; }, cam);
+          await page.waitForTimeout(3000);
+          await shot(`sea-${sea}-${view}`);
+        }
+      }
+      return `${shots.length} frames: ${shots.join(", ")}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
