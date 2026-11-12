@@ -1143,6 +1143,67 @@ const CHECKS = {
   // don't blink in and out. Both browsers measure; Chromium also prints frames: the course
   // as the player sees it, then the first mark moved (by the test, in this tab only) to about
   // 35 m off the boat so its waterline can be judged up close.
+  // Manual: #397 (Felix), story moments by state, not by ear: window.__sound.played logs one
+  // {name, t} per moment. Nothing logs while sound is off; turning it on says hello once; a voyage
+  // sailed to its end at 4 days a second logs each breakdown once, the horn at a finish and the
+  // result card's settle once. Watch a voyage plays only the sea: no moments there.
+  "sound-moments": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.evaluate(() => Array.isArray(window.__sound?.played)))) throw new SkipCheck("this build has no sound log (Felix's played-log patch not deployed)");
+      const played = () => page.evaluate(() => window.__sound.played.map((p) => ({ ...p })));
+      const out = [];
+      await page.click("#go", { timeout: 15_000 });
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      await page.waitForTimeout(2000);
+      must((await played()).length === 0, `moments logged with sound off: ${JSON.stringify(await played())}`);
+      // Sound on from the question (or N if it has gone).
+      if (await page.locator("#soundyes").isVisible().catch(() => false)) await page.click("#soundyes", { noWaitAfter: true });
+      else await page.keyboard.press("n");
+      await page.waitForTimeout(1500);
+      let p = await played();
+      must(p.filter((x) => x.name === "hello").length === 1, `turning sound on should say hello once: ${JSON.stringify(p)}`);
+      out.push("silent with sound off; hello once on turning it on");
+      // Sail to the end at 4 days a second, taking the first choice at every decision.
+      for (let i = 0; i < 40; i++) {
+        if (await page.evaluate(() => window.__helm.status?.over)) break;
+        if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) {
+          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+          await page.waitForTimeout(1000);
+        }
+        if (await page.evaluate(() => window.__helm.clock === 0 && !window.__helm.status?.over)) await page.keyboard.press("4");
+        await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.status?.over || window.__helm.error, null, { timeout: 4 * MIN }).catch(() => {});
+        must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");
+      }
+      const st = await page.evaluate(() => ({ over: window.__helm.status?.over, day: window.__helm.status?.day, outcome: window.__helm.status?.outcome ?? window.__helm.lastStop }));
+      await page.waitForTimeout(8000); // the result card and its settle
+      p = await played();
+      const names = p.map((x) => x.name);
+      const count = (n) => names.filter((x) => x === n || x.startsWith(n + ":")).length;
+      const KNOWN = /^(hello|crash|horn|settle|flog|alarm|bell:[123]|breakdown:[a-z_]+)$/;
+      const odd = names.filter((n) => !KNOWN.test(n));
+      must(!odd.length, `unknown moments: ${odd.join(", ")}`);
+      // "Once per event": the same moment twice within a second is a double fire.
+      const doubles = p.filter((x, i) => i && p[i - 1].name === x.name && Math.abs(x.t - p[i - 1].t) < 1);
+      must(!doubles.length, `fired twice for one event: ${doubles.map((d) => d.name).join(", ")}`);
+      must(count("hello") === 1, `hello ${count("hello")} times`);
+      if (st.over) must(count("settle") === 1, `the end of the voyage should settle once, got ${count("settle")}`);
+      if (/arrived|finish/.test(String(st.outcome))) must(count("horn") === 1, `a finish should sound the horn once, got ${count("horn")}`);
+      out.push(`voyage ${st.over ? "ended" : "not ended"} at day ${st.day?.toFixed?.(1)} (${st.outcome}); moments: ${names.join(", ") || "none"}`);
+      // Watch a voyage: the sound object, no moments.
+      await page.goto(SITE + "voyage.html?voyage=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
+      await page.keyboard.press("n");
+      await page.waitForTimeout(5000);
+      const vp = await page.evaluate(() => (window.__sound?.played ?? null));
+      must(vp !== null, "Watch a voyage has no window.__sound");
+      must(vp.every((x) => x.name === "hello"), `Watch a voyage logged story moments: ${JSON.stringify(vp)}`);
+      out.push(`Watch a voyage: ${vp.length ? vp.map((x) => x.name).join(", ") : "no moments"}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
