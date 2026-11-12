@@ -44,7 +44,7 @@ export const MARK_RADIUS_M = 40;
 /** "Reaching" the lighthouse: within this, staying in deep water off its shoal (GUESS). */
 export const LIGHT_RADIUS_M = 300;
 
-export type CourseKind = "triangle" | "light";
+export type CourseKind = "triangle" | "light" | "harbour";
 export interface Course {
   kind: CourseKind;
   name: string;
@@ -138,3 +138,23 @@ export function runTime(secs: number): string {
   const s = Math.round(secs % 60);
   return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min ${String(s).padStart(2, "0")} s`;
 }
+
+/**
+ * Out of Annapolis harbour to the open Bay (Leo's prologue, phase 2): from the harbour
+ * mouth down the channel, about 3.9 km. The waypoints follow water 3 m deep or more with
+ * about 80 m to spare (a path found on the coast squares' depths, 12 Nov). GUESS radius:
+ * 80 m, as the channel is about 200 m wide in places and a tack there is hard enough.
+ */
+export const ANNAPOLIS_HARBOUR: LatLon = { lat: 38.97556, lon: -76.48283 };
+export function harbourExit(): Course {
+  const marks = [
+    { lat: 38.977, lon: -76.4791, name: "the harbour mouth" },
+    { lat: 38.9746, lon: -76.4674, name: "the Severn's mouth" },
+    { lat: 38.967, lon: -76.4572, name: "the end of the channel" },
+    { ...ANNAPOLIS_COURSE, name: "the open Bay" },
+  ];
+  const v = toXY(ANNAPOLIS_HARBOUR, marks[0]);
+  return { kind: "harbour", name: "out of Annapolis harbour", start: ANNAPOLIS_HARBOUR, heading: ((Math.atan2(v.x, v.y) * 180) / Math.PI + 360) % 360, marks, radiusM: 80 };
+}
+/** Prologue winds: off the land, so the way out is a reach or a run, not a beat in a narrow channel (GUESS). */
+export const HARBOUR_WINDS = [250, 270, 290, 315, 340];

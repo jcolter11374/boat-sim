@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ANNAPOLIS_COURSE, LEG_M, THOMAS_POINT, toLatLon, toTheLight, toXY, triangle } from "../src/helm/course.ts";
+import { ANNAPOLIS_COURSE, LEG_M, THOMAS_POINT, harbourExit, toLatLon, toTheLight, toXY, triangle } from "../src/helm/course.ts";
 import { depthState, sampleGrid } from "../src/land/depth.ts";
 import { CRUISER_HANDLING, Wheel, type TrimTable } from "../src/helm/wheel.ts";
 import { aside } from "../src/helm/wheelSession.ts";
@@ -92,4 +92,18 @@ test("where the mark is, in words", () => {
   assert.equal(aside(-90), "to the left");
   assert.equal(aside(200), "behind you to the left");
   assert.equal(aside(180), "behind you");
+});
+
+test("the way out of the harbour: four marks down the channel to the open Bay, about 4 km", () => {
+  const c = harbourExit();
+  assert.equal(c.marks.length, 4);
+  assert.deepEqual({ lat: c.marks[3].lat, lon: c.marks[3].lon }, ANNAPOLIS_COURSE);
+  let m = 0;
+  let p = toXY(c.start, c.start);
+  for (const k of c.marks) {
+    const q = toXY(c.start, k);
+    m += Math.hypot(q.x - p.x, q.y - p.y);
+    p = q;
+  }
+  assert.ok(m > 3500 && m < 4500, `${m} m`);
 });

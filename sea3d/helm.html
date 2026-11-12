@@ -121,7 +121,8 @@
   #r-trim:empty { display: none; }
   #practice-what { position: fixed; top: calc(var(--bar, 0px) + 14px); left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
   #practice-what[hidden], #practice-end[hidden] { display: none; }
-  #practice-courses[hidden], #practice-again[hidden] { display: none; }
+  #practice-courses[hidden], #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
+  #prologuepick { display: block; margin: 6px 0; }
   #practice-courses button { margin: 3px 4px 3px 0; }
   #practice-courses button small { display: block; font-weight: 400; font-size: 12px; opacity: .85; }
   #practice-courses small[data-best]:empty { display: none; }
@@ -309,6 +310,12 @@
   </div>
   <p><button id="practice-again" class="go">Sail another</button> <a href="helm.html">Take the helm: a whole crossing</a></p>
 </div></div>
+<div id="prologue-end" class="overlay" hidden><div class="card glass">
+  <h1>Four days later: the Bay mouth</h1>
+  <p id="prologue-sum"></p>
+  <p>Your crossing starts here, off the mouth of the Chesapeake Bay. The trip down the Bay is skipped and doesn't count toward your time.</p>
+  <p><button id="prologue-go" class="go big">Start the crossing</button></p>
+</div></div>
 <div id="start" class="overlay">
   <div class="card glass">
     <h1>Take the helm</h1>
@@ -318,6 +325,7 @@
     </fieldset>
     <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
     <span id="porthint" class="muted"></span>
+    <label id="prologuepick" hidden><input type="checkbox" id="prologue" checked> Sail her out of the harbour yourself first <span class="muted">(about 4 minutes at the wheel, down the channel to the open Bay; you can skip any time)</span></label>
     <p id="sharedmsg" class="muted" hidden></p>
     <button id="go" class="go big">Set sail</button>
     <span id="startmsg" class="muted"></span>

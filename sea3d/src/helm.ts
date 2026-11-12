@@ -12,7 +12,7 @@ import { HORIZON, Sea } from "./water";
 import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
-import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon } from "./helm/course";
+import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon } from "./helm/course";
 import { Buoys } from "./helm/buoys";
 import { PLACES } from "./land/place";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
@@ -239,7 +239,9 @@ void loadPorts(new URL(params.get("ports") ?? "./ports.json", location.href).hre
     $("porthint").textContent = p ? portHint(p, list) : "The usual start: our support boat drops the drone here, then heads home.";
   };
   sel.addEventListener("change", hint);
+  sel.addEventListener("change", showProloguePick);
   hint();
+  showProloguePick();
 });
 /** The chosen challenge, if any (a shared link names it with ?c=). */
 function chosenChallenge(): Challenge | undefined {
@@ -1049,7 +1051,7 @@ let wheelNow: WheelFrame | null = null;
 /** Where the last wheel frame had the boat (metres from the spell's start). */
 let wheelLast: { x: number; y: number } | null = null;
 const wheel = new WheelSession({
-  ended: (r) => void (PRACTICE ? practiceEnded(r) : wheelEnded(r)),
+  ended: (r) => void (prologueDone ? prologueEnded(r) : PRACTICE ? practiceEnded(r) : wheelEnded(r)),
   note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
 });
 (window as unknown as { __wheel: WheelSession }).__wheel = wheel;
@@ -1098,6 +1100,11 @@ let practiceHere: LatLon | null = null;
 let practiceCourse: Course | null = null;
 let practiceBreeze: Breeze = "good";
 let depths: BayDepths | null = null;
+const depthsReady = BayDepths.create().then((d) => {
+  depths = d;
+  showProloguePick();
+  return d;
+});
 const buoys = new Buoys();
 scene.add(buoys.group);
 function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
@@ -1211,8 +1218,7 @@ if (PRACTICE) {
       practiceBreeze = b.dataset.b as Breeze;
       practiceCard();
     });
-  void BayDepths.create().then((d) => {
-    depths = d;
+  void depthsReady.then((d) => {
     page.practiceBay = d.known;
     if (d.known) {
       // Open on the course card, the boat already off Annapolis with the town behind.
@@ -1223,6 +1229,80 @@ if (PRACTICE) {
       aimAt(290); // toward the town and the Naval Academy
     } else void practiceSpell("drill");
   });
+}
+
+// "Sail her out of the harbour" (Leo's plan, phase 2): before a voyage from Annapolis in a
+// boat you can sail by hand, an optional spell out of the harbour to the open Bay. Then
+// "four days later" the voyage starts at the Bay mouth exactly as without it: the trip
+// down the Bay is skipped and doesn't count (said plainly on the card), and nothing of the
+// spell reaches the simulator.
+let prologueDone: ((r: WheelResult) => void) | null = null;
+/** The boat key the start card would sail, if it can be sailed by hand. */
+function handBoat(): string | null {
+  const pick = chosenBoat();
+  const k = pick === MINE ? String(startMine?.choices.base ?? "") : pick;
+  return canTakeWheel(k) ? k : null;
+}
+function showProloguePick(): void {
+  const can = !shared && $<HTMLSelectElement>("port").value === "annapolis" && !!handBoat() && !!depths?.known;
+  $("prologuepick").hidden = !can;
+  if (can) $("porthint").textContent = "Annapolis is up the Chesapeake Bay. The crossing starts at the Bay mouth, 4 days' sail down the Bay; that trip is skipped.";
+}
+async function runPrologue(boatKey: string): Promise<void> {
+  const c = harbourExit();
+  useBoat(boatKey); // the boat you'll sail, not the page's default kayak
+  const from = HARBOUR_WINDS[Math.floor(Math.random() * HARBOUR_WINDS.length)];
+  practiceWind = windFrom(from, BREEZES.good.kn);
+  practiceCourse = c;
+  practiceAt = practiceHere = c.start;
+  depths!.prefetch(c.start.lat, c.start.lon, 4000);
+  const o = c.start;
+  buoys.set(c.marks.slice(0, -1).map((m) => toXY(o, m)));
+  $("start").hidden = true;
+  const ended = new Promise<WheelResult>((res) => (prologueDone = res));
+  const ok = await wheel.start({
+    boatKey,
+    speed: 5, // about 20 boat-minutes, so about 4 minutes (Leo: the checkbox says so)
+    backLabel: "Skip to the Bay mouth",
+    heading: c.heading,
+    speedMs: 0,
+    windU: practiceWind.u,
+    windV: practiceWind.v,
+    plan: "full",
+    course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name })), radiusM: c.radiusM },
+    depthAt: (x, y) => {
+      const p = toLatLon(o, { x, y });
+      depths!.prefetch(p.lat, p.lon);
+      return depths!.at(p.lat, p.lon);
+    },
+  });
+  if (!ok) {
+    prologueDone = null;
+    practiceAt = practiceHere = null;
+    buoys.set([]);
+    return;
+  }
+  $("practice-what").textContent = "Sail her out of Annapolis harbour: follow the marks down the channel to the open Bay. Keep an eye on the depth. Esc skips to the Bay mouth.";
+  $("practice-what").hidden = false;
+  const r = await ended;
+  const how = r.aground
+    ? "She touched the bottom on the way out (no harm done: the harbour spell doesn't count)."
+    : r.reached
+      ? `Out in the open Bay in ${runTime(r.seconds)} of boat time.`
+      : "You skipped the rest of the way out.";
+  $("prologue-sum").textContent = how;
+  $("prologue-end").hidden = false;
+  await new Promise<void>((res) => $("prologue-go").addEventListener("click", () => res(), { once: true }));
+  $("prologue-end").hidden = true;
+  practiceAt = practiceHere = null;
+}
+function prologueEnded(r: WheelResult): void {
+  const done = prologueDone;
+  prologueDone = null;
+  practiceAt = null;
+  buoys.set([]);
+  $("practice-what").hidden = true;
+  done?.(r);
 }
 
 /** Hand-trimmed watches this game, as hours from the start, for the chart. */
@@ -1717,6 +1797,8 @@ async function begin(): Promise<void> {
   }
   page.challenge = ch?.id ?? "";
   page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
+  const hb = handBoat();
+  if (!shared && hb && !$("prologuepick").hidden && $<HTMLInputElement>("prologue").checked) await runPrologue(hb);
   $("start").hidden = true;
   $("loading").hidden = false;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
@@ -1890,6 +1972,7 @@ function rememberBoat(pick: string, mine: MyBoat | null): void {
 }
 powerFor(chosenBoat());
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="boat"]'))) r.addEventListener("change", () => powerFor(r.value));
+$("boats").addEventListener("change", () => showProloguePick());
 
 // Base mode turns the boat's own battery guard on by default, as the simulator does.
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="mode"]')))

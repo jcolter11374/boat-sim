@@ -49,6 +49,9 @@ export interface WheelStart {
   course?: { marks: { x: number; y: number; name: string }[]; radiusM: number };
   /** Practice off Annapolis: the ground's height (m, - is depth) at metres east and north of the start; null = not known there. */
   depthAt?: (x: number, y: number) => number | null;
+  /** How fast time runs at first (default 1x), and the hand-back button's words (default "Hand back"). */
+  speed?: number;
+  backLabel?: string;
 }
 
 export interface WheelFrame {
@@ -188,7 +191,8 @@ export class WheelSession {
     this.depth = { state: "unknown", m: null };
     this.on = true;
     this.paused = false;
-    this.speed = 1;
+    this.speed = s.speed && SPEEDS.includes(s.speed) ? s.speed : 1;
+    el(this.root, ".w-back").textContent = s.backLabel ?? "Hand back";
     this.keys = { left: false, right: false, up: false, down: false };
     this.startedAt = performance.now();
     let taught = true;
