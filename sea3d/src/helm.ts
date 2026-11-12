@@ -2659,6 +2659,7 @@ const cine = new Cinema({
   fade: (sec) => sound.duck(sec),
 });
 const sound = new OceanSound();
+(window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
 (page as unknown as { cine: Cinema }).cine = cine;
 
