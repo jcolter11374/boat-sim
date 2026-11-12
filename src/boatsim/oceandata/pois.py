@@ -422,10 +422,44 @@ POIS: list[Poi] = [
 ]
 
 
+# One line per card for the compact view (Watch a voyage, Jonas/Leo, 12 Nov): the
+# title plus this teaser; the full text opens on demand. Keyed by id.
+TEASERS: dict[str, str] = {
+    "cape-henry": "English settlers landed here in April 1607 and named the cape.",
+    "battle-of-the-capes": "In 1781 a French fleet beat the British here and sealed Yorktown's fate.",
+    "u-85": "A German U-boat lies 27 m down here, sunk by a US destroyer in 1942.",
+    "uss-monitor": "The Civil War ironclad Monitor sank in a storm near here in 1862.",
+    "sandy-hook-light": "The oldest working lighthouse in the US, first lit in 1764.",
+    "block-island-wind": "Five turbines here were the first offshore wind farm in the US.",
+    "ss-portland": "The steamer Portland was lost near here in the great gale of 1898.",
+    "fundy-tides": "The Bay of Fundy to the north has the highest tides on Earth.",
+    "birchtown": "In 1783 Black Loyalists founded Birchtown, Nova Scotia, near here.",
+    "halifax-explosion": "In 1917 a ship full of explosives blew up in Halifax harbour.",
+    "sable-island": "Sable Island, a sandbar with wild horses, has wrecked over 350 ships.",
+    "louisbourg": "France's fortress town of Louisbourg fell to the British twice.",
+    "gulf-stream": "The Gulf Stream, a warm river in the sea, runs faster than the kayak.",
+    "andrea-doria": "The liner Andrea Doria sank near here in 1956 after a collision in fog.",
+    "bermuda-triangle": "You're near Bermuda, a corner of the famous 'Triangle'.",
+    "sargasso-sea": "The Sargasso Sea is the only sea with no coast.",
+    "grand-banks": "Off the Grand Banks, cold and warm currents meet in famous fog.",
+    "titanic": "The Titanic lies nearly 4 km down, not far from here.",
+    "azores-high": "The Azores High sets the westerly winds that carry boats to Europe.",
+    "mid-atlantic-ridge": "You're crossing the seam where the Atlantic floor pulls apart.",
+    "horta-cables": "Horta was once a crossroads of the world's undersea telegraph.",
+    "azores-whaling": "Azoreans hunted sperm whales from open boats until 1987.",
+    "columbus-santa-maria": "Columbus sheltered at Santa Maria from a storm in 1493.",
+    "gorringe-bank": "Gorringe Bank, a mountain under the sea, rises to 50 m below you.",
+    "cabo-da-roca": "Due east is Cabo da Roca, the westernmost point of mainland Europe.",
+    "lisbon-1755": "In 1755 an earthquake and tsunami destroyed much of Lisbon.",
+}
+
+
 def catalog() -> dict:
     out = []
     for p in POIS:
         d = {k: v for k, v in asdict(p).items() if v is not None}
+        if p.id in TEASERS:  # right after the title, as the cards read it
+            d = {**{k: d[k] for k in ("id", "kind", "title")}, "teaser": TEASERS[p.id], **d}
         d["at"] = [list(x) for x in p.at]
         if p.size_m:
             d["size_m"] = list(p.size_m)
