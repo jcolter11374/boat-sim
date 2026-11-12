@@ -1226,7 +1226,7 @@ function practiceEnded(r: WheelResult): void {
   if (practiceAt && wheelLast) practiceHere = toLatLon(practiceAt, wheelLast);
   practiceAt = null;
   buoys.set([]);
-  let text = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
+  let text = wheelSummary(r, null).replace(/ (Sail a minute|Your voyage waited|She keeps your trim).*$/, "");
   if (c) {
     const key = bestKey(c.kind, practiceBreeze);
     const pct = Math.round(r.share * 100);
