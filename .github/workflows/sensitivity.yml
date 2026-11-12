@@ -53,6 +53,10 @@ jobs:
     timeout-minutes: 300
     strategy:
       fail-fast: false
+      # At most 8 of the 20 free runners at once, so a hand-started grid never
+      # queues the PR gates and deploys behind it (Kai, 12 Nov: an 18-job run held
+      # the runners for about 2 h).
+      max-parallel: 8
       matrix:
         year: ${{ fromJson(needs.years.outputs.list) }}
     env:
