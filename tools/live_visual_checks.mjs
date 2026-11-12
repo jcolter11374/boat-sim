@@ -190,6 +190,9 @@ export const PAGES = [
     // A part swap changes the totals and the share link.
     act: async (page, o) => {
       // Slots are one line each until opened (Boatyard M5).
+      // Sections fold as well (Elena): open Power first, if this build has folding sections.
+      const power = page.locator('.slot[data-group="Power"] h3');
+      if ((await power.count()) && (await power.getAttribute("aria-expanded")) !== "true") await power.click(o);
       if ((await page.locator('.sl-head[data-slot="bat"]').getAttribute("aria-expanded")) !== "true") await page.locator('.sl-head[data-slot="bat"]').click(o);
       return page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click(o);
     },

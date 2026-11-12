@@ -354,6 +354,7 @@ try {
     // Slots are one line each until opened (M5): open, then pick.
     await page.locator('.sl-head[data-slot="thr"]').click();
     await page.locator('.opt[data-slot="thr"][data-opt="one-t200"]').click();
+    await page.locator('.slot[data-group="Power"] h3').click(); // sections fold too; Driving starts open
     await page.locator('.sl-head[data-slot="bat"]').click();
     await page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click();
     const y1 = await page.evaluate(() => ({ s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));

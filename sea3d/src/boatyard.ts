@@ -263,8 +263,29 @@ function drawSlots(): void {
   for (const [title, ids] of groups) {
     const g = document.createElement("div");
     g.className = "slot";
+    // A section is one line until opened ("Power: 250 W solar, 1,280 Wh"); Driving starts open (Elena).
+    g.dataset.group = title;
     const h = document.createElement("h3");
-    h.textContent = title;
+    h.tabIndex = 0;
+    h.setAttribute("role", "button");
+    const gname = document.createElement("span");
+    gname.textContent = title;
+    const gsum = document.createElement("span");
+    gsum.className = "gsum";
+    gsum.id = `gsum-${title.replace(/\W+/g, "-")}`;
+    h.append(gname, gsum);
+    const flip = () => {
+      if (openGroups.has(title)) openGroups.delete(title);
+      else openGroups.add(title);
+      showOpenGroups();
+    };
+    h.addEventListener("click", flip);
+    h.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        flip();
+      }
+    });
     g.append(h);
     if (title === "Driving") g.append(cruiseControl());
     for (const id of ids) {
@@ -304,6 +325,30 @@ function drawSlots(): void {
       g.append(sl);
     }
     box.append(g);
+  }
+}
+
+/** The sections that are open; the rest fold to one summary line. */
+const openGroups = new Set<string>(["Driving"]);
+function showOpenGroups(): void {
+  document.querySelectorAll<HTMLElement>(".slot[data-group]").forEach((g) => {
+    const on = openGroups.has(g.dataset.group!);
+    g.classList.toggle("gopen", on);
+    g.querySelector("h3")?.setAttribute("aria-expanded", String(on));
+  });
+}
+/** A folded section's one line: Power in figures, the others by their picks. */
+function groupSummaries(solarW: number, batteryWh: number): void {
+  if (!cat) return;
+  for (const [title, ids] of GROUPS) {
+    const el = document.getElementById(`gsum-${title.replace(/\W+/g, "-")}`);
+    if (!el) continue;
+    if (title === "Power") {
+      el.textContent = `${solarW} W solar, ${batteryWh.toLocaleString("en-US")} Wh`;
+      continue;
+    }
+    const names = ids.filter((id) => cat!.slots.some((x) => x.id === id && shownOptions(x).length)).map((id) => optionOf(cat!, id, design)?.n ?? "").filter(Boolean);
+    el.textContent = names.length > 2 ? `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` : names.join(", ");
   }
 }
 
@@ -399,6 +444,8 @@ function redraw(): void {
     if (pick) pick.textContent = optionOf(cat, slot.id, design)?.n ?? "";
   }
   showOpenSlot();
+  showOpenGroups();
+  groupSummaries(s.solarW, s.batteryWh);
   for (const slot of cat.slots) {
     const ul = document.getElementById(`hints-${slot.id}`);
     if (!ul) continue;
@@ -571,7 +618,7 @@ function drawMine(): void {
   status.mine = mine;
   const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
   const input = $<HTMLInputElement>("mb-name");
-  if (!nameTyped) input.value = here ? mine.name : defaultName();
+  if (!nameTyped) input.value = here ? mine.name : ""; // empty until she's named: "Name her" (Elena)
   const saved = here && input.value.trim() === mine.name;
   $("mb-save").textContent = saved ? "Saved" : here ? "Rename my boat" : mine ? "Make this my boat" : "Save as my boat";
   // "Saved" is a status, not a button (Milo, M3): a dim tick.
