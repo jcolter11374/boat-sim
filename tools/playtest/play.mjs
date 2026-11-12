@@ -544,7 +544,8 @@ const CHECKS = {
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
-      const NAME = "<b>Nina</b> Rev C test";
+      // 20 characters at most: the Boatyard caps a name at 20 so it fits on the stern (#414).
+      const NAME = "<b>Nina</b> Rev C";
       await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
       if (!(await page.$("#mb-save"))) throw new SkipCheck("the deployed Boatyard has no \"my boat\" button yet");
       await page.click('#bases button[data-base="revc"]', { noWaitAfter: true });
