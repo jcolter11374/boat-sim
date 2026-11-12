@@ -78,7 +78,7 @@ test("a voyage that ends before the start line never started (Microtransat rules
   const both = card({ verdict: "neither_finished", margin_days: null, boat: side("lost", 3.9, silent), ghost: side("lost", 3.9, silent) });
   const none = { me: false, ghost: false };
   assert.equal(headline(both, none), "Neither boat reached the start line.");
-  assert.match(story(both, none), /about 500 km out, and she didn't get there\./);
-  assert.match(leaves(both, 0.83, "Our kayak", false), /never got to the start: not a race result/);
+  assert.match(story(both, none), /far out in the ocean, and she never reached it\./);
+  assert.match(leaves(both, 0.83, "Our kayak", false), /never reached the start, so it doesn't count as a race\./);
   assert.equal(headline(both), "Lost on day 3.9, and so was the ghost.");
 });

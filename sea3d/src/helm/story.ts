@@ -31,7 +31,7 @@ export interface Started {
   ghost: boolean;
 }
 const BOTH: Started = { me: true, ghost: true };
-const NO_START = "The race begins at a line about 500 km out, and she didn't get there.";
+const NO_START = "The race begins at a line far out in the ocean, and she never reached it.";
 
 /** One line, who won. */
 export function headline(c: Card, started: Started = BOTH): string {
@@ -168,7 +168,7 @@ export function callName(label: string): string {
 
 /** Where this leaves you: one line that turns the result into a reason to go again. `rate` is the build's finish rate, 0-1, if known. */
 export function leaves(c: Card, rate: number | null, boatName = "This build", started = true): string {
-  if (!started) return rate === null ? "A voyage that ends before the start line isn't a race result. Play again." : `${boatName} finishes ${Math.round(rate * 100)}% of launches. This one never got to the start: not a race result.`;
+  if (!started) return rate === null ? "This one never reached the start, so it doesn't count as a race." : `${boatName} finishes ${Math.round(rate * 100)}% of launches. This one never reached the start, so it doesn't count as a race.`;
   if (rate === null) return c.boat.outcome === "arrived" ? "One voyage is one roll of the dice. Try another launch day to see more." : "One voyage is one roll of the dice. Play again, or try another launch day.";
   const pct = `${Math.round(rate * 100)}%`;
   const base = `${boatName} finishes ${pct} of launches.`;
