@@ -461,15 +461,16 @@ const CHECKS = {
       const next = await page.evaluate(() => ({
         kind: window.__helm.standing,
         head: document.querySelector("#r-next .standing")?.textContent ?? "",
-        links: [...document.querySelectorAll("#r-next .next a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
+        // The ways on: under the standing line (before #406), or the card's button row and quiet links (#406).
+        links: [...document.querySelectorAll("#r-next .next a, #result .rc-btns a, #result .rc-links a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
       }));
       must(next.head.trim(), "the standing line is empty");
-      must(next.links.length === 3, `expected 3 ways on, got ${JSON.stringify(next.links)}`);
+      for (const want of [/boatyard/, /race/, /leaderboard/]) must(next.links.some((l) => want.test(l.href ?? "")), `no ${want.source} link among the ways on: ${JSON.stringify(next.links)}`);
       await page.screenshot({ path: `play-${BROWSER}-results-card.png` }).catch(() => {});
       // Follow the leaderboard link like a player: the board loads.
       const lb = next.links.find((l) => /leaderboard/.test(l.href));
       must(lb, "no Leaderboard link on the card");
-      const link = page.locator(`#r-next .next a[href="${lb.href}"]`);
+      const link = page.locator(`#result a[href="${lb.href}"]`).first();
       await link.scrollIntoViewIfNeeded().catch(() => {});
       await link.click({ timeout: 15_000 }).catch((e) => {
         throw new CheckFail(`the card's Leaderboard link can't be clicked: ${String(e).split("\n")[0]}`);
