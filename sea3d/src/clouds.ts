@@ -372,7 +372,8 @@ void main() {
   }
   // The horizon: everything goes to the haze over the last few degrees, as the sea does.
   // Only the last few degrees: the cloud base runs down into the haze, with no flat band above it (Ines).
-  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.07, deckAmt), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
+  // In a downpour the mist swallows the lower sky too, not just the last few degrees (Kai).
+  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.07, deckAmt) + 0.3 * smoothstep(2.0, 8.0, uRain), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
   // Under a deck the cloud goes to the haze (the sea's far fade); in clear weather it thins
   // away and the sky's own horizon shows, which the haze would only darken.
   float hz2 = hz * hz * (3.0 - 2.0 * hz);
