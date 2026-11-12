@@ -1077,6 +1077,98 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Manual: #384 (Sam), the practice marks float: they ride the sea under them (height and tilt
+  // change, a beat behind the water), sit at their draft rather than above or under it, and
+  // don't blink in and out. Both browsers measure; Chromium also prints frames: the course
+  // as the player sees it, then the first mark moved (by the test, in this tab only) to about
+  // 35 m off the boat so its waterline can be judged up close.
+  "look-marks": {
+    manual: true,
+    path: "helm.html?practice",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const look = BROWSER === "chromium";
+      const shots = [];
+      const shot = async (name) => {
+        if (!look) return;
+        const path = `look-${name}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
+      if (!(await page.evaluate(() => !!window.__buoys))) throw new SkipCheck("this build has no floating marks (#384 not deployed)");
+      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 30_000 });
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN });
+      await page.click(".w-gskip", { timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(5000);
+      // Sample the marks for 12 s: height above the water's mean, tilt, and whether each is shown.
+      const sample = () =>
+        page.evaluate(async () => {
+          const ms = window.__buoys.group.children;
+          const rows = ms.map(() => ({ y: [], tilt: [], vis: [] }));
+          for (let k = 0; k < 48; k++) {
+            ms.forEach((m, i) => {
+              rows[i].y.push(m.position.y);
+              rows[i].tilt.push(Math.hypot(m.rotation.x, m.rotation.z) * 57.3);
+              rows[i].vis.push(m.visible);
+            });
+            await new Promise((r) => setTimeout(r, 250));
+          }
+          return rows;
+        });
+      const rows = await sample();
+      must(rows.length >= 2, `only ${rows.length} marks on the triangle`);
+      const out = [];
+      rows.forEach((r, i) => {
+        const lo = Math.min(...r.y), hi = Math.max(...r.y);
+        const flips = r.vis.slice(1).filter((v, k) => v !== r.vis[k]).length;
+        must(flips === 0, `mark ${i + 1} blinked in and out (${flips} changes in 12 s)`);
+        if (!r.vis[0]) return;
+        // y is the body's bottom: about -0.35 m (its draft) plus the wave under it.
+        must(lo > -4 && hi < 3.5, `mark ${i + 1} is off the water: its bottom went from ${lo.toFixed(2)} to ${hi.toFixed(2)} m`);
+        must(hi - lo > 0.02, `mark ${i + 1} doesn't move with the sea (height range ${(hi - lo).toFixed(3)} m in 12 s)`);
+        out.push(`mark ${i + 1}: bottom ${lo.toFixed(2)}..${hi.toFixed(2)} m, tilt ${Math.min(...r.tilt).toFixed(1)}-${Math.max(...r.tilt).toFixed(1)}°`);
+      });
+      must(out.length, "no mark was showing");
+      await shot("marks-course");
+      // Up close: move the first shown mark to about 35 m off the boat, somewhere in view.
+      if (look) {
+        const placed = await page.evaluate(async () => {
+          const b = window.__buoys;
+          const i = b.group.children.findIndex((m) => m.visible);
+          const mk = b.marks[i];
+          for (const deg of [0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180]) {
+            const p = b.group.children[i].position;
+            const a = (deg * Math.PI) / 180;
+            // Scene x east, z south; the chase camera looks along the boat, roughly toward the mark.
+            const dir = Math.atan2(p.x, -p.z) + a;
+            const want = { x: 35 * Math.sin(dir), z: -35 * Math.cos(dir) };
+            mk.x += want.x - p.x;
+            mk.y -= want.z - p.z;
+            await new Promise((r) => setTimeout(r, 600));
+            const tag = document.getElementById("markptr");
+            if (tag && tag.dataset.edge === "") return deg;
+          }
+          return null;
+        });
+        await page.waitForTimeout(3000);
+        await shot("marks-close");
+        out.push(placed == null ? "couldn't put a mark in view up close" : `close frame with the mark ${placed}° off the line to it`);
+      }
+      // The Annapolis page the player reaches from Watch a voyage.
+      if (look) {
+        await page.goto(SITE + "voyage.html?place=annapolis", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN }).catch(() => {});
+        await page.waitForTimeout(8000);
+        await shot("marks-voyage-annapolis");
+      }
+      return `${out.join("; ")}${shots.length ? `; frames ${shots.join(", ")}` : ""}`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
