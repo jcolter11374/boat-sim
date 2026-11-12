@@ -218,8 +218,8 @@ void main() {
     vec2 wd = length(uWind) > 0.1 ? normalize(uWind) : vec2(1.0, 0.0);
     vec2 r = vec2(dot(q + uScud, wd), dot(q + uScud, vec2(-wd.y, wd.x)));
     vec2 morph = vec2(uTime * 0.012, uTime * 0.007);
-    float n = fbmL(r / vec2(1700.0, 1100.0) + uSeed * 1.7 + morph, lod, oct);
-    if (uQ > 0.5) n += 0.35 * (0.5 - billowL(r / vec2(420.0, 300.0) + 4.7 - morph * 3.0, lod, oct)) * (1.0 - lod);
+    float n = fbmL(r / vec2(1300.0, 1250.0) + uSeed * 1.7 + morph, lod, oct);
+    if (uQ > 0.5) n += 0.35 * (0.5 - billowL(r / vec2(360.0, 340.0) + 4.7 - morph * 3.0, lod, oct)) * (1.0 - lod);
     n = mix(n, 0.45, lod);
     // Patchy: separate rags with the deck showing between them, not a blanket.
     float d = smoothstep(0.58 - 0.06 * scudAmt, 0.78, n) * scudAmt * 0.8;
@@ -259,11 +259,13 @@ void main() {
         shade = clamp(0.5 * thick + 2.4 * toward, 0.0, 1.0);
       } else shade = 0.3 + 0.4 * thick;
       float side = smoothstep(2500.0, 12000.0, dist); // far off you see the sunlit sides, not the base
-      float baseShade = mix(0.45 + 0.5 * shade, shade * (0.35 + 0.65 * smoothstep(-0.3, 0.6, facing)), side);
+      float baseShade = mix(0.5 + 0.5 * shade, shade * (0.25 + 0.75 * smoothstep(-0.3, 0.6, facing)), side);
       // Golden hour: sunlit sides go warm gold, the shade stays cool blue-grey.
       float gold = smoothstep(0.0, 0.06, uSunDir.y) * (1.0 - smoothstep(0.14, 0.45, uSunDir.y));
       // (the flat bases overhead see the blue sky more than the sun: they stay neutral)
-      vec3 lit = uLit * mix(vec3(1.0), vec3(1.1, 0.92, 0.74), gold * (0.25 + 0.75 * side));
+      // Sunlit tops bright white; at golden hour gold on the sun side, pink further round.
+      vec3 goldC = mix(vec3(1.3, 0.85, 0.72), vec3(1.35, 1.0, 0.62), smoothstep(-0.2, 0.7, facing));
+      vec3 lit = uLit * 1.3 * mix(vec3(1.0), goldC, gold * (0.2 + 0.8 * side));
       // Shade is cool blue-grey (lit by the blue sky), never the haze's warm brown.
       vec3 cool = dot(uShade, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.84, 0.92, 1.1);
       vec3 c = mix(lit, mix(uShade, cool, 0.75), clamp(baseShade, 0.0, 1.0));
@@ -353,7 +355,8 @@ void main() {
     col += (1.0 - alpha) * da * dc; alpha += (1.0 - alpha) * da;
   }
   // The horizon: everything goes to the haze over the last few degrees, as the sea does.
-  float hz = (1.0 - smoothstep(0.0, 0.16, el)) * (1.0 - 0.75 * brkSide); // the break stays bright
+  // Only the last few degrees: the cloud base runs down into the haze, with no flat band above it (Ines).
+  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.06, deckAmt), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
   // Under a deck the cloud goes to the haze (the sea's far fade); in clear weather it thins
   // away and the sky's own horizon shows, which the haze would only darken.
   float hz2 = hz * hz * (3.0 - 2.0 * hz);
@@ -373,9 +376,12 @@ void main() {
     float h01 = clamp(el / max(top, 1e-4), 0.0, 1.0);
     float wall = on * (1.0 - smoothstep(0.6, 1.0, h01)) * smoothstep(-0.01, 0.004, el);
     // Dark and rain-grey at its foot, hazier far off, its towering tops paler where the sun catches them.
-    vec3 wc = mix(uHaze * 0.7, uBelly * 0.7, smoothstep(0.05, 0.7, uWall) * (1.0 - 0.4 * h01));
+    // Its base sits a little above the horizon in an arch, with grey rain hanging below it.
+    float arch = 0.004 + 0.012 * uWall * on * (0.6 + 0.4 * cos(az * 3.0 + uSeed.x));
+    vec3 wc = mix(uHaze * 0.6, uBelly * 0.5, smoothstep(0.05, 0.6, uWall) * (1.0 - 0.35 * h01));
+    wc = mix(uBelly * 0.9 + uHaze * 0.25, wc, smoothstep(arch * 0.6, arch, el)); // the rain under the base
     wc = mix(wc, uLit * 0.8, smoothstep(0.45, 1.0, h01) * 0.45 * sunUp);
-    float wa = wall * mix(0.5, 0.92, uWall);
+    float wa = wall * mix(0.55, 0.98, uWall);
     col += (1.0 - alpha) * wa * wc; alpha += (1.0 - alpha) * wa;
   }
   // A low sun behind a deck: the far edge of the cloud lights up warm along the horizon
@@ -402,7 +408,7 @@ void main() {
     // In a downpour the mist is all round: far curtains are lost in it, and the horizon is haze.
     rainC = curtain * hang * streak * smoothstep(0.05, 3.0, uRain) * 0.75 * deckAmt * (1.0 - 0.85 * smoothstep(2.0, 8.0, uRain));
   }
-  float hb = (1.0 - smoothstep(-0.01, 0.09, el)) * deckAmt;
+  float hb = (1.0 - smoothstep(-0.01, 0.03, el)) * deckAmt;
   col += (1.0 - alpha) * uHaze * hb; alpha += (1.0 - alpha) * hb;
   col = mix(col, uBelly * 1.6 * alpha, rainC); // steel-grey curtains (Kai's, in the deck's colours)
   if (alpha < 0.004) discard;

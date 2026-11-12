@@ -399,7 +399,7 @@ export class Atmosphere {
       this.glintLight = day > 0.15 ? this.sunLight * (1 - this.rain) : 0; // no glitter path through rain
     } else {
       this.glintDir.copy(this.moon.position).normalize();
-      this.glintLight = this.moon.intensity * 0.6;
+      this.glintLight = this.moon.intensity * 0.6 * (1 - 0.95 * Math.max(overcast, smooth(storm, 0.2, 0.7))); // no moon path under a full deck (Sam)
     }
     if (this.bloom) this.bloom.strength = 0.22 + 0.25 * dusk + 0.15 * night;
     this.storm = storm;
