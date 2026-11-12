@@ -59,7 +59,7 @@ console.log(`index.html: ${units.length} units, ${failed.length} failed`);
 
 // The contact sheet as one PNG (needs playwright; skipped without it).
 let pw = null;
-for (const t of [join(HERE, "../../sea3d/package.json"), join(execSync("npm root -g", { encoding: "utf8" }).trim(), "x.json")]) {
+for (const t of [join(HERE, "package.json"), join(HERE, "../../sea3d/package.json"), join(execSync("npm root -g", { encoding: "utf8" }).trim(), "x.json")]) {
   try {
     pw = createRequire(t)("playwright");
     break;
