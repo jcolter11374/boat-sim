@@ -128,15 +128,30 @@ function build(): void {
 // Port quarter, a little above the deck: the panels, the dome and the keel all show.
 camera.position.set(-4.6, 1.9, 6.6);
 controls.target.set(0.1, -0.15, 0);
-// Centre the boat in the open space between the two panels.
+// Centre the boat in the open space between the two panels. Where that gap is too narrow for her
+// (1024 wide), she drops into the space under the build card instead, clear of both panels (Ines).
 function frameView(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const left = w > 900 ? 404 : 0;
-  const right = w > 900 ? 324 : 0;
-  camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+  if (w <= 900) {
+    camera.setViewOffset(w, h, 0, 0, w, h);
+    return;
+  }
+  const left = 404;
+  const right = 324;
+  if (w - left - right >= 520) {
+    camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+    return;
+  }
+  const sumBottom = document.getElementById("sum")?.getBoundingClientRect().bottom ?? h / 2;
+  const viewsTop = document.getElementById("views")?.getBoundingClientRect().top ?? h - 60;
+  const cx = (left + w) / 2;
+  const cy = Math.min((sumBottom + viewsTop) / 2, h * 0.78);
+  camera.setViewOffset(w, h, w / 2 - cx, h / 2 - cy, w, h);
 }
 frameView();
+// The build card grows (a test's result), so the space under it moves.
+new ResizeObserver(() => frameView()).observe(document.getElementById("sum")!);
 
 // ---------- the catalog and the design ----------
 let cat: Catalog | null = null;
