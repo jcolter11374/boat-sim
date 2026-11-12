@@ -705,7 +705,7 @@ const CHECKS = {
       if (!/C5/.test(label)) throw new SkipCheck(`the deployed Boatyard has no Rev C5 preset yet ("${label.trim()}")`);
       const pressed = await page.getAttribute('#bases button[data-base="revc"]', "aria-pressed");
       must(pressed === "true", "opening #base=revc didn't select the Rev C5 preset");
-      must(/our model/i.test(label), `the preset isn't labelled as our model: "${label.trim()}"`);
+      must(/our model/i.test(label), `the preset isn't labelled as our model: "${label.trim()}" (${await page.evaluate(() => JSON.stringify([...document.querySelectorAll('[data-base="revc"]')].map((e) => [e.closest("[id]")?.id, e.getAttribute("aria-label"), e.textContent.trim()])))})`);
       // The boat's totals fill in a moment after the preset is picked: give them a few seconds.
       const shown = await page.waitForFunction(() => /26\.9\s*kg/.test(document.body.innerText), null, { timeout: 20_000 }).then(() => true).catch(() => false);
       const kg = shown ? "" : await page.evaluate(() => (document.body.innerText.match(/\d+(\.\d)?\s*kg/g) || []).slice(0, 4).join(", "));
@@ -753,7 +753,10 @@ const CHECKS = {
       if (where.group && !where.gopen) await page.locator(`.slot[data-group="${where.group}"] h3`).click();
       if (where.slot && !where.sopen) await page.locator(`.sl-head[data-slot="${where.slot}"]`).click();
       await opt.scrollIntoViewIfNeeded().catch(() => {});
-      await opt.click({ noWaitAfter: true });
+      await opt.click({ noWaitAfter: true, timeout: 30_000 }).catch(async (e) => {
+        const why = await opt.evaluate((el) => { const r = el.getBoundingClientRect(); return { text: el.textContent.trim().slice(0, 60), box: [r.x, r.y, r.width, r.height].map(Math.round), hiddenBy: el.closest("[hidden], details:not([open])")?.outerHTML.slice(0, 120) ?? "", where: el.closest(".slot")?.outerHTML.slice(0, 160) ?? "" }; }).catch(() => ({}));
+        throw new CheckFail(`couldn't click the part marked ${delta}: ${JSON.stringify({ where, ...why })} (${String(e).split("\n")[0]})`);
+      });
       const after = await page.waitForFunction((b) => { const t = document.getElementById("s-odds").textContent.trim(); return t !== b && /\d+%/.test(t) && t; }, before, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => "");
       must(after, `picking a part marked ${delta} left the odds at "${before}"`);
       await page.screenshot({ path: `play-${BROWSER}-odds.png` }).catch(() => {});
@@ -770,6 +773,8 @@ const CHECKS = {
       must(await page.locator("#title").isVisible(), "the title menu didn't show on a first visit");
       const menu = await page.evaluate(() => [...document.querySelectorAll("#title a, #title button")].filter((e) => e.offsetParent).map((e) => e.textContent.trim().split("\n")[0]));
       await page.screenshot({ path: `play-${BROWSER}-title.png` }).catch(() => {});
+      // Since #437 "Just watch the sea" sits under More: open it first.
+      if (!(await page.locator("#t-sea").isVisible()) && (await page.locator("#t-more > summary").count())) await page.click("#t-more > summary", { timeout: 10_000 }).catch(() => {});
       await page.click("#t-sea", { noWaitAfter: true, timeout: 10_000 }).catch(() => {
         throw new CheckFail(`couldn't click "Just watch the sea"`);
       });
@@ -1225,7 +1230,12 @@ const CHECKS = {
       const odd = names.filter((n) => !KNOWN.test(n));
       must(!odd.length, `unknown moments: ${odd.join(", ")}`);
       // "Once per event": the same moment twice within a second is a double fire.
-      const doubles = p.filter((x, i) => i && p[i - 1].name === x.name && Math.abs(x.t - p[i - 1].t) < 1);
+      // t is the sound clock: in Firefox on the runner it never starts (no audio device), so every t is
+      // the same and nothing can be told apart; at 4 days a second two real knockdowns can land within a
+      // second of each other, so only a repeat within a quarter second counts.
+      const frozen = p.length > 1 && p.every((x) => x.t === p[0].t);
+      const doubles = frozen ? [] : p.filter((x, i) => i && p[i - 1].name === x.name && Math.abs(x.t - p[i - 1].t) < 0.25);
+      if (frozen) out.push("sound clock frozen (no audio device): double-fire test not possible");
       must(!doubles.length, `fired twice for one event: ${doubles.map((d) => d.name).join(", ")}`);
       must(count("hello") === 1, `hello ${count("hello")} times`);
       if (st.over) must(count("settle") === 1, `the end of the voyage should settle once, got ${count("settle")}`);
@@ -1406,6 +1416,138 @@ const CHECKS = {
       return `${shots.length} frames: ${shots.join(", ")}`;
     },
   },
+  // #442 (M1 piece 6): the title hero, your own boat at golden hour behind the menu (desktop) or
+  // above it (phone). Elena: look at the hull's top edge at a pixel ratio of 2 or more.
+  "look-title": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      const browser = page.context().browser();
+      const shots = [];
+      const out = [];
+      const SIZES = [
+        { name: "1920-dpr2", viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 },
+        { name: "1280-dpr2", viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 },
+        { name: "phone-390-dpr3", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+      ];
+      for (const s of SIZES) {
+        const { name, ...opts } = s;
+        const ctx = await browser.newContext({ ...opts, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(e.message));
+        await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForTimeout(8000);
+        const info = await p.evaluate(() => ({
+          title: !document.getElementById("title")?.hidden,
+          heroClass: document.body.classList.contains("title"),
+          menu: (() => { const r = document.querySelector("#title nav")?.getBoundingClientRect(); return r ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null; })(),
+        }));
+        const path = `look-title-${name}.jpg`;
+        if (await jpeg(p, path)) {
+          const b64 = readFileSync(path).toString("base64");
+          console.log(`LOOK-BEGIN ${path}`);
+          for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+          console.log(`LOOK-END ${path}`);
+          shots.push(name);
+        }
+        out.push(`${name}: menu ${info.title ? "shown" : "NOT shown"} at ${JSON.stringify(info.menu)}${errs.length ? `, page errors: ${errs.slice(0, 2).join(" | ")}` : ""}`);
+        await ctx.close().catch(() => {});
+      }
+      return `${out.join("; ")}; frames ${shots.join(", ")}`;
+    },
+  },
+  // #443 (M1 piece 5): the Set sail card is the one place to pick. Pick a day…, a challenge,
+  // More options (steering, breakdowns, battery as pills), then set sail; practice from the card too.
+  "setsail-card": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.locator("#ss-when-opts").count())) throw new SkipCheck("this build has no Set sail card");
+      await page.waitForFunction(() => document.querySelectorAll("#ss-when-opts .ss-pill").length >= 3, null, { timeout: MIN }).catch(() => {
+        throw new CheckFail("the card's launch day pills didn't show");
+      });
+      const out = [];
+      const pillTexts = (box) => page.evaluate((b) => [...document.querySelectorAll(`${b} .ss-pill`)].map((e) => ({ t: e.textContent.trim(), on: e.getAttribute("aria-pressed") === "true", vis: e.offsetParent !== null })), box);
+      // The old start lists must not show anywhere.
+      const old = await page.evaluate(() => ["#launch", "#challenge", "#modes", "#breakdowns", "#safe"].filter((s) => { const e = document.querySelector(s); return e && e.offsetParent !== null; }));
+      must(!old.length, `the old pickers still show: ${old.join(", ")}`);
+      // Pick a day…
+      let days = await pillTexts("#ss-when-opts");
+      const pick = days.findIndex((d) => /Pick a day/.test(d.t));
+      must(pick >= 0, `no "Pick a day…" pill: ${days.map((d) => d.t).join(" / ")}`);
+      await page.locator("#ss-when-opts .ss-pill").nth(pick).click({ timeout: 15_000 });
+      days = await pillTexts("#ss-when-opts");
+      must(days.length >= 5, `"Pick a day…" didn't open the other days: ${days.map((d) => d.t).join(" / ")}`);
+      const dayIdx = days.findIndex((d) => /May/.test(d.t)) >= 0 ? days.findIndex((d) => /May/.test(d.t)) : days.length - 1;
+      await page.locator("#ss-when-opts .ss-pill").nth(dayIdx).click({ timeout: 15_000 });
+      const launch = await page.evaluate(() => document.getElementById("launch").value);
+      days = await pillTexts("#ss-when-opts");
+      must(days[dayIdx]?.on, `the picked day "${days[dayIdx]?.t}" isn't shown as picked`);
+      out.push(`days ${days.map((d) => d.t).join(" / ")}; picked "${days[dayIdx].t}" (launch=${launch})`);
+      // A challenge.
+      const chShown = await page.evaluate(() => !document.getElementById("ss-ch").hidden);
+      let chName = "";
+      if (chShown) {
+        const ch = await pillTexts("#ss-ch-opts");
+        const i = ch.findIndex((c) => c.t !== "None" && !/More/.test(c.t));
+        must(i > 0, `no challenge pills: ${ch.map((c) => c.t).join(" / ")}`);
+        await page.locator("#ss-ch-opts .ss-pill").nth(i).click({ timeout: 15_000 });
+        const after = await page.evaluate(() => ({ v: document.getElementById("challenge").value, why: document.getElementById("ss-why").textContent.trim(), whyShown: !document.getElementById("ss-why").hidden }));
+        must(after.v, `picking "${ch[i].t}" didn't set a challenge`);
+        must(after.whyShown && after.why, `picking "${ch[i].t}" showed no line saying why`);
+        chName = after.v;
+        out.push(`challenge "${ch[i].t}" (${after.v}): "${after.why.slice(0, 90)}"`);
+        // More… shows the rest.
+        const more = (await pillTexts("#ss-ch-opts")).findIndex((c) => /More/.test(c.t));
+        if (more >= 0) {
+          await page.locator("#ss-ch-opts .ss-pill").nth(more).click({ timeout: 15_000 });
+          out.push(`More… opened ${(await pillTexts("#ss-ch-opts")).length} challenge pills`);
+        }
+      } else out.push("no challenge row (challenges not loaded)");
+      // More options: steering, breakdowns, battery.
+      await page.click("#more > summary", { timeout: 15_000 });
+      const steer = await pillTexts("#ss-mode-opts");
+      const toggles = await pillTexts("#ss-toggles");
+      must(steer.length === 2 && steer.every((s) => s.vis), `How you steer should be two pills: ${JSON.stringify(steer)}`);
+      must(toggles.length === 2 && toggles.every((s) => s.vis), `Breakdowns and Save the battery should be two pills: ${JSON.stringify(toggles)}`);
+      await page.locator("#ss-mode-opts .ss-pill").nth(1).click({ timeout: 15_000 });
+      const sat = await page.evaluate(() => ({ mode: document.querySelector('input[name="mode"]:checked')?.value, safe: document.getElementById("safe").checked, line: document.getElementById("ss-mode-line").textContent.trim() }));
+      must(sat.mode === "base", `the second steering pill didn't pick satellite steering (${sat.mode})`);
+      await page.locator("#ss-mode-opts .ss-pill").nth(0).click({ timeout: 15_000 });
+      const bd0 = await page.evaluate(() => document.getElementById("breakdowns").checked);
+      await page.locator("#ss-toggles .ss-pill").nth(0).click({ timeout: 15_000 });
+      const bd1 = await page.evaluate(() => document.getElementById("breakdowns").checked);
+      must(bd0 !== bd1, "the Breakdowns pill didn't switch breakdowns");
+      await page.locator("#ss-toggles .ss-pill").nth(0).click({ timeout: 15_000 });
+      out.push(`steer ${steer.map((s) => s.t).join(" / ")} (satellite turned Save the battery ${sat.safe ? "on" : "off"}); toggles ${(await pillTexts("#ss-toggles")).map((s) => s.t).join(" / ")}`);
+      // Is Set sail still in view with More options open?
+      const goSeen = await page.evaluate(() => { const r = document.getElementById("go").getBoundingClientRect(); return r.bottom <= innerHeight && r.top >= 0; });
+      out.push(`Set sail ${goSeen ? "in view" : "OFF SCREEN"} with More options open`);
+      await page.screenshot({ path: `play-${BROWSER}-setsail-card.png` }).catch(() => {});
+      // Set sail on the crossing.
+      await page.click("#go", { timeout: 30_000, noWaitAfter: true });
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN }).catch(() => {});
+      const st = await page.evaluate(() => ({ err: window.__helm.error, ready: window.__helm.ready, ch: window.__helm.challenge, hidden: document.getElementById("start").hidden || getComputedStyle(document.getElementById("start")).display === "none" }));
+      must(!st.err, `setting sail failed: ${st.err}`);
+      must(st.ready, "the crossing didn't start within 8 min");
+      must(st.hidden, "the Set sail card stayed up after Set sail");
+      if (chName) must(st.ch === chName, `sailing challenge "${st.ch}", not the picked "${chName}"`);
+      out.push(`crossing started${chName ? ` on challenge ${st.ch}` : ""}`);
+      // Practice from the card.
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (await page.locator("#ss-course-opts").count()) {
+        await practiceTriangle(page);
+        must(await page.evaluate(() => !!window.__wheel?.on), "Practice from the card didn't put me at the wheel");
+        out.push("practice: triangle from the card, at the wheel");
+      } else out.push("practice: no courses on the card");
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
@@ -1524,7 +1666,7 @@ const CHECKS = {
       });
       must(helm.has, "the helm's boat list has no row for my boat");
       must(helm.checked, "my boat isn't ticked at the helm");
-      must(helm.label.includes(NAME), `the helm's row doesn't show the name as typed: "${helm.label.trim()}"`);
+      must(helm.label.includes(NAME), `the helm's row doesn't show the name as typed: ${JSON.stringify(helm.label.trim())} (stored ${JSON.stringify(await page.evaluate(() => localStorage.getItem("boatsim.myboat.v1")?.slice(0, 160)))})`);
       await helmStart(page);
       const sailing = await page.evaluate(() => window.__helm.sailing);
       must(sailing?.base === "revc", `the helm sailed ${JSON.stringify(sailing)}, not my Rev C`);
