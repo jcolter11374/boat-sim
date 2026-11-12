@@ -1,9 +1,9 @@
 """A "Your call" card's stake against the ghost comes from the forecast, never the true future."""
 
 import pytest
+from test_sandbox_helm import MAY1, env  # noqa: F401 - the shared bundle fixture
 
 from boatsim.sandbox.helm import Game
-from tests.test_sandbox_helm import MAY1, env  # noqa: F401 - the shared bundle fixture
 
 
 def test_outlook_on_auto_matches_the_ghost_and_leaves_the_game_alone(env):  # noqa: F811
