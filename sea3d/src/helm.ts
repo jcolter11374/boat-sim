@@ -1007,10 +1007,15 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
       const cut = e ? linkCutBy(e) : null;
       if (cut && e) pausedFor.add(e.h); // told here, with the pause; newEvents leaves it
       (cut ? noteAlone : note)(cut ? NO_LINK_WORDS[cut] : e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), cut && e ? linkLabel(e) : `Day ${page.status!.day.toFixed(1)}`, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn);
+    } else if (callDue()) {
+      // Stopped for the challenge's big call: the card says why, not "three quiet days".
     } else if (!(kind !== "event" && stopped === "time"))
       note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
     if (page.status?.over) finishing = true; // the results wait for the picture (#329)
+    // A challenge's big call (and the toast after it) come on a skip too: "Until something
+    // happens" stops on the call's day, and the call is the something.
+    else if (mission()) maybeDecide(true);
   } catch (e) {
     fail(e);
     return;
@@ -1824,7 +1829,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
   }
   // Two days after it: what the call bought you, against the ghost.
   if (missionCall && h - missionCall.h >= 48) {
-    const text = callToast(missionCall.key, st.boat.lon, st.ghost.lon, st.boat.lat);
+    const text = callToast(missionCall.key, st.lead_km);
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.good));
     missionCall = null;
   }
@@ -1916,9 +1921,16 @@ let decisionSeq = 0;
 const calls: Call[] = [];
 
 /** Stop the clock and ask, when a decision is due. */
-function maybeDecide(): boolean {
+/** A challenge's big call is due now (its day has come and it hasn't been asked). */
+function callDue(): boolean {
+  const m = mission();
+  const st = page.status;
+  return !!(m && st && m.goal.call_day != null && !asked.mission && CALLS[m.id] && st.day >= m.goal.call_day);
+}
+/** force: ask even with the clock stopped (a challenge's skip must not jump past its big call). */
+function maybeDecide(force = false): boolean {
   const st = game.status;
-  if (!st || rate === 0) return false;
+  if (!st || (rate === 0 && !force)) return false;
   const d = decisionDue(st, lastForecast);
   if (!d) return false;
   setRate(0, true);

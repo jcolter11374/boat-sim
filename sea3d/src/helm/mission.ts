@@ -84,12 +84,15 @@ export const CALLS: Record<string, Call> = {
   },
 };
 
-/** What the call bought you, a couple of days later: against the ghost, in km east. */
-export function callToast(key: string, myLon: number, ghostLon: number, lat: number): string {
-  const kmEast = Math.round(((myLon - ghostLon) * 111.32 * Math.cos((lat * Math.PI) / 180)) / 10) * 10;
+/**
+ * What the call bought you, a couple of days later: against the ghost, in the same km as the
+ * strip's "vs the ghost" (the simulator's lead_km, + ahead), so the toast and the strip agree.
+ */
+export function callToast(key: string, leadKm: number): string {
+  const km = Math.round(leadKm); // as the strip rounds it
   const verb: Record<string, string> = { east: "Running east", southeast: "Heading south-east", auto: "Following the autopilot" };
-  if (Math.abs(kmEast) < 20) return `${verb[key] ?? "Your call"}: level with the autopilot so far.`;
-  return `${verb[key] ?? "Your call"}: ${Math.abs(kmEast).toLocaleString("en-US")} km ${kmEast > 0 ? "east" : "west"} of the autopilot.`;
+  if (Math.abs(km) < 1) return `${verb[key] ?? "Your call"}: level with the autopilot so far.`;
+  return `${verb[key] ?? "Your call"}: ${Math.abs(km).toLocaleString("en-US")} km ${km > 0 ? "ahead of" : "behind"} the autopilot so far.`;
 }
 
 /** The judge's stars on the result card (Ravi's judge(), through the simulator's result). */

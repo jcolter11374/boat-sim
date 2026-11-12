@@ -39,8 +39,9 @@ test("Sandy's call always offers the autopilot's way, and each option says its t
 });
 
 test("the toast and the stars say what happened, in plain words", () => {
-  assert.equal(callToast("east", -66, -70.5, 38), "Running east: 390 km east of the autopilot.");
-  assert.equal(callToast("auto", -70.5, -70.5, 38), "Following the autopilot: level with the autopilot so far.");
+  assert.equal(callToast("east", -16), "Running east: 16 km behind the autopilot so far.");
+  assert.equal(callToast("southeast", 42), "Heading south-east: 42 km ahead of the autopilot so far.");
+  assert.equal(callToast("auto", 0.3), "Following the autopilot: level with the autopilot so far.");
   const s = starsText({ stars: 2, closest_km: 512.4, end_lon: -69.2, battery_low: 0.14, sailing: true }, SANDY);
   assert.equal(s.stars, "★★☆");
   assert.equal(s.why[0], "Closest to the centre: 512 km.");
