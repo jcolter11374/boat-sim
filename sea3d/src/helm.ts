@@ -2713,6 +2713,9 @@ const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
 function frameBoat(dt: number): void {
   const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
+  // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
+  // the horizon lower, never dead centre (Ines).
+  const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on;
   let tx = 0;
   let ty = 0;
   if (want && smoothYaw !== null) {
@@ -2726,6 +2729,9 @@ function frameBoat(dt: number): void {
     const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
     tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
     ty = -0.1 * room;
+  } else if (waiting) {
+    tx = 0.12;
+    ty = -0.1;
   } else if (page.card && !arrival && !wheel.on && !cine.on && window.innerWidth > 900) {
     // The results card sits on the left two-thirds: the boat's last moment on the right third (Leo, Elena).
     here0.set(0, 0, 0).project(camera);
