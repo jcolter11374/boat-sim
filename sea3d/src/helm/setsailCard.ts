@@ -11,7 +11,7 @@ import { onMyBoatChange, type MyBoat } from "../myboat";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
-  where: { ocean: ["Across the Atlantic to Portugal", "5,256 km"], annapolis: ["Annapolis practice course", "about 10 min"] },
+  where: { ocean: ["Across the Atlantic to Portugal", "5,256 km"], annapolis: ["Annapolis practice course", ""] },
   when: { calm: ["Calm", "23 Apr 2020"], rough: ["Rough", "1 Apr 2020"] },
   /** Annapolis (M1 piece 3, Leo): one plain line for the picked course, and the wind as the strip says it. */
   course: {
@@ -97,7 +97,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
     // Practice always sails the club's yacht: say so, so nobody wonders where their boat went (Ines).
     $("ss-boat").hidden = !show.boatShown;
     $("ss-practiceboat").hidden = show.boatShown;
-    pills($("ss-where-opts"), SET_SAIL.where.filter((o) => o.key === "ocean" || ANNAPOLIS_ON_CARD).map((o) => ({ key: o.key, label: CARD_WORDS.where[o.key][0], sub: CARD_WORDS.where[o.key][1] })), where, (k) => {
+    pills($("ss-where-opts"), SET_SAIL.where.filter((o) => o.key === "ocean" || ANNAPOLIS_ON_CARD).map((o) => ({ key: o.key, label: CARD_WORDS.where[o.key][0], sub: CARD_WORDS.where[o.key][1] || undefined })), where, (k) => {
       where = k as SetSail["where"];
       draw();
     });
