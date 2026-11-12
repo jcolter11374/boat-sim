@@ -80,6 +80,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const s = { ...hooks.current(), where, challenge: where === "ocean" ? challenge.value : "" };
     const show = implied(s);
     hooks.preview?.(where);
+    // The top bar's chip names the boat you'll sail: the practice boat while Annapolis is picked.
+    document.dispatchEvent(new CustomEvent("bluewater:chip", { detail: { practice: where !== "ocean" } }));
     // Your boat: the ticked radio's name (the player's own text for a Boatyard design: textContent).
     $("ss-boatname").textContent = checkedBoat()?.parentElement?.querySelector("b")?.textContent ?? "Our kayak";
     // Practice always sails the club's yacht: say so, so nobody wonders where their boat went (Ines).
