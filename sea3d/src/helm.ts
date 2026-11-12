@@ -1968,26 +1968,45 @@ function drawResultMap(): void {
     }
     const [fx, fy] = m.xy(target[0], target[1]);
     if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
-    // An arrow on the edge, pointing at the finish, with how far it was.
+    // The finish, off the frame: in the top-right corner, "4,728 km to the finish ▶", the arrow
+    // pointing its way, clear of the end marker (Ines, Leo).
     const ang = Math.atan2(fy - ey, fx - ex);
-    const ax = W - 14;
-    const ay = THREE.MathUtils.clamp(ey + Math.tan(ang) * (ax - ex), 14, H - 14);
+    const ax = W - 12;
+    const ay = 14;
     g.save();
     g.translate(ax, ay);
     g.rotate(ang);
-    g.fillStyle = "rgba(255,255,255,.85)";
+    g.fillStyle = "rgba(255,255,255,.9)";
     g.beginPath();
-    g.moveTo(8, 0);
-    g.lineTo(-4, -6);
-    g.lineTo(-4, 6);
+    g.moveTo(6, 0);
+    g.lineTo(-4, -5);
+    g.lineTo(-4, 5);
     g.closePath();
     g.fill();
     g.restore();
     g.font = "600 11px system-ui, sans-serif";
     g.textAlign = "right";
-    g.fillStyle = "rgba(235,242,250,.9)";
+    g.textBaseline = "middle";
+    g.fillStyle = "rgba(235,242,250,.92)";
     const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
-    g.fillText(`finish, ${left} km`, ax + 4, ay > H - 24 ? ay - 12 : ay + 20);
+    g.fillText(`${left} km to the finish`, ax - 10, ay);
+    // The race's start line runs through the frame without its words on a small map: name it.
+    const west = game.boat!.course.west_line as [number, number][];
+    const seen: [number, number][] = [];
+    for (let k = 0; k + 1 < west.length; k++)
+      for (let f = 0; f <= 1; f += 0.05) {
+        const [x, y] = m.xy(west[k][0] + (west[k + 1][0] - west[k][0]) * f, west[k][1] + (west[k + 1][1] - west[k][1]) * f);
+        if (x > 70 && x < W - 4 && y > 34 && y < H - 8) seen.push([x, y]);
+      }
+    if (seen.length) {
+      // Halfway along the part in view, the words to its left so they never run off the edge.
+      const [x, y] = seen[Math.floor(seen.length / 2)];
+      g.textAlign = "right";
+      g.textBaseline = "middle";
+      g.font = "600 10px system-ui, sans-serif";
+      g.fillStyle = "rgba(255,255,255,.7)";
+      g.fillText("start line", x - 6, y);
+    }
   });
 }
 

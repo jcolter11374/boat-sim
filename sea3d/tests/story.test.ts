@@ -68,7 +68,7 @@ test("each call says what it was worth until the next one", () => {
 
 test("where this leaves you turns a loss into a reason to go again", () => {
   const lost = card({ verdict: "lost", boat: side("lost", 9) });
-  assert.equal(leaves(lost, 0.83, "Our kayak"), "Our kayak finishes 83 % of launches. This was one of the unlucky ones.");
+  assert.equal(leaves(lost, 0.83, "Our kayak"), "Our kayak finishes 83% of launches. This was one of the unlucky ones.");
   assert.match(leaves(lost, 0.17), /Try another design in the Boatyard\?/);
   assert.match(leaves(card({}), 0.83), /This was one of them\./);
   assert.match(leaves(lost, null), /roll of the dice/);

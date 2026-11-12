@@ -157,7 +157,7 @@ export function callName(label: string): string {
 /** Where this leaves you: one line that turns the result into a reason to go again. `rate` is the build's finish rate, 0-1, if known. */
 export function leaves(c: Card, rate: number | null, boatName = "This build"): string {
   if (rate === null) return c.boat.outcome === "arrived" ? "One voyage is one roll of the dice. Try another launch day to see more." : "One voyage is one roll of the dice. Play again, or try another launch day.";
-  const pct = `${Math.round(rate * 100)} %`;
+  const pct = `${Math.round(rate * 100)}%`;
   const base = `${boatName} finishes ${pct} of launches.`;
   if (c.boat.outcome === "arrived") return `${base} This was one of them.`;
   if (rate >= 0.5) return `${base} This was one of the unlucky ones.`;
