@@ -728,13 +728,13 @@ const CHECKS = {
       await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => { throw new CheckFail("the triangle didn't put me at the wheel"); });
       await page.keyboard.down("ArrowLeft"); await page.waitForTimeout(1500); await page.keyboard.up("ArrowLeft");
       await page.waitForTimeout(8000);
-      const what = await page.evaluate(() => (document.getElementById("practice-what")?.innerText ?? "").replace(/\s+/g, " "));
+      const what = await page.evaluate(() => (document.body.innerText.match(/Next mark[^\n]*/) ?? [document.getElementById("practice-what")?.innerText ?? ""])[0].replace(/\s+/g, " "));
       console.log(`PRACTICE ${JSON.stringify(what)}`);
       await lookShot(page, `look-maya-${BROWSER}-practice.jpg`);
       must(/\d+:\d\d/.test(what) || /\d+ s\b/.test(what), `no clock in the practice banner: "${what}"`);
       out.push(`practice banner "${what.slice(0, 80)}"`);
       // #404: 1 May 2020, both boats lose the main box on day 3.9: the orders lock with "no link".
-      if (BROWSER === "chromium") {
+      if (BROWSER === "chromium" && process.env.NOLINK) {
         await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
         await helmStart(page, async (p) => p.selectOption("#launch", "2"));
         let st = null;
@@ -746,7 +746,7 @@ const CHECKS = {
           await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 4 * MIN });
         }
         await page.waitForTimeout(3000);
-        if (await page.locator("#result").isVisible().catch(() => false)) await lookShot(page, `look-maya-${BROWSER}-nolink-card.jpg`);
+        if (await page.locator("#result").isVisible().catch(() => false)) await lookShot(page, `look-maya-${BROWSER}-nolink-card.jpg`).catch(() => {});
         await page.evaluate(() => { const c = document.getElementById("result"); if (c) c.hidden = true; }); // see what's behind it
         await openOrders(page);
         await page.waitForTimeout(1500);
@@ -757,7 +757,7 @@ const CHECKS = {
           status: window.__helm.status?.no_link ?? null,
         }));
         console.log(`NOLINK ${JSON.stringify({ ...nl, st })}`);
-        await lookShot(page, `look-maya-${BROWSER}-nolink.jpg`);
+        await lookShot(page, `look-maya-${BROWSER}-nolink.jpg`).catch(() => {});
         must(nl.status, `no_link never set (day ${st?.day})`);
         must(/no link/i.test(nl.tab) && /no link/i.test(nl.strip), `orders not locked: ${JSON.stringify(nl)}`);
         out.push(`no link on day ${st.day?.toFixed?.(1)}: tab "${nl.tab}", strip "${nl.strip}"`);
@@ -820,6 +820,7 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  "nolink-404": { manual: true, path: "helm.html?quality=low", run: async (page) => { process.env.NOLINK = "1"; await page.setViewportSize({ width: 1280, height: 720 }); return CHECKS["look-maya"].run(page); } },
   // #380 (audit item 9, Leo's copy): player names on the leaderboard and in the Boatyard.
   "names-380": {
     manual: true,
