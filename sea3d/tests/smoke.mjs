@@ -116,6 +116,7 @@ try {
     await page.click("#boatpick .go");
     // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
+    await page.click("#t-more summary"); // "Just watch the sea" lives under More (Elena)
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
     if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
