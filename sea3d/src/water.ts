@@ -571,7 +571,7 @@ if (wreckShade > 0.0) {
 }
 #ifndef SEA_LITE
 // The hull hides the sky from the water right beside it: a soft dark contact line.
-outgoingLight *= 1.0 - 0.45 * washShade(vWPos.xz) * (1.0 - foamMask);
+outgoingLight *= 1.0 - 0.6 * washShade(vWPos.xz) * (1.0 - foamMask);
 #endif
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);

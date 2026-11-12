@@ -272,10 +272,11 @@ export class Contact {
     this.collar.name = "foam_collar";
 
     this.n = SPRAY[quality];
-    // Low quality: no foam at all (Ravi's frame budget: the sea alone fills Low's +15%).
-    // The sea's wash foam is skipped per pixel when its strength is 0, and the collar is hidden.
+    // Low quality: no foam in the sea shader (Ravi's frame budget: the sea alone fills
+    // Low's +15%); its wash foam is skipped per pixel when its strength is 0. The collar
+    // stays: a thin strip hugging the hull costs next to nothing, and without it the boat
+    // sits on the sea like a sticker (Ines, opening frame).
     this.low = quality === "low";
-    this.collar.visible = !this.low;
     this.sp = new Float32Array(this.n * 3);
     this.sv = new Float32Array(this.n * 3);
     this.born = new Float32Array(this.n).fill(-99);
@@ -344,7 +345,9 @@ export class Contact {
     u.uTime.value = t;
     u.uFlow.value = this.flow;
     // Broken, never a solid rim (Ines), but clearly white along the contact in a gale (Elena r10).
-    u.uI.value = THREE.MathUtils.clamp(0.15 + 0.4 * speedK + 0.6 * seaK * seaK, 0, 1);
+    // Some water always slaps the hull once there's a sea running: a thin broken lap at the
+    // bow and to windward from about half a metre (Ines, opening frame).
+    u.uI.value = THREE.MathUtils.clamp(0.15 + 0.4 * THREE.MathUtils.smoothstep(hs, 0.3, 1.0) + 0.4 * speedK + 0.6 * seaK * seaK, 0, 1);
     {
       const [wwx0, wwz0] = s.wind ?? [0, 0];
       const wl0 = Math.hypot(wwx0, wwz0);
