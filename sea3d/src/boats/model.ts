@@ -7,6 +7,7 @@
 // The motion model sets that group's position and rotation; nothing in here
 // moves the boat.
 
+import { paintBoatName } from "./boatName";
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -116,6 +117,7 @@ export function buildKayak(quality: Quality): BoatModel {
   const guard = kit.std(0xc9ced3, { metalness: 0.8, roughness: 0.3 });
   if (kayakDetailed) {
     g.add(kayakDetailed.clone(true)); // hull, dome, panels, keel, rudder, deck kit
+    void paintBoatName(g); // the player's name for her on both stern quarters (once she has one)
   } else {
     const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
     kit.mesh(kit.hull(K, { top: 0xf26a1b, deck: 0xe0601a, bottom: 0x3b4248, boot: 0xffffff }), hullMat, g);

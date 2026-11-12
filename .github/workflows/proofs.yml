@@ -1,0 +1,289 @@
+# Proof frames and clips for a branch (Ada, 12 Nov): builds the branch's site once,
+# renders a named shot set (tools/proof/shots.json) at High quality on 2 to 8 runners
+# side by side, and publishes one zip per branch on the "proofs" release:
+#   https://github.com/<repo>/releases/download/proofs/<branch, / as ->.zip
+# Threads unpack it into the project's shared folder with tools/proof/fetch.sh.
+#
+# Start it by hand (Actions -> Proof frames -> Run workflow, or the API), or put the
+# "proofs" label on a pull request (standard set, 4 runners). Never on every push:
+# a standard set is about 75 runner-minutes of software rendering (Kai's runner budget:
+# no more than 8 runners at once, counted across all proof runs: the plan job shrinks
+# or holds a run while others are going).
+#
+# Security: the publish job has contents: write and runs tools/proof from the labelled
+# PR's own commit. That is fine only because fork PRs get a read-only token and only
+# collaborators can label. Never add a secret to this workflow (team rule: no
+# secret-using workflow runs on pull_request).
+name: Proof frames
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to render (its site is built from its own commit)"
+        required: true
+        default: main
+      set:
+        description: "Shot set from tools/proof/shots.json"
+        type: choice
+        options: [standard, quick, sea, sky, boats, cinematic]
+        default: standard
+      shards:
+        description: "Runners side by side (2-8; max 8 by the team's runner budget)"
+        default: "4"
+      only:
+        description: "Optional: only units whose name matches this regex, e.g. kayak-f8"
+        default: ""
+      size:
+        description: "Optional: frame size, e.g. 1920x1080 (default: the set's)"
+        default: ""
+      quality:
+        description: "Optional: low, high or ultra (default: the set's, high)"
+        default: ""
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+env:
+  PLAYWRIGHT: "1.49.1" # the pre-release playtest's pin
+concurrency:
+  # Per branch; a label other than "proofs" lands in its own group, so it never cancels a run.
+  group: proofs-${{ github.event.inputs.branch || github.head_ref }}-${{ github.event.label.name || 'run' }}
+  cancel-in-progress: true
+jobs:
+  plan:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'proofs'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read # count the other proof runs going now
+    outputs:
+      branch: ${{ steps.p.outputs.branch }}
+      safe: ${{ steps.p.outputs.safe }}
+      set: ${{ steps.p.outputs.set }}
+      shards: ${{ steps.p.outputs.shards }}
+      matrix: ${{ steps.p.outputs.matrix }}
+    steps:
+      - id: p
+        env:
+          BRANCH: ${{ github.event.inputs.branch || github.head_ref }}
+          SET: ${{ github.event.inputs.set || 'standard' }}
+          SHARDS: ${{ github.event.inputs.shards || '4' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHARDS=${SHARDS//[^0-9]/}
+          SHARDS=${SHARDS:-4}
+          # The team's budget is 8 proof runners at once across ALL proof runs (Kai):
+          # each other run going counts as 4. Two or more others: wait up to 20 min.
+          others() {
+            for st in in_progress queued; do
+              gh api "repos/${{ github.repository }}/actions/workflows/proofs.yml/runs?status=$st&per_page=50" \
+                --jq '.workflow_runs[] | select(.id != ${{ github.run_id }}) | .id'
+            done | sort -u | wc -l
+          }
+          o=$(others)
+          for i in $(seq 1 40); do
+            [ "$o" -lt 2 ] && break
+            echo "proof queue full: $o other proof runs going; waiting ($i/40)"
+            sleep 30
+            o=$(others)
+          done
+          if [ "$o" -ge 2 ]; then
+            echo "::error::proof queue full ($o other proof runs going for 20 min): try again later"
+            exit 1
+          fi
+          room=$(( 8 - 4 * o )); room=$(( room < 1 ? 1 : room ))
+          n=$(( SHARDS < 1 ? 1 : SHARDS > room ? room : SHARDS ))
+          safe=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '-')
+          {
+            echo "branch=$BRANCH"
+            echo "safe=$safe"
+            echo "set=$SET"
+            echo "shards=$n"
+            echo "matrix=[$(seq -s, 1 "$n")]"
+          } >> "$GITHUB_OUTPUT"
+          echo "Rendering set $SET of $BRANCH on $n runners ($o other proof runs going)" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sea3d/package-lock.json
+      - run: npm ci
+        working-directory: sea3d
+      # The Blender boats, as the deploy builds them (same cache key as sea3d.yml).
+      - name: Cache the Blender boats
+        id: boats
+        uses: actions/cache@v4
+        with:
+          path: |
+            sea3d/public/models/kayak.glb
+            sea3d/public/models/randolph.glb
+            sea3d/public/models/shape_*.glb
+            sea3d/public/models/stock_*.glb
+          key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
+      - uses: actions/setup-python@v5
+        if: steps.boats.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.11"
+      - name: Build the boats with Blender
+        id: blender
+        if: steps.boats.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: tools/build_boats.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the site from the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pip install -q numpy pyyaml
+          tools/build_site.sh
+      # Which boat models this site has, for the contact sheet's corner (Elena: a stale
+      # kayak must be obvious). The models are rebuilt whenever sea3d/blender changes
+      # (the cache key is those scripts' hash), so they match this branch's scripts.
+      - name: Stamp the boat models
+        env:
+          FROM: ${{ steps.boats.outputs.cache-hit == 'true' && 'cache' || 'built now' }}
+          BLENDER_OK: ${{ steps.blender.outcome }}
+        run: |
+          mkdir -p sea3d/dist/models
+          n=$(ls sea3d/dist/models/*.glb 2>/dev/null | wc -l)
+          [ "$n" -gt 0 ] || FROM="none: drawn-in-code boats"
+          [ "$BLENDER_OK" = "failure" ] && FROM="Blender build failed: drawn-in-code boats"
+          python3 -c "import json,sys; print(json.dumps({'commit': sys.argv[1], 'date': sys.argv[2], 'branch': sys.argv[3], 'from': sys.argv[4], 'files': int(sys.argv[5])}))" \
+            "$(git log -1 --format=%h -- sea3d/blender)" "$(git log -1 --format=%cs -- sea3d/blender)" "${{ needs.plan.outputs.branch }}" "$FROM" "$n" \
+            > sea3d/dist/models/stamp.json
+          cat sea3d/dist/models/stamp.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proof-site
+          path: sea3d/dist
+          retention-days: 1
+
+  render:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      # At most 2 shards at once (Maya, 12 Nov): a wider render starved the main deploys.
+      max-parallel: 2
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      # The capture tool from this workflow's own commit (main, or the labelled PR), so a
+      # branch from before tools/proof existed still gets rendered.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: proof-site
+          path: site
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Pinned, so every shard draws with the same browser build; the browser is cached.
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: proof-playwright-${{ env.PLAYWRIGHT }}
+      - name: Playwright and Chromium
+        working-directory: tools/proof
+        run: |
+          npm init -y > /dev/null
+          npm install --no-save "playwright@$PLAYWRIGHT"
+          timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
+      # Clips are encoded with ffmpeg, which the runner image doesn't have.
+      - name: ffmpeg
+        run: command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null; }
+      - name: Render shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shards }}
+        env:
+          SET: ${{ needs.plan.outputs.set }}
+          SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.shards }}
+          ONLY: ${{ github.event.inputs.only }}
+          SIZE: ${{ github.event.inputs.size }}
+          QUALITY: ${{ github.event.inputs.quality }}
+        run: |
+          (cd site && python3 -m http.server 4180 > /dev/null 2>&1 &)
+          sleep 1
+          args=(--site http://localhost:4180/ --out out --set "$SET" --shard "$SHARD")
+          [ -n "$ONLY" ] && args+=(--only "$ONLY")
+          [ -n "$SIZE" ] && args+=(--size "$SIZE")
+          [ -n "$QUALITY" ] && args+=(--quality "$QUALITY")
+          node tools/proof/capture.mjs "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof-part-${{ matrix.shard }}
+          path: out
+          retention-days: 1
+          if-no-files-found: ignore
+
+  publish:
+    needs: [plan, build, render]
+    if: always() && needs.plan.result == 'success' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # the "proofs" release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/proof
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: proof-part-*
+          path: proofs
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: proof-playwright-${{ env.PLAYWRIGHT }}
+      - name: Proof page and contact sheet
+        working-directory: tools/proof
+        env:
+          BRANCH: ${{ needs.plan.outputs.branch }}
+        run: |
+          npm init -y > /dev/null
+          npm install --no-save "playwright@$PLAYWRIGHT"
+          timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
+          sha=$(git ls-remote "https://github.com/${{ github.repository }}" "refs/heads/$BRANCH" | cut -f1)
+          node sheet.mjs ../../proofs --title "$BRANCH" --commit "$sha" || echo "::warning::some proof units failed: see index.html"
+      - name: Publish on the proofs release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SAFE: ${{ needs.plan.outputs.safe }}
+          BRANCH: ${{ needs.plan.outputs.branch }}
+          SET: ${{ needs.plan.outputs.set }}
+        run: |
+          (cd proofs && zip -q -r "../$SAFE.zip" .)
+          gh release view proofs > /dev/null 2>&1 || gh release create proofs --prerelease --title "Proof frames" \
+            --notes "Proof frames and clips per branch, made by the Proof frames workflow (tools/proof). One zip per branch, replaced on every run. Not a software release."
+          gh release upload proofs "$SAFE.zip" --clobber
+          url="https://github.com/${{ github.repository }}/releases/download/proofs/$SAFE.zip"
+          {
+            echo "### Proofs for \`$BRANCH\` (set $SET)"
+            echo "$(ls proofs/*.png proofs/*.mp4 2>/dev/null | wc -l) files, $(du -h "$SAFE.zip" | cut -f1) zipped: $url"
+            echo ""
+            echo "Into the project folder from a thread: \`tools/proof/fetch.sh $BRANCH\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proofs-${{ needs.plan.outputs.safe }}
+          path: proofs
+          retention-days: 7
