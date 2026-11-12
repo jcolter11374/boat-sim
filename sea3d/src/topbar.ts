@@ -81,7 +81,9 @@ body.title #topbar .nav, body.title #topbar .more { display: none; }
 @media (max-width: 480px) {
   #topbar { padding: 0 6px; font-size: 12.5px; } #topbar .brand { margin-right: 4px; } #topbar .brand .bw-mark { font-size: 17px; }
   #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 78px; padding: 5px 8px; }
-  body.title #topbar .boat { max-width: 220px; } /* the title's bar is bare: room for the whole name */
+  /* Phones: the chip is a boat and nothing cut off; its name is in the tooltip and on the picker (Ines). */
+  #topbar .boat { max-width: none; padding: 4px 9px; } #topbar .boat b { display: none; } #topbar .boat::before { content: "\\26F5"; font-size: 15px; }
+  body.title #topbar .boat b { display: inline; } body.title #topbar .boat::before { content: none; } /* the title's bar is bare: room for the name */
 }
 `;
 
@@ -151,7 +153,8 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
     b.textContent = c.name;
     chip.replaceChildren(p, b);
     if (chip instanceof HTMLAnchorElement) chip.href = c.href;
-    chip.title = chip instanceof HTMLButtonElement ? "Change your boat" : c.title;
+    chip.title = chip instanceof HTMLButtonElement ? `${c.prefix}${c.name}: change your boat` : c.title;
+    chip.setAttribute("aria-label", chip.title);
   };
   draw();
   onBoatChange(draw);

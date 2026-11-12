@@ -30,17 +30,17 @@ const capital = (s: string) => s.replace(/^\w/, (c) => c.toUpperCase());
 
 /** The picker's rows, in order, for the boat saved now (or none). */
 export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
-  const out: PickerEntry[] = [{ id: "kayak", group: "Ours", name: "Our kayak", fact: "finishes 83% of launch days" }];
+  const out: PickerEntry[] = [{ id: "kayak", group: "Ours", name: "Our kayak", fact: "the 3 m solar drone: two small electric motors, no sail" }];
   // The Pearson first: it's the Randolph team's boat, and STOCK already says "(our model ...)".
   const stock = [...PLAYABLE_STOCK].sort((a, b) => (a === "stock_pearson31_2" ? -1 : b === "stock_pearson31_2" ? 1 : 0));
   for (const k of stock) {
     const name = k === "stock_pearson31_2" ? "Pearson 31-2 (our model)" : capital(STOCK[k].name);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
-  out.push({ id: "yard:revc", group: "Stock boats", name: "Randolph Rev C5 (our model)", fact: "the Randolph team's wing-sail drone; opens in the Boatyard", href: "./boatyard.html#base=revc" });
+  out.push({ id: "yard:revc", group: "Stock boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail drone, built in the Boatyard", href: "./boatyard.html#base=revc" });
   if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === ""))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
-  out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "", href: "./boatyard.html" });
+  out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "pick a hull, sails or motors, batteries and electronics", href: "./boatyard.html" });
   return out;
 }
 
@@ -84,6 +84,8 @@ let root: HTMLElement | null = null;
 
 /** Open the picker (builds it the first time). */
 export function openBoatPicker(doc: Document = document): void {
+  // Fold any open More menu first (Ines).
+  doc.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((d) => (d.open = false));
   if (!root) {
     const style = doc.createElement("style");
     style.textContent = CSS;

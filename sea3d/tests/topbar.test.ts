@@ -74,10 +74,12 @@ test("Set sail and Practice share helm.html; the bar lights the right one", () =
 test("the boat picker: Our kayak, our models and stock boats, your design, the Boatyard", () => {
   const none = pickerEntries(null);
   assert.equal(none[0].name, "Our kayak");
-  assert.equal(none[0].fact, "finishes 83% of launch days");
+  // Every row has the same kind of second line: a plain description (Ines); Boatyard rows read as links.
+  assert.ok(none.every((e) => e.fact && !/%/.test(e.fact)));
+  assert.ok(none.filter((e) => e.href).every((e) => e.name.endsWith("→")));
   const names = none.map((e) => e.name);
   assert.ok(names.includes("Pearson 31-2 (our model)"));
-  assert.ok(names.includes("Randolph Rev C5 (our model)"));
+  assert.ok(names.includes("Randolph Rev C5 (our model) →"));
   assert.ok(!none.some((e) => e.id === "mine"));
   assert.equal(none.at(-1)!.href, "./boatyard.html");
   // Every Randolph boat says "(our model)" (B2).
