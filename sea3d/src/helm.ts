@@ -72,7 +72,7 @@ controls.enableDamping = true;
 controls.minDistance = 2;
 controls.maxDistance = 60;
 controls.maxPolarAngle = Math.PI * 0.495;
-camera.position.set(-6.5, 2.2, 3.5);
+camera.position.set(-6.5, 2.2, -3.5); // from her port side, so she heads right-to-left before the start (Ines)
 controls.target.set(0, 0.3, 0);
 const atmos = new Atmosphere(renderer, scene, camera);
 const sea = new Sea(quality);
@@ -2730,7 +2730,9 @@ function frameBoat(dt: number): void {
     tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
     ty = -0.1 * room;
   } else if (waiting) {
-    tx = 0.12;
+    // The boat at about two-thirds across, her bow into the open water on the left (Ines: 64-67%).
+    here0.set(0, 0, 0).project(camera);
+    tx = THREE.MathUtils.clamp((here0.x + 1) / 2 + third.x - 0.66, -0.4, 0.4);
     ty = -0.1;
   } else if (page.card && !arrival && !wheel.on && !cine.on && window.innerWidth > 900) {
     // The results card sits on the left two-thirds: the boat's last moment on the right third (Leo, Elena).
