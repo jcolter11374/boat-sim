@@ -73,7 +73,7 @@ export function standingText(s: Standing): { head: string; detail: string } {
   if (s.kind === "board") {
     const r = s.row;
     const when = boardDay(s.made);
-    const on = when ? `On the board of ${when}` : "On the leaderboard (board date unknown)";
+    const on = when ? `On the board of ${when}` : "On the leaderboard";
     const rate = `It finishes ${pct(r.finish_rate)} of ${r.launches} launches.`;
     const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
     if (s.tiers <= 1)

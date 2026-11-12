@@ -46,9 +46,9 @@ test("one group only: no place at all", () => {
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th)/);
 });
 
-test("a board without its date says so (today's file)", () => {
+test("a board without its date just says \"On the leaderboard\" (older files)", () => {
   const b = board(true, { made: undefined, sha: undefined });
-  assert.match(standingText(standing("revb", b, grid)).head, /^On the leaderboard \(board date unknown\): in the 2nd of 3 groups/);
+  assert.match(standingText(standing("revb", b, grid)).head, /^On the leaderboard: in the 2nd of 3 groups/);
   assert.equal(boardDay("2026-01-05T00:10Z"), "5 Jan");
   assert.equal(boardDay("garbage"), null);
   assert.equal(boardDay("2026-13-01T00:00Z"), null);
