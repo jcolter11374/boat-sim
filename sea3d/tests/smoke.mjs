@@ -402,7 +402,7 @@ try {
     const greyed = await page.evaluate(() => ({
       noeff: document.querySelectorAll(".opt.noeff").length,
       shape: !!document.querySelector('.opt[data-slot="shape"]'),
-      money: (document.getElementById("parts").innerText + " " + document.getElementById("sum").innerText).match(/\$\d|\bprices?\b|\bcosts?\b|\bcheaper\b|price TBD|PRICE ONLY|ROUGH/i)?.[0] ?? "",
+      money: (document.getElementById("parts").innerText + " " + document.getElementById("sum").innerText).match(/\$\d|\bprices?\b|\bcosts?\b|\bcheaper\b|price TBD|PRICE ONLY|\bROUGH\b/i)?.[0] ?? "",
       dead: document.querySelectorAll('.opt[data-slot="spares"], .opt[data-opt="lead-50-scrap"], .opt[data-slot="radar"]').length,
     }));
     if (!greyed.shape || greyed.noeff || greyed.money || greyed.dead) fail(`boatyard: money on screen, or price-only choices still shown: ${JSON.stringify(greyed)}`);
