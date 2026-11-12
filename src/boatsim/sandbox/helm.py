@@ -104,6 +104,11 @@ LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the b
 SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
 PASS_MARGIN_KM = 1.0  # a lead change counts once the other boat is this far clear (Maya, 11 Nov)
 PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 11 Nov)
+# A pass only stops the clock when the lead has swung by this much: the old
+# leader's best margin plus the new leader's margin. Smaller passes are a quiet
+# note (status "last_pass"). Leo's play, 12 Nov: a 1 km pass stopping the clock
+# felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
+PASS_STOP_SWING_KM = 25.0
 
 
 def day_seed(start: datetime) -> int:
@@ -367,6 +372,10 @@ class Game:
         # leader after that is a pass.
         self.leader: str | None = None
         self.last_pass: str | None = None
+        # The current leader's best margin (km) since it took the lead, and the
+        # latest pass: who, when, how big the swing was, and whether it stopped.
+        self.lead_best_km = 0.0
+        self.pass_note: dict | None = None
         self.close_armed = self._land_km() > LAND_CLOSE_KM
         self.last_close = False
         self._events_seen = 0  # mine's log events already looked at (_step)
@@ -705,20 +714,32 @@ class Game:
 
     def _update_leader(self) -> str | None:
         """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
-        None. A lead of a few metres flips back and forth with every wave, so a
+        None (pass_note says whether it is big enough to stop the clock). A lead of a few metres flips back and forth with every wave, so a
         pass needs the other boat PASS_MARGIN_KM clear, none counts in the
         first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in),
         and the first boat to get clear of the other is not a pass."""
         if self.mine.state.t < self.start + timedelta(hours=PASS_QUIET_H):
             return None
         lead = self.lead_km()
+        mine = lead if self.leader == "me" else -lead
+        if self.leader is not None and mine > self.lead_best_km:
+            self.lead_best_km = mine
         now = "me" if lead > PASS_MARGIN_KM else "ghost" if lead < -PASS_MARGIN_KM else None
         if now is None or now == self.leader:
             return None
         first, self.leader = self.leader is None, now
+        swing, self.lead_best_km = self.lead_best_km + abs(lead), abs(lead)
         if first:
             return None
-        return "ghost_passed" if now == "ghost" else "passed_ghost"
+        kind = "ghost_passed" if now == "ghost" else "passed_ghost"
+        self.pass_note = {
+            "kind": kind,
+            "day": (self.mine.state.t - self.start).total_seconds() / 86400.0,
+            "lead_km": lead,
+            "swing_km": swing,
+            "stopped": swing >= PASS_STOP_SWING_KM,
+        }
+        return kind
 
     def run(
         self,
@@ -740,7 +761,9 @@ class Game:
         Stop reasons: time, battery, wind, land, breakdown, silence,
         ghost_passed, passed_ghost, order_arrived (Real base station mode), over. A pass
         means the lead changed hands by more than PASS_MARGIN_KM, after the
-        first PASS_QUIET_H (see _update_leader). "land" fires on entering
+        first PASS_QUIET_H (see _update_leader); it stops the clock only when
+        the lead swung by PASS_STOP_SWING_KM or more, and smaller ones are
+        status()["last_pass"] notes. "land" fires on entering
         land_within_km, and also the first time the boat closes inside
         LAND_CLOSE_KM (see _update_close), so a start near land still warns.
         "silence" warns before the race's silence limits disqualify the boat
@@ -792,7 +815,7 @@ class Game:
                 near = now_near
             if stopped is None and silence and self.last_silence:
                 stopped = self.last_silence
-            if stopped is None and ghost_passes and self.last_pass:
+            if stopped is None and ghost_passes and self.last_pass and self.pass_note["stopped"]:
                 stopped = self.last_pass
         return {"stopped": stopped, "status": self.status(), "track": self.track(since=t0)}
 
@@ -819,6 +842,7 @@ class Game:
             "boat": self._boat(v),
             "ghost": self._boat(self.ghost),
             "lead_km": self.lead_km(),
+            "last_pass": self.pass_note,
             "mode": self.mode,
             "show_true_position": True,
             "order": (

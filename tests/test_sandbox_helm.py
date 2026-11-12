@@ -319,6 +319,54 @@ def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
     ]
 
 
+def test_only_a_big_swing_in_the_lead_stops_the_clock(env):
+    """Leo's play (12 Nov): "the ghost has just passed you; it's 1 km closer"
+    stopped the clock. A pass is still noted, but it only stops when the lead
+    swung by PASS_STOP_SWING_KM: the old leader's best margin plus the new one."""
+    from boatsim.sandbox.helm import PASS_STOP_SWING_KM
+
+    assert PASS_STOP_SWING_KM == 25.0
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.run(hours=2, ghost_passes=False, land_within_km=None, breakdown=False)
+    # Me 1.5 clear (first leader, quiet), up to 4, ghost by 1.2: swing 5.2, a note.
+    # Wobbles near zero never add up. Ghost leaps to 30 clear: swing 31.1, a stop;
+    # I claw back and pass at 2: swing 32, a stop.
+    # Then the ghost back by 1.1: swing 3.1, a note again (no flip-flop stops).
+    leads = iter([1.5, 4.0, -1.2, 0.5, -3.0, 1.1, -30.0, -12.0, 2.0, 0.3, -1.1])
+    g.leader, g.lead_best_km = None, 0.0
+    g.lead_km = lambda: next(leads)
+    notes = []
+    for _ in range(11):
+        kind = g._update_leader()
+        notes.append(kind and (kind, round(g.pass_note["swing_km"], 1), g.pass_note["stopped"]))
+    assert notes == [
+        None,
+        None,
+        ("ghost_passed", 5.2, False),
+        None,
+        None,
+        ("passed_ghost", 4.1, False),
+        ("ghost_passed", 31.1, True),
+        None,
+        ("passed_ghost", 32.0, True),
+        None,
+        ("ghost_passed", 3.1, False),
+    ]
+    del g.lead_km  # back to the real lead for status()
+    assert g.status()["last_pass"]["kind"] == "ghost_passed"
+
+
+def test_a_small_pass_is_a_note_not_a_stop(env):
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.run(hours=2, ghost_passes=False, land_within_km=None, breakdown=False)
+    g.leader, g.lead_best_km = "me", 0.5
+    g.lead_km = lambda: -1.5  # the ghost slips past: swing 2 km
+    out = g.run(hours=1, land_within_km=None, breakdown=False)
+    assert out["stopped"] == "time"
+    assert out["status"]["last_pass"]["kind"] == "ghost_passed"
+    assert out["status"]["last_pass"]["stopped"] is False
+
+
 def test_results_card_says_how_it_ended(env):
     g = Game(env, launch_index=MAY1, max_days=0.9)
     g.run(hours=6)
