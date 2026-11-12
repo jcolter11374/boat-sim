@@ -217,16 +217,6 @@ const CHECKS = {
       });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       const out = [];
-      if (await page.locator("#soundask").count()) {
-        // Asked once on setting sail; it closes by itself after 20 s, which can pass while the
-        // simulator finishes starting on a slow runner. So: it was asked, and it goes away.
-        const asked = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
-        must(asked, `"Sound on?" was never asked after Set sail`);
-        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
-        const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
-        must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
-        out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
-      }
       const fast = page.locator('#timebar .rate[data-rate="96"]');
       let decided = null;
       for (let i = 0; i < 12 && !decided; i++) {
@@ -254,6 +244,17 @@ const CHECKS = {
       }
       if (!decided) out.push("no decision came up in this voyage (not a fail)");
       else out.push(decided);
+      // "Sound on?" (#334, then Leo's one-thing-at-a-time opening): asked once, a minute in or
+      // a few seconds after the first call, whichever comes first (older builds: on Set sail).
+      // It closes by itself after 20 s, so: it was asked, and it goes away.
+      if (await page.locator("#soundask").count()) {
+        const asked = await page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: 75_000 }).then(() => true).catch(() => false);
+        must(asked, `"Sound on?" was never asked (expected a minute in, or after the first call)`);
+        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
+        const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
+        must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
+        out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
+      }
       return out.join("; ");
     },
   },
