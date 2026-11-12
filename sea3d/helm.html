@@ -58,6 +58,18 @@
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
   #decidebtns button { text-align: left; white-space: normal; }
   #decidebtns button:first-child { font-weight: 600; }
+  /* No link (Maya, 12 Nov): the drawer locks with its reason; the clock and camera still work. */
+  #nolink { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid #ff6b5a; border-radius: 8px; background: rgba(255,107,90,.12); font-size: 12.5px; line-height: 1.35; }
+  #nolink b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #ff8a7a; margin-bottom: 2px; }
+  /* Only the steering locks: the clock (Jump ahead) and the share link keep working (Maya). */
+  #orders.locked > :is(#coach, #dialrow, #powerrow, #power, #sailrow, #preview, #powerhint, #sendrow) { opacity: .35; pointer-events: none; filter: grayscale(1); }
+  /* "Orders: no link" is longer than "Orders": a taller tab, the words centred inside it (Ines). */
+  #orders-tab.nolink { height: 150px; }
+  #orders-tab.nolink span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); color: #ff8a7a; }
+  #nolink .nlbtns { margin-top: 7px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #nolink .nlbtns a { color: #ffd0c8; font-size: 12px; }
+  body.no-link #strip #c-order .v { color: #ff8a7a; }
+  body.no-link #strip #c-order .v::after { content: none; }
   #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
   #soundask button { white-space: nowrap; }
   #soundask[hidden] { display: none; }
@@ -105,14 +117,24 @@
   #wheel-goal .w-num { color: #3ddc97; }
   #wheel-goal .w-depth { margin-left: 0.833em; font-weight: 600; }
   #wheel-goal .w-depth[hidden] { display: none; }
+  #wheel-goal .w-clock { margin-left: 0.833em; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #wheel-goal .w-gap { margin-left: 0.5em; font-variant-numeric: tabular-nums; }
+  #wheel-goal .w-gap[data-state="ahead"] { color: #3ddc97; }
+  #wheel-goal .w-gap[data-state="behind"] { color: #ffb347; }
+  #wheel-goal .w-clock[hidden], #wheel-goal .w-gap[hidden] { display: none; }
   #wheel-goal .w-depth[data-state="shallow"] { color: #ff8a2a; }
   #wheel-goal .w-depth[data-state="unknown"] { opacity: .7; font-weight: 400; }
   @media (max-width: 760px) { #wheel .w-strip { grid-template-columns: 1fr 1fr; } }
   #r-trim:empty { display: none; }
   #practice-what { position: fixed; top: calc(var(--bar, 0px) + 52px); transition: opacity .8s; left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
   #markptr { position: fixed; z-index: 7; transform: translate(-50%, -130%); pointer-events: none; padding: .1em .6em; border-radius: 999px; font: 600 calc(var(--ui) * .92) system-ui, sans-serif;
-    color: #fff; background: rgba(255,106,26,.85); white-space: nowrap; }
+    color: #fff; background: rgba(255,106,26,.85); white-space: nowrap; transition: opacity .3s; }
+  /* In view it sits over a real-size buoy: small and quiet, not a second orange object (Elena). */
+  #markptr[data-edge=""] { background: rgba(16,22,32,.42); color: #ffd9c2; font-weight: 500; font-size: calc(var(--ui) * .82); }
   #markptr::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: rgba(255,106,26,.85); }
+  #markptr[data-edge=""]::after { border-top-color: rgba(16,22,32,.42); }
+  #markptr[data-edge=""][data-far] { background: rgba(255,106,26,.85); color: #fff; font-weight: 600; }
+  #markptr[data-edge=""][data-far]::after { border-top-color: rgba(255,106,26,.85); }
   #markptr[data-edge="left"]::before { content: "◀ "; } #markptr[data-edge="right"]::before { content: "▶ "; }
   #markptr[data-edge="up"]::before { content: "▲ "; } #markptr[data-edge="down"]::before { content: "▼ "; }
   #markptr[data-edge="left"]::after, #markptr[data-edge="right"]::after, #markptr[data-edge="up"]::after, #markptr[data-edge="down"]::after { display: none; }
@@ -133,6 +155,20 @@
   #practice-courses .courses button { width: 100%; margin: 0; text-align: left; padding: 7px 12px; }
   #practice-courses button small { display: block; font-weight: 400; font-size: 12px; opacity: .85; }
   #practice-courses small[data-best]:empty { display: none; }
+  #practice-result[hidden] { display: none; }
+  #practice-result .medal { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
+  #practice-result .medal-name { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+  #practice-result .medal-disc { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  #practice-result .medal[data-medal="gold"] { --m1: #fff1b8; --m2: #d9a92a; --m3: #8c6410; }
+  #practice-result .medal[data-medal="silver"] { --m1: #ffffff; --m2: #b9c3cf; --m3: #6d7887; }
+  #practice-result .medal[data-medal="bronze"] { --m1: #ffd9b5; --m2: #b8713a; --m3: #6e3d17; }
+  #practice-result .medal[data-medal=""] { --m1: rgba(255,255,255,.5); --m2: rgba(255,255,255,.08); --m3: rgba(255,255,255,.25); }
+  #practice-end .crossing { display: inline-block; margin-top: 4px; color: rgba(255,255,255,.72); font-size: 13px; text-decoration: none; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,.22); }
+  #practice-end .crossing:hover, #practice-end .crossing:focus-visible { color: #fff; border-bottom-color: rgba(255,255,255,.6); }
+  #practice-result .result-time { font-size: 18px; font-weight: 600; margin: 0 0 2px; font-variant-numeric: tabular-nums; }
+  #practice-result .result-next { font-size: 13px; opacity: .8; margin: 0 0 12px; }
+  #practice-result .result-next:empty { display: none; }
+  #practice-end.trial #practice-sum { display: none; }
   #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
   .practice-note { font-size: 12px; opacity: .75; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
@@ -209,7 +245,7 @@
 
   /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: 1.8fr 1.1fr .95fr .75fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -232,6 +268,8 @@
   #timebar button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
   #timebar #t-pause { min-width: 2.2em; }
   #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #c-headv .sub { margin-left: .25em; }
+  .againrow { display: flex; align-items: center; gap: 16px; }
   #keysbtn { width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
   #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
   #keylist[hidden] { display: none; }
@@ -415,6 +453,8 @@
 <button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>
 <section id="orders" class="glass" aria-label="Your orders">
   <h2>Your orders <button id="orders-x" class="x" aria-label="Close (O)" title="Close (O)">&times;</button></h2>
+  <div id="nolink" role="status" hidden><b>No link</b><span id="nolinktext"></span>
+    <div class="nlbtns"><button id="nl-end" class="needs-idle go" title="Sail on to the end of the voyage">Watch her go (jump to the end)</button> <a href="helm.html">Try another launch day</a></div></div>
   <div id="coach" hidden>Steer here, or with &larr; &rarr;. O opens and closes this.</div>
   <div id="dialrow">
     <canvas id="dial" title="Tap or drag to steer. Orange: your order · white: where the bow points · green: the finish · blue: the wind"></canvas>
@@ -479,6 +519,12 @@
 <div id="practice-end" class="overlay" hidden><div class="card glass">
   <h1>Practice sailing</h1>
   <p id="practice-sum"></p>
+  <div id="practice-result" hidden>
+    <div class="medal" data-medal=""><svg class="medal-disc" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="var(--m3)"/><circle cx="20" cy="20" r="16.5" fill="var(--m2)"/><circle cx="20" cy="20" r="15" fill="none" stroke="var(--m1)" stroke-width="0.8" opacity=".7"/><path d="M20 7 L22.6 17.4 L33 20 L22.6 22.6 L20 33 L17.4 22.6 L7 20 L17.4 17.4 Z" fill="var(--m1)"/><path d="M20 7 L22.6 17.4 L20 20 Z M33 20 L22.6 22.6 L20 20 Z M20 33 L17.4 22.6 L20 20 Z M7 20 L17.4 17.4 L20 20 Z" fill="var(--m3)" opacity=".55"/><circle cx="20" cy="20" r="1.6" fill="var(--m3)"/></svg><span class="medal-name"></span></div>
+    <p class="result-time"></p>
+    <p class="result-next"></p>
+    <p class="result-go"><button id="practice-ghost" class="go">Race your ghost</button> <button id="practice-other">Another course</button></p>
+  </div>
   <div id="practice-courses" hidden>
     <p id="practice-breeze" role="group" aria-label="Breeze">Breeze: <button data-b="light">Light (8 kn)</button> <button data-b="good">Good (12 kn)</button> <button data-b="fresh">Fresh (18 kn)</button></p>
     <p class="courses"><button class="go" data-course="triangle">The triangle<small>three marks 800 m apart: upwind, across, back (about 15 min; try 5&times;)</small><small data-best="triangle"></small></button>
@@ -486,7 +532,7 @@
       <button data-course="drill">Drills<small>short spells: a reach, a beat, a run</small></button></p>
     <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. <button class="info" aria-expanded="false" title="About the depths">i</button><span class="info-more" hidden> The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</span></p>
   </div>
-  <p><button id="practice-again" class="go">Sail another</button> <a href="helm.html">Take the helm: a whole crossing</a></p>
+  <p><button id="practice-again" class="go">Sail another</button> <a class="crossing" href="helm.html">Take the helm: a whole crossing</a></p>
 </div></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
   <h1>Four days later: the Bay mouth</h1>
@@ -545,7 +591,7 @@
     <div id="r-ends"></div>
     <p class="muted" id="r-notes"></p>
     <div id="r-next"></div>
-    <button id="again" class="go">Play again</button> <a href="./voyage.html">Voyage replays</a>
+    <div class="againrow"><button id="again" class="go">Play again</button><a href="./voyage.html">Voyage replays</a></div>
   </div>
 </div>
 

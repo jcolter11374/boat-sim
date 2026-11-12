@@ -14,6 +14,7 @@
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { holdWires } from "./wire";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, PEARSON, SAIL_DRONE, STOCK, type StockKey } from "./specs";
@@ -132,6 +133,7 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
               for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat.side = THREE.DoubleSide;
             }
           });
+          holdWires(g); // stays and lifelines stay a fine unbroken line at any distance
           detailed.set(key, g);
           return true;
         } catch {

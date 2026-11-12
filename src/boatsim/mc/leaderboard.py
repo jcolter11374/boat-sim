@@ -283,6 +283,7 @@ def summary(board: dict, reference: str = "k-p25") -> dict:
         row = {
             **r,
             "label": e.get("label", r["design"]),
+            **({"note": e["note"]} if e.get("note") else {}),
             "class": e.get("class", DRONE_CLASS),
             "finished": sum(_finished(x) for x in e["launches"]),
         }
@@ -433,6 +434,7 @@ def assemble(public, holdout, every_days: int, public_years, holdout_years) -> d
         e = {
             "design": bid,
             "label": b.label,
+            **({"note": b.note} if b.note else {}),
             "design_sha256": design_hash(b),
             "class": boat_class(b.design_path),
             "badges": badges(b),

@@ -83,6 +83,8 @@ export interface ContactState {
 }
 
 export class Contact {
+  /** How hard the bow dropped into the water this frame, 0..1 (0 most frames). */
+  splash = 0;
   readonly collar: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   readonly spray: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
   /** Outline points in the boat frame (x ahead, z starboard), bow -> stern on starboard, then back on port. */
@@ -233,11 +235,13 @@ export class Contact {
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.
+    this.splash = 0;
     if (this.n > 0) {
       const sink = dt > 0 ? (this.lastClear - s.bowClearance) / dt : 0; // m/s the bow is going down into the water
       this.lastClear = s.bowClearance;
       let burst = 0;
       if (s.bowClearance < 0.04 && sink > 0.35) burst = Math.min(40, Math.round((sink - 0.35) * 45 * (0.5 + speedK)));
+      this.splash = burst / 40; // for the sound of the slap (sound.ts), in step with the spray
       const steady = speedK * seaK * 25 * dt; // drops per frame
       const emit = burst + (Math.random() < steady % 1 ? Math.ceil(steady) : Math.floor(steady));
       const [bx, bz] = this.bow;
