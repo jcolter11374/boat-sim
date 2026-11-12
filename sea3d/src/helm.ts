@@ -884,6 +884,12 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
   if (page.status?.over) return setBusy(false);
+  // A jump during the last jump's replay: that replay is skipped to its end (you asked to
+  // move on), so only the clock's own lead counts below (CI #391: back-to-back hops shrank).
+  if (hopPlay) {
+    hour = shownTo;
+    hopPlay = false;
+  }
   const from = hour;
   // The simulator can be some hours ahead of the picture: "until something happens" stops at
   // most 3 days on from what you see (CI #391: day 0.375 to 4.125 with the battery stop gone).
