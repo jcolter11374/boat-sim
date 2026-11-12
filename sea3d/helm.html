@@ -103,6 +103,8 @@
   #wheel .w-guide[hidden] { display: none; }
   #wheel .w-gskip { float: right; margin-left: 8px; }
   #r-trim:empty { display: none; }
+  #practice-what { position: fixed; top: calc(var(--bar, 0px) + 14px); left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
+  #practice-what[hidden], #practice-end[hidden] { display: none; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
     font: 600 12px system-ui, sans-serif; background: rgba(61,220,151,.2); border: 1px solid #3ddc97; color: #dff8ec; pointer-events: none; }
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
@@ -263,6 +265,12 @@
 
 <div id="notes"></div>
 
+<div id="practice-what" class="glass" hidden></div>
+<div id="practice-end" class="overlay" hidden><div class="card glass">
+  <h1>Practice sailing</h1>
+  <p id="practice-sum"></p>
+  <p><button id="practice-again" class="go">Sail another</button> <a href="helm.html">Take the helm: a whole crossing</a></p>
+</div></div>
 <div id="start" class="overlay">
   <div class="card glass">
     <h1>Take the helm</h1>
