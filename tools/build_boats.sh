@@ -13,4 +13,4 @@ python -m pip install -q bpy==4.2.0 pillow numpy
 python blender/build_kayak.py public/models/kayak.glb
 python blender/build_randolph.py public/models/randolph.glb
 for s in cat semisub board; do python blender/build_shapes.py $s public/models/shape_$s.glb; done
-for b in cruiser dinghy beachcat drone rower; do python blender/build_stock.py $b public/models/stock_$b.glb; done
+for b in cruiser dinghy beachcat drone rower pearson; do python blender/build_stock.py $b public/models/stock_$b.glb; done

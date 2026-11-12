@@ -2,13 +2,13 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?, choices?, start_port?}
+// Messages in:  {id, type: "new", base, launch, day?, safe, breakdowns, mode, challenge?, bundle?, choices?, start_port?}
 //                 mode: "hands_on" or "base"; challenge: an id from challenges.json, whose
 //                 weather is `bundle` (a URL; left out for the 2020 bundle); start_port:
 //                 a port id from ports.json, started from instead of the usual drop
 //               {id, type: "load", code, bundle?}         a shared game (Game.save's code)
 //               {id, type: "save"}
-//               {id, type: "order", heading, power, sails?, engine?}  heading: degrees, "finish" or "route"; power 0..1
+//               {id, type: "order", heading, power, sails?, engine?, trim?}  heading: degrees, "finish" or "route"; power 0..1; trim 0..1 (a wheel spell)
 //               {id, type: "run", hours?, soc_below?, wind_above?, breakdown?}
 //               {id, type: "forecast"} | {id, type: "result"}
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
@@ -29,22 +29,61 @@ interface Py {
 let ready: Promise<Py> | null = null;
 const say = (text: string) => postMessage({ type: "progress", text });
 
-async function fetchBytes(url: string): Promise<Uint8Array> {
+async function fetchBytes(url: string, progress?: (n: number, total: number) => void): Promise<Uint8Array> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
-  return new Uint8Array(await r.arrayBuffer());
+  const total = Number(r.headers.get("content-length")) || 0;
+  // Content-Length is the compressed size when the server compresses; then count to the end without a percent.
+  if (!progress || !r.body || !total || r.headers.get("content-encoding")) return new Uint8Array(await r.arrayBuffer());
+  const reader = r.body.getReader();
+  const out = new Uint8Array(total);
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (n + value.length > total) return concatRest(out.subarray(0, n), value, reader); // longer than it said
+    out.set(value, n);
+    n += value.length;
+    progress(n, total);
+  }
+  return n === total ? out : out.subarray(0, n);
+}
+
+async function concatRest(head: Uint8Array, next: Uint8Array, reader: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array> {
+  const parts = [head, next];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+  }
+  const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  let i = 0;
+  for (const p of parts) out.set(p, (i += p.length) - p.length);
+  return out;
 }
 
 function start(base: string): Promise<Py> {
   ready ??= (async () => {
-    say("Loading Python in the browser...");
+    say("Loading the simulator... 5%");
     const mod = (await import(/* @vite-ignore */ PYODIDE)) as { loadPyodide: (o: { indexURL: string }) => Promise<Py> };
-    const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`), fetchBytes(`${base}forcing_2020.npz`)]);
+    // "Loading the simulator... N%" (Nina's review, item 8): the bytes of our two files,
+    // which are most of the download; Python's own files are counted as one step.
+    const got = [0, 0], size = [0, 0];
+    let shown = -1;
+    const tick = (i: number) => (n: number, total: number) => {
+      got[i] = n;
+      size[i] = total;
+      const known = size[0] && size[1];
+      const pct = known ? Math.floor((80 * (got[0] + got[1])) / (size[0] + size[1])) : 0;
+      if (known && pct !== shown) say(`Loading the simulator... ${(shown = pct)}%`);
+    };
+    const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`, tick(0)), fetchBytes(`${base}forcing_2020.npz`, tick(1))]);
+    say("Loading the simulator... 85%");
     await py.loadPackage(["numpy", "pyyaml"]);
     py.FS.mkdirTree("/sandbox");
     py.FS.writeFile("/sandbox/boatsim.zip", zip);
     py.FS.writeFile("/sandbox/forcing.npz", bundle);
-    say("Loading the 2020 weather...");
+    say("Loading the simulator... 90%: the 2020 weather");
     py.runPython(`
 import os, sys, warnings, zipfile, json
 warnings.simplefilter("ignore")
@@ -122,6 +161,7 @@ def voyages():
 `);
     return py;
   })();
+  ready.catch(() => (ready = null)); // a failed load can be tried again
   return ready;
 }
 
@@ -147,11 +187,16 @@ self.onmessage = async (ev: MessageEvent) => {
   const m = ev.data;
   try {
     const py = await start(m.base ?? "");
+    if (m.type === "warm") {
+      // Loaded while the player reads the start card (#322: no silent wait after Set sail).
+      postMessage({ id: m.id, ok: true, value: null });
+      return;
+    }
     if (m.type === "new" || m.type === "load") await useBundle(py, m.bundle ?? "");
     py.globals.set("msg_json", JSON.stringify(m));
     let code: string;
     if (m.type === "new") {
-      say("Getting the boats ready...");
+      say("Loading the simulator... 95%: getting the boats ready");
       code = `
 m = json.loads(msg_json)
 if Game is None:
@@ -174,6 +219,8 @@ try:
         if not takes_challenges():
             raise RuntimeError("NO_CHALLENGES")
         G = Game(ENV, choices, challenge=m["challenge"], **kw)
+    elif m.get("day"):
+        G = Game(ENV, choices, day=m["day"], **kw)  # any April to June noon (the default: a good day)
     else:
         G = Game(ENV, choices, m["launch"], **kw)
 except KeyError as err:
@@ -200,7 +247,7 @@ json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(EN
       code = `
 m = json.loads(msg_json)
 # Sail and engine orders (#242) go only when the page sends them, so older simulators still play.
-o = G.order(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []))
+o = G.order(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []), **({"trim": m["trim"]} if "trim" in m else {}))
 json.dumps({"order": o if isinstance(o, dict) else {"accepted": True}, "status": G.status()}, default=_f)
 `;
     } else if (m.type === "run") {
@@ -212,6 +259,12 @@ if kw.get("hours") is None and UNTIL_CAP == 240.0:
     kw["hours"] = 240.0  # an older simulator without the 3-day cap
 out = run_until(kw)
 json.dumps({"stopped": out["stopped"], "status": out["status"], **voyages()}, default=_f)
+`;
+    } else if (m.type === "preview") {
+      // What an order would do over the next day, from a copy of the boat (#330). Older simulators: null.
+      code = `
+m = json.loads(msg_json)
+json.dumps(G.preview(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []), hours=m.get("hours", 24.0)) if hasattr(G, "preview") and G.mode == "hands_on" and not G.status()["over"] else None, default=_f)
 `;
     } else if (m.type === "forecast") {
       code = `json.dumps(G.forecast(hours=120), default=_f)`;

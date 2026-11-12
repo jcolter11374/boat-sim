@@ -12,10 +12,8 @@ on:
       site:
         description: "Site to play"
         default: "https://jcolter11374.github.io/boat-sim/"
-  pull_request:
-    paths:
-      - ".github/workflows/playtest.yml"
-      - "tools/playtest/**"
+  # No pull_request trigger: the pre-release playtest (prerelease-playtest.yml)
+  # plays a PR's own tools/playtest/play.mjs against the PR's own build.
 permissions:
   contents: read
 concurrency:
@@ -39,7 +37,13 @@ jobs:
       SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
       BROWSER: ${{ matrix.browser }}
     steps:
+      # The playtest from the commit that deployed, not main's newest: a workflow_run
+      # checks out main's head, so a check added by the next merge failed against
+      # the site deployed before it (12 Nov: sea-sail, run 43137338172). Only a
+      # successful push run on main gets here (the if above), so it's main's code.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

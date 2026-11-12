@@ -202,3 +202,20 @@ def test_rev_b_tracker_failure_names_the_yb3():
         thrusters=(),
     )  # fmt: skip
     assert [e.detail for e in out.events] == ["beacon (YB3 backup tracker failed)"]
+
+
+def _stall_deg(ar: float) -> float:
+    """Angle (deg) of the most lift, to 0.1 deg."""
+    return max((S.foil_coeffs(math.radians(x / 10), ar, 0.012)[0], x / 10) for x in range(450))[1]
+
+
+def test_a_stubbier_wing_stalls_later_not_sooner():
+    # Real finite wings: lower aspect ratio, gentler lift slope, later stall
+    # (Anderson, Fundamentals of Aerodynamics, sec. 5.3). Before 11 Nov 2026 ours
+    # stalled stubby wings sooner (Randolph Rev C5's 3.41 vs C4's 5.33).
+    assert _stall_deg(2.0) > _stall_deg(3.41) > _stall_deg(5.33) > _stall_deg(8.0)
+    # Their AR 5.33 wing keeps the stall their VPP gave it (10 + 4 x 5.33/6 = 13.55 deg).
+    slope = 2 * math.pi * 5.33 / (2 + math.sqrt(5.33**2 + 4))
+    assert math.degrees(S.CL_AT_STALL / slope) == pytest.approx(13.55, abs=0.05)
+    # A very stubby wing is capped, and the curve stays smooth and finite.
+    assert all(math.isfinite(c) for c in S.foil_coeffs(math.radians(60), 0.3, 0.012))
