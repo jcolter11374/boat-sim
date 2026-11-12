@@ -181,10 +181,12 @@ export function safeUrl(u: string): string | null {
 }
 
 const STYLE = `
-.poi-card { position: fixed; right: var(--poi-right, 12px); bottom: var(--poi-bottom, 100px); width: min(340px, calc(100vw - 24px)); z-index: 20;
+.poi-card { position: fixed; right: var(--poi-right, 12px); bottom: var(--poi-bottom, 100px); top: var(--poi-top, auto); max-height: var(--poi-max, none);
+  width: min(var(--poi-w, 340px), calc(100vw - 24px)); z-index: 20;
   box-sizing: border-box; padding: 11px 14px 12px; border: 1px solid rgba(160,200,255,.18); border-left: 4px solid var(--c, #5cc8e0);
   border-radius: 12px; color: #e9f1fb; background: rgba(10,22,38,.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); overflow: hidden;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); overflow: hidden auto;
+  scrollbar-width: thin; scrollbar-color: rgba(160,200,255,.35) transparent;
   animation: poi-in .45s cubic-bezier(.2,.8,.2,1); }
 .poi-card .poi-k { display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .9px;
   text-transform: uppercase; color: #9fb3c8; padding-right: 22px; }
@@ -197,6 +199,7 @@ const STYLE = `
 .poi-card .poi-src a { color: #8ab4ff; }
 .poi-card .poi-more { margin-top: 4px; font-size: 11px; color: #9fb3c8; }
 .poi-card .poi-more:empty { display: none; }
+.poi-tight .poi-card .poi-more { display: none; }
 .poi-card .poi-x { position: absolute; right: 6px; top: 5px; background: none; border: 0; color: #9fb3c8; font-size: 18px; line-height: 1;
   cursor: pointer; padding: 3px 6px; border-radius: 6px; }
 .poi-card .poi-x:hover { color: #fff; background: rgba(255,255,255,.08); }
@@ -210,7 +213,7 @@ const STYLE = `
 @media (prefers-reduced-motion: reduce) { .poi-card, .poi-card .poi-time { animation: none; } .poi-card.poi-out { transition: none; } }
 `;
 
-/** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom). Each stays SHOW_S seconds (or until closed); points passed
+/** One card at a time, bottom right (a page can move it with --poi-right and --poi-bottom, or hang it from --poi-top with --poi-bottom: auto and a --poi-max height). Each stays SHOW_S seconds (or until closed); points passed
  *  together (three at the drop) wait their turn. */
 export class PoiCards {
   static SHOW_S = 25;
