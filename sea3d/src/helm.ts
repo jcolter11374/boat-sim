@@ -1692,11 +1692,12 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         return act();
       };
       const choices: Choice[] = [
-        { label: "Hold course: fastest, but a knockdown is likelier", title: "Sail on through it", act: call("hold", () => undefined) },
-        { label: `Dodge south-east (${south}°): safer, but a longer way round`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)) },
+        // Stakes from the same 4-day look; "waves to X m" beside each is the risk side (Maya).
+        { label: "Hold course: fastest, but a knockdown is likelier", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
+        { label: `Dodge south-east (${south}°): safer, but a longer way round`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
       ];
       if (motors && power > 0.1)
-        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)) });
+        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)), order: { heading: order === "auto" ? "route" : order, power: 0.1 } });
       return {
         kind,
         look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
@@ -1781,10 +1782,10 @@ let decisionSeq = 0;
 /** Stop the clock and ask, when a decision is due. */
 // ---------- the route check (#10, the fallback call) ----------
 // When nothing has asked for a while (a random 3 to 5 voyage days, so calls don't land on a
-// beat: Elena), a navigator's moment: the forecast's best line for the next 2 days against
-// yours. Asked only when it's worth it: the forecast puts the best line ROUTE_GAIN_KM or more
+// beat: Elena), a navigator's moment: the forecast's best line against yours over the next
+// 4 days. Asked only when it's worth it: the forecast puts the best line ROUTE_GAIN_DAYS or more
 // ahead of what you're doing now; otherwise the clock never stops and it looks again in a day.
-const ROUTE_GAIN_KM = 5;
+const ROUTE_GAIN_DAYS = 0.25; // a quarter of a day on the ghost over the 4-day look
 const ROUTE_MIN_TURN = 10; // degrees: smaller is not a different line
 let lastCallH = -Infinity; // the first call of a voyage is never held back
 let routeLookedH = -Infinity;
@@ -1814,20 +1815,22 @@ function maybeRouteCheck(st: Status): boolean {
     const b: BestHeading | null = await game.bestHeading().catch(() => null);
     if (!b || seq !== decisionSeq) return resume();
     const mine: { heading: Heading; power: number } = { heading: order, power };
-    const o = await game.outlook([{ heading: b.best, power }, mine, { heading: "auto" }]).catch(() => null);
+    const o = await game.outlook([{ heading: b.best, power }, mine, { heading: "auto" }], LOOK_H).catch(() => null);
     if (!o || seq !== decisionSeq) return resume();
     const [best, now, auto] = o.orders;
     const turn = Math.abs(((b.best - b.heading + 540) % 360) - 180);
     const gainKm = best.lead_km - now.lead_km;
+    const pace = o.hours > 0 ? (o.ghost.km / o.hours) * 24 : 0;
+    const gainDays = pace > 1 ? gainKm / pace : 0;
     // A real decision needs a price on the better line (Elena): rougher seas, or a lower battery.
     const rougher = (best.hs_max ?? 0) - (now.hs_max ?? 0) >= 0.75;
     const drains = (now.soc_min ?? 1) - (best.soc_min ?? 1) >= 0.08;
-    const better = gainKm >= ROUTE_GAIN_KM && turn >= ROUTE_MIN_TURN;
+    const better = gainDays >= ROUTE_GAIN_DAYS && turn >= ROUTE_MIN_TURN;
     const ask = better && (rougher || drains);
     page.routeChecks.push({ day: st.day, best: b.best, gain: gainKm, turn, asked: ask });
     if (better && !ask) {
       // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
-      const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} for the next 2 days, ${gapChange(gainKm)} against ${orderWords(order)}, in no worse seas. Change it in Orders.`;
+      const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} over ${orderWords(order)} for the next 4 days (${timeChange(gainKm, pace)}), in no worse seas. Change it in Orders.`;
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     if (!ask) return resume();
@@ -1836,10 +1839,10 @@ function maybeRouteCheck(st: Status): boolean {
     page.decisions.push({ kind: "route", day: st.day });
     const price = [rougher ? `rougher seas (waves to ${best.hs_max!.toFixed(1)} m, not ${now.hs_max!.toFixed(1)})` : "", drains ? `a lower battery (down to ${Math.round(best.soc_min! * 100)}%)` : ""].filter(Boolean).join(" and ");
     // The autopilot and the forecast's line agree (within 3 km): one option, not two (Elena).
-    const same = Math.abs(auto.lead_km - best.lead_km) < 3;
+    const same = pace > 1 && Math.abs(auto.lead_km - best.lead_km) / pace < 0.25;
     const d: Decision = {
       kind: "route",
-      text: `Navigator's check: ${fmtDeg(b.best)} gains about ${Math.round(gainKm)} km in the next 2 days, but through ${price}.`,
+      text: `Navigator's check: the forecast says ${fmtDeg(b.best)} would gain on ${orderWords(order)} over the next 4 days, but through ${price}.`,
       choices: [
         { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
         { label: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
@@ -1875,7 +1878,7 @@ function maybeDecide(): boolean {
   // truth), while the picture catches up. An older simulator, or a failure: no stakes.
   const orders = d.choices.map((c) => c.order);
   const stakes: Promise<Outlook | null> = orders.some(Boolean)
-    ? game.outlook(orders.map((o) => o ?? { heading: "auto" })).catch(() => null)
+    ? game.outlook(orders.map((o) => o ?? { heading: "auto" }), LOOK_H).catch(() => null)
     : Promise.resolve(null);
   whenAt(st.day * 24, async () => {
     const o = await stakes;
@@ -1884,10 +1887,17 @@ function maybeDecide(): boolean {
   return true;
 }
 
-/** What an option does to the gap, rounded because it's a forecast (Leo, Elena: a change, not a total; the strip has the total). */
-function gapChange(km: number): string {
-  const r = Math.abs(km) < 10 ? Math.round(km) : Math.round(km / 5) * 5;
-  return Math.abs(r) < 3 ? "about the same on the ghost" : r > 0 ? `+${r} km on the ghost` : `${r} km to the ghost`;
+/** How far ahead the stakes look: 4 days. A 10-day look took about 4 s in Pyodide, past
+ * Maya's 2 s budget; 4 days took about 1.6 s. Stakes beyond 2 days, because a 2-day gain
+ * can turn into days lost at the finish (gameplay/router-north-bias.md). */
+const LOOK_H = 96;
+/** The gap change in the race's own terms, time (Leo, Maya): km over the ghost's own pace. */
+function timeChange(km: number, kmPerDay: number): string {
+  const d = kmPerDay > 1 ? km / kmPerDay : 0;
+  const half = Math.round(Math.abs(d) * 2) / 2;
+  if (half < 0.5) return "about the same against the ghost";
+  const n = half === 0.5 ? "half a day" : half === 1 ? "a day" : `${half % 1 ? `${Math.floor(half)} and a half` : half} days`;
+  return d > 0 ? `about ${n} gained on the ghost` : `about ${n} lost to the ghost`;
 }
 /** Its cost beside it, where the options differ: the roughest sea, the lowest battery. */
 function costWords(p: Preview, all: Preview[]): string {
@@ -1933,9 +1943,11 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     if (p) {
       const k = document.createElement("span");
       k.className = "stake";
-      const when = Math.round(o!.hours / 24) === 2 ? "2 days" : `${Math.round(o!.hours)} h`;
+      const days = Math.round(o!.hours / 24);
       const shown = o!.orders.filter((_, j) => has[j]);
-      k.textContent = `Forecast, ${when}: ${gapChange(p.lead_km - o!.lead_now_km)}${costWords(p, shown)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      // One tag in race terms, worded as a forecast so it can honestly be wrong (Maya, Leo).
+      const pace = o!.hours > 0 ? (o!.ghost.km / o!.hours) * 24 : 0;
+      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
     const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
