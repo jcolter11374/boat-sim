@@ -10,6 +10,10 @@ import { R_EARTH } from "./land/shader";
 import { RAIN_SHOWERS, rainUniforms } from "./rainRings";
 
 const SHAFTS = 10;
+/** The distant shower curtains are held back (Ines, 12 Nov: they still read as waterspouts)
+ *  until they're redone with Hana's cloud base; ?showers=1 shows them for that work.
+ *  The showers still drive the sea under them (rainUniforms.uShowers) and the rain here. */
+const CURTAINS = typeof location !== "undefined" && new URLSearchParams(location.search).get("showers") === "1";
 const FIELD = 6000; // m, the square of sky the bands drift through, kept round the camera
 const TOP = 420; // m, where a curtain meets its cloud
 
@@ -52,9 +56,10 @@ void main() {
   // Streaks of heavier rain, leaning with the wind, slowly shifting.
   // Soft sheets of heavier and lighter rain (broad noise, no fine vertical comb).
   // Several veils of different density with lighter gaps between them.
-  float v1 = smoothstep(0.25, 0.75, vn(vec2(x * 4.0 + vShaft.x * 50.0, vUv.y * 0.8 - uTime * 0.04)));
-  float v2 = smoothstep(0.3, 0.8, vn(vec2(x * 9.0 + vShaft.x * 17.0, vUv.y * 1.6 - uTime * 0.07)));
-  float s = 0.25 + 0.75 * v1 + 0.35 * v2;
+  float v1 = smoothstep(0.25, 0.75, vn(vec2(x * 2.3 + vShaft.x * 50.0 + 0.6 * vUv.y, vUv.y * 0.8 - uTime * 0.04)));
+  float v2 = smoothstep(0.3, 0.8, vn(vec2(x * 5.0 + vShaft.x * 17.0 + 1.2 * vUv.y, vUv.y * 2.2 - uTime * 0.07)));
+  // Gentle contrast, so no veil stands alone as a narrow dark column (a waterspout look).
+  float s = 0.5 + 0.45 * v1 + 0.2 * v2;
   float near = smoothstep(30.0, 150.0, vDist);
   float far = 1.0 - smoothstep(0.7 * uFar, 1.05 * uFar, vDist); // lost in the haze
   float a = uAmount * vShaft.y * edge * up * s * near * far * (1.5 + 0.2 * foot);
@@ -166,7 +171,7 @@ export class RainBands {
     // at the boat: the logged rain is the hour's rain right here (GUESS display tuning).
     this.local = THREE.MathUtils.clamp(amount * (0.75 + 0.5 * under), 0, 1);
     this.shown = amount > 0.02 ? shown : 0;
-    this.mesh.visible = amount > 0.02;
+    this.mesh.visible = CURTAINS && amount > 0.02;
     if (!this.mesh.visible) return;
     const u = this.mesh.material.uniforms;
     u.uAmount.value = THREE.MathUtils.smoothstep(amount, 0.02, 0.25); // a passing shower shows even when it only drizzles here
