@@ -5,6 +5,7 @@
 // sailing. Read-only: it only visits the public site.
 //
 //   node tools/live_site_check.mjs [check ...]     (no names = every check)
+//   SHARD=2/4 node tools/live_site_check.mjs       (every 4th check, from the 2nd)
 //   SITE=https://example.github.io/boat-sim/ node tools/live_site_check.mjs helm-drop
 //
 // Each check prints one PASS/FAIL line plus its evidence, and writes
@@ -374,8 +375,15 @@ async function runCheck(browser, name) {
   return out;
 }
 
-const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
-for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
+const all = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
+for (const n of all) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
+// SHARD=k/n runs every n-th check starting at the k-th (1-based), so n runners
+// together run every check exactly once, new checks included (Kai: the
+// post-deploy check used one runner per check, 23 runners per deploy).
+const shard = /^(\d+)\/(\d+)$/.exec(process.env.SHARD ?? "");
+if (process.env.SHARD && !(shard && +shard[1] >= 1 && +shard[1] <= +shard[2])) throw new Error(`SHARD must be k/n with 1 <= k <= n, got ${process.env.SHARD}`);
+const names = shard ? all.filter((_, i) => i % +shard[2] === +shard[1] - 1) : all;
+if (shard) console.log(`shard ${shard[0]}: ${names.length} of ${all.length} checks (shards split by position before any check runs, so a SKIP never moves one): ${names.join(" ")}`);
 // BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
 // Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
 // headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.
