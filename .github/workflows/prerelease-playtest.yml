@@ -11,8 +11,16 @@
 # the same site a second time; that workflow now only builds on main (deploy).
 # No secrets: it only reads public releases and serves on the runner itself.
 name: Pre-release playtest
+# Fast on every push, full before a merge (Maya, coordinator, 12 Nov: the runner jam).
+# Every PR push: build (with the unit tests) and smoke (1). The full suite (smoke (2) and
+# the four play jobs) runs when the PR carries the "ready-to-merge" label (added by the
+# merge desk after sign-off, and on every later push while it stays on) and on a hand
+# dispatch. Same job names as before, so "all green" reads the same; the merge desk merges
+# only on a green full run of the head. Main is covered by the deploy (sea3d.yml) and the
+# post-deploy Playtest and Live site check.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "sea3d/**"
       - "src/boatsim/**"
@@ -28,10 +36,13 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: prerelease-playtest-${{ github.ref }}
+  # Adding some other label starts a run that does nothing: its own group, so it can't
+  # cancel the run in progress.
+  group: prerelease-playtest-${{ github.event.action == 'labeled' && github.event.label.name != 'ready-to-merge' && format('skip-{0}', github.run_id) || github.ref }}
   cancel-in-progress: true
 jobs:
   build:
+    if: github.event.action != 'labeled' || github.event.label.name == 'ready-to-merge'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -90,7 +101,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [1, 2]
+        # smoke (1) on every push; smoke (2) only in the full suite.
+        part: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')) && '[1, 2]' || '[1]') }}
     defaults:
       run:
         working-directory: sea3d
@@ -121,6 +133,7 @@ jobs:
           retention-days: 30
   play:
     needs: build
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
