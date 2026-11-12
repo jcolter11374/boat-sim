@@ -194,10 +194,10 @@
   .card label { display: block; margin: 8px 0; }
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
   /* Results, story first (Leo's plan, Elena 12 Nov): headline, story, map and three numbers, your calls, where this leaves you, one bright button. */
-  #result { background: rgba(5,12,22,.28); transition: opacity .5s; z-index: 30; padding-bottom: calc(var(--edge) + var(--strip-h) * .5); box-sizing: border-box; }
+  #result { justify-content: flex-start; padding-left: max(24px, 6vw); background: linear-gradient(90deg, rgba(5,12,22,.4), rgba(5,12,22,.1) 70%); transition: opacity .5s; z-index: 30; padding-bottom: calc(var(--edge) + var(--strip-h) * .5); box-sizing: border-box; }
   #result .rc { width: min(640px, 94vw); padding: 22px 26px 16px; background: var(--hud-solid); max-height: calc(100dvh - var(--bar, 0px) - var(--edge) * 2 - var(--strip-h) * .5 - 16px); }
   .rc-top { display: flex; align-items: flex-start; gap: 10px; }
-  .rc-top h1 { flex: 1; font-size: 26px; line-height: 1.2; margin: 0; }
+  .rc-top h1 { flex: 1; font-size: 24px; line-height: 1.2; margin: 0; text-wrap: balance; }
   .rc .i { width: 22px; height: 22px; padding: 0; border-radius: 50%; font: italic 600 13px Georgia, serif; flex: none; margin-top: 4px; color: var(--dim); background: rgba(255,255,255,.06); border-color: var(--line); }
   #r-caveat { font-size: 12.5px; }
   #r-story { font-size: 15px; line-height: 1.45; color: var(--ink); margin: 10px 0 12px; }
@@ -227,7 +227,8 @@
   #r-details summary::after { content: " \25B8"; }
   #r-details[open] summary::after { content: " \25BE"; }
   #r-standing:empty { display: none; }
-  body.results #strip, body.results #mapbox { opacity: .3; transition: opacity .5s; pointer-events: none; }
+  @media (max-width: 900px) { #result { justify-content: center; padding-left: 0; background: rgba(5,12,22,.3); } }
+  body.results #strip, body.results #mapbox { opacity: .18; transition: opacity .5s; pointer-events: none; }
   body.results #keyhint, body.results #keylist, body.results #orders-tab, body.results #poidock, body.results .poi-card, body.results #notes { display: none !important; }
   @media (max-width: 560px) { .rc-mid { grid-template-columns: 1fr; } #r-nums { flex-direction: row; justify-content: space-between; } .rc-top h1 { font-size: 21px; } }
   #r-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }

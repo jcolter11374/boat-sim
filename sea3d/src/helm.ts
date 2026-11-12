@@ -1928,8 +1928,73 @@ function drawResultMap(): void {
     { rep: game.boat, colours: TRACK.kayak },
     { rep: game.ghost, colours: GHOST },
   ]);
+  // Framed on what was sailed (Ines): both tracks with a margin, at the map's own shape, so a short
+  // voyage isn't a stub in the corner. The finish, when it's off the frame, is an arrow at the edge.
+  const pts: [number, number][] = [];
+  for (const r of [game.boat, game.ghost])
+    for (let i = 0; i < r.lat.length; i++) if (r.lat[i] != null && r.lon[i] != null) pts.push([r.lat[i] as number, r.lon[i] as number]);
+  const target = game.boat.course.target as [number, number];
+  const COS40 = Math.cos((40 * Math.PI) / 180);
+  let [la0, la1, lo0, lo1] = [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))];
+  const whole = lo1 - lo0 > 40;
+  if (!whole && pts.length) {
+    // At least 8 degrees of longitude, and the canvas's 16:10 shape.
+    const cx = (lo0 + lo1) / 2;
+    const cy = (la0 + la1) / 2;
+    let wLon = Math.max(8, (lo1 - lo0) * 1.5);
+    let hLat = Math.max((la1 - la0) * 1.5, (wLon * COS40 * 10) / 16);
+    wLon = Math.max(wLon, (hLat * 16) / 10 / COS40);
+    hLat = (wLon * COS40 * 10) / 16;
+    [la0, la1, lo0, lo1] = [cy - hLat / 2, cy + hLat / 2, cx - wLon / 2, cx + wLon / 2];
+    m.setView({ lonMin: lo0, lonMax: lo1, latMin: la0, latMax: la1 });
+  }
   // Drawn after the card lays out, so the canvas has its size.
-  requestAnimationFrame(() => m.draw(1e9, performance.now()));
+  requestAnimationFrame(() => {
+    m.draw(1e9, performance.now());
+    if (whole || !pts.length) return;
+    const g = cv.getContext("2d")!;
+    const dpr = cv.width / Math.max(1, cv.getBoundingClientRect().width);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = cv.width / dpr;
+    const H = cv.height / dpr;
+    const [ex, ey] = m.xy(...(lastFix(game.boat!) ?? pts[0]));
+    // Where it ended, named (Ines): "Went silent", "Caught in fishing gear"...
+    const end = page.card?.boat;
+    if (end && end.outcome !== "arrived" && end.ending?.headline) {
+      g.font = "600 11px system-ui, sans-serif";
+      g.textAlign = ex > W * 0.6 ? "right" : "left";
+      g.fillStyle = "rgba(255,200,150,.95)";
+      g.fillText(end.ending.headline, ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10);
+    }
+    const [fx, fy] = m.xy(target[0], target[1]);
+    if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
+    // An arrow on the edge, pointing at the finish, with how far it was.
+    const ang = Math.atan2(fy - ey, fx - ex);
+    const ax = W - 14;
+    const ay = THREE.MathUtils.clamp(ey + Math.tan(ang) * (ax - ex), 14, H - 14);
+    g.save();
+    g.translate(ax, ay);
+    g.rotate(ang);
+    g.fillStyle = "rgba(255,255,255,.85)";
+    g.beginPath();
+    g.moveTo(8, 0);
+    g.lineTo(-4, -6);
+    g.lineTo(-4, 6);
+    g.closePath();
+    g.fill();
+    g.restore();
+    g.font = "600 11px system-ui, sans-serif";
+    g.textAlign = "right";
+    g.fillStyle = "rgba(235,242,250,.9)";
+    const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
+    g.fillText(`finish, ${left} km`, ax + 4, ay > H - 24 ? ay - 12 : ay + 20);
+  });
+}
+
+/** The last position a replay has, for the results map. */
+function lastFix(r: Replay): [number, number] | null {
+  for (let i = r.lat.length - 1; i >= 0; i--) if (r.lat[i] != null && r.lon[i] != null) return [r.lat[i] as number, r.lon[i] as number];
+  return null;
 }
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
@@ -2554,6 +2619,11 @@ function frameBoat(dt: number): void {
     const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
     tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
     ty = -0.1 * room;
+  } else if (page.card && !arrival && !wheel.on && !cine.on && window.innerWidth > 900) {
+    // The results card sits on the left two-thirds: the boat's last moment on the right third (Leo, Elena).
+    here0.set(0, 0, 0).project(camera);
+    tx = THREE.MathUtils.clamp((here0.x + 1) / 2 + third.x - 0.82, -0.4, 0.4);
+    ty = -0.04;
   }
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;

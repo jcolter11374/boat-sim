@@ -59,6 +59,8 @@ export class Chart {
   private lanes: ChartLane[] = [];
   private wrecks: [number, number][] = [];
   private focus = 0;
+  /** The part of the ocean shown: the whole crossing by default; the results card frames the track sailed. */
+  private view = { ...VIEW };
   /** The live tracker's forecast: middle path and spread (lat, lon, radius km). */
   private ghost: { median: [number, number][]; spread: [number, number, number][] } | null = null;
 
@@ -68,6 +70,12 @@ export class Chart {
     private readonly bounds: LandBounds,
   ) {
     this.g = canvas.getContext("2d")!;
+  }
+
+  /** Frame a box of the ocean (degrees) instead of the whole crossing. */
+  setView(v: { lonMin: number; lonMax: number; latMin: number; latMax: number }): void {
+    this.view = { ...v };
+    this.base = null;
   }
 
   /** Shipwrecks to mark (lat, lon), with the chart's wreck sign. */
@@ -126,12 +134,12 @@ export class Chart {
 
   /** Canvas pixels for a lat, lon. */
   xy(lat: number, lon: number): [number, number] {
-    const sx = this.w / ((VIEW.lonMax - VIEW.lonMin) * COS);
-    const sy = this.h / (VIEW.latMax - VIEW.latMin);
+    const sx = this.w / ((this.view.lonMax - this.view.lonMin) * COS);
+    const sy = this.h / (this.view.latMax - this.view.latMin);
     const s = Math.min(sx, sy);
-    const ox = (this.w - (VIEW.lonMax - VIEW.lonMin) * COS * s) / 2;
-    const oy = (this.h - (VIEW.latMax - VIEW.latMin) * s) / 2;
-    return [ox + (lon - VIEW.lonMin) * COS * s, oy + (VIEW.latMax - lat) * s];
+    const ox = (this.w - (this.view.lonMax - this.view.lonMin) * COS * s) / 2;
+    const oy = (this.h - (this.view.latMax - this.view.latMin) * s) / 2;
+    return [ox + (lon - this.view.lonMin) * COS * s, oy + (this.view.latMax - lat) * s];
   }
 
   private kmToPx(km: number): number {
@@ -178,16 +186,16 @@ export class Chart {
     g.font = "10px system-ui, sans-serif";
     g.fillStyle = "rgba(160,190,230,0.45)";
     for (let lon = -80; lon <= 0; lon += 10) {
-      const [x0, y0] = this.xy(VIEW.latMin, lon);
-      const [x1, y1] = this.xy(VIEW.latMax, lon);
+      const [x0, y0] = this.xy(this.view.latMin, lon);
+      const [x1, y1] = this.xy(this.view.latMax, lon);
       g.beginPath();
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
     }
     for (let lat = 30; lat <= 50; lat += 10) {
-      const [x0, y0] = this.xy(lat, VIEW.lonMin);
-      const [x1, y1] = this.xy(lat, VIEW.lonMax);
+      const [x0, y0] = this.xy(lat, this.view.lonMin);
+      const [x1, y1] = this.xy(lat, this.view.lonMax);
       g.beginPath();
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
@@ -224,13 +232,13 @@ export class Chart {
     g.font = "10px system-ui, sans-serif";
     g.fillStyle = "rgba(160,190,230,0.55)";
     for (let lon = -70; !this.small && lon <= 0; lon += 10) {
-      const [x1, y1] = this.xy(VIEW.latMax, lon);
+      const [x1, y1] = this.xy(this.view.latMax, lon);
       const label = `${-lon}°W`;
       const lx = x1 + 3;
       if (lx >= 2 && lx + g.measureText(label).width <= this.w - 2) g.fillText(label, lx, Math.max(y1, 0) + 11);
     }
     for (let lat = 30; !this.small && lat <= 50; lat += 10) {
-      const [x0, y0] = this.xy(lat, VIEW.lonMin);
+      const [x0, y0] = this.xy(lat, this.view.lonMin);
       if (y0 - 3 >= 10 && y0 - 3 <= this.h - 2) g.fillText(`${lat}°N`, Math.max(x0, 0) + 3, y0 - 3);
     }
 
