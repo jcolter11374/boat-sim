@@ -25,6 +25,8 @@ import { RAIN_RINGS, rainUniforms } from "./rainRings";
 import { ShortWaveLayer, windSeaFrom, type Detail } from "./seaDetail";
 import { BOAT_WASH_FRAGMENT, BOAT_WASH_PARS, BOAT_WASH_VERTEX, washUniforms } from "./boatWash";
 
+// The hulls' wash, all of it off on Low (the sea there is Low's whole frame budget).
+const WASH_PARS_FULL = `\n#ifndef SEA_LITE\n${BOAT_WASH_PARS}\n#endif\n`;
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
@@ -129,18 +131,23 @@ void gerstner(vec2 p, float w) {
 const VERT_NORMAL = /* glsl */ `
 gerstner(position.xz, fade);
 objectNormal = gNorm;
+#ifndef SEA_LITE
 {
-  // The hulls' own waves (boatWash.ts) tilt the surface too.
+  // The hulls' own waves (boatWash.ts) tilt the surface too (not on Low: five boatWave
+  // calls a vertex was Low's frame budget; Ravi, 12 Nov).
   vec2 pw = (modelMatrix * vec4(position + gDisp, 1.0)).xz;
   float e = 0.08;
   float dx = (boatWave(pw + vec2(e, 0.0)) - boatWave(pw - vec2(e, 0.0))) / (2.0 * e);
   float dz = (boatWave(pw + vec2(0.0, e)) - boatWave(pw - vec2(0.0, e))) / (2.0 * e);
   objectNormal = normalize(objectNormal + vec3(-dx, 0.0, -dz));
 }
+#endif
 `;
 const VERT_POS = /* glsl */ `
 transformed += gDisp;
+#ifndef SEA_LITE
 ${BOAT_WASH_VERTEX}
+#endif
 // The sea is flat, so its rim (3 km off) would sit a few pixels under the horizon with a
 // sliver of sky below it (Ines's hairline). Lift the rim to the eye's own level: the
 // last stretch then rises to the horizon line and fades into the haze there.
@@ -688,7 +695,7 @@ export class Sea {
       Object.assign(sh.uniforms, this.uniforms, seaUniforms, rainUniforms, washUniforms);
       sh.vertexShader =
         VERT_HEAD +
-        BOAT_WASH_PARS +
+        WASH_PARS_FULL +
         sh.vertexShader
           .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\n" + VERT_NORMAL)
           .replace("#include <begin_vertex>", "#include <begin_vertex>\n" + VERT_POS)
@@ -696,7 +703,7 @@ export class Sea {
       // The boat's night deck light (helm.ts, #358) lights its deck and gear, not the
       // sea: lit from a lamp a metre up, the sea's blue turned into a cyan pool under the
       // hull that read as a hover light (Leo, Elena's audit item 12). Point lights skip it.
-      sh.fragmentShader = (RAIN_RINGS + FRAG_HEAD + BOAT_WASH_PARS + sh.fragmentShader)
+      sh.fragmentShader = (RAIN_RINGS + FRAG_HEAD + WASH_PARS_FULL + sh.fragmentShader)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
@@ -706,7 +713,7 @@ export class Sea {
         .replace("#include <fog_fragment>", FRAG_HAZE + "\n#include <fog_fragment>")
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v14-shade";
+    material.customProgramCacheKey = () => "boatsim-sea-v15-washlite";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls (and "See under the water" lets them show through)
     this.mesh.frustumCulled = false;

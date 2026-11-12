@@ -20,6 +20,9 @@ export interface InWaterLook {
   light: number;
   /** How rough the sea is, 0 calm .. 1 a gale: the contact foam and wet band grow with it. */
   rough?: number;
+  /** Low only: the sea under the hull as a plane, height y (m) at world (x, z), rising
+   *  gx, gz metres per metre east and north. */
+  plane?: { x: number; z: number; y: number; gx: number; gz: number };
 }
 
 const PARS = /* glsl */ `
@@ -37,6 +40,14 @@ float iwNoise(vec2 p) {
   vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(iwHash(i), iwHash(i + vec2(1, 0)), u.x), mix(iwHash(i + vec2(0, 1)), iwHash(i + vec2(1, 1)), u.x), u.y);
 }
+`;
+
+const PARS_LITE = /* glsl */ `
+uniform float uWetH;
+uniform float uWetLight;
+uniform float uSeaRough;
+uniform vec3 uWaterTint;
+varying float vSeaH;
 `;
 
 const BODY = /* glsl */ `
@@ -99,19 +110,47 @@ const BODY = /* glsl */ `
 }
 `;
 
+// Low quality (Ravi's frame budget, 12 Nov): the full look above cost Low about half its
+// frame time on software graphics, the sea's height being worked out for every hull pixel
+// (and again in the mirror). Low takes the sea under the hull as a tilted plane through
+// a few points found on the CPU (contact.ts), and keeps only the plain parts: dark under
+// the water, the wet band and the dark wet line; no foam, no noise.
+const VERT_LITE = /* glsl */ `
+#include <project_vertex>
+vec3 wLite = (modelMatrix * vec4(transformed, 1.0)).xyz;
+vSeaH = wLite.y - uSeaPlaneY - dot(uSeaPlane.zw, wLite.xz - uSeaPlane.xy);
+`;
+const BODY_LITE = /* glsl */ `
+{
+  float h = vSeaH;
+  vec3 water = uWaterTint * uWetLight;
+  if (h < 0.0) {
+    float k = 1.0 - exp(h / 0.7);
+    vec3 under = mix(gl_FragColor.rgb * 0.62, gl_FragColor.rgb * vec3(0.5, 0.68, 0.72), smoothstep(0.0, 0.3, -h));
+    gl_FragColor.rgb = mix(under, water, k);
+  } else {
+    float band = uWetH + 0.09 * uSeaRough;
+    gl_FragColor.rgb *= mix(1.0, 0.45, 1.0 - smoothstep(0.6 * band, band, h));
+    gl_FragColor.rgb *= 1.0 - 0.6 * (1.0 - smoothstep(0.012, 0.045, h)) * 0.87;
+  }
+}
+`;
+
 const TINT = new THREE.Color(0x0b3a52); // GUESS: about the sea's own colour looking down into it
 
 /**
  * Teach every lit material under `root` where the water is. Returns the uniforms to
  * drive each frame. Materials are patched once (a flag stops a second patch).
  */
-export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): void } {
+export function putInWater(root: THREE.Object3D, lite = false): { update(look: InWaterLook): void } {
   const u = {
     uWetH: { value: 0.05 },
     uWetFoam: { value: 0.5 },
     uWetLight: { value: 1 },
     uSeaRough: { value: 0 },
     uWaterTint: { value: new THREE.Vector3(TINT.r, TINT.g, TINT.b) },
+    uSeaPlane: { value: new THREE.Vector4() },
+    uSeaPlaneY: { value: 0 },
   };
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
@@ -127,6 +166,15 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
       m.onBeforeCompile = (sh, r) => {
         prev(sh, r);
         Object.assign(sh.uniforms, seaUniforms, washUniforms, u);
+        if (lite) {
+          sh.vertexShader = sh.vertexShader
+            .replace("#include <common>", "#include <common>\nuniform vec4 uSeaPlane;\nuniform float uSeaPlaneY;\nvarying float vSeaH;")
+            .replace("#include <project_vertex>", VERT_LITE);
+          sh.fragmentShader = sh.fragmentShader
+            .replace("#include <common>", "#include <common>\n" + PARS_LITE)
+            .replace("#include <opaque_fragment>", "#include <opaque_fragment>\n" + BODY_LITE);
+          return;
+        }
         sh.vertexShader = sh.vertexShader
           .replace("#include <common>", "#include <common>\nvarying vec3 vSeaW;")
           .replace("#include <project_vertex>", "#include <project_vertex>\nvSeaW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
@@ -135,7 +183,7 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
           .replace("#include <opaque_fragment>", "#include <opaque_fragment>\n" + BODY);
       };
       const key = m.customProgramCacheKey.bind(m);
-      m.customProgramCacheKey = () => key() + "|in-water-v2";
+      m.customProgramCacheKey = () => key() + (lite ? "|in-water-v2-lite" : "|in-water-v2");
       m.needsUpdate = true;
     }
   });
@@ -145,6 +193,11 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
       u.uWetFoam.value = look.foam;
       u.uWetLight.value = look.light;
       u.uSeaRough.value = look.rough ?? 0;
+      const pl = look.plane;
+      if (pl) {
+        u.uSeaPlane.value.set(pl.x, pl.z, pl.gx, pl.gz);
+        u.uSeaPlaneY.value = pl.y;
+      }
     },
   };
 }

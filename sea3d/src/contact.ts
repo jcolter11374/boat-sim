@@ -226,7 +226,12 @@ export class Contact {
     this.wlLength = hi - lo;
     this.wlHalfBeam = Math.max(...this.ring.map(([, w]) => Math.abs(w)));
     this.wash = WashSlot.take();
-    this.water = root ? putInWater(root) : null;
+    // Low quality: no wash in the sea shader and a plain hull look (inWater.ts lite) (Ravi's frame budget: the sea alone fills
+    // Low's +15%); its wash foam is skipped per pixel when its strength is 0. The collar
+    // stays: a thin strip hugging the hull costs next to nothing, and without it the boat
+    // sits on the sea like a sticker (Ines, opening frame).
+    this.low = quality === "low";
+    this.water = root ? putInWater(root, this.low) : null;
     const m = this.ring.length;
     for (let i = 0; i < m; i++) {
       const a = this.ring[(i - 1 + m) % m];
@@ -271,11 +276,6 @@ export class Contact {
     this.collar.name = "foam_collar";
 
     this.n = SPRAY[quality];
-    // Low quality: no foam in the sea shader (Ravi's frame budget: the sea alone fills
-    // Low's +15%); its wash foam is skipped per pixel when its strength is 0. The collar
-    // stays: a thin strip hugging the hull costs next to nothing, and without it the boat
-    // sits on the sea like a sticker (Ines, opening frame).
-    this.low = quality === "low";
     this.sp = new Float32Array(this.n * 3);
     this.sv = new Float32Array(this.n * 3);
     this.born = new Float32Array(this.n).fill(-99);
@@ -382,7 +382,7 @@ export class Contact {
       this.wetBoost = x >= 0 && x < 6 ? 0.3 * this.over.h * Math.exp(-x / 2.5) : 0;
     }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
-    this.water?.update({ wetH: 0.05 + 0.03 * Math.min(speedK, 1.2) + 0.12 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5) });
+    this.water?.update({ wetH: 0.05 + 0.03 * Math.min(speedK, 1.2) + 0.12 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5), plane: this.low ? this.seaPlane(comps, t, place, cx, cz) : undefined });
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.
@@ -537,6 +537,21 @@ export class Contact {
       this.spray.material.uniforms.uLight.value = s.light;
       this.shown.spray = live;
     }
+  }
+
+  /** Low: the sea under the hull as a plane (inWater.ts lite), from its height at the
+   *  waterline's middle, ends and sides. */
+  private seaPlane(comps: WaveComponent[], t: number, place: Placement, cx: number, cz: number) {
+    const hl = this.wlLength / 2, hb = Math.max(this.wlHalfBeam, 0.2);
+    const [bx, bz] = toWorld(this.wlMid + hl, 0, place);
+    const [sx, sz] = toWorld(this.wlMid - hl, 0, place);
+    const [px, pz] = toWorld(this.wlMid, hb, place);
+    const [qx, qz] = toWorld(this.wlMid, -hb, place);
+    const along = (this.surface(comps, bx, bz, t) - this.surface(comps, sx, sz, t)) / (2 * hl);
+    const across = (this.surface(comps, px, pz, t) - this.surface(comps, qx, qz, t)) / (2 * hb);
+    const [ux, uz] = [(bx - sx) / (2 * hl), (bz - sz) / (2 * hl)];
+    const [vx, vz] = [(px - qx) / (2 * hb), (pz - qz) / (2 * hb)];
+    return { x: cx, z: cz, y: this.surface(comps, cx, cz, t), gx: along * ux + across * vx, gz: along * uz + across * vz };
   }
 
   dispose(): void {
