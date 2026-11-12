@@ -158,6 +158,13 @@ async function practiceTriangle(page) {
     throw new CheckFail(`"The triangle" didn't put me at the wheel (${why})`);
   }
 }
+/** Reload once the page has finished fetching: in Chromium, leaving while the boat model's
+ * textures are still decoding logs "GLTFLoader: Couldn't load texture blob:" (sound-helm, 12 Nov). */
+async function calmReload(page) {
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+  await page.waitForTimeout(3000);
+  await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+}
 /** #385: count the page's AudioContexts (an init script, so it sees the very first one). */
 const soundSpy = () => {
   window.__ac = [];
@@ -916,22 +923,27 @@ const CHECKS = {
         console.log(`LOOK-END ${path}`);
         shots.push(name);
       };
-      const wind = () => page.evaluate(() => (document.body.innerText.match(/\d+° off the bow on the (port|starboard)[^\n]*/) || [""])[0]);
+      // The wheel panel's wind line: "upwind, left" etc. (wheelSession.ts); older builds said "on the port side".
+      const SIDE = /(?:upwind|reach|behind), (left|right)|off the bow on the (port|starboard)/;
+      const wind = () => page.evaluate((src) => (document.body.innerText.match(new RegExp(src)) || [""])[0], SIDE.source);
+      const left = (w) => /left|port/.test(w);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
       await practiceTriangle(page);
       await page.click(".w-gskip", { timeout: 3000 }).catch(() => {});
       await page.waitForTimeout(6000);
       const a = await wind();
       await shot("heel-tack-a");
-      // Turn through the wind onto the other tack: hold left until the wind changes side (up to 25 s).
-      const sideA = /port/.test(a) ? "port" : "starboard";
-      await page.keyboard.down(sideA === "port" ? "ArrowLeft" : "ArrowRight");
-      await page.waitForFunction((side) => { const m = document.body.innerText.match(/off the bow on the (port|starboard)/); return m && m[1] !== side; }, sideA, { timeout: 25_000 }).catch(() => {});
+      must(SIDE.test(a), `couldn't read which side the wind is on ("${a}")`);
+      // Tack: turn toward the wind (left when it's on the left) until it comes over to the other side (up to 25 s).
+      const key = left(a) ? "ArrowLeft" : "ArrowRight";
+      await page.keyboard.down(key);
+      await page.waitForFunction(([src, wasLeft]) => { const m = document.body.innerText.match(new RegExp(src)); return m && /left|port/.test(m[0]) !== wasLeft; }, [SIDE.source, left(a)], { timeout: 25_000 }).catch(() => {});
       await page.waitForTimeout(1500);
-      await page.keyboard.up(sideA === "port" ? "ArrowLeft" : "ArrowRight");
+      await page.keyboard.up(key);
       await page.waitForTimeout(6000);
       const b = await wind();
       await shot("heel-tack-b");
+      must(left(a) !== left(b), `didn't get onto the other tack: wind "${a}" then "${b}"`);
       return `tack A: "${a}"; tack B: "${b}"; ${shots.join(", ")}`;
     },
   },
@@ -982,7 +994,7 @@ const CHECKS = {
     path: "helm.html?quality=low",
     run: async (page) => {
       await page.addInitScript(soundSpy);
-      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await calmReload(page);
       const out = [];
       const loaded = async () => {
         await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
@@ -1012,7 +1024,7 @@ const CHECKS = {
       if (clicked) must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
       out.push(`load: no AudioContext, button off; "Sound on?" asked after Set sail, ${clicked ? '"No thanks" stored "off"' : "closed by itself"}`);
       // 2. Second visit after "No thanks": no question.
-      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await calmReload(page);
       await loaded();
       await watchAsk();
       await page.click("#go", { timeout: 15_000 });
@@ -1044,7 +1056,7 @@ const CHECKS = {
       await page.waitForFunction(() => window.__helm.clock === 0 && !window.__helm.busy, null, { timeout: 2 * MIN }).catch(() => {});
       out.push(await cinematic(page, () => window.__helm.frames));
       // 5. Second visit after "on": silent on load, back at the first click, no question.
-      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await calmReload(page);
       await loaded();
       s = await soundState(page);
       must(s.contexts === 0 && !s.pressed, `a remembered "on" started sound on load (${s.contexts} AudioContext, button ${s.pressed})`);
@@ -1065,7 +1077,7 @@ const CHECKS = {
     path: "voyage.html?voyage=2020-04-15&quality=low",
     run: async (page) => {
       await page.addInitScript(soundSpy);
-      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await calmReload(page);
       const out = [];
       const loaded = async () => {
         await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
@@ -1097,7 +1109,7 @@ const CHECKS = {
       must(s.pressed && s.stored === "on", `the Sound button didn't turn sound on: pressed ${s.pressed}, stored ${s.stored}`);
       out.push(`N on (${on1}), N off (${off1}), button on again`);
       out.push(await cinematic(page, () => window.__replay.frames));
-      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await calmReload(page);
       await loaded();
       s = await soundState(page);
       must(s.contexts === 0 && !s.pressed, `a remembered "on" started sound on load (${s.contexts} AudioContext, button ${s.pressed})`);
