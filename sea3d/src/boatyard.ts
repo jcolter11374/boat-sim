@@ -324,7 +324,7 @@ function drawSlots(): void {
       sl.append(head, body, hints);
       g.append(sl);
     }
-    box.append(g);
+    if (g.querySelector(".sl") || title === "Driving") box.append(g); // no empty sections
   }
 }
 
@@ -348,7 +348,7 @@ function groupSummaries(solarW: number, batteryWh: number): void {
       continue;
     }
     const names = ids.filter((id) => cat!.slots.some((x) => x.id === id && shownOptions(x).length)).map((id) => optionOf(cat!, id, design)?.n ?? "").filter(Boolean);
-    el.textContent = names.length > 2 ? `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` : names.join(", ");
+    el.textContent = names.length > 1 ? `${names[0]} and ${names.length - 1} more` : (names[0] ?? "");
   }
 }
 
