@@ -19,6 +19,7 @@ import { Wetness } from "./boats/wet";
 import { Drain } from "./drain";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import * as THREE from "three";
+import { setRainOnSea } from "./rainRings";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -320,6 +321,7 @@ function setQuality(l: Look): void {
   atmos.setBloom(q === "high");
   atmos.setUltra(l === "ultra");
   atmos.setPixelRatio(ratio);
+  clouds.setQuality(l);
   status.look = l;
 }
 
@@ -531,6 +533,8 @@ const status = {
   },
   /** The last hour of the voyage(s) on screen. */
   endHour: (): number => endHour(),
+  /** Test hook: a storm's wall on the horizon (compass bearing, km to its centre), or null. */
+  stormWall: null as { bearing: number; km: number } | null,
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
@@ -1460,6 +1464,7 @@ renderer.setAnimationLoop(() => {
     sunAz = sp.az;
     atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
     atmos.cloud = clouds.cover; // last frame's, which is close enough
+    atmos.rain = clouds.rainShade;
     atmos.set(sp.el, sp.az, storm);
     showWreck(lat, lon);
     if (Number.isFinite(lat)) sea.setBay(SEATEST.sea?.bay ?? inChesapeake(lat, lon));
@@ -1477,7 +1482,11 @@ renderer.setAnimationLoop(() => {
       atmos.sunDir,
       atmos.fog.color,
       atmos.ambient,
+      rep.rain ? valueAt(rep, rep.rain, hour) : null,
     );
+    clouds.seed(utc(rep.start) / 86400e3); // each voyage its own sky
+    clouds.setMoon(atmos.moonDir, atmos.moonlight);
+    clouds.setStorm(status.stormWall);
     clouds.closeIn(atmos.fog);
     // The sea mirrors the cloud deck, so sea and sky meet without a line (Kai's Clouds.seaSky, sky PR).
     (clouds as { seaSky?: (out: THREE.Vector4) => void }).seaSky?.(seaUniforms.uSeaSky.value);
@@ -1490,6 +1499,7 @@ renderer.setAnimationLoop(() => {
     // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
     bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
     rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+    setRainOnSea(rate != null ? rainFromRate(rate) : rainFromStorm(storm), bands.local, quality === "low"); // rings on the sea (rainRings.ts)
     status.bands = bands.shown;
     status.bandNear = bands.nearest;
     traffic?.update(lat, lon, (utc(rep.start) + hour * 3600e3) / 1000, atmos.fog.far, sea.waveHeight);

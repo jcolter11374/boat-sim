@@ -138,15 +138,19 @@ function deepenSky(m: THREE.ShaderMaterial): void {
         // Clear air: bluer and darker going up, but not in the bright glow round the sun.
         float glow = smoothstep(0.75, 0.995, cosTheta);
         float up = smoothstep(0.0, 0.55, hgt);
-        vec3 deep = mix(vec3(1.0), vec3(0.42, 0.62, 1.08), up * (1.0 - glow));
-        vec3 graded = mix(vec3(lum), retColor, 1.35) * deep;
+        // At a low sun the zenith is a deeper, duskier blue, not midday's saturated one (Ines).
+        vec3 zen = mix(vec3(0.42, 0.62, 1.08), vec3(0.34, 0.44, 0.78), uWarm);
+        vec3 deep = mix(vec3(1.0), zen, up * (1.0 - glow));
+        vec3 graded = mix(vec3(lum), retColor, mix(1.35, 1.1, uWarm)) * deep;
         // Just above the horizon: a pale, bright band of haze rather than flat white.
         float band = 1.0 - smoothstep(0.0, 0.12, hgt);
         graded = mix(graded, retColor * vec3(0.8, 0.9, 1.03), band * 0.6);
         // Low sun: warm the sky on the sun's side, rose and violet opposite (the "belt of Venus").
         float sunSide = 0.5 + 0.5 * cosTheta;
         vec3 dusk = mix(vec3(0.95, 0.82, 1.0), vec3(1.18, 0.86, 0.62), sunSide);
-        graded *= mix(vec3(1.0), dusk, uWarm * (1.0 - 0.6 * up));
+        // ...and the warmth climbs higher round the sun.
+        float nearSun = smoothstep(0.2, 0.95, cosTheta);
+        graded *= mix(vec3(1.0), dusk, uWarm * (1.0 - 0.6 * up * (1.0 - 0.75 * nearSun)));
         retColor = mix(retColor, max(graded, 0.0), uClear);
         // Twilight, sun just below the horizon: the sky keeps a glow for half an hour
         // or so. Orange low on the sun's side, a deepening blue overhead, and a
@@ -208,6 +212,8 @@ export class Atmosphere {
   exposure = 0.55;
   /** Cloud cover 0..1 (the clouds' own reading, from the logged sunlight): dims the day under it. */
   cloud = 0;
+  /** How hard it is raining, 0..1 (Clouds.rainShade): steady rain hides the sun. */
+  rain = 0;
   /** How far you can see through flying spray (m); Infinity in anything less than a severe gale. */
   sprayFar = Infinity;
   /** Overall light level for unlit things like foam particles, 0..1. */
@@ -373,7 +379,8 @@ export class Atmosphere {
     // third or so of a clear day's); a gale's own murk counts the same way, whichever is darker.
     // Broken cloud leaves the sun out most of the time; only a closing sky shades the day.
     const overcast = smooth(this.cloud, 0.35, 0.95);
-    const shade = Math.max(0.6 * storm, 0.75 * overcast);
+    // In steady rain the deck is thick and low: the sun is all but gone, and so is its glitter on the sea.
+    const shade = Math.max(0.6 * storm, 0.75 * overcast, 0.99 * this.rain);
     this.sunLight = day * (1 - shade);
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;
@@ -396,7 +403,8 @@ export class Atmosphere {
       u.uOpacity.value = night * (1 - storm);
       u.uLimit.value = nakedEyeLimit(elDeg, moonlight);
     }
-    this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day));
+    // Hidden behind a full deck (its unlit side showed as a dark ellipse in the cloud, Ines).
+    this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day)) * (1 - Math.max(overcast, smooth(storm, 0.2, 0.7)));
     this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
     const dark = 0.05 + 0.13 * moonlight; // what the night leaves, moonless .. full moon
@@ -404,7 +412,9 @@ export class Atmosphere {
     this.foamLight = this.ambient - 0.7 * dark * (1 - day); // GUESS: 0.3 of the night's level
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
-    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
+    // A blow or a full overcast turns the haze cold grey quickly (Hana): at force 8 the dusk's
+    // orange is gone from the murk and stays only in the break under the deck, towards the sun.
+    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), Math.max(smooth(storm, 0, 0.6), 0.85 * overcast));
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = this.horizon * (0.9 - 0.77 * storm);
     // Spindrift in a severe gale closes the view in further (storm.ts sprayVisibility).
@@ -420,10 +430,10 @@ export class Atmosphere {
     // The moon makes the glints at night.
     if (day > 0.15 || this.moonEl < 0) {
       this.glintDir.copy(this.sunDir);
-      this.glintLight = day > 0.15 ? this.sunLight : 0;
+      this.glintLight = day > 0.15 ? this.sunLight * (1 - this.rain) : 0; // no glitter path through rain
     } else {
       this.glintDir.copy(this.moon.position).normalize();
-      this.glintLight = this.moon.intensity * 0.6;
+      this.glintLight = this.moon.intensity * 0.6 * (1 - 0.95 * Math.max(overcast, smooth(storm, 0.2, 0.7))); // no moon path under a full deck (Sam)
     }
     if (this.bloom) this.bloom.strength = 0.22 + 0.25 * dusk + 0.15 * night;
     this.storm = storm;
