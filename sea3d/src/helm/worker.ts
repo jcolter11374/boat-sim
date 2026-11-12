@@ -14,9 +14,11 @@
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 // Replies that move time carry both boats' voyages so far as replays (hourly rows).
 
+import { HELM_PACKAGES } from "./prefetch";
+
 // Pass the folder too: Firefox can't work it out from a module imported in a worker
 // ("Could not extract indexURL path from pyodide module location", #294).
-const PYODIDE_DIR = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+const PYODIDE_DIR = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"; // the same as helm/prefetch.ts (tests/prefetch.test.ts)
 const PYODIDE = `${PYODIDE_DIR}pyodide.mjs`;
 
 interface Py {
@@ -79,7 +81,7 @@ function start(base: string): Promise<Py> {
     };
     const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`, tick(0)), fetchBytes(`${base}forcing_2020.npz`, tick(1))]);
     say("Loading the simulator... 85%");
-    await py.loadPackage(["numpy", "pyyaml"]);
+    await py.loadPackage(HELM_PACKAGES);
     py.FS.mkdirTree("/sandbox");
     py.FS.writeFile("/sandbox/boatsim.zip", zip);
     py.FS.writeFile("/sandbox/forcing.npz", bundle);
