@@ -615,6 +615,48 @@ const CHECKS = {
       return `${shots.length} looks: ${shots.join(", ")}`;
     },
   },
+  // Manual: the helm at night (#373), 1 Apr 2020 kayak, paused near 1 AM local on 2 Apr
+  // (about day 0.75) and at day 1.5, each with the panels and in cinematic mode. Printed to the log like "look".
+  "look-night": {
+    manual: true,
+    path: "helm.html",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
+      await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
+      const day = page.locator("#launch");
+      if (await day.count()) await day.selectOption("0").catch(() => {});
+      await page.click("#go");
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+      for (const target of [0.75, 1.5]) {
+        await page.evaluate(() => { if (window.__helm.clock === 0) document.querySelector('#timebar .rate[data-rate="6"]')?.click(); });
+        await page.evaluate(() => document.querySelector("#decidebtns button")?.click());
+        await page.waitForFunction((t) => (window.__helm.hour ?? 0) / 24 >= t || window.__helm.clock === 0, target, { timeout: 4 * MIN }).catch(() => {});
+        await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+        await page.waitForTimeout(5000);
+        const when = await page.evaluate(() => `${document.getElementById("clock")?.textContent} ${document.getElementById("local")?.textContent}`.replace(/[^\w.:+-]+/g, "_"));
+        await shot(`night-${target}-panels-${when}`.slice(0, 80));
+        await page.click("#cinebtn", { noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+        await page.waitForTimeout(6000);
+        await shot(`night-${target}-cinematic`);
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(1500);
+      }
+      return `${shots.length} looks: ${shots.join(", ")}`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
