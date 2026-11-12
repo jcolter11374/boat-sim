@@ -539,7 +539,39 @@ class Game:
         for o in orders:
             p = self.preview(o["heading"], float(o.get("power", self._cruise())), hours=hours)
             out.append({**o, **p, "lead_km": lead + p["km"] - ghost["km"]})
-        return {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+        res = {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+        tracks = [p.get("track") or [] for p in [ghost, *out]]
+        res["current"] = self._current_grid([pt for tr in tracks for pt in tr])
+        return res
+
+    def _current_grid(self, pts: list, step: float = 0.25, pad: float = 0.75) -> dict | None:
+        """The forecast's surface current now, on a grid round the call's lines (Rosa's call
+        map draws the Gulf Stream from it): {lat0, lon0, step, nlat, nlon, u, v}, rows south
+        to north, m/s east and north, 0 outside the weather. Display only."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        v = self.mine
+        pts = [*pts, [v.state.lat, v.state.lon]]
+        if not pts:
+            return None
+        lat0 = math.floor((min(p[0] for p in pts) - pad) / step) * step
+        lon0 = math.floor((min(p[1] for p in pts) - pad) / step) * step
+        nlat = min(40, int((max(p[0] for p in pts) + pad - lat0) / step) + 1)
+        nlon = min(60, int((max(p[1] for p in pts) + pad - lon0) / step) + 1)
+        issued = v.c.forecast.issue(v.state.t)
+        us, vs = [], []
+        for i in range(nlat):
+            for j in range(nlon):
+                try:
+                    e = issued.sample(v.state.t, lat0 + i * step, lon0 + j * step)
+                    cu, cv = float(e.current_u), float(e.current_v)
+                except OutsideCoverage:
+                    cu = cv = 0.0
+                if not (math.isfinite(cu) and math.isfinite(cv)):
+                    cu = cv = 0.0
+                us.append(round(cu, 2))
+                vs.append(round(cv, 2))
+        return {"lat0": lat0, "lon0": lon0, "step": step, "nlat": nlat, "nlon": nlon, "u": us, "v": vs}
 
     def best_heading(
         self, hours: float = OUTLOOK_HOURS, fan=(-30, -20, -10, 0, 10, 20, 30)

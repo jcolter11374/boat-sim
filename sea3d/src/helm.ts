@@ -43,6 +43,7 @@ import { Compass } from "./helm/compass";
 import { askedChallenge } from "./sailLink";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
+import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
@@ -818,6 +819,8 @@ function askSound(): void {
 // the model), and the finish sounds a horn. The results card waits for the picture.
 let kick = { t: -99, dir: 1 };
 let slowUntil = 0;
+/** A call coming up: slow down from `from`, turn the camera to `look` (compass), until `h` (voyage hours). */
+let foresee: { from: number; h: number; look: number | null } | null = null;
 let finishing = false;
 const shake = new THREE.Vector3();
 const stillCamera = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -848,7 +851,7 @@ function flash(kind: "spray" | "alarm"): void {
 
 /** Play at an hour a second: during a moment, and over the last hours before the end. */
 function slowNow(t: number): boolean {
-  return t < slowUntil || (finishing && shownTo - hour < 3);
+  return t < slowUntil || (finishing && shownTo - hour < 3) || (!!foresee && hour >= foresee.from && hour < foresee.h);
 }
 
 /** The knockdown's roll (rad) at time t: thrown over, then righting itself with a wobble. */
@@ -1506,6 +1509,11 @@ addEventListener("keydown", (e) => {
     sound.toggle();
     return;
   }
+  // A "Your call" card: 1-3 pick, Esc takes the autopilot's (before the speed keys, which share 1-4).
+  if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea") && decisionKey(e)) {
+    e.preventDefault();
+    return;
+  }
   // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's (practice has no game).
   if (wheel.on && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
     if (e.code === "KeyV" && !e.repeat) {
@@ -1596,7 +1604,10 @@ function untilOptions(): Record<string, number | boolean> {
 // leave it). Hands on only: from base, orders go by satellite and the forecast is the same.
 /** `order`: what the choice would steer, so the card can show its forecast stake against the ghost. */
 type Choice = { label: string; title: string; act: () => Promise<void> | void; order?: { heading: Heading; power?: number } };
-type Decision = { kind: string; text: string; choices: Choice[] };
+/** look: the compass bearing of the problem (the gale, the Stream), for the camera to turn to as the call nears. */
+type Decision = { kind: string; text: string; choices: Choice[]; look?: number };
+/** Compass bearing (deg) of a vector given as east and north parts. */
+const compassOf = (east: number, north: number): number => ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
 const asked = { gale: -Infinity, night: -Infinity, stream: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 let streamCall: { h: number; chose: string; lead: number; later: string[] } | null = null;
@@ -1669,6 +1680,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)) });
       return {
         kind,
+        look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
         text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
         choices,
       };
@@ -1717,6 +1729,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     // One line (Elena): the card's options and their stakes carry the rest.
     return {
       kind: "stream",
+      look: compassOf(w.current_u, w.current_v), // down the Stream, the way it runs
       text: `The Gulf Stream: a ${knots}-knot river running ${towards(w.current_u, w.current_v)}.${against ? " Wind against it makes steep seas." : ""}`,
       choices: [
         {
@@ -1754,6 +1767,9 @@ function maybeDecide(): boolean {
   if (!d) return false;
   setRate(0, true);
   page.decisions.push({ kind: d.kind, day: st.day });
+  // See it coming (Rosa): over the last half day before the call the picture slows to an hour
+  // a second and the camera turns toward the problem, so the pause lands on a picture of it.
+  foresee = { from: st.day * 24 - 12, h: st.day * 24, look: d.look ?? null };
   // Asked once the picture gets there, so the question and the view agree. Carrying on
   // before then skips it; a later question replaces it.
   const seq = ++decisionSeq;
@@ -1776,16 +1792,36 @@ function againstGhost(km: number): string {
   return Math.abs(r) < 1 ? "level with the ghost" : `about ${Math.abs(r).toLocaleString()} km ${r > 0 ? "ahead of" : "behind"} the ghost`;
 }
 
+/** The open call's map, redrawn when an option is hovered or focused (-1: none). */
+let drawDecisionMap: ((lit: number) => void) | null = null;
+
 function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []): void {
   $("decidetext").textContent = d.text;
   const box = $("decidebtns");
   box.replaceChildren();
-  // For the call's map (Rosa's cards): each option's forecast line, and the ghost's.
+  // The card is a map first (Rosa's cards, Elena's plan note 1): each option's forecast line in
+  // its own colour, and the ghost's, faint and dashed. No map without the lines.
   page.outlook = o;
+  const lines: (Line | null)[] = d.choices.map((_, i) => (o && has[i] ? (o.orders[i]?.track ?? null) : null));
+  const st = game.status;
+  const map = $<HTMLCanvasElement>("decidemap");
+  const withMap = !!st && lines.some((l) => l && l.length > 1);
+  map.hidden = !withMap;
+  $("decide").classList.toggle("withmap", withMap);
+  // The map's key, in the card's own words (Ines): the band is named only when there is one.
+  const fast = !!o?.current?.u.some((u, k) => Math.hypot(u, o.current!.v[k]) >= 1);
+  const band = fast ? ` Grey band: ${d.kind === "stream" ? "the Stream" : "a strong current"} (forecast).` : "";
+  $("decidefoot").textContent = `Time is paused until you choose.${withMap ? ` Dashed: the ghost.${band}` : ""} Keys 1-${d.choices.length}, or Esc for the autopilot.`;
+  drawDecisionMap = withMap
+    ? (lit) => drawCallMap(map, chartLand, [st!.boat.lat, st!.boat.lon], lines, o?.ghost.track ?? null, lit, o?.current ?? null)
+    : null;
   for (const [i, c] of d.choices.entries()) {
     const b = document.createElement("button");
-    b.textContent = c.label;
     b.title = c.title;
+    const key = document.createElement("kbd");
+    key.textContent = String(i + 1);
+    b.append(key, c.label);
+    if (withMap && lines[i]) b.style.setProperty("--opt", OPTION_COLOURS[i % OPTION_COLOURS.length]);
     const p = o && has[i] ? o.orders[i] : null;
     if (p) {
       const k = document.createElement("span");
@@ -1793,17 +1829,47 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       k.textContent = `Forecast, ${Math.round(o!.hours / 24) === 2 ? "2 days" : `${Math.round(o!.hours)} h`} on: ${againstGhost(p.lead_km)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
+    const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
+    b.addEventListener("mouseenter", () => lightUp(true));
+    b.addEventListener("mouseleave", () => lightUp(false));
+    b.addEventListener("focus", () => lightUp(true));
+    b.addEventListener("blur", () => lightUp(false));
     b.addEventListener("click", async () => {
       $("decide").hidden = true;
       page.outlook = null;
+      drawDecisionMap = null;
       await c.act();
       setRate(lastRate);
     });
     box.append(b);
   }
   $("decide").hidden = false;
-  $("fcbox").classList.add("lit");
-  hud.forecast(true, true);
+  // On the right, it sits 12 px under the chart, whatever the chart's size (Ines).
+  const chartBox = document.getElementById("mapbox")?.getBoundingClientRect();
+  $("decide").style.top = withMap && chartBox && chartBox.height > 0 ? `${Math.round(chartBox.bottom + 12)}px` : "";
+  foresee = null;
+  drawDecisionMap?.(-1);
+  // With a map on the card, the 5-day strip stays shut: together they buried the boat (Elena).
+  if (!withMap) {
+    $("fcbox").classList.add("lit");
+    hud.forecast(true, true);
+  }
+}
+
+/** 1, 2, 3 pick a call's options; Esc takes the autopilot's (always one key away). */
+function decisionKey(e: KeyboardEvent): boolean {
+  if ($("decide").hidden) return false;
+  const btns = Array.from($("decidebtns").querySelectorAll("button"));
+  const n = /^Digit([1-9])$/.exec(e.code)?.[1] ?? /^Numpad([1-9])$/.exec(e.code)?.[1];
+  if (n && btns[Number(n) - 1]) {
+    btns[Number(n) - 1].click();
+    return true;
+  }
+  if (e.key === "Escape") {
+    (btns.find((b) => /autopilot/i.test(b.textContent ?? "")) ?? btns.at(-1))?.click();
+    return true;
+  }
+  return false;
 }
 
 /** Things to say once the picture reaches a voyage hour: the simulator runs ahead of it. */
@@ -2000,6 +2066,7 @@ function showChallenge(): void {
   $("chnote").textContent = c.weather_note;
 }
 async function begin(): Promise<void> {
+  foresee = null;
   arrival = null;
   page.arrival = false;
   // An index into the six odds launches, or a day: the default is 23 Apr 2020, a good
@@ -2222,6 +2289,8 @@ showOrder();
 compass.draw();
 
 const landImg = new Image();
+/** The land mask, for a call card's map, once loaded. */
+let chartLand: LandMask | null = null;
 (async () => {
   const [bounds] = await Promise.all([
     fetch("./land.json").then((r) => r.json() as Promise<LandBounds>),
@@ -2232,6 +2301,7 @@ const landImg = new Image();
     }),
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
+  chartLand = { img: landImg, bounds };
   chart.setWrecks(wreckMarks());
 })().catch((e) => console.warn("chart:", e));
 
@@ -2493,6 +2563,8 @@ function frameBoat(dt: number): void {
     const fill = (spec.length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
     const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
     tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
+    // A call's card on the right third: the boat goes to the left third, the sea she's choosing about beyond her.
+    if (!$("decide").hidden && $("decide").classList.contains("withmap")) tx = 0.17 * room;
     ty = -0.1 * room;
   }
   const k = Math.min(1, dt * 1.2);
@@ -2575,6 +2647,12 @@ renderer.setAnimationLoop(() => {
   motion.pose.yaw = smoothYaw;
   const off = camera.position.clone().sub(controls.target);
   off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
+  // A call coming: ease round (about 2 s) to look at the problem past the boat. Reduced motion: no turn.
+  if (foresee?.look != null && hour >= foresee.from && !stillCamera && !wheel.on && !cine.on) {
+    const cur = Math.atan2(-off.x, off.z);
+    const want = THREE.MathUtils.degToRad(foresee.look);
+    off.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.atan2(Math.sin(want - cur), Math.cos(want - cur)) * Math.min(1, dt * 1.2));
+  }
   camera.position.copy(controls.target).add(off);
   // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
   motion.heel = wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;

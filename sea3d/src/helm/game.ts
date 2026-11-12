@@ -91,11 +91,14 @@ export interface Preview {
   track?: [number, number][];
 }
 /** Each order's stake against the ghost, from the forecast as issued (sandbox/helm.py Game.outlook). */
+import type { CurrentGrid } from "./callmap";
 export interface Outlook {
   hours: number;
   lead_now_km: number;
   ghost: Preview;
   orders: (Preview & { heading: Heading; power?: number; lead_km: number })[];
+  /** The forecast's surface current round the lines, for the call map (newer simulators). */
+  current?: CurrentGrid | null;
 }
 export interface ForecastRow {
   t: string;

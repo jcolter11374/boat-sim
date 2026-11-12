@@ -27,3 +27,17 @@ def test_best_heading_comes_from_a_fan_around_the_heading_now(env):  # noqa: F81
     b = g.best_heading(hours=6)
     assert b["best"] in b["km"] and len(b["km"]) == 7
     assert b["gain_km"] >= 0
+
+
+def test_outlook_carries_the_current_round_the_lines_for_the_call_map(env):  # noqa: F811
+    """Rosa's call map draws the Gulf Stream from outlook()["current"]: a grid round the lines."""
+    g = Game(env, launch_index=MAY1, max_days=0.9)
+    g.run(hours=3, ghost_passes=False, land_within_km=None, breakdown=False)
+    o = g.outlook([{"heading": "auto"}, {"heading": 90, "power": 0.25}])
+    c = o["current"]
+    assert c is not None and c["nlat"] > 1 and c["nlon"] > 1
+    assert len(c["u"]) == len(c["v"]) == c["nlat"] * c["nlon"]
+    pts = [p for tr in [o["ghost"].get("track") or [], *[x.get("track") or [] for x in o["orders"]]] for p in tr]
+    for la, lo in pts:
+        assert c["lat0"] <= la <= c["lat0"] + (c["nlat"] - 1) * c["step"]
+        assert c["lon0"] <= lo <= c["lon0"] + (c["nlon"] - 1) * c["step"]
