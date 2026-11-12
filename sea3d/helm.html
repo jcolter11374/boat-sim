@@ -214,7 +214,7 @@
 
   /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: 1.8fr 1.1fr .95fr .75fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -236,6 +236,8 @@
   #timebar button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
   #timebar #t-pause { min-width: 2.2em; }
   #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #c-headv .sub { margin-left: .25em; }
+  .againrow { display: flex; align-items: center; gap: 16px; }
   #keysbtn { width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
   #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
   #keylist[hidden] { display: none; }
@@ -549,7 +551,7 @@
     <div id="r-ends"></div>
     <p class="muted" id="r-notes"></p>
     <div id="r-next"></div>
-    <button id="again" class="go">Play again</button> <a href="./voyage.html">Voyage replays</a>
+    <div class="againrow"><button id="again" class="go">Play again</button><a href="./voyage.html">Voyage replays</a></div>
   </div>
 </div>
 

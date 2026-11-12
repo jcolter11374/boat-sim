@@ -278,7 +278,18 @@ const arrow = (deg: number): string => ARROWS[Math.round((((deg % 360) + 360) % 
 export function showStrip(d: StripData): void {
   if (d.order !== undefined) $("c-orderv").textContent = d.order;
   if (d.heading !== undefined)
-    $("c-headv").textContent = d.heading == null ? "–" : `${point(d.heading)} ${String(Math.round(((d.heading % 360) + 360) % 360) % 360).padStart(3, "0")}°`;
+    {
+      // "050°" first, the compass letters after in small type, so a narrow cell loses the letters, not the number (Milo).
+      const e = $("c-headv");
+      if (d.heading == null) e.textContent = "–";
+      else {
+        e.textContent = `${String(Math.round(((d.heading % 360) + 360) % 360) % 360).padStart(3, "0")}°`;
+        const sub = document.createElement("span");
+        sub.className = "sub";
+        sub.textContent = point(d.heading);
+        e.append(sub);
+      }
+    }
   if (d.speedKn !== undefined) $("c-speedv").textContent = d.speedKn == null ? "–" : `${d.speedKn.toFixed(1)} kn`;
   const bar = $("c-batbar");
   if (d.heel !== undefined) {
