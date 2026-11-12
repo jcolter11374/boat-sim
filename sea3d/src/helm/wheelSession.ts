@@ -496,19 +496,15 @@ export const COUNTS_AFTER_S = 60;
 
 /** counts: the simulator took the spell's trim for the next watch (null: it can't, or it was too short). */
 export function summary(r: WheelResult, counts: { hours: number } | null = null): string {
-  const km = r.metres >= 1000 ? `${(r.metres / 1000).toFixed(2)} km` : `${Math.round(r.metres)} m`;
-  const mins = Math.floor(r.seconds / 60);
-  const secs = Math.round(r.seconds % 60);
+  // Three short sentences (Leo): what happened, how well, what it's worth. Distance and time are left out.
   const pct = Math.round(r.share * 100);
   const ap = Math.round(r.autopilot * 100);
-  const vs = r.sailedSecs < 20 ? "too short to compare with the autopilot" : pct > ap ? `better than the autopilot's ${ap}%` : pct === ap ? `level with the autopilot's ${ap}%` : `the autopilot manages ${ap}%`;
-  const pb = r.best && r.seconds > 20 ? (r.share > r.best ? " A new personal best!" : ` Your best: ${Math.round(r.best * 100)}%.`) : "";
-  const extra = [r.tacks ? `${r.tacks} tack${r.tacks > 1 ? "s" : ""}` : "", r.roundUps ? `rounded up ${r.roundUps} time${r.roundUps > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ");
-  return `${r.reached ? "Mark reached!" : "Handed back."} You sailed ${km} in ${mins} min ${secs} s at ${pct}% of the boat's best speed (${vs}).${extra ? ` ${extra[0].toUpperCase()}${extra.slice(1)}.` : ""}${pb} ${
-    counts
-      ? `For the next ${counts.hours} hours of the voyage your boat sails trimmed like that, instead of the autopilot's ${ap}%.`
-      : r.sailedSecs < COUNTS_AFTER_S
-        ? "Sail at least a minute and your trimming counts in the voyage for the next watch."
-        : "Your voyage waited while you sailed; this simulator can't count a spell yet."
-  }`;
+  const how = r.sailedSecs < 20 ? `You sailed at ${pct}% of her best speed (too short to compare).` : `You sailed at ${pct}% of her best speed (the autopilot manages ${ap}%).`;
+  const pb = r.best && r.seconds > 20 && r.share > r.best ? " A new personal best!" : "";
+  const worth = counts
+    ? `She keeps your trim for the next ${counts.hours} hours.`
+    : r.sailedSecs < COUNTS_AFTER_S
+      ? "Sail a minute or more and she keeps your trim for the next 4 hours." // TRIM_HOURS in sandbox/helm.py
+      : "Your voyage waited while you sailed.";
+  return `${r.reached ? "Mark reached!" : "Handed back."} ${how}${pb} ${worth}`;
 }
