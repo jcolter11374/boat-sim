@@ -59,5 +59,6 @@ test("the guess is scored against the outcome", () => {
   assert.equal(guessVerdict(done, false).right, false);
   assert.equal(guessVerdict(lost, false).right, true);
   assert.equal(guessVerdict(lost, true).text, "You said it would make it, but it didn't.");
-  assert.match(outcomeLine(done), /^Made it to the finish off Portugal in 70 days\.$/);
+  // 58 days since #285 (a late route no longer sends the boat back for a waypoint it has passed); 70 before.
+  assert.match(outcomeLine(done), /^Made it to the finish off Portugal in 58 days\.$/);
 });
