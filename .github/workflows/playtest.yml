@@ -12,10 +12,8 @@ on:
       site:
         description: "Site to play"
         default: "https://jcolter11374.github.io/boat-sim/"
-  pull_request:
-    paths:
-      - ".github/workflows/playtest.yml"
-      - "tools/playtest/**"
+  # No pull_request trigger: the pre-release playtest (prerelease-playtest.yml)
+  # plays a PR's own tools/playtest/play.mjs against the PR's own build.
 permissions:
   contents: read
 concurrency:

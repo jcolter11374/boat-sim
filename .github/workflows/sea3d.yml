@@ -7,16 +7,13 @@
 # Until then the deploy job fails without affecting the build check.
 name: 3D sea page
 on:
+  # Pull requests get the same build and tests (unit + smoke) in the pre-release
+  # playtest (prerelease-playtest.yml), which plays that build too; building it
+  # here as well doubled the work on every PR. A PR that changes this file still
+  # runs it, so a broken deploy workflow shows up before it reaches main.
   pull_request:
     paths:
-      - "sea3d/**"
       - ".github/workflows/sea3d.yml"
-      # The simulator the pages run in the browser is packed here too, from the
-      # same commit, so a simulator-only change redeploys the pages.
-      - "src/boatsim/**"
-      - "configs/**"
-      - "data/land/**"
-      - "tools/build_site.sh"
   push:
     branches: [main]
     paths:
