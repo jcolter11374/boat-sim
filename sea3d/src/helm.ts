@@ -2913,7 +2913,8 @@ function frameBoat(dt: number): void {
     here0.set(0, 0, 0).project(camera); // includes the lens's current slide, so this settles on the target
     const phone = window.innerWidth < 700;
     tx = THREE.MathUtils.clamp(third.x + (here0.x * 0.5 + 0.5 - (phone ? 0.5 : 0.68)), -0.4, 0.4);
-    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - (phone ? 0.2 : 0.5)), -0.4, 0.4);
+    // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - (phone ? (spec.length > 5 ? 0.36 : 0.2) : 0.5)), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
@@ -3211,6 +3212,22 @@ async function startVoyage(s: SetSail): Promise<void> {
 }
 (window as unknown as { __setsail: unknown }).__setsail = { options: SET_SAIL, implied, current: currentSetSail, start: startVoyage };
 // The Set sail card draws its pills over the controls above (Jonas; Elena's approved wireframe).
-if (!shared && !PRACTICE) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady });
+// The boat on the water is always the one you'll sail: the cruiser for Annapolis, else the picked boat (Elena).
+let previewed = "";
+const previewBoat = (where: SetSail["where"]) => {
+  const pick = chosenBoat();
+  const key = where === "annapolis" ? "stock_cruiser31" : pick === MINE ? String(startMine?.base ?? "kayak") : pick || "kayak";
+  if (key === previewed) return; // only on a change, so a player's own zoom is left alone
+  const first = !previewed;
+  previewed = key;
+  useBoat(key);
+  if (first) return; // the page's own opening view
+  // Far enough back to see all of her, mast and sails included, beside the card.
+  const off = camera.position.clone().sub(controls.target);
+  // On a phone she sits in the band under the bar: further back again, so her masthead clears it.
+  const back = spec.length > 5 ? (window.innerWidth < 700 ? 6.5 : 4.5) : 2.8;
+  camera.position.copy(controls.target).add(off.setLength(spec.length * back));
+};
+if (!shared && !PRACTICE) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat });
 // ?go=1: the card (or a link) already chose; set sail at once.
 if (!shared && !PRACTICE && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));

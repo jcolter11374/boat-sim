@@ -36,7 +36,7 @@ export function challengeLine(id: string, story: string, date: string): string {
 }
 
 /** Annapolis on the card: on once the card shows the helm's real Cruiser 31 behind it (Elena's r4). */
-export const ANNAPOLIS_ON_CARD = false;
+export const ANNAPOLIS_ON_CARD = true;
 
 export interface CardHooks {
   current: () => SetSail;
