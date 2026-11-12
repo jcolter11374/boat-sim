@@ -138,6 +138,12 @@ export class WheelSession {
       return false;
     }
     const tws = Math.hypot(s.windU, s.windV) * KNOTS_PER_MS;
+    // The trim table stops at its strongest wind (40 kn on the cruiser): beyond it we'd be guessing.
+    const top = table.tws_kn[table.tws_kn.length - 1];
+    if (tws > top) {
+      this.host.note(`${Math.round(tws)} knots of wind is too much to hand-steer here (our sailing tables stop at ${top}); the autopilot keeps her for now.`);
+      return false;
+    }
     const from = (((Math.atan2(-s.windU, -s.windV) * 180) / Math.PI) % 360 + 360) % 360;
     this.wheel = new Wheel(
       table,
