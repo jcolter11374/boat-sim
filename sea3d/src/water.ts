@@ -97,6 +97,10 @@ vFoam = uFoamAmt > 0.0 ? uFoamAmt * smoothstep(0.4, 1.3, hRel) : 0.0;
 #endif
 `;
 
+const POINT_LIGHTS_IF = "#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )";
+/** The light loop without point lights (the deck light lights the boat, not the sea). */
+const LIGHTS_NO_POINT = THREE.ShaderChunk.lights_fragment_begin.replace(POINT_LIGHTS_IF, "#if 0");
+
 const FRAG_HEAD = /* glsl */ `
 uniform float uTime;
 uniform vec3 uSunDir;
@@ -341,14 +345,18 @@ export class Sea {
           .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\n" + VERT_NORMAL)
           .replace("#include <begin_vertex>", "#include <begin_vertex>\n" + VERT_POS)
           .replace("#include <project_vertex>", "#include <project_vertex>\n" + VERT_BODY);
+      // The boat's night deck light (helm.ts, #358) lights its deck and gear, not the
+      // sea: lit from a lamp a metre up, the sea's blue turned into a cyan pool under the
+      // hull that read as a hover light (Leo, Elena's audit item 12). Point lights skip it.
       sh.fragmentShader = (FRAG_HEAD + sh.fragmentShader)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
-        .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>");
+        .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>")
+        .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v9";
+    material.customProgramCacheKey = () => "boatsim-sea-v10";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
