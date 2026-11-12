@@ -50,6 +50,7 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
+import { moonEquatorial, moonPhase, toHorizon } from "./sky";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
 import { PLACE, PLACES, fetchSea } from "./land/place";
@@ -87,6 +88,15 @@ const REPLAY = params.get("replay");
 if (REPLAY) document.body.classList.add("single");
 const GAME = params.get("mode") === "game" || document.documentElement.dataset.mode === "game"; // or <html data-mode="game">
 if (GAME) document.body.classList.add("game");
+/** Proof pictures only (tools/proof): ?drawas=stock_pearson31_2 draws the replay's boat as
+ * another model, for boats that have no replays of their own yet (the Pearson sails a
+ * cruiser replay). Never linked from the pages. */
+const DRAW_AS_RAW = params.get("drawas");
+// Only a known boat key (Lena): anything else is ignored.
+const DRAW_AS: Rev | null =
+  DRAW_AS_RAW && ["kayak", "randolph", "randolph_c", "stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7", "stock_ocean_rower45", "stock_pearson31_2"].includes(DRAW_AS_RAW)
+    ? (DRAW_AS_RAW as Rev)
+    : null;
 /**
  * Live tracker: ?live (or <html data-mode="live">) shows the boat at its reported
  * positions from the tracker feed, then the simulator's forecast after now.
@@ -196,6 +206,7 @@ const STOCK_ABOUT: Record<StockKey, string> = {
 /** Which boat a replay's boat name is. The stock boats go by their names ("31 ft cruiser");
  * otherwise anything not Randolph is ours, and a Randolph boat is Rev B unless it says Rev C. */
 const keyOf = (boat: string | undefined): Rev => {
+  if (DRAW_AS) return DRAW_AS;
   const b = boat ?? "";
   return stockKeyOf(b) ?? (!/randolph/i.test(b) ? "kayak" : /rev[\s_-]*c\b/i.test(b) ? "randolph_c" : "randolph");
 };
@@ -332,6 +343,15 @@ function seaTarget(rep: Replay, hour: number): number {
     live.setSeaState(chop.hs, chop.tp, (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360);
     return chop.hs;
   }
+  const fs = status.force.sea;
+  if (fs.length >= 2) {
+    // Forced for proof pictures: one wind sea from the given direction (or the wind's).
+    seaNow = null;
+    const [wu, wv] = windAt(rep, hour);
+    const from = fs[2] !== undefined && fs[2] >= 0 ? fs[2] : (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360;
+    live.setSeaState(fs[0], fs[1], from);
+    return fs[0];
+  }
   const [lat, lon] = positionAt(rep, hour);
   seaNow = LIVE ? null : seaFeed.at(new Date(utc(rep.start) + hour * 3600e3), lat, lon);
   if (seaNow) {
@@ -456,7 +476,31 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1 },
+  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[], heel: [] as number[], reef: false },
+  // force.reef (proof pictures, Sam): true reefs a yacht's sails for the forced wind
+  // (forcedPlan); false keeps the replay's sail plan.
+  // force.heel (proof pictures, Sam): [beat, reach, run] degrees for a sailing yacht in the
+  // forced wind, to leeward of it; [] keeps the replay's heel.
+  // force.sea (proof pictures, tools/proof): [Hs m, Tp s, from degrees or -1 = from the wind]
+  // replaces the logged sea; [] follows the log.
+  /** Proof camera: held relative to the bow every frame while set; null gives the
+   * camera back to the mouse. az: degrees from the bow, clockwise (180 = astern),
+   * dist and h in metres (scaled with the boat), fov degrees, look: aim this high above the boat. */
+  // toward: look along this compass bearing (e.g. at the moon) instead of az.
+  cam: null as null | { az: number; dist: number; h: number; fov?: number; look?: number; toward?: number },
+  /** Sun elevation (degrees) at the boat at a voyage hour (proof pictures pick times of day by it). */
+  sunAt: (h: number): number => sunElAt(h),
+  /** The moon at the boat at a voyage hour: elevation (degrees) and how much is lit (0..1). */
+  moonAt: (h: number): { el: number; az: number; lit: number } => {
+    if (!rep) return { el: NaN, az: NaN, lit: 0 };
+    const [la, lo] = positionAt(rep, h);
+    const ms = utc(rep.start) + h * 3600e3;
+    const m = moonEquatorial(ms);
+    const p = toHorizon(m.ra, m.dec, ms, la, lo);
+    return { el: p.el, az: p.az, lit: moonPhase(ms).lit };
+  },
+  /** The last hour of the voyage(s) on screen. */
+  endHour: (): number => endHour(),
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
@@ -1068,6 +1112,51 @@ const sound = new OceanSound();
 filmButtons(cine, sound);
 (status as unknown as { cine: Cinema }).cine = cine;
 
+/** A yacht's heel for the forced wind (status.force.heel), by its angle to the wind:
+ * beat at 45 degrees off the wind or closer, reach at 90, run from 160; to leeward. */
+function forcedHeel(rep: Replay, hour: number, hdg: number): number | null {
+  const fh = status.force.heel;
+  if (fh.length < 3) return null;
+  const [wu, wv] = windAt(rep, hour);
+  const from = THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv));
+  const rel = ((((from - hdg) % 360) + 540) % 360) - 180; // wind's side: + from starboard
+  const a = Math.abs(rel);
+  const [beat, reach, run] = fh;
+  const deg = a <= 45 ? beat : a <= 90 ? beat + ((reach - beat) * (a - 45)) / 45 : a <= 160 ? reach + ((run - reach) * (a - 90)) / 70 : run;
+  return rel > 0 ? -deg : deg; // roll + is to starboard: wind from starboard heels her to port
+}
+
+/** A yacht's sails for the forced wind (status.force.reef, Sam's rule): full to 16 kt,
+ * one reef to 21, two to 27, storm sails to 33, bare poles above; one step more sail
+ * with the wind 150 degrees or more aft. */
+function forcedPlan(rep: Replay, hour: number, hdg: number): string | null {
+  if (!status.force.reef || status.force.wind < 0 || !rep.sail_plan) return null;
+  const kt = status.force.wind * 1.94384;
+  const steps = ["full", "reef1", "reef2", "storm", "down"];
+  let i = kt <= 16 ? 0 : kt <= 21 ? 1 : kt <= 27 ? 2 : kt <= 33 ? 3 : 4;
+  const [wu, wv] = windAt(rep, hour);
+  const from = THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv));
+  if (Math.abs(((((from - hdg) % 360) + 540) % 360) - 180) >= 150) i = Math.max(0, i - 1);
+  return steps[i];
+}
+
+/** The proof camera (status.cam): placed from the bow each frame, so it rides with the boat. */
+function placeCam(r: NonNullable<typeof status.cam>): void {
+  const yaw = smoothYaw ?? 0;
+  const fx = Math.cos(yaw), fz = -Math.sin(yaw); // bow
+  const rx = -fz, rz = fx; // starboard
+  // Looking along a bearing puts the camera on the far side: bearing + 180, less the heading.
+  const a = THREE.MathUtils.degToRad(r.toward !== undefined ? r.toward + 180 - (90 - THREE.MathUtils.radToDeg(yaw)) : r.az);
+  const d = r.dist * viewScale;
+  const tg = controls.target;
+  camera.position.set(tg.x + (fx * Math.cos(a) + rx * Math.sin(a)) * d, tg.y + r.h * viewScale, tg.z + (fz * Math.cos(a) + rz * Math.sin(a)) * d);
+  if (r.fov && r.fov !== camera.fov) {
+    camera.fov = r.fov;
+    camera.updateProjectionMatrix();
+  }
+  camera.lookAt(tg.x, tg.y + (r.look ?? 0) * viewScale, tg.z);
+}
+
 // ---------- the drawer keeps the boat in view; the camera moment; the log ----------
 /** True after a jump, a new voyage or a new boat: parts already broken don't count as breaking now. */
 let eqQuiet = true;
@@ -1087,7 +1176,7 @@ function frameDrawer(dt: number): void {
   let ty = 0;
   const W = window.innerWidth;
   const H = window.innerHeight;
-  if (!cine.on && !vhud.isBig() && !lifted && W > 700 && smoothYaw !== null) {
+  if (!cine.on && !status.cam && !vhud.isBig() && !lifted && W > 700 && smoothYaw !== null) {
     const fill = (SPEC[boatKey].length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
     ty = -0.08 * THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
     // Aim the boat itself (not the point the camera orbits) at a third: where it would sit with
@@ -1219,7 +1308,7 @@ renderer.setAnimationLoop(() => {
     // (The log's last row can come a little before the final event.)
     const atEnd = hour >= rep.h[rep.h.length - 1] - 1e-6;
     const over = rep.events.some((e) => (e.h <= hour || atEnd) && e.kind === "lost" && /capsiz|stayed over/i.test(e.detail));
-    motion.heel = rep.heel && !over ? THREE.MathUtils.degToRad(valueAt(rep, rep.heel, hour) ?? 0) : 0;
+    motion.heel = rep.heel && !over ? THREE.MathUtils.degToRad(forcedHeel(rep, hour, hdg) ?? valueAt(rep, rep.heel, hour) ?? 0) : 0;
     // Turned over for good (a dinghy or cat with nobody to right it): over it goes, the
     // way it was leaning, and it floats upside down.
     if (over && !motion.capsized) motion.capsized = motion.roll < 0 ? -1 : 1;
@@ -1246,8 +1335,7 @@ renderer.setAnimationLoop(() => {
     if (model) {
       // Working equipment from the log: props with speed, rudder with the turn,
       // wing and vane with the apparent wind, panels with the sun, the comms light.
-      const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
-      const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+      const [wu, wv] = windAt(rep, hour); // the forced wind for proof pictures, else the log
       const shownHdg = 90 - THREE.MathUtils.radToDeg(smoothYaw);
       const failed = failuresAt(rep, hour);
       model.gear.update(
@@ -1262,7 +1350,7 @@ renderer.setAnimationLoop(() => {
         t,
       );
       if (model.rig) {
-        model.rig.update(dt, { flow: apparentFlow(wu, wv, stw, shownHdg), plan: planAt(rep, hour), rudder: model.gear.shown.rudder });
+        model.rig.update(dt, { flow: apparentFlow(wu, wv, stw, shownHdg), plan: forcedPlan(rep, hour, shownHdg) ?? planAt(rep, hour), rudder: model.gear.shown.rudder });
         (status as unknown as { rig: object }).rig = { ...model.rig.shown, heel: THREE.MathUtils.radToDeg(motion.roll), over: motion.capsized };
       }
       status.gear = { parts: model.gear.parts(), now: model.gear.shown, failed: [...failed.keys()] };
@@ -1363,7 +1451,10 @@ renderer.setAnimationLoop(() => {
     });
   }
   if (focusing && !focusing.update(dt)) focusing = null;
-  if (!focusing && !cine.update(dt)) controls.update();
+  if (!focusing && !cine.update(dt)) {
+    if (status.cam) placeCam(status.cam);
+    else controls.update();
+  }
   frameDrawer(dt);
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
