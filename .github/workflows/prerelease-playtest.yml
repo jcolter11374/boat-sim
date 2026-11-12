@@ -5,6 +5,10 @@
 # on the runner, and plays it in Chrome and Firefox: Ravi's live-site checks
 # (tools/live_site_check.mjs) and Nina's playtest (tools/playtest/play.mjs). A red run means the PR would break
 # the live game. The post-deploy "Live site check" is the second gate.
+# It also runs the page's own tests on the same build: the unit tests (wave
+# motion, righting curves, ...) and the Chromium smoke test (sea3d/tests/smoke.mjs).
+# Those used to run in the "3D sea page" workflow on every PR too, which built
+# the same site a second time; that workflow now only builds on main (deploy).
 # No secrets: it only reads public releases and serves on the runner itself.
 name: Pre-release playtest
 on:
@@ -15,6 +19,8 @@ on:
       - "tools/playtest/**"
       - "tools/build_site.sh"
       - "configs/**"
+      - "data/land/**"
+      - "tools/build_boats.sh"
       - "tools/live_site_check.mjs"
       - "tools/live_visual_checks.mjs"
       - ".github/workflows/prerelease-playtest.yml"
@@ -65,11 +71,54 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: tools/build_site.sh
+      - name: Wave-motion gate (roll period, righting curves, self-righting)
+        working-directory: sea3d
+        run: npm run test:unit
       - uses: actions/upload-artifact@v4
         with:
           name: site
           path: sea3d/dist
           retention-days: 3
+  # The page's smoke test (animates, wave heights right, not blank, every page
+  # opens), as the deploy used to run it on PRs, on this run's build.
+  # Two halves side by side (SMOKE_PART in smoke.mjs): it was 18 min in one job,
+  # the gate's longest.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    defaults:
+      run:
+        working-directory: sea3d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sea3d/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: sea3d/dist
+      - run: |
+          npm install --no-save playwright@1
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
+      - name: Smoke test (animates, wave heights right, not blank)
+        run: npm test
+        env:
+          SMOKE_PART: ${{ matrix.part }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sea3d-screenshots-${{ matrix.part }}
+          path: sea3d/test-output/
+          retention-days: 30
   play:
     needs: build
     runs-on: ubuntu-latest

@@ -30,11 +30,13 @@ PACK_FILES = (
     # Stock vessels and the joke fleet (sandbox/catalog.py STOCK_BASES) and the
     # keelboats' polars.
     "configs/stock_cruiser31.yaml",
+    "configs/stock_pearson31_2.yaml",
     "configs/stock_dinghy14.yaml",
     "configs/stock_beachcat16.yaml",
     "configs/stock_sail_drone7.yaml",
     "configs/stock_ocean_rower45.yaml",
     "configs/polars/cruiser31.json",
+    "configs/polars/pearson31_2.json",
     "configs/polars/dinghy14.json",
     "configs/polars/beachcat16.json",
     "configs/joke_robot_kayak.yaml",

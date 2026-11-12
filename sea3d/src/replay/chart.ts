@@ -27,7 +27,7 @@ export interface TrackColours {
   beacon: string;
   glow: string;
 }
-export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45", TrackColours> = {
+export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45" | "stock_pearson31_2", TrackColours> = {
   kayak: { main: "#ff8a2a", beacon: "#9cc8ff", glow: "rgba(255,140,40,0.9)" },
   randolph: { main: "#2ec4b6", beacon: "#b4f0ea", glow: "rgba(46,196,182,0.9)" },
   randolph_c: { main: "#b78cff", beacon: "#e0d0ff", glow: "rgba(183,140,255,0.9)" },
@@ -36,6 +36,7 @@ export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser3
   stock_beachcat16: { main: "#ff5d6c", beacon: "#ffc4ca", glow: "rgba(255,93,108,0.9)" },
   stock_sail_drone7: { main: "#f2d03d", beacon: "#fff2b8", glow: "rgba(242,208,61,0.9)" },
   stock_ocean_rower45: { main: "#5aa9e6", beacon: "#d4ecff", glow: "rgba(90,169,230,0.9)" },
+  stock_pearson31_2: { main: "#7ad37a", beacon: "#d2f2d2", glow: "rgba(122,211,122,0.9)" },
 };
 const SILENT = "#8a94a3";
 const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
@@ -43,6 +44,9 @@ const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
 interface ChartLane {
   rep: Replay;
   colours: TrackColours;
+  /** Stretches to draw brighter, as hour ranges from the voyage start (the helm's
+   * hand-trimmed watches, Rosa). Unset everywhere else. */
+  bright?: [number, number][];
 }
 
 export class Chart {
@@ -175,7 +179,6 @@ export class Chart {
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      if (lon > -80) g.fillText(`${-lon}°W`, x1 + 3, y1 + 11);
     }
     for (let lat = 30; lat <= 50; lat += 10) {
       const [x0, y0] = this.xy(lat, VIEW.lonMin);
@@ -184,7 +187,6 @@ export class Chart {
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      g.fillText(`${lat}°N`, x0 + 3, y0 - 3);
     }
 
     // Land, tinted.
@@ -210,6 +212,22 @@ export class Chart {
     g.shadowBlur = 6;
     g.drawImage(tint, lx0, ly0, lx1 - lx0, ly1 - ly0);
     g.shadowBlur = 0;
+
+    // Grid labels over the land, so the coast never hides half of one (audit A5: the helm's
+    // chart showed "W" alone where Nova Scotia covered "60°"). A label that would hang off
+    // the chart's edge is left out rather than cut.
+    g.font = "10px system-ui, sans-serif";
+    g.fillStyle = "rgba(160,190,230,0.55)";
+    for (let lon = -70; lon <= 0; lon += 10) {
+      const [x1, y1] = this.xy(VIEW.latMax, lon);
+      const label = `${-lon}°W`;
+      const lx = x1 + 3;
+      if (lx >= 2 && lx + g.measureText(label).width <= this.w - 2) g.fillText(label, lx, Math.max(y1, 0) + 11);
+    }
+    for (let lat = 30; lat <= 50; lat += 10) {
+      const [x0, y0] = this.xy(lat, VIEW.lonMin);
+      if (y0 - 3 >= 10 && y0 - 3 <= this.h - 2) g.fillText(`${lat}°N`, Math.max(x0, 0) + 3, y0 - 3);
+    }
 
     // Shipwrecks: a small version of the sea chart's wreck sign (a hull line with masts).
     g.strokeStyle = WRECK_COLOUR;
@@ -298,7 +316,7 @@ export class Chart {
     for (const k of order) this.drawLane(this.lanes[k], hour, now, k === this.focus);
   }
 
-  private drawLane({ rep, colours }: ChartLane, hour: number, now: number, focused: boolean): void {
+  private drawLane({ rep, colours, bright }: ChartLane, hour: number, now: number, focused: boolean): void {
     const g = this.g;
     // Track so far, with a glow.
     const [i] = locate(rep.h, hour);
@@ -342,6 +360,40 @@ export class Chart {
     }
     if (colour) g.stroke();
     g.restore();
+
+    // Bright stretches (hand-trimmed watches), up to now; silent stretches stay dashed.
+    if (bright?.length) {
+      g.save();
+      g.lineJoin = "round";
+      g.lineCap = "round";
+      g.strokeStyle = "#ffe2b8";
+      g.shadowColor = colours.glow;
+      g.shadowBlur = 14;
+      g.lineWidth = (focused ? 2 : 1.6) + 1.5;
+      for (const [a, b0] of bright) {
+        const b = Math.min(b0, hour);
+        if (!(b > a)) continue;
+        const pts: [number, number][] = [];
+        const add = (h: number) => {
+          const [la, lo] = positionAt(rep, h);
+          if (Number.isFinite(la)) pts.push(this.xy(la, lo));
+        };
+        add(a);
+        for (let k = 0; k < rep.h.length; k++) {
+          if (rep.h[k] <= a || rep.h[k] >= b) continue;
+          const ir = rep.iridium_ok?.[k];
+          if (ir != null && !ir && !rep.beacon_ok?.[k]) continue; // silent: leave the dashes alone
+          add(rep.h[k]);
+        }
+        add(b);
+        if (pts.length < 2) continue;
+        g.beginPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (const p of pts.slice(1)) g.lineTo(p[0], p[1]);
+        g.stroke();
+      }
+      g.restore();
+    }
 
     // Event markers up to now.
     for (const e of rep.events) {

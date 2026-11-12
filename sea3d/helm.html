@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim 3D: Take the helm</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1726; color: var(--ink);
@@ -21,7 +22,7 @@
   button[aria-pressed="true"] { background: rgba(255,138,42,.18); border-color: var(--orange); }
   button:disabled { opacity: .5; cursor: progress; }
   button.go { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
-  #status { position: fixed; top: 12px; left: 12px; width: 330px; padding: 12px 14px; }
+  #status { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; width: 330px; padding: 12px 14px; }
   #status h1 { margin: 0; font-size: 18px; display: flex; justify-content: space-between; align-items: baseline; }
   #status h1 span { font-size: 13px; color: var(--dim); font-weight: 600; }
   #status .row { margin-top: 4px; font-size: 13px; }
@@ -42,8 +43,109 @@
   #sailrow button { padding: 2px 5px; font-size: 11px; }
   /* Short windows: the sailboat's extra rows would push the orders into the status panel. */
   @media (max-height: 780px) { body.sailboat #powerhint { display: none; } body.sailboat #runs { margin-top: 5px; } }
-  #runs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
-  #runs #sevent { grid-column: 1 / 3; }
+  #runs { display: grid; grid-template-columns: 1fr 1fr 1.6fr; gap: 5px; margin-top: 8px; align-items: center; }
+  #runs .lbl { grid-column: 1 / 4; font-size: 11px; color: var(--dim); }
+  #runs button { padding: 5px 7px; font-size: 12px; }
+  /* The clock (John, 11 Nov): time runs by itself once you set sail, at a speed you choose
+     here, like a flight sim's time compression. It stops itself when something happens. */
+  #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
+  #arrive { position: fixed; top: calc(var(--bar, 0px) + 60px); left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
+    padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
+  body.arriving #status, body.arriving #orders, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
+  body.arriving #timebar, body.arriving #timestate, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
+  #arrive .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #3ddc97; }
+  #arrivehead { font-size: 20px; font-weight: 650; margin: 2px 0 6px; }
+  #arrive p { margin: 0 0 10px; font-size: 13px; color: var(--dim); }
+  @keyframes arrive-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  #timebar { position: fixed; top: calc(var(--bar, 0px) + 46px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 12px; border-radius: 999px; z-index: 6; }
+  #timebar[hidden] { display: none; }
+  #timebar .t { font: 600 12px system-ui, sans-serif; color: var(--dim); margin-right: 4px; white-space: nowrap; }
+  #timebar button { padding: 5px 10px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; }
+  #timebar #t-pause { font-size: 13px; min-width: 38px; }
+  #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #timestate { position: fixed; top: calc(var(--bar, 0px) + 84px); left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
+    text-shadow: 0 1px 4px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none;
+    background: rgba(10,18,30,.45); padding: 1px 9px; border-radius: 10px; } /* readable on a bright sky */
+  #timestate:empty, #timestate[hidden] { display: none; }
+  #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
+    padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
+  #decide[hidden] { display: none; } /* display:flex above would otherwise beat [hidden] */
+  #decide .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb84d; }
+  #fcbox.lit { outline: 2px solid #ffb84d; }
+  #decidebtns { display: flex; flex-direction: column; gap: 6px; }
+  #decidebtns button { text-align: left; white-space: normal; }
+  #decidebtns button:first-child { font-weight: 600; }
+  #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
+  #soundask button { white-space: nowrap; }
+  #soundask[hidden] { display: none; }
+  #flash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; }
+  #flash.spray { background: radial-gradient(ellipse at 50% 60%, rgba(255,255,255,.75), rgba(220,235,245,.35) 60%, transparent); animation: flash-out 1.6s ease-out forwards; }
+  #flash.alarm { box-shadow: inset 0 0 90px 18px rgba(255,60,40,.75); animation: flash-pulse .5s ease-in-out 4 alternate; }
+  @keyframes flash-out { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes flash-pulse { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #flash.spray, #flash.alarm { animation-duration: .01s; } }
+  #keyhint { position: fixed; top: calc(var(--bar, 0px) + 106px); left: 50%; transform: translateX(-50%); font: 500 11.5px system-ui, sans-serif;
+    color: rgba(220,232,246,.85); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s;
+    background: rgba(10,18,30,.4); padding: 1px 9px; border-radius: 10px; }
+  #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
+  @media (max-width: 700px) { #timebar .t { display: none; } #timebar button { padding: 5px 8px; } }
+  /* Take the wheel (Rosa): the sailing panel, bottom centre. */
+  #b-wheel { background: rgba(61,220,151,.18); border-color: #3ddc97; font-weight: 600; }
+  #wheel { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 8; width: min(760px, calc(100vw - 24px)); padding: 10px 14px; font-size: 12.5px; }
+  #wheel[hidden] { display: none; }
+  #wheel.over { box-shadow: 0 0 0 2px #ff5a4f inset; }
+  #wheel .w-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  #wheel .w-goal { color: #3ddc97; font-weight: 600; }
+  #wheel .w-speeds { margin-left: auto; display: flex; gap: 3px; }
+  #wheel button { padding: 3px 8px; font-size: 12px; }
+  #wheel .w-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  #wheel .w-lbl { color: var(--dim); font-size: 11px; }
+  #wheel .w-big { font: 700 20px system-ui, sans-serif; }
+  #wheel .w-sub { color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; min-height: 1.2em; }
+  #wheel .w-bar, #wheel .w-gauge { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); margin: 4px 0 2px; }
+  #wheel .w-bar .w-now { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #8ab4ff; }
+  #wheel .w-bar .w-best { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #3ddc97; }
+  #wheel .w-heelbar .w-now { background: #ffc857; }
+  #wheel .w-heelbar .w-max { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #ff5a4f; }
+  #wheel .w-band { position: absolute; top: 0; bottom: 0; background: rgba(61,220,151,.55); border-radius: 4px; }
+  #wheel .w-band[hidden] { display: none; }
+  #wheel .w-needle { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: #fff; border-radius: 2px; }
+  #wheel .w-tell { font-weight: 600; min-height: 1.3em; }
+  #wheel .w-tell[data-state="good"] { color: #3ddc97; }
+  #wheel .w-tell[data-state="flapping"], #wheel .w-tell[data-state="stalled"] { color: #ff8a2a; }
+  #wheel .w-tell[data-state="in"], #wheel .w-tell[data-state="ease"] { color: #ffc857; }
+  #wheel .w-guide { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; background: rgba(61,220,151,.14); border-left: 3px solid #3ddc97; font-size: 13.5px; font-weight: 600; }
+  #wheel .w-guide[hidden] { display: none; }
+  #wheel .w-gskip { float: right; margin-left: 8px; }
+  #r-trim:empty { display: none; }
+  #practice-what { position: fixed; top: calc(var(--bar, 0px) + 14px); left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
+  #practice-what[hidden], #practice-end[hidden] { display: none; }
+  #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
+    font: 600 12px system-ui, sans-serif; background: rgba(61,220,151,.2); border: 1px solid #3ddc97; color: #dff8ec; pointer-events: none; }
+  #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
+  #trimchip[hidden] { display: none; }
+  #wheel .w-keys { color: var(--dim); font-size: 11px; margin-top: 6px; }
+  #wheel .w-btns { display: flex; gap: 5px; margin-top: 5px; }
+  /* While at the wheel the voyage controls wait. */
+  body.at-wheel #timebar, body.at-wheel #timestate, body.at-wheel #keyhint { display: none; }
+  body.at-wheel #orders, body.at-wheel #fcbox { visibility: hidden; }
+  @media (max-width: 700px) { #wheel .w-grid { grid-template-columns: 1fr 1fr; } }
+  /* The start card: boat, where to start, Set sail. The rest folds away. */
+  #go.big { display: block; width: 100%; padding: 13px; font-size: 17px; margin: 14px 0 6px; border-radius: 11px; }
+  /* Before you set sail only the start card shows (Nina's review, item 1): the game's
+     own controls appear with the game. visibility, not display, so canvases keep their size. */
+  body:not(.sailing) #status, body:not(.sailing) #orders, body:not(.sailing) #fcbox, body:not(.sailing) #mapbox,
+  body:not(.sailing) #notes, body:not(.sailing) #clock { visibility: hidden; }
+  #loading { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 16px 22px; min-width: 280px; text-align: center; z-index: 7; }
+  #loading[hidden] { display: none; }
+  #loading .spin { width: 22px; height: 22px; margin: 0 auto 8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: var(--orange); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #porthint { display: block; margin: -2px 0 6px; }
+  #launch:disabled { opacity: .5; }
+  #more { margin: 10px 0 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+  #more > summary { cursor: pointer; color: #b9cde4; font-weight: 600; font-size: 13px; }
+  #more[open] > summary { margin-bottom: 4px; }
   #modes, #boats { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; padding: 2px 10px; }
   #modes legend, #boats legend { color: var(--dim); font-size: 12px; padding: 0 4px; }
   #r-ends:empty { display: none; }
@@ -66,19 +168,19 @@
   #watch { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; }
   #watch button { padding: 4px 9px; font-size: 12px; }
   #film { display: flex; gap: 6px; margin-top: 6px; } #film button { padding: 4px 9px; font-size: 12px; }
-  #notes { position: fixed; top: 12px; right: 12px; width: 300px; display: flex; flex-direction: column; gap: 6px; }
+  #notes { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; display: flex; flex-direction: column; gap: 6px; }
   .note { padding: 7px 10px; border-left: 4px solid #8ab4ff; font-size: 13px; transition: opacity 1s; }
   .note .when { font-size: 11px; color: var(--dim); }
   .note.old { opacity: .55; }
   #ghosttag { position: fixed; transform: translate(-50%, -120%); font: 600 12px system-ui, sans-serif; color: #dbe6f5;
     background: rgba(10,22,38,.55); border: 1px solid rgba(200,212,230,.45); border-radius: 8px; padding: 2px 8px; pointer-events: none; white-space: nowrap; }
   #ghosttag::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 1px; height: 6px; background: rgba(200,212,230,.6); }
-  #clock { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); font: 700 15px system-ui, sans-serif; background: rgba(10,22,38,.55); border-radius: 8px; padding: 2px 10px;
+  #clock { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 50%; transform: translateX(-50%); font: 700 15px system-ui, sans-serif; background: rgba(10,22,38,.55); border-radius: 8px; padding: 2px 10px;
     text-shadow: 0 1px 4px rgba(0,0,0,.6); }
-  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
+  .overlay { position: fixed; inset: 0; top: var(--bar, 0px); display: flex; align-items: center; justify-content: center; background: rgba(5,12,22,.45); }
   .overlay[hidden] { display: none; }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
-  .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+  .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .card select { max-width: 100%; }
   @media (max-width: 480px), (max-height: 480px) { .card { padding: 14px 16px; } .card h1 { font-size: 19px; } }
   .card h1 { margin: 0 0 6px; font-size: 22px; }
@@ -102,6 +204,28 @@
 <body>
 <div id="app"></div>
 <div id="clock"></div>
+<div id="decide" class="glass" role="dialog" aria-live="polite" aria-labelledby="decidetext" hidden>
+  <div class="t">Your call</div>
+  <div id="decidetext"></div>
+  <div id="decidebtns"></div>
+  <div class="muted" style="font-size:11px">Time is paused until you choose. The forecast is open below.</div>
+</div>
+<div id="flash" aria-hidden="true"></div>
+<div id="soundask" class="glass" role="dialog" aria-label="Sound" hidden>
+  <span>The sea sounds good: wind, waves and rain, made from the weather. Turn sound on?</span>
+  <button id="soundyes">&#128266; Sound on</button><button id="soundno">No thanks</button>
+</div>
+<div id="timebar" class="glass" role="group" aria-label="How fast time runs" hidden>
+  <span class="t">Time</span>
+  <button id="t-pause" title="Pause or carry on (space bar)" aria-pressed="false">&#10074;&#10074;</button>
+  <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second: watch the waves (key 1)">1 h/s</button>
+  <button class="rate" data-rate="6" aria-pressed="true" title="Six hours every second: a day in 4 seconds (key 2)">6 h/s</button>
+  <button class="rate" data-rate="24" aria-pressed="false" title="A day every second (key 3)">1 day/s</button>
+  <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second, for the empty middle of the ocean (key 4)">4 days/s</button>
+</div>
+<div id="timestate"></div>
+<div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
+<div id="keyhint" hidden>Space pause · 1-4 speed · &larr;&rarr; steer (hold to keep turning, Shift for 1&deg;) · &uarr;&darr; power · ? keys</div>
 <div id="ghosttag" hidden></div>
 
 <section id="status" class="glass">
@@ -110,7 +234,7 @@
   <div class="muted" id="local"></div>
   <div class="row" id="lead">Level with the autopilot ghost</div>
   <div class="row" id="tofinish"></div>
-  <div class="row"><span id="battext">Battery 100%</span> · <span id="speed"></span></div>
+  <div class="row"><span id="battext">Battery 100%</span><span id="speed"></span></div>
   <div id="bat"><div id="batbar"></div></div>
   <div class="row muted" id="weather"></div>
   <div class="row muted" id="sailline" hidden></div>
@@ -123,9 +247,12 @@
   <div id="dialrow">
     <canvas id="dial" title="Tap or drag to steer"></canvas>
     <div class="side">
-      <div id="ordertext">Straight at the finish</div>
-      <button id="b-finish" aria-pressed="true">Aim at the finish</button>
+      <div class="muted" style="font-size:11px;margin-bottom:-4px">Your order now</div>
+      <div id="ordertext">Autopilot steering, like the ghost</div>
+      <button id="b-auto" aria-pressed="true" title="The autopilot sails your boat exactly as it sails the ghost. Leave it on and the two boats stay level.">Autopilot</button>
+      <button id="b-finish" aria-pressed="false">Aim at the finish</button>
       <button id="b-route" aria-pressed="false" title="The autopilot's planned route, which allows for the current">Follow the route</button>
+      <button id="b-wheel" hidden title="Sail her yourself in real time: steer, trim the sail, reef (Enter)">Take the wheel ⏎</button>
       <div class="key muted"><i style="background:#ff8a2a"></i>your order<br><i style="background:#fff"></i>where the bow points<br><i style="background:#3ddc97"></i>the finish<br><i style="background:#8ab4ff"></i>the wind</div>
     </div>
   </div>
@@ -135,11 +262,13 @@
     <div class="seg"><span class="muted">Sails</span><span id="sailbtns"></span></div>
     <div class="seg" id="enginerow"><span class="muted">Engine</span><span id="enginebtns"></span></div>
   </div>
+  <div id="preview" aria-live="polite" title="A copy of your boat sails this order for a day in today's forecast (which can be wrong; no breakdowns), then is thrown away" hidden></div>
   <div class="muted" id="powerhint">The autopilot cruises at 25%. More is faster, but the sun has to refill the battery, and at empty the motors stop until it does.</div>
   <div id="runs">
-    <button id="s6" class="needs-idle">Sail 6 hours</button>
-    <button id="sday" class="needs-idle">Sail 1 day</button>
-    <button id="sevent" class="needs-idle go">Sail until something happens</button>
+    <span class="lbl">Jump ahead (the clock pauses after)</span>
+    <button id="s6" class="needs-idle" title="Sail 6 hours at once, then pause">6 hours</button>
+    <button id="sday" class="needs-idle" title="Sail a day at once, then pause">1 day</button>
+    <button id="sevent" class="needs-idle" title="Sail until something happens (at most 3 days), then pause">Until something happens</button>
   </div>
   <div id="sendrow" hidden><button id="send" class="needs-idle go">Send this order from base</button><div class="muted" id="sendtext"></div></div>
   <div id="busy"><span id="busytext">Sailing...</span></div>
@@ -157,36 +286,58 @@
 
 <div id="notes"></div>
 
+<div id="practice-what" class="glass" hidden></div>
+<div id="practice-end" class="overlay" hidden><div class="card glass">
+  <h1>Practice sailing</h1>
+  <p id="practice-sum"></p>
+  <p><button id="practice-again" class="go">Sail another</button> <a href="helm.html">Take the helm: a whole crossing</a></p>
+</div></div>
 <div id="start" class="overlay">
   <div class="card glass">
     <h1>Take the helm</h1>
-    <p>You steer a boat from the drop point off the Chesapeake Bay to the finish off Portugal, through the real weather of 2020. Choose a heading and a power, then let time run in hops.</p>
+    <p>Steer a boat from off the Chesapeake Bay to the finish off Portugal, through the real weather of 2020, against the autopilot sailing the same boat beside you.</p>
     <fieldset id="boats"><legend>Your boat</legend>
       <label><input type="radio" name="boat" value="" checked> <b>Our kayak</b>: the 3 m solar drone, two small electric motors and no sail.</label>
     </fieldset>
-    <p>The autopilot sails the same boat, through the same weather and the same bad luck, beside you as a ghost. It never shows you what's ahead of your clock. Finish more than a day ahead of it to win; within a day is a draw, because that much is down to the weather's luck.</p>
-    <label>Launch day <select id="launch">
-      <option value="0">1 April 2020</option><option value="1">15 April 2020</option><option value="2">1 May 2020</option>
-      <option value="3">15 May 2020</option><option value="4">1 June 2020</option><option value="5">15 June 2020</option></select></label>
-    <label id="chpick" hidden>Or a weather challenge <select id="challenge"><option value="">None: sail a 2020 launch</option></select></label>
-    <p id="chstory" hidden></p>
-    <p id="chnote" class="muted" hidden></p>
-    <label id="portpick" hidden>Start from <select id="port"><option value="">Our drop, 100 km off the Chesapeake Bay mouth</option></select></label>
-    <fieldset id="modes"><legend>How you steer</legend>
-      <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: your orders reach the boat at once.</label>
-      <label><input type="radio" name="mode" value="base"> <b>Real base station</b>: what steering from home is really like. One order a day, sent by satellite; it waits until the boat's next daily check-in, so it gets there about a day later, and base only knows where the boat was at its last report. In between, the boat's own battery guard looks after it.</label>
-    </fieldset>
+    <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
+    <span id="porthint" class="muted"></span>
     <p id="sharedmsg" class="muted" hidden></p>
-    <label><input type="checkbox" id="breakdowns" checked> Things can break (the same luck for both boats)</label>
-    <label><input type="checkbox" id="safe"> Battery guard: ease off on a low battery, like the autopilot does</label>
-    <button id="go" class="go">Take the helm</button> <span id="startmsg" class="muted"></span>
-    <p class="muted">The simulator runs in your browser: about 30 MB to load the first time.</p>
+    <button id="go" class="go big">Set sail</button>
+    <span id="startmsg" class="muted"></span>
+    <details id="more">
+      <summary>More options</summary>
+      <label>Launch day <select id="launch">
+        <option value="2020-04-23" selected>23 April 2020: a good day, light seas</option>
+        <option value="0">Rough start: 1 April 2020, the tail of a gale, about 4 m waves</option><option value="1">15 April 2020</option><option value="2">1 May 2020</option>
+        <option value="3">15 May 2020</option><option value="4">1 June 2020</option><option value="5">15 June 2020</option></select></label>
+      <label id="chpick" hidden>Or a weather challenge <select id="challenge"><option value="">None: sail a 2020 launch</option></select></label>
+      <p id="chover" class="muted" hidden>A challenge brings its own date and weather, so it replaces the launch day.</p>
+      <p id="chstory" hidden></p>
+      <p id="chnote" class="muted" hidden></p>
+      <fieldset id="modes"><legend>How you steer</legend>
+        <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
+        <label><input type="radio" name="mode" value="base"> <b>From home, by satellite</b>: what steering a real drone is like. You send one order a day; it reaches the boat at its next daily check-in, about a day later, and you only see where the boat was at its last report.</label>
+      </fieldset>
+      <label><input type="checkbox" id="breakdowns" checked> Breakdowns: parts can fail at sea, with the same luck for you and the autopilot</label>
+      <label><input type="checkbox" id="safe"> Save the battery: the boat slows itself down when the battery runs low, as the autopilot does</label>
+      <p class="muted">The autopilot's ghost sails the same boat through the same weather and the same bad luck. It never shows you what's ahead of your clock. Finish more than a day ahead of it to win; within a day is a draw, because that much is down to the weather's luck.</p>
+    </details>
+    <p class="muted">The defaults are fine: just press Set sail. Time then runs by itself; change its speed or pause at the top of the screen. Keys: Space pauses, 1 to 4 set the speed, the arrow keys steer and set the power.</p>
   </div>
 </div>
 
+<div id="loading" class="glass" hidden><div class="spin"></div><div id="loadtext">Loading the simulator...</div><div class="muted">It runs in your browser: about 30 MB the first time.</div></div>
+
+<div id="arrive" class="glass" role="status" hidden>
+  <div class="t">Finish</div>
+  <div id="arrivehead"></div>
+  <p>The finish circle is 330 km out to sea, too far to see land from. So this is a view of where the boat was headed, not where it is: Cascais, near Lisbon, with Cabo da Roca (Europe's westernmost point) and the Sintra hills to the north-west. The boat itself is still out at the finish.</p>
+  <button id="arrivego">See the results</button>
+</div>
 <div id="result" class="overlay" hidden>
   <div class="card glass">
     <h1 id="r-head"></h1>
+    <p id="r-trim" class="muted"></p>
     <table id="r-table"></table>
     <div id="r-ends"></div>
     <p class="muted" id="r-notes"></p>
@@ -196,6 +347,7 @@
 </div>
 
 <div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto"><span id="landcredit"></span>Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · Simulator in the browser: Pyodide · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/helm.ts"></script>
 </body>
 </html>

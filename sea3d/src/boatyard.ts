@@ -43,6 +43,7 @@ import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
 import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
 import { chanceFor, type Chance } from "./yard/chance";
+import { OddsModel } from "./yard/estimate";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
@@ -223,6 +224,10 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
     b.classList.add("noeff");
     b.title = `Changes the price and parts list only: the simulator doesn't sail this part yet${o.basis ? ` (${o.basis})` : ""}, so a test sails the boat without it.`;
   }
+  // What this part would do to the odds, filled in by drawChance (Leo: see which swap is worth trying).
+  const delta = document.createElement("span");
+  delta.className = "delta";
+  name.append(delta);
   const price = document.createElement("span");
   price.className = "price";
   price.textContent = o.priceTbd ? "price TBD" : o.cost ? usd(o.cost) : "$0";
@@ -419,14 +424,79 @@ function redraw(): void {
 async function drawChance(): Promise<void> {
   if (!cat) return;
   const turn = ++chanceTurn;
-  const [n, src] = await Promise.all([grid.nearest(design), grid.source()]);
+  const [n, src, model] = await Promise.all([grid.nearest(design), grid.source(), oddsModel()]);
   if (turn !== chanceTurn) return; // the player has changed a part since
   const c = chanceFor(n, src ?? null);
+  const e = model?.odds(design) ?? null;
   const v = $("s-odds");
-  v.textContent = c.value;
-  v.classList.toggle("untested", !c.tested);
-  $("s-odds-note").textContent = c.note;
-  status.chance = c;
+  const was = shownBase === base ? shownOdds : null; // no flash when switching boats
+  shownOdds = e?.p ?? null;
+  shownBase = base;
+  // Tested: the grid's own figure. Untested: the quick estimate, said so (estimate.ts).
+  // The comparison as two odds side by side, not "points" (Leo): "Our kayak: 78%."
+  const vsWhat = base === "kayak" ? "our kayak" : `${SHORT[base]} as built`;
+  const vs =
+    e?.p != null && !(e.tested && e.p === e.planned)
+      ? Math.abs(Math.round((e.p - e.planned) * 100)) < NOISE_PTS
+        ? ` About the same as ${vsWhat}.`
+        : ` ${vsWhat[0].toUpperCase()}${vsWhat.slice(1)}: ${Math.round(e.planned * 100)}%.`
+      : "";
+  if (c.tested || !e || e.p === null) {
+    v.textContent = c.value;
+    $("s-odds-note").textContent =
+      e && e.p === null && e.missing ? `No estimate yet: "${e.missing}" hasn't been tested. Press "Test it" to find out.` : `${c.note}${vs}`;
+  } else {
+    v.textContent = `about ${Math.round(e.p * 100)}%`;
+    $("s-odds-note").textContent = `Quick estimate from builds we've tested.${vs} Press "Test it" to sail it for real.`;
+  }
+  v.classList.toggle("untested", !c.tested && (!e || e.p === null));
+  v.classList.toggle("estimate", !c.tested && !!e && e.p !== null);
+  // A short flash when the figure moves: green up, red down (Leo).
+  v.classList.remove("up", "down");
+  if (was !== null && shownOdds !== null && Math.round(was * 100) !== Math.round(shownOdds * 100)) {
+    void v.offsetWidth; // restart the animation
+    v.classList.add(shownOdds > was ? "up" : "down");
+  }
+  status.chance = { ...c, estimate: e?.p ?? null } as Chance;
+  drawDeltas(model);
+  $("legend").hidden = !model;
+}
+let shownOdds: number | null = null;
+let shownBase = "";
+// Under 3 points is inside the grid's own noise (100 launches a build), so it reads
+// "about the same" rather than suggesting, say, that dropping the AIS helps (Ravi's rule on #323).
+const NOISE_PTS = 3;
+const modelFor = new Map<BaseKey, OddsModel>();
+/** The quick-estimate model for the boat on show (null without the grid). */
+async function oddsModel(): Promise<OddsModel | null> {
+  const builds = await grid.all();
+  if (!cat || !builds.length) return null;
+  let m = modelFor.get(base);
+  if (!m) modelFor.set(base, (m = new OddsModel(cat, builds)));
+  return m;
+}
+/** Each part's effect on the odds if you picked it now: "+6", "−24", "no data yet". */
+function drawDeltas(model: OddsModel | null): void {
+  const here = model?.odds(design)?.p ?? null;
+  document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => {
+    const span = b.querySelector<HTMLSpanElement>(".delta");
+    if (!span) return;
+    const slot = b.dataset.slot!;
+    const opt = b.dataset.opt!;
+    let text = "";
+    let cls = "delta";
+    if (model && here !== null && design.picks[slot] !== opt && !b.classList.contains("na")) {
+      const p = model.odds({ ...design, picks: { ...design.picks, [slot]: opt } })?.p ?? null;
+      if (p === null) [text, cls] = ["no data yet", "delta none"];
+      else {
+        const n = Math.round((p - here) * 100);
+        [text, cls] = Math.abs(n) < NOISE_PTS ? ["about the same", "delta same"] : [`${n > 0 ? "+" : "−"}${Math.abs(n)}`, n > 0 ? "delta up" : "delta down"];
+      }
+    }
+    span.textContent = text;
+    span.className = cls;
+    span.title = text && text !== "no data yet" ? "Change in the odds if you pick this part (quick estimate)" : "";
+  });
 }
 // What "Test it" does, on the button (#315 item 13): the simulator in this browser
 // sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
@@ -494,7 +564,7 @@ const INTRO: Record<BaseKey, string> = {
   kayak:
     "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ROUGH marks figures nobody has measured or quoted yet.",
   revc:
-    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ROUGH marks our guesses.",
+    "Our model of the Randolph team's Rev C5 (11 Nov 2026): a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ROUGH marks our guesses.",
   revb:
     "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ROUGH marks our guesses.",
 };
@@ -687,6 +757,10 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   box.append(t);
 }
 
+/** Said wherever a number comes from the simulator in this browser (#335). */
+const BROWSER_WEATHER_NOTE = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays and leaderboard.";
+const SIMPLIFIED_BACKEND = "simulator in the browser";
+
 function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | null = null): void {
   box.replaceChildren();
   if (!r) {
@@ -735,6 +809,9 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
       ul.append(li);
     }
     box.append(ul);
+    // #335, beside the day counts it explains: the browser sails on a lighter weather
+    // file than the full runs behind the voyage replays and the leaderboard.
+    if (status.backend === SIMPLIFIED_BACKEND) box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: BROWSER_WEATHER_NOTE }));
   }
   if (r.fingerprints?.length) {
     // Ravi's gate: these must match reference.json exactly (python -m boatsim.sandbox compare ... --exact).

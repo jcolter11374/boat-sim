@@ -1,5 +1,5 @@
 // Dress our model of the Randolph boat to the Boatyard picks: one or two
-// rudders, the YB3 backup tracker on the stern post, and the small motor of
+// rudders, the YB3 backup tracker in its foredeck well (Rev C3), and the small motor of
 // the wing-and-thruster option. (Battery, boxes and keel bulb changes are
 // inside or too small to see; the summary panel carries those.)
 //
@@ -10,6 +10,9 @@ import * as THREE from "three";
 import type { BoatModel } from "../boats/model";
 
 const RUDDER_OFF = 0.1; // m either side of the centreline (Rev C, Build_Plan.md)
+/** The YB3 well: 180 mm from the bow (Rev C3), and the deck's height there (boats/model.ts form: dz + crown). */
+const YB3_X = 0.18;
+const YB3_DECK = 0.23 + 0.03 * (1 - YB3_X / 1.5 / 0.4) ** 2 + 0.006;
 
 export class RandolphDress {
   private rudder: THREE.Object3D | null;
@@ -33,14 +36,19 @@ export class RandolphDress {
       return m;
     };
     const geo = <T extends THREE.BufferGeometry>(g: T) => (this.geos.push(g), g);
-    // YB3: a yellow box about 6 x 3 x 10 cm with a dark top, on the antenna platform.
+    // YB3: a yellow box about 10 x 6 x 3 cm lying in a well in the foredeck, centred
+    // 180 mm from the bow with its top flush with the deck (Rev C3, their Design_RevC.md:
+    // off the stern post, so one bent post can't silence both trackers). Seen from
+    // above: a dark gasket round the well, the yellow case, its dark antenna patch.
     this.tracker = new THREE.Group();
     this.tracker.name = "yard_yb3";
-    const box = new THREE.Mesh(geo(new THREE.BoxGeometry(0.06, 0.1, 0.03)), std(0xf3c614, 0.45));
-    box.position.set(1.47, 0.63, 0.035);
-    const cap = new THREE.Mesh(geo(new THREE.BoxGeometry(0.062, 0.015, 0.032)), std(0x222222, 0.6));
-    cap.position.set(1.47, 0.687, 0.035);
-    this.tracker.add(box, cap);
+    const gasket = new THREE.Mesh(geo(new THREE.BoxGeometry(0.112, 0.003, 0.072)), std(0x1d2124, 0.7));
+    gasket.position.set(YB3_X, YB3_DECK - 0.001, 0); // top just under the case: a dark rim round it
+    const box = new THREE.Mesh(geo(new THREE.BoxGeometry(0.1, 0.03, 0.06)), std(0xf3c614, 0.45));
+    box.position.set(YB3_X, YB3_DECK - 0.0135, 0);
+    const cap = new THREE.Mesh(geo(new THREE.BoxGeometry(0.045, 0.002, 0.04)), std(0x222222, 0.6));
+    cap.position.set(YB3_X + 0.02, YB3_DECK + 0.0025, 0);
+    this.tracker.add(gasket, box, cap);
     frame.add(this.tracker);
     // Thruster: a small pod on a strut under the stern quarter.
     this.thruster = new THREE.Group();

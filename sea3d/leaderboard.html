@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim: Design leaderboard</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html { background: #0b1726; }
@@ -15,11 +16,21 @@
   a { color: #8ab4ff; }
   .muted { color: var(--dim); font-size: 12px; }
   .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
-  main { max-width: 1060px; margin: 24px auto 40px; padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
+  main { max-width: 1060px; margin: calc(var(--bar, 0px) + 24px) auto 40px; padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
   header { padding: 14px 18px; }
   header h1 { margin: 0 0 2px; font-size: 22px; }
   header nav { float: right; font-size: 13px; }
-  #facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; }
+  #about { margin-top: 6px; }
+  #about summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+  #facts { margin-top: 4px; }
+  #you { padding: 12px 18px; border-left: 4px solid #5fb4ff; }
+  #you .head { font-size: 16px; font-weight: 650; }
+  #shared { padding: 6px 12px 2px; }
+  #shared:empty { display: none; }
+  .stat, .stat-line { display: none; }
+  #board.stats .stat { display: table-cell; }
+  #board.stats .stat-line { display: block; }
+  #statsbar { padding: 4px 12px 0; font-size: 12.5px; color: var(--dim); }
   .banner { padding: 10px 16px; border-left: 4px solid var(--warn); }
   .banner.bad { border-left-color: var(--bad); color: var(--ink); }
   .banner ul { margin: 4px 0 0; padding-left: 20px; }
@@ -52,28 +63,31 @@
 <body>
 <main>
   <header class="glass">
-    <nav><a href="./">Sea</a> · <a href="./boatyard.html">Boatyard</a> · <a href="./helm.html">Take the helm</a></nav>
     <h1>Design leaderboard</h1>
-    <div class="muted">Which designs reach the finish most often, on the same launches with the same luck.</div>
-    <div id="facts" class="muted"></div>
+    <div class="muted">Which builds reach the finish most often, on the same launches with the same luck.</div>
+    <details id="about"><summary>About this leaderboard</summary><div id="facts" class="muted"></div></details>
   </header>
   <div id="banner" class="glass banner"></div>
+  <div id="you" class="glass" hidden></div>
   <section id="board" class="glass">
+    <div id="statsbar"><label><input type="checkbox" id="showstats"> Show the statistics</label></div>
+    <div id="shared" class="muted"></div>
     <table>
-      <thead><tr><th>Tier</th><th>Design</th><th>Finished</th><th>Against the plan kayak</th><th>Hidden launches</th></tr></thead>
+      <thead><tr><th>Group</th><th>Build</th><th>Finished</th><th>Against our kayak</th><th class="stat">Hidden year</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </section>
   <section id="explain" class="glass">
     <h2>How to read this</h2>
-    <p><b>Finished</b> means arriving within 25 km of our target on the Microtransat finish line, west of Lisbon, under the race's rules. The thin bar is the range the true rate probably sits in (95%); with about 65 launches it is wide.</p>
-    <p><b>Tiers.</b> Every design sails the same launches with the same weather and the same breakdown dice, so differences are the design, not luck of the draw. A design drops to a new tier only when it is clearly worse than every design above it. Designs in the same tier are too close to call.</p>
-    <p><b>Against the plan kayak</b> counts the launches where one boat finished and the other didn't. "Too close to call" means the gap could be chance.</p>
-    <p><b>Hidden launches</b> are a separate year nobody tunes against. A design that does much worse there than on the public launches gets a warning: it may be tuned to the test.</p>
-    <p><b>"Our model of"</b> marks the Randolph team's boats as we simulate them, not their own results. Our kayak is 3.05 m long, over the race's 2.4 m limit, on purpose.</p>
+    <p><b>Finished</b> means reaching the finish (a 25 km circle on the race's finish line, about 330 km west of Lisbon) under the race rules. The thin bar is the likely range: where the true share probably sits. With about 65 launches it is wide.</p>
+    <p><b>Groups.</b> Every build sails the same launches with the same weather and the same breakdowns (parts failing at random), so differences are the build, not luck of the draw. A build drops to a new group only when it is clearly worse than every build above it. Builds in one group can't be told apart.</p>
+    <p><b>Against our kayak</b> (the 3 m solar-electric kayak as we plan to build it) counts the launches where one boat finished and the other didn't. "Could be luck" means the gap is too small to be sure of.</p>
+    <p><b>Show the statistics</b> adds the likely ranges and the <b>hidden year</b>: a separate year nobody tunes against. A build that does much worse there than on the main launches gets a warning: it may be tuned to the test.</p>
+    <p><b>"Our model of"</b> marks Randolph's team's boats (Rev B, Rev C) as we simulate them, not their own results.</p>
   </section>
 </main>
 <div id="credits" style="max-width:1060px;margin:-28px auto 12px;padding:0 12px;text-align:right;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.6)">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/leaderboard.ts"></script>
 </body>
 </html>

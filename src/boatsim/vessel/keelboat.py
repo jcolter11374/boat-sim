@@ -259,6 +259,9 @@ class KeelboatVessel(KayakVessel):
         self.polar = polar or Polar.load(polar_path(design))
         v, prop = design.vpp, design.propulsion
         self.reef_heel_deg = float(v.get("reef_heel_deg", 25.0))
+        # Baked into the polar's speeds by vpp.py (the file doesn't carry it): a
+        # Command.trim_share replaces it for a helm spell's watch.
+        self.autopilot_factor = float(v.get("autopilot_factor", 1.0))
         self.engine_kn = float(prop.get("engine_cruise_kn", 0.0))
         self.engine_l_per_h = float(prop.get("engine_l_per_h", 0.0))
         self.engine_resist_n = float(prop.get("engine_resist_n", 1.0))
@@ -370,6 +373,9 @@ class KeelboatVessel(KayakVessel):
         if plan != DOWN:
             pt = self.polar.at(plan, tws_kn, twa_signed)
             sail_v = pt.speed * (drag + aw / pt.resist_n) ** (-1.0 / pt.r_exp)
+            share = self._step.get("trim_share")
+            if share is not None:  # a player's watch: their share of the crew's best speed
+                sail_v *= share / self.autopilot_factor
             heel, lee = pt.heel_deg, pt.leeway_deg
         motor_v = 0.0
         if self._step.get("motoring"):
@@ -411,6 +417,7 @@ class KeelboatVessel(KayakVessel):
             frac = max(frac, self.engine_idle_frac)  # a diesel never runs below idle
         engine = frac if wanted and fuel > 0.0 and not state.damage.get("engine") else 0.0
         self._step = {"engine": engine, "asked": cmd.sail_plan, "plan": DOWN, "heel": 0.0}
+        self._step["trim_share"] = cmd.trim_share
         charging = self.wants_charge(state, fuel)
         new, events = super().step(state, cmd, env, dt, rng)
         hours = dt.total_seconds() / 3600.0

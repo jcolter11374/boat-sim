@@ -125,23 +125,12 @@
   "voyages_per_build": 100,
   "note": "April to June launches every 10 days, real weather and currents, same seeds for every build; unknown failure off (odds_unknown_10 puts a 10% chance by day 60 back in). Microtransat finish on our target."
  },
- "commit": "cbb9dbf",
- "regrids": [
-  {
-   "builds": [
-    "k-p0-drive.wing-sail",
-    "k-p25-drive.hybrid",
-    "revb-brain.two-box",
-    "revc-brain.two-box"
-   ],
-   "commit": "55a6c4f"
-  }
- ],
+ "commit": "ba1d298",
  "builds": [
   {
    "id": "k-p25",
    "boat": "v4 kayak",
-   "label": "25 W cruise, kayak as it stands",
+   "label": "Our kayak",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -164,34 +153,35 @@
    "current": true,
    "odds": {
     "voyages": 100,
-    "finished": 78,
-    "odds": 0.78,
-    "low95": 0.689,
-    "high95": 0.85,
-    "within_150": 78,
-    "median_days": 72.0,
-    "odds_unknown_10": 0.695,
+    "finished": 83,
+    "odds": 0.83,
+    "low95": 0.745,
+    "high95": 0.891,
+    "within_150": 83,
+    "median_days": 60.7,
+    "odds_unknown_10": 0.746,
     "endings": {
-     "arrived": 78,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 5,
-     "taken or snagged by fishermen [near land]": 3,
-     "disqualified: silent too long": 2,
-     "stuck inverted or keel lost [open ocean]": 2
+     "arrived": 83,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "still at sea": 3,
+     "taken or snagged by fishermen [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "disqualified: silent too long": 1,
+     "ran aground before the finish": 1
     }
    },
    "replays": [
     {
      "file": "k-p25/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "lost",
-     "days": 71.69
+     "outcome": "arrived",
+     "days": 67.13
     },
     {
      "file": "k-p25/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 71.4
+     "days": 57.55
     },
     {
      "file": "k-p25/2020-05-01.json",
@@ -209,20 +199,20 @@
      "file": "k-p25/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 74.45
+     "days": 59.26
     },
     {
      "file": "k-p25/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.99
+     "days": 60.6
     }
    ]
   },
   {
    "id": "k-p10",
    "boat": "v4 kayak",
-   "label": "10 W cruise, kayak as it stands",
+   "label": "Our kayak, 10 W cruise",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -245,22 +235,22 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 65,
-    "odds": 0.65,
-    "low95": 0.553,
-    "high95": 0.736,
-    "within_150": 65,
-    "median_days": 106.6,
-    "odds_unknown_10": 0.565,
+    "finished": 76,
+    "odds": 0.76,
+    "low95": 0.668,
+    "high95": 0.833,
+    "within_150": 76,
+    "median_days": 79.8,
+    "odds_unknown_10": 0.672,
     "endings": {
-     "arrived": 65,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
-     "still at sea": 12,
-     "taken or snagged by fishermen [near land]": 3,
-     "ran aground before the finish": 2,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
+     "arrived": 76,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "still at sea": 6,
+     "taken or snagged by fishermen [near land]": 2,
      "disqualified: silent too long": 2,
-     "stuck inverted or keel lost [open ocean]": 1
+     "ran aground before the finish": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -268,13 +258,13 @@
      "file": "k-p10/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 125.95
+     "days": 82.34
     },
     {
      "file": "k-p10/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "lost",
-     "days": 73.42
+     "outcome": "arrived",
+     "days": 122.0
     },
     {
      "file": "k-p10/2020-05-01.json",
@@ -292,20 +282,20 @@
      "file": "k-p10/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 106.75
+     "days": 74.61
     },
     {
      "file": "k-p10/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 98.52
+     "days": 73.03
     }
    ]
   },
   {
    "id": "k-p15",
    "boat": "v4 kayak",
-   "label": "15 W cruise, kayak as it stands",
+   "label": "Our kayak, 15 W cruise",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -328,22 +318,22 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 74,
-    "odds": 0.74,
-    "low95": 0.646,
-    "high95": 0.816,
-    "within_150": 74,
-    "median_days": 84.6,
-    "odds_unknown_10": 0.652,
+    "finished": 80,
+    "odds": 0.8,
+    "low95": 0.711,
+    "high95": 0.867,
+    "within_150": 80,
+    "median_days": 69.8,
+    "odds_unknown_10": 0.713,
     "endings": {
-     "arrived": 74,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
-     "still at sea": 4,
-     "disqualified: silent too long": 3,
-     "taken or snagged by fishermen [near land]": 3,
+     "arrived": 80,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "still at sea": 5,
+     "ran aground before the finish": 2,
+     "disqualified: silent too long": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
-     "ran aground before the finish": 1
+     "taken or snagged by fishermen [near land]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -351,13 +341,13 @@
      "file": "k-p15/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 124.66
+     "days": 83.62
     },
     {
      "file": "k-p15/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 105.51
+     "days": 71.83
     },
     {
      "file": "k-p15/2020-05-01.json",
@@ -369,26 +359,26 @@
      "file": "k-p15/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "disqualified",
-     "days": 64.51
+     "days": 64.26
     },
     {
      "file": "k-p15/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 76.82
+     "days": 65.91
     },
     {
      "file": "k-p15/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 91.7
+     "days": 71.58
     }
    ]
   },
   {
    "id": "k-p20",
    "boat": "v4 kayak",
-   "label": "20 W cruise, kayak as it stands",
+   "label": "Our kayak, 20 W cruise",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -411,21 +401,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 76,
-    "odds": 0.76,
-    "low95": 0.668,
-    "high95": 0.833,
-    "within_150": 76,
-    "median_days": 75.6,
-    "odds_unknown_10": 0.675,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 64.8,
+    "odds_unknown_10": 0.753,
     "endings": {
-     "arrived": 76,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
-     "still at sea": 6,
-     "disqualified: silent too long": 3,
-     "ran aground before the finish": 2,
-     "taken or snagged by fishermen [near land]": 2,
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "still at sea": 4,
      "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1,
      "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
@@ -434,13 +423,13 @@
      "file": "k-p20/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 117.27
+     "days": 73.62
     },
     {
      "file": "k-p20/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 80.32
+     "days": 62.19
     },
     {
      "file": "k-p20/2020-05-01.json",
@@ -452,26 +441,26 @@
      "file": "k-p20/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "disqualified",
-     "days": 64.26
+     "days": 64.51
     },
     {
      "file": "k-p20/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 63.17
+     "days": 61.26
     },
     {
      "file": "k-p20/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 87.53
+     "days": 63.66
     }
    ]
   },
   {
    "id": "k-p30",
    "boat": "v4 kayak",
-   "label": "30 W cruise, kayak as it stands",
+   "label": "Our kayak, 30 W cruise",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -494,20 +483,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 84,
-    "odds": 0.84,
-    "low95": 0.756,
-    "high95": 0.899,
-    "within_150": 84,
-    "median_days": 66.4,
-    "odds_unknown_10": 0.751,
+    "finished": 86,
+    "odds": 0.86,
+    "low95": 0.779,
+    "high95": 0.915,
+    "within_150": 86,
+    "median_days": 57.7,
+    "odds_unknown_10": 0.775,
     "endings": {
-     "arrived": 84,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 2,
-     "disqualified: silent too long": 2,
+     "arrived": 86,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "still at sea": 3,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -515,13 +504,13 @@
      "file": "k-p30/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 86.39
+     "days": 61.77
     },
     {
      "file": "k-p30/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 79.91
+     "days": 61.42
     },
     {
      "file": "k-p30/2020-05-01.json",
@@ -532,27 +521,27 @@
     {
      "file": "k-p30/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "disqualified",
-     "days": 64.26
+     "outcome": "arrived",
+     "days": 63.91
     },
     {
      "file": "k-p30/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 67.26
+     "days": 56.16
     },
     {
      "file": "k-p30/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 64.36
+     "days": 59.66
     }
    ]
   },
   {
    "id": "k-p25-thr.one-t200",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Thrusters: one-t200",
+   "label": "Our kayak, Thrusters: one-t200",
    "options": {
     "thr": "one-t200",
     "sol": "solar-250",
@@ -575,21 +564,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 57,
-    "odds": 0.57,
-    "low95": 0.472,
-    "high95": 0.663,
-    "within_150": 57,
-    "median_days": 73.3,
-    "odds_unknown_10": 0.507,
+    "finished": 61,
+    "odds": 0.61,
+    "low95": 0.512,
+    "high95": 0.7,
+    "within_150": 61,
+    "median_days": 62.5,
+    "odds_unknown_10": 0.547,
     "endings": {
-     "arrived": 57,
-     "still at sea": 25,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
-     "disqualified: silent too long": 3,
-     "ran aground before the finish": 1,
+     "arrived": 61,
+     "still at sea": 18,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "ran aground before the finish": 6,
+     "taken or snagged by fishermen [near land]": 4,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1,
      "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
@@ -598,13 +587,13 @@
      "file": "k-p25-thr.one-t200/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 84.2
+     "days": 62.62
     },
     {
      "file": "k-p25-thr.one-t200/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "timeout",
-     "days": 136.79
+     "outcome": "arrived",
+     "days": 65.5
     },
     {
      "file": "k-p25-thr.one-t200/2020-05-01.json",
@@ -628,14 +617,14 @@
      "file": "k-p25-thr.one-t200/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 73.77
+     "days": 64.32
     }
    ]
   },
   {
    "id": "k-p25-sol.solar-200",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Solar panels: solar-200",
+   "label": "Our kayak, Solar panels: solar-200",
    "options": {
     "thr": "two-t200",
     "sol": "solar-200",
@@ -658,34 +647,36 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 78,
-    "odds": 0.78,
-    "low95": 0.689,
-    "high95": 0.85,
-    "within_150": 78,
-    "median_days": 72.4,
-    "odds_unknown_10": 0.695,
+    "finished": 86,
+    "odds": 0.86,
+    "low95": 0.779,
+    "high95": 0.915,
+    "within_150": 86,
+    "median_days": 61.1,
+    "odds_unknown_10": 0.772,
     "endings": {
-     "arrived": 78,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 6,
-     "taken or snagged by fishermen [near land]": 3,
-     "disqualified: silent too long": 2,
-     "stuck inverted or keel lost [open ocean]": 1
+     "arrived": 86,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "still at sea": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
+     "disqualified: silent too long": 1,
+     "ran aground before the finish": 1
     }
    },
    "replays": [
     {
      "file": "k-p25-sol.solar-200/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "lost",
-     "days": 71.69
+     "outcome": "arrived",
+     "days": 79.12
     },
     {
      "file": "k-p25-sol.solar-200/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 76.64
+     "days": 61.75
     },
     {
      "file": "k-p25-sol.solar-200/2020-05-01.json",
@@ -703,20 +694,20 @@
      "file": "k-p25-sol.solar-200/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 57.68
+     "days": 56.52
     },
     {
      "file": "k-p25-sol.solar-200/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 95.83
+     "days": 62.99
     }
    ]
   },
   {
    "id": "k-p25-sol.solar-300",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Solar panels: solar-300",
+   "label": "Our kayak, Solar panels: solar-300",
    "options": {
     "thr": "two-t200",
     "sol": "solar-300",
@@ -739,19 +730,19 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 81,
-    "odds": 0.81,
-    "low95": 0.722,
-    "high95": 0.875,
-    "within_150": 81,
-    "median_days": 69.9,
-    "odds_unknown_10": 0.722,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 60.5,
+    "odds_unknown_10": 0.755,
     "endings": {
-     "arrived": 81,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 3,
-     "ran aground before the finish": 2,
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
      "taken or snagged by fishermen [near land]": 2,
+     "still at sea": 2,
+     "ran aground before the finish": 1,
      "stuck inverted or keel lost [open ocean]": 1,
      "disqualified: silent too long": 1
     }
@@ -761,13 +752,13 @@
      "file": "k-p25-sol.solar-300/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 87.89
+     "days": 61.72
     },
     {
      "file": "k-p25-sol.solar-300/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 75.19
+     "days": 60.18
     },
     {
      "file": "k-p25-sol.solar-300/2020-05-01.json",
@@ -785,20 +776,20 @@
      "file": "k-p25-sol.solar-300/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 68.5
+     "days": 57.47
     },
     {
      "file": "k-p25-sol.solar-300/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.74
+     "days": 60.08
     }
    ]
   },
   {
    "id": "k-p25-bat.one-50ah",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Batteries: one-50ah",
+   "label": "Our kayak, Batteries: one-50ah",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -821,22 +812,22 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 79,
-    "odds": 0.79,
-    "low95": 0.7,
-    "high95": 0.858,
-    "within_150": 79,
-    "median_days": 71.7,
-    "odds_unknown_10": 0.703,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 61.5,
+    "odds_unknown_10": 0.755,
     "endings": {
-     "arrived": 79,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
-     "still at sea": 4,
-     "disqualified: silent too long": 2,
-     "stuck inverted or keel lost [open ocean]": 2,
-     "taken or snagged by fishermen [near land]": 2,
-     "ran aground before the finish": 1,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 7,
+     "left the weather box": 2,
+     "still at sea": 2,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -844,13 +835,13 @@
      "file": "k-p25-bat.one-50ah/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 89.82
+     "days": 71.96
     },
     {
      "file": "k-p25-bat.one-50ah/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 71.57
+     "days": 70.97
     },
     {
      "file": "k-p25-bat.one-50ah/2020-05-01.json",
@@ -868,20 +859,20 @@
      "file": "k-p25-bat.one-50ah/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 66.38
+     "days": 56.4
     },
     {
      "file": "k-p25-bat.one-50ah/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 69.65
+     "days": 61.91
     }
    ]
   },
   {
    "id": "k-p25-bat.two-100ah",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Batteries: two-100ah",
+   "label": "Our kayak, Batteries: two-100ah",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -909,14 +900,14 @@
     "low95": 0.745,
     "high95": 0.891,
     "within_150": 83,
-    "median_days": 68.9,
-    "odds_unknown_10": 0.74,
+    "median_days": 60.5,
+    "odds_unknown_10": 0.746,
     "endings": {
      "arrived": 83,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "taken or snagged by fishermen [near land]": 3,
      "still at sea": 3,
-     "stuck inverted or keel lost [open ocean]": 2,
-     "taken or snagged by fishermen [near land]": 1,
+     "stuck inverted or keel lost [open ocean]": 1,
      "disqualified: silent too long": 1
     }
    },
@@ -925,13 +916,13 @@
      "file": "k-p25-bat.two-100ah/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 116.62
+     "days": 66.19
     },
     {
      "file": "k-p25-bat.two-100ah/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 73.45
+     "days": 56.43
     },
     {
      "file": "k-p25-bat.two-100ah/2020-05-01.json",
@@ -949,20 +940,20 @@
      "file": "k-p25-bat.two-100ah/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 78.65
+     "days": 58.27
     },
     {
      "file": "k-p25-bat.two-100ah/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 86.4
+     "days": 62.5
     }
    ]
   },
   {
    "id": "k-p25-brain.one-box",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Autopilot: one-box",
+   "label": "Our kayak, Autopilot: one-box",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -985,20 +976,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 66,
-    "odds": 0.66,
-    "low95": 0.563,
-    "high95": 0.745,
-    "within_150": 66,
-    "median_days": 71.2,
-    "odds_unknown_10": 0.588,
+    "finished": 69,
+    "odds": 0.69,
+    "low95": 0.594,
+    "high95": 0.772,
+    "within_150": 69,
+    "median_days": 59.9,
+    "odds_unknown_10": 0.62,
     "endings": {
-     "arrived": 66,
-     "still at sea": 22,
-     "disqualified: silent too long": 4,
+     "arrived": 69,
+     "still at sea": 21,
      "ran aground before the finish": 4,
-     "taken or snagged by fishermen [near land]": 3,
-     "stuck inverted or keel lost [open ocean]": 1
+     "disqualified: silent too long": 3,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "left the weather box": 1
     }
    },
    "replays": [
@@ -1012,7 +1004,7 @@
      "file": "k-p25-brain.one-box/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 70.95
+     "days": 57.99
     },
     {
      "file": "k-p25-brain.one-box/2020-05-01.json",
@@ -1024,7 +1016,7 @@
      "file": "k-p25-brain.one-box/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "arrived",
-     "days": 74.92
+     "days": 68.6
     },
     {
      "file": "k-p25-brain.one-box/2020-06-01.json",
@@ -1036,14 +1028,14 @@
      "file": "k-p25-brain.one-box/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.7
+     "days": 60.78
     }
    ]
   },
   {
    "id": "k-p25-beacon.none",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Backup beacon: none",
+   "label": "Our kayak, Backup beacon: none",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1066,35 +1058,34 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 59,
-    "odds": 0.59,
-    "low95": 0.492,
-    "high95": 0.681,
-    "within_150": 59,
-    "median_days": 71.2,
-    "odds_unknown_10": 0.525,
+    "finished": 66,
+    "odds": 0.66,
+    "low95": 0.563,
+    "high95": 0.745,
+    "within_150": 66,
+    "median_days": 60.7,
+    "odds_unknown_10": 0.593,
     "endings": {
-     "arrived": 59,
-     "disqualified: silent too long": 28,
+     "arrived": 66,
+     "disqualified: silent too long": 21,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
-     "ran aground before the finish": 1,
+     "taken or snagged by fishermen [near land]": 2,
      "still at sea": 1,
-     "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1
+     "stuck inverted or keel lost [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "k-p25-beacon.none/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "lost",
-     "days": 71.69
+     "outcome": "arrived",
+     "days": 66.93
     },
     {
      "file": "k-p25-beacon.none/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 70.97
+     "days": 57.55
     },
     {
      "file": "k-p25-beacon.none/2020-05-01.json",
@@ -1112,20 +1103,20 @@
      "file": "k-p25-beacon.none/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 58.0
+     "days": 59.25
     },
     {
      "file": "k-p25-beacon.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.7
+     "days": 60.78
     }
    ]
   },
   {
    "id": "k-p25-ais.none",
    "boat": "v4 kayak",
-   "label": "25 W cruise, AIS: none",
+   "label": "Our kayak, AIS: none",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1148,21 +1139,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 79,
-    "odds": 0.79,
-    "low95": 0.7,
-    "high95": 0.858,
-    "within_150": 79,
-    "median_days": 69.0,
-    "odds_unknown_10": 0.705,
+    "finished": 85,
+    "odds": 0.85,
+    "low95": 0.767,
+    "high95": 0.907,
+    "within_150": 85,
+    "median_days": 60.0,
+    "odds_unknown_10": 0.764,
     "endings": {
-     "arrived": 79,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "still at sea": 5,
-     "taken or snagged by fishermen [near land]": 3,
+     "arrived": 85,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "still at sea": 3,
      "stuck inverted or keel lost [open ocean]": 1,
-     "disqualified: silent too long": 1,
-     "ran aground before the finish": 1
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -1170,13 +1160,13 @@
      "file": "k-p25-ais.none/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 82.58
+     "days": 72.97
     },
     {
      "file": "k-p25-ais.none/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 72.81
+     "days": 63.36
     },
     {
      "file": "k-p25-ais.none/2020-05-01.json",
@@ -1188,26 +1178,26 @@
      "file": "k-p25-ais.none/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "disqualified",
-     "days": 64.26
+     "days": 64.51
     },
     {
      "file": "k-p25-ais.none/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 57.68
+     "days": 56.52
     },
     {
      "file": "k-p25-ais.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.67
+     "days": 60.75
     }
    ]
   },
   {
    "id": "k-p25-paint.none",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Antifouling paint: none",
+   "label": "Our kayak, Antifouling paint: none",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1230,22 +1220,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 76,
-    "odds": 0.76,
-    "low95": 0.668,
-    "high95": 0.833,
-    "within_150": 76,
-    "median_days": 76.7,
-    "odds_unknown_10": 0.674,
+    "finished": 83,
+    "odds": 0.83,
+    "low95": 0.745,
+    "high95": 0.891,
+    "within_150": 83,
+    "median_days": 64.7,
+    "odds_unknown_10": 0.743,
     "endings": {
-     "arrived": 76,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
-     "still at sea": 6,
+     "arrived": 83,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "still at sea": 4,
      "disqualified: silent too long": 2,
-     "taken or snagged by fishermen [near land]": 2,
-     "ship strike": 1,
      "stuck inverted or keel lost [open ocean]": 1,
-     "ran aground before the finish": 1
+     "taken or snagged by fishermen [near land]": 1
     }
    },
    "replays": [
@@ -1253,13 +1241,13 @@
      "file": "k-p25-paint.none/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 117.26
+     "days": 70.12
     },
     {
      "file": "k-p25-paint.none/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 80.08
+     "days": 60.35
     },
     {
      "file": "k-p25-paint.none/2020-05-01.json",
@@ -1277,20 +1265,20 @@
      "file": "k-p25-paint.none/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 85.06
+     "days": 59.72
     },
     {
      "file": "k-p25-paint.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 92.49
+     "days": 64.47
     }
    ]
   },
   {
    "id": "k-p25-lead.lead-40",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Keel bulb: lead-40",
+   "label": "Our kayak, Keel bulb: lead-40",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1313,19 +1301,19 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 83,
-    "odds": 0.83,
-    "low95": 0.745,
-    "high95": 0.891,
-    "within_150": 83,
-    "median_days": 68.7,
-    "odds_unknown_10": 0.74,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 59.1,
+    "odds_unknown_10": 0.756,
     "endings": {
-     "arrived": 83,
+     "arrived": 84,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
-     "still at sea": 4,
-     "stuck inverted or keel lost [open ocean]": 2,
-     "taken or snagged by fishermen [near land]": 1,
+     "still at sea": 3,
+     "taken or snagged by fishermen [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
      "disqualified: silent too long": 1
     }
    },
@@ -1333,14 +1321,14 @@
     {
      "file": "k-p25-lead.lead-40/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "arrived",
-     "days": 86.06
+     "outcome": "lost",
+     "days": 57.12
     },
     {
      "file": "k-p25-lead.lead-40/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 71.22
+     "days": 64.9
     },
     {
      "file": "k-p25-lead.lead-40/2020-05-01.json",
@@ -1358,20 +1346,20 @@
      "file": "k-p25-lead.lead-40/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 73.93
+     "days": 55.59
     },
     {
      "file": "k-p25-lead.lead-40/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.73
+     "days": 61.69
     }
    ]
   },
   {
    "id": "k-p25-drive.hybrid",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Drive: hybrid",
+   "label": "Our kayak, Drive: hybrid",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1399,8 +1387,8 @@
     "low95": 0.79,
     "high95": 0.922,
     "within_150": 87,
-    "median_days": 53.1,
-    "odds_unknown_10": 0.786,
+    "median_days": 50.2,
+    "odds_unknown_10": 0.79,
     "endings": {
      "arrived": 87,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
@@ -1414,14 +1402,14 @@
     {
      "file": "k-p25-drive.hybrid/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "arrived",
-     "days": 97.07
+     "outcome": "lost",
+     "days": 32.07
     },
     {
      "file": "k-p25-drive.hybrid/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 47.79
+     "days": 55.65
     },
     {
      "file": "k-p25-drive.hybrid/2020-05-01.json",
@@ -1433,26 +1421,26 @@
      "file": "k-p25-drive.hybrid/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "arrived",
-     "days": 51.15
+     "days": 50.25
     },
     {
      "file": "k-p25-drive.hybrid/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 49.28
+     "days": 47.74
     },
     {
      "file": "k-p25-drive.hybrid/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 52.41
+     "days": 51.85
     }
    ]
   },
   {
    "id": "k-p0-drive.wing-sail",
    "boat": "v4 kayak",
-   "label": "sail only, Drive: wing-sail",
+   "label": "Our kayak, sail only, Drive: wing-sail",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1475,24 +1463,23 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 54,
-    "odds": 0.54,
-    "low95": 0.443,
-    "high95": 0.634,
-    "within_150": 54,
-    "median_days": 75.1,
-    "odds_unknown_10": 0.478,
+    "finished": 58,
+    "odds": 0.58,
+    "low95": 0.482,
+    "high95": 0.672,
+    "within_150": 58,
+    "median_days": 70.8,
+    "odds_unknown_10": 0.516,
     "endings": {
-     "arrived": 54,
+     "arrived": 58,
      "ran aground before the finish": 19,
      "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
      "taken or snagged by fishermen [near land]": 5,
-     "still at sea": 4,
-     "disqualified: silent too long": 3,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
-     "left the weather box": 2,
+     "left the weather box": 4,
+     "disqualified: silent too long": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "ship strike": 1
+     "still at sea": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -1500,13 +1487,13 @@
      "file": "k-p0-drive.wing-sail/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 80.31
+     "days": 58.85
     },
     {
      "file": "k-p0-drive.wing-sail/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "timeout",
-     "days": 91.69
+     "days": 82.38
     },
     {
      "file": "k-p0-drive.wing-sail/2020-05-01.json",
@@ -1524,20 +1511,20 @@
      "file": "k-p0-drive.wing-sail/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 70.51
+     "days": 69.81
     },
     {
      "file": "k-p0-drive.wing-sail/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "timeout",
-     "days": 133.01
+     "days": 150.0
     }
    ]
   },
   {
    "id": "k-p25-material.fibreglass",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull material: fibreglass",
+   "label": "Our kayak, Hull material: fibreglass",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1560,21 +1547,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 81,
-    "odds": 0.81,
-    "low95": 0.722,
-    "high95": 0.875,
-    "within_150": 81,
-    "median_days": 70.0,
-    "odds_unknown_10": 0.722,
+    "finished": 85,
+    "odds": 0.85,
+    "low95": 0.767,
+    "high95": 0.907,
+    "within_150": 85,
+    "median_days": 58.9,
+    "odds_unknown_10": 0.765,
     "endings": {
-     "arrived": 81,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
-     "still at sea": 4,
+     "arrived": 85,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "ran aground before the finish": 2,
+     "taken or snagged by fishermen [near land]": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1,
-     "disqualified: silent too long": 1,
-     "ran aground before the finish": 1
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -1582,13 +1568,13 @@
      "file": "k-p25-material.fibreglass/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 89.08
+     "days": 71.51
     },
     {
      "file": "k-p25-material.fibreglass/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 66.49
+     "days": 56.54
     },
     {
      "file": "k-p25-material.fibreglass/2020-05-01.json",
@@ -1606,20 +1592,20 @@
      "file": "k-p25-material.fibreglass/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 60.01
+     "days": 55.78
     },
     {
      "file": "k-p25-material.fibreglass/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 78.0
+     "days": 60.43
     }
    ]
   },
   {
    "id": "k-p25-material.carbon",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull material: carbon",
+   "label": "Our kayak, Hull material: carbon",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1642,20 +1628,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 81,
-    "odds": 0.81,
-    "low95": 0.722,
-    "high95": 0.875,
-    "within_150": 81,
-    "median_days": 70.7,
-    "odds_unknown_10": 0.722,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 59.4,
+    "odds_unknown_10": 0.756,
     "endings": {
-     "arrived": 81,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
-     "still at sea": 4,
-     "disqualified: silent too long": 2,
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1,
+     "ran aground before the finish": 1
     }
    },
    "replays": [
@@ -1663,13 +1650,13 @@
      "file": "k-p25-material.carbon/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 84.51
+     "days": 65.12
     },
     {
      "file": "k-p25-material.carbon/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 69.93
+     "days": 59.1
     },
     {
      "file": "k-p25-material.carbon/2020-05-01.json",
@@ -1687,20 +1674,20 @@
      "file": "k-p25-material.carbon/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 67.16
+     "days": 55.53
     },
     {
      "file": "k-p25-material.carbon/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 65.61
+     "days": 61.33
     }
    ]
   },
   {
    "id": "k-p25-material.plywood-epoxy",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull material: plywood-epoxy",
+   "label": "Our kayak, Hull material: plywood-epoxy",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1723,20 +1710,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 78,
-    "odds": 0.78,
-    "low95": 0.689,
-    "high95": 0.85,
-    "within_150": 78,
-    "median_days": 70.8,
-    "odds_unknown_10": 0.695,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 58.8,
+    "odds_unknown_10": 0.756,
     "endings": {
-     "arrived": 78,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 12,
-     "still at sea": 6,
-     "disqualified: silent too long": 2,
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "ran aground before the finish": 1,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1,
+     "still at sea": 1
     }
    },
    "replays": [
@@ -1744,13 +1732,13 @@
      "file": "k-p25-material.plywood-epoxy/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 86.03
+     "days": 68.44
     },
     {
      "file": "k-p25-material.plywood-epoxy/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 67.54
+     "days": 57.47
     },
     {
      "file": "k-p25-material.plywood-epoxy/2020-05-01.json",
@@ -1762,26 +1750,26 @@
      "file": "k-p25-material.plywood-epoxy/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "disqualified",
-     "days": 64.26
+     "days": 64.51
     },
     {
      "file": "k-p25-material.plywood-epoxy/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 57.62
+     "days": 56.66
     },
     {
      "file": "k-p25-material.plywood-epoxy/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.67
+     "days": 60.51
     }
    ]
   },
   {
    "id": "k-p25-material.aluminium",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull material: aluminium",
+   "label": "Our kayak, Hull material: aluminium",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1804,21 +1792,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 80,
-    "odds": 0.8,
-    "low95": 0.711,
-    "high95": 0.867,
-    "within_150": 80,
-    "median_days": 74.8,
-    "odds_unknown_10": 0.711,
+    "finished": 85,
+    "odds": 0.85,
+    "low95": 0.767,
+    "high95": 0.907,
+    "within_150": 85,
+    "median_days": 61.2,
+    "odds_unknown_10": 0.763,
     "endings": {
-     "arrived": 80,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
+     "arrived": 85,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
      "still at sea": 4,
-     "ran aground before the finish": 3,
-     "disqualified: silent too long": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -1826,13 +1813,13 @@
      "file": "k-p25-material.aluminium/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 89.92
+     "days": 66.24
     },
     {
      "file": "k-p25-material.aluminium/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 79.78
+     "days": 58.76
     },
     {
      "file": "k-p25-material.aluminium/2020-05-01.json",
@@ -1850,20 +1837,20 @@
      "file": "k-p25-material.aluminium/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 70.59
+     "days": 58.9
     },
     {
      "file": "k-p25-material.aluminium/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 77.97
+     "days": 64.33
     }
    ]
   },
   {
    "id": "k-p25-shape.cat",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull shape: cat",
+   "label": "Our kayak, Hull shape: cat",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1886,37 +1873,36 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 35,
-    "odds": 0.35,
-    "low95": 0.264,
-    "high95": 0.447,
-    "within_150": 35,
-    "median_days": 83.4,
-    "odds_unknown_10": 0.309,
+    "finished": 40,
+    "odds": 0.4,
+    "low95": 0.309,
+    "high95": 0.498,
+    "within_150": 40,
+    "median_days": 66.7,
+    "odds_unknown_10": 0.357,
     "endings": {
-     "capsized and stayed upside down (not self-righting) [open ocean]": 47,
-     "arrived": 35,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
-     "still at sea": 3,
-     "ran aground before the finish": 2,
-     "disqualified: silent too long": 2,
-     "taken or snagged by fishermen [near land]": 1,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
-     "capsized and stayed upside down (not self-righting) [near land]": 1
+     "capsized and stayed upside down (not self-righting) [open ocean]": 44,
+     "arrived": 40,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 6,
+     "still at sea": 5,
+     "taken or snagged by fishermen [near land]": 2,
+     "ran aground before the finish": 1,
+     "disqualified: silent too long": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
     {
      "file": "k-p25-shape.cat/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "lost",
-     "days": 29.58
+     "outcome": "timeout",
+     "days": 150.0
     },
     {
      "file": "k-p25-shape.cat/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "lost",
-     "days": 9.36
+     "outcome": "arrived",
+     "days": 64.38
     },
     {
      "file": "k-p25-shape.cat/2020-05-01.json",
@@ -1927,27 +1913,27 @@
     {
      "file": "k-p25-shape.cat/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "lost",
-     "days": 3.8
+     "outcome": "disqualified",
+     "days": 64.51
     },
     {
      "file": "k-p25-shape.cat/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "lost",
-     "days": 106.31
+     "days": 108.19
     },
     {
      "file": "k-p25-shape.cat/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 65.68
+     "days": 65.84
     }
    ]
   },
   {
    "id": "k-p25-shape.semisub",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull shape: semisub",
+   "label": "Our kayak, Hull shape: semisub",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -1970,21 +1956,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 72,
-    "odds": 0.72,
-    "low95": 0.625,
-    "high95": 0.799,
-    "within_150": 72,
-    "median_days": 86.8,
-    "odds_unknown_10": 0.633,
+    "finished": 79,
+    "odds": 0.79,
+    "low95": 0.7,
+    "high95": 0.858,
+    "within_150": 79,
+    "median_days": 70.8,
+    "odds_unknown_10": 0.704,
     "endings": {
-     "arrived": 72,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 14,
-     "still at sea": 7,
-     "disqualified: silent too long": 3,
+     "arrived": 79,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "still at sea": 5,
+     "disqualified: silent too long": 2,
      "taken or snagged by fishermen [near land]": 2,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
-     "stuck inverted or keel lost [open ocean]": 1
+     "stuck inverted or keel lost [open ocean]": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -1992,13 +1978,13 @@
      "file": "k-p25-shape.semisub/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 89.56
+     "days": 84.55
     },
     {
      "file": "k-p25-shape.semisub/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "lost",
-     "days": 69.44
+     "outcome": "arrived",
+     "days": 71.53
     },
     {
      "file": "k-p25-shape.semisub/2020-05-01.json",
@@ -2010,26 +1996,26 @@
      "file": "k-p25-shape.semisub/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "disqualified",
-     "days": 64.26
+     "days": 64.51
     },
     {
      "file": "k-p25-shape.semisub/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 95.57
+     "days": 62.06
     },
     {
      "file": "k-p25-shape.semisub/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 77.28
+     "days": 69.09
     }
    ]
   },
   {
    "id": "k-p25-shape.board",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull shape: board",
+   "label": "Our kayak, Hull shape: board",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -2052,21 +2038,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 73,
-    "odds": 0.73,
-    "low95": 0.636,
-    "high95": 0.807,
-    "within_150": 73,
-    "median_days": 78.9,
-    "odds_unknown_10": 0.646,
+    "finished": 83,
+    "odds": 0.83,
+    "low95": 0.745,
+    "high95": 0.891,
+    "within_150": 83,
+    "median_days": 66.1,
+    "odds_unknown_10": 0.742,
     "endings": {
-     "arrived": 73,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
-     "still at sea": 8,
-     "disqualified: silent too long": 3,
-     "taken or snagged by fishermen [near land]": 3,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
-     "stuck inverted or keel lost [open ocean]": 2
+     "arrived": 83,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "still at sea": 5,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "taken or snagged by fishermen [near land]": 1,
+     "disqualified: silent too long": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -2074,13 +2060,13 @@
      "file": "k-p25-shape.board/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 86.92
+     "days": 73.46
     },
     {
      "file": "k-p25-shape.board/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 85.63
+     "days": 61.66
     },
     {
      "file": "k-p25-shape.board/2020-05-01.json",
@@ -2098,20 +2084,20 @@
      "file": "k-p25-shape.board/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 72.39
+     "days": 62.38
     },
     {
      "file": "k-p25-shape.board/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 70.36
+     "days": 66.28
     }
    ]
   },
   {
    "id": "k-p25-brain.one-box-beacon.none",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Autopilot: one-box, Backup beacon: none",
+   "label": "Our kayak, Autopilot: one-box, Backup beacon: none",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -2134,17 +2120,17 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 59,
-    "odds": 0.59,
-    "low95": 0.492,
-    "high95": 0.681,
-    "within_150": 59,
-    "median_days": 71.2,
-    "odds_unknown_10": 0.526,
+    "finished": 62,
+    "odds": 0.62,
+    "low95": 0.522,
+    "high95": 0.709,
+    "within_150": 62,
+    "median_days": 59.8,
+    "odds_unknown_10": 0.558,
     "endings": {
-     "arrived": 59,
+     "arrived": 62,
      "electronics box dead: silent and uncontrolled [open ocean]": 26,
-     "disqualified: silent too long": 12,
+     "disqualified: silent too long": 9,
      "still at sea": 1,
      "stuck inverted or keel lost [open ocean]": 1,
      "taken or snagged by fishermen [near land]": 1
@@ -2161,7 +2147,7 @@
      "file": "k-p25-brain.one-box-beacon.none/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 73.47
+     "days": 62.58
     },
     {
      "file": "k-p25-brain.one-box-beacon.none/2020-05-01.json",
@@ -2173,7 +2159,7 @@
      "file": "k-p25-brain.one-box-beacon.none/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "arrived",
-     "days": 83.15
+     "days": 68.91
     },
     {
      "file": "k-p25-brain.one-box-beacon.none/2020-06-01.json",
@@ -2185,14 +2171,14 @@
      "file": "k-p25-brain.one-box-beacon.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 63.69
+     "days": 60.82
     }
    ]
   },
   {
    "id": "k-p25-sol.solar-300-bat.two-100ah",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Solar panels: solar-300, Batteries: two-100ah",
+   "label": "Our kayak, Solar panels: solar-300, Batteries: two-100ah",
    "options": {
     "thr": "two-t200",
     "sol": "solar-300",
@@ -2215,20 +2201,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 82,
-    "odds": 0.82,
-    "low95": 0.733,
-    "high95": 0.883,
-    "within_150": 82,
-    "median_days": 69.4,
-    "odds_unknown_10": 0.731,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 60.5,
+    "odds_unknown_10": 0.755,
     "endings": {
-     "arrived": 82,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
+     "arrived": 84,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
      "still at sea": 3,
-     "disqualified: silent too long": 2,
+     "taken or snagged by fishermen [near land]": 2,
      "stuck inverted or keel lost [open ocean]": 1,
-     "taken or snagged by fishermen [near land]": 1
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
@@ -2236,13 +2222,13 @@
      "file": "k-p25-sol.solar-300-bat.two-100ah/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 91.85
+     "days": 66.23
     },
     {
      "file": "k-p25-sol.solar-300-bat.two-100ah/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 69.83
+     "days": 60.44
     },
     {
      "file": "k-p25-sol.solar-300-bat.two-100ah/2020-05-01.json",
@@ -2260,20 +2246,20 @@
      "file": "k-p25-sol.solar-300-bat.two-100ah/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 80.4
+     "days": 59.2
     },
     {
      "file": "k-p25-sol.solar-300-bat.two-100ah/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 73.81
+     "days": 62.55
     }
    ]
   },
   {
    "id": "k-p30-sol.solar-300-bat.two-100ah",
    "boat": "v4 kayak",
-   "label": "30 W cruise, Solar panels: solar-300, Batteries: two-100ah",
+   "label": "Our kayak, 30 W cruise, Solar panels: solar-300, Batteries: two-100ah",
    "options": {
     "thr": "two-t200",
     "sol": "solar-300",
@@ -2296,20 +2282,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 81,
-    "odds": 0.81,
-    "low95": 0.722,
-    "high95": 0.875,
-    "within_150": 81,
-    "median_days": 65.2,
-    "odds_unknown_10": 0.725,
+    "finished": 85,
+    "odds": 0.85,
+    "low95": 0.767,
+    "high95": 0.907,
+    "within_150": 85,
+    "median_days": 57.5,
+    "odds_unknown_10": 0.766,
     "endings": {
-     "arrived": 81,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
-     "disqualified: silent too long": 3,
-     "still at sea": 3,
-     "stuck inverted or keel lost [open ocean]": 2,
-     "taken or snagged by fishermen [near land]": 1
+     "arrived": 85,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "taken or snagged by fishermen [near land]": 2,
+     "still at sea": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "disqualified: silent too long": 1,
+     "ran aground before the finish": 1
     }
    },
    "replays": [
@@ -2317,13 +2304,13 @@
      "file": "k-p30-sol.solar-300-bat.two-100ah/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "arrived",
-     "days": 79.44
+     "days": 60.85
     },
     {
      "file": "k-p30-sol.solar-300-bat.two-100ah/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "arrived",
-     "days": 70.66
+     "days": 56.6
     },
     {
      "file": "k-p30-sol.solar-300-bat.two-100ah/2020-05-01.json",
@@ -2334,27 +2321,27 @@
     {
      "file": "k-p30-sol.solar-300-bat.two-100ah/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "disqualified",
-     "days": 64.26
+     "outcome": "arrived",
+     "days": 58.7
     },
     {
      "file": "k-p30-sol.solar-300-bat.two-100ah/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "arrived",
-     "days": 93.22
+     "days": 54.86
     },
     {
      "file": "k-p30-sol.solar-300-bat.two-100ah/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 61.03
+     "days": 58.93
     }
    ]
   },
   {
    "id": "revc",
    "boat": "Randolph Rev C",
-   "label": "Randolph Rev C as published (our model)",
+   "label": "Randolph's Rev C as built (our model)",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2373,22 +2360,23 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 11,
-    "odds": 0.11,
-    "low95": 0.063,
-    "high95": 0.186,
-    "within_150": 11,
-    "median_days": 127.7,
-    "odds_unknown_10": 0.094,
+    "finished": 17,
+    "odds": 0.17,
+    "low95": 0.109,
+    "high95": 0.255,
+    "within_150": 17,
+    "median_days": 120.9,
+    "odds_unknown_10": 0.146,
     "endings": {
-     "still at sea": 64,
-     "arrived": 11,
-     "taken or snagged by fishermen [near land]": 8,
-     "ran aground before the finish": 5,
-     "stuck inverted or keel lost [open ocean]": 5,
-     "disqualified: silent too long": 4,
-     "electronics box dead: silent and uncontrolled [open ocean]": 2,
-     "stuck inverted or keel lost [near land]": 1
+     "still at sea": 51,
+     "arrived": 17,
+     "taken or snagged by fishermen [near land]": 14,
+     "ran aground before the finish": 8,
+     "stuck inverted or keel lost [open ocean]": 4,
+     "disqualified: silent too long": 3,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "stuck inverted or keel lost [near land]": 1,
+     "electronics box dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -2401,39 +2389,39 @@
     {
      "file": "revc/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 73.42
     },
     {
      "file": "revc/2020-05-01.json",
      "start": "2020-05-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 137.31
     },
     {
      "file": "revc/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "aground",
-     "days": 11.92
+     "days": 11.99
     },
     {
      "file": "revc/2020-06-01.json",
      "start": "2020-06-01T12:00",
-     "outcome": "lost",
-     "days": 113.35
+     "outcome": "timeout",
+     "days": 150.0
     },
     {
      "file": "revc/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "aground",
-     "days": 1.88
+     "days": 1.17
     }
    ]
   },
   {
    "id": "revc-drive.wing-thruster",
    "boat": "Randolph Rev C",
-   "label": "Randolph Rev C, Drive: wing-thruster",
+   "label": "Randolph's Rev C (our model), Drive: wing-thruster",
    "options": {
     "base": "revc",
     "drive": "wing-thruster",
@@ -2452,20 +2440,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 45,
-    "odds": 0.45,
-    "low95": 0.356,
-    "high95": 0.548,
-    "within_150": 45,
-    "median_days": 87.4,
-    "odds_unknown_10": 0.395,
+    "finished": 49,
+    "odds": 0.49,
+    "low95": 0.394,
+    "high95": 0.587,
+    "within_150": 49,
+    "median_days": 79.4,
+    "odds_unknown_10": 0.434,
     "endings": {
-     "arrived": 45,
-     "still at sea": 34,
-     "taken or snagged by fishermen [near land]": 7,
-     "ran aground before the finish": 6,
-     "disqualified: silent too long": 5,
-     "stuck inverted or keel lost [open ocean]": 2,
+     "arrived": 49,
+     "still at sea": 36,
+     "taken or snagged by fishermen [near land]": 6,
+     "disqualified: silent too long": 4,
+     "ran aground before the finish": 3,
+     "stuck inverted or keel lost [open ocean]": 1,
      "stuck inverted or keel lost [near land]": 1
     }
    },
@@ -2479,8 +2467,8 @@
     {
      "file": "revc-drive.wing-thruster/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "aground",
+     "days": 104.51
     },
     {
      "file": "revc-drive.wing-thruster/2020-05-01.json",
@@ -2492,26 +2480,26 @@
      "file": "revc-drive.wing-thruster/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "arrived",
-     "days": 103.67
+     "days": 83.47
     },
     {
      "file": "revc-drive.wing-thruster/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "lost",
-     "days": 28.56
+     "days": 73.58
     },
     {
      "file": "revc-drive.wing-thruster/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "aground",
-     "days": 1.34
+     "days": 1.36
     }
    ]
   },
   {
    "id": "revc-brain.two-box",
    "boat": "Randolph Rev C",
-   "label": "Randolph Rev C, Electronics boxes: two-box",
+   "label": "Randolph's Rev C (our model), Electronics boxes: two-box",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2530,37 +2518,37 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 22,
-    "odds": 0.22,
-    "low95": 0.15,
-    "high95": 0.311,
-    "within_150": 22,
-    "median_days": 125.1,
-    "odds_unknown_10": 0.189,
+    "finished": 24,
+    "odds": 0.24,
+    "low95": 0.167,
+    "high95": 0.332,
+    "within_150": 24,
+    "median_days": 122.5,
+    "odds_unknown_10": 0.207,
     "endings": {
-     "still at sea": 38,
-     "arrived": 22,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 12,
-     "taken or snagged by fishermen [near land]": 11,
+     "still at sea": 36,
+     "arrived": 24,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 13,
+     "taken or snagged by fishermen [near land]": 12,
      "ran aground before the finish": 6,
      "disqualified: silent too long": 4,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 3,
-     "stuck inverted or keel lost [near land]": 2,
-     "stuck inverted or keel lost [open ocean]": 2
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
+     "stuck inverted or keel lost [open ocean]": 2,
+     "stuck inverted or keel lost [near land]": 1
     }
    },
    "replays": [
     {
      "file": "revc-brain.two-box/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "lost",
-     "days": 127.5
+     "outcome": "timeout",
+     "days": 150.0
     },
     {
      "file": "revc-brain.two-box/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "lost",
-     "days": 138.26
+     "days": 69.44
     },
     {
      "file": "revc-brain.two-box/2020-05-01.json",
@@ -2572,7 +2560,7 @@
      "file": "revc-brain.two-box/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "aground",
-     "days": 11.92
+     "days": 11.98
     },
     {
      "file": "revc-brain.two-box/2020-06-01.json",
@@ -2584,14 +2572,14 @@
      "file": "revc-brain.two-box/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "aground",
-     "days": 1.88
+     "days": 1.17
     }
    ]
   },
   {
    "id": "revc-rudder.single",
    "boat": "Randolph Rev C",
-   "label": "Randolph Rev C, Rudder: single",
+   "label": "Randolph's Rev C (our model), Rudder: single",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2610,22 +2598,23 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 11,
-    "odds": 0.11,
-    "low95": 0.063,
-    "high95": 0.186,
-    "within_150": 11,
-    "median_days": 126.9,
-    "odds_unknown_10": 0.094,
+    "finished": 15,
+    "odds": 0.15,
+    "low95": 0.093,
+    "high95": 0.233,
+    "within_150": 15,
+    "median_days": 122.6,
+    "odds_unknown_10": 0.129,
     "endings": {
-     "still at sea": 64,
+     "still at sea": 53,
+     "arrived": 15,
      "taken or snagged by fishermen [near land]": 11,
-     "arrived": 11,
-     "stuck inverted or keel lost [open ocean]": 5,
+     "ran aground before the finish": 9,
      "disqualified: silent too long": 4,
+     "stuck inverted or keel lost [open ocean]": 4,
      "electronics box dead: silent and uncontrolled [open ocean]": 2,
-     "ran aground before the finish": 2,
-     "stuck inverted or keel lost [near land]": 1
+     "stuck inverted or keel lost [near land]": 1,
+     "left the weather box": 1
     }
    },
    "replays": [
@@ -2651,7 +2640,7 @@
      "file": "revc-rudder.single/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "aground",
-     "days": 11.04
+     "days": 11.19
     },
     {
      "file": "revc-rudder.single/2020-06-01.json",
@@ -2663,14 +2652,14 @@
      "file": "revc-rudder.single/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "aground",
-     "days": 1.78
+     "days": 1.1
     }
    ]
   },
   {
    "id": "revc-rsol.deck-60w-rbat.lfp-384wh",
    "boat": "Randolph Rev C",
-   "label": "Randolph Rev C, Solar panels: deck-60w, Battery: lfp-384wh",
+   "label": "Randolph's Rev C (our model), Solar panels: deck-60w, Battery: lfp-384wh",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2689,19 +2678,19 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 12,
-    "odds": 0.12,
-    "low95": 0.07,
-    "high95": 0.198,
-    "within_150": 12,
-    "median_days": 131.3,
-    "odds_unknown_10": 0.103,
+    "finished": 16,
+    "odds": 0.16,
+    "low95": 0.101,
+    "high95": 0.244,
+    "within_150": 16,
+    "median_days": 128.9,
+    "odds_unknown_10": 0.137,
     "endings": {
-     "still at sea": 63,
-     "arrived": 12,
-     "taken or snagged by fishermen [near land]": 10,
-     "stuck inverted or keel lost [open ocean]": 6,
-     "ran aground before the finish": 4,
+     "still at sea": 54,
+     "arrived": 16,
+     "taken or snagged by fishermen [near land]": 13,
+     "ran aground before the finish": 8,
+     "stuck inverted or keel lost [open ocean]": 4,
      "disqualified: silent too long": 3,
      "electronics box dead: silent and uncontrolled [open ocean]": 1,
      "stuck inverted or keel lost [near land]": 1
@@ -2717,8 +2706,8 @@
     {
      "file": "revc-rsol.deck-60w-rbat.lfp-384wh/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "arrived",
-     "days": 133.48
+     "outcome": "lost",
+     "days": 78.88
     },
     {
      "file": "revc-rsol.deck-60w-rbat.lfp-384wh/2020-05-01.json",
@@ -2730,26 +2719,26 @@
      "file": "revc-rsol.deck-60w-rbat.lfp-384wh/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "aground",
-     "days": 11.94
+     "days": 11.99
     },
     {
      "file": "revc-rsol.deck-60w-rbat.lfp-384wh/2020-06-01.json",
      "start": "2020-06-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 113.35
     },
     {
      "file": "revc-rsol.deck-60w-rbat.lfp-384wh/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "aground",
-     "days": 1.19
+     "days": 1.04
     }
    ]
   },
   {
    "id": "revc-tracker.none",
    "boat": "Randolph Rev C",
-   "label": "Randolph Rev C, Backup tracker: none",
+   "label": "Randolph's Rev C (our model), Backup tracker: none",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2768,22 +2757,22 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 12,
-    "odds": 0.12,
-    "low95": 0.07,
-    "high95": 0.198,
-    "within_150": 12,
-    "median_days": 134.3,
-    "odds_unknown_10": 0.103,
+    "finished": 15,
+    "odds": 0.15,
+    "low95": 0.093,
+    "high95": 0.233,
+    "within_150": 15,
+    "median_days": 126.0,
+    "odds_unknown_10": 0.129,
     "endings": {
-     "electronics box dead: silent and uncontrolled [open ocean]": 32,
-     "disqualified: silent too long": 23,
-     "still at sea": 21,
-     "arrived": 12,
-     "taken or snagged by fishermen [near land]": 6,
-     "electronics box dead: silent and uncontrolled [near land]": 2,
-     "stuck inverted or keel lost [open ocean]": 2,
-     "ran aground before the finish": 1,
+     "electronics box dead: silent and uncontrolled [open ocean]": 30,
+     "disqualified: silent too long": 21,
+     "still at sea": 17,
+     "arrived": 15,
+     "taken or snagged by fishermen [near land]": 7,
+     "stuck inverted or keel lost [open ocean]": 4,
+     "electronics box dead: silent and uncontrolled [near land]": 3,
+     "ran aground before the finish": 2,
      "stuck inverted or keel lost [near land]": 1
     }
    },
@@ -2797,8 +2786,8 @@
     {
      "file": "revc-tracker.none/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "disqualified",
-     "days": 101.01
+     "outcome": "lost",
+     "days": 69.44
     },
     {
      "file": "revc-tracker.none/2020-05-01.json",
@@ -2810,7 +2799,7 @@
      "file": "revc-tracker.none/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "aground",
-     "days": 11.94
+     "days": 11.99
     },
     {
      "file": "revc-tracker.none/2020-06-01.json",
@@ -2822,14 +2811,14 @@
      "file": "revc-tracker.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "aground",
-     "days": 1.88
+     "days": 1.17
     }
    ]
   },
   {
    "id": "revb",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B as published (our model)",
+   "label": "Randolph's Rev B as built (our model)",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -2848,29 +2837,29 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 5,
-    "odds": 0.05,
-    "low95": 0.022,
-    "high95": 0.112,
-    "within_150": 5,
-    "median_days": 117.6,
-    "odds_unknown_10": 0.043,
+    "finished": 16,
+    "odds": 0.16,
+    "low95": 0.101,
+    "high95": 0.244,
+    "within_150": 16,
+    "median_days": 112.8,
+    "odds_unknown_10": 0.139,
     "endings": {
-     "still at sea": 75,
-     "taken or snagged by fishermen [near land]": 8,
-     "stuck inverted or keel lost [open ocean]": 5,
-     "arrived": 5,
-     "disqualified: silent too long": 4,
-     "electronics box dead: silent and uncontrolled [open ocean]": 2,
-     "ran aground before the finish": 1
+     "still at sea": 61,
+     "arrived": 16,
+     "taken or snagged by fishermen [near land]": 7,
+     "ran aground before the finish": 6,
+     "disqualified: silent too long": 5,
+     "stuck inverted or keel lost [open ocean]": 3,
+     "electronics box dead: silent and uncontrolled [open ocean]": 2
     }
    },
    "replays": [
     {
      "file": "revb/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 13.12
     },
     {
      "file": "revb/2020-04-15.json",
@@ -2888,13 +2877,13 @@
      "file": "revb/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "lost",
-     "days": 138.47
+     "days": 28.14
     },
     {
      "file": "revb/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "lost",
-     "days": 104.17
+     "days": 73.58
     },
     {
      "file": "revb/2020-06-15.json",
@@ -2907,7 +2896,7 @@
   {
    "id": "revb-drive.wing-thruster",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B, Drive: wing-thruster",
+   "label": "Randolph's Rev B (our model), Drive: wing-thruster",
    "options": {
     "base": "revb",
     "drive": "wing-thruster",
@@ -2926,20 +2915,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 89.9,
-    "odds_unknown_10": 0.255,
+    "finished": 39,
+    "odds": 0.39,
+    "low95": 0.3,
+    "high95": 0.488,
+    "within_150": 39,
+    "median_days": 76.9,
+    "odds_unknown_10": 0.346,
     "endings": {
-     "still at sea": 50,
-     "arrived": 29,
-     "taken or snagged by fishermen [near land]": 7,
-     "stuck inverted or keel lost [open ocean]": 7,
+     "arrived": 39,
+     "still at sea": 35,
+     "taken or snagged by fishermen [near land]": 13,
+     "ran aground before the finish": 4,
      "disqualified: silent too long": 4,
-     "ran aground before the finish": 2,
+     "stuck inverted or keel lost [open ocean]": 4,
      "electronics box dead: silent and uncontrolled [open ocean]": 1
     }
    },
@@ -2959,33 +2948,33 @@
     {
      "file": "revb-drive.wing-thruster/2020-05-01.json",
      "start": "2020-05-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "aground",
+     "days": 83.0
     },
     {
      "file": "revb-drive.wing-thruster/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "lost",
-     "days": 138.47
+     "days": 104.38
     },
     {
      "file": "revb-drive.wing-thruster/2020-06-01.json",
      "start": "2020-06-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 28.56
     },
     {
      "file": "revb-drive.wing-thruster/2020-06-15.json",
      "start": "2020-06-15T12:00",
-     "outcome": "lost",
-     "days": 99.12
+     "outcome": "timeout",
+     "days": 150.0
     }
    ]
   },
   {
    "id": "revb-brain.two-box",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B, Electronics boxes: two-box",
+   "label": "Randolph's Rev B (our model), Electronics boxes: two-box",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3004,22 +2993,22 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 12,
-    "odds": 0.12,
-    "low95": 0.07,
-    "high95": 0.198,
-    "within_150": 12,
-    "median_days": 117.8,
-    "odds_unknown_10": 0.104,
+    "finished": 15,
+    "odds": 0.15,
+    "low95": 0.093,
+    "high95": 0.233,
+    "within_150": 15,
+    "median_days": 100.0,
+    "odds_unknown_10": 0.131,
     "endings": {
-     "still at sea": 41,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 20,
-     "arrived": 12,
-     "stuck inverted or keel lost [open ocean]": 9,
-     "taken or snagged by fishermen [near land]": 7,
+     "still at sea": 44,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 19,
+     "arrived": 15,
      "ran aground before the finish": 6,
+     "stuck inverted or keel lost [open ocean]": 5,
+     "taken or snagged by fishermen [near land]": 5,
      "disqualified: silent too long": 4,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2
     }
    },
    "replays": [
@@ -3064,7 +3053,7 @@
   {
    "id": "revb-rudder.twin",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B, Rudder: twin",
+   "label": "Randolph's Rev B (our model), Rudder: twin",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3083,29 +3072,30 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 3,
-    "odds": 0.03,
-    "low95": 0.01,
-    "high95": 0.085,
-    "within_150": 3,
-    "median_days": 117.2,
-    "odds_unknown_10": 0.026,
+    "finished": 10,
+    "odds": 0.1,
+    "low95": 0.055,
+    "high95": 0.174,
+    "within_150": 10,
+    "median_days": 116.0,
+    "odds_unknown_10": 0.086,
     "endings": {
-     "still at sea": 72,
+     "still at sea": 65,
+     "arrived": 10,
+     "taken or snagged by fishermen [near land]": 8,
      "stuck inverted or keel lost [open ocean]": 7,
-     "taken or snagged by fishermen [near land]": 7,
-     "ran aground before the finish": 5,
-     "disqualified: silent too long": 5,
-     "arrived": 3,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "ran aground before the finish": 4,
+     "disqualified: silent too long": 4,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "stuck inverted or keel lost [near land]": 1
     }
    },
    "replays": [
     {
      "file": "revb-rudder.twin/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 13.12
     },
     {
      "file": "revb-rudder.twin/2020-04-15.json",
@@ -3122,8 +3112,8 @@
     {
      "file": "revb-rudder.twin/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "aground",
-     "days": 34.24
+     "outcome": "lost",
+     "days": 138.47
     },
     {
      "file": "revb-rudder.twin/2020-06-01.json",
@@ -3142,7 +3132,7 @@
   {
    "id": "revb-rsol.deck-60w-rbat.lfp-384wh",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B, Solar panels: deck-60w, Battery: lfp-384wh",
+   "label": "Randolph's Rev B (our model), Solar panels: deck-60w, Battery: lfp-384wh",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3161,20 +3151,20 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 4,
-    "odds": 0.04,
-    "low95": 0.016,
-    "high95": 0.098,
-    "within_150": 4,
-    "median_days": 132.2,
-    "odds_unknown_10": 0.034,
+    "finished": 11,
+    "odds": 0.11,
+    "low95": 0.063,
+    "high95": 0.186,
+    "within_150": 11,
+    "median_days": 122.5,
+    "odds_unknown_10": 0.095,
     "endings": {
-     "still at sea": 74,
-     "stuck inverted or keel lost [open ocean]": 9,
+     "still at sea": 68,
+     "arrived": 11,
+     "taken or snagged by fishermen [near land]": 6,
      "disqualified: silent too long": 5,
-     "taken or snagged by fishermen [near land]": 4,
-     "arrived": 4,
-     "ran aground before the finish": 2,
+     "stuck inverted or keel lost [open ocean]": 4,
+     "ran aground before the finish": 4,
      "electronics box dead: silent and uncontrolled [open ocean]": 2
     }
    },
@@ -3188,8 +3178,8 @@
     {
      "file": "revb-rsol.deck-60w-rbat.lfp-384wh/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "aground",
+     "days": 130.84
     },
     {
      "file": "revb-rsol.deck-60w-rbat.lfp-384wh/2020-05-01.json",
@@ -3206,8 +3196,8 @@
     {
      "file": "revb-rsol.deck-60w-rbat.lfp-384wh/2020-06-01.json",
      "start": "2020-06-01T12:00",
-     "outcome": "lost",
-     "days": 41.78
+     "outcome": "timeout",
+     "days": 150.0
     },
     {
      "file": "revb-rsol.deck-60w-rbat.lfp-384wh/2020-06-15.json",
@@ -3220,7 +3210,7 @@
   {
    "id": "revb-tracker.none",
    "boat": "Randolph Rev B",
-   "label": "Randolph Rev B, Backup tracker: none",
+   "label": "Randolph's Rev B (our model), Backup tracker: none",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3239,22 +3229,23 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 2,
-    "odds": 0.02,
-    "low95": 0.006,
-    "high95": 0.07,
-    "within_150": 2,
-    "median_days": 142.0,
-    "odds_unknown_10": 0.017,
+    "finished": 11,
+    "odds": 0.11,
+    "low95": 0.063,
+    "high95": 0.186,
+    "within_150": 11,
+    "median_days": 118.4,
+    "odds_unknown_10": 0.095,
     "endings": {
-     "electronics box dead: silent and uncontrolled [open ocean]": 38,
-     "disqualified: silent too long": 24,
-     "still at sea": 22,
-     "stuck inverted or keel lost [open ocean]": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 39,
+     "disqualified: silent too long": 21,
+     "still at sea": 16,
+     "arrived": 11,
+     "stuck inverted or keel lost [open ocean]": 4,
      "ran aground before the finish": 3,
      "taken or snagged by fishermen [near land]": 3,
-     "arrived": 2,
-     "electronics box dead: silent and uncontrolled [near land]": 2
+     "electronics box dead: silent and uncontrolled [near land]": 2,
+     "stuck inverted or keel lost [near land]": 1
     }
    },
    "replays": [
@@ -3280,7 +3271,7 @@
      "file": "revb-tracker.none/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "lost",
-     "days": 138.47
+     "days": 28.14
     },
     {
      "file": "revb-tracker.none/2020-06-01.json",
@@ -3291,15 +3282,15 @@
     {
      "file": "revb-tracker.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 138.48
     }
    ]
   },
   {
    "id": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none",
    "boat": "v4 kayak",
-   "label": "15 W cruise, Thrusters: one-t200, Solar panels: solar-200, Batteries: one-50ah, Solar charge controllers: one-mppt, Autopilot: one-box, Backup beacon: none, AIS: none, Antifouling paint: none",
+   "label": "Our kayak, 15 W cruise, Thrusters: one-t200, Solar panels: solar-200, Batteries: one-50ah, Solar charge controllers: one-mppt, Autopilot: one-box, Backup beacon: none, AIS: none, Antifouling paint: none",
    "options": {
     "thr": "one-t200",
     "sol": "solar-200",
@@ -3322,21 +3313,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.4,
-    "odds_unknown_10": 0.234,
+    "finished": 39,
+    "odds": 0.39,
+    "low95": 0.3,
+    "high95": 0.488,
+    "within_150": 39,
+    "median_days": 77.7,
+    "odds_unknown_10": 0.345,
     "endings": {
-     "electronics box dead: silent and uncontrolled [open ocean]": 34,
-     "arrived": 27,
-     "disqualified: silent too long": 20,
-     "still at sea": 11,
-     "taken or snagged by fishermen [near land]": 4,
+     "arrived": 39,
+     "electronics box dead: silent and uncontrolled [open ocean]": 29,
+     "disqualified: silent too long": 17,
+     "still at sea": 7,
+     "taken or snagged by fishermen [near land]": 3,
      "electronics box dead: silent and uncontrolled [near land]": 2,
-     "ran aground before the finish": 1,
+     "ran aground before the finish": 2,
      "stuck inverted or keel lost [open ocean]": 1
     }
    },
@@ -3350,8 +3341,8 @@
     {
      "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "lost",
-     "days": 78.88
+     "outcome": "disqualified",
+     "days": 101.01
     },
     {
      "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-05-01.json",
@@ -3362,8 +3353,8 @@
     {
      "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "arrived",
-     "days": 90.85
+     "outcome": "lost",
+     "days": 138.47
     },
     {
      "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-06-01.json",
@@ -3375,14 +3366,14 @@
      "file": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 103.9
+     "days": 74.06
     }
    ]
   },
   {
    "id": "k-p25-shape.cat-over20",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull shape: cat (if 20% of rolls leave it upside down, not 50 %)",
+   "label": "Our kayak, Hull shape: cat (if 20% of rolls leave it upside down, not 50 %)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -3406,37 +3397,36 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 45,
-    "odds": 0.45,
-    "low95": 0.356,
-    "high95": 0.548,
-    "within_150": 45,
-    "median_days": 84.7,
-    "odds_unknown_10": 0.397,
+    "finished": 51,
+    "odds": 0.51,
+    "low95": 0.413,
+    "high95": 0.606,
+    "within_150": 51,
+    "median_days": 65.9,
+    "odds_unknown_10": 0.456,
     "endings": {
-     "arrived": 45,
-     "capsized and stayed upside down (not self-righting) [open ocean]": 35,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "arrived": 51,
+     "capsized and stayed upside down (not self-righting) [open ocean]": 31,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 6,
      "still at sea": 5,
      "ran aground before the finish": 2,
-     "disqualified: silent too long": 2,
-     "taken or snagged by fishermen [near land]": 1,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
-     "capsized and stayed upside down (not self-righting) [near land]": 1
+     "taken or snagged by fishermen [near land]": 2,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
+     "disqualified: silent too long": 1
     }
    },
    "replays": [
     {
      "file": "k-p25-shape.cat-over20/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "lost",
-     "days": 29.58
+     "outcome": "timeout",
+     "days": 150.0
     },
     {
      "file": "k-p25-shape.cat-over20/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "lost",
-     "days": 16.77
+     "outcome": "arrived",
+     "days": 64.38
     },
     {
      "file": "k-p25-shape.cat-over20/2020-05-01.json",
@@ -3447,27 +3437,27 @@
     {
      "file": "k-p25-shape.cat-over20/2020-05-15.json",
      "start": "2020-05-15T12:00",
-     "outcome": "lost",
-     "days": 3.8
+     "outcome": "disqualified",
+     "days": 64.51
     },
     {
      "file": "k-p25-shape.cat-over20/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "lost",
-     "days": 106.38
+     "days": 108.19
     },
     {
      "file": "k-p25-shape.cat-over20/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 65.68
+     "days": 65.84
     }
    ]
   },
   {
    "id": "k-p25-shape.cat-over80",
    "boat": "v4 kayak",
-   "label": "25 W cruise, Hull shape: cat (if 80% of rolls leave it upside down, not 50 %)",
+   "label": "Our kayak, Hull shape: cat (if 80% of rolls leave it upside down, not 50 %)",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -3491,23 +3481,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 32,
-    "odds": 0.32,
-    "low95": 0.237,
-    "high95": 0.417,
-    "within_150": 32,
-    "median_days": 83.0,
-    "odds_unknown_10": 0.283,
+    "finished": 36,
+    "odds": 0.36,
+    "low95": 0.273,
+    "high95": 0.458,
+    "within_150": 36,
+    "median_days": 66.5,
+    "odds_unknown_10": 0.322,
     "endings": {
      "capsized and stayed upside down (not self-righting) [open ocean]": 52,
-     "arrived": 32,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 7,
-     "still at sea": 2,
-     "ran aground before the finish": 2,
-     "disqualified: silent too long": 2,
-     "taken or snagged by fishermen [near land]": 1,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 1,
-     "capsized and stayed upside down (not self-righting) [near land]": 1
+     "arrived": 36,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 5,
+     "still at sea": 3,
+     "taken or snagged by fishermen [near land]": 2,
+     "ran aground before the finish": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
    },
    "replays": [
@@ -3521,7 +3509,7 @@
      "file": "k-p25-shape.cat-over80/2020-04-15.json",
      "start": "2020-04-15T12:00",
      "outcome": "lost",
-     "days": 9.36
+     "days": 9.83
     },
     {
      "file": "k-p25-shape.cat-over80/2020-05-01.json",
@@ -3533,19 +3521,19 @@
      "file": "k-p25-shape.cat-over80/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "lost",
-     "days": 3.8
+     "days": 19.85
     },
     {
      "file": "k-p25-shape.cat-over80/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "lost",
-     "days": 35.88
+     "days": 108.19
     },
     {
      "file": "k-p25-shape.cat-over80/2020-06-15.json",
      "start": "2020-06-15T12:00",
      "outcome": "arrived",
-     "days": 65.68
+     "days": 65.84
     }
    ]
   },
@@ -3559,35 +3547,36 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 18,
-    "odds": 0.18,
-    "low95": 0.117,
-    "high95": 0.267,
-    "within_150": 18,
-    "median_days": 127.7,
-    "odds_unknown_10": 0.155,
+    "finished": 21,
+    "odds": 0.21,
+    "low95": 0.142,
+    "high95": 0.3,
+    "within_150": 21,
+    "median_days": 113.6,
+    "odds_unknown_10": 0.182,
     "endings": {
-     "still at sea": 63,
-     "arrived": 18,
+     "still at sea": 52,
+     "arrived": 21,
+     "ran aground before the finish": 10,
      "taken or snagged by fishermen [near land]": 6,
-     "stuck inverted or keel lost [open ocean]": 5,
-     "disqualified: silent too long": 3,
-     "ran aground before the finish": 3,
-     "electronics box dead: silent and uncontrolled [open ocean]": 2
+     "disqualified: silent too long": 5,
+     "stuck inverted or keel lost [open ocean]": 3,
+     "electronics box dead: silent and uncontrolled [open ocean]": 2,
+     "left the weather box": 1
     }
    },
    "replays": [
     {
      "file": "revb-spar/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 13.12
     },
     {
      "file": "revb-spar/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "lost",
-     "days": 78.88
+     "outcome": "aground",
+     "days": 86.12
     },
     {
      "file": "revb-spar/2020-05-01.json",
@@ -3599,13 +3588,13 @@
      "file": "revb-spar/2020-05-15.json",
      "start": "2020-05-15T12:00",
      "outcome": "lost",
-     "days": 138.47
+     "days": 28.14
     },
     {
      "file": "revb-spar/2020-06-01.json",
      "start": "2020-06-01T12:00",
      "outcome": "lost",
-     "days": 104.17
+     "days": 73.58
     },
     {
      "file": "revb-spar/2020-06-15.json",

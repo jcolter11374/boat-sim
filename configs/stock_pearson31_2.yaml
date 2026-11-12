@@ -1,0 +1,192 @@
+# STOCK VESSEL: "Pearson 31-2 (our model of Randolph's boat)". The Randolph team's own
+# boat (the sailboat that carries the drone out), deep-keel version: Bill Shaw design,
+# built by Pearson Yachts 1987-91. Our model from published class specs, not their
+# measurements; with thanks to Randolph and Becky. No logos, no brand styling, not official.
+# Sources:
+#   pearson = Pearson Yachts' spec sheet, https://pearsonyachts.org/models/pearson-31-2.html
+#   gob     = https://goodoldboat.com/saildata/boat/pearson-312/ (sail inventory, PHRF)
+#   guide   = https://sailboat.guide/zjgohs (engine and tanks)
+# Where sources differ we sail on Pearson's own sheet and note the other. No ORC
+# certificate or published polar exists for this boat, so the VPP isn't fitted to one:
+# the sail and resistance coefficients come from our First 31.7 fit (stock_cruiser31.yaml),
+# with the residuary resistance scaled for this heavier, fuller hull. Anything not from a
+# source is marked GUESS.
+name: Pearson 31-2 (our model of Randolph's boat)
+stock:
+  label: Pearson 31-2 (our model of Randolph's boat)
+  based_on: published class specs of the Pearson 31-2, deep keel; Randolph and Becky's boat
+  kind: sailing yacht, single-handed under autopilot
+  credit: Randolph and Becky's own boat (the Randolph team, sheltonr2/drone-boat)
+  sources:
+    - https://pearsonyachts.org/models/pearson-31-2.html
+    - https://goodoldboat.com/saildata/boat/pearson-312/
+    - https://sailboat.guide/zjgohs
+  spec_card:                 # builder's numbers, for the info text (pearson, guide)
+    length_overall_m: 9.39   # 30.8 ft (gob: 30.67 ft)
+    waterline_m: 7.74        # 25.4 ft
+    beam_m: 3.29             # 10.8 ft (gob: 10.5 ft)
+    draft_m: 1.71            # 5.6 ft deep keel (gob: 5.8 ft; wing keel 4.0 ft)
+    displacement_kg: 4536    # 10,000 lb
+    ballast_kg: 1724         # 3,800 lb lead
+    main_m2: 20.5            # 221 sq ft
+    foretriangle_m2: 25.4    # 273 sq ft
+    mast_above_water_m: 14.1 # 46.3 ft
+    engine: 18 hp Yanmar 2GM diesel (guide)
+    fuel_l: 68               # 18 US gal (guide)
+    water_l: 151             # 40 US gal (guide)
+    phrf: 156 to 165 s/mile  # gob / pearson average
+
+# Drifting with the sails down and no engine, and the hazards' size (vessel/hull.py).
+hull:
+  model: Pearson 31-2, elliptical fin keel and spade rudder (stock vessel)
+  length_m: 9.39             # pearson
+  beam_m: 3.29               # pearson
+  mass_kg: 4536              # pearson (light ship, as published)
+  waterline_length_m: 7.74   # pearson
+  wetted_area_m2: 24.8       # GUESS (as vpp)
+  form_factor: 1.1           # GUESS
+  wave_making_frac: 0.10     # GUESS: only used drifting slowly
+  air_side_area_m2: 13.0     # GUESS: topsides 9.4 x 1.0 m, dodger, mast and rigging
+  air_front_area_m2: 4.3     # GUESS
+  air_cd_side: 0.9           # GUESS
+  air_cd_front: 0.7          # GUESS
+  lateral_cd_area_m2: 11.5   # GUESS: hull, keel and rudder broadside
+  keel_lift_slope_area_m2: 10.0  # GUESS (as vpp)
+  fouling_onset_days: 30     # GUESS: antifouling paint holds about a month offshore
+  fouling_frac_per_day: 0.002  # GUESS
+  drift_heading_offset_deg: 60 # GUESS: a keelboat lying a-hull sits about 60 deg off the wind
+  stokes_drift: true
+
+# Steering limits (vessel/sail.py): the sails themselves come from the polar.
+sail:
+  area_m2: 53.5              # main 20.5 + 135 % genoa 33.0 (display only here)
+  max_alpha_deg: 20
+  storm_wind_ms: 25          # GUESS: above about 50 kn, sails down and run off (bare poles)
+  storm_run_twa_deg: 150     # GUESS
+  min_upwind_twa_deg: 47     # GUESS: a masthead cruiser with a genoa points a little wider
+  min_downwind_twa_deg: 170  # GUESS: no dead run (risk of an accidental gybe)
+  tack_hysteresis_deg: 20
+  unsteered_twa_deg: 60      # GUESS: rudder gone, it rounds up and lies about 60 deg off the wind
+
+power:
+  # As the 31 ft cruiser (stock_cruiser31.yaml): we don't know Randolph's real fit.
+  # GUESS: two 200 W panels on a stern arch, a common offshore fit. 200 W ran the
+  # batteries flat in 12 days against the 960 Wh/day load (Ravi, docs/qa/stock-cruiser31-
+  # fairness.md); 400 W holds them full in typical spring sun. Cloudy spells still drain
+  # them, so the engine's alternator tops them up (propulsion block, vessel/keelboat.py).
+  solar_wp: 400
+  panels_w: {panel_port: 200, panel_stbd: 200}
+  soiling_salt: 0.93         # GUESS
+  mounting_mismatch: 0.75    # GUESS: boom and sails shade the panels
+  mppt_eff: 0.96             # GUESS
+  wiring_eff: 0.97           # GUESS
+  temp_coeff_per_c: -0.0037  # GUESS
+  noct_c: 50                 # GUESS
+  charge_eff: 0.95           # GUESS: lead-acid house bank
+  discharge_eff: 0.95        # GUESS
+  min_charge_temp_c: -10     # lead-acid
+  battery_wh: 2400           # GUESS: 2 x 100 Ah 12 V house bank
+  restart_soc: 0.3
+
+propulsion:
+  thruster_count: 0          # no electric drive: the engine is a diesel (vessel/keelboat.py)
+  cruise_drive_w: 0.7        # the autopilot's thrust fraction (0.7 / 1) = engine at 70 % in calms
+  max_drive_w: 1
+  engine_cruise_kn: 5.5      # GUESS: an 18 hp diesel pushing 4.5 t, below the 6.75 kn hull speed
+  engine_l_per_h: 1.8        # GUESS: a 2GM at cruising revs
+  engine_resist_n: 730       # vpp._resistance at 5.5 kn (this yaml's vpp block), for the sea penalty under power
+  engine_below_wind_kn: 5    # GUESS: motors only in calms
+  fuel_l: 68                 # guide: 18 US gal
+  alternator_w: 250          # GUESS: a 40 A alternator gives about 20 A at idle, 13 V (Ravi, #255)
+  charge_below_soc: 0.35     # GUESS: the autopilot starts the engine out of gear below this
+  charge_until_soc: 0.8      # GUESS: and idles it until the bank is back up to this
+  fuel_reserve_l: 5          # GUESS: never burns the last 5 L charging
+
+electronics:
+  autopilot: below-deck autopilot with a rudder ram, plus instruments
+  hotel_load_wh_per_day: 960 # GUESS: autopilot about 30 W averaged, instruments, fridge off
+  nav_light_w: 2.0           # GUESS: LED masthead tricolour
+  nav_light_hours_per_day: 10
+
+comms:
+  two_way: Iridium
+  one_way: standalone satellite tracker with its own battery (GUESS fit)
+  ais: Class B
+
+voyage:
+  drop_lat: 36.65
+  drop_lon: -74.94
+  finish_lat: 39.5
+  finish_lon: -13.5
+
+hazards:
+  enabled: true
+  hull_length_m: 9.39
+  hull_beam_m: 3.29
+  critical_wave_frac_of_length: 0.55  # Wolfson / Fastnet: breaker 55 % of length rolls a yacht
+  damage_ref_hs_m: 3.0
+  p_part:                    # GUESS: per knockdown at Hs 3 m
+    panel_port: 4.0e-5
+    panel_stbd: 4.0e-5
+    rudder: 1.5e-5
+    sail: 2.0e-4             # torn sail or broken rig: sails no more (design note GUESS 7)
+  rate_set: planning
+  failures_enabled: true
+  # A stock yacht has ONE autopilot and one set of instruments, not the kayak's two
+  # sealed boxes: when it dies the boat drifts, tracked by its standalone tracker.
+  electronics_boxes: 1
+  electronics_per_day: 0.0025  # GUESS: about one autopilot failure per 400 days at sea
+  # GUESS: within 150 km of land an empty yacht gets reported and towed in at least as
+  # often as the kayak, so it keeps the kayak's 1 % a day (Ravi, docs/qa/stock-cruiser31-fairness.md).
+  capture_per_day: 0.01
+  leak_per_day: 0.0025       # GUESS: as the kayak; see vpp.p_sink_given_leak
+  # GUESS: a ship that hits a 4.5 t yacht usually holes or dismasts it, as it does the
+  # kayak. A hit it survives leaves a leak (p_leak_given_strike), which can then sink it
+  # (vpp.p_sink_given_leak), so about 86 % of strikes end the voyage.
+  p_lost_given_strike: 0.8
+  p_leak_given_strike: 1.0
+
+vpp:
+  polar_file: polars/pearson31_2.json   # written by python -m boatsim.vessel.vpp
+  disp_kg: 4536              # pearson: 10,000 lb
+  lwl_m: 7.74                # pearson: 25.4 ft
+  wetted_m2: 24.8            # GUESS: hull 21.3 (the cruiser's 21 x sqrt(volume x LWL)) + keel 2.5 + rudder 1.0
+  main_m2: 20.51             # pearson: P 36.8 x E 12.0 ft / 2 = 220.8 sq ft (sheet: 221)
+  jib_m2: 33.03              # GUESS: a 135 % genoa, gob's 355.6 sq ft (gob lists 341-407 sq ft genoas)
+  rig_height_m: 14.11        # pearson: mast 46.3 ft above the waterline
+  ce_height_m: 6.0           # GUESS: about 0.39 x I (12.95 m) above the deck plus 0.95 m freeboard
+  clr_depth_m: 0.77          # GUESS: about 0.45 x draft
+  keel_te_m: 1.4             # GUESS: effective draft (keel 1.71 m, less tip losses)
+  keel_slope_area_m2: 10.0   # GUESS: keel 2.5 + rudder 1.0 m^2 at about 3 per radian, less than the cruiser's deeper fin
+  form_factor: 1.1           # GUESS
+  rr_exp: 7.0                # GUESS: wave-making rises about as Froude^7 near hull speed
+  heel_drag_k: 0.5           # GUESS
+  cd_max: 1.3                # GUESS: stalled sail square to the wind
+  alpha_stall_deg: 20        # GUESS
+  sheet_min_deg: 13          # GUESS: a genoa sheeted to the rail, a little wider than the cruiser's
+  windage_cda_m2: 2.3        # GUESS: hull, mast, rigging and a cruising dodger
+  heel_max_deg: 35           # GUESS: past this a fin-keel boat rounds up
+  # No published polar to fit, so the cruiser's fitted coefficients unchanged (GUESS:
+  # same kind of sloop rig and fin keel). Check against PHRF, from one source (gob):
+  # this boat 156-165 s/mile, the First 31.7 132-144, so about 22 s/mile or 3.5 %
+  # slower with a race crew. Our VPP makes it 7 % slower (shorter waterline, 17 %
+  # heavier): on the slow side, so we don't add the extra wave drag its fuller hull
+  # might suggest. If Randolph has log speeds, fit to those instead.
+  cl_max: 1.3627
+  cd0: 0.015
+  rr_at_fn04: 0.0395
+  waves_k: 0.0038            # GUESS: the cruiser's fitted value (per unit weight)
+  autopilot_factor: 0.93     # GUESS: autopilot steering and set-and-forget trim vs a race crew
+  reef_heel_deg: 25          # GUESS: the boat reefs to stay under this heel
+  p_sink_given_leak: 0.3     # GUESS: a leak the electric bilge pump can't keep up with
+  gz:                        # GZ (righting lever, m). GUESS: no published curve. GM about 1.0 m
+    # (the cruiser's 1.15 m scaled by waterplane L x B^3 / volume, with a similar ballast
+    # moment: 38 % ballast ratio, lead lower in a fin with no bulb); the cruiser's curve
+    # shape, vanishing a little earlier for the wider, heavier hull (gob CSF 2.0).
+    deg: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
+    m: [0, 0.165, 0.31, 0.43, 0.51, 0.55, 0.55, 0.51, 0.43, 0.33, 0.21, 0.09, -0.03, -0.15]
+  plans:                     # GUESS: reef and furling sizes, as the cruiser
+    - {name: full, main: 1.0, jib: 1.0}
+    - {name: reef1, main: 0.82, jib: 0.70}
+    - {name: reef2, main: 0.64, jib: 0.45}
+    - {name: storm, main: 0.45, jib: 0.18}

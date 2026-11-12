@@ -18,3 +18,8 @@
    or a budget without an itemised plan of what it buys and why it's the cheapest
    way to get it. Never go looking for reasons to spend. Running costs (airtime,
    subscriptions, cloud) are simulator *outputs* to minimise, not allowances to fill.
+10. **Don't merge main into your PR branch just to keep it fresh.** Every push to a
+   PR starts the whole gate (about an hour of runner time), and GitHub gives us 20
+   runners at once, so a round of "merge origin/main" pushes queues everyone. Merge
+   main only when there is a conflict, or when the merge desk (Maya) asks for it
+   just before merging.

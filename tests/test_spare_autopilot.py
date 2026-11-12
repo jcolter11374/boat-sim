@@ -18,7 +18,7 @@ SPARE_BASES = ("stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_s
 
 @pytest.mark.parametrize("base", SPARE_BASES)
 def test_the_spare_is_a_choice_not_a_default(base):
-    assert C.defaults_for(base) == {"spare": "none"}
+    assert C.defaults_for(base)["spare"] == "none"
     assert C.design_changes({"base": base}) == ()  # as it comes: the yaml untouched
     plain = load_design(C.BASES[base])
     d = C.design_for({"base": base, "spare": "spare-autopilot"})
@@ -49,7 +49,8 @@ def test_boats_without_an_autopilot_box_have_no_spare_slot():
 def test_the_page_table_matches_the_catalog():
     t = C.stock_table()
     assert set(t) == set(SPARE_BASES)
-    opts = {o["id"]: o for o in t["stock_cruiser31"]["slots"][0]["opts"]}
+    spare = next(s for s in t["stock_cruiser31"]["slots"] if s["id"] == "spare")
+    opts = {o["id"]: o for o in spare["opts"]}
     assert opts["spare-autopilot"]["cost"] == 83
     assert opts["spare-autopilot"]["sim"] == [
         "hazards.electronics_boxes", "electronics.hotel_load_wh_per_day", "hull.mass_kg",

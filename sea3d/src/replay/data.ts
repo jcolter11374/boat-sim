@@ -262,7 +262,7 @@ export function describeEvent(e: ReplayEvent, boat = ""): string {
       return partText(e, boat);
     case "capsize": {
       const m = /(\d+) knockdown\(s\), Hs ([\d.]+) m/.exec(e.detail);
-      if (m) return `Knocked flat by a breaking wave${m[1] !== "1" ? ` (${m[1]} times)` : ""}, waves ${m[2]} m`;
+      if (m) return `Knocked flat by a breaking wave${m[1] !== "1" ? ` (${m[1]} times)` : ""}, waves ${m[2]}\u00a0m`; // no-break space: "m" never wraps alone (audit A1)
       return "Knocked flat by a breaking wave" + d;
     }
     case "safe_mode":
