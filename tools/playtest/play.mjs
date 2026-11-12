@@ -136,6 +136,15 @@ async function lookShot(page, path) {
   console.log(`LOOK-END ${path}`);
 }
 
+// Practice: pick a good breeze and the triangle with DOM clicks (Playwright clicks wait out the busy page).
+async function practiceTriangle(page) {
+  await page.waitForFunction(() => !document.getElementById("practice-courses")?.hidden, null, { timeout: MIN }).catch(() => {});
+  await page.evaluate(() => document.querySelector('#practice-breeze button[data-b="good"]')?.click());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.querySelector('#practice-courses button[data-course="triangle"]')?.click());
+  await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => { throw new CheckFail("the triangle didn't put me at the wheel"); });
+}
+
 const CHECKS = {
   // The four pages load and draw in this browser.
   index: {
@@ -830,6 +839,78 @@ const CHECKS = {
   },
   "nolink-404": { manual: true, path: "helm.html?quality=low", run: async (page) => { process.env.NOLINK = "1"; await page.setViewportSize({ width: 1280, height: 720 }); return CHECKS["look-maya"].run(page); } },
   // Maya's M0 list (12 Nov 18:00): #406 results card, #422 voyage strip/end card, #415 ships, #408 sails and hulls.
+  // Nina's john-decisions check (12 Nov), folded in here so there is one.
+  // John's locked decisions (/mnt/project-files/simulator/john-decisions.md), the ones a page
+  // can show: run in every post-deploy pass (Maya, 12 Nov). Item numbers are the list's.
+  "john-decisions": {
+    path: "voyage.html?quality=low",
+    run: async (page) => {
+      const out = [];
+      const noMoney = async (where) => {
+        const t = await page.evaluate(() => document.body.innerText);
+        const m = t.match(/[^\n]{0,30}\$\s?\d[^\n]{0,20}/);
+        must(!m, `B7 no money: "${m?.[0]}" on ${where}`);
+      };
+      // Watch a voyage.
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
+      await page.waitForTimeout(3000);
+      const v = await page.evaluate(() => {
+        const r = window.__replay;
+        const vis = (e) => e && e.offsetParent !== null;
+        const rt = [...document.querySelectorAll("button")].find((b) => /^real time$/i.test(b.textContent.trim()) && vis(b));
+        const text = document.body.innerText;
+        return { playing: r.playing, warp: r.warp, rt: !!rt, lookup: /Look up at the sky/.test(text), bow: /▲\s*bow/.test(text), sky: /☀\s*sun|☾\s*moon|North Star/.test(text), local: /local \(UTC[−+-]?\d/.test(text), simulated: /\bsimulated\b/i.test([...document.querySelectorAll("body *")].filter((e) => vis(e) && !e.children.length).map((e) => e.textContent).join("\n")) };
+      });
+      must(v.playing && Math.abs(v.warp * 3600 - 1) < 0.01, `T2: Watch a voyage should open playing in real time; playing ${v.playing}, ${(v.warp * 3600).toFixed(3)} s of voyage per second`);
+      must(v.rt, "T1: no visible \"Real time\" speed button on Watch a voyage");
+      must(v.bow && v.sky && v.lookup, `L4: the sky compass (bow ${v.bow}, sun/moon/North Star ${v.sky}) or "Look up at the sky" (${v.lookup}) is missing`);
+      must(v.local, "S1: no local time and zone (\"local (UTC…)\") on Watch a voyage");
+      must(!v.simulated, 'S2: a "simulated" label shows on Watch a voyage');
+      await noMoney("Watch a voyage");
+      out.push("voyage: opens playing at real time (T2), Real time button (T1), sky compass + Look up (L4), local time (S1), no simulated banner (S2), no $ (B7)");
+      // The title: Bluewater (S4).
+      await page.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForTimeout(3000);
+      must(/bluewater/i.test(await page.evaluate(() => document.title + " " + document.body.innerText)), "S4: the title page doesn't say Bluewater");
+      await noMoney("the title");
+      // The helm: speed isn't a first choice (T3); Real time is in the bar (T1); the crossing's fast start (T4).
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      const pre = await page.evaluate(() => {
+        const vis = (e) => e && e.offsetParent !== null && getComputedStyle(e).visibility !== "hidden";
+        const card = document.getElementById("go")?.closest("section, div, form") ?? document.body;
+        return { rates: [...document.querySelectorAll("#timebar .rate")].filter(vis).length, speedAsk: /how fast|time speed|speed up time/i.test(card.innerText) };
+      });
+      must(!pre.rates && !pre.speedAsk, `T3: time speed is offered before Set sail (${pre.rates} speed buttons showing${pre.speedAsk ? ", the start card asks about speed" : ""})`);
+      await noMoney("the helm start");
+      await page.click("#go", { timeout: 30_000 });
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+      const bar = await page.evaluate(() => {
+        const r = [...document.querySelectorAll("#timebar .rate")];
+        return { first: r[0]?.dataset.rate, rtShown: r.some((b) => b.dataset.rate === "rt" && b.offsetParent !== null), pressed: r.find((b) => b.getAttribute("aria-pressed") === "true")?.dataset.rate ?? null, clock: window.__helm.clock };
+      });
+      must(bar.rtShown && bar.first === "rt", `T1/T4: Real time should be first and showing in the helm's speed bar (first ${bar.first}, showing ${bar.rtShown})`);
+      must(bar.pressed === "1" || bar.clock === 1, `T4: the crossing should start at an hour a second (pressed ${bar.pressed}, clock ${bar.clock})`);
+      out.push(`title says Bluewater (S4); helm: no speed choice before Set sail (T3), Real time first in the bar (T1), crossing starts at 1 h/s (T4)`);
+      // Practice opens in real time (T4).
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await practiceTriangle(page);
+      const px = await page.evaluate(() => document.querySelector('button[data-x][aria-pressed="true"]')?.dataset.x ?? null);
+      must(px === "1", `T4: Practice should open in real time (1×); pressed: ${px}`);
+      out.push("practice opens at 1× (T4)");
+      // Boatyard: Randolph's boats labelled as our model (B2); no money (B7).
+      await page.goto(SITE + "boatyard.html", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForTimeout(5000);
+      const by = await page.evaluate(() => [...document.querySelectorAll("button")].filter((b) => /Randolph/.test(b.textContent)).map((b) => b.textContent.trim()));
+      must(by.length && by.every((t) => /our model/i.test(t)), `B2: Randolph's boats should say "our model": ${JSON.stringify(by)}`);
+      await noMoney("the Boatyard");
+      out.push("Boatyard: Randolph boats say our model (B2); no $ on title, helm, voyage or Boatyard (B7)");
+      return out.join("; ");
+    },
+  },
   "m0-maya": {
     manual: true,
     path: "helm.html?spot=50.0,-2.0",
