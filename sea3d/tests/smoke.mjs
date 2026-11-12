@@ -377,12 +377,18 @@ try {
     if (mb.stored?.hash !== y1.share || mb.stored?.name !== "Test <b>boat</b>" || mb.stored?.choices?.thr !== "one-t200" || mb.btn !== "Saved")
       fail(`boatyard: saving my boat: ${JSON.stringify(mb)}`);
     await page.goto(`${URL}boatyard.html?quality=low&mine=1`);
-    await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
+    // Ready, and the Blender boats in: their rebuild and first draw is one long frame on the
+    // runner's software graphics, and the hash step below waited behind it (deploy 43174294873).
+    await page.waitForFunction(() => window.__yard?.ready && window.__yard.models !== "loading" && window.__yard.frames > 2, null, { timeout: 60000 });
     const mb2 = await page.evaluate(() => ({ line: document.getElementById("mb-line").textContent, href: document.querySelector("#mb-line a")?.getAttribute("href"), tags: document.querySelectorAll("#mb-line b").length }));
     if (!mb2.line.includes("Test <b>boat</b>") || mb2.href !== `boatyard.html${y1.share}` || mb2.tags) fail(`boatyard: my boat line: ${JSON.stringify(mb2)}`);
     // On the live site the link only changes the hash (no query), and the page opens the design in place.
+    const tHash = Date.now();
     await page.evaluate((h) => (location.hash = h), y1.share);
-    await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 10000 }).catch(() => fail("boatyard: the my-boat link didn't reopen it"));
+    await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 30000 }).catch(async () =>
+      fail(`boatyard: the my-boat link didn't reopen it: ${JSON.stringify(await page.evaluate(() => ({ thr: window.__yard.design.picks.thr, btn: document.getElementById("mb-save").textContent, models: window.__yard.models, frames: window.__yard.frames })))}`),
+    );
+    log.push(`boatyard my-boat link reopened in ${Date.now() - tHash} ms (${await page.evaluate(() => window.__yard.models)} models)`);
     await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
     // Every choice looks different on the boat (spares stay ashore; one-option slots have nothing to swap).
     const looks = await page.evaluate(() => {
