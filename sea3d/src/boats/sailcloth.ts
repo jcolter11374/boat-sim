@@ -14,6 +14,7 @@
 // Cosmetic only. Numbers are GUESS, set by eye against photos of sails.
 
 import * as THREE from "three";
+import type { Quality } from "./parts";
 
 /** Where the sun is (unit, scene), its colour, and how much it's shining (0 at night or under thick cloud). */
 export const SAIL_SUN = {
@@ -48,10 +49,11 @@ interface SailUniforms {
  * Give it the sail's size so seams land a panel apart; without UVs on the mesh
  * the seams and the luff ripple simply don't show.
  */
-export function clothe<M extends THREE.MeshStandardMaterial>(m: M, size = new THREE.Vector2(4, 10)): THREE.MeshPhysicalMaterial | M {
+export function clothe<M extends THREE.MeshStandardMaterial>(m: M, size = new THREE.Vector2(4, 10), lite = false): THREE.MeshPhysicalMaterial | M {
   if (m.userData.sailcloth) return m;
   let p: THREE.MeshStandardMaterial = m;
-  if (!(m instanceof THREE.MeshPhysicalMaterial)) {
+  // Low quality keeps the cheaper Standard material (no cloth sheen); the seams, glow and luff still show.
+  if (!lite && !(m instanceof THREE.MeshPhysicalMaterial)) {
     const q = new THREE.MeshPhysicalMaterial();
     q.name = m.name;
     q.color.copy(m.color);
@@ -59,14 +61,16 @@ export function clothe<M extends THREE.MeshStandardMaterial>(m: M, size = new TH
     q.roughness = m.roughness;
     p = q;
   }
-  const pm = p as THREE.MeshPhysicalMaterial;
+  const pm = p;
   pm.userData.sailcloth = true;
   pm.roughness = Math.max(pm.roughness, 0.8);
   pm.metalness = 0;
-  pm.clearcoat = 0;
-  pm.sheen = 0.6;
-  pm.sheenRoughness = 0.85;
-  pm.sheenColor.set(0xfff6ea);
+  if (pm instanceof THREE.MeshPhysicalMaterial) {
+    pm.clearcoat = 0;
+    pm.sheen = 0.6;
+    pm.sheenRoughness = 0.85;
+    pm.sheenColor.set(0xfff6ea);
+  }
   pm.side = THREE.DoubleSide;
   const u: SailUniforms = { uLuff: { value: 0 }, uSize: { value: size.clone() } };
   pm.userData.sail = u;
@@ -209,7 +213,7 @@ function sizeOf(mesh: THREE.Mesh): THREE.Vector2 {
  * Clothe every sail in a model. Each sail gets its own material (its own luff
  * and size), so call this on each boat's copy, not on a shared template.
  */
-export function clotheSails(root: THREE.Object3D): void {
+export function clotheSails(root: THREE.Object3D, quality: Quality = "high"): void {
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -218,7 +222,7 @@ export function clotheSails(root: THREE.Object3D): void {
       if (mat.userData.sailcloth && mat.userData.owner === mesh.uuid) return mat;
       const fresh = mat.clone();
       fresh.userData = { ...mat.userData, sailcloth: false, sail: undefined };
-      const c = clothe(fresh, sizeOf(mesh));
+      const c = clothe(fresh, sizeOf(mesh), quality === "low");
       c.userData.owner = mesh.uuid;
       return c;
     };

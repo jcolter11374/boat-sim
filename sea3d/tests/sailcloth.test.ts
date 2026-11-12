@@ -48,3 +48,19 @@ test("each sail on a boat gets its own cloth, and the luff flutter reaches it", 
   setSailLuff(new THREE.Group(), 1); // nothing to flutter: no error
   assert.ok(Math.abs(mm.userData.sail.uSize.value.y - 9) < 1e-6, "seams spaced from the sail's own height");
 });
+
+test("Low quality keeps sails on the cheaper Standard material (no cloth sheen)", () => {
+  const mk = () => {
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial({ name: "sail" }));
+    const g = new THREE.Group();
+    g.add(sail);
+    return { g, sail };
+  };
+  const lo = mk();
+  clotheSails(lo.g, "low");
+  assert.ok(!(lo.sail.material instanceof THREE.MeshPhysicalMaterial));
+  assert.equal((lo.sail.material as THREE.MeshStandardMaterial).userData.sailcloth, true);
+  const hi = mk();
+  clotheSails(hi.g, "high");
+  assert.ok(hi.sail.material instanceof THREE.MeshPhysicalMaterial);
+});

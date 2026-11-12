@@ -478,7 +478,7 @@ export function buildStock(key: StockKey, quality: Quality) {
   if (model) g.add(model.clone(true));
   else DRAW[key](kit, g);
   // Sailcloth, one material per sail on this copy (each has its own luff flutter).
-  clotheSails(g);
+  clotheSails(g, quality);
   const sailMats: THREE.Material[] = [];
   g.traverse((o) => {
     const mat = (o as THREE.Mesh).material as THREE.Material | undefined;
