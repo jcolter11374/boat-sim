@@ -56,6 +56,9 @@ interface Dry {
   color: THREE.Color;
   coat?: number;
   coatRough?: number;
+  /** The dry clear coat's own normal map (a hull's fairing), put back when it dries. */
+  coatNormal?: THREE.Texture | null;
+  coatNormalScale?: number;
 }
 
 export class Wetness {
@@ -67,13 +70,13 @@ export class Wetness {
     root.traverse((o) => {
       const ms = o instanceof THREE.Mesh ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
       for (const m of ms) {
-        if (seen.has(m) || !(m instanceof THREE.MeshStandardMaterial) || m.emissiveIntensity > 0.5 || m.transparent) continue;
+        if (seen.has(m) || !(m instanceof THREE.MeshStandardMaterial) || (m.emissiveIntensity > 0.5 && m.emissive.getHex() !== 0) || m.transparent) continue;
         seen.add(m);
         // The dry look is kept on the material, since a detailed model's materials are shared by every copy.
         m.userData.dry ??= {
           rough: m.roughness,
           color: m.color.clone(),
-          ...(m instanceof THREE.MeshPhysicalMaterial ? { coat: m.clearcoat, coatRough: m.clearcoatRoughness } : {}),
+          ...(m instanceof THREE.MeshPhysicalMaterial ? { coat: m.clearcoat, coatRough: m.clearcoatRoughness, coatNormal: m.clearcoatNormalMap, coatNormalScale: m.clearcoatNormalScale.x } : {}),
         };
         this.mats.push({ m, ...(m.userData.dry as Omit<Dry, "m">) });
       }
@@ -87,17 +90,18 @@ export class Wetness {
     const beads = w > 0.15;
     for (const d of this.mats) {
       // Water fills the surface's roughness and darkens it a little (light goes into the film).
-      d.m.roughness = THREE.MathUtils.lerp(d.rough, Math.min(d.rough, 0.12), w);
+      // Wet cloth darkens but stays matt (water soaks into the weave).
+      if (!d.m.userData.sailcloth) d.m.roughness = THREE.MathUtils.lerp(d.rough, Math.min(d.rough, 0.12), w);
       d.m.color.copy(d.color).multiplyScalar(1 - 0.18 * w * Math.min(1, d.rough * 2));
       if (d.coat !== undefined && d.m instanceof THREE.MeshPhysicalMaterial) {
         d.m.clearcoat = THREE.MathUtils.lerp(d.coat, 1, w);
         d.m.clearcoatRoughness = THREE.MathUtils.lerp(d.coatRough ?? 0.1, 0.04, w);
-        const want = beads ? dropTexture() : null;
+        const want = beads ? dropTexture() : (d.coatNormal ?? null);
         if (d.m.clearcoatNormalMap !== want) {
           d.m.clearcoatNormalMap = want;
           d.m.needsUpdate = true;
         }
-        d.m.clearcoatNormalScale.setScalar(0.9 * w);
+        d.m.clearcoatNormalScale.setScalar(beads ? 0.9 * w : (d.coatNormalScale ?? 1));
       }
     }
     this.level = w;
