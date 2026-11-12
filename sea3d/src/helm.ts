@@ -2491,7 +2491,7 @@ const MINE = "mine";
 const startMine = shared ? null : loadMyBoat();
 const isPlannedKayak = (b: MyBoat) => b.kind === "yard" && b.base === "kayak" && b.hash === "";
 const rowFor = (b: MyBoat) => (isPlannedKayak(b) ? "" : b.kind === "stock" ? b.base : MINE);
-const boatRow = (v: string) => document.querySelector<HTMLInputElement>(`input[name="boat"][value="${v}"]`);
+const boatRow = (v: string) => document.querySelector<HTMLInputElement>(`input[name="boat"][value="${CSS.escape(v)}"]`);
 if (startMine) {
   // A stock boat this page doesn't list gets its own row too.
   const v = boatRow(rowFor(startMine)) ? rowFor(startMine) : MINE;
