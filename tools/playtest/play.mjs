@@ -128,6 +128,23 @@ async function cinematic(page, framesOf) {
   return `cinematic ran ${f1 - f0} frames in 8 s and a key press left it`;
 }
 
+/** Practice: start "The triangle" and wait until you have the wheel. The course buttons can
+ * resolve before they take clicks (still loading or sliding in; look-heel 12 Nov), so wait for
+ * the page to be idle and the button to be visible and enabled, retry, then click in-page. */
+async function practiceTriangle(page) {
+  const sel = '#practice-courses button[data-course="triangle"]';
+  await page.waitForFunction(() => !window.__helm?.busy, null, { timeout: 3 * MIN }).catch(() => {});
+  for (let i = 0; i < 3 && !(await page.evaluate(() => !!window.__wheel?.on)); i++) {
+    await page.waitForFunction((s) => { const b = document.querySelector(s); return b && !b.disabled && b.offsetParent !== null; }, sel, { timeout: MIN }).catch(() => {});
+    await page.click(sel, { timeout: 15_000 }).catch(() => page.evaluate((s) => document.querySelector(s)?.click(), sel));
+    await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 30_000 }).catch(() => {});
+  }
+  const on = await page.evaluate(() => !!window.__wheel?.on);
+  if (!on) {
+    const why = await page.evaluate((s) => { const b = document.querySelector(s); if (!b) return "no button"; const r = b.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return `button ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)} disabled=${b.disabled}; on top: ${top ? top.tagName + "#" + top.id + "." + top.className : "nothing"}`; }, sel);
+    throw new CheckFail(`"The triangle" didn't put me at the wheel (${why})`);
+  }
+}
 /** #385: count the page's AudioContexts (an init script, so it sees the very first one). */
 const soundSpy = () => {
   window.__ac = [];
@@ -888,8 +905,7 @@ const CHECKS = {
       };
       const wind = () => page.evaluate(() => (document.body.innerText.match(/\d+° off the bow on the (port|starboard)[^\n]*/) || [""])[0]);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
-      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 30_000 });
-      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN });
+      await practiceTriangle(page);
       await page.click(".w-gskip", { timeout: 3000 }).catch(() => {});
       await page.waitForTimeout(6000);
       const a = await wind();
@@ -1104,8 +1120,7 @@ const CHECKS = {
       };
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
       if (!(await page.evaluate(() => !!window.__buoys))) throw new SkipCheck("this build has no floating marks (#384 not deployed)");
-      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 30_000 });
-      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN });
+      await practiceTriangle(page);
       await page.click(".w-gskip", { timeout: 3000 }).catch(() => {});
       await page.waitForTimeout(5000);
       // Sample the marks for 12 s: height above the water's mean, tilt, and whether each is shown.
