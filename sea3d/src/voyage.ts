@@ -64,7 +64,7 @@ import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
-import { OceanSound } from "./sound";
+import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { loadMyBoat } from "./myboat";
 
@@ -881,6 +881,12 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setPlaying(!playing);
   }
+  // N: sound on or off, as on every 3D page (one key, one meaning).
+  const t = e.target as HTMLElement | null;
+  if (e.code === "KeyN" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
+    e.preventDefault();
+    sound.toggle();
+  }
 });
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -1069,6 +1075,7 @@ const cine = new Cinema({
   cloud: () => clouds.cover,
   landmark: () => (island ? PLACE!.look : null),
   toggleSound: () => sound.toggle(),
+  fade: (sec) => sound.duck(sec),
   scale: () => viewScale,
 });
 const sound = new OceanSound();
@@ -1273,12 +1280,15 @@ renderer.setAnimationLoop(() => {
       if (fresh) liveHud(tracked);
     }
     status.hour = hour;
+    sound.rig = rigFor(boatKey);
+    if (contact?.splash) sound.splash(contact.splash);
     sound.update(dt, {
       wind: Math.hypot(wu, wv),
       hs,
       tp: valueAt(rep, rep.tp, hour) ?? 3 + 2.5 * Math.sqrt(hs),
       rain: rain.amount,
       near: camera.position.distanceTo(controls.target),
+      stw,
     });
   }
   if (!cine.update(dt)) controls.update();
