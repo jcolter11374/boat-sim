@@ -1,4 +1,5 @@
-import { launchSetWords, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
+import { bestHeadline, groupSummary, launchSetWords, tierName, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
+import { type BuildName, loadNames, nameOf } from "./names";
 import { standing, standingText } from "./results";
 // Design leaderboard page: draws the board JSON the "Design leaderboard"
 // workflow publishes (boatsim.mc.leaderboard). All statistics are worked out in
@@ -19,6 +20,7 @@ interface Row {
   tier: number;
   design: string;
   label: string;
+  note?: string;
   class: string;
   finish_rate: number;
   ci95: Interval;
@@ -77,10 +79,57 @@ function chip(text: string): HTMLElement {
   return el("span", `chip ${kind}`.trim(), text);
 }
 
+/** A group's one row: its tier, "Our kayak and 4 builds just as good ▸", the finish range. */
+function groupRow(tier: number, groups: number, members: Row[], reference: string | null, open: boolean): HTMLElement {
+  const tr = el("tr", "group tierstart");
+  tr.dataset.tier = String(tier);
+  tr.append(el("td", "tier", tierName(tier, groups)));
+  const lead = members.find((m) => m.design === reference) ?? members[0];
+  const btn = el("button", "grouptoggle");
+  btn.type = "button";
+  const names = [lead, ...members.filter((m) => m !== lead)].map((m) => m.label);
+  const words = el("span", undefined, groupSummary(names, tier === 1));
+  // Randolph's boats are tagged wherever their names show (Maya), folded rows too: only the
+  // names the row actually says (groupSummary names one for Best or 4+, else all of them),
+  // so "Our kayak and 4 builds just as good" isn't tagged for a Randolph build folded inside it.
+  const ordered = [lead, ...members.filter((m) => m !== lead)];
+  const named = tier === 1 || ordered.length > 3 ? ordered.slice(0, 1) : ordered;
+  if (named.some((m) => m.badges.some(isModelBadge))) words.append(" ", el("span", "modeltag", "our model"));
+  const arrow = el("span", "arrow");
+  btn.append(words, " ", arrow);
+  const set = (on: boolean) => {
+    btn.setAttribute("aria-expanded", String(on));
+    arrow.textContent = on ? "▾" : "▸";
+    for (const row of Array.from(document.querySelectorAll<HTMLElement>(`#rows tr.member[data-tier="${tier}"]`))) row.hidden = !on;
+  };
+  btn.addEventListener("click", () => set(btn.getAttribute("aria-expanded") !== "true"));
+  btn.setAttribute("aria-expanded", String(open));
+  arrow.textContent = open ? "▾" : "▸";
+  const td = el("td");
+  td.append(btn);
+  const rates = members.map((m) => m.finish_rate);
+  const lo = Math.round(Math.min(...rates) * 100);
+  const hi = Math.round(Math.max(...rates) * 100);
+  tr.append(td, el("td", "muted", lo === hi ? `${lo}%` : `${lo} to ${hi}%`), el("td"), el("td", "stat"));
+  return tr;
+}
+
+/** A small "i": the model and evidence notes behind a name (Leo: never in the name itself). */
+function info(text: string): HTMLElement {
+  const i = el("span", "info", "i");
+  i.title = text;
+  i.tabIndex = 0;
+  i.setAttribute("role", "note");
+  i.setAttribute("aria-label", text);
+  return i;
+}
+
+const isModelBadge = (t: string) => /^our model of /.test(t);
+
 function verdictCell(r: Row, s: Summary): HTMLElement {
   const td = el("td", "verdict");
   if (r.design === s.reference) {
-    td.append(el("span", "muted", "This is our kayak: the others are compared with it"));
+    td.append(el("span", "muted", "The one we compare with"));
     return td;
   }
   const v = r.vs_reference;
@@ -90,7 +139,9 @@ function verdictCell(r: Row, s: Summary): HTMLElement {
   }
   // Plain words first (#318); the numbers behind them show with "Show the statistics".
   const w = versusWords(v);
-  td.append(el("div", w.tone, w.head), el("div", "muted stat-line", w.detail));
+  const head = el("div", w.tone, w.short);
+  head.append(" ", info(`${w.head}. ${w.detail}`));
+  td.append(head, el("div", "muted stat-line", w.detail));
   return td;
 }
 
@@ -107,7 +158,14 @@ function holdoutCell(r: Row): HTMLElement {
   return td;
 }
 
-function draw(b: Board): void {
+function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
+  // Player names from the Boatyard grid (names.ts): older boards carry the old labels.
+  if (b.summary)
+    for (const r of b.summary.rows) {
+      const n = nameOf(names, r.design, r.label, r.note);
+      r.label = n.label;
+      r.note = n.note;
+    }
   const s = b.summary;
   const facts = document.getElementById("facts")!;
   const banner = document.getElementById("banner")!;
@@ -142,7 +200,11 @@ function draw(b: Board): void {
   const shared = sharedKayakBadges(s.rows);
   const note = document.getElementById("shared")!;
   note.replaceChildren();
-  if (shared.length) note.append(el("span", undefined, `Every build of our kayak: ${shared.join("; ")}. That's on purpose; every other race rule applies.`));
+  // The length rule in a sentence (Milo, M10); any other shared note as it is.
+  const lengthRule = (t: string) => /2\.4 m/.test(t);
+  if (shared.some(lengthRule)) note.append(el("span", undefined, "Our kayak is 3.05 m, longer than the race's 2.4 m limit. We break that one rule on purpose."));
+  const rest = shared.filter((t) => !lengthRule(t));
+  if (rest.length) note.append(el("span", undefined, ` Every build of our kayak: ${rest.join("; ")}.`));
 
   const tbody = document.getElementById("rows")!;
   // leaderboard.html#<design> (from a Results card) marks that build's row.
@@ -152,20 +214,35 @@ function draw(b: Board): void {
   } catch {
     // a mangled link: mark nothing
   }
+  // Each group is one row that opens in place (Milo M6); only the top group, and the
+  // group with a marked build, start open. Groups are named, not numbered (M7).
+  const groups = Math.max(0, ...s.rows.map((r) => r.tier));
+  const open = new Set<number>([1, ...s.rows.filter((r) => mine && r.design === mine).map((r) => r.tier)]);
   let lastTier = 0;
   for (const r of s.rows) {
+    if (r.tier !== lastTier) {
+      const members = s.rows.filter((x) => x.tier === r.tier);
+      if (members.length > 1) tbody.append(groupRow(r.tier, groups, members, s.reference, open.has(r.tier)));
+    }
     const tr = el("tr");
-    if (r.tier !== lastTier) tr.classList.add("tierstart");
+    const single = s.rows.filter((x) => x.tier === r.tier).length === 1;
+    if (r.tier !== lastTier && single) tr.classList.add("tierstart");
     if (r.design === s.reference) tr.classList.add("ref");
     tr.dataset.design = r.design;
     tr.dataset.tier = String(r.tier);
-    tr.append(el("td", "tier", r.tier !== lastTier ? String(r.tier) : ""));
+    tr.classList.add("member");
+    tr.hidden = !single && !open.has(r.tier);
+    tr.append(el("td", "tier", r.tier !== lastTier && single ? tierName(r.tier, groups) : ""));
     lastTier = r.tier;
 
     const name = el("td");
-    name.append(el("div", "name", r.label));
+    const nm = el("div", "name", r.label);
+    // Randolph's boats say so on screen, not only behind the "i" (Maya): a quiet tag.
+    if (r.badges.some(isModelBadge)) nm.append(" ", el("span", "modeltag", "our model"));
+    if (r.note) nm.append(" ", info(r.note));
+    name.append(nm);
     const chips = el("div");
-    for (const t of r.badges) if (!shared.includes(t)) chips.append(chip(t));
+    for (const t of r.badges) if (!shared.includes(t) && !isModelBadge(t)) chips.append(chip(t));
     name.append(chips);
     tr.append(name);
 
@@ -193,14 +270,18 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     head.textContent = `Your build: ${t.head.slice(t.head.indexOf(": ") + 2)}`; // drop "On the board of ...: "
     sub.textContent = t.detail;
   } else {
-    const top = s.rows.filter((r) => r.tier === 1);
+    // Our kayak leads the sentence when it's in the top group ("Best: Our kayak and 4 others").
+    const top = s.rows.filter((r) => r.tier === 1).sort((x, y) => Number(y.design === s.reference) - Number(x.design === s.reference));
     const groups = Math.max(0, ...s.rows.map((r) => r.tier));
-    head.textContent = s.fair
-      ? `${groups > 1 ? `The top of ${groups} groups` : "All builds are in one group"}: ${top.length > 3 ? `${top.slice(0, 2).map((r) => r.label).join("; ")} and ${top.length - 2} more` : top.map((r) => r.label).join("; ")}.`
-      : "Not ranked yet: this leaderboard didn't pass its fairness check.";
-    sub.textContent = mine
-      ? "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others."
-      : "A group is builds the leaderboard can't tell apart on its launches. Sail a build and its results link back here with it marked.";
+    head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
+    if (mine) sub.textContent = "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others.";
+    else {
+      sub.textContent = "Builds in the same group can't be told apart with this many launches. ";
+      const n = s.rows[0]?.launches ?? 0;
+      const when = launchSetWords(b.board.launch_set).replace(/ launches every \d+ days, /, ", ");
+      // One sentence from one source for both pages' "i" (Milo M4).
+      sub.append(info(`Every build sails the same ${n} launches, ${when}, so the weather is identical for all. The Boatyard tests on a wider set of 100 launches, so its odds can differ by a few points.`));
+    }
   }
   box.replaceChildren(head, sub);
   box.hidden = false;
@@ -224,10 +305,10 @@ async function main(): Promise<void> {
   window.__leaderboard = { ready: false, rows: 0, error: null, sample: false };
   const url = boardUrl();
   try {
-    const r = await fetch(url);
+    const [r, names] = await Promise.all([fetch(url), loadNames()]);
     if (!r.ok || /text\/html/.test(r.headers.get("content-type") ?? "")) throw new Error("NO_BOARD");
     const b = (await r.json()) as Board;
-    draw(b);
+    draw(b, names);
     window.__leaderboard = { ready: true, rows: b.summary?.rows.length ?? 0, error: null, sample: !!b.board.sample };
   } catch (e) {
     const banner = document.getElementById("banner")!;

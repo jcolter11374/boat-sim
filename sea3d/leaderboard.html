@@ -36,7 +36,12 @@
   .banner ul { margin: 4px 0 0; padding-left: 20px; }
   .banner:empty { display: none; }
   #board { padding: 6px 4px 10px; overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; }
+  /* Fixed column widths, so folding or opening a group never shifts the table (Ines). */
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  thead th:nth-child(1) { width: 96px; }
+  thead th:nth-child(2) { width: 38%; }
+  thead th:nth-child(3) { width: 21%; }
+  thead th:nth-child(5) { width: 12%; }
   th { text-align: left; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--dim);
     font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   td { padding: 9px 10px; vertical-align: top; border-bottom: 1px solid rgba(160,200,255,.07); }
@@ -44,12 +49,21 @@
   tr.ref td { background: rgba(255,138,42,.08); }
   tr.mine td { background: rgba(95,180,255,.16); }
   tr.mine td:first-child { box-shadow: inset 3px 0 0 #5fb4ff; }
-  td.tier { font-weight: 700; font-size: 18px; width: 48px; text-align: center; }
+  td.tier { font-weight: 700; font-size: 14px; width: 84px; white-space: nowrap; }
+  tr.group td { background: rgba(160,200,255,.04); }
+  .grouptoggle { all: unset; cursor: pointer; font-weight: 650; }
+  .grouptoggle:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; border-radius: 3px; }
+  .grouptoggle .arrow { color: var(--dim); }
+  tr.member:not(.tierstart) td.tier { border-top: 0; }
   .name { font-weight: 650; }
   .chip { display: inline-block; font-size: 11px; padding: 1px 7px; margin: 3px 4px 0 0; border-radius: 10px;
     border: 1px solid var(--line); color: var(--dim); }
   .chip.model { border-color: rgba(138,180,255,.5); color: #b9d1ff; }
   .chip.rule { border-color: rgba(255,194,71,.45); color: #ffd98a; }
+  .modeltag { font-size: 12px; font-weight: 400; opacity: .6; white-space: nowrap; }
+  .info { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.45); font: italic 600 10px/1 Georgia, serif; color: #cfe0ff; cursor: help; vertical-align: 1px; }
+  .info:focus { outline: 2px solid #8ab4ff; outline-offset: 1px; }
   .rate { font-weight: 700; font-size: 16px; }
   .bar { position: relative; height: 6px; background: rgba(255,255,255,.08); border-radius: 3px; margin-top: 4px; width: 150px; }
   .bar i { position: absolute; top: 0; bottom: 0; background: rgba(138,180,255,.45); border-radius: 3px; }
@@ -80,10 +94,10 @@
   <section id="explain" class="glass">
     <h2>How to read this</h2>
     <p><b>Finished</b> means reaching the finish (a 25 km circle on the race's finish line, about 330 km west of Lisbon) under the race rules. The thin bar is the likely range: where the true share probably sits. With about 65 launches it is wide.</p>
-    <p><b>Groups.</b> Every build sails the same launches with the same weather and the same breakdowns (parts failing at random), so differences are the build, not luck of the draw. A build drops to a new group only when it is clearly worse than every build above it. Builds in one group can't be told apart.</p>
-    <p><b>Against our kayak</b> (the 3 m solar-electric kayak as we plan to build it) counts the launches where one boat finished and the other didn't. "Could be luck" means the gap is too small to be sure of.</p>
+    <p><b>Groups.</b> Best, Good and Long shot are groups. Every build sails the same launches with the same weather and the same breakdowns (parts failing at random), so differences are the build, not luck of the draw. A build drops to a new group only when it is clearly worse than every build above it. Builds in one group can't be told apart.</p>
+    <p><b>Against our kayak</b> (the 3 m solar-electric kayak as we plan to build it) counts the launches where one boat finished and the other didn't. "Same as ours" and "Maybe worse (could be luck)" mean the gap is too small to be sure of.</p>
     <p><b>Show the statistics</b> adds the likely ranges and the <b>hidden year</b>: a separate year nobody tunes against. A build that does much worse there than on the main launches gets a warning: it may be tuned to the test.</p>
-    <p><b>"Our model of"</b> marks Randolph's team's boats (Rev B, Rev C) as we simulate them, not their own results.</p>
+    <p><b>Randolph's boats</b> (Rev B, Rev C5) are our model of their team's designs, not their own results: the quiet "our model" tag by a name says so, and its <b>i</b> says more.</p>
   </section>
 </main>
 <div id="credits" style="max-width:1060px;margin:-28px auto 12px;padding:0 12px;text-align:right;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.6)">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>

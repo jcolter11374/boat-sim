@@ -14,6 +14,29 @@ const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
 const fail = (msg) => { console.error("FAIL:", msg); server.kill(); process.exit(1); };
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if (!(await page.locator("#orders-tab").count())) return;
+  // At the start the drawer opens by itself for 10 s with a tip, then slides shut unless it's
+  // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
+  // until it has fully slid in, then point at it, which keeps it open (the player is using it).
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    const there = await page
+      .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
+      .then(() => true, () => false);
+    if (!there) continue;
+    await page.hover("#orders h2", { timeout: 10_000 }).catch(() => {});
+    if (await page.locator("#orders.open").count()) return;
+  }
+}
+/** Watch a voyage's replay drawer (it slides shut after 10 s of play): open it and wait until it's in place. Old builds: nothing. */
+async function openReplay(page) {
+  if (!(await page.locator("#replay-tab").count())) return;
+  if (!(await page.locator("#top.open").count())) await page.click("#replay-tab");
+  await page.waitForFunction(() => { const o = document.getElementById("top"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20000 });
+  await page.hover("#top h2").catch(() => {});
+}
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
@@ -235,6 +258,7 @@ try {
     }
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+    await openReplay(page); // the close-up buttons live in the replay drawer
     await page.click('#focus button[data-lane="1"]');
     await page.waitForTimeout(800);
     if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
@@ -353,12 +377,18 @@ try {
     if (mb.stored?.hash !== y1.share || mb.stored?.name !== "Test <b>boat</b>" || mb.stored?.choices?.thr !== "one-t200" || mb.btn !== "Saved")
       fail(`boatyard: saving my boat: ${JSON.stringify(mb)}`);
     await page.goto(`${URL}boatyard.html?quality=low&mine=1`);
-    await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 60000 });
+    // Ready, and the Blender boats in: their rebuild and first draw is one long frame on the
+    // runner's software graphics, and the hash step below waited behind it (deploy 43174294873).
+    await page.waitForFunction(() => window.__yard?.ready && window.__yard.models !== "loading" && window.__yard.frames > 2, null, { timeout: 60000 });
     const mb2 = await page.evaluate(() => ({ line: document.getElementById("mb-line").textContent, href: document.querySelector("#mb-line a")?.getAttribute("href"), tags: document.querySelectorAll("#mb-line b").length }));
     if (!mb2.line.includes("Test <b>boat</b>") || mb2.href !== `boatyard.html${y1.share}` || mb2.tags) fail(`boatyard: my boat line: ${JSON.stringify(mb2)}`);
     // On the live site the link only changes the hash (no query), and the page opens the design in place.
+    const tHash = Date.now();
     await page.evaluate((h) => (location.hash = h), y1.share);
-    await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 10000 }).catch(() => fail("boatyard: the my-boat link didn't reopen it"));
+    await page.waitForFunction(() => window.__yard.design.picks.thr === "one-t200" && document.getElementById("mb-save").textContent === "Saved", null, { timeout: 30000 }).catch(async () =>
+      fail(`boatyard: the my-boat link didn't reopen it: ${JSON.stringify(await page.evaluate(() => ({ thr: window.__yard.design.picks.thr, btn: document.getElementById("mb-save").textContent, models: window.__yard.models, frames: window.__yard.frames })))}`),
+    );
+    log.push(`boatyard my-boat link reopened in ${Date.now() - tHash} ms (${await page.evaluate(() => window.__yard.models)} models)`);
     await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
     // Every choice looks different on the boat (spares stay ashore; one-option slots have nothing to swap).
     const looks = await page.evaluate(() => {
@@ -446,7 +476,7 @@ try {
     }
     if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
+    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("strip") ?? document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
       .catch(() => fail("cinematic: a key didn't bring the panels back"));
     const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
     if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);
@@ -570,6 +600,7 @@ try {
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
     if (hm.ready) {
+      await openOrders(page);
       await page.click("#s6");
       await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
       // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
@@ -607,6 +638,7 @@ try {
       if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
       let hops = 0;
       for (; hops < 40 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+        await openOrders(page);
         await page.click("#sevent");
         await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
         st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
@@ -651,8 +683,9 @@ try {
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, clock: window.__helm.clock, lastStop: window.__helm.lastStop, msg: document.querySelector("#startmsg").textContent }));
       if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
-      // Without clock=paused, time runs from Set sail at 6 hours a second (unless something already paused it).
-      if (mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start at 6 h/s: ${JSON.stringify(mg)}`);
+      // Without clock=paused, time runs from Set sail: the first hours at 1 hour a second, then 6
+      // (unless something already paused it).
+      if (mg.clock !== 1 && mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start by itself: ${JSON.stringify(mg)}`);
       // Picking another boat on the start card makes it my boat, for the other pages.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
@@ -697,6 +730,7 @@ try {
       // Published challenge files with a simulator that can't sail them is a live bug: the picker offers a game that won't start.
       if (!ch.ready || ch.err || ch.id !== chFile.id) fail(`helm challenge ${chFile.id} didn't start: ${JSON.stringify(ch)}`);
       else {
+        await openOrders(page);
         await page.click("#s6");
         await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
         const s = await page.evaluate(() => ({ st: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
@@ -769,10 +803,17 @@ try {
       banner: document.querySelector("#banner").textContent,
       tiers: [...document.querySelectorAll("#rows tr")].map((r) => Number(r.dataset.tier)),
       ref: document.querySelectorAll("#rows tr.ref").length,
-      model: [...document.querySelectorAll(".chip.model")].map((c) => c.textContent),
+      // Randolph's boats: a quiet "our model" tag beside the name, the "i" with the detail (Maya); never "(our model)" in the name.
+      model: [...document.querySelectorAll("#rows .name .info")].map((c) => c.getAttribute("title") ?? ""),
+      names: [...document.querySelectorAll("#rows .name")].map((c) => c.firstChild?.textContent ?? ""),
+      tags: document.querySelectorAll("#rows .name .modeltag").length,
+      // A folded group row that names a Randolph boat carries the tag too.
+      untagged: [...document.querySelectorAll("#rows tr.group")].filter((r) => /Randolph/.test(r.textContent) && !r.querySelector(".modeltag")).length,
     }));
+    const leaked = lb.names.filter((n) => /Drive:|: [a-z0-9]+-|W cruise|\(our model\)|GUESS/.test(n));
+    if (leaked.length) fail(`leaderboard shows internal build names: ${JSON.stringify(leaked)}`);
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
-    if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^our model of Randolph/.test(t)))
+    if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
     await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);

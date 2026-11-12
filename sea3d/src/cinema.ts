@@ -28,8 +28,10 @@ export interface CinemaHost {
   landmark?(): number | null;
   /** Cloud cover now, 0..1: no night-sky shot under a thick overcast. */
   cloud?(): number;
-  /** The sound toggle, for the M key. */
+  /** The sound toggle, for the N key. */
   toggleSound?(): void;
+  /** A fade to black is starting (seconds long): the sound dips with it (sound.ts duck). */
+  fade?(seconds: number): void;
   /** How much bigger than our 3 m kayak the boat is: the close shots stand back by this much. */
   scale?(): number;
 }
@@ -83,7 +85,7 @@ export class Cinema {
     if (!this.on || e.repeat) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (e.key === "m" || e.key === "M") this.host.toggleSound?.();
+    if (e.code === "KeyN") this.host.toggleSound?.(); // N is sound on every page (Elena: one key, one meaning)
     else this.stop();
   };
   private readonly onPointer = (e: Event) => {
@@ -103,7 +105,7 @@ export class Cinema {
     this.el = document.createElement("div");
     this.el.id = "cine";
     // Constant markup only.
-    this.el.innerHTML = '<div class="bar t"></div><div class="bar b"></div><div class="dip"></div><div class="cap"></div><div class="hint">Any key or click to leave · M for sound</div>';
+    this.el.innerHTML = '<div class="bar t"></div><div class="bar b"></div><div class="dip"></div><div class="cap"></div><div class="hint">Any key or click to leave · N for sound</div>';
     document.body.append(this.el);
     this.dip = this.el.querySelector(".dip") as HTMLElement;
     this.hint = this.el.querySelector(".hint") as HTMLElement;
@@ -215,6 +217,7 @@ export class Cinema {
     if (this.t > s.len - 0.35 && this.dipAt < 0) {
       this.dipAt = this.t;
       this.dip.classList.add("on");
+      this.host.fade?.(0.7);
     }
     if (this.t >= s.len) {
       this.next();
@@ -350,7 +353,9 @@ export function filmButtons(cine: Cinema, sound: { on: boolean; muted: boolean; 
   const sb = document.getElementById("soundbtn");
   const label = () => {
     if (!sb) return;
-    sb.textContent = sound.on ? "\u{1F50A} Sound on" : "\u{1F507} Sound off";
+    // An icon-only button (the helm's corner map) keeps its words in the tooltip.
+    if (sb.dataset.icon) sb.textContent = sound.on ? "\u{1F50A}" : "\u{1F507}";
+    else sb.textContent = sound.on ? "\u{1F50A} Sound on" : "\u{1F507} Sound off";
     sb.setAttribute("aria-pressed", String(sound.on));
   };
   sound.onChange = label;
