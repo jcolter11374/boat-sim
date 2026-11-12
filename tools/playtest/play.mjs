@@ -61,6 +61,8 @@ async function helmStart(page, setup = async () => {}) {
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
   // Time runs by itself once you set sail (#339): pause it, and let the picture settle, so a hop measures only the hop.
   await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+  // The status can lag the start by a frame or two: settle only once there's a day to read.
+  await page.waitForFunction(() => typeof window.__helm.status?.day === "number", null, { timeout: MIN }).catch(() => {});
   let last = -1;
   for (let i = 0; i < 60; i++) {
     const d = await page.evaluate(() => window.__helm.status?.day ?? 0);
@@ -289,23 +291,17 @@ const CHECKS = {
       return out.join("; ");
     },
   },
-  // #359: starting from Annapolis, the Bay's coast squares load around the boat.
+  // #359: near Annapolis (between the city and Thomas Point) the Bay's coast squares load around
+  // the boat. No game start is inside the Bay yet, so this puts the boat there with ?spot= (for tests).
   "helm-bay-squares": {
-    path: "helm.html?quality=low",
+    path: "helm.html?quality=low&spot=38.92,-76.42",
     run: async (page) => {
-      await helmStart(page, async (p) => {
-        await p.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN }).catch(() => {
-          throw new SkipCheck("no port picker");
-        });
-        const v = await p.evaluate(() => [...document.querySelectorAll("#port option")].find((o) => /annapolis/i.test(o.value + o.textContent))?.value ?? "");
-        if (!v) throw new SkipCheck("Annapolis isn't offered as a start");
-        await p.selectOption("#port", v);
-      });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       if (!(await page.evaluate(() => "squares" in (window.__helm.land ?? {})))) throw new SkipCheck("this build has no coast squares (#359 not deployed)");
       const n = await page.waitForFunction(() => window.__helm.land.squares > 0 && window.__helm.land.squares, null, { timeout: 90_000 }).then((h) => h.jsonValue()).catch(() => 0);
       await page.screenshot({ path: `play-${BROWSER}-bay-squares.png` }).catch(() => {});
-      must(n > 0, `no coast squares loaded around the boat off Annapolis in 90 s (land ${JSON.stringify(await page.evaluate(() => window.__helm.land))})`);
-      const credit = await page.evaluate(() => document.body.innerText.match(/[^\n]*(CUDEM|Sentinel)[^\n]*/)?.[0] ?? "");
+      must(n > 0, `no coast squares loaded around the boat near Annapolis in 90 s (land ${JSON.stringify(await page.evaluate(() => window.__helm.land))})`);
+      const credit = await page.evaluate(() => document.body.innerText.match(/[^\n]*CUDEM[^\n]*/)?.[0] ?? "");
       return `${n} coast squares around the boat; credit "${credit.trim().slice(0, 100)}"`;
     },
   },
@@ -473,8 +469,10 @@ const CHECKS = {
       const pressed = await page.getAttribute('#bases button[data-base="revc"]', "aria-pressed");
       must(pressed === "true", "opening #base=revc didn't select the Rev C5 preset");
       must(/our model/i.test(label), `the preset isn't labelled as our model: "${label.trim()}"`);
-      const text = await page.evaluate(() => document.body.innerText);
-      must(/26\.9\s*kg/.test(text), "the page doesn't show 26.9 kg for the Rev C5's boat");
+      // The boat's totals fill in a moment after the preset is picked: give them a few seconds.
+      const shown = await page.waitForFunction(() => /26\.9\s*kg/.test(document.body.innerText), null, { timeout: 20_000 }).then(() => true).catch(() => false);
+      const kg = shown ? "" : await page.evaluate(() => (document.body.innerText.match(/\d+(\.\d)?\s*kg/g) || []).slice(0, 4).join(", "));
+      must(shown, `the page doesn't show 26.9 kg for the Rev C5's boat after 20 s (weights on the page: ${kg || "none"})`);
       await page.screenshot({ path: `play-${BROWSER}-revc5.png` }).catch(() => {});
       await page.click("#launch");
       await page.waitForFunction(() => window.__yard.launch || window.__yard.launchError, null, { timeout: 15 * MIN });
