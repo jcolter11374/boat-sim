@@ -2045,7 +2045,12 @@ async function finish(): Promise<void> {
   const lead = st ? st.lead_km : 0;
   const nums = $("r-nums");
   nums.replaceChildren(
-    ...numbers(c, me.outcome === "arrived" ? way : way - left, way, lead).map((n) => {
+    // A challenge (Ines): the crossing's length means nothing, and the ghost line in the stars already
+    // tells the ghost's story, so just the days and the km sailed.
+    ...numbers(c, me.outcome === "arrived" ? way : way - left, way, lead)
+      .filter((n, i) => !mi || i < 2)
+      .map((n) => (mi && n.unit === "km" ? { value: n.value, unit: "", label: "km sailed" } : n))
+      .map((n) => {
       const d = document.createElement("div");
       d.className = "n";
       const b = document.createElement("b");
@@ -2162,7 +2167,8 @@ async function showStanding(build: string): Promise<void> {
   const p = document.createElement("p");
   p.className = "standing";
   p.textContent = leaves(page.card, rate, name, page.started.me);
-  box.append(p);
+  // Not in a challenge (Ines): the odds read as a scolding there, and they belong in the Boatyard.
+  if (!mission()) box.append(p);
   const t = standingText(s);
   $("r-standing").textContent = `${t.head} ${t.detail}`;
   page.standing = s.kind;
@@ -2248,7 +2254,8 @@ function drawResultMap(): void {
       g.font = "600 11px system-ui, sans-serif";
       g.textAlign = ex > W * 0.6 ? "right" : "left";
       g.fillStyle = "rgba(255,200,150,.95)";
-      g.fillText(end.ending.headline, ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10);
+      // A challenge met reads "Still sailing", as the headline does (Ines: one story, not "Made it").
+      g.fillText(mission() && end.outcome === "goal" ? "Still sailing" : end.ending.headline, ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10);
     }
     const [fx, fy] = m.xy(target[0], target[1]);
     if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
