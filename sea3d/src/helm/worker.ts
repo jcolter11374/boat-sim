@@ -2,7 +2,7 @@
 // with numpy and pyyaml) runs Sam's boatsim.sandbox.helm.Game on the 2020
 // weather, as the Boatyard's workers run its voyages (docs/sandbox.md).
 //
-// Messages in:  {id, type: "new", base, launch, safe, breakdowns, mode, challenge?, bundle?, choices?, start_port?}
+// Messages in:  {id, type: "new", base, launch, day?, safe, breakdowns, mode, challenge?, bundle?, choices?, start_port?}
 //                 mode: "hands_on" or "base"; challenge: an id from challenges.json, whose
 //                 weather is `bundle` (a URL; left out for the 2020 bundle); start_port:
 //                 a port id from ports.json, started from instead of the usual drop
@@ -219,6 +219,8 @@ try:
         if not takes_challenges():
             raise RuntimeError("NO_CHALLENGES")
         G = Game(ENV, choices, challenge=m["challenge"], **kw)
+    elif m.get("day"):
+        G = Game(ENV, choices, day=m["day"], **kw)  # any April to June noon (the default: a good day)
     else:
         G = Game(ENV, choices, m["launch"], **kw)
 except KeyError as err:

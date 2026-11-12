@@ -635,6 +635,30 @@ function showTrimChip(s: Status): void {
   c.classList.toggle("lost", chipGain < 0);
 }
 
+/** Where the panel's local time is reckoned (the boat, or base's estimate of it). */
+let whenHere: [number, number] | null = null;
+let whenDrawn = "";
+/** The panel's day, date and local time, and the 3D day label, all at the hour the picture
+ *  is drawing, every frame: running, paused by you, or paused by a stop (audit A2, #372).
+ *  The rest of the panel waits for the picture as before (`shown`), so nothing tells you
+ *  the future; these three just never lag or lead it. */
+function drawWhen(force = false): void {
+  const st = page.status;
+  const r = rep();
+  if (!st || !page.ready) return;
+  const h = r ? Math.min(hour, lastHour(r)) : st.day * 24;
+  const ms = utc(st.boat.t) - st.day * 86400e3 + Math.round(h * 60) * 60e3; // to the minute
+  const key = `${ms} ${whenHere}`;
+  if (!force && key === whenDrawn) return;
+  whenDrawn = key;
+  const day = `Day ${(h / 24).toFixed(1)}`;
+  $("clock").textContent = day;
+  if (!whenHere) return;
+  $("day").textContent = day;
+  $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
+  $("local").textContent = localTime(ms, whenHere[0], whenHere[1]);
+}
+
 function showStatus(): void {
   const s = shown ?? page.status;
   if (!s) return;
@@ -646,9 +670,8 @@ function showStatus(): void {
   // Where the page believes the boat is: the truth, or base's estimate.
   const here: [number, number] = est ? [est.lat, est.lon] : [b.lat, b.lon];
   const fb = bearing(here, finish);
-  $("day").textContent = `Day ${s.day.toFixed(1)}`;
-  $("when").textContent = new Date(utc(b.t)).toUTCString().slice(5, 22) + " UTC";
-  $("local").textContent = localTime(utc(b.t), here[0], here[1]);
+  whenHere = here;
+  drawWhen(true);
   let toGo = b.km_to_finish;
   let lead = s.lead_km;
   if (est) {
@@ -706,13 +729,18 @@ function note(text: string, when: string, colour: string): void {
 }
 
 function newEvents(): void {
+  // Only what the picture has got to: the simulator runs ahead of it.
+  const seen = (who: "boat" | "ghost") => rep(who)?.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6) ?? [];
+  const evs = { boat: seen("boat"), ghost: seen("ghost") };
+  // The same thing to both boats at the same hour (both knocked flat by one wave) is one
+  // note, "You and the ghost", not two (audit 13, #334).
+  const same = (a: ReplayEvent, b: ReplayEvent) => Math.abs(a.h - b.h) < 1 && describeEvent(a, "") === describeEvent(b, "");
   for (const who of ["boat", "ghost"] as const) {
-    const r = rep(who);
-    if (!r) continue;
-    // Only what the picture has got to: the simulator runs ahead of it.
-    const evs = r.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6);
-    for (const e of evs.slice(shownEvents[who])) {
-      const label = who === "boat" ? "You" : "Ghost";
+    const other = who === "boat" ? evs.ghost : evs.boat;
+    for (const e of evs[who].slice(shownEvents[who])) {
+      const both = other.some((o) => same(e, o));
+      if (both && who === "ghost") continue; // told with your boat's note
+      const label = both ? "You and the ghost" : who === "boat" ? "You" : "Ghost";
       const text = describeEvent(e, who === "boat" ? "your boat" : "the ghost");
       // The log can name one failure twice (the part, then what it means): one note is enough.
       const key = `${who} ${text}`;
@@ -721,8 +749,9 @@ function newEvents(): void {
       note(text, `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
       if (who === "boat" && hour - e.h < 3) moment(e);
     }
-    shownEvents[who] = evs.length;
   }
+  shownEvents.boat = evs.boat.length;
+  shownEvents.ghost = evs.ghost.length;
 }
 const lastNote: Record<string, number> = {};
 
@@ -1555,7 +1584,10 @@ function showChallenge(): void {
 async function begin(): Promise<void> {
   arrival = null;
   page.arrival = false;
-  const launch = Number($<HTMLSelectElement>("launch").value);
+  // An index into the six odds launches, or a day: the default is 23 Apr 2020, a good
+  // day (Hs 0.9 m, 12 kt from the SW, Sam's pick); 1 Apr, the tail of a gale, is "Rough start".
+  const lv = $<HTMLSelectElement>("launch").value;
+  const launch: number | string = /^\d+$/.test(lv) ? Number(lv) : lv;
   const safe = $<HTMLInputElement>("safe").checked;
   const breakdowns = $<HTMLInputElement>("breakdowns").checked;
   mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as Mode) ?? "hands_on";
@@ -2101,7 +2133,8 @@ renderer.setAnimationLoop(() => {
     }
     chart.draw(page.card ? 1e9 : hour, performance.now());
   }
-  $("clock").textContent = r && page.ready ? `Day ${(h / 24).toFixed(1)}` : "";
+  if (!(r && page.ready)) $("clock").textContent = "";
+  else drawWhen();
   page.frames++;
   page.hour = hour;
   page.simHour = shownTo;
