@@ -2255,7 +2255,14 @@ function drawResultMap(): void {
       g.textAlign = ex > W * 0.6 ? "right" : "left";
       g.fillStyle = "rgba(255,200,150,.95)";
       // A challenge met reads "Still sailing", as the headline does (Ines: one story, not "Made it").
-      g.fillText(mission() && end.outcome === "goal" ? "Still sailing" : end.ending.headline, ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10);
+      const word = mission() && end.outcome === "goal" ? "Still sailing" : end.ending.headline;
+      const [lx, ly] = [ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10];
+      // A dark halo, so a track line under the label never runs through the words (Ines).
+      g.strokeStyle = "rgba(8,18,32,.9)";
+      g.lineWidth = 3;
+      g.lineJoin = "round";
+      g.strokeText(word, lx, ly);
+      g.fillText(word, lx, ly);
     }
     const [fx, fy] = m.xy(target[0], target[1]);
     if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
