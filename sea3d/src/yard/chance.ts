@@ -13,10 +13,12 @@ export interface Chance {
   value: string;
   /** One line under it. */
   note: string;
+  /** Which launches it was tested on, for the "i" (Milo M4). */
+  about?: string;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
-const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** The chance of finishing for the nearest grid build (null: no grid), with the grid's launch years and months. */
 export function chanceFor(
@@ -28,10 +30,11 @@ export function chanceFor(
   if (!n || !o || !o.voyages) return { tested: false, value: "not tested yet", note: `Press "${testLabel}" to sail it.` };
   const yrs = source?.years ? `, ${source.years[0]} to ${source.years[1]}` : "";
   const ms = source?.months?.filter((m) => m >= 1 && m <= 12).sort((a, b) => a - b) ?? [];
-  const when = ms.length ? ` (${MONTH[ms[0] - 1]} to ${MONTH[ms[ms.length - 1] - 1]}${yrs})` : yrs ? ` (${yrs.slice(2)})` : "";
+  const when = ms.length ? `, ${MONTH[ms[0] - 1]} to ${MONTH[ms[ms.length - 1] - 1]}${yrs}` : yrs;
   return {
     tested: true,
     value: pct(o.odds),
-    note: `Tested over ${o.voyages} launches${when}. Likely range ${pct(o.low95)} to ${pct(o.high95)}.`,
+    note: `Likely range ${pct(o.low95)} to ${pct(o.high95)}.`,
+    about: `Tested on ${o.voyages} launches${when}.`,
   };
 }

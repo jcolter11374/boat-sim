@@ -314,6 +314,7 @@
   #strip .v { font: 650 1.42em/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .1px; }
   #strip .v .sub { font-size: .7em; font-weight: 500; color: var(--dim); }
   #strip .l { font-size: .875em; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  #strip .l .u { text-transform: none; }
   #strip button.cell { cursor: pointer; border: 0; border-left: 1px solid var(--hud-line); border-radius: 0; background: none; padding: 0 .83em; }
   #strip button.cell:hover .v, #strip button.cell[aria-expanded="true"] .v { color: #ffb070; }
   #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: .76em; }
@@ -482,10 +483,11 @@
     <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span></div>
     <div id="timebar" role="group" aria-label="How fast time runs" hidden>
       <button id="t-pause" title="Pause or carry on (Space)" aria-pressed="false">&#10074;&#10074;</button>
-      <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second (key 1)">1h</button>
-      <button class="rate" data-rate="6" aria-pressed="true" title="Six hours every second (key 2)">6h</button>
-      <button class="rate" data-rate="24" aria-pressed="false" title="A day every second (key 3)">1d</button>
-      <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second (key 4)">4d</button>
+      <button class="rate" data-rate="rt" aria-pressed="false" title="Real time: a second of the voyage every second (key 1)">Real time</button>
+      <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second (key 2)">1h</button>
+      <button class="rate" data-rate="6" aria-pressed="false" title="Six hours every second (key 3)">6h</button>
+      <button class="rate" data-rate="24" aria-pressed="false" title="A day every second (key 4)">1d</button>
+      <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second (key 5)">4d</button>
     </div>
   </div>
   <button class="cell c-order" id="c-order" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span class="v" id="c-orderv">Autopilot</span><span class="l">order</span></button>
@@ -630,7 +632,7 @@
       <label><input type="checkbox" id="safe"> Save the battery: the boat slows itself down when the battery runs low, as the autopilot does</label>
       <p class="muted">The autopilot's ghost sails the same boat through the same weather and the same bad luck. It never shows you what's ahead of your clock. Finish more than a day ahead of it to win; within a day is a draw, because that much is down to the weather's luck.</p>
     </details>
-    <p class="muted">The defaults are fine: just press Set sail. Time then runs by itself; change its speed or pause at the top of the screen. Keys: Space pauses, 1 to 4 set the speed, the arrow keys steer and set the power.</p>
+    <p class="muted">The defaults are fine: just press Set sail. Time then runs by itself; change its speed or pause at the top of the screen. Keys: Space pauses, 1 to 5 set the speed (1 is real time), the arrow keys steer and set the power.</p>
   </div>
 </div>
 

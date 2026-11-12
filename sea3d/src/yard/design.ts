@@ -7,6 +7,7 @@ export interface CatalogOption {
   id: string;
   n: string; // name
   d: string; // what it means
+  more?: string; // the longer story, behind an "i" (Milo: one line on the row)
   cost: number; // USD
   kg: number; // weight change vs the planned build
   url?: string;
