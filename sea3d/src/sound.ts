@@ -272,6 +272,19 @@ export class OceanSound {
   muted = stored() === "off";
   /** The viewer turned sound on last visit: it comes back at their first click or key, never on load. */
   readonly remembered = stored() === "on";
+  /**
+   * Which moments played, newest last (read-only, for the live checks: Nina). Only the moments a
+   * player hears as one event: hello, crash, breakdown:<kind>, ship, alarm, horn, bell:<n>,
+   * settle, flog (once per spell of luffing). Capped at 50.
+   */
+  readonly played: { name: string; t: number }[] = [];
+  private inner = false;
+  private flogging = false;
+  private mark(name: string): void {
+    if (this.inner) return;
+    this.played.push({ name, t: +this.now.toFixed(3) });
+    if (this.played.length > 50) this.played.shift();
+  }
   /** Called after on changes (for the page's button). */
   onChange: (() => void) | null = null;
 
@@ -463,7 +476,9 @@ export class OceanSound {
 
   /** One soft lap of water against the hull, about -20 dB for a second. */
   hello(): void {
-    if (this.ctx) this.burst("brown", "lowpass", 380, 0.1, 0.18, 0.9, 0.08);
+    if (!this.ctx) return;
+    this.mark("hello");
+    this.burst("brown", "lowpass", 380, 0.1, 0.18, 0.9, 0.08);
   }
 
   /**
@@ -472,6 +487,7 @@ export class OceanSound {
    */
   crash(): void {
     if (!this.live) return;
+    this.mark("crash");
     const r = this.rnd;
     // Make room first (Milo): the sea drops about 6 dB in the 0.3 s before the hit, so the thump
     // lands in a gap, then sits 4 dB down while the water pours off, then comes back.
@@ -516,6 +532,7 @@ export class OceanSound {
   /** The boat's electronics alert, heard from outside the cabin: something needs you (#329). */
   alarm(delay = 0): void {
     if (!this.live) return;
+    this.mark("alarm");
     // The boat's own piezo alert heard from outside: small and a little muffled (Elena), not a UI ping.
     this.tone([2350], "square", 0.03, delay, 0.06, 1100, 0.01);
     this.tone([2350], "square", 0.03, delay + 0.14, 0.06, 1100, 0.01);
@@ -528,6 +545,16 @@ export class OceanSound {
    */
   breakdown(kind: string): void {
     if (!this.live) return;
+    this.mark(`breakdown:${kind}`);
+    this.inner = true;
+    try {
+      this.breakdownSounds(kind);
+    } finally {
+      this.inner = false;
+    }
+  }
+
+  private breakdownSounds(kind: string): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const r = this.rnd;
@@ -579,6 +606,7 @@ export class OceanSound {
   /** A ship passing close: its engine's throb swells and fades, then its wash slaps the hull. */
   ship(): void {
     if (!this.live) return;
+    this.mark("ship");
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const src = ctx.createBufferSource();
@@ -612,6 +640,7 @@ export class OceanSound {
   /** The finish (#329): a ship's horn far off, echoing over the water. A moment, not a blast. */
   horn(): void {
     if (!this.live) return;
+    this.mark("horn");
     this.duck(4, 0.7);
     this.tone([98, 147], "sawtooth", 0.028, 0, 2.6, 600, 0.35, true);
   }
@@ -622,6 +651,7 @@ export class OceanSound {
    */
   bell(strikes: 1 | 2 | 3): void {
     if (!this.live) return;
+    this.mark(`bell:${strikes}`);
     const at = [0, 0.5, 1.45].slice(0, strikes);
     for (const d of at) this.strike(d);
   }
@@ -655,6 +685,7 @@ export class OceanSound {
   /** The result card settles: a soft knock, and the sea drops to half under it for a while. */
   settle(): void {
     if (!this.live) return;
+    this.mark("settle");
     this.duck(6, 0.5);
     this.burst("brown", "lowpass", 180, 0.15, 0.01, 0.25, 0.05);
   }
@@ -804,7 +835,10 @@ export class OceanSound {
     // Stuck head to wind a long time, the flogging eases about 2 dB after 10 s so it can't grate (Milo).
     this.ironsFor = luff > 0.8 ? this.ironsFor + dt : 0;
     const tire = 1 - 0.2 * clamp((this.ironsFor - 10) / 5);
-    if (this.rig === "shrouds" && luff > 0.1) {
+    const flogNow = this.rig === "shrouds" && luff > 0.1;
+    if (flogNow && !this.flogging) this.mark("flog");
+    this.flogging = flogNow;
+    if (flogNow) {
       if (this.nextFlog < t) this.nextFlog = t;
       const wk = clamp(beaufort(w.apparent ?? w.wind) / 6, 0.25, 1.3);
       while (this.nextFlog < t + dt) {
