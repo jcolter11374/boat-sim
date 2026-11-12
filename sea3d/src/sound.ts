@@ -165,11 +165,11 @@ export function mixFor(w: SeaWeather, rig: Rig, gust = 0, set = 0.5): Mix {
     wash: Math.max(db(table(WASH, hs)), Math.min(db(table(WASH, hs)) * lift, db(-31))) * setK,
     washHz: Math.min(220 + 70 * hs, 650),
     sizzle: db(table(SIZZLE, f)) * (0.75 + 0.5 * set) * Math.max(0.6, g),
-    rain: w.rain > 0.01 ? db(-38 + 24 * clamp(w.rain)) : 0,
+    rain: w.rain > 0.01 ? db(-50 + 14 * clamp(w.rain)) : 0, // under the wind: the drops carry it
     breaksPerSec: wc > 0 ? (0.04 + 0.5 * wc * wc + 0.1 * clamp((hs - 2) / 4)) * setK * Math.max(g, 0.4) : 0,
     slap: clamp(0.15 + hs / 4.5, 0, 1),
     slam: f >= 5.5 ? clamp((hs - 2) / 5) * 0.35 * setK : 0,
-    dropsPerSec: w.rain > 0.02 ? 2 + 26 * clamp(w.rain) : 0,
+    dropsPerSec: w.rain > 0.02 ? 3 + 80 * clamp(w.rain) : 0,
     // Light airs, rolling: a loose halyard taps the mast; once the sails fill (force 4 up) it stops.
     tapsPerSec: shrouds && fa > 0.8 && fa < 3.6 ? 0.2 * clamp(1 - Math.abs(fa - 2) / 1.8) + 0.05 : 0,
     slat: shrouds && fa < 3.5 && hs > 0.2 ? 0.45 * clamp((3.5 - fa) / 2) * clamp(hs / 0.8) : 0,
@@ -256,6 +256,8 @@ export class OceanSound {
   private armed = false;
   /** What's aloft on the boat being shown (set by the page when the boat changes). */
   rig: Rig = "small";
+  /** The boat's length, m (set by the page): small hulls slap lighter and quicker. */
+  length = 3;
   /** True while sound is playing (not muted). */
   on = false;
   /** Set when the viewer has turned it off on purpose; remembered between visits. */
@@ -339,7 +341,8 @@ export class OceanSound {
     this.ctx = ctx;
     if (seed != null) this.rnd = seeded(seed);
     const rnd = this.rnd;
-    this.bufs = { white: noise(ctx, "white", 4, rnd), pink: noise(ctx, "pink", 6, rnd), brown: noise(ctx, "brown", 7, rnd) };
+    // Long loops, lengths that never line up, so no texture repeats on a beat (Elena).
+    this.bufs = { white: noise(ctx, "white", 9, rnd), pink: noise(ctx, "pink", 11, rnd), brown: noise(ctx, "brown", 13, rnd) };
     // Master: on/off fade -> duck (cinematic fades) -> soft high shelf -> limiter.
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = -9;
@@ -383,17 +386,24 @@ export class OceanSound {
       hull: layer(b.white, "bandpass", 600, 1.3),
       wash: layer(b.brown, "lowpass", 400, 0.5),
       sizzle: layer(b.pink, "bandpass", 1500, 0.6),
-      rain: layer(b.white, "bandpass", 3200, 0.5),
+      rain: layer(b.pink, "bandpass", 2200, 0.7), // a soft hiss on the sea; the drops carry the rain
     };
-    // The hull's water bubbles: two slow wobbles on its level, at rates that never line up.
-    for (const [hz, depth] of [[3.1, 0.35], [7.3, 0.25]] as const) {
-      const o = ctx.createOscillator();
-      o.frequency.value = hz;
+    // The hull's water bubbles: its level wobbles at random (noise slowed right down), never on
+    // a beat. (A steady LFO here made a faint metronome in a calm: Elena, 12 Nov.)
+    for (const [hz, depth] of [[4, 0.4], [9, 0.25]] as const) {
+      const src = ctx.createBufferSource();
+      src.buffer = b.white;
+      src.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = hz;
+      lp.Q.value = 0.5;
       const d = ctx.createGain();
       d.gain.value = 0;
-      o.connect(d).connect(this.L.hull.gain.gain);
-      o.start();
-      (this.wobble ??= []).push({ d, depth });
+      src.connect(lp).connect(d).connect(this.L.hull.gain.gain);
+      src.start(0, rnd() * b.white.duration);
+      // Lowpassed noise is small (about 0.5 * sqrt(2 * hz / rate) RMS): scale it to about +-1.
+      (this.wobble ??= []).push({ d, depth: depth / (0.5 * Math.sqrt((2 * hz) / ctx.sampleRate)) / 2.5 });
     }
   }
 
@@ -512,12 +522,16 @@ export class OceanSound {
     }
   }
 
-  /** Water slapping the hull: a low knock and a short splash on top. */
+  /**
+   * Water slapping the hull: a knock and a short splash on top. A small light hull (the 3 m
+   * kayak) gives a lighter, quicker, higher slap; a 9 m keelboat a deeper, longer one.
+   */
   private slapAt(delay: number, w: number): void {
     if (w < 0.01) return;
     const r = this.rnd;
-    this.burst("brown", "lowpass", 150 + r() * 140, (0.25 + 0.45 * w) * w, 0.006, 0.1 + r() * 0.1, delay);
-    this.burst("white", "bandpass", 700 + r() * 500, 0.06 * w, 0.01, 0.25 + r() * 0.2, delay + 0.03, 0.8);
+    const small = clamp((9 - this.length) / 6); // 1 for the kayak, 0 for a 9 m boat
+    this.burst("brown", "lowpass", 120 + 180 * small + r() * 120, (0.25 + 0.45 * w) * w * (1 - 0.35 * small), 0.006 - 0.003 * small, (0.13 - 0.07 * small) + r() * 0.08, delay);
+    this.burst("white", "bandpass", 700 + 500 * small + r() * 500, 0.06 * w, 0.01, (0.3 - 0.15 * small) + r() * 0.15, delay + 0.03, 0.8);
   }
 
   /** Follow the weather; call every frame (cheap when off). */
@@ -586,10 +600,17 @@ export class OceanSound {
       }
       this.nextSlap = t + tp * (0.35 + r() * 0.6);
     }
-    // Rain ticking on the deck.
-    if (m.dropsPerSec > 0 && t >= this.nextDrop) {
-      this.burst("white", "bandpass", 1800 + r() * 1400, 0.012 + 0.03 * r() * clamp(w.rain), 0.002, 0.03, 0, 3);
-      this.nextDrop = t + (-Math.log(1 - r() * 0.98) / m.dropsPerSec);
+    // Rain: single drops of every size at random moments (not on the frame's beat): most are
+    // small and bright, a few big, lower and longer. Most land on deck; some on the sea, softer.
+    if (m.dropsPerSec > 0) {
+      if (this.nextDrop < t) this.nextDrop = t;
+      while (this.nextDrop < t + dt) {
+        const size = r() ** 3;
+        const sea = r() < 0.35;
+        const k = (0.006 + 0.06 * size) * (sea ? 0.35 : 1) * (0.6 + 0.4 * clamp(w.rain));
+        this.burst("white", "bandpass", (sea ? 2200 : 3600) - 2200 * size + r() * 600, k, 0.001, 0.012 + 0.05 * size, this.nextDrop - t, 2.5);
+        this.nextDrop += -Math.log(1 - r() * 0.98) / m.dropsPerSec;
+      }
     }
     // A loose halyard tapping the mast in light airs, as the boat rolls.
     if (m.tapsPerSec > 0 && t >= this.nextTap) {

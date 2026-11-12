@@ -54,6 +54,7 @@ for (const s of SCENES) {
       const ctx = new OfflineAudioContext(1, SECONDS * RATE, RATE);
       const snd = new window.Sea.OceanSound();
       snd.rig = s.rig;
+      snd.length = s.rig === "small" ? 3.05 : 9.4;
       snd.attach(ctx, s.seed);
       const dt = 1 / 30;
       for (let i = 1; i * dt < SECONDS - 0.05; i++) {

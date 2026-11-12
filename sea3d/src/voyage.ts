@@ -1281,6 +1281,7 @@ renderer.setAnimationLoop(() => {
     }
     status.hour = hour;
     sound.rig = rigFor(boatKey);
+    sound.length = SPEC[boatKey].length;
     const feel = smoothYaw != null ? apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)) : null;
     if (contact?.splash) sound.splash(contact.splash);
     sound.update(dt, {

@@ -2565,6 +2565,7 @@ renderer.setAnimationLoop(() => {
   wake?.setLight(atmos.ambient);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
   sound.rig = rigOf(spec.key);
+  sound.length = spec.length;
   if (contact?.splash) sound.splash(contact.splash);
   const feel = smoothYaw != null ? apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)) : null;
   sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target), stw, apparent: feel ? Math.hypot(feel.x, feel.z) : undefined });
