@@ -128,6 +128,19 @@ async function cinematic(page, framesOf) {
   return `cinematic ran ${f1 - f0} frames in 8 s and a key press left it`;
 }
 
+/** A look frame. On software graphics one heavy frame can take more than 30 s to draw (look-heel,
+ * 12 Nov), so allow 90 s and try twice; a frame that still won't come is noted, not a failure. */
+async function jpeg(page, path) {
+  for (let i = 0; i < 2; i++) {
+    try {
+      await page.screenshot({ path, type: "jpeg", quality: 85, timeout: 90_000, animations: "disabled" });
+      return true;
+    } catch (e) {
+      console.log(`(frame ${path} not taken, try ${i + 1}: ${String(e.message).split("\n")[0]})`);
+    }
+  }
+  return false;
+}
 /** Practice: start "The triangle" and wait until you have the wheel. The course buttons can
  * resolve before they take clicks (still loading or sliding in; look-heel 12 Nov), so wait for
  * the page to be idle and the button to be visible and enabled, retry, then click in-page. */
@@ -750,7 +763,7 @@ const CHECKS = {
       const shots = [];
       const shot = async (name) => {
         const path = `look-${name}.jpg`;
-        await page.screenshot({ path, type: "jpeg", quality: 82 });
+        if (!(await jpeg(page, path))) return;
         const b64 = readFileSync(path).toString("base64");
         console.log(`LOOK-BEGIN ${path}`);
         for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
@@ -807,7 +820,7 @@ const CHECKS = {
       const shots = [];
       const shot = async (name) => {
         const path = `look-${name}.jpg`;
-        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        if (!(await jpeg(page, path))) return;
         const b64 = readFileSync(path).toString("base64");
         console.log(`LOOK-BEGIN ${path}`);
         for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
@@ -848,7 +861,7 @@ const CHECKS = {
       const shots = [];
       const shot = async (name) => {
         const path = `look-${name}.jpg`;
-        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        if (!(await jpeg(page, path))) return;
         const b64 = readFileSync(path).toString("base64");
         console.log(`LOOK-BEGIN ${path}`);
         for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
@@ -896,7 +909,7 @@ const CHECKS = {
       const shots = [];
       const shot = async (name) => {
         const path = `look-${name}.jpg`;
-        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        if (!(await jpeg(page, path))) return;
         const b64 = readFileSync(path).toString("base64");
         console.log(`LOOK-BEGIN ${path}`);
         for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
@@ -933,7 +946,7 @@ const CHECKS = {
       const shots = [];
       const shot = async (name) => {
         const path = `look-${name}.jpg`;
-        await page.screenshot({ path, type: "jpeg", quality: 88 });
+        if (!(await jpeg(page, path))) return;
         const b64 = readFileSync(path).toString("base64");
         console.log(`LOOK-BEGIN ${path}`);
         for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
@@ -1111,7 +1124,7 @@ const CHECKS = {
       const shot = async (name) => {
         if (!look) return;
         const path = `look-${name}.jpg`;
-        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        if (!(await jpeg(page, path))) return;
         const b64 = readFileSync(path).toString("base64");
         console.log(`LOOK-BEGIN ${path}`);
         for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
