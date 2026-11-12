@@ -169,6 +169,7 @@ async function openUnit(browser, u) {
       r.force.fog = 0;
       if (hooks && sea.hs !== undefined) r.force.sea = [sea.hs, sea.tp, sea.from ?? -1];
       if (Array.isArray(r.force?.heel) && sea.heel) r.force.heel = sea.heel;
+      if (r.force && "reef" in r.force && sea.wind !== undefined) r.force.reef = true;
       r.setHour(hour);
       return { hooks, hour, sunEl: typeof r.sunAt === "function" ? r.sunAt(hour) : null, boats: r.boats, models: r.models };
     },

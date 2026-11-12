@@ -461,7 +461,9 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[], heel: [] as number[] },
+  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[], heel: [] as number[], reef: false },
+  // force.reef (proof pictures, Sam): true reefs a yacht's sails for the forced wind
+  // (forcedPlan); false keeps the replay's sail plan.
   // force.heel (proof pictures, Sam): [beat, reach, run] degrees for a sailing yacht in the
   // forced wind, to leeward of it; [] keeps the replay's heel.
   // force.sea (proof pictures, tools/proof): [Hs m, Tp s, from degrees or -1 = from the wind]
@@ -1084,6 +1086,20 @@ function forcedHeel(rep: Replay, hour: number, hdg: number): number | null {
   return rel > 0 ? -deg : deg; // roll + is to starboard: wind from starboard heels her to port
 }
 
+/** A yacht's sails for the forced wind (status.force.reef, Sam's rule): full to 16 kt,
+ * one reef to 21, two to 27, storm sails to 33, bare poles above; one step more sail
+ * with the wind 150 degrees or more aft. */
+function forcedPlan(rep: Replay, hour: number, hdg: number): string | null {
+  if (!status.force.reef || status.force.wind < 0 || !rep.sail_plan) return null;
+  const kt = status.force.wind * 1.94384;
+  const steps = ["full", "reef1", "reef2", "storm", "down"];
+  let i = kt <= 16 ? 0 : kt <= 21 ? 1 : kt <= 27 ? 2 : kt <= 33 ? 3 : 4;
+  const [wu, wv] = windAt(rep, hour);
+  const from = THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv));
+  if (Math.abs(((((from - hdg) % 360) + 540) % 360) - 180) >= 150) i = Math.max(0, i - 1);
+  return steps[i];
+}
+
 /** The proof camera (status.cam): placed from the bow each frame, so it rides with the boat. */
 function placeCam(r: NonNullable<typeof status.cam>): void {
   const yaw = smoothYaw ?? 0;
@@ -1202,8 +1218,7 @@ renderer.setAnimationLoop(() => {
     if (model) {
       // Working equipment from the log: props with speed, rudder with the turn,
       // wing and vane with the apparent wind, panels with the sun, the comms light.
-      const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
-      const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
+      const [wu, wv] = windAt(rep, hour); // the forced wind for proof pictures, else the log
       const shownHdg = 90 - THREE.MathUtils.radToDeg(smoothYaw);
       const failed = failuresAt(rep, hour);
       model.gear.update(
@@ -1218,7 +1233,7 @@ renderer.setAnimationLoop(() => {
         t,
       );
       if (model.rig) {
-        model.rig.update(dt, { flow: apparentFlow(wu, wv, stw, shownHdg), plan: planAt(rep, hour), rudder: model.gear.shown.rudder });
+        model.rig.update(dt, { flow: apparentFlow(wu, wv, stw, shownHdg), plan: forcedPlan(rep, hour, shownHdg) ?? planAt(rep, hour), rudder: model.gear.shown.rudder });
         (status as unknown as { rig: object }).rig = { ...model.rig.shown, heel: THREE.MathUtils.radToDeg(motion.roll), over: motion.capsized };
       }
       status.gear = { parts: model.gear.parts(), now: model.gear.shown, failed: [...failed.keys()] };
