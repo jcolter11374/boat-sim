@@ -889,6 +889,45 @@ const CHECKS = {
       return `tack A: "${a}"; tack B: "${b}"; ${shots.join(", ")}`;
     },
   },
+  // Manual: #379, close frames of the kayak's bow (no "V4") in the Boatyard (zoomed in, from
+  // a few sides) and in the voyage replay's cinematic view. Printed to the log like "look".
+  "look-bow": {
+    manual: true,
+    path: "boatyard.html",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 88 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 30, null, { timeout: 3 * MIN });
+      await page.waitForTimeout(3000);
+      const c = await page.locator("canvas").first().boundingBox();
+      const cx = c.x + c.width / 2, cy = c.y + c.height / 2;
+      await page.mouse.move(cx, cy);
+      for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, -300); await page.waitForTimeout(150); }
+      await page.waitForTimeout(1500);
+      await shot("bow-yard-1");
+      for (const [n, dx] of [["2", 220], ["3", -440]]) {
+        await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(cx + dx, cy, { steps: 12 }); await page.mouse.up();
+        await page.waitForTimeout(1500);
+        await shot(`bow-yard-${n}`);
+      }
+      await page.goto(SITE + "voyage.html", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__replay && (window.__replay.frames ?? 0) > 30, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.click("#cinebtn", { noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(5000);
+      await shot("bow-voyage-cinematic");
+      return `${shots.length} looks: ${shots.join(", ")}`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
