@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { launchSetWords, launchSetYears, sharedKayakBadges, versusWords } from "../src/boardwords";
+import { groupSummary, launchSetWords, launchSetYears, sharedKayakBadges, tierName, versusWords } from "../src/boardwords";
 
 test("launch sets in words", () => {
   assert.equal(launchSetWords("2015-2019-AprJun-every7d-v1"), "April to June launches every 7 days, 2015 to 2019");
@@ -40,4 +40,26 @@ test("the kayak's length note is said once, not on every row", () => {
   assert.deepEqual(sharedKayakBadges(rows), [cap]);
   assert.deepEqual(sharedKayakBadges(rows.slice(0, 1)), []); // one kayak: nothing to fold
   assert.deepEqual(sharedKayakBadges([...rows, { design: "revb", badges: [cap] }]), []); // not kayak-only
+});
+
+test("short words in the comparison cell (Milo M8)", () => {
+  assert.equal(versusWords({ gap: -0.12, ci95: [-0.23, -0.02], gained: 1, lost: 9, clear: true }).short, "Worse: 12 fewer finishes in 100");
+  assert.equal(versusWords({ gap: 0.12, ci95: [0.03, 0.21], gained: 9, lost: 1, clear: true }).short, "Better: 12 more finishes in 100");
+  assert.equal(versusWords({ gap: 0.02, ci95: [-0.03, 0.09], gained: 2, lost: 0, clear: false }).short, "Same as ours");
+  assert.equal(versusWords({ gap: -0.06, ci95: [-0.15, 0.03], gained: 2, lost: 6, clear: false }).short, "Maybe worse (could be luck)");
+});
+
+test("groups are named and fold to one row (Milo M6, M7)", () => {
+  assert.deepEqual([1, 2, 3].map((t) => tierName(t, 3)), ["Best", "Good", "Long shot"]);
+  assert.deepEqual([1, 2].map((t) => tierName(t, 2)), ["Best", "Long shot"]);
+  assert.equal(tierName(1, 1), "Best");
+  assert.deepEqual([1, 2, 3, 4].map((t) => tierName(t, 4)), ["Best", "Good", "Good", "Long shot"]);
+  for (let g = 1; g <= 6; g++) for (let t = 1; t <= g; t++) assert.doesNotMatch(tierName(t, g), /poor|bad|worst/i);
+  const five = ["Our kayak", "Our kayak + wing sail and motors", "Our kayak, bigger panels and batteries", "Our kayak, motors turned up (30 W)", "Our kayak, motors turned down (20 W)"];
+  assert.equal(groupSummary(five, true), "Our kayak and 4 builds just as good");
+  assert.equal(groupSummary(["Randolph Rev C5, as built", "Randolph Rev B, as built"], false), "Randolph Rev C5 and Rev B");
+  assert.equal(groupSummary(["A", "B", "C"], false), "A, B and C");
+  assert.equal(groupSummary(five, false), "Our kayak and 4 more");
+  assert.equal(groupSummary(["Our kayak"], true), "Our kayak");
+  for (const best of [false]) assert.doesNotMatch(groupSummary(["Randolph Rev C5, as built", "Randolph Rev B, as built"], best), /just as good/);
 });
