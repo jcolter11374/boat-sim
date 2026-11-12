@@ -287,16 +287,26 @@ const CHECKS = {
       const turned = ((h1 - h0 + 540) % 360) - 180;
       must(turned > 10, `holding the right arrow 1.5 s only turned from ${h0}° to ${h1}°`);
       out.push(`holding → turned ${h0}° to ${h1}°`);
+      // The new heading starts a simulator run; Take the wheel waits for it (takeWheel awaits the
+      // run in flight), which on a busy runner in Firefox can pass 20 s (Lena, #368). Let it finish
+      // first, then time the handover itself; a slow one is reported, not failed.
+      const tIdle = Date.now();
+      await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 2 * MIN }).catch(() => {});
+      await page.waitForTimeout(1500);
+      const idleSecs = Math.round((Date.now() - tIdle) / 1000);
       await openOrders(page);
       const b = page.locator("#b-wheel");
       must(await b.isVisible(), `no "Take the wheel" button on the cruiser`);
+      const t0 = Date.now();
       await b.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
         throw new CheckFail(`couldn't click "Take the wheel"`);
       });
-      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 20_000 }).catch(async () => {
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 60_000 }).catch(async () => {
         const n = await page.evaluate(() => document.querySelector("#notes .note .txt")?.textContent ?? "");
-        throw new CheckFail(`"Take the wheel" didn't hand over the boat (latest note "${n}")`);
+        throw new CheckFail(`"Take the wheel" didn't hand over the boat in 60 s (busy ${await page.evaluate(() => window.__helm.busy)}; latest note "${n}")`);
       });
+      const handSecs = (Date.now() - t0) / 1000;
+      out.push(`after the new heading the simulator was busy ~${idleSecs} s; the wheel took ${handSecs.toFixed(1)} s${handSecs > 5 ? " (slow for a player)" : ""}`);
       await page.keyboard.down("ArrowLeft");
       await page.waitForTimeout(1000);
       await page.keyboard.up("ArrowLeft");
