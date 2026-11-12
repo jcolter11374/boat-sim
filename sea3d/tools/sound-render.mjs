@@ -37,6 +37,12 @@ const SCENES = [
   { name: "force5-beating", rig: "shrouds", w: at(5, { stw: 3, apparent: 13.2 }) },
   { name: "force5-running", rig: "shrouds", w: at(5, { stw: 3, apparent: 6.2 }) },
   { name: "force2-drifting-swell", rig: "shrouds", w: at(2, { stw: 0.2, hs: 1.2, tp: 9 }) },
+  // Story moments over a force 4 sea, one after another (Elena's plan, 12 Nov).
+  { name: "moments", rig: "shrouds", w: at(4, { stw: 2.4 }), seconds: 60, moments: [[12, "breakdown:motors_off"], [19, "breakdown:part_failed"], [26, "breakdown:battery_empty"], [31, "breakdown:ship_strike"], [42, "horn"], [50, "bell:1"], [53, "bell:2"], [56, "bell:3"]] },
+  // A knockdown happens in a gale: heard over force 7.
+  { name: "moment-knockdown-force7", rig: "shrouds", w: at(7, { stw: 2.6 }), moments: [[4, "crash"], [16, "crash"]] },
+  // At the wheel, force 4: luffing up from drawing (0) through a flutter to in irons (1) and back.
+  { name: "moment-luff-force4", rig: "shrouds", w: at(4, { stw: 1.5 }), luffRamp: true },
   { name: "force5-rain", rig: "shrouds", w: at(5, { stw: 2.4, rain: 0.8 }) },
   // Cinematic: the camera cuts between close (5 m) and far (80 m) every 8 s, a fade on every second cut.
   { name: "force5-cinematic-cuts", rig: "shrouds", w: at(5, { stw: 2.4 }), cuts: true },
@@ -67,7 +73,14 @@ for (const s of SCENES) {
             if (k % 2 === 0 && t % 8 > 7.6 && t % 8 < 7.6 + dt) snd.duck(0.7);
           }
           if (s.hello && Math.abs(t - 0.5) < dt / 2) snd.hello();
-          snd.update(dt, { ...s.w, near });
+          for (const [at, what] of s.moments ?? []) {
+            if (Math.abs(t - at) < dt / 2) {
+              const [fn, arg] = what.split(":");
+              snd[fn](fn === "bell" ? Number(arg) : arg);
+            }
+          }
+          const luff = s.luffRamp ? Math.max(0, Math.min(1, t < 30 ? (t - 5) / 20 : (50 - t) / 15)) : 0;
+          snd.update(dt, { ...s.w, near, luff });
           void ctx.resume();
         });
       }
