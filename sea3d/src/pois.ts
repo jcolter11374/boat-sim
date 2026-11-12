@@ -186,9 +186,10 @@ const STYLE = `
   border-radius: 12px; color: #e9f1fb; background: rgba(10,22,38,.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); overflow: hidden;
   animation: poi-in .45s cubic-bezier(.2,.8,.2,1); }
-.poi-card .poi-k { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .9px;
+.poi-card .poi-k { display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .9px;
   text-transform: uppercase; color: #9fb3c8; padding-right: 22px; }
-.poi-card .poi-k .poi-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; letter-spacing: .5px; }
+.poi-card .poi-k .poi-where { min-width: 0; overflow-wrap: anywhere; letter-spacing: .5px; padding-top: 1px; }
+.poi-card .poi-k .poi-when { white-space: nowrap; }
 .poi-card .poi-k .poi-badge { flex: none;  color: #0b1726; background: var(--c, #5cc8e0); border-radius: 999px; padding: 1px 7px; letter-spacing: .6px; }
 .poi-card .poi-t { font-weight: 650; font-size: 15.5px; margin: 5px 0 4px; color: #fff; }
 .poi-card .poi-x-text { color: #d6e2ef; }
@@ -258,7 +259,14 @@ export class PoiCards {
     badge.textContent = KIND_LABEL[p.poi.kind];
     const where = d.createElement("span");
     where.className = "poi-where";
-    where.textContent = `${whereFrom(p)}${when ? ` · ${when}` : ""}`;
+    where.textContent = whereFrom(p);
+    if (when) {
+      // The day stays in one piece when the line wraps ("Day 0.0", never "Day" / "0.0").
+      const day = d.createElement("span");
+      day.className = "poi-when";
+      day.textContent = `· ${when}`;
+      where.append(" ", day);
+    }
     k.append(badge, where);
     add("div", "poi-t", p.poi.title);
     add("div", "poi-x-text", p.poi.text);
