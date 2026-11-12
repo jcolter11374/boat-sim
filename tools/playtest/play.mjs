@@ -238,6 +238,77 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #348: on the cruiser, holding an arrow keeps turning, and "Take the wheel" hands you the boat until Esc.
+  "helm-wheel": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await helmStart(page, async (p) => {
+        const r = p.locator('input[name="boat"][value="stock_cruiser31"]');
+        if ((await r.count()) !== 1) throw new SkipCheck("the cruiser isn't offered in the helm's boat picker");
+        await r.check();
+      });
+      if (!(await page.locator("#b-wheel").count())) throw new SkipCheck("this build has no Take the wheel (#348 not deployed)");
+      const out = [];
+      // Hold-to-turn: a tap is 5 degrees; holding for 1.5 s should turn well past that.
+      await page.evaluate(() => document.activeElement?.blur?.()); // keys to the page, not a focused control
+      const read = () => page.evaluate(() => document.getElementById("ordertext").textContent);
+      await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(300);
+      const tapped = await read();
+      const h0 = Number((tapped.match(/Steering (\d+)/) || [])[1]);
+      must(Number.isFinite(h0), `an arrow key didn't give a heading to steer (orders say "${tapped}")`);
+      await page.keyboard.down("ArrowRight");
+      await page.waitForTimeout(1500);
+      await page.keyboard.up("ArrowRight");
+      await page.waitForTimeout(300);
+      const held = await read();
+      const h1 = Number((held.match(/Steering (\d+)/) || [])[1]);
+      const turned = ((h1 - h0 + 540) % 360) - 180;
+      must(turned > 10, `holding the right arrow 1.5 s only turned from ${h0}° to ${h1}°`);
+      out.push(`holding → turned ${h0}° to ${h1}°`);
+      const b = page.locator("#b-wheel");
+      must(await b.isVisible(), `no "Take the wheel" button on the cruiser`);
+      await b.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
+        throw new CheckFail(`couldn't click "Take the wheel"`);
+      });
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 20_000 }).catch(async () => {
+        const n = await page.evaluate(() => document.querySelector("#notes .note .txt")?.textContent ?? "");
+        throw new CheckFail(`"Take the wheel" didn't hand over the boat (latest note "${n}")`);
+      });
+      await page.keyboard.down("ArrowLeft");
+      await page.waitForTimeout(1000);
+      await page.keyboard.up("ArrowLeft");
+      await page.screenshot({ path: `play-${BROWSER}-wheel.png` }).catch(() => {});
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !window.__wheel.on, null, { timeout: 15_000 }).catch(() => {
+        throw new CheckFail("Esc didn't hand the boat back");
+      });
+      const n = await page.evaluate(() => [...document.querySelectorAll("#notes .note")].filter((e) => /At the wheel/.test(e.textContent)).length);
+      must(n >= 1, "no 'At the wheel' note after taking and handing back the wheel");
+      out.push("took the wheel, steered, Esc handed back");
+      return out.join("; ");
+    },
+  },
+  // #359: starting from Annapolis, the Bay's coast squares load around the boat.
+  "helm-bay-squares": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await helmStart(page, async (p) => {
+        await p.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN }).catch(() => {
+          throw new SkipCheck("no port picker");
+        });
+        const v = await p.evaluate(() => [...document.querySelectorAll("#port option")].find((o) => /annapolis/i.test(o.value + o.textContent))?.value ?? "");
+        if (!v) throw new SkipCheck("Annapolis isn't offered as a start");
+        await p.selectOption("#port", v);
+      });
+      if (!(await page.evaluate(() => "squares" in (window.__helm.land ?? {})))) throw new SkipCheck("this build has no coast squares (#359 not deployed)");
+      const n = await page.waitForFunction(() => window.__helm.land.squares > 0 && window.__helm.land.squares, null, { timeout: 90_000 }).then((h) => h.jsonValue()).catch(() => 0);
+      await page.screenshot({ path: `play-${BROWSER}-bay-squares.png` }).catch(() => {});
+      must(n > 0, `no coast squares loaded around the boat off Annapolis in 90 s (land ${JSON.stringify(await page.evaluate(() => window.__helm.land))})`);
+      const credit = await page.evaluate(() => document.body.innerText.match(/[^\n]*(CUDEM|Sentinel)[^\n]*/)?.[0] ?? "");
+      return `${n} coast squares around the boat; credit "${credit.trim().slice(0, 100)}"`;
+    },
+  },
   // Sam's spot 5: "Sail until something happens" stops within 72 h.
   "helm-until": {
     path: "helm.html?quality=low",
@@ -281,7 +352,7 @@ const CHECKS = {
     },
   },
   ...Object.fromEntries(
-    [["helm-drone", "stock_sail_drone7"], ["helm-rower", "stock_ocean_rower45"], ["helm-cruiser", "stock_cruiser31"]].map(([n, b]) => [
+    [["helm-drone", "stock_sail_drone7"], ["helm-rower", "stock_ocean_rower45"], ["helm-cruiser", "stock_cruiser31"], ["helm-pearson", "stock_pearson31_2"]].map(([n, b]) => [
       n,
       {
         path: "helm.html?quality=low",
