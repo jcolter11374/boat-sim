@@ -84,13 +84,15 @@ const frag = /* glsl */ `
     float arms = exp(-pow((across + 0.6 * wob * 0.3 - 0.8) / 0.07, 2.0)) * (1.0 - smoothstep(0.0, 0.65, age)) * 0.7;
     float body = max(centre, arms);
     // Streaky, turbulent foam: noise stretched along the flow, thinning with age.
-    float st = vnoise(vec2(q.x * 0.22, q.y * 4.5) + 3.0) * 0.55 + vnoise(vec2(q.x * 0.7, q.y * 10.0) + uTime * 0.05) * 0.3 + vnoise(q * 3.0) * 0.15;
+    float st = vnoise(vec2(q.x * 0.45, q.y * 4.5) + 3.0) * 0.5 + vnoise(vec2(q.x * 1.1, q.y * 9.0) + uTime * 0.05) * 0.3 + vnoise(q * 3.0) * 0.2;
     float isl = st;
     float churn = body;
-    float foam = body * smoothstep(0.38 + 0.25 * age, 0.62 + 0.2 * age, st + 0.22 * (1.0 - age)) * (1.0 - 0.5 * age);
+    // Broken, never a solid sheet: about a third of the churned band is white near the stern,
+    // thinning to wisps aft (Ines: no pale slab behind the transom).
+    float foam = body * smoothstep(0.5 + 0.12 * age, 0.66 + 0.14 * age, st + 0.08 * (1.0 - age)) * (1.0 - 0.5 * age);
     // Fresh foam under the stern is a churned white mass, the hull's width.
-    float fresh = (1.0 - smoothstep(0.0, 0.15, age)) * (1.0 - smoothstep(0.4, 1.1, across / max(centreW, 0.05) + wob));
-    foam = max(foam, fresh * lumps(q * 1.3 + 5.7, 0.35) * smoothstep(0.3, 0.6, st));
+    float fresh = (1.0 - smoothstep(0.0, 0.08, age)) * (1.0 - smoothstep(0.4, 1.1, across / max(centreW, 0.05) + wob));
+    foam = max(foam, 0.8 * fresh * lumps(q * 1.3 + 5.7, 0.55) * smoothstep(0.45, 0.7, st));
     float a = foam * uI * smoothstep(0.0, 0.04, age);   // soft start under the stern
     // Bubbles just under the surface make the whole band a pale, milky turquoise.
     float milk = centre * uI * 0.07 * (1.0 - 0.7 * age) * smoothstep(0.45, 0.8, isl);
@@ -98,6 +100,8 @@ const frag = /* glsl */ `
     // Never a hard-edged strip: fade out well inside its sides and ease in under the stern.
     float alpha = clamp(max(0.85 * a, milk), 0.0, 0.85) * (1.0 - smoothstep(0.82, 0.98, across)) * smoothstep(0.0, 0.06, age);
     gl_FragColor = vec4(col * (uLight + foamLamp(vW)), alpha);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 

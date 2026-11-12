@@ -54,6 +54,8 @@ const collarFrag = /* glsl */ `
     float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
     a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
     gl_FragColor = vec4(vec3(0.84, 0.88, 0.9) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.6));
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -80,6 +82,8 @@ const sprayFrag = /* glsl */ `
     float r = dot(d, d) * 4.0;
     if (r > 1.0) discard;
     gl_FragColor = vec4(vec3(0.9, 0.94, 0.97) * (uLight + foamLamp(vW)), vAlpha * exp(-3.0 * r) * (1.0 - r));
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -121,7 +125,9 @@ export class Contact {
   private greenWater(t: number, h: number): void {
     const small = this.spec.length < 5;
     // A small boat is swept end to end; a yacht takes it over the bow (GUESS by eye).
-    this.over = small ? { t, dur: 1.1, h, from: 1.3, to: -1.3 } : { t, dur: 0.9, h, from: 1.25, to: 0.15 };
+    // h is the depth over the deck, so the hump is raised by the freeboard too (a kayak's
+    // ~0.3 m GUESS from the model), or it would stay hidden behind the hull's side.
+    this.over = small ? { t, dur: 1.1, h: h + 0.3, from: 1.3, to: -1.3 } : { t, dur: 0.9, h, from: 1.25, to: 0.15 };
   }
 
   /** A breaking crest hits the boat now (a knockdown): a big sheet of spray next frame, 0..1. */
@@ -334,11 +340,17 @@ export class Contact {
           // just past the steepest part of the face: throw the sheet once for this face
           crest = this.risePeak;
           // From force 6 a fast-rising face breaks over a low deck (Sam's checklist 3).
-          const gw = THREE.MathUtils.smoothstep(hs, 2.0, 4.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) * Math.min(0.5, 0.3 * (crest - CREST_RISE));
+          const gw = THREE.MathUtils.smoothstep(hs, 2.0, 4.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) * Math.min(0.45, 0.14 + 0.35 * (crest - CREST_RISE)); // a gale's every steep face
           if (gw > 0.05 && t - this.over.t > this.over.dur) this.greenWater(t, gw);
           burst += Math.min(220, Math.round((this.risePeak - CREST_RISE) * 150 * (0.4 + speedK) * slamK * slamK));
           this.risePeak = -1;
         }
+      }
+      // Between the big faces a small low deck in a gale is still awash: the short crests
+      // slop over it every few seconds (Sam's checklist 3; GUESS by eye, display only).
+      const awashK = THREE.MathUtils.smoothstep(hs, 3.5, 5.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) ** 2;
+      if (awashK > 0.05 && t - this.over.t > this.over.dur + 0.5 && Math.random() < dt * 0.5 * awashK) {
+        this.greenWater(t, (0.12 + 0.14 * Math.random()) * awashK);
       }
       if (this.pending > 0) {
         this.greenWater(t, 0.45 * this.pending);
