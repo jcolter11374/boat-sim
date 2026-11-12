@@ -58,7 +58,8 @@ const collarFrag = /* glsl */ `
     float aft = smoothstep(0.15, 0.9, vUV.x);
     float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
     a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
-    gl_FragColor = vec4(vec3(0.97, 0.99, 1.0) * (0.25 + 1.2 * uLight + foamLamp(vW)), clamp(a, 0.0, 0.95));
+    // At night a faint grey shape at most, even under the deck lamp (Ines, night check).
+    gl_FragColor = vec4(vec3(0.97, 0.99, 1.0) * (1.2 * uLight + 0.45 * foamLamp(vW)), clamp(a, 0.0, 0.95) * mix(0.6, 1.0, smoothstep(0.1, 0.4, uLight)));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }

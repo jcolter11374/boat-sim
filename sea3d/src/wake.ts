@@ -99,7 +99,7 @@ const frag = /* glsl */ `
     vec3 col = mix(vec3(0.55, 0.78, 0.8), vec3(0.86, 0.9, 0.91), clamp(a / max(a + milk, 1e-3), 0.0, 1.0));
     // Never a hard-edged strip: fade out well inside its sides and ease in under the stern.
     float alpha = clamp(max(0.85 * a, milk), 0.0, 0.85) * (1.0 - smoothstep(0.82, 0.98, across)) * smoothstep(0.0, 0.06, age);
-    gl_FragColor = vec4(col * (uLight + foamLamp(vW)), alpha);
+    gl_FragColor = vec4(col * (uLight + 0.45 * foamLamp(vW)), alpha * mix(0.6, 1.0, smoothstep(0.1, 0.4, uLight))); // faint at night (Ines)
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
