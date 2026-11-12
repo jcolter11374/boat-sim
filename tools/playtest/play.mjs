@@ -167,7 +167,12 @@ const CHECKS = {
       must(!p.err, `sailing failed: ${p.err}`);
       if (!p.over) {
         must(/paused/i.test(p.state), `paused but the time bar says "${p.state}"`);
-        must(p.stop === "time" || /^Paused:/.test(p.note), `paused for "${p.stop}" with no reason in the notes (latest note "${p.note}")`);
+        // The reason's note appears once the picture has played on to the moment it stopped (#341), so give it time.
+        if (p.stop !== "time") {
+          const why = await page.waitForFunction(() => [...document.querySelectorAll("#notes .note .txt")].map((e) => e.textContent).find((t) => /^Paused:/.test(t)), null, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => "");
+          must(why, `paused for "${p.stop}" with no "Paused: ..." reason in the notes after 30 s (latest note "${p.note}")`);
+          p.note = why;
+        }
       }
       // The picture plays on to the moment it stopped; then the 3D label and the panel must agree.
       const agree = await page.waitForFunction(() => { const c = document.getElementById("clock").textContent.trim(); return c && c === document.getElementById("day").textContent.trim(); }, null, { timeout: 30_000 }).then(() => true).catch(() => false);
