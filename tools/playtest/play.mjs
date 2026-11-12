@@ -859,7 +859,7 @@ const CHECKS = {
         await lookShot(page, `m0-${BROWSER}-${w}-voyage-strip.jpg`);
         await page.evaluate(() => window.__replay.setHour?.(24 * 30));
         await page.waitForTimeout(3000);
-        const eq = await page.evaluate(() => (document.getElementById("c-eq")?.innerText ?? "").replace(/\s+/g, " "));
+        const eq = await page.evaluate(() => { const l = document.querySelector("#c-eq .l"); return { count: l?.getAttribute("data-bad") ?? "", red: document.querySelectorAll("#eq .part.bad").length, shown: l ? getComputedStyle(l, "::after").content : "" }; });
         await lookShot(page, `m0-${BROWSER}-${w}-voyage-day30.jpg`);
         await page.evaluate(() => { const t = document.getElementById("top"); if (t && !t.classList.contains("open")) document.getElementById("replay-tab")?.click(); });
         await page.waitForTimeout(1500);
@@ -870,8 +870,8 @@ const CHECKS = {
         console.log(`M0-422 ${w} ${JSON.stringify({ cell, eq, end })}`);
         must(!cell.cut, `at ${w}: wind/waves cell cut off: "${cell.text}"`);
         must(!end.overlap, `at ${w}: the drawer still covers the end card`);
-        must(/\d/.test(eq), `at ${w}: no broken-part count on Equipment at day 30 ("${eq}")`);
-        out.push(`${w}: "${cell.text}", eq "${eq}", end card clear`);
+        must(eq.red === 0 || (eq.count === String(eq.red) && /\d/.test(eq.shown)), `at ${w}: Equipment count at day 30 doesn't match the red parts (${JSON.stringify(eq)})`);
+        out.push(`${w}: "${cell.text}", Equipment count ${eq.count || "none"} for ${eq.red} red parts, end card clear`);
       }
       // #406: the story-first results card (1 May 2020: both boats lose their computers on day 3.9).
       await page.setViewportSize({ width: 1280, height: 720 });
