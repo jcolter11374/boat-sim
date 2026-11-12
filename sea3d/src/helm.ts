@@ -1011,7 +1011,7 @@ addEventListener("blur", () => {
 let wheelRate = 0; // the clock's speed before the spell, to carry on at
 let wheelNow: WheelFrame | null = null;
 const wheel = new WheelSession({
-  ended: (r) => void wheelEnded(r),
+  ended: (r) => void (PRACTICE ? practiceEnded(r) : wheelEnded(r)),
   note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
 });
 (window as unknown as { __wheel: WheelSession }).__wheel = wheel;
@@ -1044,6 +1044,47 @@ async function wheelEnded(r: WheelResult): Promise<void> {
   showOrder();
   setRate(wheelRate);
 }
+// "Practice sailing" (Leo): helm.html?practice. The cruiser, no voyage and no simulator to
+// load: a spell to a mark in a steady wind, a new one each time (a reach, a beat, a run).
+const PRACTICE = params.has("practice");
+let practiceWind: { u: number; v: number } | null = null;
+let practiceN = 0;
+async function practiceSpell(): Promise<void> {
+  $("practice-end").hidden = true;
+  const kinds = [
+    { kn: 12, off: 90, name: "a reach: the wind from the side" },
+    { kn: 10, off: 0, name: "a beat: the mark is upwind, so zigzag (tack) toward it" },
+    { kn: 16, off: 165, name: "a run: the wind behind you" },
+    { kn: 22, off: 70, name: "a fresh breeze: reef if she leans too far" },
+  ];
+  const k = kinds[practiceN++ % kinds.length];
+  const from = (practiceN * 137) % 360; // a different compass each time
+  const ms = k.kn / 1.943844;
+  const toward = ((from + 180) * Math.PI) / 180;
+  practiceWind = { u: Math.sin(toward) * ms, v: Math.cos(toward) * ms };
+  // Mark bearing: `off` degrees from the wind; for a beat the mark is straight upwind and the
+  // boat starts close-hauled.
+  const mark = (from + k.off + 360) % 360;
+  const heading = k.off === 0 ? (from + 50) % 360 : mark;
+  const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
+  if (ok) {
+    $("practice-what").textContent = `Practice ${practiceN}: ${k.kn} knots, ${k.name}.`;
+    $("practice-what").hidden = false;
+  }
+}
+function practiceEnded(r: WheelResult): void {
+  $("practice-sum").textContent = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
+  $("practice-end").hidden = false;
+  $("practice-what").hidden = true;
+}
+if (PRACTICE) {
+  document.body.classList.add("practice");
+  $("start").hidden = true;
+  useBoat("stock_cruiser31");
+  $("practice-again").addEventListener("click", () => void practiceSpell());
+  void practiceSpell();
+}
+
 /** Hand-trimmed watches this game, as hours from the start, for the chart. */
 const trimWatches: [number, number][] = [];
 function trimRanges(): [number, number][] | undefined {
@@ -1100,12 +1141,12 @@ function toggleKeyHint(): void {
 }
 addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
-  if (!page.ready || page.status?.over || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
-  // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's.
-  if (wheel.on) {
+  // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's (practice has no game).
+  if (wheel.on && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
     if (wheel.key(e, true)) e.preventDefault();
     return;
   }
+  if (!page.ready || page.status?.over || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
   // Enter takes the wheel, unless a keyboard user has a button or link focused (then Enter presses it).
   if (e.code === "Enter" && !t?.closest?.("button:focus-visible, a:focus-visible") && wheelOffered()) {
     e.preventDefault();
@@ -1921,8 +1962,8 @@ renderer.setAnimationLoop(() => {
   const from = r ? angleAt(r, r.wave_dir, h) ?? 270 : 270;
   live.setSeaState(hs, tp, from);
   const comps = live.advance(t);
-  const wu = r ? valueAt(r, r.wind_u, h) ?? 0 : 3;
-  const wv = r ? valueAt(r, r.wind_v, h) ?? 0 : 0;
+  const wu = r ? valueAt(r, r.wind_u, h) ?? 0 : practiceWind?.u ?? 3;
+  const wv = r ? valueAt(r, r.wind_v, h) ?? 0 : practiceWind?.v ?? 0;
   sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv));
   sea.update(comps, t);
   // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).
