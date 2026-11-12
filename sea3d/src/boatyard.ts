@@ -116,7 +116,7 @@ function build(): void {
   motion = new BoatMotion(KAYAK_V4, place);
   model = BUILDERS.kayak(quality);
   shadowsOn(model.root);
-  contact = new Contact(model.form, KAYAK, quality);
+  contact = new Contact(model.form, KAYAK, quality, model.root);
   scene.add(model.root, contact.collar, contact.spray);
   outfit = new Outfit(model);
   outfit.onShapeLoaded = () => cat && redraw();

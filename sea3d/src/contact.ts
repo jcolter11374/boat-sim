@@ -8,6 +8,8 @@ import type { HullForm, Quality } from "./boats/parts";
 import type { BoatSpec } from "./boats/specs";
 import { toWorld, type Placement } from "./standin";
 import { heightAt, type WaveComponent } from "./waves";
+import { WashSlot } from "./boatWash";
+import { putInWater } from "./boats/inWater";
 
 const N_SIDE = 40; // outline points per side
 
@@ -103,7 +105,16 @@ export class Contact {
   /** For the test hook: how much is showing. */
   readonly shown = { collar: 0, spray: 0 };
 
-  constructor(form: HullForm, spec: BoatSpec, quality: Quality) {
+  /** This hull's bow wave and wash in the sea (boatWash.ts), and its wet line (boats/inWater.ts). */
+  private readonly wash: WashSlot | null;
+  private readonly water: ReturnType<typeof putInWater> | null;
+  private wlMid = 0;
+  private wlLength = 0;
+  private wlHalfBeam = 0;
+
+  /** root: the boat's model, to put its hull materials in the water (wet line, nothing
+   *  showing below the surface). Without it only the foam collar and spray are drawn. */
+  constructor(form: HullForm, spec: BoatSpec, quality: Quality, root?: THREE.Object3D) {
     // Waterline outline from the hull form (same maths as parts.ts hull()):
     // at height wl the half-width is b (1 - (1 - t)^n)^(1/n), t = (wl - kz) / (dz - kz).
     const side: [number, number, number][] = []; // builder x, half-width, s
@@ -127,6 +138,14 @@ export class Contact {
       this.ring.push([bx(x), -w]);
       this.along.push(s);
     }
+    const xs = this.ring.map(([x]) => x);
+    const lo = Math.min(...xs);
+    const hi = Math.max(...xs);
+    this.wlMid = (lo + hi) / 2;
+    this.wlLength = hi - lo;
+    this.wlHalfBeam = Math.max(...this.ring.map(([, w]) => Math.abs(w)));
+    this.wash = WashSlot.take();
+    this.water = root ? putInWater(root) : null;
     const m = this.ring.length;
     for (let i = 0; i < m; i++) {
       const a = this.ring[(i - 1 + m) % m];
@@ -233,6 +252,11 @@ export class Contact {
     u.uDir.value.set(Math.cos(place.yaw), -Math.sin(place.yaw));
     this.shown.collar = u.uI.value;
 
+    // The bow wave and wash in the sea, and the wet line on the hull, from the same speed and sea.
+    const [cx, cz] = toWorld(this.wlMid, 0, place);
+    this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
+    this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.05 * seaK, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
+
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.
     this.splash = 0;
@@ -292,6 +316,7 @@ export class Contact {
   }
 
   dispose(): void {
+    this.wash?.release();
     this.collar.geometry.dispose();
     this.collar.material.dispose();
     this.spray.geometry.dispose();

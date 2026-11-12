@@ -271,7 +271,7 @@ function buildBoat(q: Quality): void {
     controls.minDistance = 1.5 * k;
     viewScale = k;
   }
-  contact = new Contact(model.form, spec, q);
+  contact = new Contact(model.form, spec, q, model.root);
   scene.add(contact.collar, contact.spray);
   // Two hulls: the collar and spray follow one centred hull, so leave them off.
   contact.collar.visible = contact.spray.visible = !model.twinHull;

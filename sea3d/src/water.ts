@@ -23,8 +23,8 @@ import { foamStreaks, whitecaps } from "./storm";
 import { SEA_SURFACE_PARS, seaUniforms, writeSeaUniforms } from "./seaSurface";
 import { RAIN_RINGS, rainUniforms } from "./rainRings";
 import { ShortWaveLayer, windSeaFrom, type Detail } from "./seaDetail";
+import { BOAT_WASH_FRAGMENT, BOAT_WASH_PARS, BOAT_WASH_VERTEX, washUniforms } from "./boatWash";
 
-const SEA_OPACITY = 1;
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
@@ -42,6 +42,10 @@ const FADE_OUT = 170;
 const FLAT_IN = 2000;
 const FLAT_OUT = 2800;
 
+// The sea hides what's under it (Elena's fix 3): at 0.95 every keel and pod showed as a
+// dark stilt from above, the sky drawn behind the sea being brighter than the hull. What
+// shows just under the surface comes from the hull side instead (boats/inWater.ts).
+const SEA_OPACITY = 1;
 const DEEP = new THREE.Color(0x041d33);
 const SHALLOW = new THREE.Color(0x135a7e);
 // Chesapeake Bay water: shallow and full of silt and plankton, a green-grey, not
@@ -125,9 +129,18 @@ void gerstner(vec2 p, float w) {
 const VERT_NORMAL = /* glsl */ `
 gerstner(position.xz, fade);
 objectNormal = gNorm;
+{
+  // The hulls' own waves (boatWash.ts) tilt the surface too.
+  vec2 pw = (modelMatrix * vec4(position + gDisp, 1.0)).xz;
+  float e = 0.08;
+  float dx = (boatWave(pw + vec2(e, 0.0)) - boatWave(pw - vec2(e, 0.0))) / (2.0 * e);
+  float dz = (boatWave(pw + vec2(0.0, e)) - boatWave(pw - vec2(0.0, e))) / (2.0 * e);
+  objectNormal = normalize(objectNormal + vec3(-dx, 0.0, -dz));
+}
 `;
 const VERT_POS = /* glsl */ `
 transformed += gDisp;
+${BOAT_WASH_VERTEX}
 // The sea is flat, so its rim (3 km off) would sit a few pixels under the horizon with a
 // sliver of sky below it (Ines's hairline). Lift the rim to the eye's own level: the
 // last stretch then rises to the horizon line and fades into the haze there.
@@ -429,7 +442,9 @@ if (uStreak > 0.001) {
 }
 #endif
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), foamMask * (SEA_DET_N > 0 ? 0.88 : 1.0)); // off-white, a little see-through
-/* boat wash (boatWash.ts) */
+#ifndef SEA_LITE
+${BOAT_WASH_FRAGMENT}
+#endif
 `;
 
 const FRAG_ROUGH = /* glsl */ `
@@ -644,9 +659,10 @@ export class Sea {
       side: THREE.DoubleSide,
     });
     material.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, this.uniforms, seaUniforms, rainUniforms);
+      Object.assign(sh.uniforms, this.uniforms, seaUniforms, rainUniforms, washUniforms);
       sh.vertexShader =
         VERT_HEAD +
+        BOAT_WASH_PARS +
         sh.vertexShader
           .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\n" + VERT_NORMAL)
           .replace("#include <begin_vertex>", "#include <begin_vertex>\n" + VERT_POS)
@@ -654,7 +670,7 @@ export class Sea {
       // The boat's night deck light (helm.ts, #358) lights its deck and gear, not the
       // sea: lit from a lamp a metre up, the sea's blue turned into a cyan pool under the
       // hull that read as a hover light (Leo, Elena's audit item 12). Point lights skip it.
-      sh.fragmentShader = (RAIN_RINGS + FRAG_HEAD + sh.fragmentShader)
+      sh.fragmentShader = (RAIN_RINGS + FRAG_HEAD + BOAT_WASH_PARS + sh.fragmentShader)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOUR)
         .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
@@ -666,7 +682,7 @@ export class Sea {
     };
     material.customProgramCacheKey = () => "boatsim-sea-v14";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-    this.mesh.renderOrder = 10; // after the hulls, so keels show through
+    this.mesh.renderOrder = 10; // after the hulls (and "See under the water" lets them show through)
     this.mesh.frustumCulled = false;
     this.quality = quality;
     this.setQuality(quality);

@@ -147,7 +147,7 @@ function buildBoat(): void {
   }
   model = BUILDERS[spec.key](quality);
   reflectable(model.root);
-  contact = new Contact(model.form, spec, quality);
+  contact = new Contact(model.form, spec, quality, model.root);
   // The foam line fits single hulls the size of ours or bigger; not the twin hulls or the little Randolph boat.
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);

@@ -122,7 +122,7 @@ function buildBoats(q: Quality): void {
       b.contact.dispose();
     }
     b.model = BUILDERS[b.spec.key](q);
-    b.contact = new Contact(b.model.form, b.spec, q);
+    b.contact = new Contact(b.model.form, b.spec, q, b.model.root);
     scene.add(b.contact.collar, b.contact.spray);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
     shadowsOn(b.model.root);
