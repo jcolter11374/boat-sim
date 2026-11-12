@@ -34,7 +34,7 @@
   .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
   /* Title screen (src/title.ts): the menu over the live sea. "Just watch the sea" swaps it for the sea panel. */
   #title { position: fixed; left: max(16px, 5vw); top: calc(var(--bar, 0px) + 50% - var(--bar, 0px) / 2); transform: translateY(-50%);
-    width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - var(--bar, 0px) - 90px); overflow-y: auto; box-sizing: border-box;
+    width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - var(--bar, 0px) - 40px); overflow-y: auto; box-sizing: border-box;
     padding: 22px 22px 18px; border-radius: 14px; color: #e9f1fb; background: rgba(8,18,32,.78);
     backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(160,200,255,.2); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
   #title[hidden], body.title #panel, body.title #shots, body.title #tags { display: none; } /* no name tags over the hero shot (Ines) */
@@ -53,6 +53,9 @@
   #title nav .quiet { background: transparent; font-weight: 600; font-size: 13.5px; color: #b7c8dc; }
   #title .mine { display: flex; gap: 7px; } #title .mine[hidden] { display: none; } #title .mine a:first-child { flex: 1; }
   #title .fine { color: #8197ad; font-size: 11.5px; margin: 14px 0 0; }
+  /* 720 tall (a laptop): the whole menu fits, no row cut off at the card's edge (Ines). */
+  @media (max-height: 820px) { #title { padding: 16px 20px 14px; } #title h1 { font-size: 38px; margin-bottom: 2px; } #title .tag { font-size: 13.5px; margin: 4px 0 12px; }
+    #title nav { gap: 5px; } #title nav a, #title nav button { padding: 8px 13px; } #title nav small { font-size: 11.5px; margin-top: 1px; } #title .fine { margin-top: 10px; } }
   @media (max-height: 560px) { #title { padding: 14px 16px 12px; } #title h1 { font-size: 32px; } #title .tag { margin-bottom: 10px; } #title nav small { display: none; } }
   /* The way into the game (src/sailLink.ts): sail this sea at the helm, or build a boat first. */
   #ways { display: flex; gap: 8px; align-items: stretch; margin: 8px 0 6px; }
