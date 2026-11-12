@@ -50,8 +50,11 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
+import { seaTestFrom } from "./seaTest";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
-import { HORIZON, Sea } from "./water";
+import { HORIZON, Sea, inChesapeake } from "./water";
+import { seaUniforms } from "./seaSurface";
+import { detailFor } from "./seaDetail";
 import { PLACE, PLACES, fetchSea } from "./land/place";
 import { Island } from "./land/island";
 import { Mirror, reflectable } from "./mirror";
@@ -228,6 +231,7 @@ let wet: Wetness | null = null;
 let drain: Drain | null = null;
 /** How much bigger than our 3 m kayak the shown boat is (cameras stand back by this much). */
 let viewScale = 1;
+let photoBoat = false; // the "low" test view (status.view)
 function buildBoat(q: Quality): void {
   setForecastLook(false); // materials can be shared with the next model: put them back first
   if (model) {
@@ -275,6 +279,7 @@ function setQuality(l: Look): void {
   const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
+  sea.setDetail(detailFor(l));
   mirror.scale = q === "high" ? 0.5 : 0.35;
   buildBoat(q);
   live = new LiveSea(undefined, { n: N_COMP[q], smoothing: 0.4 });
@@ -304,7 +309,13 @@ const seaFeed = new SeaStateFeed();
 void seaFeed.init();
 let seaNow: Systems | null = null; // what the Waves card describes
 /** The logged wind (m/s towards east, north), or its speed forced for pictures and tests (status.force.wind). */
+/** Pictures of the sea only (seaTest.ts, ?seatest= and ?sun=): a fixed sea, wind and sun. */
+const SEATEST = seaTestFrom(location.search);
 function windAt(rep: Replay, hour: number): [number, number] {
+  if (SEATEST.sea) {
+    const to = THREE.MathUtils.degToRad(SEATEST.sea.ws.dirFrom + 180);
+    return [SEATEST.sea.wind * Math.sin(to), SEATEST.sea.wind * Math.cos(to)];
+  }
   const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
   const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
   const f = status.force.wind;
@@ -313,6 +324,11 @@ function windAt(rep: Replay, hour: number): [number, number] {
   return w > 0.01 ? [(wu * f) / w, (wv * f) / w] : [f, 0];
 }
 function seaTarget(rep: Replay, hour: number): number {
+  if (SEATEST.sea) {
+    seaNow = null;
+    live.setSystems(SEATEST.sea.ws, SEATEST.sea.s1, null);
+    return Math.hypot(SEATEST.sea.ws.hs, SEATEST.sea.s1?.hs ?? 0);
+  }
   if (PLACE?.fetch) {
     // A sheltered harbour: only the local wind's chop, running downwind.
     seaNow = null;
@@ -454,6 +470,33 @@ const status = {
   live: { on: LIVE, lastFix: 0, now: 0, simulated: false, forecast: false, banner: false, fixes: 0 },
   /** Jump to the latest report (the Now button). */
   goNow: () => tracked && seek(tracked.nowHour),
+  /**
+   * Pictures of the sea (with ?seatest=): "chase" (the page's own view), "long"
+   * (20 degree lens, 2.5 m up, 140 m off with the sun behind the boat) or "over"
+   * (45 m up, looking down at the boat) or "low" (from a boat 40 m off, the
+   * lens 2 m above the water there, riding its own waves: the troughs hide the boat).
+   */
+  view: (kind: "chase" | "long" | "over" | "low"): void => {
+    photoBoat = kind === "low";
+    const az = THREE.MathUtils.degToRad(SEATEST.sun?.az ?? sunAz);
+    const toSun = new THREE.Vector3(Math.sin(az), 0, -Math.cos(az)); // x east, z south
+    const t = controls.target;
+    controls.maxDistance = Math.max(controls.maxDistance, 160); // test views reach past the player's zoom limit
+    if (kind === "low") {
+      camera.fov = 35;
+      camera.position.set(t.x - 40 * toSun.x, 2, t.z - 40 * toSun.z);
+    } else if (kind === "long") {
+      camera.fov = 20;
+      camera.position.set(t.x - 140 * toSun.x, 2.5, t.z - 140 * toSun.z);
+    } else if (kind === "over") {
+      camera.fov = 45;
+      camera.position.set(t.x - 14 * toSun.x, 45, t.z - 14 * toSun.z);
+    } else {
+      camera.fov = 45;
+    }
+    camera.updateProjectionMatrix();
+    controls.update();
+  },
 };
 (window as unknown as { __replay: typeof status }).__replay = status;
 
@@ -1133,6 +1176,15 @@ renderer.setAnimationLoop(() => {
       showOutcome();
     }
     const hs = seaTarget(rep, hour);
+    // The boat sails through the water at its speed: the water flows past it
+    // (the boat stays at the scene origin), at real speed whatever the warp.
+    if (smoothYaw !== null) {
+      const run = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0) * dt;
+      const fx = run * Math.cos(smoothYaw);
+      const fz = -run * Math.sin(smoothYaw);
+      live.flow(fx, fz);
+      sea.flow(fx, fz);
+    }
     const comps = live.advance(t);
     {
       const [wu, wv] = windAt(rep, hour);
@@ -1220,7 +1272,7 @@ renderer.setAnimationLoop(() => {
     storm += (target - storm) * Math.min(1, dt * 1.5);
     // Off real land the sky is the place's own (the replay still brings the weather).
     const [lat, lon] = PLACE ? [PLACE.lat, PLACE.lon] : positionAt(rep, hour);
-    const sp = sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
+    const sp = SEATEST.sun ?? sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
     // Moon, its phase and the stars where they really were from this spot at this time.
     if (Number.isFinite(lat)) atmos.setCelestial(utc(rep.start) + hour * 3600e3, lat, lon);
     sunEl = sp.el;
@@ -1229,6 +1281,7 @@ renderer.setAnimationLoop(() => {
     atmos.cloud = clouds.cover; // last frame's, which is close enough
     atmos.set(sp.el, sp.az, storm);
     showWreck(lat, lon);
+    if (Number.isFinite(lat)) sea.setBay(SEATEST.sea?.bay ?? inChesapeake(lat, lon));
     status.stars = atmos.starCount;
     const when = utc(rep.start) / 86400e3 + hour / 24; // calendar day, so a given day is foggy in every replay
     clouds.update(
@@ -1245,6 +1298,9 @@ renderer.setAnimationLoop(() => {
       atmos.ambient,
     );
     clouds.closeIn(atmos.fog);
+    // The sea mirrors the cloud deck, so sea and sky meet without a line (Kai's Clouds.seaSky, sky PR).
+    (clouds as { seaSky?: (out: THREE.Vector4) => void }).seaSky?.(seaUniforms.uSeaSky.value);
+    (clouds as { seaBreak?: (out: THREE.Vector4) => void }).seaBreak?.(seaUniforms.uSeaBreak.value);
     status.cloud = clouds.cover;
     status.fog = clouds.fog;
     // Scene x is east, -z is north.
@@ -1294,10 +1350,16 @@ renderer.setAnimationLoop(() => {
       apparent: feel ? Math.hypot(feel.x, feel.z) : undefined,
     });
   }
-  if (!cine.update(dt)) controls.update();
+  if (photoBoat) camera.lookAt(controls.target); // the orbit controls would lift it above the boat
+  else if (!cine.update(dt)) controls.update();
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;
+    // Test view "low": the lens rides the water where it is, not the boat's heave.
+    if (photoBoat) {
+      camera.position.y = floor - 0.35 + 2 + 0.5 * sea.detailHeightAt(camera.position.x, camera.position.z);
+      camera.lookAt(controls.target);
+    }
   }
   // Ultra: focus on the boat, shadows round it; back to High if this computer can't keep up.
   if (atmos.ultra) {
