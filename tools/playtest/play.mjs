@@ -850,6 +850,9 @@ const CHECKS = {
         await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
         await page.click("#go").catch(() => {});
         await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN }).catch(() => {});
+        // The clock runs by itself after Set sail (#339); pause it so the frame is the first screen
+        // the player sees (morning on 23 Apr), not however far it ran on software graphics (Rosa).
+        await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
         await page.click("#soundno", { timeout: 3000 }).catch(() => {});
         // The drawer opens by itself for 10 s at the start; the default screen is after it shuts.
         await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
