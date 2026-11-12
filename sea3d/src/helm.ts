@@ -842,6 +842,8 @@ let lastRate = DEFAULT_RATE;
 /** The stop conditions armed when the clock started (so "a big battery drop" is measured from then). */
 let armed: Record<string, number | boolean> | null = null;
 let inFlight: Promise<void> | null = null;
+/** The clock is paused and no simulator run is on its way. */
+const clockIdle = (): boolean => !rate && !inFlight;
 let forecastAt = -Infinity;
 /** The simulator runs ahead of the picture (the clock's runs, and a skip while it plays
  *  out). The panels show each status once the picture gets to its hour, so they never
@@ -1947,6 +1949,10 @@ renderer.setAnimationLoop(() => {
     hour = Math.min(shownTo, hour + dt * (slowNow(t) ? 1 : rate));
     if (hour >= shownTo) hopPlay = false;
   }
+  // Paused with the picture at the end of the track: show what's left (#353). A stop's
+  // status can sit just after the last track hour, so the hour test above never reaches it.
+  if (page.ready && pending.length && clockIdle() && drainRate === 0 && !hopPlay && hour >= shownTo - 1e-6)
+    applyPending(true);
   runDue();
   if (finishing && hour >= shownTo - 1e-6 && !inFlight) {
     finishing = false;
