@@ -241,7 +241,7 @@ export class Hud {
     for (const el of Array.from($("notes").querySelectorAll<HTMLElement>('.note[data-sticky="1"]'))) this.dropToast(el);
   }
 
-  private dropToast(el: HTMLElement): void {
+  dropToast(el: HTMLElement): void {
     clearTimeout(this.toastTimers.get(el));
     this.toastTimers.delete(el);
     if (el.classList.contains("out")) return;

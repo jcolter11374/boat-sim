@@ -386,6 +386,11 @@ function linkCutBy(e: ReplayEvent): string | null {
   const { part } = failedPart(e);
   return part === "electronics_main" ? "main_box" : part === "comms_silent" ? "comms_silent" : null;
 }
+/** The lost link is the news: older toasts (a stale battery figure) leave so it stands alone (Ines). */
+function noteAlone(text: string, when: string, colour: string): void {
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>("#notes .note:not(.out)"))) hud.dropToast(el);
+  note(text, when, colour);
+}
 /** Link-cutting events already told by the note of the pause they caused. */
 const pausedFor = new Set<number>();
 /** "You and the ghost · Day 1.5" when the ghost lost it at the same hour (same dice), else "You · Day 1.5". */
@@ -841,7 +846,7 @@ function newEvents(): void {
       const key = `${who} ${text}`;
       if (lastNote[key] !== undefined && e.h - lastNote[key] < 6) continue;
       lastNote[key] = e.h;
-      note(text, `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+      (cut ? noteAlone : note)(text, `${label} · Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
       if (who === "boat" && hour - e.h < 3) moment(e);
     }
   }
@@ -947,7 +952,7 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
       // A lost link is told once, by its own toast (newEvents), not again here (Leo, Elena).
       const cut = e ? linkCutBy(e) : null;
       if (cut && e) pausedFor.add(e.h); // told here, with the pause; newEvents leaves it
-      note(cut ? NO_LINK_WORDS[cut] : e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), cut && e ? linkLabel(e) : `Day ${page.status!.day.toFixed(1)}`, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn);
+      (cut ? noteAlone : note)(cut ? NO_LINK_WORDS[cut] : e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), cut && e ? linkLabel(e) : `Day ${page.status!.day.toFixed(1)}`, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn);
     } else if (!(kind !== "event" && stopped === "time"))
       note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
@@ -1052,7 +1057,7 @@ async function clockRun(): Promise<void> {
         const e = game.boat!.events.filter(isNotable).at(-1);
         const cut = e ? linkCutBy(e) : null;
         if (cut && e) pausedFor.add(e.h); // one toast for a lost link, with the pause (Leo, Elena)
-        whenAt(game.status!.day * 24, () => note(`Paused: ${cut ? NO_LINK_WORDS[cut] : e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, cut && e ? linkLabel(e) : d, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn));
+        whenAt(game.status!.day * 24, () => (cut ? noteAlone : note)(`Paused: ${cut ? NO_LINK_WORDS[cut] : e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, cut && e ? linkLabel(e) : d, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn));
       } else if (stopped !== "over")
         whenAt(game.status!.day * 24, () => note(`Paused: ${stopText(stopped, game.status)}`, d, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info));
     }

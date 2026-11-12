@@ -63,7 +63,9 @@
   #nolink b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #ff8a7a; margin-bottom: 2px; }
   /* Only the steering locks: the clock (Jump ahead) and the share link keep working (Maya). */
   #orders.locked > :is(#coach, #dialrow, #powerrow, #power, #sailrow, #preview, #powerhint, #sendrow) { opacity: .35; pointer-events: none; filter: grayscale(1); }
-  #orders-tab.nolink span { color: #ff8a7a; }
+  /* "Orders: no link" is longer than "Orders": a taller tab, the words centred inside it (Ines). */
+  #orders-tab.nolink { height: 150px; }
+  #orders-tab.nolink span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); color: #ff8a7a; }
   #nolink .nlbtns { margin-top: 7px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   #nolink .nlbtns a { color: #ffd0c8; font-size: 12px; }
   body.no-link #strip #c-order .v { color: #ff8a7a; }
