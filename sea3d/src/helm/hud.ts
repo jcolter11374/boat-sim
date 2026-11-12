@@ -12,8 +12,8 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 export const TOAST_MS = { info: 6000, warn: 10000 };
 /** At most this many toasts at once; older ones leave early. */
 export const MAX_TOASTS = 2;
-/** The coach line in the open drawer for the first seconds after Set sail. */
-export const COACH_MS = 10000;
+/** The coach line in the open drawer for the first seconds after Set sail: long enough to read its three sentences (F4). */
+export const COACH_MS = 12000;
 
 export interface HudHooks {
   /** The map changed size: redraw it. */

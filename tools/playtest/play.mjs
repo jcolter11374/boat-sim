@@ -217,16 +217,6 @@ const CHECKS = {
       });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       const out = [];
-      if (await page.locator("#soundask").count()) {
-        // Asked once on setting sail; it closes by itself after 20 s, which can pass while the
-        // simulator finishes starting on a slow runner. So: it was asked, and it goes away.
-        const asked = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
-        must(asked, `"Sound on?" was never asked after Set sail`);
-        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
-        const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
-        must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
-        out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
-      }
       const fast = page.locator('#timebar .rate[data-rate="96"]');
       let decided = null;
       for (let i = 0; i < 12 && !decided; i++) {
@@ -254,6 +244,17 @@ const CHECKS = {
       }
       if (!decided) out.push("no decision came up in this voyage (not a fail)");
       else out.push(decided);
+      // "Sound on?" (#334, then Leo's one-thing-at-a-time opening): asked once, a minute in or
+      // a few seconds after the first call, whichever comes first (older builds: on Set sail).
+      // It closes by itself after 20 s, so: it was asked, and it goes away.
+      if (await page.locator("#soundask").count()) {
+        const asked = await page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: 75_000 }).then(() => true).catch(() => false);
+        must(asked, `"Sound on?" was never asked (expected a minute in, or after the first call)`);
+        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
+        const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
+        must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
+        out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
+      }
       return out.join("; ");
     },
   },
@@ -460,15 +461,16 @@ const CHECKS = {
       const next = await page.evaluate(() => ({
         kind: window.__helm.standing,
         head: document.querySelector("#r-next .standing")?.textContent ?? "",
-        links: [...document.querySelectorAll("#r-next .next a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
+        // The ways on: under the standing line (before #406), or the card's button row and quiet links (#406).
+        links: [...document.querySelectorAll("#r-next .next a, #result .rc-btns a, #result .rc-links a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
       }));
       must(next.head.trim(), "the standing line is empty");
-      must(next.links.length === 3, `expected 3 ways on, got ${JSON.stringify(next.links)}`);
+      for (const want of [/boatyard/, /race/, /leaderboard/]) must(next.links.some((l) => want.test(l.href ?? "")), `no ${want.source} link among the ways on: ${JSON.stringify(next.links)}`);
       await page.screenshot({ path: `play-${BROWSER}-results-card.png` }).catch(() => {});
       // Follow the leaderboard link like a player: the board loads.
       const lb = next.links.find((l) => /leaderboard/.test(l.href));
       must(lb, "no Leaderboard link on the card");
-      const link = page.locator(`#r-next .next a[href="${lb.href}"]`);
+      const link = page.locator(`#result a[href="${lb.href}"]`).first();
       await link.scrollIntoViewIfNeeded().catch(() => {});
       await link.click({ timeout: 15_000 }).catch((e) => {
         throw new CheckFail(`the card's Leaderboard link can't be clicked: ${String(e).split("\n")[0]}`);
