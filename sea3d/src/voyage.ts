@@ -472,16 +472,18 @@ const status = {
   /** Proof camera: held relative to the bow every frame while set; null gives the
    * camera back to the mouse. az: degrees from the bow, clockwise (180 = astern),
    * dist and h in metres (scaled with the boat), fov degrees, look: aim this high above the boat. */
-  cam: null as null | { az: number; dist: number; h: number; fov?: number; look?: number },
+  // toward: look along this compass bearing (e.g. at the moon) instead of az.
+  cam: null as null | { az: number; dist: number; h: number; fov?: number; look?: number; toward?: number },
   /** Sun elevation (degrees) at the boat at a voyage hour (proof pictures pick times of day by it). */
   sunAt: (h: number): number => sunElAt(h),
   /** The moon at the boat at a voyage hour: elevation (degrees) and how much is lit (0..1). */
-  moonAt: (h: number): { el: number; lit: number } => {
-    if (!rep) return { el: NaN, lit: 0 };
+  moonAt: (h: number): { el: number; az: number; lit: number } => {
+    if (!rep) return { el: NaN, az: NaN, lit: 0 };
     const [la, lo] = positionAt(rep, h);
     const ms = utc(rep.start) + h * 3600e3;
     const m = moonEquatorial(ms);
-    return { el: toHorizon(m.ra, m.dec, ms, la, lo).el, lit: moonPhase(ms).lit };
+    const p = toHorizon(m.ra, m.dec, ms, la, lo);
+    return { el: p.el, az: p.az, lit: moonPhase(ms).lit };
   },
   /** The last hour of the voyage(s) on screen. */
   endHour: (): number => endHour(),
@@ -1116,7 +1118,8 @@ function placeCam(r: NonNullable<typeof status.cam>): void {
   const yaw = smoothYaw ?? 0;
   const fx = Math.cos(yaw), fz = -Math.sin(yaw); // bow
   const rx = -fz, rz = fx; // starboard
-  const a = THREE.MathUtils.degToRad(r.az);
+  // Looking along a bearing puts the camera on the far side: bearing + 180, less the heading.
+  const a = THREE.MathUtils.degToRad(r.toward !== undefined ? r.toward + 180 - (90 - THREE.MathUtils.radToDeg(yaw)) : r.az);
   const d = r.dist * viewScale;
   const tg = controls.target;
   camera.position.set(tg.x + (fx * Math.cos(a) + rx * Math.sin(a)) * d, tg.y + r.h * viewScale, tg.z + (fz * Math.cos(a) + rz * Math.sin(a)) * d);

@@ -152,7 +152,17 @@ async function openUnit(browser, u) {
         for (let h = 24; h <= 72; h += 0.05) hs.push([h, r.sunAt(h)]);
         const day = hs.filter(([h]) => h < 48);
         const end = typeof r.endHour === "function" ? r.endHour() : 72;
-        if (time.pick === "moon" && typeof r.moonAt === "function") {
+        if (time.pick === "moon" && time.el !== undefined && typeof r.moonAt === "function") {
+          // A moon at a set height (and at least this lit), under a dark sky: closest height wins.
+          let best = Infinity;
+          for (let h = 24; h <= end - 1; h += 0.25) {
+            if (r.sunAt(h) > -12) continue;
+            const m = r.moonAt(h);
+            if (m.lit < (time.lit ?? 0) || m.el < 5) continue;
+            const d = Math.abs(m.el - time.el);
+            if (d < best) [best, hour] = [d, h];
+          }
+        } else if (time.pick === "moon" && typeof r.moonAt === "function") {
           // A dark sky (sun 12 degrees down or more) under the brightest high moon in the voyage.
           let best = -1;
           for (let h = 24; h <= end - 1; h += 0.25) {
@@ -211,18 +221,29 @@ const setCam = (page, v) => page.evaluate((v) => "cam" in window.__replay && (wi
 async function renderUnit(browser, u) {
   const t0 = Date.now();
   const { ctx, page, cdp, errors, info } = await openUnit(browser, u);
+  const sea = SHOTS.seas[u.sea];
   const files = [];
   try {
     if (u.views) {
       for (const v of u.views) {
         const view = SHOTS.views[v];
-        await setCam(page, { az: view.az, dist: view.dist, h: view.h, fov: view.fov, look: view.look });
+        await setCam(page, { az: view.az, dist: view.dist, h: view.h, fov: view.fov, look: view.look, ...(view.toward === "moon" && info.moon ? { toward: info.moon.az } : {}) });
+        // A gale rolls a yacht about its heel: like a photographer, wait (up to 1.5 s) for a
+        // moment inside the sea's heel limit (Sam: 20-30 degrees in gusts at force 8).
+        if (sea.maxHeel) {
+          for (let k = 0; k < 36; k++) {
+            const h = await page.evaluate(() => window.__replay.rig?.heel);
+            if (typeof h !== "number" || Math.abs(h) <= sea.maxHeel) break;
+            await step(page, 1000 / FPS);
+          }
+        }
         // Two frames: the first after a camera move can still carry the last view's reflections.
         await step(page, 1000 / FPS);
         await step(page, 1000 / FPS);
         const file = `${u.id}-${v}.png`;
         await shot(cdp, join(OUT, file));
-        files.push({ file, kind: "still", view: v });
+        const heel = await page.evaluate(() => window.__replay.rig?.heel ?? null);
+        files.push({ file, kind: "still", view: v, heel: typeof heel === "number" ? Math.round(heel) : null });
       }
     } else {
       const clip = SHOTS.clips[u.clip];

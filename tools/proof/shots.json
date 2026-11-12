@@ -1,5 +1,5 @@
 {
-  "about": "Named proof shots for tools/proof/capture.mjs. Edit here, not in the script. Views place the camera from the boat's bow: az degrees clockwise from the bow (180 = astern, 90 = starboard beam), dist and h in metres for our 3 m kayak (bigger boats scale up), fov in degrees (small = long lens), look = aim this many metres above the boat. Sea numbers are open-Atlantic targets from creative/sailor-realism-checklist.md (WMO Beaufort table); cloud and wind are looks, not physics. heel = [beat, reach, run] degrees for sailing yachts in that wind (Sam's targets; the replay's sail plan is not changed).",
+  "about": "Named proof shots for tools/proof/capture.mjs. Edit here, not in the script. Views place the camera from the boat's bow: az degrees clockwise from the bow (180 = astern, 90 = starboard beam), dist and h in metres for our 3 m kayak (bigger boats scale up), fov in degrees (small = long lens), look = aim this many metres above the boat. Sea numbers are open-Atlantic targets from creative/sailor-realism-checklist.md (WMO Beaufort table); cloud and wind are looks, not physics. heel = [beat, reach, run] degrees for sailing yachts in that wind (Sam's targets; the replay's sail plan is not changed). maxHeel: a still waits (up to 1.5 s) for a yacht's roll to come inside this many degrees. A view with toward: moon looks along the moon's bearing.",
   "boats": {
     "kayak": {
       "voyage": "voyage_2020-04-15.json",
@@ -33,7 +33,8 @@
         3,
         2,
         0
-      ]
+      ],
+      "maxHeel": 10
     },
     "f5": {
       "label": "Force 5, 19 kt",
@@ -45,7 +46,8 @@
         20,
         15,
         3
-      ]
+      ],
+      "maxHeel": 28
     },
     "f8": {
       "label": "Force 8 gale, 37 kt",
@@ -57,7 +59,8 @@
         25,
         20,
         5
-      ]
+      ],
+      "maxHeel": 30
     },
     "f6": {
       "label": "Force 6, 25 kt",
@@ -69,7 +72,8 @@
         22,
         17,
         4
-      ]
+      ],
+      "maxHeel": 30
     },
     "f7": {
       "label": "Force 7, 31 kt",
@@ -81,7 +85,8 @@
         24,
         19,
         5
-      ]
+      ],
+      "maxHeel": 30
     },
     "f9": {
       "label": "Force 9, 44 kt",
@@ -93,7 +98,8 @@
         25,
         20,
         5
-      ]
+      ],
+      "maxHeel": 32
     },
     "f10": {
       "label": "Force 10, 52 kt",
@@ -105,7 +111,8 @@
         25,
         20,
         5
-      ]
+      ],
+      "maxHeel": 35
     }
   },
   "times": {
@@ -135,6 +142,12 @@
     "night-moon": {
       "label": "Night under a high moon, half full or more (moon glitter)",
       "pick": "moon"
+    },
+    "night-lowmoon": {
+      "label": "Night, low moon (about 25 degrees up, 85% lit or more)",
+      "pick": "moon",
+      "el": 25,
+      "lit": 0.85
     }
   },
   "views": {
@@ -188,6 +201,14 @@
       "dist": 2,
       "h": 18,
       "fov": 45
+    },
+    "moon": {
+      "label": "Into the moon (its glitter path reaches the boat)",
+      "toward": "moon",
+      "dist": 9,
+      "h": 1.2,
+      "fov": 40,
+      "look": 0.5
     }
   },
   "clips": {
@@ -419,6 +440,36 @@
         "close",
         "chase",
         "low"
+      ],
+      "clips": []
+    },
+    "night": {
+      "about": "Night: both boats, calm / force 5 / force 8, dark, moonlit and low moon, every view plus into the moon.",
+      "size": "1280x720",
+      "quality": "high",
+      "boats": [
+        "kayak",
+        "pearson"
+      ],
+      "seas": [
+        "calm",
+        "f5",
+        "f8"
+      ],
+      "times": [
+        "night-dark",
+        "night-moon",
+        "night-lowmoon"
+      ],
+      "views": [
+        "close",
+        "chase",
+        "beam",
+        "bow",
+        "low",
+        "long",
+        "over",
+        "moon"
       ],
       "clips": []
     }
