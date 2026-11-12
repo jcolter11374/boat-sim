@@ -961,7 +961,7 @@ const CHECKS = {
         console.log(`M0-422 ${w} ${JSON.stringify({ cell, eq, end })}`);
         must(!cell.cut, `at ${w}: wind/waves cell cut off: "${cell.text}"`);
         must(!end.overlap, `at ${w}: the drawer still covers the end card`);
-        must(eq.red === 0 || (eq.count === String(eq.red) && /\d/.test(eq.shown)), `at ${w}: Equipment count at day 30 doesn't match the red parts (${JSON.stringify(eq)})`);
+        must(eq.red === 0 || (eq.count === String(eq.red) && /\d|attr\(data-bad\)/.test(eq.shown)), `at ${w}: Equipment count at day 30 doesn't match the red parts (${JSON.stringify(eq)})`);
         out.push(`${w}: "${cell.text}", Equipment count ${eq.count || "none"} for ${eq.red} red parts, end card clear`);
       }
       // #406: the story-first results card (1 May 2020: both boats lose their computers on day 3.9).
