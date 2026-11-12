@@ -921,6 +921,8 @@ function moment(e: ReplayEvent): void {
   const now = clock.getElapsedTime();
   if (e.kind === "capsize") {
     kick = { t: now, dir: Math.random() < 0.5 ? -1 : 1 };
+    ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
+    contact?.slam(1); // under a breaking crest
     sound.crash();
     flash("spray");
     slowUntil = now + 4;
@@ -944,12 +946,6 @@ function flash(kind: "spray" | "alarm"): void {
 /** Play at an hour a second: during a moment, and over the last hours before the end. */
 function slowNow(t: number): boolean {
   return t < slowUntil || (finishing && shownTo - hour < 3);
-}
-
-/** The knockdown's roll (rad) at time t: thrown over, then righting itself with a wobble. */
-function kickRoll(t: number): number {
-  const k = t - kick.t;
-  return k >= 0 && k < 5 ? kick.dir * 1.25 * Math.exp(-k * 1.2) * Math.cos(k * 2.6) : 0;
 }
 
 // ---------- running time ----------
@@ -2401,6 +2397,12 @@ const cine = new Cinema({
 const sound = new OceanSound();
 filmButtons(cine, sound);
 (page as unknown as { cine: Cinema }).cine = cine;
+// For the cinema's Heel shot (Iris): heel now, deg (+ over to starboard), and the last
+// knockdown's timing in the page clock (boats/ride.ts KnockdownTiming), or null.
+Object.assign(page, {
+  heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
+  knockdown: () => ride?.knockdown ?? null,
+});
 
 // ---------- frame ----------
 const clock = new THREE.Clock();
@@ -2736,9 +2738,9 @@ renderer.setAnimationLoop(() => {
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
   if (model) {
-    ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt);
+    ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - spec.cgBelowWaterline, 0);
-    model.root.rotation.set(motion.roll + (ride?.roll ?? 0) + kickRoll(t), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
+    model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
     model.root.updateMatrixWorld();
     if (contact) {

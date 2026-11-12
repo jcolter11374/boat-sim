@@ -238,6 +238,7 @@ let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
 let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
+let pourAt = Infinity; // when a knockdown's water pours off the deck (page clock, s)
 let motion = new BoatMotion(HULL[laneRev], place);
 let wet: Wetness | null = null;
 let drain: Drain | null = null;
@@ -1223,9 +1224,12 @@ renderer.setAnimationLoop(() => {
         if (e.kind === "message_sent" && li === focus) model?.gear.flashLight(t);
         if (!isNotable(e)) continue;
         status.shown.push(e.kind);
-        // A knockdown: give the boat a hard shove so the physics rolls it over and
-        // rights it again (the keel and dome do the righting, as designed).
-        if (e.kind === "capsize" && warp <= 24 && li === focus) motion.rollRate += (Math.random() < 0.5 ? -1 : 1) * 7;
+        // A knockdown, shown rather than simulated (boats/ride.ts): thrown flat, hangs, rights itself, and the
+        // water pours off as it comes up.
+        if (e.kind === "capsize" && warp <= 24 && li === focus && ride) {
+          pourAt = ride.knock(t, Math.random() < 0.5 ? -1 : 1).rising;
+          contact?.slam(1); // under a breaking crest
+        }
         // Too fast to see the roll: just show the water running off afterwards.
         else if (e.kind === "capsize" && li === focus && warp <= 600) drain?.pour();
         const who = lanes.length > 1 ? `${SHORT[l.key]} · ` : "";
@@ -1289,7 +1293,11 @@ renderer.setAnimationLoop(() => {
     if (!over) motion.capsized = 0;
     motion.advance(comps, t);
     if (model) {
-      ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt);
+      ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
+      if (t >= pourAt) {
+        pourAt = Infinity;
+        drain?.pour();
+      }
       model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - SPEC[boatKey].cgBelowWaterline, 0);
       model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     }

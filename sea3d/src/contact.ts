@@ -113,6 +113,12 @@ export class Contact {
   private lastBowSea = 0;
   /** This frame's splash for the sound, 0..1 (a slam's sheet or the bow meeting a steep face); 0 otherwise. */
   splash = 0;
+  private pending = 0;
+
+  /** A breaking crest hits the boat now (a knockdown): a big sheet of spray next frame, 0..1. */
+  slam(strength = 1): void {
+    this.pending = Math.max(this.pending, strength);
+  }
   /** The drawn water's height under a point: the big waves unless the page hands over the
    *  sea's own (Sea.surfaceAt, with the short waves), so the collar and spray sit on what's drawn. */
   surface: (comps: WaveComponent[], x: number, z: number, t: number) => number = heightAt;
@@ -315,6 +321,11 @@ export class Contact {
           burst += Math.min(220, Math.round((this.risePeak - CREST_RISE) * 150 * (0.4 + speedK) * slamK * slamK));
           this.risePeak = -1;
         }
+      }
+      if (this.pending > 0) {
+        burst += Math.round(200 * this.pending);
+        crest = Math.max(crest, 2.5 * this.pending);
+        this.pending = 0;
       }
       if (burst >= 10) { this.shown.bursts++; this.shown.lastBurst = burst; }
       this.splash = Math.min(1, burst / 40);
