@@ -247,7 +247,7 @@ class Trimmed:
         return cmd
 
     def __getattr__(self, name):  # on_message_received and the like
-        if name == "inner":  # not set yet (copy/deepcopy make the object without __init__)
+        if name == "inner" or name.startswith("__"):  # inner unset under copy; dunders stay ours
             raise AttributeError(name)
         return getattr(self.inner, name)
 
