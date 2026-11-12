@@ -166,7 +166,12 @@ void main() {`,
   diffuseColor.rgb *= 1.0 - 0.02 * sailDbl.x - 0.04 * sailDbl.y; // barely there in front light
   // The cloth curves away towards the leech and gathers a little shade at the
   // foot (the boom, the deck and the other sail), so a full sail reads as a curve.
-  diffuseColor.rgb *= (1.0 - 0.15 * smoothstep(0.4, 1.0, vSailUv.x)) * (1.0 - 0.09 * (1.0 - smoothstep(0.0, 0.25, vSailUv.y))); // leech and foot a touch deeper so the curve reads at noon (Elena)
+  // Broad enough to survive a sail 200 px tall (Ines): the luff third a touch brighter, the
+  // leech third clearly darker, as the cloth turns away; and shade gathering at the foot.
+  diffuseColor.rgb *= mix(1.06, 0.78, smoothstep(0.15, 0.9, vSailUv.x)) * (1.0 - 0.09 * (1.0 - smoothstep(0.0, 0.25, vSailUv.y)));
+  // A headsail sits partly in the main's shade (and the main's luff in the jib's wash): a soft
+  // darker band along the jib's after part.
+  diffuseColor.rgb *= 1.0 - 0.12 * uJib * smoothstep(0.45, 0.95, vSailUv.x) * (1.0 - 0.5 * vSailUv.y);
   // A flogging luff: the cloth folds, and the folds shade each other.
   diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);
   // So jib and main read as two sails from the chase camera (Elena): a darker line of
@@ -240,8 +245,6 @@ export function clotheSails(root: THREE.Object3D, quality: Quality = "high"): vo
       const fresh = mat.clone();
       fresh.userData = { ...mat.userData, sailcloth: false, sail: undefined };
       const jib = /jib|genoa|head/i.test(mesh.name) || /jib|genoa|head/i.test(mat.name);
-      // A headsail in a slightly warmer, heavier cloth than the main, so the two don't merge into one white triangle.
-      if (jib) fresh.color.multiply(new THREE.Color(0.92, 0.9, 0.85));
       const c = clothe(fresh, sizeOf(mesh), quality === "low");
       const su = c.userData.sail as SailUniforms | undefined;
       if (su) su.uJib.value = jib ? 1 : 0;
