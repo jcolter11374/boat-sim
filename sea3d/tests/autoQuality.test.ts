@@ -52,6 +52,13 @@ test("a hidden tab's long gap is a pause, not a slow frame (Kai)", () => {
   assert.ok(!out.includes("slow") && !out.includes("ok"), "ten frames are not 3 s");
 });
 
+test("three long gaps in a row is a very slow computer, not a pause (Kai)", () => {
+  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
+  assert.deepEqual(run(j, [600, 600, 600]), ["wait", "wait", "slow"]);
+  const k = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
+  assert.ok(!run(k, [600, 600, 16, 600, 600]).includes("slow"), "not in a row");
+});
+
 test("a steady 30 frames a second is fine; 40 a second on a 60 Hz screen too (Kai)", () => {
   const a = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
   assert.ok(run(a, Array(100).fill(33.3)).includes("ok"));

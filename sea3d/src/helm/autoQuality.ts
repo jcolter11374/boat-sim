@@ -53,11 +53,20 @@ export class FrameJudge {
   private readonly dts: number[] = [];
   private verdict: "slow" | "ok" | null = null;
   private told = false;
+  private pausesInRow = 0;
   constructor(private readonly o: JudgeOptions = JUDGE) {}
 
   tick(dtMs: number): "wait" | "slow" | "ok" | "done" {
     if (this.told) return "done";
-    if (!(dtMs > 0) || !Number.isFinite(dtMs) || dtMs > this.o.pauseMs) return "wait";
+    if (!(dtMs > 0) || !Number.isFinite(dtMs)) return "wait";
+    if (dtMs > this.o.pauseMs) {
+      // One long gap is a pause; three in a row is a computer drawing under 2 frames a second (Kai).
+      if (++this.pausesInRow < 3) return "wait";
+      this.verdict = "slow";
+      this.told = true;
+      return "slow";
+    }
+    this.pausesInRow = 0;
     this.seen++;
     this.sinceStart += dtMs;
     if (this.seen <= this.o.skipFrames || this.sinceStart < this.o.skipMs) return "wait";
