@@ -89,7 +89,7 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   bar.id = "topbar";
   bar.setAttribute("aria-label", "Game menu");
   bar.innerHTML =
-    `<a class="brand" href="./" title="boat-sim: design a boat, then sail it across the Atlantic"><i></i><span>boat-sim</span></a>` +
+    `<a class="brand" href="./" title="Bluewater: design a boat, then sail it across the Atlantic"><i></i><span>Bluewater</span></a>` +
     LINKS.slice(1)
       .map((l) => `<a class="nav" href="${l.href}" title="${l.title}"${l.page === here ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
       .join("") +
