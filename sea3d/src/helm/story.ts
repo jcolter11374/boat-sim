@@ -140,12 +140,12 @@ export interface Call {
   lead: number;
 }
 
-/** "Day 2 · Rode the Gulf Stream · +120 km on the ghost": what each call was worth, until the next one or the end. */
+/** "Day 2 · Rode the Gulf Stream · 120 km ahead of the ghost": what each call was worth, until the next one or the end. */
 export function callLines(calls: Call[], endLead: number): string[] {
   if (!calls.length) return ["You let the autopilot sail. Next time, make a call when the clock stops."];
   return calls.map((k, i) => {
     const gain = Math.round((i + 1 < calls.length ? calls[i + 1].lead : endLead) - k.lead);
-    const worth = Math.abs(gain) < 1 ? "level with the ghost" : `${gain > 0 ? "+" : "−"}${Math.abs(gain).toLocaleString("en-US")} km on the ghost`;
+    const worth = Math.abs(gain) < 1 ? "level with the ghost" : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
     return `Day ${d1(k.day)} · ${k.chose} · ${worth}`;
   });
 }

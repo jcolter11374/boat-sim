@@ -10,6 +10,7 @@
 import { paintBoatName } from "./boatName";
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
+import { nightLook } from "./nightlook";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
@@ -388,13 +389,22 @@ export function buildRandolph(quality: Quality): BoatModel {
   };
 }
 
+/** Every boat reads at night: a cool rim of light on its edges after dark (nightlook.ts). */
+const lit =
+  (build: (q: Quality) => BoatModel) =>
+  (q: Quality): BoatModel => {
+    const m = build(q);
+    nightLook(m.root);
+    return m;
+  };
+
 export const BUILDERS: Record<BoatSpec["key"], (q: Quality) => BoatModel> = {
-  kayak: buildKayak,
-  randolph: buildRandolph,
-  stock_cruiser31: (q) => buildStock("stock_cruiser31", q),
-  stock_dinghy14: (q) => buildStock("stock_dinghy14", q),
-  stock_beachcat16: (q) => buildStock("stock_beachcat16", q),
-  stock_sail_drone7: (q) => buildStock("stock_sail_drone7", q),
-  stock_ocean_rower45: (q) => buildStock("stock_ocean_rower45", q),
-  stock_pearson31_2: (q) => buildStock("stock_pearson31_2", q),
+  kayak: lit(buildKayak),
+  randolph: lit(buildRandolph),
+  stock_cruiser31: lit((q) => buildStock("stock_cruiser31", q)),
+  stock_dinghy14: lit((q) => buildStock("stock_dinghy14", q)),
+  stock_beachcat16: lit((q) => buildStock("stock_beachcat16", q)),
+  stock_sail_drone7: lit((q) => buildStock("stock_sail_drone7", q)),
+  stock_ocean_rower45: lit((q) => buildStock("stock_ocean_rower45", q)),
+  stock_pearson31_2: lit((q) => buildStock("stock_pearson31_2", q)),
 };

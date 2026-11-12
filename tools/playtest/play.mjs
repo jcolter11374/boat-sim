@@ -486,7 +486,10 @@ const CHECKS = {
     path: "boatyard.html?quality=low#base=revc",
     run: async (page) => {
       await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
-      const label = (await page.locator('#bases button[data-base="revc"]').textContent().catch(() => "")) ?? "";
+      // The button's accessible name: since #416 "our model" is said once for both Randolph boats,
+      // beside them and in each button's aria-label, rather than on every button's face.
+      const rc = page.locator('#bases button[data-base="revc"]');
+      const label = ((await rc.getAttribute("aria-label").catch(() => null)) || (await rc.textContent().catch(() => "")) || "");
       if (!/C5/.test(label)) throw new SkipCheck(`the deployed Boatyard has no Rev C5 preset yet ("${label.trim()}")`);
       const pressed = await page.getAttribute('#bases button[data-base="revc"]', "aria-pressed");
       must(pressed === "true", "opening #base=revc didn't select the Rev C5 preset");
@@ -533,6 +536,10 @@ const CHECKS = {
       const before = await page.evaluate(() => document.getElementById("s-odds").textContent.trim());
       const opt = page.locator(".opt:has(.delta.down), .opt:has(.delta.up)").first();
       const delta = (await opt.locator(".delta").textContent())?.trim();
+      // Sections and slots fold to one line (#416): open the ones holding this part first. Old builds: no-ops.
+      const where = await opt.evaluate((el) => ({ group: el.closest(".slot[data-group]")?.getAttribute("data-group") ?? null, gopen: !!el.closest(".slot[data-group]")?.classList.contains("gopen"), slot: el.closest(".sl")?.getAttribute("data-slot") ?? null, sopen: !!el.closest(".sl")?.classList.contains("open") }));
+      if (where.group && !where.gopen) await page.locator(`.slot[data-group="${where.group}"] h3`).click();
+      if (where.slot && !where.sopen) await page.locator(`.sl-head[data-slot="${where.slot}"]`).click();
       await opt.scrollIntoViewIfNeeded().catch(() => {});
       await opt.click({ noWaitAfter: true });
       const after = await page.waitForFunction((b) => { const t = document.getElementById("s-odds").textContent.trim(); return t !== b && /\d+%/.test(t) && t; }, before, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => "");

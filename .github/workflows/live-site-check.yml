@@ -7,9 +7,10 @@
 # broken page doesn't hide the others; each job's table is in the run summary.
 name: Live site check
 on:
-  workflow_run:
-    workflows: ["3D sea page"]
-    types: [completed]
+  # Nightly against the live site, not after every deploy (John and the coordinator, 12 Nov:
+  # deploys and pull requests mustn't wait for runners); Nina checks each deploy by hand.
+  schedule:
+    - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
       site:

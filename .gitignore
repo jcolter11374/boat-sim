@@ -22,3 +22,4 @@ data/land/*
 # Pyodide reference runner (tools/pyodide)
 tools/pyodide/node_modules/
 tools/pyodide/package-lock.json
+sea3d/node_modules

@@ -4,9 +4,10 @@
 # Read-only: it only visits the public site. Screenshots are in the artifacts.
 name: Playtest
 on:
-  workflow_run:
-    workflows: ["3D sea page"]
-    types: [completed]
+  # Nightly against the live site, not after every deploy (John and the coordinator, 12 Nov:
+  # deploys and pull requests mustn't wait for runners); Nina checks each deploy by hand.
+  schedule:
+    - cron: "30 8 * * *"
   workflow_dispatch:
     inputs:
       site:

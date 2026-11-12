@@ -372,7 +372,11 @@ try {
     await page.goto(`${URL}boatyard.html?quality=low`);
     await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
     const y0 = await page.evaluate(() => window.__yard.summary);
+    // Slots are one line each until opened (M5): open, then pick.
+    await page.locator('.sl-head[data-slot="thr"]').click();
     await page.locator('.opt[data-slot="thr"][data-opt="one-t200"]').click();
+    await page.locator('.slot[data-group="Power"] h3').click(); // sections fold too; Driving starts open
+    await page.locator('.sl-head[data-slot="bat"]').click();
     await page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click();
     const y1 = await page.evaluate(() => ({ s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));
     if (!(y1.s.batteryWh === 2560 && y1.s.thrusters === 1 && y1.s.massKg > y0.massKg && y1.d.thrusters === 1))
@@ -566,6 +570,11 @@ try {
       .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
     if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
     log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+    // Off Annapolis: Thomas Point Light stands on its shoal (the model, or its drawn stand-in), no page errors.
+    await page.goto(`${URL}helm.html?quality=low&spot=38.91,-76.45`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.land.landmarks > 0, null, { timeout: 60000 })
+      .catch(async () => fail(`helm: no Thomas Point Light off Annapolis (${await page.evaluate(() => JSON.stringify(window.__helm?.land))})`));
+    if (errors.length) fail(`page errors by Thomas Point Light: ${errors.join("; ")}`);
     // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
     await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });
@@ -673,7 +682,7 @@ try {
       if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
       // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
-      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Voyage replays.
+      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Watch a voyage.
       const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
       if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
       await page.screenshot({ path: "test-output/helm-result.png" });

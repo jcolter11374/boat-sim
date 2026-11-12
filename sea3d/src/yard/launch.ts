@@ -31,6 +31,9 @@ export interface LaunchResult {
   note: string;
   odds: LaunchOdds | null;
   replays: LaunchReplay[];
+  /** A second, smaller result shown folded away under the main one (the browser's own
+   *  six-launch run, when the server grid has the figure to trust; Omar's sweep). */
+  detail?: { summary: string; text: string };
   /** Data attribution to show with the results (the sandbox redistributes modified data). */
   credits?: { text: string; url: string };
   /** Sandbox runs, one per launch, in Theo's reference fingerprint shape (Ravi's exact-match gate). */
@@ -332,10 +335,24 @@ export class SandboxLauncher implements Launcher {
       }));
     return {
       exact: meta.exact,
-      note:
-        `Sandbox (${meta.note}): ${finished} of ${runs.length} voyages finished, run here in your browser. ` +
-        "Browser runs can end differently from the same build run on our servers; the odds shown come from the server grid" +
-        (grid?.odds ? (meta.exact ? " (this exact build)." : ` (the closest build we've run: ${gridName(grid)}).`) : ", which hasn't run this build yet."),
+      // One result to trust (Omar, Maya): with the server grid's figure, that's the
+      // headline and the browser's six launches fold away under it; without it, the
+      // browser run is all there is, so it's the note.
+      ...(grid?.odds
+        ? {
+            note: meta.exact
+              ? "Tested on our computers, this exact build."
+              : `Tested on our computers, the closest build we've tested: ${gridName(grid)}.`,
+            detail: {
+              summary: `Your quick test (${runs.length} launches)`,
+              text: `${finished} of ${runs.length} made it, in 2020's weather. Six launches are too few to judge by, so go by the figure above.`,
+            },
+          }
+        : {
+            note:
+              `Your quick test: ${finished} of ${runs.length} launches made it, in 2020's weather. ` +
+              "We haven't tested this build on our computers yet, so treat it as a rough guide.",
+          }),
       credits: SANDBOX_CREDITS,
       odds: grid?.odds ?? null,
       replays,
