@@ -1080,7 +1080,7 @@ class Game:
         }
 
     def _stars(self) -> dict:
-        """A mission's stars for both boats ({"stars": {"boat", "ghost"}}), from Ravi's
+        """A mission's stars, yours and the ghost's ({"stars", "ghost_stars"}, Rosa), from Ravi's
         judge (boatsim.sandbox.stars.judge(goal, rows, closest_km)) once it lands; until
         then nothing, and the page shows none."""
         if not getattr(self, "goal", None):
@@ -1090,10 +1090,10 @@ class Game:
         except ImportError:
             return {}
         return {
-            "stars": {
-                who: judge(self.goal, v.log.rows, self.storm_closest.get(id(v)))
-                for who, v in (("boat", self.mine), ("ghost", self.ghost))
-            }
+            "stars": judge(self.goal, self.mine.log.rows, self.storm_closest.get(id(self.mine))),
+            "ghost_stars": judge(
+                self.goal, self.ghost.log.rows, self.storm_closest.get(id(self.ghost))
+            ),
         }
 
     # ------------------------------------------------------- save and resume
