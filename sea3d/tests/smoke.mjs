@@ -821,7 +821,7 @@ try {
     if (rough.launch !== "0" || rough.ss.when !== "rough") fail(`?when=rough didn't fill in the rough start: ${JSON.stringify(rough)}`);
     await page.goto(`${URL}helm.html?quality=low&where=annapolis&course=triangle&go=1`);
     await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 90000 }).catch(() => fail("an Annapolis Set sail link didn't put you at the wheel"));
-    if (new URL(page.url()).searchParams.has("go")) fail("go=1 stayed in the URL, so a reload would set sail again");
+    if (new globalThis.URL(page.url()).searchParams.has("go")) fail("go=1 stayed in the URL, so a reload would set sail again");
     log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once");
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
