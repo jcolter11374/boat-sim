@@ -350,12 +350,13 @@ try {
     log.push("water off the deck, fog and cloud");
 
     // Live tracker on the sample feed (Sam's replay mode, day 30: main box down, beacon only):
-    // the "simulated voyage" label, "now" at the latest report, and the forecast look past it.
+    // no "simulated" label even on the demo feed (John's call S2), "now" at the latest report,
+    // and the forecast look past it.
     await page.goto(`${URL}voyage.html?live&feed=feed-sample/&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 })
       .catch(async () => fail(`live tracker didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
     const lv = await page.evaluate(() => ({ ...window.__replay.live, hour: window.__replay.hour, label: /simulated voyage/.test(document.getElementById("h1").textContent), local: document.getElementById("w-local").textContent }));
-    if (!lv.simulated || !lv.label) fail(`simulated feed without its label: ${JSON.stringify(lv)}`);
+    if (!lv.simulated || lv.label || lv.banner) fail(`live tracker: demo feed must load with no "simulated" label (S2): ${JSON.stringify(lv)}`);
     if (!/^\d+:\d\d(:\d\d)? [AP]M local \(UTC/.test(lv.local)) fail(`no local time under the clock: ${JSON.stringify(lv)}`);
     if (Math.abs(lv.hour - lv.now) > 0.01 || lv.now < lv.lastFix || lv.fixes < 50) fail(`live tracker not at now: ${JSON.stringify(lv)}`);
     await page.evaluate((h) => window.__replay.setHour(h), lv.now + 24 * 5);
