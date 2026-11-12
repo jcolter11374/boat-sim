@@ -99,7 +99,9 @@ const sprayFrag = /* glsl */ `
     float across = dot(c, vec2(-vDir.y, vDir.x)) * vStretch;
     float r = along * along + across * across;
     if (r > 1.0) discard;
-    gl_FragColor = vec4(vec3(0.97, 0.99, 1.0) * (uLight + foamLamp(vW)), min(1.0, 1.3 * vAlpha * exp(-1.8 * r) * (1.0 - r)));
+    // White to pale cool grey, lit by the sky (Ines r9: never beige); the freshest streaks
+    // near the stem a little brighter.
+    gl_FragColor = vec4(vec3(0.9, 0.96, 1.04) * (uLight + foamLamp(vW)) * (1.05 + 0.4 * vAlpha), min(1.0, 1.3 * vAlpha * exp(-1.8 * r) * (1.0 - r)));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
