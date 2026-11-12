@@ -829,6 +829,75 @@ const CHECKS = {
     },
   },
   "nolink-404": { manual: true, path: "helm.html?quality=low", run: async (page) => { process.env.NOLINK = "1"; await page.setViewportSize({ width: 1280, height: 720 }); return CHECKS["look-maya"].run(page); } },
+  // Maya's M0 list (12 Nov 18:00): #406 results card, #422 voyage strip/end card, #415 ships, #408 sails and hulls.
+  "m0-maya": {
+    manual: true,
+    path: "helm.html?spot=50.0,-2.0",
+    run: async (page) => {
+      const out = [];
+      await page.setViewportSize({ width: 1280, height: 720 });
+      // #415: ships in the Channel.
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 5 && window.__helm.ships?.ships > 0, null, { timeout: 2 * MIN }).catch(() => {});
+      await page.waitForTimeout(5000);
+      const ships = await page.evaluate(() => JSON.stringify(window.__helm.ships?.kinds ?? window.__helm.ships));
+      await lookShot(page, `m0-${BROWSER}-ships.jpg`);
+      await page.keyboard.press("c"); await page.waitForTimeout(6000); // cinematic may go looking at traffic
+      await lookShot(page, `m0-${BROWSER}-ships-cine.jpg`);
+      out.push(`ships ${ships}`);
+      // #408: the cruiser's sails and hull in practice.
+      await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 5, null, { timeout: 2 * MIN });
+      await page.waitForTimeout(6000);
+      await lookShot(page, `m0-${BROWSER}-sails-hull.jpg`);
+      // #422: Watch a voyage at 1024: the wind/waves cell, the end card with the drawer open, the broken-part count.
+      for (const [w, h] of [[1024, 700], [1280, 720]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.goto(SITE + "voyage.html", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__replay && (window.__replay.frames ?? 0) > 20, null, { timeout: 3 * MIN });
+        await page.waitForTimeout(3000);
+        const cell = await page.evaluate(() => { const e = document.getElementById("c-wind"); const cut = [...(e?.querySelectorAll("*") ?? [])].some((x) => x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).textOverflow === "ellipsis") || /…|\.\.\.\./.test(e?.innerText ?? ""); return { text: (e?.innerText ?? "").replace(/\s+/g, " "), cut }; });
+        await lookShot(page, `m0-${BROWSER}-${w}-voyage-strip.jpg`);
+        await page.evaluate(() => window.__replay.setHour?.(24 * 30));
+        await page.waitForTimeout(3000);
+        const eq = await page.evaluate(() => (document.getElementById("c-eq")?.innerText ?? "").replace(/\s+/g, " "));
+        await lookShot(page, `m0-${BROWSER}-${w}-voyage-day30.jpg`);
+        await page.evaluate(() => { const t = document.getElementById("top"); if (t && !t.classList.contains("open")) document.getElementById("replay-tab")?.click(); });
+        await page.waitForTimeout(1500);
+        await page.evaluate(() => window.__replay.setHour?.(24 * 400));
+        await page.waitForTimeout(5000);
+        const end = await page.evaluate(() => { const r = (id) => document.getElementById(id)?.getBoundingClientRect(); const o = r("outcome"), t = r("top"); return { drawer: document.getElementById("top")?.classList.contains("open"), overlap: !!(o && t && o.width && document.getElementById("top").classList.contains("open") && t.right > o.left && t.left < o.right && t.bottom > o.top && t.top < o.bottom) }; });
+        await lookShot(page, `m0-${BROWSER}-${w}-voyage-end.jpg`);
+        console.log(`M0-422 ${w} ${JSON.stringify({ cell, eq, end })}`);
+        must(!cell.cut, `at ${w}: wind/waves cell cut off: "${cell.text}"`);
+        must(!end.overlap, `at ${w}: the drawer still covers the end card`);
+        must(/\d/.test(eq), `at ${w}: no broken-part count on Equipment at day 30 ("${eq}")`);
+        out.push(`${w}: "${cell.text}", eq "${eq}", end card clear`);
+      }
+      // #406: the story-first results card (1 May 2020: both boats lose their computers on day 3.9).
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await helmStart(page, async (p) => p.selectOption("#launch", "2"));
+      for (let i = 0; i < 30 && !(await page.evaluate(() => window.__helm.card)); i++) {
+        const nl = await page.evaluate(() => !!window.__helm.status?.no_link);
+        if (nl) { await page.evaluate(() => { if (!window.__helm.clock) document.getElementById("t-pause")?.click(); }); await page.waitForTimeout(5000); continue; }
+        await openOrders(page);
+        await page.click("#sevent", { timeout: 20_000 }).catch(() => {});
+        await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 4 * MIN });
+      }
+      await page.waitForFunction(() => window.__helm.card && !document.getElementById("result")?.hidden, null, { timeout: 4 * MIN }).catch(() => {});
+      await page.waitForTimeout(4000);
+      const card = await page.evaluate(() => {
+        const c = document.getElementById("result");
+        return { n: document.querySelectorAll("#result").length, text: (c?.innerText ?? "").replace(/\n+/g, " | ").slice(0, 900), buttons: [...(c?.querySelectorAll("button") ?? [])].filter((b) => b.offsetParent).map((b) => b.textContent.trim()), links: [...(c?.querySelectorAll("a") ?? [])].filter((a) => a.offsetParent).map((a) => a.textContent.trim()) };
+      });
+      console.log(`M0-406 ${JSON.stringify(card)}`);
+      await lookShot(page, `m0-${BROWSER}-results-card.jpg`);
+      for (const b of ["Play again", "Try another launch day", "Change the boat"]) must(card.buttons.some((x) => x.includes(b)) || card.links.some((x) => x.includes(b)), `results card has no "${b}"`);
+      for (const l of ["Race it", "Leaderboard", "Voyage replays"]) must(card.links.some((x) => x.includes(l)) || card.buttons.some((x) => x.includes(l)), `results card has no "${l}" link`);
+      out.push(`results card: ${card.buttons.join(" / ")} | ${card.links.join(" / ")}`);
+      return out.join("; ");
+    },
+  },
   // #380 (audit item 9, Leo's copy): player names on the leaderboard and in the Boatyard.
   "names-380": {
     manual: true,
