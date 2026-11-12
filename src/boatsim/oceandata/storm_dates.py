@@ -115,6 +115,39 @@ def report(df, claims=CLAIMS, log=print) -> list[dict]:
     return rows
 
 
+TRACK_TOLERANCE_KM = 60.0  # a typed-in fix further off than this from IBTrACS fails CI
+
+
+def check_track(df, name: str, season: int, typed, log=print) -> list[str]:
+    """Compare a typed 6-hourly track [(iso, lat, lon), ...] (challenges.py) with
+    IBTrACS at the same times; log the real points as Python to paste in, and
+    return the problems (a time missing, or a fix more than TRACK_TOLERANCE_KM off)."""
+    import pandas as pd
+
+    t = df[(df.NAME == name) & (df.SEASON == season)].set_index("time")
+    problems, real = [], []
+    for iso, lat, lon in typed:
+        when = pd.Timestamp(iso.replace("Z", ""))
+        if when not in t.index:
+            problems.append(f"{name} {season}: no best-track fix at {iso}")
+            continue
+        r = t.loc[when]
+        r = r.iloc[0] if hasattr(r, "iloc") and r.ndim > 1 else r
+        rl, ro = round(float(r.LAT), 1), round(float(r.LON), 1)
+        real.append((iso, rl, ro))
+        off = km(lat, lon, rl, ro)
+        if off > TRACK_TOLERANCE_KM:
+            problems.append(
+                f"{name} {season} {iso}: typed {lat}, {lon}; IBTrACS {rl}, {ro} ({off:.0f} km)"
+            )
+    log(f"{name} {season} best track, for challenges.py:")
+    for row in real:
+        log(f"    {row!r},")
+    for p in problems:
+        log("TRACK OFF: " + p)
+    return problems
+
+
 def main(argv: list[str] | None = None) -> None:
     import argparse
     import json
@@ -123,10 +156,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("ibtracs_csv")
     ap.add_argument("--json", help="also write the rows here")
     a = ap.parse_args(argv)
-    rows = report(load(a.ibtracs_csv))
+    df = load(a.ibtracs_csv)
+    rows = report(df)
+    from boatsim.oceandata.challenges import SANDY_TRACK_6H
+
+    bad = check_track(df, "SANDY", 2012, SANDY_TRACK_6H)
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:
             json.dump(rows, f, indent=1)
+    if bad:
+        raise SystemExit(f"{len(bad)} typed storm-track fixes are off; paste in the points above")
 
 
 if __name__ == "__main__":
