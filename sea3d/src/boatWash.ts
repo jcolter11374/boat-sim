@@ -52,9 +52,10 @@ export class WashSlot {
   }
 
   /** A crest breaking over the deck: height (m) of water over it, centred at s along
-   *  the hull (-1 stern .. 1 bow) with half width w; height 0 for none. */
-  setOver(height: number, s: number, w = 0.45): void {
-    washUniforms.uWashOver.value[this.i].set(height, s, w, 0);
+   *  the hull (-1 stern .. 1 bow) with half width w; height 0 for none. pile (m): the sea
+   *  heaped against the whole hull side in a gale, climbing it (Elena r10). */
+  setOver(height: number, s: number, w = 0.45, pile = 0): void {
+    washUniforms.uWashOver.value[this.i].set(height, s, w, pile);
   }
 
   release(): void {
@@ -121,7 +122,7 @@ float boatWaveK(vec2 xz, float onHull) {
     if (i >= uWashN) break;
     vec4 dim = uWashDim[i];
     float H = dim.z;
-    if (H <= 0.0005 && uWashOver[i].x <= 0.001) continue;
+    if (H <= 0.0005 && uWashOver[i].x <= 0.001 && uWashOver[i].w <= 0.001) continue;
     // Cheap reject first: nothing reaches more than a few crest widths past the hull ends.
     vec2 dd = xz - uWashPos[i].xy;
     float rr = dim.x + 0.6 + 0.4 * dim.x;
@@ -139,6 +140,10 @@ float boatWaveK(vec2 xz, float onHull) {
     // spanning the hull side still reaches it; deeper inside, none (the hull hides it).
     k *= max(onHull, smoothstep(-0.2, -0.03, l.w));
     y += H * k;
+    // The sea heaped against the hull side in a gale (on the skin too, so the hull's wet
+    // line climbs with it); only outside the outline on the open water.
+    float pileW = 0.3;
+    y += uWashOver[i].w * exp(-pow(max(l.w, 0.0) / pileW, 2.0)) * max(onHull, smoothstep(-0.2, -0.03, l.w));
     // Green water is not drawn by lifting the sea (a smooth mound through or beside the
     // hull, Ines r5): it's a white sheet on the hull's skin (washOverAt, inWater.ts) and
     // the drops pouring off (contact.ts).

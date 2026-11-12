@@ -32,6 +32,8 @@ const collarFrag = /* glsl */ `
   uniform float uI;     // strength 0..1
   uniform float uLight;
   uniform vec2 uDir;    // boat's forward direction in world xz
+  uniform vec3 uWindC;  // xy: hull centre (world xz), z unused
+  uniform vec2 uWindD;  // unit direction the wind blows towards (world xz), 0 if calm
   varying vec2 vUV;
   varying vec3 vW;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -49,12 +51,14 @@ const collarFrag = /* glsl */ `
     float edge = 1.0 - smoothstep(0.0, 1.0, vUV.y);           // thick at the hull, thin outside
     float bow = 1.0 + 0.8 * (1.0 - smoothstep(0.0, 0.25, vUV.x)); // more at the bow
     // Never a solid rim: even at the bow under half of it is foam (Ines r5: no white skirt).
-    float a = smoothstep(0.6 - 0.2 * edge * uI * bow, 0.78, n) * edge * edge * edge * uI;
+    // Thicker on the windward side, where the sea piles up against the hull (Elena r10).
+    float windward = smoothstep(0.0, 0.7, -dot(normalize(vW.xz - uWindC.xy + 1e-4), uWindD));
+    float a = smoothstep(0.6 - (0.2 + 0.25 * windward) * edge * uI * bow, 0.78, n) * pow(edge, 3.0 - 1.5 * windward) * uI * (1.0 + 0.5 * windward);
     // Thick at the bow, thinning aft and breaking into patches with gaps (Elena, WIP 2).
     float aft = smoothstep(0.15, 0.9, vUV.x);
     float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
     a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
-    gl_FragColor = vec4(vec3(0.74, 0.8, 0.83) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.45));
+    gl_FragColor = vec4(vec3(0.8, 0.85, 0.88) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.75));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -108,7 +112,8 @@ const sprayFrag = /* glsl */ `
 `;
 
 const SPRAY: Record<Quality, number> = { low: 0, high: 600 };
-const SPRAY_LIFE = 1.0; // s: a burst is gone in about a second (Ines r8)
+const SPRAY_LIFE = 0.6; // s: a drop is gone in about half a second (Elena r10)
+const MIST_LIFE = 1.0; // s: the fine mist behind it hangs a little longer
 /** Water rising at the bow faster than this (m/s) meets it as a steep face (GUESS, by eye). */
 const CREST_RISE = 0.8;
 
@@ -144,6 +149,9 @@ export class Contact {
   /** The hull pushed down into the crest as it comes aboard (m, display only): the sea
    *  itself hides the low hull for a moment, then she pops back up (Ines r7). */
   sink = 0;
+  /** How far the sea piles up against the hull's side (m). */
+  private pile = 0;
+  private wetBoost = 0;
 
   /** A crest comes aboard now, strength h (0..1). */
   private greenWater(t: number, h: number): void {
@@ -162,6 +170,8 @@ export class Contact {
   surface: (comps: WaveComponent[], x: number, z: number, t: number) => number = heightAt;
   /** Per drop: 1 for a soft puff of mist, 0 for a drop. */
   private readonly mist: Uint8Array;
+  /** Each drop's own size (mixed sizes, Elena r10). */
+  private readonly szk: Float32Array;
   private risePeak = 0;
   /** Bigger boats throw bigger sheets of spray (GUESS: by length^0.7 against the kayak's 3.05 m). */
   private readonly sprayScale: number;
@@ -249,7 +259,7 @@ export class Contact {
       new THREE.ShaderMaterial({
         vertexShader: collarVert,
         fragmentShader: collarFrag,
-        uniforms: { uTime: { value: 0 }, uFlow: { value: 0 }, uI: { value: 0 }, uLight: { value: 1 }, uDir: { value: new THREE.Vector2(1, 0) }, ...FOAM_LAMP_UNIFORMS },
+        uniforms: { uTime: { value: 0 }, uFlow: { value: 0 }, uI: { value: 0 }, uLight: { value: 1 }, uDir: { value: new THREE.Vector2(1, 0) }, uWindC: { value: new THREE.Vector3() }, uWindD: { value: new THREE.Vector2() }, ...FOAM_LAMP_UNIFORMS },
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -268,6 +278,7 @@ export class Contact {
     this.sv = new Float32Array(this.n * 3);
     this.born = new Float32Array(this.n).fill(-99);
     this.mist = new Uint8Array(this.n);
+    this.szk = new Float32Array(this.n).fill(1);
     const sg = new THREE.BufferGeometry();
     sg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.n * 3), 3));
     sg.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(this.n), 1));
@@ -320,7 +331,7 @@ export class Contact {
         const [wx, wz] = toWorld(x + nx * off, z + nz * off, place);
         const o = (i * 2 + k) * 3;
         pos[o] = wx;
-        pos[o + 1] = this.surface(comps, wx, wz, t) + 0.015;
+        pos[o + 1] = this.surface(comps, wx, wz, t) + 0.015 + this.pile * Math.exp(-((Math.max(off, 0) / 0.3) ** 2));
         pos[o + 2] = wz;
       }
     }
@@ -328,7 +339,15 @@ export class Contact {
     const u = this.collar.material.uniforms;
     u.uTime.value = t;
     u.uFlow.value = this.flow;
-    u.uI.value = THREE.MathUtils.clamp(0.15 + 0.4 * speedK + 0.22 * seaK, 0, 0.85); // broken and grey, never a bright rim (Ines)
+    // Broken, never a solid rim (Ines), but clearly white along the contact in a gale (Elena r10).
+    u.uI.value = THREE.MathUtils.clamp(0.15 + 0.4 * speedK + 0.6 * seaK * seaK, 0, 1);
+    {
+      const [wwx0, wwz0] = s.wind ?? [0, 0];
+      const wl0 = Math.hypot(wwx0, wwz0);
+      u.uWindD.value.set(wl0 > 0.1 ? wwx0 / wl0 : 0, wl0 > 0.1 ? wwz0 / wl0 : 0);
+      const [hx, hz] = toWorld(this.wlMid, 0, place);
+      u.uWindC.value.set(hx, hz, 0);
+    }
     u.uLight.value = s.light;
     u.uDir.value.set(Math.cos(place.yaw), -Math.sin(place.yaw));
     this.shown.collar = u.uI.value;
@@ -341,13 +360,22 @@ export class Contact {
       const x = t - this.over.t;
       const o = this.over;
       const env = x < 0 || x > o.dur ? 0 : o.h * Math.min(1, x / 0.12) * Math.exp(-2.2 * x / o.dur);
-      this.wash?.setOver(env, o.at, o.w);
+      this.wash?.setOver(env, o.at, o.w, this.pile);
       const small = this.spec.length < 5;
       // Down fast as the crest lands, back up within the second (so the foam shows after).
       this.sink = small && x >= 0 && x < 0.9 ? 0.22 * o.h * (x < 0.25 ? Math.sin((Math.PI / 2) * (x / 0.25)) : 0.5 + 0.5 * Math.cos((Math.PI * (x - 0.25)) / 0.65)) : 0;
     }
+    // The sea piles up against the hull in a gale, more as a crest lands (Elena r10: water
+    // climbs the hull, never a flat cut). GUESS by eye, display only.
+    {
+      const x = t - this.over.t;
+      const hit = x >= 0 && x < 1.5 ? this.over.h * Math.exp(-2.5 * x) : 0;
+      this.pile = this.low ? 0 : 0.06 * seaK * seaK + 0.12 * hit;
+      // A wet band up the topsides after a burial, drying over a few seconds.
+      this.wetBoost = x >= 0 && x < 6 ? 0.3 * this.over.h * Math.exp(-x / 2.5) : 0;
+    }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
-    this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.05 * seaK, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
+    this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.1 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.
@@ -417,7 +445,8 @@ export class Contact {
         this.sv[i * 3 + 1] = power * (1.0 + jit * Math.random()) * (sheet ? aftK * 1.25 : 1) + Math.max(rise, 0); // thrown off water that is itself rising
         this.sv[i * 3 + 2] = sideSign * power * (0.7 + jit * Math.random());
         this.born[i] = t;
-        this.mist[i] = Math.random() < 0.08 ? 1 : 0;
+        this.mist[i] = Math.random() < 0.3 ? 1 : 0; // a fine mist behind the streaks
+        this.szk[i] = 0.45 + 1.6 * Math.random() ** 2;
       }
       // Green water pouring off the gunwale: drops spill out over both sides where the
       // water on deck is, falling back into the sea (Ines r5: runs off broken and white).
@@ -440,6 +469,7 @@ export class Contact {
             this.sv[i * 3 + 2] = side * (0.6 + 0.9 * Math.random());
             this.born[i] = t;
             this.mist[i] = Math.random() < 0.1 ? 1 : 0;
+            this.szk[i] = 0.5 + Math.random();
           }
         }
       }
@@ -450,7 +480,7 @@ export class Contact {
       // Spray carries at most a couple of boat lengths downwind before it's gone (Ines r8).
       {
         const wl = Math.hypot(windB[0], windB[1]);
-        const cap = (2.2 * this.spec.length) / SPRAY_LIFE;
+        const cap = (2.2 * this.spec.length) / MIST_LIFE;
         if (wl > cap) { windB[0] *= cap / wl; windB[1] *= cap / wl; }
       }
       const ppos = this.spray.geometry.attributes.position.array as Float32Array;
@@ -460,7 +490,8 @@ export class Contact {
       let live = 0;
       for (let i = 0; i < this.n; i++) {
         const age = t - this.born[i];
-        if (age < 0 || age > SPRAY_LIFE) {
+        const life = this.mist[i] ? MIST_LIFE : SPRAY_LIFE;
+        if (age < 0 || age > life) {
           alpha[i] = 0;
           continue;
         }
@@ -481,12 +512,13 @@ export class Contact {
         vel[i * 3] = vbx * cy + vbz * sy;
         vel[i * 3 + 1] = this.sv[i * 3 + 1];
         vel[i * 3 + 2] = -vbx * sy + vbz * cy;
-        const k = age / SPRAY_LIFE;
+        const k = age / life;
         // Drops spread into a mist as they fly: bigger, softer and fainter with age.
         // A sheet is many small drops and a few soft puffs of mist that hang a little longer.
         const m = this.mist[i];
-        alpha[i] = (m ? 0.2 * (1 - k) : 0.95 * (1 - k) ** 1.5) * Math.min(1, age * 10);
-        size[i] = (m ? 0.25 + 0.9 * k : 0.07 + 0.14 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
+        alpha[i] = (m ? 0.14 * (1 - k) : 0.95 * (1 - k) ** 1.5) * Math.min(1, age * 10);
+        size[i] = (m ? 0.2 + 0.6 * k : 0.06 + 0.1 * k) * this.szk[i] * (0.6 + 0.6 * slamK) * this.sprayScale;
+        if (m) vel[i * 3] = vel[i * 3 + 1] = vel[i * 3 + 2] = 0; // mist is soft puffs, not streaks
         live++;
       }
       this.spray.geometry.attributes.position.needsUpdate = true;
