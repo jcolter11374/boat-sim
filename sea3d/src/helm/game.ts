@@ -117,11 +117,11 @@ export interface Airtime {
   beacon_pings: number;
 }
 
-/** Plain words for the airtime counter: messages each way, bytes, and the bill. */
+/** Plain words for the airtime counter: messages each way and bytes (no money in the game, John 12 Nov). */
 export function airtimeText(a: Airtime | null | undefined): string {
   if (!a) return "not counted";
   const bytes = a.up.bytes + a.down.bytes;
-  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes: $${a.usd.total.toFixed(2)}`;
+  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes`;
 }
 
 export interface Card {
@@ -220,11 +220,12 @@ export class HelmGame {
    *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
    *  boat (e.g. "stock_cruiser31"), or is a Boatyard design's simulator choices
    *  ("my boat"); left out, it's our kayak. `startPort`: a port id
-   *  from ports.json to start from instead of the usual drop. */
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string | Record<string, string | number>, startPort?: string): Promise<Status> {
+   *  from ports.json to start from instead of the usual drop. `launch` is an index into
+   *  the six odds launches, or an April to June day ("2020-04-23", noon UTC). */
+  async start(launch: number | string, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string | Record<string, string | number>, startPort?: string): Promise<Status> {
     const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
       type: "new",
-      launch,
+      ...(typeof launch === "string" ? { day: launch, launch: 0 } : { launch }),
       safe,
       breakdowns,
       mode,

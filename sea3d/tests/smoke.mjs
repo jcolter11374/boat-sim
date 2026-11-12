@@ -14,6 +14,22 @@ const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
 const fail = (msg) => { console.error("FAIL:", msg); server.kill(); process.exit(1); };
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if (!(await page.locator("#orders-tab").count())) return;
+  // At the start the drawer opens by itself for 10 s with a tip, then slides shut unless it's
+  // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
+  // until it has fully slid in, then point at it, which keeps it open (the player is using it).
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    const there = await page
+      .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
+      .then(() => true, () => false);
+    if (!there) continue;
+    await page.hover("#orders h2", { timeout: 10_000 }).catch(() => {});
+    if (await page.locator("#orders.open").count()) return;
+  }
+}
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
@@ -65,8 +81,11 @@ try {
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
       build: document.getElementById("t-build").classList.contains("main"),
+      chip: document.getElementById("topbar-boat")?.textContent,
     }));
     if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
+    // No boat saved yet: you sail Our kayak, so the chip says so; "build one" is only for the Boatyard (audit A3).
+    if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
     if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
@@ -378,11 +397,15 @@ try {
       return same;
     });
     if (looks.length) fail(`boatyard: choices that look the same on the boat: ${looks.join("; ")}`);
+    // No money in the game (John, 12 Nov): no price, cost or $ anywhere on the page, and
+    // the choices that only ever changed the price are gone.
     const greyed = await page.evaluate(() => ({
       noeff: document.querySelectorAll(".opt.noeff").length,
       shape: !!document.querySelector('.opt[data-slot="shape"]'),
+      money: (document.getElementById("parts").innerText + " " + document.getElementById("sum").innerText).match(/\$\d|\bprices?\b|\bcosts?\b|\bcheaper\b|price TBD|PRICE ONLY|\bROUGH\b/i)?.[0] ?? "",
+      dead: document.querySelectorAll('.opt[data-slot="spares"], .opt[data-opt="lead-50-scrap"], .opt[data-slot="radar"]').length,
     }));
-    if (!greyed.shape || greyed.noeff < 3) fail(`boatyard: the simulator's new slots or "no effect yet" options are missing: ${JSON.stringify(greyed)}`);
+    if (!greyed.shape || greyed.noeff || greyed.money || greyed.dead) fail(`boatyard: money on screen, or price-only choices still shown: ${JSON.stringify(greyed)}`);
     // The other hull shapes show their own models (when the build has them), in place of the kayak.
     const shapes = await page.evaluate(async () => {
       const out = {};
@@ -403,7 +426,7 @@ try {
     await page.waitForFunction(() => window.__yard.backend && !document.querySelector("#launch").disabled, null, { timeout: 30000 });
     const how = await page.evaluate(() => ({ backend: window.__yard.backend, text: document.querySelector("#result").textContent }));
     if (!how.text || /failed/.test(how.text)) fail(`boatyard launch: ${JSON.stringify(how)}`);
-    log.push(`boatyard ${y1.share}, ${greyed.noeff} greyed options, launch via ${how.backend}`);
+    log.push(`boatyard ${y1.share}, no money on screen, launch via ${how.backend}`);
     // Start from the Randolph boat: its own slots and totals, the model dressing to the picks, a share link with the base.
     await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
     await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
@@ -567,6 +590,7 @@ try {
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
     if (hm.ready) {
+      await openOrders(page);
       await page.click("#s6");
       await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
       // "Sail 6 hours" sails 6 hours unless something stops the clock first (a player
@@ -591,6 +615,9 @@ try {
       await page.waitForTimeout(4000);
       if ((await page.evaluate(() => window.__helm.status.day)) !== held) fail("helm: the clock kept running after pause");
       log.push(`helm clock: 1 day a second ran day ${run0.toFixed(2)} to ${ran.day.toFixed(2)}${ran.clock ? "" : ` (paused itself: ${ran.stop})`}, pause held`);
+      // Paused, the panel's day and the 3D day label both show the hour the picture is at (audit A2, #372).
+      const labels = await page.evaluate(() => [document.getElementById("day").textContent, document.getElementById("clock").textContent]);
+      if (labels[0] !== labels[1]) fail(`helm paused: the panel says ${labels[0]} but the picture's label says ${labels[1]}`);
       const local = await page.evaluate(() => document.getElementById("local").textContent);
       if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
       // Ravi's gates in the page: the ghost never ahead of the player's clock, every
@@ -601,6 +628,7 @@ try {
       if (ahead(st.s) || !Number.isFinite(st.s.lead_km)) fail(`helm after 6 h: ${JSON.stringify(st)}`);
       let hops = 0;
       for (; hops < 40 && !(await page.evaluate(() => window.__helm.card)); hops++) {
+        await openOrders(page);
         await page.click("#sevent");
         await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
         st = await page.evaluate(() => ({ s: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));
@@ -691,6 +719,7 @@ try {
       // Published challenge files with a simulator that can't sail them is a live bug: the picker offers a game that won't start.
       if (!ch.ready || ch.err || ch.id !== chFile.id) fail(`helm challenge ${chFile.id} didn't start: ${JSON.stringify(ch)}`);
       else {
+        await openOrders(page);
         await page.click("#s6");
         await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 240000 });
         const s = await page.evaluate(() => ({ st: window.__helm.status, stop: window.__helm.lastStop, err: window.__helm.error }));

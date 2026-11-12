@@ -140,6 +140,11 @@ export class Chart {
     return Math.abs(y1 - y0);
   }
 
+  /** A corner map (the helm's, under 300 px): lines and tracks only, no words (Leo's plan, item 5). */
+  private get small(): boolean {
+    return this.w < 300;
+  }
+
   private resize(): void {
     const r = this.canvas.getBoundingClientRect();
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -179,7 +184,6 @@ export class Chart {
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      if (lon > -80) g.fillText(`${-lon}°W`, x1 + 3, y1 + 11);
     }
     for (let lat = 30; lat <= 50; lat += 10) {
       const [x0, y0] = this.xy(lat, VIEW.lonMin);
@@ -188,7 +192,6 @@ export class Chart {
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      g.fillText(`${lat}°N`, x0 + 3, y0 - 3);
     }
 
     // Land, tinted.
@@ -214,6 +217,22 @@ export class Chart {
     g.shadowBlur = 6;
     g.drawImage(tint, lx0, ly0, lx1 - lx0, ly1 - ly0);
     g.shadowBlur = 0;
+
+    // Grid labels over the land, so the coast never hides half of one (audit A5: the helm's
+    // chart showed "W" alone where Nova Scotia covered "60°"). A label that would hang off
+    // the chart's edge is left out rather than cut.
+    g.font = "10px system-ui, sans-serif";
+    g.fillStyle = "rgba(160,190,230,0.55)";
+    for (let lon = -70; !this.small && lon <= 0; lon += 10) {
+      const [x1, y1] = this.xy(VIEW.latMax, lon);
+      const label = `${-lon}°W`;
+      const lx = x1 + 3;
+      if (lx >= 2 && lx + g.measureText(label).width <= this.w - 2) g.fillText(label, lx, Math.max(y1, 0) + 11);
+    }
+    for (let lat = 30; !this.small && lat <= 50; lat += 10) {
+      const [x0, y0] = this.xy(lat, VIEW.lonMin);
+      if (y0 - 3 >= 10 && y0 - 3 <= this.h - 2) g.fillText(`${lat}°N`, Math.max(x0, 0) + 3, y0 - 3);
+    }
 
     // Shipwrecks: a small version of the sea chart's wreck sign (a hull line with masts).
     g.strokeStyle = WRECK_COLOUR;
@@ -249,7 +268,7 @@ export class Chart {
         const [x, y] = this.xy(la, lo);
         g.fillStyle = colour;
         g.font = "600 10px system-ui, sans-serif";
-        g.fillText(label, x + 5, y - 5);
+        if (!this.small) g.fillText(label, x + 5, y - 5);
       };
       line(rep.course.west_line, "rgba(255,255,255,0.7)", "RACE START LINE", 1);
       line(rep.course.east_line, "rgba(255,255,255,0.7)", "FINISH LINE", 5);
@@ -260,7 +279,7 @@ export class Chart {
         g.arc(x, y, 2.5, 0, Math.PI * 2);
         g.fill();
         g.font = "10px system-ui, sans-serif";
-        g.fillText("drop", x - 26, y + 3);
+        if (!this.small) g.fillText("drop", x - 26, y + 3);
       }
     }
     return c;
@@ -293,7 +312,7 @@ export class Chart {
     g.stroke();
     g.fillStyle = "#3ddc97";
     g.font = "600 10px system-ui, sans-serif";
-    g.fillText("TARGET", tx + rr + 5, ty + 3);
+    if (!this.small) g.fillText("TARGET", tx + rr + 5, ty + 3);
 
     this.drawGhost();
     // Other boats first, the one the close-up follows on top.

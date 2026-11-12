@@ -61,9 +61,14 @@ export function pageName(pathname: string): string {
   return file === "" ? "index" : file.replace(/\.html?$/, "");
 }
 
-/** The "my boat" chip's words and where it goes. The name is player data, so it is only ever set as text. */
-export function boatChip(boat: { name: string; href: string } | null): { prefix: string; name: string; href: string; title: string } {
-  if (!boat) return { prefix: "No boat yet: ", name: "build one", href: "./boatyard.html", title: "Design a boat in the Boatyard" };
+/** The "my boat" chip's words and where it goes. The name is player data, so it is only ever set as text.
+ *  With no boat saved you sail Our kayak (the helm and start card already treat it as yours), so
+ *  the chip says so; "build one" only shows in the Boatyard, where it isn't a nag (Leo's audit A3). */
+export function boatChip(boat: { name: string; href: string } | null, page = ""): { prefix: string; name: string; href: string; title: string } {
+  // Practice sailing always sails the club's cruiser, whatever boat is yours (Elena: no nag there).
+  if (page === "practice") return { prefix: "Practice: ", name: "31 ft cruiser", href: "./boatyard.html", title: "Practice sails a 31 ft cruiser; your own boat sails the voyages" };
+  if (!boat && page === "boatyard") return { prefix: "No boat of your own yet: ", name: "build one", href: "./boatyard.html", title: "Design a boat in the Boatyard" };
+  if (!boat) return { prefix: "My boat: ", name: "Our kayak", href: "./boatyard.html", title: "Our kayak, until you build your own in the Boatyard" };
   return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }
 
@@ -79,6 +84,7 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   doc.head.appendChild(style);
 
   const here = pageName(doc.location.pathname);
+  const chipPage = here === "helm" && new URLSearchParams(doc.location.search).has("practice") ? "practice" : here;
   const bar = doc.createElement("nav");
   bar.id = "topbar";
   bar.setAttribute("aria-label", "Game menu");
@@ -92,7 +98,7 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
 
   const chip = bar.querySelector<HTMLAnchorElement>("#topbar-boat")!;
   const draw = () => {
-    const c = boatChip(currentBoat());
+    const c = boatChip(currentBoat(), chipPage);
     const p = doc.createElement("span");
     p.className = "p";
     p.textContent = c.prefix;

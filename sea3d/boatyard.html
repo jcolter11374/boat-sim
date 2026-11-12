@@ -103,6 +103,9 @@
   #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); padding: 8px 14px; display: none; }
   #toast.show { display: block; }
   #error { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); padding: 16px 20px; display: none; max-width: 520px; }
+  .info { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.45); font: italic 600 10px/1 Georgia, serif; cursor: help; vertical-align: 1px; }
+  .opt .figure { opacity: .6; font-size: 12px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -110,7 +113,7 @@
 <aside id="parts" class="glass">
   <header>
     <h1>Boatyard</h1>
-    <p id="intro">Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); <span class="badge est">ROUGH</span> marks figures nobody has measured or quoted yet.</p>
+    <p id="intro">Build your own version of our kayak. Swap a part and watch the boat and its odds of finishing change.</p>
     <div id="bases" role="group" aria-label="Start from">
       <span class="muted">Start from</span>
       <button data-base="kayak" aria-pressed="true">Our kayak</button>
@@ -126,13 +129,10 @@
   <h2>Your build</h2>
   <div class="row chance"><span>Odds of finishing</span><b id="s-odds">-</b></div>
   <div class="muted" id="s-odds-note"></div>
-  <div class="row"><span>Boat and parts</span><b id="s-cost">-</b></div>
-  <div class="row"><span>Licences, airtime, trials</span><b id="s-prog">-</b></div>
-  <div class="row total"><span>Total</span><b id="s-total">-</b></div>
   <div class="row"><span>Weight</span><b id="s-kg">-</b></div>
   <div class="row"><span>Solar panels</span><b id="s-sol">-</b></div>
   <div class="row"><span>Battery</span><b id="s-bat">-</b></div>
-  <div class="row"><span>Night running on battery</span><b id="s-night">-</b></div>
+  <div class="row"><span>Runs through the night for</span><b id="s-night">-</b></div>
   <div class="muted" id="s-est"></div>
   <div class="btns">
     <button id="share" title="Copy a link that opens this exact design">Copy share link</button>

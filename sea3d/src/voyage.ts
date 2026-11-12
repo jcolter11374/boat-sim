@@ -509,6 +509,35 @@ function showWreck(lat: number, lon: number): void {
 const poiSeen = new Set<string>();
 let poiH = 0;
 const poiCards = new PoiCards();
+/** The history card hangs just below the dials, as wide as they are, and grows downward, so it
+ *  never covers the Equipment rows and stops above the time bar (Leo, #378). */
+function poiPlace(): void {
+  const root = document.documentElement.style;
+  const hud = document.getElementById("hud")?.getBoundingClientRect();
+  if (!hud?.height) {
+    for (const k of ["--poi-top", "--poi-bottom", "--poi-max", "--poi-w"]) root.removeProperty(k);
+    document.documentElement.classList.remove("poi-tight");
+    return;
+  }
+  const tr = document.getElementById("transport")?.getBoundingClientRect();
+  const top = Math.round(hud.bottom + 6);
+  const floor = tr?.height ? tr.top - 6 : innerHeight - 12;
+  // Narrow windows: the Equipment rows wrap and push the card down, so it takes the free
+  // water between the map and the right edge instead, to keep long stories from scrolling.
+  const map = document.getElementById("chartbox")?.getBoundingClientRect();
+  const wide = map?.width && innerWidth < 1100 ? Math.min(520, innerWidth - 12 - (map.right + 12)) : 0;
+  root.setProperty("--poi-w", `${Math.round(Math.max(hud.width, wide))}px`);
+  document.documentElement.classList.toggle("poi-tight", innerWidth < 1100); // drops "N more nearby" there
+  root.setProperty("--poi-top", `${top}px`);
+  root.setProperty("--poi-bottom", "auto");
+  root.setProperty("--poi-max", `${Math.max(120, Math.round(floor - top))}px`);
+}
+{
+  const hud = document.getElementById("hud");
+  if (hud) new ResizeObserver(poiPlace).observe(hud);
+  addEventListener("resize", poiPlace);
+  poiPlace();
+}
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   status.pois.loaded = p.length;
@@ -526,7 +555,7 @@ function poisReached(): void {
   if (!rep || !pois.length || hour < poiH) return;
   const ps = passes(rep, poiH, hour, pois, poiSeen);
   poiH = hour;
-  for (const p of ps) poiCards.add(p, `Day ${(p.h / 24).toFixed(1)}`);
+  for (const p of ps) poiCards.add(p); // no day here: the Day dial and the time bar already show it (Leo)
   status.pois.shown.push(...ps.map((x) => x.poi.id));
 }
 
