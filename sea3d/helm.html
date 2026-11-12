@@ -47,6 +47,7 @@
   #runs button { padding: 5px 7px; font-size: 12px; }
   /* The clock (John, 11 Nov): time runs by itself once you set sail, at a speed you choose
      here, like a flight sim's time compression. It stops itself when something happens. */
+  #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
   #arrive { position: fixed; top: calc(var(--bar, 0px) + 60px); left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
     padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
   body.arriving #status, body.arriving #orders, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
@@ -217,6 +218,7 @@
     <div class="seg"><span class="muted">Sails</span><span id="sailbtns"></span></div>
     <div class="seg" id="enginerow"><span class="muted">Engine</span><span id="enginebtns"></span></div>
   </div>
+  <div id="preview" aria-live="polite" title="A copy of your boat sails this order for a day in today's forecast (which can be wrong; no breakdowns), then is thrown away" hidden></div>
   <div class="muted" id="powerhint">The autopilot cruises at 25%. More is faster, but the sun has to refill the battery, and at empty the motors stop until it does.</div>
   <div id="runs">
     <span class="lbl">Jump ahead (the clock pauses after)</span>
