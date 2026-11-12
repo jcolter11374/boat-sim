@@ -131,6 +131,7 @@ void main() {
   float facing = dot(dir, uSunDir);
   float sunUp = smoothstep(-0.06, 0.12, uSunDir.y);
   vec3 col = vec3(0.0);
+  float rainC = 0.0; // how much a rain curtain hides here (drawn after the horizon haze)
   float alpha = 0.0;
   // Composite front to back: scud (nearest), then cumulus, then the deck.
   // ---- scud ----
@@ -154,7 +155,8 @@ void main() {
   }
   // ---- cumulus ----
   // Under a closing deck the heaps lose their sun and merge into it.
-  float deckAmt = max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm));
+  // Overcast, a blow, or steady rain (rain falls from a deck, whatever the sunlight said) close the sky.
+  float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.3, 2.5, uRain));
   float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
   if (cuAmt > 0.01 && alpha < 0.99) {
     vec2 q = onLayer(dir, 1200.0) + uDrift;
@@ -211,14 +213,6 @@ void main() {
     float toSun = pow(max(facing, 0.0), 3.0) * (0.35 + 0.65 * thin) * sunUp;
     c += vec3(1.0, 0.84, 0.62) * uLight * toSun * 0.6;
     c += uGlow * uWarm * 0.35 * smoothstep(-0.2, 0.9, facing) * thin * (1.0 - 0.6 * uStorm);
-    // Rain: grey curtains under the deck in the distance, by bearing, drifting with the wind.
-    if (uRain > 0.05) {
-      float az = atan(dir.z, dir.x);
-      float curtain = smoothstep(0.55, 0.8, fbmL(vec2(az * 6.0 + uTime * 0.004, 0.0) + uDrift.x * 0.0001, 0.2, 3));
-      float low = 1.0 - smoothstep(0.02, 0.16, el);
-      float streak = 0.8 + 0.2 * vnoise(vec2(az * 400.0, el * 12.0 + uTime * 0.3));
-      c = mix(c, uShade * 0.62, curtain * low * streak * smoothstep(0.05, 2.0, uRain) * 0.85);
-    }
     c = mix(c, uHaze, smoothstep(6000.0, 45000.0, dist) * 0.85);
     col += (1.0 - alpha) * deckAmt * c; alpha += (1.0 - alpha) * deckAmt;
   }
@@ -236,8 +230,26 @@ void main() {
   float under = pow(max(dot(normalize(dir.xz), normalize(uSunDir.xz + 1e-4)), 0.0), 6.0) * (1.0 - smoothstep(0.0, 0.12, el));
   col += alpha * vec3(1.0, 0.62, 0.36) * under * lowSun * uLight * (0.25 + 0.35 * smoothstep(0.3, 0.9, uStorm + uCover));
   // Behind the cloud, the bottom of the sky itself fades into the same haze.
+  // Rain: grey curtains hanging from the deck to the sea in the distance, on the bearings
+  // where it is raining, drifting with the wind; darker at the foot, streaked.
+  if (uRain > 0.05 && deckAmt > 0.01) {
+    vec2 wd = length(uWind) > 0.1 ? normalize(uWind) : vec2(1.0, 0.0);
+    // Curtains lean with the wind: the bearing shifts a little with height.
+    float lean = dot(vec2(-dir.z, dir.x), wd) * el * 0.6;
+    float az = atan(dir.z, dir.x) + lean;
+    float slide = dot(uDrift, vec2(-wd.y, wd.x)) * 0.00002; // curtains move across the view with the wind
+    float shower = fbmL(vec2(az * 3.2 + slide, 3.7), 0.0, 3);
+    float curtain = smoothstep(0.5 - 0.1 * smoothstep(1.0, 8.0, uRain), 0.68, shower);
+    // Each shower its own height (smoothly, so no hard edges), densest at the sea, thinning upward into the deck.
+    float tall = 0.03 + 0.045 * vnoise(vec2(az * 2.1 + slide + 9.1, 1.3));
+    float hang = 1.0 - smoothstep(0.0, tall, el);
+    hang *= hang * (3.0 - 2.0 * hang);
+    float streak = 0.8 + 0.2 * vnoise(vec2(az * 420.0, el * 3.0 + uTime * 0.5));
+    rainC = curtain * hang * streak * smoothstep(0.05, 3.0, uRain) * 0.75 * deckAmt;
+  }
   float hb = (1.0 - smoothstep(-0.01, 0.09, el)) * deckAmt;
   col += (1.0 - alpha) * uHaze * hb; alpha += (1.0 - alpha) * hb;
+  col = mix(col, uShade * 0.85 * alpha, rainC);
   if (alpha < 0.004) discard;
   gl_FragColor = vec4(col / max(alpha, 1e-3), alpha);
 }`;
@@ -423,7 +435,7 @@ export class Clouds {
   seaSky(out: THREE.Vector4): THREE.Vector4 {
     const u = this.layer.material.uniforms;
     const h = u.uHaze.value as THREE.Color;
-    const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7));
+    const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7), SM(this.rain, 0.3, 2.5));
     return out.set(h.r, h.g, h.b, deck);
   }
 
