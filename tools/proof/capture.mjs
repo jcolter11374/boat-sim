@@ -228,6 +228,18 @@ async function renderUnit(browser, u) {
       for (const v of u.views) {
         const view = SHOTS.views[v];
         await setCam(page, { az: view.az, dist: view.dist, h: view.h, fov: view.fov, look: view.look, ...(view.toward === "moon" && info.moon ? { toward: info.moon.az } : {}) });
+        // Keep the moon off the mast (Ines: a halo on the masthead reads as a huge light): if
+        // the moon sits within 6 degrees of the view's centre line, swing the camera 8 degrees.
+        if (view.toward !== "moon" && info.moon && info.moon.el > 0) {
+          await step(page, 1000 / FPS);
+          const sky = await page.evaluate(() => window.__replay.sky ?? {});
+          const off = ((((sky.view - info.moon.az) % 360) + 540) % 360) - 180;
+          if (Number.isFinite(off) && Math.abs(off) < 6) {
+            const nudge = (off >= 0 ? 1 : -1) * (8 - Math.abs(off));
+            await setCam(page, { az: view.az + nudge, dist: view.dist, h: view.h, fov: view.fov, look: view.look });
+            console.log(`  ${u.id}-${v}: moon ${off.toFixed(1)} deg off centre, camera swung ${nudge.toFixed(1)} deg`);
+          }
+        }
         // A gale rolls a yacht about its heel: like a photographer, wait (up to 1.5 s) for a
         // moment inside the sea's heel limit (Sam: 20-30 degrees in gusts at force 8).
         if (sea.maxHeel) {
