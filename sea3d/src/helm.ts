@@ -32,7 +32,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
-import { WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame } from "./helm/wheelSession";
+import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { askedChallenge } from "./sailLink";
@@ -597,12 +597,48 @@ function sailText(s: Status): string {
   // A sailboat can't sail straight into the wind, or well dead downwind: it zigzags.
   if (g.tactic === "beat") bits.push("zigzagging upwind");
   else if (g.tactic === "run") bits.push("zigzagging downwind");
+  // A watch you trimmed at the wheel (phase 2): how it compares with the autopilot, and how long it lasts.
+  if (s.trim) {
+    const left = (utc(s.trim.until) - utc(s.boat.t)) / 3600e3;
+    if (left > 0) bits.push(`your trim ${Math.round(s.trim.share * 100)}% (autopilot ${Math.round(s.trim.factor * 100)}%) for ${left.toFixed(1)} h more`);
+  }
   return bits.join(" · ");
+}
+
+/** The trim chip under the time bar (Leo): "Your trim: +1.8 km" counting up through a wheel
+ * watch, held for a few seconds after it ends. Distance, not percent: it means more. */
+let chipGain: number | null = null;
+let chipBase: number | null = null;
+let chipHold: ReturnType<typeof setTimeout> | undefined;
+function showTrimChip(s: Status): void {
+  const c = $("trimchip");
+  const g = s.trim?.gain_km;
+  if (s.trim && g != null) {
+    clearTimeout(chipHold);
+    chipHold = undefined;
+    chipGain = g;
+    chipBase = (s.trim_gain_km ?? g) - g; // all watches before this one
+    c.hidden = false;
+  } else if (chipGain != null && !chipHold) {
+    // The watch ended between two looks (at 6 h/s it lasts under a second): its final
+    // gain is what the running total grew by since it began.
+    if (s.trim_gain_km != null && chipBase != null) chipGain = s.trim_gain_km - chipBase;
+    chipHold = setTimeout(() => {
+      c.hidden = true;
+      chipGain = null;
+      chipHold = undefined;
+    }, 5000);
+  }
+  if (chipGain == null) return;
+  const km = Math.abs(chipGain) < 10 ? Math.abs(chipGain).toFixed(1) : String(Math.round(Math.abs(chipGain)));
+  c.textContent = `Your trim: ${chipGain < 0 ? "−" : "+"}${km} km${s.trim ? "" : " (watch over)"}`;
+  c.classList.toggle("lost", chipGain < 0);
 }
 
 function showStatus(): void {
   const s = shown ?? page.status;
   if (!s) return;
+  showTrimChip(page.status ?? s);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
   const est = hidden() ? s.base?.estimate : undefined;
@@ -975,15 +1011,53 @@ addEventListener("blur", () => {
 let wheelRate = 0; // the clock's speed before the spell, to carry on at
 let wheelNow: WheelFrame | null = null;
 const wheel = new WheelSession({
-  ended: (r) => {
-    wheelNow = null;
-    note(wheelSummary(r), "At the wheel", r.reached ? TONE_COLOUR.good : TONE_COLOUR.info);
-    showOrder();
-    setRate(wheelRate);
-  },
+  ended: (r) => void wheelEnded(r),
   note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
 });
 (window as unknown as { __wheel: WheelSession }).__wheel = wheel;
+/** Phase 2 (Sam, Theo, Maya): a spell of a minute or more sets how well the boat is trimmed
+ * for the next watch, as an order the simulator sails (clamped there), never by moving the boat here. */
+async function wheelEnded(r: WheelResult): Promise<void> {
+  wheelNow = null;
+  let counts: { hours: number } | null = null;
+  const st = page.status;
+  if (r.sailedSecs >= COUNTS_AFTER_S && st?.sailboat && st.trim !== undefined && mode === "hands_on") {
+    try {
+      if (inFlight) await inFlight;
+      const o = await game.order(order, power, sailOrder, engineOrder, r.share);
+      page.status = game.status;
+      if (o.trim_until) {
+        counts = { hours: Math.round((utc(o.trim_until) - utc(page.status!.boat.t)) / 3600e3) };
+        // The chart draws this watch brighter (Leo). A new watch cuts the last one short.
+        const from = (utc(page.status!.boat.t) - startMs) / 3600e3;
+        const last = trimWatches.at(-1);
+        if (last && last[1] > from) last[1] = from;
+        trimWatches.push([from, (utc(o.trim_until) - startMs) / 3600e3]);
+        chartDirty = true;
+      }
+      present();
+    } catch (e) {
+      console.warn("the simulator didn't take the spell's trim", e);
+    }
+  }
+  note(wheelSummary(r, counts), "At the wheel", r.reached ? TONE_COLOUR.good : TONE_COLOUR.info);
+  showOrder();
+  setRate(wheelRate);
+}
+/** Hand-trimmed watches this game, as hours from the start, for the chart. */
+const trimWatches: [number, number][] = [];
+function trimRanges(): [number, number][] | undefined {
+  return trimWatches.length ? trimWatches : undefined;
+}
+/** The results card's line on the wheel spells (Sam's trim_watches / trim_gain_km). */
+function trimLine(c: Card): string {
+  const n = c.trim_watches ?? 0;
+  if (!n || c.trim_gain_km == null) return "";
+  const km = Math.abs(c.trim_gain_km);
+  const amount = km < 0.05 ? "about nothing" : `about ${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+  const way = km < 0.05 ? "" : c.trim_gain_km > 0 ? " gained" : " lost";
+  return `Your trimming at the wheel was worth ${amount}${way} over ${n} watch${n > 1 ? "es" : ""}, against the autopilot's own trim.`;
+}
 function wheelOffered(): boolean {
   return page.ready && !page.status?.over && mode === "hands_on" && canTakeWheel(spec.key) && !cine.on;
 }
@@ -1280,6 +1354,7 @@ async function finish(): Promise<void> {
           ? "A draw: within a day of each other, which is down to the weather's luck."
           : "Neither boat finished.";
   $("r-head").textContent = head;
+  $("r-trim").textContent = trimLine(c);
   const trouble: Record<string, string> = { capsize: "knocked flat by a wave", part_failed: "a part broke", ship_strike: "hit by a ship" };
   const line = (who: string, x: Card["boat"]) => {
     const tr = document.createElement("tr");
@@ -1970,7 +2045,7 @@ renderer.setAnimationLoop(() => {
         known
           ? [...known, { rep: game.ghost, colours: GHOST }]
           : [
-              { rep: game.boat, colours: TRACK.kayak },
+              { rep: game.boat, colours: TRACK.kayak, bright: trimRanges() },
               { rep: game.ghost, colours: GHOST },
             ],
         watch === "boat" ? 0 : known ? known.length : 1,

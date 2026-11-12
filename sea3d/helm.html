@@ -118,6 +118,11 @@
   #wheel .w-guide { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; background: rgba(61,220,151,.14); border-left: 3px solid #3ddc97; font-size: 13.5px; font-weight: 600; }
   #wheel .w-guide[hidden] { display: none; }
   #wheel .w-gskip { float: right; margin-left: 8px; }
+  #r-trim:empty { display: none; }
+  #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
+    font: 600 12px system-ui, sans-serif; background: rgba(61,220,151,.2); border: 1px solid #3ddc97; color: #dff8ec; pointer-events: none; }
+  #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
+  #trimchip[hidden] { display: none; }
   #wheel .w-keys { color: var(--dim); font-size: 11px; margin-top: 6px; }
   #wheel .w-btns { display: flex; gap: 5px; margin-top: 5px; }
   /* While at the wheel the voyage controls wait. */
@@ -217,6 +222,7 @@
   <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second, for the empty middle of the ocean (key 4)">4 days/s</button>
 </div>
 <div id="timestate"></div>
+<div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
 <div id="keyhint" hidden>Space pause · 1-4 speed · &larr;&rarr; steer (hold to keep turning, Shift for 1&deg;) · &uarr;&darr; power · ? keys</div>
 <div id="ghosttag" hidden></div>
 
@@ -322,6 +328,7 @@
 <div id="result" class="overlay" hidden>
   <div class="card glass">
     <h1 id="r-head"></h1>
+    <p id="r-trim" class="muted"></p>
     <table id="r-table"></table>
     <div id="r-ends"></div>
     <p class="muted" id="r-notes"></p>

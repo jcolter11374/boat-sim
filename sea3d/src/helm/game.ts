@@ -21,6 +21,9 @@ export interface OrderResult {
   next_allowed?: string;
   arrives?: string | null;
   from_report?: string;
+  /** A wheel spell's trim as the simulator took it (clamped), and until when it holds. */
+  trim?: number;
+  trim_until?: string;
 }
 export interface BoatNow {
   t: string;
@@ -68,6 +71,10 @@ export interface Status {
   silence?: { days_in_a_row: number; days_total: number; limit_in_a_row: number; limit_total: number };
   /** False in base mode: the page shows what base knows, not the true boat (#214). */
   show_true_position?: boolean;
+  /** A hand-trimmed watch running now (Take the wheel, phase 2): null when none; older simulators leave it out. */
+  trim?: { share: number; until: string; factor: number; gain_km?: number } | null;
+  /** What every wheel watch so far has gained (km through the water vs the autopilot's trim). */
+  trim_gain_km?: number;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
 }
 /** An order's next day, sailed by a copy of the boat (sandbox/helm.py Game.preview, #330). */
@@ -128,6 +135,9 @@ export interface Card {
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
+  /** Take the wheel spells (phase 2): watches a spell set, and what they were worth through the water vs the autopilot's trim (km). */
+  trim_watches?: number;
+  trim_gain_km?: number;
 }
 export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "silence" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
@@ -241,9 +251,12 @@ export class HelmGame {
     return this.ask<string>({ type: "save" });
   }
 
-  /** sails and engine: sailboats only; null or left out lets the boat decide. */
-  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null): Promise<OrderResult> {
-    const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+  /** sails and engine: sailboats only; null or left out lets the boat decide.
+   * trim: a "Take the wheel" spell's share of the best speed (sailboats only): the
+   * simulator sails at it for the next watch instead of the autopilot's own trim. */
+  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, trim?: number | null): Promise<OrderResult> {
+    const extra: Record<string, unknown> = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+    if (trim != null) extra.trim = trim;
     const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power, ...extra });
     this.status = v.status;
     return v.order;
