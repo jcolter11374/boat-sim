@@ -57,7 +57,14 @@
     border-radius: 8px; padding: 6px 11px; cursor: pointer; }
   #transport button[aria-pressed="true"] { background: var(--orange); color: #1a0d00; border-color: var(--orange); }
   #play { width: 44px; font-size: 16px !important; }
-  #warp { display: flex; gap: 4px; }
+  #warp { display: flex; gap: 4px; position: relative; }
+  /* A few seconds' hint by the speed bar when a replay opens (Leo, 11 Nov). */
+  #warphint { position: absolute; bottom: calc(100% + 10px); left: 0; white-space: nowrap; font-size: 12.5px; padding: 5px 9px;
+    border-radius: 6px; background: rgba(10, 22, 40, .92); border-left: 3px solid var(--orange); pointer-events: none;
+    transition: opacity .8s; }
+  #warphint.fade { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { #warphint { transition: none; } }
+  #warphint[hidden] { display: none; }
   #scrubwrap { position: relative; flex: 1; height: 28px; }
   #scrub { position: absolute; inset: 0; width: 100%; margin: 0; accent-color: var(--orange); }
   #ticks { position: absolute; left: 8px; right: 8px; top: 0; height: 6px; pointer-events: none; }
@@ -200,6 +207,7 @@
   <button id="play" aria-label="Play or pause">&#9654;</button>
   <button id="now" hidden title="Back to the latest report">Now</button>
   <div id="warp" role="group" aria-label="Time warp">
+    <div id="warphint" role="status" hidden></div>
     <button data-warp="0.000277778" title="Real time: one second of voyage per second" aria-pressed="true">Real time</button>
     <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
     <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
