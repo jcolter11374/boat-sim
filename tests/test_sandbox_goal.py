@@ -23,7 +23,7 @@ def test_hourly_track_and_storm_at():
 def test_sandy_goal_in_the_catalog_has_rosas_shape():
     g = next(c for c in C.catalog()["challenges"] if c["id"] == "sandys-shadow")["goal"]
     assert g["until"] == "2012-10-31T12:00:00Z" and g["call_day"] == 3
-    assert g["storm"]["clear_km"] == 300 and g["storm"]["well_km"] == 400
+    assert g["storm"]["clear_km"] == 250 and g["storm"]["well_km"] == 300
     assert len(g["storm"]["track"]) == 9 * 24 + 1  # hourly, 22 Oct 12 UTC to 31 Oct 12 UTC
     assert g["stars3"] == {"east_of": -68.0, "battery_min": 0.2}
     assert "goal" not in next(c for c in C.catalog()["challenges"] if c["id"] == "gentle-june")

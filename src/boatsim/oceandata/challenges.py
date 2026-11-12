@@ -201,10 +201,10 @@ CHALLENGES: list[Challenge] = [
         "Hurricane Sandy comes up the coast a week after the drop. It is 400 km off Cape "
         "Hatteras on 29 October and comes ashore in New Jersey that night.",
         hurricane=True,
-        # Ravi's stars from real runs (sandy-first-mission-plan.md); Rosa's page shape.
+        # Ravi's stars from real runs, retuned (250/300 km, Elena approved); Rosa's page shape.
         goal={
             "until": "2012-10-31T12:00:00Z",
-            "storm": {"name": "Sandy", "track_6h": SANDY_TRACK_6H, "clear_km": 300, "well_km": 400},
+            "storm": {"name": "Sandy", "track_6h": SANDY_TRACK_6H, "clear_km": 250, "well_km": 300},
             "stars3": {"east_of": -68.0, "battery_min": 0.2},
             "call_day": 3,
             "debrief": {
