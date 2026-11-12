@@ -18,6 +18,8 @@ export interface InWaterLook {
   foam: number;
   /** Scene light for the water's own colour and the foam (atmosphere ambient, 0..1). */
   light: number;
+  /** How rough the sea is, 0 calm .. 1 a gale: the contact foam and wet band grow with it. */
+  rough?: number;
 }
 
 const PARS = /* glsl */ `
@@ -26,6 +28,7 @@ ${BOAT_WASH_PARS}
 uniform float uWetH;
 uniform float uWetFoam;
 uniform float uWetLight;
+uniform float uSeaRough; // 0 calm .. 1 a gale
 uniform vec3 uWaterTint;
 varying vec3 vSeaW;
 float iwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -55,17 +58,22 @@ const BODY = /* glsl */ `
     gl_FragColor.rgb *= 1.0 - 0.08 * mark;
     vec2 q = vSeaW.xz * 7.0 + vec2(uSeaTime * 0.9, -uSeaTime * 0.6);
     float n = iwNoise(q) * 0.6 + iwNoise(q * 2.7) * 0.4;
-    float band = uWetH * (0.5 + n);
-    float wet = 1.0 - smoothstep(0.0, max(band, 1e-3), h);
-    gl_FragColor.rgb *= mix(1.0, 0.62, wet); // darker where it's wet
-    float line = 1.0 - smoothstep(0.0, 0.015 + 0.015 * n + 0.3 * uWetH * n, h); // white along the contact, more in a sea (Elena r10)
-    float bits = smoothstep(0.42, 0.7, iwNoise(vSeaW.xz * 18.0 + uSeaTime * 2.3));
-    // More at the bow, thin and broken aft (none read where no hull is known).
+    // Wet paint: the bottom of the topsides goes darker, with a soft top edge; a band a
+    // quarter of the topsides high in a gale (Ines r10), a few cm in a calm.
+    float band = uWetH * (0.8 + 0.4 * n) + 0.09 * uSeaRough;
+    float wet = 1.0 - smoothstep(0.35 * band, band, h);
+    gl_FragColor.rgb *= mix(1.0, 0.55, wet);
+    // White along the contact line: a thin broken line in a calm; in a gale a continuous,
+    // broken, bright band a few cm high, higher where a wave is climbing (Ines r10).
+    float lineH = 0.012 + 0.012 * n + uSeaRough * (0.015 + 0.03 * n);
+    float line = 1.0 - smoothstep(0.6 * lineH, lineH, h);
+    float bits = smoothstep(0.42 - 0.2 * uSeaRough, 0.7 - 0.2 * uSeaRough, iwNoise(vec2(dot(vSeaW.xz, vec2(13.0, 13.0)), vSeaW.y * 40.0) + uSeaTime * 2.3) * 0.6 + iwNoise(vSeaW.xz * 31.0 - uSeaTime) * 0.4);
+    // More at the bow, thin and broken aft as lace (none read where no hull is known).
     float sAl = washAlong(vSeaW.xz);
     float bowK = sAl < -1.5 ? 0.6 : smoothstep(-0.6, 0.85, sAl);
     float gaps = smoothstep(0.3, 0.6, iwNoise(vSeaW.xz * 1.6 + vec2(uSeaTime * 0.7, 0.0)));
-    bits *= mix(gaps, 1.0, bowK) * (0.45 + 0.55 * bowK);
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.86, 0.9, 0.92) * uWetLight, line * bits * uWetFoam * (0.4 + 0.5 * uWetFoam));
+    bits *= mix(mix(gaps, 1.0, bowK), mix(0.55 + 0.45 * gaps, 1.0, bowK), uSeaRough) * mix(0.45 + 0.55 * bowK, 0.8 + 0.2 * bowK, uSeaRough);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.9, 0.93, 0.95) * uWetLight, line * bits * mix(uWetFoam * (0.4 + 0.5 * uWetFoam), 0.95, uSeaRough));
     // Green water that came aboard (Ines r7): no painted sheet, just what it leaves. The
     // paint goes dark and wet and dries back; broken white foam sits on the deck and the
     // upper hull, thinning and draining down the sides over a second or two.
@@ -94,6 +102,7 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
     uWetH: { value: 0.05 },
     uWetFoam: { value: 0.5 },
     uWetLight: { value: 1 },
+    uSeaRough: { value: 0 },
     uWaterTint: { value: new THREE.Vector3(TINT.r, TINT.g, TINT.b) },
   };
   root.traverse((o) => {
@@ -118,7 +127,7 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
           .replace("#include <opaque_fragment>", "#include <opaque_fragment>\n" + BODY);
       };
       const key = m.customProgramCacheKey.bind(m);
-      m.customProgramCacheKey = () => key() + "|in-water-v1";
+      m.customProgramCacheKey = () => key() + "|in-water-v2";
       m.needsUpdate = true;
     }
   });
@@ -127,6 +136,7 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
       u.uWetH.value = look.wetH;
       u.uWetFoam.value = look.foam;
       u.uWetLight.value = look.light;
+      u.uSeaRough.value = look.rough ?? 0;
     },
   };
 }

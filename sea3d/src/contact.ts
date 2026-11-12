@@ -100,12 +100,13 @@ const sprayFrag = /* glsl */ `
     vec2 c = (gl_PointCoord - 0.5) * 2.0;
     c.y = -c.y; // gl_PointCoord runs down the screen
     float along = dot(c, vDir);
-    float across = dot(c, vec2(-vDir.y, vDir.x)) * vStretch;
+    // Tapered: full at the head, thinning to a point at the tail (Ines r10).
+    float across = dot(c, vec2(-vDir.y, vDir.x)) * vStretch * (1.0 + 1.6 * max(-along, 0.0));
     float r = along * along + across * across;
     if (r > 1.0) discard;
     // White to pale cool grey, lit by the sky (Ines r9: never beige); the freshest streaks
     // near the stem a little brighter.
-    gl_FragColor = vec4(vec3(0.9, 0.96, 1.04) * (uLight + foamLamp(vW)) * (1.05 + 0.4 * vAlpha), min(1.0, 1.3 * vAlpha * exp(-1.8 * r) * (1.0 - r)));
+    gl_FragColor = vec4(vec3(0.9, 0.96, 1.04) * (uLight + foamLamp(vW)) * (1.05 + 0.4 * vAlpha), min(1.0, 1.3 * vAlpha * exp(-1.8 * r) * (1.0 - r) * (0.55 + 0.45 * smoothstep(-1.0, 0.6, along))));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -172,6 +173,7 @@ export class Contact {
   private readonly mist: Uint8Array;
   /** Each drop's own size (mixed sizes, Elena r10). */
   private readonly szk: Float32Array;
+  private readonly av: Float32Array;
   private risePeak = 0;
   /** Bigger boats throw bigger sheets of spray (GUESS: by length^0.7 against the kayak's 3.05 m). */
   private readonly sprayScale: number;
@@ -279,6 +281,7 @@ export class Contact {
     this.born = new Float32Array(this.n).fill(-99);
     this.mist = new Uint8Array(this.n);
     this.szk = new Float32Array(this.n).fill(1);
+    this.av = new Float32Array(this.n).fill(1);
     const sg = new THREE.BufferGeometry();
     sg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.n * 3), 3));
     sg.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(this.n), 1));
@@ -375,7 +378,7 @@ export class Contact {
       this.wetBoost = x >= 0 && x < 6 ? 0.3 * this.over.h * Math.exp(-x / 2.5) : 0;
     }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
-    this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.1 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
+    this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.1 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5) });
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.
@@ -445,8 +448,9 @@ export class Contact {
         this.sv[i * 3 + 1] = power * (1.0 + jit * Math.random()) * (sheet ? aftK * 1.25 : 1) + Math.max(rise, 0); // thrown off water that is itself rising
         this.sv[i * 3 + 2] = sideSign * power * (0.7 + jit * Math.random());
         this.born[i] = t;
-        this.mist[i] = Math.random() < 0.3 ? 1 : 0; // a fine mist behind the streaks
+        this.mist[i] = Math.random() < 0.4 ? 1 : 0; // a fine mist behind the streaks
         this.szk[i] = 0.45 + 1.6 * Math.random() ** 2;
+        this.av[i] = 0.3 + 0.7 * Math.random() ** 1.5; // most streaks faint, a few bright
       }
       // Green water pouring off the gunwale: drops spill out over both sides where the
       // water on deck is, falling back into the sea (Ines r5: runs off broken and white).
@@ -516,8 +520,9 @@ export class Contact {
         // Drops spread into a mist as they fly: bigger, softer and fainter with age.
         // A sheet is many small drops and a few soft puffs of mist that hang a little longer.
         const m = this.mist[i];
-        alpha[i] = (m ? 0.14 * (1 - k) : 0.95 * (1 - k) ** 1.5) * Math.min(1, age * 10);
-        size[i] = (m ? 0.2 + 0.6 * k : 0.06 + 0.1 * k) * this.szk[i] * (0.6 + 0.6 * slamK) * this.sprayScale;
+        // The fine mist carries most of the volume; the streaks vary, most of them faint.
+        alpha[i] = (m ? 0.22 * (1 - k) : 0.95 * this.av[i] * (1 - k) ** 1.5) * Math.min(1, age * 10);
+        size[i] = (m ? 0.28 + 0.8 * k : 0.06 + 0.1 * k) * this.szk[i] * (0.6 + 0.6 * slamK) * this.sprayScale;
         if (m) vel[i * 3] = vel[i * 3 + 1] = vel[i * 3 + 2] = 0; // mist is soft puffs, not streaks
         live++;
       }
