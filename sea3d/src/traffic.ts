@@ -14,7 +14,7 @@
 // new ones only appear out of sight, so nothing pops in or out in view.
 
 import * as THREE from "three";
-import { makeShip, SHIP_SIZE, type ShipKind } from "./boats/ships";
+import { dressShip, makeShip, SHIP_SIZE, type ShipKind } from "./boats/ships";
 import { metresPerDegree, R_EARTH } from "./land/shader";
 import { reflectable } from "./mirror";
 
@@ -165,12 +165,12 @@ export function shipsNear(g: ShipGrid, lat: number, lon: number, t: number, radi
 function sighting(g: ShipGrid, i: number, j: number, k: number, n: number, phase: number, d: number, r: () => number): Sighting | null {
   const lat = g.lat0 + (i + r()) * g.res;
   const lon = g.lon0 + (j + r()) * g.res;
-  // The mix of kinds (GUESS: roughly the share of big ships on AIS: cargo, tankers, fishing).
+  // The mix of kinds (GUESS: roughly the share of big ships on AIS: box ships, tankers, bulk carriers, fishing).
   const u = r();
-  const kind: ShipKind = u < 0.4 ? "container" : u < 0.7 ? "tanker" : "fishing";
+  const kind: ShipKind = u < 0.35 ? "container" : u < 0.6 ? "tanker" : u < 0.85 ? "bulk" : "fishing";
   // In crowded port water half the merchant ships wait at anchor (GUESS).
   const anchored = kind !== "fishing" && d > 0.01 && r() < 0.5;
-  const speed = anchored ? 0 : kind === "container" ? 8 + 2 * r() : kind === "tanker" ? 6 + 1.2 * r() : 1.5 + 2 * r();
+  const speed = anchored ? 0 : kind === "container" ? 8 + 2 * r() : kind === "tanker" ? 6 + 1.2 * r() : kind === "bulk" ? 6.2 + 1.2 * r() : 1.5 + 2 * r();
   const lane = kind === "fishing" || anchored ? null : laneHeading(g, i, j);
   const heading = lane == null ? r() * 360 : (lane + (r() < 0.5 ? 0 : 180) + (r() - 0.5) * 30 + 360) % 360;
   const s: Sighting = { id: `${i}:${j}:${k}:${n}`, kind, lat, lon, heading, speed, anchored, tMid: phase + (n + 0.5) * HOUR, seed: r() };
@@ -190,12 +190,12 @@ interface Live {
 export class Traffic {
   readonly root = new THREE.Group();
   /** What's in the scene (for tests and the page). */
-  readonly shown = { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } as Record<ShipKind, number> };
+  readonly shown = { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, bulk: 0, fishing: 0 } as Record<ShipKind, number> };
   /** Lights fade out by this distance (m). */
   private readonly lightRange = { value: 8000 };
   private live = new Map<string, Live>();
   /** Ships out of use, kept to reuse. */
-  private spare: Record<ShipKind, THREE.Group[]> = { container: [], tanker: [], fishing: [] };
+  private spare: Record<ShipKind, THREE.Group[]> = { container: [], tanker: [], bulk: [], fishing: [] };
   private last: { t: number; lat: number; lon: number } | null = null;
 
   private constructor(private readonly grid: ShipGrid | null) {
@@ -250,7 +250,7 @@ export class Traffic {
     // Place them: east is +x, north is -z, sunk by the earth's curve.
     const { mx, my } = metresPerDegree(lat);
     const k = this.shown.kinds;
-    k.container = k.tanker = k.fishing = 0;
+    k.container = k.tanker = k.bulk = k.fishing = 0;
     let nearest = Infinity;
     let bearing = 0;
     let inSight = 0;
@@ -281,8 +281,7 @@ export class Traffic {
 
   private add(s: Sighting): void {
     const obj = this.spare[s.kind].pop() ?? makeShip(s.kind, this.lightRange);
-    obj.getObjectByName("underway")!.visible = !s.anchored;
-    obj.getObjectByName("anchored")!.visible = s.anchored;
+    dressShip(obj, s.kind, s.seed, s.anchored);
     reflectable(obj);
     this.root.add(obj);
     this.live.set(s.id, { s, obj });
