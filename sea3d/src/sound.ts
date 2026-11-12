@@ -713,7 +713,11 @@ export class OceanSound {
   update(dt: number, w: SeaWeather): void {
     const L = this.L;
     if (!this.live || !L) return;
-    dt = Math.min(Math.max(dt, 0), 0.25);
+    dt = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), 0.25) : 0;
+    // A reading that isn't there yet (an empty track before the first hour) must never reach an
+    // AudioParam: a NaN there throws and would stop the frame. Fall back to calm, plain values.
+    const ok = (v: number | undefined, d: number) => (v != null && Number.isFinite(v) ? v : d);
+    w = { wind: ok(w.wind, 0), hs: ok(w.hs, 0.3), tp: ok(w.tp, 6), rain: ok(w.rain, 0), near: ok(w.near, 8), stw: ok(w.stw, 0), apparent: w.apparent != null && Number.isFinite(w.apparent) ? w.apparent : undefined, luff: ok(w.luff, 0) };
     const t = this.now;
     const r = this.rnd;
     // Gusts: a new aim every 5 to 20 s, eased into, so each gust builds and passes.
