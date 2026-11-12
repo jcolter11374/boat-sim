@@ -36,8 +36,11 @@ class StormStars:
     soc_min: float  # ... with the battery never below this share
 
 
+# Set from the CI run on Sandy's best track (PR #389, 12 Nov): running east keeps 315 to 385 km
+# from the centre, south 338 km, south-east 186 to 259 km; the ghost's usual route passes 16 km
+# from it, so the ghost earns no stars here. The first plan's 300/400 km left no ★★ at all.
 SANDY = StormStars(
-    storm="SANDY", season=2012, goal_km=300.0, clear_km=400.0, east_of=-68.0, soc_min=0.20
+    storm="SANDY", season=2012, goal_km=250.0, clear_km=300.0, east_of=-68.0, soc_min=0.20
 )
 RULES = {"sandys-shadow": SANDY}
 

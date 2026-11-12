@@ -46,12 +46,12 @@ def test_stars_stack_and_three_needs_the_right_way_and_battery():
         judge(rows(-69.0, lon0=-69.5), "at_sea", STORM, SANDY)["stars"] == 2
     )  # not far enough east
     assert judge(far, "lost", STORM, SANDY)["stars"] == 0  # not sailing at the end: no goal
-    # Closer than 400 km but more than 300: one star.
+    # Inside the clear distance but outside the goal distance: one star.
     near = rows(-66.0, lon0=-70.0, lat=38.0)
     for r in near:
-        r["lon"] = -70.0  # about 350 km from 74W at 38N
+        r["lon"] = -70.8  # about 280 km from 74W at 38N
     j = judge(near, "at_sea", STORM, SANDY)
-    assert 300 < j["closest_km"] < 400 and j["stars"] == 1
+    assert SANDY.goal_km < j["closest_km"] < SANDY.clear_km and j["stars"] == 1
 
 
 def test_storm_track_reads_one_storm_from_an_ibtracs_csv(tmp_path):
