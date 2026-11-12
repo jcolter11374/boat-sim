@@ -189,13 +189,17 @@ const CHECKS = {
     run: async (page) => {
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       if (!(await page.locator("#decide").count())) throw new SkipCheck("this build has no decision stops (#341 not deployed)");
-      await page.click("#go");
+      await page.click("#go", { timeout: 15_000 }).catch(() => {
+        throw new CheckFail(`couldn't click "Set sail"`);
+      });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       const out = [];
       if (await page.locator("#soundask").count()) {
         const asked = await page.locator("#soundask").isVisible();
         must(asked, `"Sound on?" didn't show after Set sail`);
-        await page.click("#soundno");
+        await page.click("#soundno", { noWaitAfter: true, timeout: 10_000 }).catch(() => {
+          throw new CheckFail(`couldn't click "No thanks" on the sound question`);
+        });
         must(!(await page.locator("#soundask").isVisible()), `"No thanks" didn't close the sound question`);
         out.push(`"Sound on?" asked and closed`);
       }
@@ -203,7 +207,11 @@ const CHECKS = {
       let decided = null;
       for (let i = 0; i < 12 && !decided; i++) {
         if (await page.evaluate(() => window.__helm.card || window.__helm.status?.over)) break;
-        if (await page.evaluate(() => window.__helm.clock === 0)) await fast.click({ noWaitAfter: true });
+        // Key 4 is "4 days a second" (the key hint); a key can't be blocked by a panel over the button.
+        if (await page.evaluate(() => window.__helm.clock === 0)) {
+          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => page.keyboard.press("4"));
+          else await page.keyboard.press("4");
+        }
         await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.error || window.__helm.card, null, { timeout: 4 * MIN }).catch(() => {});
         must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");
         const shown = await page.waitForFunction(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length, null, { timeout: 15_000 }).then(() => true).catch(() => false);
@@ -211,7 +219,9 @@ const CHECKS = {
           const d = await page.evaluate(() => ({ text: document.getElementById("decidetext").textContent, btns: [...document.querySelectorAll("#decidebtns button")].map((b) => b.textContent) }));
           must(d.text.trim() && d.btns.length >= 2, `a decision showed without a question or choices: ${JSON.stringify(d)}`);
           await page.screenshot({ path: `play-${BROWSER}-decision.png` }).catch(() => {});
-          await page.locator("#decidebtns button").first().click({ noWaitAfter: true });
+          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
+            throw new CheckFail(`couldn't click "${d.btns[0]}" on the decision`);
+          });
           await page.waitForFunction(() => document.getElementById("decide").hidden && window.__helm.clock > 0, null, { timeout: 20_000 }).catch(() => {
             throw new CheckFail(`picking "${d.btns[0]}" didn't close the question and carry on`);
           });
