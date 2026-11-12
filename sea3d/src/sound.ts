@@ -513,11 +513,12 @@ export class OceanSound {
     if (strength > 0.45) this.spray(strength * near);
   }
 
-  /** The cockpit instrument's soft double chirp: something needs you (#329). */
+  /** The boat's electronics alert, heard from outside the cabin: something needs you (#329). */
   alarm(delay = 0): void {
     if (!this.live) return;
-    this.tone([1175], "sine", 0.024, delay, 0.07, 2000);
-    this.tone([880], "sine", 0.024, delay + 0.12, 0.07, 2000);
+    // The boat's own piezo alert heard from outside: small and a little muffled (Elena), not a UI ping.
+    this.tone([2350], "square", 0.012, delay, 0.06, 1100, 0.01);
+    this.tone([2350], "square", 0.012, delay + 0.14, 0.06, 1100, 0.01);
   }
 
   /**
