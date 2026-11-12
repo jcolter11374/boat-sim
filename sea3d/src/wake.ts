@@ -151,6 +151,10 @@ export class Wake {
     this.points.material.uniforms.uLight.value = l;
   }
 
+  /** The drawn water's height under a point, if the page hands over the sea's own
+   *  (Sea.surfaceAt); otherwise the big waves' height near enough. */
+  surface: ((comps: WaveComponent[], x: number, z: number, t: number) => number) | null = null;
+
   reset(): void {
     this.odo = 0;
     this.lastT = -1;
@@ -173,7 +177,7 @@ export class Wake {
         const [x, z] = toWorld(this.sternX - d, uv[k * 2 + 1] * hw, place);
         // Height of the wave crossing this point (close enough for a foam sheet; the exact
         // inverse in heightAt costs several times more and this runs ~200 times a frame).
-        const y = displace(comps, x, z, t)[1];
+        const y = this.surface ? this.surface(comps, x, z, t) : displace(comps, x, z, t)[1];
         pos[k * 3] = x;
         pos[k * 3 + 1] = y + 0.02;
         pos[k * 3 + 2] = z;

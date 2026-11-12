@@ -109,6 +109,9 @@ export class Contact {
   private lastT = -1;
   private lastClear = 0;
   private lastBowSea = 0;
+  /** The drawn water's height under a point: the big waves unless the page hands over the
+   *  sea's own (Sea.surfaceAt, with the short waves), so the collar and spray sit on what's drawn. */
+  surface: (comps: WaveComponent[], x: number, z: number, t: number) => number = heightAt;
   /** Per drop: 1 for a soft puff of mist, 0 for a drop. */
   private readonly mist: Uint8Array;
   private risePeak = 0;
@@ -259,7 +262,7 @@ export class Contact {
         const [wx, wz] = toWorld(x + nx * off, z + nz * off, place);
         const o = (i * 2 + k) * 3;
         pos[o] = wx;
-        pos[o + 1] = heightAt(comps, wx, wz, t) + 0.015;
+        pos[o + 1] = this.surface(comps, wx, wz, t) + 0.015;
         pos[o + 2] = wz;
       }
     }
@@ -317,7 +320,7 @@ export class Contact {
         this.sp[i * 3] = bx - back;
         this.sp[i * 3 + 2] = bz + sideSign * (this.beam * 0.3 * Math.min(1, back * 4 + 0.2));
         const [wx, wz] = toWorld(this.sp[i * 3], this.sp[i * 3 + 2], place);
-        this.sp[i * 3 + 1] = heightAt(comps, wx, wz, t) + 0.02 + bowWaveHeight(s.speed); // on the bow wave
+        this.sp[i * 3 + 1] = this.surface(comps, wx, wz, t) + 0.02 + bowWaveHeight(s.speed); // on the bow wave
         const power = (0.6 + Math.min(Math.max(sink, 1.3 * crest), 3) * 0.8 + 0.6 * speedK) * (0.8 + 0.4 * slamK) * Math.sqrt(this.sprayScale);
         this.sv[i * 3] = -s.speed * 0.4 + (Math.random() - 0.5) * 0.4; // drops fall behind as the boat moves on
         this.sv[i * 3 + 1] = power * (0.8 + 0.6 * Math.random()) + Math.max(rise, 0); // thrown off water that is itself rising
