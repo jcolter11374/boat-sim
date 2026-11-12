@@ -163,7 +163,8 @@ export class Rain {
     const heavy = THREE.MathUtils.smoothstep(amount, 0.45, 0.95);
     this.far.visible = heavy > 0.01;
     this.farMat.uniforms.uAmount.value = 1.0 * heavy;
-    this.farMat.uniforms.uLen.value = 0.8 + 0.7 * amount; // farther off, so longer to show at all
+    this.farMat.uniforms.uLen.value = 0.3 + 0.3 * amount; // a little longer than near, never lines across the sea
+    this.farMat.uniforms.uLucky.value = 0; // no long bright streaks out there
     this.far.geometry.setDrawRange(0, Math.ceil(this.far.geometry.getAttribute("aEnd").count * heavy / 2) * 2);
   }
 
