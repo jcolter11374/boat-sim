@@ -165,11 +165,12 @@ export function bestSheet(t: TrimTable, plan: string, twsKn: number, twaDeg: num
 /** The sails as the telltales show them, in words a non-sailor can act on. */
 export type SailState = "flapping" | "ease" | "good" | "in" | "stalled" | "irons";
 export const SAIL_WORDS: Record<SailState, string> = {
-  flapping: "Flapping: pull the sail in (Up)",
-  in: "Drawing, a little loose: pull in (Up)",
+  // Short enough for the strip's sail cell at 1280 (Ines: no cut-off words).
+  flapping: "Flapping: pull in (Up)",
+  in: "A little loose: pull in (Up)",
   good: "Drawing well",
-  ease: "Drawing, a little tight: ease out (Down)",
-  stalled: "Stalled: ease the sail out (Down)",
+  ease: "A little tight: ease out (Down)",
+  stalled: "Stalled: ease out (Down)",
   irons: "Too close to the wind",
 };
 

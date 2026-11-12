@@ -159,12 +159,24 @@ deckLight.name = "deck_light";
 /** Candela at full night, and the foam's floor of light: tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
 const FOAM_AT_NIGHT = 0.3;
+/** A lantern higher than this (m) is a masthead light, not a deck lantern. */
+const MASTHEAD_LAMP_M = 5;
+/** The deck light is a low cockpit lamp (a yacht with a masthead lantern). */
+let deckYacht = false;
 function placeDeckLight(): void {
   if (!model) return;
   deckLight.removeFromParent();
   const nav = model.root.getObjectByName("nav_lights");
   const lamp = nav?.children[0];
-  if (nav && lamp) {
+  // On a yacht the lantern is at the masthead, 12 m+ up: there it floodlit the sail like a searchlight
+  // (Ines, 12 Nov), and a quarter of the way up it lit the sail from inside. Keep it low, a cockpit
+  // lamp just over the deck, short-ranged, so the sails stay a faint shape at night.
+  const up = lamp ? model.root.worldToLocal(lamp.getWorldPosition(new THREE.Vector3())).y : 0;
+  deckYacht = !!(nav && lamp && up > MASTHEAD_LAMP_M);
+  if (deckYacht) {
+    deckLight.position.set(0, up * 0.1, 0);
+    model.root.add(deckLight);
+  } else if (nav && lamp) {
     deckLight.position.copy(lamp.position);
     nav.add(deckLight);
   } else {
@@ -172,7 +184,7 @@ function placeDeckLight(): void {
     deckLight.position.set(0, box.max.y + 0.1, 0);
     model.root.add(deckLight);
   }
-  deckLight.distance = 6 * Math.max(1, spec.length / KAYAK.length);
+  deckLight.distance = deckYacht ? 5 : 6 * Math.max(1, spec.length / KAYAK.length);
 }
 /** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
@@ -1366,7 +1378,7 @@ controls.addEventListener("end", () => chase.drag(false));
 const chaseLook = new THREE.Vector3();
 let wheelFov = false;
 /** Thomas Point Light from the boat, on the run to it (the camera's second subject); null otherwise. */
-function lightAhead(): { bearing: number; distM: number; spanDeg?: number } | null {
+function lightAhead(): { bearing: number; distM: number; spanDeg?: number; leanDeg?: number } | null {
   const w = wheel.wheel;
   if (!w || !wheelNow || practiceCourse?.kind !== "light" || w.s.mark < practiceCourse.marks.length - 1) return null;
   const m = w.markXY();
@@ -1380,7 +1392,7 @@ function lightAhead(): { bearing: number; distM: number; spanDeg?: number } | nu
   const rel = [light, ...ends].map((b) => ((((b - light) % 360) + 540) % 360) - 180);
   const lo = Math.min(...rel);
   const hi = Math.max(...rel);
-  return { bearing: (light + (lo + hi) / 2 + 360) % 360, distM, spanDeg: hi - lo };
+  return { bearing: (light + (lo + hi) / 2 + 360) % 360, distM, spanDeg: hi - lo, leanDeg: -(lo + hi) / 2 };
 }
 function wheelCamera(dt: number, t: number): void {
   if (cine.on) return; // the cinematic owns the lens
@@ -2567,7 +2579,7 @@ renderer.setAnimationLoop(() => {
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
+    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 2 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);

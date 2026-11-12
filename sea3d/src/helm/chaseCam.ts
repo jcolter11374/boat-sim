@@ -82,6 +82,8 @@ export const TWO_SUBJECT_M = 2500;
 export const TWO_FOV = 20;
 /** The camera stands this far (deg) off the line from the landmark through the boat, to leeward, so they sit on opposite thirds. */
 const TWO_OFF = 14;
+/** Which way to stand for a landmark at one end of the group (checked on frames). */
+const TWO_SIDE_SIGN = -1;
 
 /** How much of the two-subject shot (0..1): fades in from TWO_SUBJECT_M to 60% of it, only while the landmark is ahead (within 70 deg of the bow). */
 export function twoSubject(distM: number, relDeg: number): number {
@@ -140,7 +142,7 @@ export class ChaseCam {
     topM: number,
     frame: Frame,
     still: boolean,
-    subject?: { bearing: number; distM: number; spanDeg?: number } | null,
+    subject?: { bearing: number; distM: number; spanDeg?: number; leanDeg?: number } | null,
   ): (Shot & { blend: number }) | null {
     if (!this.dragging) this.sinceDrag += dt;
     // Switch sides only when the wind is clearly on the other side (a tack or a gybe), not on a dead run.
@@ -151,7 +153,10 @@ export class ChaseCam {
     this.two += (twoWant - this.two) * (1 - Math.exp(-dt / 1.5));
     if (this.two < 1e-3) this.two = 0;
     const alone = standAt(heading, this.side);
-    const both = (((subject?.bearing ?? 0) + 180 + this.side * TWO_OFF) % 360 + 360) % 360;
+    // Stand on the side that keeps her mast off the landmark itself (leanDeg: where it sits in the group,
+    // + clockwise), so its light never stacks on her masthead light (Ines, 12 Nov); else to leeward.
+    const twoSide = subject?.leanDeg ? TWO_SIDE_SIGN * Math.sign(subject.leanDeg) : this.side;
+    const both = (((subject?.bearing ?? 0) + 180 + twoSide * TWO_OFF) % 360 + 360) % 360;
     const dd = ((((both - alone) % 360) + 540) % 360) - 180;
     const want = (alone + dd * this.two + 360) % 360;
     this.fov = CHASE_FOV + (twoFov(subject?.spanDeg ?? 0) - CHASE_FOV) * this.two;
