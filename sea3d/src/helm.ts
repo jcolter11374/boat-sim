@@ -218,6 +218,8 @@ let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
 const shared = params.get("g");
+/** The title's one-click Set sail (F1): helm.html?sail. */
+const ONE_CLICK = params.has("sail") && !shared && !params.has("practice");
 // Weather challenges (challenge-data release, copied to public/challenges/).
 const challengesBase = new URL(params.get("challenges") ?? "./challenges/", location.href).href;
 let challenges: Challenge[] = [];
@@ -330,7 +332,9 @@ const page = {
 
 game.onProgress = (t) => {
   $("busytext").textContent = t;
-  $("loadtext").textContent = t;
+  // The one-click start says one plain thing while it loads, with how far along (F1/F2).
+  const pct = /(\d+)%/.exec(t)?.[1];
+  $("loadtext").textContent = ONE_CLICK ? `Getting the weather ready…${pct ? ` ${pct}%` : ""}` : t;
 };
 // Load the simulator while the player reads the start card, so Set sail starts at once (#322).
 void sandboxThere(sandboxBase).then((ok) => (ok ? game.warm() : undefined));
@@ -1916,6 +1920,35 @@ async function showStanding(build: string): Promise<void> {
   page.standing = s.kind;
 }
 
+/** F3: the goal, on screen from second one (Leo's first five minutes, Elena). Eight seconds over
+ * the opening view, in the clear sky at the top left; a click or a key lets it go early. */
+const GOAL_MS = 8000;
+function goalCard(km: number): Promise<void> {
+  const card = $("goalcard");
+  $("goalkm").textContent = `${Math.round(km).toLocaleString("en-US")} km.`;
+  card.hidden = false;
+  requestAnimationFrame(() => card.classList.add("in"));
+  page.scene = "goal";
+  return new Promise((done) => {
+    let over = false;
+    const end = () => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      removeEventListener("keydown", end);
+      removeEventListener("pointerdown", end);
+      card.classList.remove("in");
+      page.scene = "";
+      setTimeout(() => (card.hidden = true), 800);
+      done();
+    };
+    // ?hold=goal keeps it up, for frames on slow software graphics.
+    const timer = params.get("hold") === "goal" ? 0 : setTimeout(end, GOAL_MS);
+    addEventListener("keydown", end);
+    addEventListener("pointerdown", end);
+  });
+}
+
 /** The card's small map: both whole tracks, drawn once on the chart's land. */
 function drawResultMap(): void {
   const cv = $<HTMLCanvasElement>("r-map");
@@ -2123,7 +2156,7 @@ async function begin(): Promise<void> {
   $("start").hidden = true;
   $("loading").hidden = false;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
-  if (!/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
+  if (!ONE_CLICK && !/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
   try {
     if (shared) {
       const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
@@ -2175,11 +2208,20 @@ async function begin(): Promise<void> {
     // paused where it was left; ?clock=paused starts paused (for tests).
     forecastAt = page.status!.day * 24;
     document.body.classList.add("sailing");
-    hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "The autopilot is steering, just like the ghost's. To get ahead, you'll have to make better calls than it does. The first one is coming.");
+    const coach = shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "The autopilot is steering, just like the ghost's. To get ahead, you'll have to make better calls than it does. The first one is coming.";
     $("loading").hidden = true;
     setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
-    $("keyhint").hidden = false;
-    setTimeout(hideKeyHint, 60_000);
+    // One thing to read at a time (Leo): the goal card first, then the drawer with its coach line
+    // and the key hint; the sound ask a minute in.
+    const opening = () => {
+      hud.sailing(coach);
+      $("keyhint").hidden = false;
+      setTimeout(hideKeyHint, 60_000);
+    };
+    if (!shared && mode === "hands_on" && !chosenChallenge() && finishesOffLisbon() && !page.status?.over) {
+      hud.sailing(null); // the bar steps away; the drawer waits for the card
+      void goalCard(page.status!.boat.km_to_finish).then(opening);
+    } else opening();
     askSoundLater();
   } catch (e) {
     $("loading").hidden = true;
@@ -2232,6 +2274,16 @@ $("s6").addEventListener("click", () => void sail("6h"));
 $("sday").addEventListener("click", () => void sail("day"));
 $("sevent").addEventListener("click", () => void sail("event"));
 $("go").addEventListener("click", () => void begin());
+// F1 (Leo's first five minutes, Elena): the title's Set sail, helm.html?sail, goes straight to the sea
+// on the defaults (our kayak, or my boat; the good-weather launch day; the usual drop), no start card.
+// Any trouble starting brings the start card back with its message.
+if (ONE_CLICK) {
+  document.body.classList.add("oneclick");
+  $("start").hidden = true;
+  $("loadtext").textContent = "Getting the weather ready…";
+  $("loading").hidden = false;
+  void challengesReady.finally(() => void begin());
+}
 $("send").addEventListener("click", () => void sendOrder());
 $("share").addEventListener("click", () => void shareLink());
 // The boats you can sail: our kayak, and the stock boats Maya cleared for play.
@@ -2315,7 +2367,12 @@ function again(sameDay: boolean): void {
   } catch {
     /* private mode: a plain reload */
   }
-  location.reload();
+  // Another day means the start card: drop the title's one-click ?sail.
+  if (!sameDay && params.has("sail")) {
+    const u = new URL(location.href);
+    u.searchParams.delete("sail");
+    location.replace(u.href);
+  } else location.reload();
 }
 $("again").addEventListener("click", () => again(true));
 $("r-day").addEventListener("click", () => again(false));
@@ -2375,6 +2432,7 @@ let chartBounds: LandBounds | null = null;
     }),
   ]);
   chart = new Chart($<HTMLCanvasElement>("chart"), landImg, bounds);
+  chart.toFinish = true;
   chartBounds = bounds;
   chart.setWrecks(wreckMarks());
 })().catch((e) => console.warn("chart:", e));

@@ -61,6 +61,8 @@ export class Chart {
   private focus = 0;
   /** The part of the ocean shown: the whole crossing by default; the results card frames the track sailed. */
   private view = { ...VIEW };
+  /** Draw a thin line from the followed boat to the finish (the helm's corner map, F3). */
+  toFinish = false;
   /** The live tracker's forecast: middle path and spread (lat, lon, radius km). */
   private ghost: { median: [number, number][]; spread: [number, number, number][] } | null = null;
 
@@ -321,6 +323,21 @@ export class Chart {
     g.fillStyle = "#3ddc97";
     g.font = "600 10px system-ui, sans-serif";
     if (!this.small) g.fillText("TARGET", tx + rr + 5, ty + 3);
+
+    // A thin line from the boat to the finish (F3), so progress is something you can see.
+    if (this.toFinish && this.lanes[this.focus]) {
+      const [la, lo] = positionAt(this.lanes[this.focus].rep, hour);
+      const [bx, by] = this.xy(la, lo);
+      g.save();
+      g.strokeStyle = "rgba(61,220,151,0.45)";
+      g.lineWidth = 1;
+      g.setLineDash([2, 3]);
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.lineTo(tx, ty);
+      g.stroke();
+      g.restore();
+    }
 
     this.drawGhost();
     // Other boats first, the one the close-up follows on top.

@@ -157,6 +157,11 @@
   body:not(.sailing) #notes, body:not(.sailing) #strip, body:not(.sailing) #orders-tab { visibility: hidden; }
   #loading { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 16px 22px; min-width: 280px; text-align: center; z-index: 7; }
   #loading[hidden] { display: none; }
+  /* One-click start: a slim line low on the screen, the boat in view above it (F2: the hero shot, not an empty card). */
+  body.oneclick #loading { top: auto; bottom: 16vh; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 16px; min-width: 0; border-radius: 999px; }
+  body.oneclick #loading .spin { width: 14px; height: 14px; margin: 0; border-width: 2px; }
+  body.oneclick #loading .muted { display: none; }
+  body.oneclick:not(.sailing) #orders, body.oneclick:not(.sailing) #orders-tab, body.oneclick:not(.sailing) #strip, body.oneclick:not(.sailing) #mapbox { visibility: hidden; }
   #loading .spin { width: 22px; height: 22px; margin: 0 auto 8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: var(--orange); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #porthint { display: block; margin: -2px 0 6px; }
@@ -193,6 +198,17 @@
   .card p { color: #d4e1f0; margin: 8px 0; }
   .card label { display: block; margin: 8px 0; }
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+  /* F3: the goal card, over the opening view in the clear sky at the top left (Iris's box: top 45%, left 60%). */
+  #goalcard { position: fixed; left: 8vw; top: calc(var(--bar, 0px) + 14vh); max-width: min(52vw, 640px); z-index: 7; pointer-events: none;
+    color: #fff; text-shadow: 0 2px 18px rgba(0,10,25,.55), 0 1px 3px rgba(0,10,25,.5); opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
+  #goalcard.in { opacity: 1; transform: none; }
+  #goalcard { isolation: isolate; }
+  #goalcard::before { content: ""; position: absolute; inset: -48px -72px; z-index: -1; background: radial-gradient(closest-side at 50% 50%, rgba(4,14,28,.42), rgba(4,14,28,.16) 60%, transparent); }
+  #goalcard[hidden] { display: none; }
+  #goalcard h2 { margin: 0 0 10px; font-size: clamp(28px, 3.6vw, 52px); font-weight: 650; line-height: 1.08; letter-spacing: -.01em; text-wrap: balance; }
+  #goalcard p { margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.4; color: rgba(255,255,255,.92); text-wrap: balance; }
+  #goalcard b { font-weight: 650; color: #fff; }
+  @media (prefers-reduced-motion: reduce) { #goalcard { transition: opacity .3s; transform: none; } }
   /* Results, story first (Leo's plan, Elena 12 Nov): headline, story, map and three numbers, your calls, where this leaves you, one bright button. */
   #result { justify-content: flex-start; padding-left: max(24px, 6vw); background: linear-gradient(90deg, rgba(5,12,22,.4), rgba(5,12,22,.1) 70%); transition: opacity .5s; z-index: 30; padding-bottom: calc(var(--edge) + var(--strip-h) * .5); box-sizing: border-box; }
   #result .rc { width: min(640px, 94vw); padding: 22px 26px 16px; background: var(--hud-solid); max-height: calc(100dvh - var(--bar, 0px) - var(--edge) * 2 - var(--strip-h) * .5 - 16px); }
@@ -580,6 +596,10 @@
   <div id="arrivehead"></div>
   <p>The finish circle is 330 km out to sea, too far to see land from. So this is a view of where the boat was headed, not where it is: Cascais, near Lisbon, with Cabo da Roca (Europe's westernmost point) and the Sintra hills to the north-west. The boat itself is still out at the finish.</p>
   <button id="arrivego">See the results</button>
+</div>
+<div id="goalcard" role="status" aria-live="polite" hidden>
+  <h2>Beat the autopilot to Portugal.</h2>
+  <p><b id="goalkm">5,256 km.</b> It&rsquo;s sailing the same boat, right beside you.</p>
 </div>
 <div id="result" class="overlay" hidden>
   <div class="card glass rc" role="dialog" aria-labelledby="r-head">
