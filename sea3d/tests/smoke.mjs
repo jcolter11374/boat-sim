@@ -470,7 +470,7 @@ try {
     }
     if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
+    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("strip") ?? document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
       .catch(() => fail("cinematic: a key didn't bring the panels back"));
     const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
     if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);

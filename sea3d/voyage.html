@@ -93,9 +93,16 @@
   #top select { width: 100%; font: inherit; font-size: 13px; padding: 5px 6px; border-radius: 7px; background: #13263d; color: var(--ink); border: 1px solid var(--line); }
   #top select + select { margin-top: 6px; }
   #top .row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 9px; font-size: 12px; color: var(--dim); }
-  #top .row select { width: auto; padding: 2px 4px; font-size: 12px; }
+  #top .row select { width: auto; padding: 3px 24px 3px 7px; font-size: 12px; }
   #top .lh { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--hud-line); font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); }
-  #top a { color: #8ab4ff; }
+  #top a { color: var(--ink); text-decoration: none; font: 600 12px system-ui, sans-serif; padding: 4px 9px; border-radius: 7px; background: rgba(255,255,255,.06); border: 1px solid transparent; }
+  #top a:hover { border-color: var(--hud-line); background: rgba(255,255,255,.12); }
+  #top a .go { color: #ffb070; margin-left: 2px; }
+  #top select { -webkit-appearance: none; appearance: none; padding-right: 26px; background-color: rgba(255,255,255,.06); border-color: var(--hud-line); cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+    background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
+  #top select:hover { border-color: rgba(200,220,245,.35); }
+  #top select option { background: #13263d; }
   #top kbd { font: 600 10.5px system-ui, sans-serif; padding: 0 5px; border-radius: 4px; border: 1px solid var(--hud-line); color: var(--dim); }
   #top #warp2 { display: flex; gap: 4px; }
   #top #warp2 button { font-size: 12px; padding: 3px 8px; }
@@ -112,7 +119,8 @@
   body.drawer-open #replay-tab { visibility: hidden; }
 
   /* The map: a corner map top right; M or a click makes it big, with the legend and the log. */
-  #mapbox { position: fixed; right: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); width: 232px; box-sizing: border-box; padding: 6px; z-index: 6; }
+  #mapbox { position: fixed; right: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); width: 232px; box-sizing: border-box; padding: 6px; z-index: 6;
+    background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); } /* the strip's glass, so it holds at night (Ines) */
   #mapbox .mhead { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 4px; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); }
   #h-dist { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
   #h-dist small { font-weight: 500; color: var(--dim); margin-left: 1px; }
@@ -238,6 +246,11 @@
     #mapbox:not(.big) #film { margin-top: 0; }
     #mapbtn { display: inline-block !important; }
   }
+  @media (max-width: 1199px) {
+    body.drawer-open .poi-card:not(.poi-open) { width: auto; max-width: 320px; padding: 6px 12px; }
+    body.drawer-open .poi-card:not(.poi-open) > :not(.poi-t):not(.poi-time) { display: none !important; }
+    body.drawer-open .poi-card:not(.poi-open) .poi-t { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
   @media (max-width: 700px) { #top { width: auto; right: var(--edge); } #mapbox.big #mside { display: none; } }
 </style>
 </head>
@@ -246,7 +259,7 @@
 <button id="replay-tab" aria-controls="top" aria-expanded="true" title="Replay settings (R)"><span>Replay</span></button>
 <div id="top" class="open" aria-label="Replay settings">
   <h2><span id="h1">Voyage replay</span><button class="x" id="top-x" aria-label="Close the replay settings (R)" title="Close (R)">&times;</button></h2>
-  <p class="sub" id="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
+  <p class="sub" id="sub">Our kayak on one voyage through a real spring's weather, waves and currents, battery and breakdowns included.</p>
   <select id="boat" aria-label="Boat"></select>
   <select id="voyage" aria-label="Voyage"></select>
   <div id="guesschip" hidden>Your prediction: <b id="g-chip"></b></div>
@@ -256,13 +269,13 @@
     <button data-lane="1" aria-pressed="false">Randolph (our model)</button>
   </div>
   <div class="row">
-    <a href="./index.html">Both boats side by side &rarr;</a>
-    <a href="?mode=game" id="playlink">&#127922; Play: pick your launch day</a>
-    <a href="?live" id="livelink">&#128225; Live tracker</a>
+    <a href="./index.html">Both boats side by side<span class="go"> &rsaquo;</span></a>
+    <a href="?mode=game" id="playlink">Pick your launch day<span class="go"> &rsaquo;</span></a>
+    <a href="?live" id="livelink">Live tracker<span class="go"> &rsaquo;</span></a>
     <a href="./voyage.html" id="quitlink" hidden>Leave the game</a>
   </div>
   <div class="row">
-    <label id="placelabel" title="Real land from satellite pictures and height maps">&#9968; <select id="placepick" aria-label="Sail by real land"><option value="">Sail by real land&hellip;</option></select></label>
+    <label id="placelabel" title="Real land from satellite pictures and height maps"><select id="placepick" aria-label="Sail by real land"><option value="">Sail by real land&hellip;</option></select></label>
   </div>
   <div class="lh">View</div>
   <div class="row">

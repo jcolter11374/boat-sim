@@ -258,6 +258,7 @@ function buildBoat(q: Quality): void {
   }
   const spec = SPEC[boatKey];
   model = BUILDERS[boatKey](q);
+  model.gear.showSigns = false; // the red icon and the toast carry a breakdown here (Ines)
   // A bigger boat: stand the camera back so it all fits (a 31 ft yacht's mast is 14 m up).
   const k = THREE.MathUtils.clamp(spec.length / KAYAK.length, 1, 3.4);
   if (k !== viewScale) {
@@ -646,7 +647,7 @@ async function load(files: string[], pick = files[0], autoplay = !REDUCED_MOTION
           ? `${LABEL[lanes[0].key]}, built from published specs of a common boat of its kind, on one simulated voyage in real weather and currents for that year. ${STOCK_ABOUT[lanes[0].key as StockKey]}`
           : lanes[0].key !== "kayak"
           ? `Our own model of the Randolph ${lanes[0].key === "randolph_c" ? "Rev C" : "Rev B"} boat (${lanes[0].key === "randolph_c" ? "from the config the Randolph team wrote in our format" : "built from their published design"}), not their own simulator, sailing one simulated voyage in real weather and currents for that year. Their real odds may differ.`
-          : "Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.";
+          : "Our kayak on one voyage through a real spring's weather, waves and currents, battery and breakdowns included.";
     setFocus(0, true);
     ticks();
     beats = GAME && gamePicked ? storyBeats(lanes[0].rep) : []; // none behind the picker
@@ -1069,31 +1070,30 @@ let focusing: Focus | null = null;
 const shift = new THREE.Vector2();
 const here0 = new THREE.Vector3();
 const ahead = new THREE.Vector3();
+let lastSide = 1;
 /**
- * Where the boat sits in the frame. While the replay drawer is open: in the middle of the water left
- * between the drawer and the history card (Elena). Otherwise on a third, as on the helm: a little low,
- * with room ahead of the bow. Never dead centre (Ines's first-pass rubric).
+ * Where the boat sits in the frame: never dead centre (Ines's first-pass rubric). While the replay
+ * drawer is open, on the third away from it (Elena). Otherwise on a third with its bow pointing into
+ * the open side, a little low, as on the helm; a bow pointing straight at or away from the camera
+ * keeps the side it had.
  */
 function frameDrawer(dt: number): void {
   let tx = 0;
   let ty = 0;
   const W = window.innerWidth;
   const H = window.innerHeight;
-  if (!cine.on && !vhud.isBig() && !focusing && !lifted && W > 700 && smoothYaw !== null) {
+  if (!cine.on && !vhud.isBig() && !lifted && W > 700 && smoothYaw !== null) {
     const fill = (SPEC[boatKey].length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
-    const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
-    ty = -0.08 * room;
-    if (vhud.isDrawerOpen()) {
-      const left = $("top").getBoundingClientRect().right;
-      const card = document.querySelector(".poi-card:not(.poi-tab)")?.getBoundingClientRect();
-      const right = card ? Math.min(W, card.left) : W;
-      tx = THREE.MathUtils.clamp(0.5 - (left + right) / 2 / W, -0.2, 0);
-    } else {
-      here0.set(0, 0, 0).project(camera);
-      ahead.set(Math.cos(smoothYaw) * 20, 0, -Math.sin(smoothYaw) * 20).project(camera);
-      const side = ahead.x - here0.x; // + when the bow points right on screen
-      tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
-    }
+    ty = -0.08 * THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
+    // Aim the boat itself (not the point the camera orbits) at a third: where it would sit with
+    // no offset is where it sits now plus the offset already applied.
+    here0.set(0, 0, 0).project(camera);
+    ahead.set(Math.cos(smoothYaw) * 20, 0, -Math.sin(smoothYaw) * 20).project(camera);
+    const side = ahead.x - here0.x; // + when the bow points right on screen
+    if (Math.abs(side) > 0.03 && ahead.z < 1) lastSide = Math.sign(side);
+    const goal = vhud.isDrawerOpen() ? 2 / 3 : 0.5 - lastSide * 0.17;
+    const plain = (here0.x + 1) / 2 + shift.x;
+    tx = here0.z < 1 ? THREE.MathUtils.clamp(plain - goal, -0.3, 0.3) : 0;
   }
   const k = Math.min(1, dt * 1.2);
   shift.x += (tx - shift.x) * k;

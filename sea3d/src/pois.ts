@@ -12,6 +12,8 @@ export interface Poi {
   id: string;
   kind: PoiKind;
   title: string;
+  /** One complete sentence that fits two lines of the docked card; "Read more" shows `text`. */
+  teaser?: string;
   /** (lat, lon) points; a line (the Gulf Stream, the ridge) is several. */
   at: [number, number][];
   radius_km: number;
@@ -214,6 +216,8 @@ const STYLE = `
 /* Compact (the helm): narrower, two lines and "Read more", then it shrinks to a tab at the edge. */
 .poi-card.poi-compact { width: min(300px, calc(100vw - 24px)); padding: 9px 12px 10px; font-size: 12.5px; background: rgba(8,16,28,.72); }
 .poi-card.poi-compact .poi-t { font-size: 14.5px; margin: 3px 0 2px; }
+.poi-card .poi-teaser { color: #d6e2ef; }
+.poi-card.poi-open .poi-teaser, .poi-card.poi-has-teaser:not(.poi-open) .poi-x-text { display: none !important; }
 .poi-card.poi-compact:not(.poi-open) .poi-x-text { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .poi-card.poi-compact:not(.poi-open) .poi-src, .poi-card.poi-compact .poi-more { display: none; }
 /* "1 of 2 ›" by the close button: the next story is one click away and never scrolls out of sight (Leo). */
@@ -304,9 +308,11 @@ export class PoiCards {
     }
     k.append(badge, where);
     add("div", "poi-t", p.poi.title);
+    if (this.opts.compact && p.poi.teaser) add("div", "poi-teaser", p.poi.teaser);
     add("div", "poi-x-text", p.poi.text);
     if (this.opts.compact) {
       el.classList.add("poi-compact");
+      if (p.poi.teaser) el.classList.add("poi-has-teaser");
       const read = add("button", "poi-read", "Read more");
       read.addEventListener("click", (e) => {
         e.stopPropagation();
