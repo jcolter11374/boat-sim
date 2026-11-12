@@ -12,6 +12,7 @@
  */
 
 import { depthState, type DepthState } from "../land/depth";
+import { Recorder, clock, gapToGhost, type Track } from "./trial";
 import { CRUISER_HANDLING, Guide, PEARSON31_2_HANDLING, SAIL_WORDS, Wheel, trimGauge, type Handling, type TrimTable } from "./wheel";
 
 /** Boats that can be sailed by hand, their trim tables (written by vpp.py --trim) and their drafts (from their configs). */
@@ -52,6 +53,8 @@ export interface WheelStart {
   /** How fast time runs at first (default 1x), and the hand-back button's words (default "Hand back"). */
   speed?: number;
   backLabel?: string;
+  /** A time trial (practice courses): the clock and gaps in the banner, and the run recorded. best: the best run so far, or null. */
+  trial?: { best: Track | null };
 }
 
 export interface WheelFrame {
@@ -64,6 +67,8 @@ export interface WheelFrame {
   /** Metres east and north of where the spell began. */
   x: number;
   y: number;
+  /** How much the sails luff, 0 (drawing) to 1 (flogging head to wind): for the sail shader and the sound. */
+  luff: number;
 }
 
 export interface WheelResult {
@@ -82,6 +87,8 @@ export interface WheelResult {
   /** On a course: when (s) each mark was reached, and how many there were. */
   markTimes: number[];
   marks: number;
+  /** A time trial's run, sampled once a second (for the ghost). */
+  track?: Track;
 }
 
 const tables = new Map<string, Promise<TrimTable>>();
@@ -104,6 +111,8 @@ const el = <T extends HTMLElement = HTMLElement>(root: HTMLElement, sel: string)
 export class WheelSession {
   on = false;
   wheel: Wheel | null = null;
+  private trial: { best: Track | null } | null = null;
+  private rec: Recorder | null = null;
   private keys = { left: false, right: false, up: false, down: false };
   private speed = 1;
   private paused = false;
@@ -159,7 +168,7 @@ export class WheelSession {
     this.top.id = "wheel-goal";
     this.top.className = "glass";
     this.top.hidden = true;
-    this.top.innerHTML = `<span class="w-goal"><span class="w-gname"></span><span class="w-num"></span><span class="w-gwhere"></span></span> <span class="w-depth" hidden></span>`;
+    this.top.innerHTML = `<span class="w-goal"><span class="w-gname"></span><span class="w-num"></span><span class="w-gwhere"></span></span> <span class="w-clock" hidden></span> <span class="w-gap" hidden></span> <span class="w-depth" hidden></span>`;
     document.body.append(this.top);
     document.body.append(this.root);
     for (const b of Array.from(this.root.querySelectorAll<HTMLButtonElement>(".w-speeds button"))) b.addEventListener("click", () => this.setSpeed(Number(b.dataset.x)));
@@ -201,6 +210,8 @@ export class WheelSession {
       { markM: 800, markBearing: s.markBearing ?? s.heading, marks: s.course?.marks, markRadiusM: s.course?.radiusM },
     );
     this.course = s.course;
+    this.trial = s.trial ?? null;
+    this.rec = s.trial ? new Recorder() : null;
     this.depthAt = s.depthAt;
     this.draftM = spec.draftM;
     this.depth = { state: "unknown", m: null };
@@ -254,6 +265,7 @@ export class WheelSession {
       aground: w.s.aground,
       markTimes: [...w.s.markTimes],
       marks: this.course?.marks.length ?? 1,
+      track: this.rec ? this.rec.track(w.s.t, w.s.markTimes) : undefined,
     });
   }
 
@@ -341,6 +353,7 @@ export class WheelSession {
       const inp = { helm: (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0), sheet: (this.keys.down ? 1 : 0) - (this.keys.up ? 1 : 0) };
       for (let i = 0; i < n; i++) {
         w.step(total / n, inp);
+        this.rec?.add(w.s.t, w.s.x, w.s.y, w.s.heading, w.heelSigned());
         this.guide?.update(w, total / n);
       }
       if (this.guide?.done) this.endGuide();
@@ -356,7 +369,7 @@ export class WheelSession {
     }
     if (this.depthAt && this.paused) this.sound(w); // the reading still catches up while paused
     this.draw();
-    return { heading: w.s.heading, heelDeg: w.heelSigned(), speedMs: w.s.speedKn / KNOTS_PER_MS, plan: w.s.plan, sheet: w.s.sheet, x: w.s.x, y: w.s.y };
+    return { heading: w.s.heading, heelDeg: w.heelSigned(), speedMs: w.s.speedKn / KNOTS_PER_MS, plan: w.s.plan, sheet: w.s.sheet, x: w.s.x, y: w.s.y, luff: w.s.luff };
   }
 
   /** The goal banner: white words, the distance in green (Elena). */
@@ -364,6 +377,27 @@ export class WheelSession {
     el(this.top, ".w-gname").textContent = name;
     el(this.top, ".w-num").textContent = num;
     el(this.top, ".w-gwhere").textContent = where;
+  }
+
+  /** A time trial in the banner: the clock, and how you stand against your best run (exact at each mark, held 4 s). */
+  private drawTrial(w: Wheel): void {
+    const ck = el(this.top, ".w-clock");
+    const gap = el(this.top, ".w-gap");
+    ck.hidden = gap.hidden = !this.trial;
+    if (!this.trial) return;
+    ck.textContent = clock(w.s.t);
+    const best = this.trial.best;
+    let d: number | null = null;
+    const i = w.s.markTimes.length - 1;
+    if (best && i >= 0 && best.markTimes[i] != null && w.s.t - w.s.markTimes[i] < 4) d = w.s.markTimes[i] - best.markTimes[i];
+    else if (best && w.s.t > 20) d = gapToGhost(best, w.s.x, w.s.y, w.s.t);
+    gap.hidden = d == null;
+    if (d != null) {
+      const ahead = d < 0;
+      const n = Math.abs(d);
+      gap.textContent = `${n < 60 ? `${n} s` : clock(n)} ${ahead ? "ahead of" : "behind"} your best`;
+      gap.dataset.state = ahead ? "ahead" : "behind";
+    }
   }
 
   /** Read the depth under her (a sounding). */
@@ -394,6 +428,7 @@ export class WheelSession {
       const k = this.course.marks[Math.min(w.s.mark, this.course.marks.length - 1)];
       this.goal(`${k.name[0].toUpperCase()}${k.name.slice(1)}: `, dist, `, ${aside(w.markBearing() - w.s.heading)}`);
     } else this.goal("", dist, " to the mark");
+    this.drawTrial(w);
     const dep = el(this.top, ".w-depth");
     dep.hidden = !this.depthAt;
     if (this.depthAt) {

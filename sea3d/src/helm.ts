@@ -37,6 +37,8 @@ import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planA
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
+import { Ghost } from "./helm/ghost";
+import { LIGHT_WIND_FROM, MEDAL_WORDS, ROBOT_SECS, clock as trialClock, ghostAt, medalFor, medalTime, readGhost, saveGhost, turnTrack, type Medal, type Track } from "./helm/trial";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
@@ -297,6 +299,8 @@ const page = {
   land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0 } as NearbyLand["shown"],
   /** Practice sailing: true once the Bay's depths are known to be on this copy of the site (Annapolis courses offered). */
   practiceBay: false,
+  /** The time-trial ghost: shown, and how far off (m). */
+  ghost: { shown: false, m: 0 },
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
@@ -1138,6 +1142,13 @@ const depthsReady = BayDepths.create().then((d) => {
 });
 const buoys = new Buoys();
 scene.add(buoys.group);
+// Time trials (Elena approved 12 Nov): your best run's ghost, the course you last sailed.
+const ghost = new Ghost();
+scene.add(ghost.group);
+let ghostTrack: Track | null = null;
+let lastTrial: CourseKind | null = null;
+/** The wind direction of the run being sailed (ghosts are kept turned to a north wind). */
+let trialFrom = 0;
 function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
   const ms = kn / 1.943844;
   const toward = ((fromDeg + 180) * Math.PI) / 180;
@@ -1168,8 +1179,15 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
     }
     return;
   }
-  const from = BAY_WINDS[Math.floor(Math.random() * BAY_WINDS.length)];
+  // The triangle is laid to the wind, so any direction sails the same; the light run has a fixed wind so its times compare.
+  const from = kind === "light" ? LIGHT_WIND_FROM : BAY_WINDS[Math.floor(Math.random() * BAY_WINDS.length)];
   const br = BREEZES[practiceBreeze];
+  const trialKey = bestKey(kind, practiceBreeze);
+  const stored = kind === "triangle" || kind === "light" ? readGhost(trialKey) : null;
+  ghostTrack = stored ? turnTrack(stored, from) : null;
+  trialFrom = from;
+  lastTrial = kind;
+  ghost.set(ghostTrack ? BUILDERS[spec.key](quality) : null);
   practiceWind = windFrom(from, br.kn);
   const c = kind === "triangle" ? triangle(from) : toTheLight();
   practiceCourse = c;
@@ -1185,6 +1203,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
     windV: practiceWind.v,
     plan: practiceBreeze === "fresh" ? "reef1" : "full",
     course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name })), radiusM: c.radiusM },
+    trial: kind === "triangle" || kind === "light" ? { best: ghostTrack } : undefined,
     depthAt: (x, y) => {
       const p = toLatLon(o, { x, y });
       depths!.prefetch(p.lat, p.lon);
@@ -1204,26 +1223,54 @@ function practiceEnded(r: WheelResult): void {
   if (practiceAt && wheelLast) practiceHere = toLatLon(practiceAt, wheelLast);
   practiceAt = null;
   buoys.set([]);
+  ghost.set(null);
+  const card = $("practice-end");
+  card.classList.remove("trial");
+  $("practice-result").hidden = true;
   let text = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
   if (c) {
     const key = bestKey(c.kind, practiceBreeze);
     const pct = Math.round(r.share * 100);
     if (r.aground) text = `Shallow water: her keel touched the bottom ${r.markTimes.length ? `after ${r.markTimes.length} of ${r.marks} marks` : "before the first mark"}, so this run ends here. Watch the depth at the top of the wheel panel and steer for deeper water. Try again?`;
     else if (!r.reached) text = `Handed back after ${runTime(r.seconds)}, with ${r.markTimes.length} of ${r.marks} marks. Try again?`;
-    else {
+    else if (c.kind === "triangle" || c.kind === "light") {
+      const before = saveBest(key, r.seconds);
+      if (r.track) saveGhost(key, turnTrack(r.track, -trialFrom));
+      showResult(c.kind, r.seconds, before);
+      text = `Finished ${c.name} in ${runTime(r.seconds)}, trimmed at ${pct}% of her best speed.`;
+    } else {
       const before = saveBest(key, r.seconds);
       const pb = before == null ? "Your first time on this course in this breeze." : r.seconds < before ? `A new best (it was ${runTime(before)})!` : `Your best: ${runTime(before)}.`;
-      const splits = c.kind === "triangle" ? ` Marks at ${r.markTimes.map(runTime).join(", ")}.` : "";
-      text = `Finished ${c.name} in ${runTime(r.seconds)} of boat time, trimmed at ${pct}% of her best speed.${splits} ${pb}`;
+      text = `Finished ${c.name} in ${runTime(r.seconds)} of boat time, trimmed at ${pct}% of her best speed. ${pb}`;
     }
   }
   $("practice-sum").textContent = text;
   if (c) practiceCard();
-  $("practice-end").hidden = false;
+  if (card.classList.contains("trial")) $("practice-courses").hidden = true;
+  card.hidden = false;
   $("practice-what").hidden = true;
+}
+/** A time trial's result: the medal, the time against your best, and what the next medal needs. */
+function showResult(kind: "triangle" | "light", secs: number, before: number | null): void {
+  const medal = medalFor(secs, kind, practiceBreeze);
+  const box = $("practice-result");
+  const m = box.querySelector<HTMLElement>(".medal")!;
+  m.dataset.medal = medal ?? "";
+  m.querySelector(".medal-name")!.textContent = medal ? MEDAL_WORDS[medal] : "Finished";
+  const by = (d: number) => (d < 60 ? `${Math.round(d)} s` : trialClock(d));
+  const vs = before == null ? "your first time" : secs < before ? `a new best, by ${by(before - secs)}` : `${by(secs - before)} slower than your best`;
+  box.querySelector(".result-time")!.textContent = `${trialClock(secs)} · ${vs}`;
+  const up: Medal | null = medal === "gold" ? null : medal === "silver" ? "gold" : medal === "bronze" ? "silver" : "bronze";
+  box.querySelector(".result-next")!.textContent = up ? `${MEDAL_WORDS[up]}: under ${trialClock(medalTime(up, kind, practiceBreeze))}` : secs < ROBOT_SECS[kind][practiceBreeze] ? `Faster than the autopilot (${trialClock(ROBOT_SECS[kind][practiceBreeze])})` : `The autopilot: ${trialClock(ROBOT_SECS[kind][practiceBreeze])}. Beat it?`;
+  // The first run has no ghost to race yet (Leo): "Try again"; after that, "Race your best".
+  $("practice-ghost").textContent = before == null ? "Try again" : "Race your best";
+  box.hidden = false;
+  $("practice-end").classList.add("trial");
+  $("practice-end").querySelector("h1")!.textContent = `${kind === "triangle" ? "The triangle" : "Thomas Point Light"} · ${BREEZES[practiceBreeze].kn} knots`;
 }
 /** The course card: pick a course and a breeze. */
 function practiceCard(): void {
+  if (!$("practice-end").classList.contains("trial")) $("practice-end").querySelector("h1")!.textContent = "Practice sailing";
   const annapolis = !!depths?.known;
   $("practice-courses").hidden = !annapolis;
   $("practice-again").hidden = annapolis;
@@ -1238,6 +1285,12 @@ if (PRACTICE) {
   $("start").hidden = true;
   useBoat("stock_cruiser31");
   $("practice-again").addEventListener("click", () => void practiceSpell("drill"));
+  $("practice-ghost").addEventListener("click", () => void (lastTrial && practiceSpell(lastTrial)));
+  $("practice-other").addEventListener("click", () => {
+    $("practice-result").hidden = true;
+    $("practice-end").classList.remove("trial");
+    practiceCard();
+  });
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-courses [data-course]"))) b.addEventListener("click", () => void practiceSpell(b.dataset.course as CourseKind | "drill"));
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button")))
     b.addEventListener("click", () => {
@@ -2542,6 +2595,19 @@ renderer.setAnimationLoop(() => {
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
   const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
   if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0);
+  if (practiceAt && wheelNow && ghostTrack && wheel.wheel) {
+    const g = ghostAt(ghostTrack, wheel.wheel.s.t)!;
+    const dx = g.x - wheelNow.x;
+    const dz = -(g.y - wheelNow.y);
+    const gy = heightAt(comps, dx, dz, t);
+    const g0 = ghostAt(ghostTrack, wheel.wheel.s.t - 1)!;
+    const gstw = Math.hypot(g.x - g0.x, g.y - g0.y); // m/s over the last second
+    ghost.update(dx, dz, gy, THREE.MathUtils.degToRad(90 - g.heading), rollFromWheel(g.heel), apparentFlow(wu, wv, gstw, g.heading), dt, NAV_NIGHT.value);
+    page.ghost = { shown: ghost.group.visible, m: Math.round(Math.hypot(dx, dz)) };
+  } else {
+    ghost.hide();
+    page.ghost.shown = false;
+  }
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);

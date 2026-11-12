@@ -223,6 +223,8 @@ export interface WheelState {
   markTimes: number[];
   /** Ended in water too shallow for her keel. */
   aground: boolean;
+  /** How much the sails luff, 0..1, eased (luffTarget()). */
+  luff: number;
 }
 
 export class Wheel {
@@ -261,6 +263,7 @@ export class Wheel {
       done: false,
       mark: 0,
       markTimes: [],
+      luff: 0,
       aground: false,
     };
   }
@@ -291,6 +294,20 @@ export class Wheel {
     if (this.s.sheet >= b.lo - GOOD_TOL && this.s.sheet <= b.hi + GOOD_TOL) return "good";
     if (this.s.sheet > b.hi) return "in";
     return alpha > this.table.alpha_stall_deg + 4 ? "stalled" : "ease";
+  }
+
+  /**
+   * How much the sails are luffing (flapping at the front edge), 0..1, for the sail shader and
+   * the flog sound (agreed with Yuki and Felix, 12 Nov). From the sail's angle to the apparent
+   * wind: a flutter from 8 degrees, "Flapping" (0.6) by 2, and flogging (1) at -4 or head to wind.
+   */
+  luffTarget(): number {
+    const alpha = this.awa() - this.s.sheet;
+    const byTrim = alpha >= 8 ? 0 : alpha >= 2 ? 0.15 + ((8 - alpha) / 6) * 0.45 : Math.min(1, 0.6 + ((2 - alpha) / 6) * 0.4);
+    // Head to wind (closer than 25 degrees): the whole sail shakes, whatever the sheet.
+    const twa = Math.abs(this.twa());
+    const irons = twa >= 30 ? 0 : twa <= 25 ? 1 : (30 - twa) / 5;
+    return Math.max(byTrim, irons);
   }
 
   /** Tuck in a reef (deeper = +1) or shake one out (-1). */
@@ -378,6 +395,8 @@ export class Wheel {
     const tau = target > s.speedKn ? h.accelS : h.decelS;
     s.speedKn += (target - s.speedKn) * (1 - Math.exp(-dt / tau));
     // Heel follows the sails' push quickly (GUESS 1.5 s).
+    // The luff eases (about 0.3 s) so it doesn't jitter.
+    s.luff += (this.luffTarget() - s.luff) * (1 - Math.exp(-dt / 0.3));
     const heelTarget = s.overNow ? Math.max(l.heelDeg, this.table.heel_max_deg + 5) : l.heelDeg;
     s.heelDeg += (heelTarget - s.heelDeg) * (1 - Math.exp(-dt / 1.5));
     if (s.overNow && !this.wasOver) s.roundUps++;

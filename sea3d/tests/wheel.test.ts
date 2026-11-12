@@ -179,3 +179,15 @@ test("the sail gauge is a level: the needle is inside the green exactly when the
   assert.equal(trimGauge(200, 15, 25).needle, 100);
   assert.equal(trimGauge(12, 12, 12).needle, 50, "a band of one angle");
 });
+
+test("the sails luff when let out too far or head to wind, and not when drawing well", () => {
+  const w = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 90, speedKn: 5 }, SPELL);
+  w.s.sheet = w.best().sheet;
+  assert.equal(w.luffTarget(), 0, "trimmed: no luff");
+  w.s.sheet = w.awa() - 1; // eased until the sail is nearly edge-on
+  assert.ok(w.luffTarget() > 0.6, `flapping: ${w.luffTarget()}`);
+  const irons = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 5, speedKn: 0 }, SPELL);
+  assert.equal(irons.luffTarget(), 1, "head to wind: flogging");
+  sail(w, 3);
+  assert.ok(w.s.luff > 0.3, "the eased value follows");
+});
