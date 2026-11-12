@@ -749,7 +749,6 @@ function drawWhen(force = false): void {
   whenDrawn = key;
   const day = `Day ${(h / 24).toFixed(1)}`;
   $("clock").textContent = day;
-  drawGoal(ms);
   if (!whenHere) return;
   $("day").textContent = day;
   $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
@@ -757,6 +756,7 @@ function drawWhen(force = false): void {
   // The strip's date beside the day: local, short; UTC on hover.
   $("c-date").textContent = shortLocal(ms, whenHere[0], whenHere[1]);
   $("c-date").title = $("when").textContent ?? "";
+  drawGoal(ms);
 }
 
 /** The challenge being sailed, when it has a goal. */
@@ -764,19 +764,26 @@ function mission(): (Challenge & { goal: NonNullable<Challenge["goal"]> }) | nul
   const c = challenges.find((x) => x.id === page.challenge);
   return c?.goal ? (c as Challenge & { goal: NonNullable<Challenge["goal"]> }) : null;
 }
-/** The goal chip: "Day 4 of 9 · storm centre 380 km", at the hour the picture shows. */
+/**
+ * The goal in the strip's time cell (Jonas): "Day 4 of 9" in place of the day, and "storm centre
+ * 380 km" in place of the date, with the colour on the km figure only. The cell has room for
+ * one line beside the time buttons, so the goal takes that line rather than adding one.
+ */
 function drawGoal(ms: number): void {
   const m = mission();
   const chip = $("goalchip");
-  chip.hidden = !m || !whenHere;
-  if (!m || !whenHere) return;
+  if (!m || !whenHere) {
+    chip.hidden = true;
+    $("c-date").hidden = false;
+    return;
+  }
   const g = goalChip(m.goal, m.start, ms, whenHere[0], whenHere[1]);
-  chip.querySelector(".g-day")!.textContent = g.day;
-  chip.querySelector<HTMLElement>(".g-storm")!.hidden = !g.storm;
-  const km = chip.querySelector<HTMLElement>(".g-km")!; // only the figure takes the colour (Jonas)
+  $("day").textContent = g.day;
+  chip.hidden = !g.storm;
+  $("c-date").hidden = !!g.storm;
+  const km = chip.querySelector<HTMLElement>(".g-km")!;
   km.textContent = g.km;
   km.dataset.state = g.state;
-  chip.querySelector<HTMLElement>(".g-sep")!.hidden = !g.storm;
 }
 
 function showStatus(): void {

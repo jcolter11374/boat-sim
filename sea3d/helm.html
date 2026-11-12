@@ -322,8 +322,8 @@
   #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
   #strip .meter[hidden] { display: none; }
   #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
-  #goalchip { margin-top: 2px; font-size: .86em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-  #goalchip[hidden], #goalchip .g-sep[hidden], #goalchip .g-storm[hidden] { display: none; }
+  #goalchip .g-km { font-weight: 650; }
+  #goalchip[hidden], #c-date[hidden] { display: none; }
   #goalchip .g-km[data-state="clear"] { color: #cfe3f5; }
   #goalchip .g-km[data-state="near"] { color: #ffb347; }
   #goalchip .g-km[data-state="danger"] { color: #ff6b5a; }
@@ -492,8 +492,7 @@
 <!-- The instrument strip (Leo's plan, approved by Elena 12 Nov): six cells, bottom centre. -->
 <section id="strip" class="hud" aria-label="Instruments">
   <div class="cell c-time">
-    <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span></div>
-    <div id="goalchip" hidden><span class="g-day"></span><span class="g-sep"> · </span><span class="g-storm">storm centre <span class="g-km"></span></span></div>
+    <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span><span id="goalchip" class="sub" hidden>storm centre <span class="g-km"></span></span></div>
     <div id="timebar" role="group" aria-label="How fast time runs" hidden>
       <button id="t-pause" title="Pause or carry on (Space)" aria-pressed="false">&#10074;&#10074;</button>
       <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second (key 1)">1h</button>
