@@ -21,7 +21,8 @@ test("each ship is its stated length and beam, bow at x = 0, with a hull below t
     // The stem rakes forward above the waterline (and the bulb below), so the hull starts a little ahead of x = 0.
     assert.ok(b.min.x < 0 && b.min.x > -Math.max(0.06 * L, 3), `${kind}: bow ${b.min.x.toFixed(1)}`);
     assert.ok(Math.abs(b.max.x - L) < 0.02 * L, `${kind}: stern ${b.max.x.toFixed(1)} vs ${L}`);
-    assert.ok(b.max.z - b.min.z <= B + 0.8 && b.max.z - b.min.z >= B - 0.5, `${kind}: beam ${(b.max.z - b.min.z).toFixed(1)} vs ${B}`);
+    // The trawler's outrigger booms stand out past her sides, so she's allowed a little more.
+    assert.ok(b.max.z - b.min.z <= (kind === "fishing" ? 1.4 * B : B + 0.8) && b.max.z - b.min.z >= B - 0.5, `${kind}: beam ${(b.max.z - b.min.z).toFixed(1)} vs ${B}`);
     assert.ok(b.min.y < -0.08 * B, `${kind}: draft below the waterline`);
   }
 });
@@ -40,6 +41,10 @@ test("big ships' lights by the rules, for the bulk carrier too; sidelights at th
     assert.ok(red.at.z >= SHIP_SIZE[kind].beam / 2 - 0.5 && green.at.z <= -SHIP_SIZE[kind].beam / 2 + 0.5, `${kind}: sidelights at the side`);
     assert.ok(red.at.x > fwd.at.x, `${kind}: sidelights abaft the forward masthead light (Rule 23 / Annex I 3(b))`);
     assert.equal(anchored.length, 2, `${kind}: two anchor lights`);
+    // Annex I 2(g): sidelights no higher above the main deck than three quarters of the
+    // forward masthead light's height above it. Deck heights (freeboard, m) from the hull lines.
+    const deck = { container: 10, tanker: 7.4, bulk: 7.2 }[kind];
+    assert.ok(red.at.y - deck <= 0.75 * (fwd.at.y - deck) + 1e-6, `${kind}: sidelights low enough under the forward masthead light (Annex I 2(g))`);
   }
 });
 

@@ -31,6 +31,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { addLanterns, GREEN, NAV_NIGHT, RED, WHITE, type Arc, type Lantern } from "./navlights";
+import { seaUniforms } from "../seaSurface";
 
 export type ShipKind = "container" | "tanker" | "bulk" | "fishing";
 export const SHIP_KINDS: ShipKind[] = ["container", "tanker", "bulk", "fishing"];
@@ -403,7 +404,13 @@ function bowGear(h: HullLines, mastX: number, mastTop: number): THREE.BufferGeom
   const d = sheerY(h, mastX);
   const hx = Math.max(3, h.L * 0.03);
   const hy = sheerY(h, hx) - 2.6;
-  const parts = [post(mastX, 0, d, mastTop, 0.45, 0xd8d6cf, {}, 8)];
+  // A tapered foremast (tall: see fwdMastTop), with a platform for the masthead light.
+  const parts = [
+    post(mastX, 0, d, d + (mastTop - d) * 0.55, 0.75, 0xd8d6cf, {}, 8),
+    post(mastX, 0, d + (mastTop - d) * 0.55, mastTop, 0.42, 0xd8d6cf, {}, 8),
+    box(mastX - 1.2, mastX + 1.2, mastTop - 1.6, mastTop - 1.35, -1.2, 1.2, 0xd8d6cf), // platform
+    box(mastX - 0.25, mastX + 0.25, d + (mastTop - d) * 0.55, d + (mastTop - d) * 0.55 + 0.3, -2.5, 2.5, 0xd8d6cf), // crosstree
+  ];
   for (const s of [1, -1]) {
     const z = sideZ(h, hx, hy);
     parts.push(box(hx - 0.9, hx + 0.9, hy - 1.6, hy + 0.3, s * z - 0.25, s * z + 0.25, 0x222326)); // anchor in its pocket
@@ -455,11 +462,21 @@ export function shipWaterline(kind: ShipKind): { entrance: number; run: number; 
   return { entrance: h.entrance, run: h.run, transom: halfBreadth(h, h.L, 0) / (h.B / 2) };
 }
 
-const MAST_H = 8; // radar mast over the bridge roof (m)
 const roofOf = (H: House) => H.bridge + 3.35;
 const fwdMastX = (h: HullLines) => h.fcsle[0] - 8;
-const FWD_MAST_TOP: Record<"container" | "tanker" | "bulk", number> = { container: 29, tanker: 22, bulk: 22.5 };
-
+const sidelightY = (H: House) => H.bridge + 1.2;
+/**
+ * The forward masthead light's height (m above the waterline). Annex I 2(g): the sidelights
+ * no higher above the hull than three-quarters of the forward masthead light, so on these
+ * bridge-aft ships the foremast is tall (Sam); half a metre to spare.
+ */
+function fwdMastTop(h: HullLines, H: House): number {
+  return h.F + (sidelightY(H) - h.F) / 0.75 + 0.5;
+}
+/** The radar mast over the bridge roof: tall enough that the aft masthead light is 4.5 m (and a bit) above the forward one (Annex I 2(a)(ii)). */
+function aftMastH(h: HullLines, H: House): number {
+  return Math.max(8, fwdMastTop(h, H) + 4.8 - roofOf(H));
+}
 const MASTHEAD: Arc[] = [{ colour: WHITE, from: 247.5, to: 112.5 }];
 const STERN: Arc[] = [{ colour: WHITE, from: 112.5, to: 247.5 }];
 const STBD: Arc[] = [{ colour: GREEN, from: 0, to: 112.5 }];
@@ -483,13 +500,13 @@ export function shipLights(kind: ShipKind): { underway: Lantern[]; anchored: Lan
     };
   const [h, H] = kind === "container" ? [C_HULL, C_HOUSE] : kind === "tanker" ? [T_HULL, T_HOUSE] : [B_HULL, B_HOUSE];
   const fx = fwdMastX(h);
-  const top = FWD_MAST_TOP[kind];
+  const top = fwdMastTop(h, H);
   return {
     underway: [
       { arcs: MASTHEAD, at: V(fx, top + 0.3, 0) },
-      { arcs: MASTHEAD, at: V(H.x0 + 3, roofOf(H) + MAST_H + 0.3, 0) },
-      { arcs: STBD, at: V(H.x0 + 1.5, H.bridge + 1.2, -H.wing - 0.2) },
-      { arcs: PORT, at: V(H.x0 + 1.5, H.bridge + 1.2, H.wing + 0.2) },
+      { arcs: MASTHEAD, at: V(H.x0 + 3, roofOf(H) + aftMastH(h, H) + 0.3, 0) },
+      { arcs: STBD, at: V(H.x0 + 1.5, sidelightY(H), -H.wing - 0.2) },
+      { arcs: PORT, at: V(H.x0 + 1.5, sidelightY(H), H.wing + 0.2) },
       { arcs: STERN, at: V(h.L + 0.2, sheerY(h, h.L) + 1.8, 0) },
     ],
     anchored: [
@@ -562,8 +579,8 @@ function containerShip(): THREE.BufferGeometry[] {
   parts.push(...accommodation(H, 7));
   parts.push(...funnel(C_FUNNEL.x0, C_FUNNEL.x1, 4.2, deck, C_FUNNEL.top, 0x22303f));
   parts.push(box(H.x1, C_FUNNEL.x1 + 1, deck, deck + 9, -8, 8, WHITE_PAINT)); // engine casing round the funnel
-  parts.push(...radarMast(H.x0 + 3, roofOf(H), MAST_H));
-  parts.push(...bowGear(h, fwdMastX(h), FWD_MAST_TOP.container));
+  parts.push(...radarMast(H.x0 + 3, roofOf(H), aftMastH(h, H)));
+  parts.push(...bowGear(h, fwdMastX(h), fwdMastTop(h, H)));
   parts.push(...freeFallBoat(h.L - 1, sheerY(h, h.L)));
   parts.push(box(H.x0 + 4, H.x0 + 10, H.y0 + 2 * DECK_H, H.y0 + 2 * DECK_H + 2.2, -H.hw - 2.4, -H.hw - 0.2, LIFEBOAT)); // rescue boat on its davit
   for (const s of [1, -1]) parts.push(box(h.L - 12, h.L - 7, sheerY(h, h.L), sheerY(h, h.L) + 1.4, s * 9 - 1.3, s * 9 + 1.3, DECKGEAR)); // mooring winches aft
@@ -598,8 +615,8 @@ function tanker(): THREE.BufferGeometry[] {
   parts.push(...accommodation(H, 11));
   parts.push(...funnel(T_FUNNEL.x0, T_FUNNEL.x1, 3.8, deck, T_FUNNEL.top, 0x16181b));
   parts.push(box(H.x1, T_FUNNEL.x1 + 1, deck, deck + 6, -9, 9, WHITE_PAINT));
-  parts.push(...radarMast(H.x0 + 3, roofOf(H), MAST_H));
-  parts.push(...bowGear(h, fwdMastX(h), FWD_MAST_TOP.tanker));
+  parts.push(...radarMast(H.x0 + 3, roofOf(H), aftMastH(h, H)));
+  parts.push(...bowGear(h, fwdMastX(h), fwdMastTop(h, H)));
   parts.push(...freeFallBoat(h.L - 1, sheerY(h, h.L)));
   for (const s of [1, -1]) parts.push(box(H.x0 - 6, H.x0 - 1, deck, deck + 2.2, s * (H.hw + 3) - 1.2, s * (H.hw + 3) + 1.2, LIFEBOAT)); // rescue boat
   return parts;
@@ -638,8 +655,8 @@ function bulkCarrier(): THREE.BufferGeometry[] {
   parts.push(...accommodation(H, 17));
   parts.push(...funnel(B_FUNNEL.x0, B_FUNNEL.x1, 3.4, deck, B_FUNNEL.top, 0x7a2a22));
   parts.push(box(H.x1, B_FUNNEL.x1 + 1, deck, deck + 6, -8, 8, WHITE_PAINT));
-  parts.push(...radarMast(H.x0 + 3, roofOf(H), MAST_H));
-  parts.push(...bowGear(h, fwdMastX(h), FWD_MAST_TOP.bulk));
+  parts.push(...radarMast(H.x0 + 3, roofOf(H), aftMastH(h, H)));
+  parts.push(...bowGear(h, fwdMastX(h), fwdMastTop(h, H)));
   parts.push(...freeFallBoat(h.L - 1, sheerY(h, h.L)));
   return parts;
 }
@@ -649,8 +666,8 @@ function trawler(): THREE.BufferGeometry[] {
   const parts = hull(h);
   const deck = h.F;
   parts.push(
-    box(3.2, 10.5, deck + 0.9, deck + 3.4, -2.6, 2.6, 0xecebe6), // deckhouse
-    box(4.5, 10.2, deck + 3.4, deck + 5.6, -2.3, 2.3, 0xecebe6), // wheelhouse
+    box(3.2, 10.5, deck + 0.9, deck + 3.4, -2.6, 2.6, 0xc9c6bb, { flood: 1 }), // deckhouse, salt-stained
+    box(4.5, 10.2, deck + 3.4, deck + 5.6, -2.3, 2.3, 0xd2cfc5, { flood: 1 }), // wheelhouse
     box(4.45, 9.6, deck + 4.2, deck + 5.2, -2.35, 2.35, GLASS, { glow: 0.5 }), // its windows, lit at night
     box(4.4, 4.5, deck + 4.2, deck + 5.2, -2.1, 2.1, GLASS, { glow: 0.5 }),
     post(7.5, 0, deck + 5.6, 12, 0.14, 0xd8d6cf, {}, 6), // mast
@@ -658,11 +675,32 @@ function trawler(): THREE.BufferGeometry[] {
     box(13, 17, deck, deck + 1.9, -1.9, 1.9, 0x3a6b4a, { flood: 1 }), // net drum
     box(12.2, 13, deck, deck + 2.4, -2.8, -2.0, DECKGEAR), // trawl winches
     box(12.2, 13, deck, deck + 2.4, 2.0, 2.8, DECKGEAR),
-    box(22.2, 22.8, deck, deck + 6, 2.5, 3.1, 0xe0a028), // stern gantry (the A-frame the net is towed from)
-    box(22.2, 22.8, deck, deck + 6, -3.1, -2.5, 0xe0a028),
-    box(22.2, 22.8, deck + 5.4, deck + 6, -3.1, 3.1, 0xe0a028),
-    box(18, 22, deck + 0.02, deck + 0.3, -1.6, 1.6, 0x4b5a55), // the net, heaped on the stern ramp
+    box(22.2, 22.8, deck, deck + 6, 2.5, 3.1, 0xa8792e, { flood: 1 }), // stern gantry (the A-frame the net is towed from), worn
+    box(22.2, 22.8, deck, deck + 6, -3.1, -2.5, 0xa8792e, { flood: 1 }),
+    box(22.2, 22.8, deck + 5.4, deck + 6, -3.1, 3.1, 0xa8792e, { flood: 1 }),
+    box(22.0, 23.0, deck + 4.6, deck + 5.4, -2.2, -1.4, 0x2a2b2d), // towing blocks
+    box(22.0, 23.0, deck + 4.6, deck + 5.4, 1.4, 2.2, 0x2a2b2d),
+    box(17.5, 22.2, deck + 0.02, deck + 0.45, -1.8, 1.8, 0x3f4a3f, { flood: 1 }), // the net, heaped on the stern ramp
+    box(13.2, 16.8, deck + 0.2, deck + 1.7, -1.95, 1.95, 0x5a6a4a, { flood: 1 }), // net wound on the drum
   );
+  // Warps from the winches up to the gantry blocks, and stays from the gantry top down to the deck.
+  const wire = (a: THREE.Vector3, b: THREE.Vector3) => {
+    const len = a.distanceTo(b);
+    const g = new THREE.CylinderGeometry(0.03, 0.03, len, 4, 1);
+    g.translate(0, len / 2, 0);
+    g.applyMatrix4(new THREE.Matrix4().lookAt(a, b, new THREE.Vector3(0, 0, 1)).multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2)));
+    g.translate(a.x, a.y, a.z);
+    return finish(g, 0x2b2b2b);
+  };
+  for (const s of [1, -1]) {
+    parts.push(wire(new THREE.Vector3(12.6, deck + 2.4, s * 2.4), new THREE.Vector3(22.5, deck + 4.8, s * 1.8)));
+    parts.push(wire(new THREE.Vector3(22.5, deck + 6, s * 2.8), new THREE.Vector3(19.5, deck, s * 3.2)));
+    // Outrigger booms, raised, from the mast's foot; and their stays to the masthead.
+    const foot = new THREE.Vector3(8.6, deck + 5.6, s * 1.0);
+    const tip = new THREE.Vector3(9.4, deck + 5.6 + 7.5 * Math.cos(0.5), s * (1.0 + 7.5 * Math.sin(0.5)));
+    parts.push(wire(foot, tip), wire(foot.clone().setZ(s * 1.05), tip.clone().setZ(tip.z + s * 0.05)));
+    parts.push(wire(tip, new THREE.Vector3(7.5, 12, 0)));
+  }
   parts.push(bulwark(h, stemX(h, sheerY(h, 0)) + 0.1, h.L - 0.2, 0.8));
   return parts;
 }
@@ -689,7 +727,7 @@ export const HULL_COLOURS: Record<ShipKind, number[]> = {
   container: [0x1d2b47, 0x23402f, 0x5e2620, 0x46505b, 0x18191b, 0x34506a],
   tanker: [0x18191b, 0x4e1f1d, 0x1d2a44, 0x3b3f44],
   bulk: [0x18191b, 0x5a2420, 0x1f2f4c, 0x27412f, 0x40464d],
-  fishing: [0xa8322a, 0x2c4f7c, 0x2f5d3d, 0xd9d6cf],
+  fishing: [0x7a2620, 0x22344f, 0x26402f, 0x1e2022, 0x5a2a1f],
 };
 /** Funnel bands: invented, plain colours, no company marks. */
 const BANDS = [0xc8a03a, 0xe8e6df, 0x2f7f86, 0xb03a2e, 0x2d5fa0, 0x6e8b3d];
@@ -703,6 +741,9 @@ function shipMaterial(kind: ShipKind): THREE.MeshStandardMaterial {
     uFlood: { value: 0 },
     uNight: NAV_NIGHT,
     uHawse: { value: new THREE.Vector2(SHIP_SIZE[kind].length * 0.03, kind === "fishing" ? -9 : hawseY(kind)) },
+    /** The bow wave's height at the stem (m; 0 at anchor) and the ship's length (m). */
+    uBow: { value: new THREE.Vector3(0, SHIP_SIZE[kind].length, 0) },
+    uSeaTime: seaUniforms.uSeaTime,
   };
   m.userData.u = u;
   m.onBeforeCompile = (sh) => {
@@ -717,6 +758,8 @@ uniform vec3 uBand;
 uniform float uFlood;
 uniform float uNight;
 uniform vec2 uHawse;
+uniform vec3 uBow; // bow wave height at the stem, ship length, how far she floats above her marks (ballast), m
+uniform float uSeaTime;
 varying vec3 vMark;
 varying vec3 vLocal;
 float sHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -739,11 +782,31 @@ void main() {`,
     float below = uHawse.y - vLocal.y;
     float hawse = (1.0 - smoothstep(0.5 + below * 0.06, 1.3 + below * 0.1, hx)) * step(0.0, below) * (1.0 - smoothstep(2.0, 9.0, below));
     vec3 rust = vec3(0.16, 0.055, 0.025);
-    diffuseColor.rgb = mix(uPaint * (0.94 + 0.08 * sNoise(vLocal.xy * vec2(0.05, 0.3))), rust, clamp(streak + 0.7 * hawse, 0.0, 0.8));
+    diffuseColor.rgb = mix(uPaint * (0.9 + 0.16 * sNoise(vLocal.xy * vec2(0.04, 0.25))), rust, clamp(streak + 0.7 * hawse, 0.0, 0.8));
   } else if (vMark.y > 1.5) {
     diffuseColor.rgb = uBand;
   }
-`,
+  if (vMark.z > 0.5) {
+    // Boxes, hatches and deck: grime and a little rust, so no two read as clean plastic.
+    float g = sNoise(vLocal.xz * 0.35 + vLocal.y * 0.2) * 0.6 + sNoise(vec2(vLocal.x * 1.7, vLocal.y * 0.4 + vLocal.z * 1.7)) * 0.4;
+    diffuseColor.rgb *= 0.84 + 0.24 * g;
+    float rs = smoothstep(0.72, 0.95, sNoise(vec2(vLocal.x * 2.1 + vLocal.z * 2.1, vLocal.y * 0.3)));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.08, 0.04), rs * 0.35);
+  }
+  // Hull steel darkens towards the water (wet, salt-stained, and in the shade of the flare).
+  if (vMark.x < 0.01 && vMark.z < 0.5) diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(uBow.z - 1.0, uBow.z + 7.0, vLocal.y));
+  if (uBow.x > 0.0 && vLocal.y > uBow.z - 0.6) {
+    // Under way: the bow wave climbing the stem and breaking white down the bow, a
+    // lower, broken wash along the sides (the same foam the sea draws, boatWash.ts).
+    float xs = max(vLocal.x, 0.0);
+    float top = uBow.x * exp(-pow(xs / (0.11 * uBow.y), 1.5)) + 0.45 * min(uBow.x, 1.2) * (1.0 - smoothstep(0.7 * uBow.y, uBow.y, xs));
+    float n = sNoise(vec2(vLocal.x * 0.9 + uSeaTime * 2.0, vLocal.y * 2.2)) * 0.6 + sNoise(vec2(vLocal.x * 2.7 - uSeaTime * 3.0, vLocal.y * 5.0)) * 0.4;
+    float edge = top * (0.65 + 0.5 * n);
+    // Solid white where it heaps up against the stem, breaking into lace further aft.
+    float solid = exp(-xs / (0.09 * uBow.y));
+    float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y - uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.95), foam * 0.95);
+  }`,
       )
       .replace(
         "#include <emissivemap_fragment>",
@@ -753,9 +816,9 @@ void main() {`,
   totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.55) * vMark.z * uFlood * uNight * 0.55;`,
       )
       // Fogged out over a longer distance than the sea (traffic.ts HULL_REACH), since a dark hull shows through haze.
-      .replace("#include <fog_fragment>", "#ifdef USE_FOG\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, smoothstep(fogNear, fogFar * 1.8, vFogDepth));\n#endif");
+      .replace("#include <fog_fragment>", "#ifdef USE_FOG\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, 0.85 * smoothstep(fogNear, fogFar * 2.2, vFogDepth));\n#endif");
   };
-  m.customProgramCacheKey = () => "boatsim-ship-v2";
+  m.customProgramCacheKey = () => "boatsim-ship-v3";
   return m;
 }
 
@@ -765,16 +828,153 @@ function hawseY(kind: ShipKind): number {
 }
 
 /**
+ * How high a ship's bow wave climbs her stem (m): GUESS, 0.8 of the stagnation head v^2 / 2g,
+ * scaled by how much of a wave her Froude number makes (boatWash.ts shipFoam); a box ship at
+ * 18 knots about 2.3 m, a slow tanker about 1 m, a ship at anchor none.
+ */
+/**
+ * How much white water a ship of this length makes at this speed, 0..1, from its Froude
+ * number Fr = v / sqrt(g L) (Theo): a slow coaster or a ship at anchor makes none; a box
+ * ship at 18 knots (Fr 0.17) a white bow wave and a churned lane; a trawler at 6 knots
+ * (Fr 0.2) a full one. GUESS, tuned by eye.
+ */
+export function shipFoam(speed: number, length: number): number {
+  const fr = speed / Math.sqrt(9.81 * Math.max(length, 1));
+  return THREE.MathUtils.clamp((fr - 0.07) / 0.14, 0, 1);
+}
+
+export function bowWaveOnStem(speed: number, length: number): number {
+  return ((1.1 * speed * speed) / (2 * 9.81)) * Math.sqrt(shipFoam(speed, length));
+}
+
+/**
  * A ship of a kind, ready to place: the hull and its lights, "underway" and "anchored"
  * (show one; dressShip() does), and "floods", the deck lights at anchor. `range` fades the
  * lights out with distance (m).
  */
+
+// ---------- the bow wave ----------
+// A real curl of white water: on each side a sheet that climbs the stem to the bow-wave
+// height, rolls over at a lip and falls outward to the sea, peeling aft along the hull and
+// breaking into foam a third of the way down her length. Built at unit height and width;
+// the shader scales it by uBowH (the wave's height at the stem, m) so one mesh serves every speed.
+
+const BOW_ALONG = 24; // sections from the stem aft
+const BOW_ACROSS = 7; // from the hull out to the sea
+
+function bowWaveGeometry(kind: ShipKind): THREE.BufferGeometry {
+  const h = kind === "container" ? C_HULL : kind === "tanker" ? T_HULL : kind === "bulk" ? B_HULL : F_HULL;
+  const len = 0.34 * h.L;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const side: number[] = [];
+  const idx: number[] = [];
+  for (const sgn of [1, -1]) {
+    const base = pos.length / 3;
+    for (let i = 0; i <= BOW_ALONG; i++) {
+      const u = i / BOW_ALONG;
+      const x = Math.pow(u, 1.3) * len; // closer sections near the stem, where it's busiest
+      const hb = halfBreadth(h, Math.max(x, 0.2), 0);
+      for (let j = 0; j <= BOW_ACROSS; j++) {
+        const t = j / BOW_ACROSS;
+        // Cross-section, in units of the stem height: up the hull (t 0..0.35), over the
+        // lip (0.35..0.55), down the face to the sea (0.55..1). y is height, w is out from the hull.
+        const lip = 0.45;
+        const y = t < lip ? 0.15 + 0.85 * Math.sin((t / lip) * Math.PI * 0.5) : Math.cos(((t - lip) / (1 - lip)) * Math.PI * 0.5) - 0.12;
+        const w = t < lip ? 0.25 * (t / lip) : 0.25 + 1.6 * Math.pow((t - lip) / (1 - lip), 1.4);
+        pos.push(x + 0.6 * w * u, y, sgn * (hb + 0.15 * Math.min(1, x / 3))); // z gets the outward width in the shader
+        uv.push(u, t);
+        side.push(sgn * w);
+      }
+    }
+    for (let i = 0; i < BOW_ALONG; i++)
+      for (let j = 0; j < BOW_ACROSS; j++) {
+        const a = base + i * (BOW_ACROSS + 1) + j;
+        const b = a + BOW_ACROSS + 1;
+        idx.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute("aOut", new THREE.Float32BufferAttribute(side, 1));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function bowWaveMaterial(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color: 0xf4f7f8, roughness: 0.9, metalness: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const u = { uBowH: { value: 0 }, uSeaTime: seaUniforms.uSeaTime };
+  m.userData.u = u;
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace(
+        "void main() {",
+        `uniform float uBowH;
+uniform float uSeaTime;
+attribute float aOut;
+varying vec2 vBw;
+void main() {
+  vBw = uv;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+  // Height falls off aft of the stem; the sheet spreads wider as it peels away.
+  float hk = uBowH * (0.25 + 0.75 * exp(-uv.x * 3.2)) * (1.0 + 0.08 * sin(uSeaTime * 3.0 + uv.x * 17.0));
+  transformed.y *= hk;
+  transformed.z += aOut * hk * (1.0 + 2.5 * uv.x);`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        "void main() {",
+        `uniform float uSeaTime;
+varying vec2 vBw;
+float bwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float bwNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 q = f * f * (3.0 - 2.0 * f);
+  return mix(mix(bwHash(i), bwHash(i + vec2(1, 0)), q.x), mix(bwHash(i + vec2(0, 1)), bwHash(i + vec2(1, 1)), q.x), q.y);
+}
+void main() {`,
+      )
+      .replace(
+        "#include <alphamap_fragment>",
+        `#include <alphamap_fragment>
+  {
+    // Solid at the stem and along the lip; breaking into lace aft and towards the sea.
+    vec2 q = vec2(vBw.x * 38.0 - uSeaTime * 1.6, vBw.y * 5.0 + uSeaTime * 0.7);
+    float n = bwNoise(q) * 0.6 + bwNoise(q * 2.7 + 3.1) * 0.4;
+    float solid = (1.0 - smoothstep(0.1, 0.6, vBw.x)) * (1.0 - smoothstep(0.45, 0.8, vBw.y));
+    float lace = smoothstep(0.42, 0.62, n + 0.3 * solid);
+    float a = mix(lace, 0.92, solid * 0.8);
+    a *= 1.0 - smoothstep(0.7, 1.0, vBw.x);          // dies out aft
+    a *= 1.0 - smoothstep(0.85, 1.0, vBw.y);         // feathers into the sea
+    a *= smoothstep(0.0, 0.08, vBw.y);               // and into the hull
+    a *= mix(lace, 1.0, smoothstep(0.0, 0.05, vBw.x)); // ragged where the two sides meet at the stem
+    diffuseColor.a *= a;
+    diffuseColor.rgb *= 0.86 + 0.14 * n;
+    if (diffuseColor.a < 0.02) discard;
+  }`,
+      );
+  };
+  m.customProgramCacheKey = () => "boatsim-bowwave-v1";
+  return m;
+}
+
 export function makeShip(kind: ShipKind, range: { value: number }): THREE.Group {
   const s = new THREE.Group();
   s.name = `ship_${kind}`;
   const hull = new THREE.Mesh(shipGeometry(kind), shipMaterial(kind));
   hull.name = "hull";
   s.add(hull);
+  const bow = new THREE.Mesh(bowWaveGeometry(kind), bowWaveMaterial());
+  bow.name = "bowWave";
+  bow.visible = false;
+  bow.renderOrder = 2; // over the sea's foam
+  s.add(bow);
   const l = shipLights(kind);
   // Big ships' lanterns are bigger and brighter than a yacht's: they carry 6 nautical miles.
   const size = kind === "fishing" ? 0.026 : 0.034;
@@ -786,14 +986,30 @@ export function makeShip(kind: ShipKind, range: { value: number }): THREE.Group 
 }
 
 /** Paint a ship and set its lights for a sighting: `seed` in 0..1 picks the colours. */
-export function dressShip(s: THREE.Group, kind: ShipKind, seed: number, anchored: boolean): void {
+/** How far a ship floats above her loaded marks when empty (m): tankers and bulk carriers run home in ballast. */
+export const BALLAST_LIFT: Record<ShipKind, number> = { container: 1.5, tanker: 6, bulk: 5, fishing: 0 };
+
+/**
+ * Paint a ship and set her lights and trim for a sighting: `seed` in 0..1 picks the colours
+ * and whether she is in ballast (empty, riding high with her red bottom showing). Her lift
+ * (m) is left in userData.lift for whoever places her.
+ */
+export function dressShip(s: THREE.Group, kind: ShipKind, seed: number, anchored: boolean, speed = 0): void {
   const hull = s.getObjectByName("hull") as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
   const u = hull.material.userData.u;
   const cols = HULL_COLOURS[kind];
   u.uPaint.value.setHex(cols[Math.floor(seed * 7919) % cols.length]);
   u.uBand.value.setHex(BANDS[Math.floor(seed * 104729) % BANDS.length]);
   u.uFlood.value = anchored ? 1 : 0;
+  u.uBow.value.x = anchored ? 0 : bowWaveOnStem(speed, SHIP_SIZE[kind].length);
+  const ballast = kind !== "fishing" && (Math.floor(seed * 3571) % 100) / 100 < (kind === "container" ? 0.2 : 0.45);
+  s.userData.lift = ballast ? BALLAST_LIFT[kind] : 0;
+  u.uBow.value.z = s.userData.lift;
   s.getObjectByName("underway")!.visible = !anchored;
   s.getObjectByName("anchored")!.visible = anchored;
+  const bow = s.getObjectByName("bowWave") as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  bow.material.userData.u.uBowH.value = u.uBow.value.x;
+  bow.visible = u.uBow.value.x > 0.15;
+  bow.position.y = -s.userData.lift; // she rides higher in ballast; the wave stays on the sea
   s.getObjectByName("floods")!.visible = anchored && kind !== "fishing";
 }

@@ -170,7 +170,7 @@ function sighting(g: ShipGrid, i: number, j: number, k: number, n: number, phase
   const kind: ShipKind = u < 0.35 ? "container" : u < 0.6 ? "tanker" : u < 0.85 ? "bulk" : "fishing";
   // In crowded port water half the merchant ships wait at anchor (GUESS).
   const anchored = kind !== "fishing" && d > 0.01 && r() < 0.5;
-  const speed = anchored ? 0 : kind === "container" ? 8 + 2 * r() : kind === "tanker" ? 6 + 1.2 * r() : kind === "bulk" ? 6.2 + 1.2 * r() : 1.5 + 2 * r();
+  const speed = anchored ? 0 : kind === "container" ? 8 + 2 * r() : kind === "tanker" ? 6 + 1.2 * r() : kind === "bulk" ? 6.2 + 1.2 * r() : 1.5 + 1.0 * r(); // a trawler fishing makes 3 to 5 knots (Sam)
   const lane = kind === "fishing" || anchored ? null : laneHeading(g, i, j);
   const heading = lane == null ? r() * 360 : (lane + (r() < 0.5 ? 0 : 180) + (r() - 0.5) * 30 + 360) % 360;
   const s: Sighting = { id: `${i}:${j}:${k}:${n}`, kind, lat, lon, heading, speed, anchored, tMid: phase + (n + 0.5) * HOUR, seed: r() };
@@ -269,7 +269,7 @@ export class Traffic {
       const { length: L, beam: B } = SHIP_SIZE[s.kind];
       const w = 2 * Math.PI * (0.08 + 0.04 * s.seed);
       const a = s.seed * 50;
-      obj.position.set(x, -(d * d) / (2 * R_EARTH) + (s.kind === "fishing" ? 0.25 * hs * Math.sin(w * t + a) : 0), z);
+      obj.position.set(x, (obj.userData.lift ?? 0) - (d * d) / (2 * R_EARTH) + (s.kind === "fishing" ? 0.25 * hs * Math.sin(w * t + a) : 0), z);
       obj.rotation.set(
         Math.min(0.15, (0.6 * hs) / B) * Math.sin(w * t * 0.8 + a), // roll
         -THREE.MathUtils.degToRad(s.heading + 90), // bow (builder -x) to the heading
