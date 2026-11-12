@@ -615,15 +615,15 @@ export class OceanSound {
     // A loose halyard tapping the mast in light airs, as the boat rolls.
     if (m.tapsPerSec > 0 && t >= this.nextTap) {
       const k = 0.02 + 0.03 * r();
-      this.burst("white", "bandpass", 1300 + r() * 400, k * near, 0.002, 0.05, 0, 5);
-      if (r() < 0.4) this.burst("white", "bandpass", 1300 + r() * 400, k * 0.6 * near, 0.002, 0.04, 0.12 + r() * 0.1, 5);
+      this.burst("white", "bandpass", 1300 + r() * 400, k * near, 0.007, 0.06, 0, 5);
+      if (r() < 0.4) this.burst("white", "bandpass", 1300 + r() * 400, k * 0.6 * near, 0.007, 0.05, 0.12 + r() * 0.1, 5);
       this.nextTap = t + (-Math.log(1 - r() * 0.98) / m.tapsPerSec);
     }
     // Slatting: no wind to fill the sails, the boat rolls and the boom bangs across, blocks clunk.
     if (m.slat > 0 && t >= this.nextSlat) {
       if (r() < m.slat) {
         this.burst("brown", "lowpass", 260 + r() * 120, 0.07 * near * (0.6 + 0.4 * r()), 0.02, 0.28);
-        this.burst("white", "bandpass", 800 + r() * 300, 0.035 * near, 0.003, 0.07, 0.04, 3);
+        this.burst("white", "bandpass", 800 + r() * 300, 0.035 * near, 0.008, 0.08, 0.04, 3);
       }
       this.nextSlat = t + tp * (0.45 + r() * 0.5);
     }
