@@ -437,8 +437,10 @@ if (SEA_DET_N > 0) {
   // drew smooth white smears along every wave back (Ines, round 6).
   foamMask = mix(clamp(near, 0.0, 1.0), max(foamMask * mix(smoothstep(0.35, 0.65, tex), 0.6, o2), 0.25 * uCover), detFar) * (1.0 - 0.5 * farMix);
   // Round a fresh cap the water is milky with bubbles just under the surface, so the foam
-  // reads as sunk into the sea with soft edges, not laid on top of it (Ines, round 5).
-  foamSunk = smoothstep(0.02, 0.4, fresh) * (1.0 - clamp(near, 0.0, 1.0)) * (1.0 - detFar);
+  // reads as sunk into the sea with soft edges, not laid on top of it (Ines, round 5). Only round
+  // young, textured foam: at force 8 the old foam field covers a third of the sea, and a milky
+  // tint over all of it drew big flat pale slabs with the coarse patch's straight edges (Elena).
+  foamSunk = smoothstep(0.25, 0.6, fresh) * smoothstep(0.3, 0.7, tex) * (1.0 - clamp(near, 0.0, 1.0)) * (1.0 - detFar);
 }
 // Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
 // downwind; where they're finer than a pixel, their average whiteness instead.
@@ -488,8 +490,9 @@ if (SEA_DET_N > 0) roughnessFactor = mix(roughnessFactor, 0.05 + 0.22 * uRoughFa
 roughnessFactor = max(roughnessFactor, 0.06 + 0.14 * uRoughFar);
 #endif
 // Matte where there's foam, but eased in from the FFT's smooth foam field rather than the
-// crisp lace mask, so foam patches don't get glossy rims (Ines: puddle outlines).
-float foamShade = SEA_DET_N > 0 ? max(0.8 * smoothstep(0.05, 0.6, detA.w), 0.5 * foamMask) : foamMask;
+// crisp lace mask, so foam patches don't get glossy rims (Ines: puddle outlines). Old, faded
+// foam stays glossy: matte over the whole old field read as flat pale slabs at noon (Elena).
+float foamShade = SEA_DET_N > 0 ? max(0.6 * smoothstep(0.3, 0.8, detA.w), 0.6 * foamMask) : foamMask;
 roughnessFactor = mix(roughnessFactor, 0.75, foamShade);
 `;
 

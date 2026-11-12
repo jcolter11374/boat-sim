@@ -96,12 +96,27 @@ try {
       panel: getComputedStyle(document.getElementById("panel")).display,
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
-      build: document.getElementById("t-build").classList.contains("main"),
+      barShown: [...document.querySelectorAll("#topbar a.nav, #topbar .more")].filter((a) => a.offsetParent).length,
+      more: [...document.querySelectorAll("#topbar .more .menu a")].map((a) => a.textContent),
+      setsail: document.getElementById("t-setsail").classList.contains("main"),
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
-    if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
+    // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is bare (Elena).
+    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.barH !== 40 || !ts.setsail)
+      fail(`title screen: ${JSON.stringify(ts)}`);
+    // The chip opens the boat picker; picking the Pearson makes it my boat, and Our kayak puts it back.
+    await page.click("#topbar-boat");
+    await page.waitForFunction(() => window.__boatpick?.open, null, { timeout: 15000 });
+    await page.check('#boatpick input[value="stock_pearson31_2"]');
+    await page.click("#boatpick .go");
+    const picked = await page.evaluate(() => ({ chip: document.getElementById("topbar-boat").textContent, title: document.getElementById("t-boatname").textContent, open: window.__boatpick.open }));
+    if (picked.open || picked.chip !== "My boat: Pearson 31-2 (our model)" || picked.title !== "Pearson 31-2 (our model)") fail(`boat picker: ${JSON.stringify(picked)}`);
+    await page.click("#t-change");
+    await page.check('#boatpick input[value="kayak"]');
+    await page.click("#boatpick .go");
     // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
+    await page.click("#t-more summary"); // "Just watch the sea" lives under More (Elena)
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
     if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
@@ -694,6 +709,7 @@ try {
       // got ahead of its simulator): the packed simulator must take the port.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ports >= 20, null, { timeout: 60000 });
+      await page.evaluate(() => (document.getElementById("more").open = true)); // the port is under More options on the Set sail card
       await page.selectOption("#port", "baltimore");
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
@@ -719,7 +735,12 @@ try {
       // Picking another boat on the start card makes it my boat, for the other pages.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
-      await page.check('input[name="boat"][value="stock_cruiser31"]');
+      // The Set sail card keeps the boat radios hidden and picks through the top bar's My boat picker,
+      // which ticks the row and fires change: do the same.
+      await page.locator('input[name="boat"][value="stock_cruiser31"]').evaluate((el) => {
+        el.checked = true;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"));
@@ -820,6 +841,16 @@ try {
     await page.waitForTimeout(500);
     const mod = await page.evaluate(() => ({ asked: window.__helm.asked, value: document.getElementById("challenge").value }));
     if (mod.asked || mod.value) fail(`a plain helm link preselected a challenge: ${JSON.stringify(mod)}`);
+    // The one Set sail card's choices ride in the URL (the one-game plan, step 1): a rough start
+    // fills in the 1 April launch, and an Annapolis link with go=1 is at the wheel at once.
+    await page.goto(`${URL}helm.html?quality=low&when=rough`);
+    await page.waitForFunction(() => window.__setsail, null, { timeout: 60000 });
+    const rough = await page.evaluate(() => ({ launch: document.getElementById("launch").value, ss: window.__setsail.current() }));
+    if (rough.launch !== "0" || rough.ss.when !== "rough") fail(`?when=rough didn't fill in the rough start: ${JSON.stringify(rough)}`);
+    await page.goto(`${URL}helm.html?quality=low&where=annapolis&course=triangle&go=1`);
+    await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 90000 }).catch(() => fail("an Annapolis Set sail link didn't put you at the wheel"));
+    if (new globalThis.URL(page.url()).searchParams.has("go")) fail("go=1 stayed in the URL, so a reload would set sail again");
+    log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once");
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);
