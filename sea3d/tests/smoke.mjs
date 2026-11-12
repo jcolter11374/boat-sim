@@ -35,7 +35,12 @@ async function openReplay(page) {
   if (!(await page.locator("#replay-tab").count())) return;
   if (!(await page.locator("#top.open").count())) await page.click("#replay-tab");
   await page.waitForFunction(() => { const o = document.getElementById("top"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20000 });
+  // Pin it open (replay/hud.ts pin) so the after-play timer can't slide it shut mid-test. A hover only
+  // pins on a real pointerenter, which never fires when the mouse already sits there (flaky
+  // "outside of the viewport" clicks, Lena): move off and back, then pin directly as a backstop.
+  await page.mouse.move(1270, 360); // off the drawer (it is on the left)
   await page.hover("#top h2").catch(() => {});
+  await page.evaluate(() => document.getElementById("top")?.dispatchEvent(new PointerEvent("pointerenter")));
 }
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
