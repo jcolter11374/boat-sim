@@ -100,6 +100,13 @@ export interface Outlook {
   /** The forecast's surface current round the lines, for the call map (newer simulators). */
   current?: CurrentGrid | null;
 }
+/** sandbox/helm.py Game.best_heading: km towards the finish for a fan of headings round the bow. */
+export interface BestHeading {
+  heading: number;
+  best: number;
+  km: Record<string, number>;
+  gain_km: number;
+}
 export interface ForecastRow {
   t: string;
   wind_u: number;
@@ -290,6 +297,11 @@ export class HelmGame {
   /** What each order would do against the ghost over the next `hours`, or null where the simulator can't say. */
   outlook(orders: { heading: Heading; power?: number }[], hours = 48): Promise<Outlook | null> {
     return this.ask<Outlook | null>({ type: "outlook", orders, hours });
+  }
+
+  /** The route check (plan #10): the fixed heading the forecast favours for the next `hours`. */
+  bestHeading(hours = 48): Promise<BestHeading | null> {
+    return this.ask<BestHeading | null>({ type: "best", hours });
   }
 
   forecast(): Promise<ForecastRow[]> {

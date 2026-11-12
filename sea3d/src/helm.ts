@@ -38,7 +38,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
-import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Outlook, type Preview, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type BestHeading, type Outlook, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { askedChallenge } from "./sailLink";
 import { drawForecast } from "./helm/forecast";
@@ -287,6 +287,8 @@ const page = {
   decisions: [] as { kind: string; day: number }[],
   /** The open call's forecast lines and stakes (Game.outlook), for its map; null when none. */
   outlook: null as Outlook | null,
+  /** Each route check (#10): when it looked, the best heading and its forecast gain (km), asked or not. */
+  routeChecks: [] as { day: number; best: number; gain: number; turn: number; asked: boolean }[],
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
   /** The challenge a link preselected (?challenge=, from the Sea page's "Sail this sea"); "" = none. */
@@ -1760,11 +1762,80 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
 let decisionSeq = 0;
 
 /** Stop the clock and ask, when a decision is due. */
+// ---------- the route check (#10, the fallback call) ----------
+// When nothing has asked for a while (a random 3 to 5 voyage days, so calls don't land on a
+// beat: Elena), a navigator's moment: the forecast's best line for the next 2 days against
+// yours. Asked only when it's worth it: the forecast puts the best line ROUTE_GAIN_KM or more
+// ahead of what you're doing now; otherwise the clock never stops and it looks again in a day.
+const ROUTE_GAIN_KM = 5;
+const ROUTE_MIN_TURN = 10; // degrees: smaller is not a different line
+let lastCallH = 0;
+let routeLookedH = -Infinity;
+let callCount = 0;
+/** Hours of quiet before the next route check: 72 to 120, fixed by the voyage and the call count. */
+function quietGapH(): number {
+  const x = Math.sin((callCount + 1) * 12.9898 + (game.boat?.seed ?? 0) * 0.017) * 43758.5453;
+  return 72 + 48 * (x - Math.floor(x));
+}
+const fmtDeg = (d: number) => `${String(Math.round(d) % 360).padStart(3, "0")}°`;
+function orderWords(o: Heading): string {
+  return typeof o === "number" ? `your ${fmtDeg(o)}` : o === "auto" ? "the autopilot's line" : o === "route" ? "the planned route" : "straight at the finish";
+}
+
+/** Look for a better line; true if the clock was stopped to look. */
+function maybeRouteCheck(st: Status): boolean {
+  if (mode !== "hands_on" || st.over || shared) return false;
+  const h = st.day * 24;
+  if (h - lastCallH < quietGapH() || h - routeLookedH < 24) return false;
+  routeLookedH = h;
+  setRate(0, true);
+  const seq = ++decisionSeq;
+  const resume = () => {
+    if (seq === decisionSeq && rate === 0 && $("decide").hidden) setRate(lastRate);
+  };
+  (async () => {
+    const b: BestHeading | null = await game.bestHeading().catch(() => null);
+    if (!b || seq !== decisionSeq) return resume();
+    const mine: { heading: Heading; power: number } = { heading: order, power };
+    const o = await game.outlook([{ heading: b.best, power }, mine, { heading: "auto" }]).catch(() => null);
+    if (!o || seq !== decisionSeq) return resume();
+    const [best, now] = o.orders;
+    const turn = Math.abs(((b.best - b.heading + 540) % 360) - 180);
+    const ask = best.lead_km - now.lead_km >= ROUTE_GAIN_KM && turn >= ROUTE_MIN_TURN;
+    page.routeChecks.push({ day: st.day, best: b.best, gain: best.lead_km - now.lead_km, turn, asked: ask });
+    if (!ask) return resume();
+    lastCallH = h;
+    callCount++;
+    page.decisions.push({ kind: "route", day: st.day });
+    const gain = Math.round(best.lead_km - now.lead_km);
+    const d: Decision = {
+      kind: "route",
+      text: `Navigator's check: the forecast likes ${fmtDeg(b.best)} for the next 2 days, about ${gain} km better than ${orderWords(order)}.`,
+      choices: [
+        { label: `Take the forecast's line (${fmtDeg(b.best)})`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
+        { label: `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: "Let the autopilot decide (what the ghost does)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
+      ],
+    };
+    // Already on the autopilot: "keep" and "autopilot" are one choice.
+    const picks = order === "auto" ? [0, 2] : [0, 1, 2];
+    d.choices = picks.map((i) => d.choices[i]);
+    if (order === "auto") d.choices[1] = { ...d.choices[1], label: "Stay on the autopilot (what the ghost does)", title: "Carry on as you are" };
+    const view: Outlook = { ...o, orders: picks.map((i) => o.orders[i]) };
+    whenAt(h, () => {
+      if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, view, picks.map(() => true));
+    });
+  })();
+  return true;
+}
+
 function maybeDecide(): boolean {
   const st = game.status;
   if (!st || rate === 0) return false;
   const d = decisionDue(st, lastForecast);
-  if (!d) return false;
+  if (!d) return maybeRouteCheck(st);
+  lastCallH = st.day * 24;
+  callCount++;
   setRate(0, true);
   page.decisions.push({ kind: d.kind, day: st.day });
   // See it coming (Rosa): over the last half day before the call the picture slows to an hour
@@ -2131,6 +2202,7 @@ async function begin(): Promise<void> {
     sailedAt = performance.now();
     shownTo = shared ? lastHour(game.boat!) : 0;
     hour = shownTo;
+    lastCallH = hour; // a shared game's quiet spell starts where it was left
     resetPois();
     present();
     newEvents();
