@@ -89,8 +89,12 @@ function groupRow(tier: number, groups: number, members: Row[], reference: strin
   btn.type = "button";
   const names = [lead, ...members.filter((m) => m !== lead)].map((m) => m.label);
   const words = el("span", undefined, groupSummary(names, tier === 1));
-  // Randolph's boats are tagged wherever their names show (Maya), folded rows too.
-  if (members.some((m) => m.badges.some(isModelBadge))) words.append(" ", el("span", "modeltag", "our model"));
+  // Randolph's boats are tagged wherever their names show (Maya), folded rows too: only the
+  // names the row actually says (groupSummary names one for Best or 4+, else all of them),
+  // so "Our kayak and 4 builds just as good" isn't tagged for a Randolph build folded inside it.
+  const ordered = [lead, ...members.filter((m) => m !== lead)];
+  const named = tier === 1 || ordered.length > 3 ? ordered.slice(0, 1) : ordered;
+  if (named.some((m) => m.badges.some(isModelBadge))) words.append(" ", el("span", "modeltag", "our model"));
   const arrow = el("span", "arrow");
   btn.append(words, " ", arrow);
   const set = (on: boolean) => {
