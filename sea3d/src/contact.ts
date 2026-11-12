@@ -53,12 +53,12 @@ const collarFrag = /* glsl */ `
     // Never a solid rim: even at the bow under half of it is foam (Ines r5: no white skirt).
     // Thicker on the windward side, where the sea piles up against the hull (Elena r10).
     float windward = smoothstep(0.0, 0.7, -dot(normalize(vW.xz - uWindC.xy + 1e-4), uWindD));
-    float a = smoothstep(0.6 - (0.2 + 0.25 * windward) * edge * uI * bow, 0.78, n) * pow(edge, 3.0 - 1.5 * windward) * uI * (1.0 + 0.5 * windward);
+    float a = smoothstep(0.56 - (0.32 + 0.2 * windward) * sqrt(edge) * uI * bow, 0.66, n) * pow(edge, 0.8 - 0.4 * windward) * min(1.0, 1.3 * uI) * (1.0 + 0.4 * windward);
     // Thick at the bow, thinning aft and breaking into patches with gaps (Elena, WIP 2).
     float aft = smoothstep(0.15, 0.9, vUV.x);
     float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
     a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
-    gl_FragColor = vec4(vec3(0.8, 0.85, 0.88) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.75));
+    gl_FragColor = vec4(vec3(0.97, 0.99, 1.0) * (0.25 + 1.2 * uLight + foamLamp(vW)), clamp(a, 0.0, 0.95));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -329,12 +329,13 @@ export class Contact {
       const [nx, nz] = this.normals[i];
       const sAlong = this.along[i];
       const bowK = 1 - THREE.MathUtils.smoothstep(sAlong, 0, 0.35);
-      const w = 0.06 + 0.1 * speedK + 0.12 * bowK * speedK + 0.08 * seaK;
+      // In a gale a broken white ring 0.2-0.5 m wide hugs the hull (Ines r11), wider at the bow.
+      const w = 0.06 + 0.1 * speedK + 0.12 * bowK * speedK + seaK * seaK * (0.45 + 0.3 * bowK);
       for (const [k, off] of [[0, -0.015], [1, w]] as const) {
         const [wx, wz] = toWorld(x + nx * off, z + nz * off, place);
         const o = (i * 2 + k) * 3;
         pos[o] = wx;
-        pos[o + 1] = this.surface(comps, wx, wz, t) + 0.015 + this.pile * Math.exp(-((Math.max(off, 0) / 0.3) ** 2));
+        pos[o + 1] = this.surface(comps, wx, wz, t) + 0.015 + 0.02 * seaK + this.pile * Math.exp(-((Math.max(off, 0) / 0.3) ** 2));
         pos[o + 2] = wz;
       }
     }

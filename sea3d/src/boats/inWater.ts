@@ -61,19 +61,23 @@ const BODY = /* glsl */ `
     // Wet paint: the bottom of the topsides goes darker, with a soft top edge; a band a
     // quarter of the topsides high in a gale (Ines r10), a few cm in a calm.
     float band = uWetH * (0.8 + 0.4 * n) + 0.09 * uSeaRough;
-    float wet = 1.0 - smoothstep(0.35 * band, band, h);
-    gl_FragColor.rgb *= mix(1.0, 0.55, wet);
+    float wet = 1.0 - smoothstep(0.6 * band, band, h);
+    gl_FragColor.rgb *= mix(1.0, 0.45, wet);
+    // A touch glossier: wet paint catches a little sky at a glancing angle (Ines r11).
+    vec3 Vh = normalize(cameraPosition - vSeaW);
+    float frw = pow(1.0 - abs(dot(Vh, nW)), 3.0);
+    gl_FragColor.rgb += vec3(0.05, 0.06, 0.07) * uWetLight * wet * (0.4 + frw);
     // White along the contact line: a thin broken line in a calm; in a gale a continuous,
     // broken, bright band a few cm high, higher where a wave is climbing (Ines r10).
-    float lineH = 0.012 + 0.012 * n + uSeaRough * (0.015 + 0.03 * n);
-    float line = 1.0 - smoothstep(0.6 * lineH, lineH, h);
+    float lineH = 0.012 + 0.012 * n + uSeaRough * 0.01 * n; // a thin wet sheen; the foam itself is on the water (Ines r11)
+    float line = 1.0 - smoothstep(0.0, lineH, h);
     float bits = smoothstep(0.42 - 0.2 * uSeaRough, 0.7 - 0.2 * uSeaRough, iwNoise(vec2(dot(vSeaW.xz, vec2(13.0, 13.0)), vSeaW.y * 40.0) + uSeaTime * 2.3) * 0.6 + iwNoise(vSeaW.xz * 31.0 - uSeaTime) * 0.4);
     // More at the bow, thin and broken aft as lace (none read where no hull is known).
     float sAl = washAlong(vSeaW.xz);
     float bowK = sAl < -1.5 ? 0.6 : smoothstep(-0.6, 0.85, sAl);
     float gaps = smoothstep(0.3, 0.6, iwNoise(vSeaW.xz * 1.6 + vec2(uSeaTime * 0.7, 0.0)));
     bits *= mix(mix(gaps, 1.0, bowK), mix(0.55 + 0.45 * gaps, 1.0, bowK), uSeaRough) * mix(0.45 + 0.55 * bowK, 0.8 + 0.2 * bowK, uSeaRough);
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.9, 0.93, 0.95) * uWetLight, line * bits * mix(uWetFoam * (0.4 + 0.5 * uWetFoam), 0.95, uSeaRough));
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.9, 0.93, 0.95) * uWetLight, line * bits * uWetFoam * 0.5);
     // Green water that came aboard (Ines r7): no painted sheet, just what it leaves. The
     // paint goes dark and wet and dries back; broken white foam sits on the deck and the
     // upper hull, thinning and draining down the sides over a second or two.
