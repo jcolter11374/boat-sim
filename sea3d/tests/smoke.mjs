@@ -96,12 +96,27 @@ try {
       panel: getComputedStyle(document.getElementById("panel")).display,
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
-      build: document.getElementById("t-build").classList.contains("main"),
+      barShown: [...document.querySelectorAll("#topbar a.nav, #topbar .more")].filter((a) => a.offsetParent).length,
+      more: [...document.querySelectorAll("#topbar .more .menu a")].map((a) => a.textContent),
+      setsail: document.getElementById("t-setsail").classList.contains("main"),
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
-    if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
+    // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is bare (Elena).
+    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.barH !== 40 || !ts.setsail)
+      fail(`title screen: ${JSON.stringify(ts)}`);
+    // The chip opens the boat picker; picking the Pearson makes it my boat, and Our kayak puts it back.
+    await page.click("#topbar-boat");
+    await page.waitForFunction(() => window.__boatpick?.open, null, { timeout: 15000 });
+    await page.check('#boatpick input[value="stock_pearson31_2"]');
+    await page.click("#boatpick .go");
+    const picked = await page.evaluate(() => ({ chip: document.getElementById("topbar-boat").textContent, title: document.getElementById("t-boatname").textContent, open: window.__boatpick.open }));
+    if (picked.open || picked.chip !== "My boat: Pearson 31-2 (our model)" || picked.title !== "Pearson 31-2 (our model)") fail(`boat picker: ${JSON.stringify(picked)}`);
+    await page.click("#t-change");
+    await page.check('#boatpick input[value="kayak"]');
+    await page.click("#boatpick .go");
     // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
+    await page.click("#t-more summary"); // "Just watch the sea" lives under More (Elena)
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
     if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
