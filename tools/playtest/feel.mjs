@@ -75,8 +75,25 @@ async function watchInputs(page) {
 }
 
 /** Wall time of one sail button, and the frame rate while the simulator works. */
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if (!(await page.locator("#orders-tab").count())) return;
+  // At the start the drawer opens by itself for 10 s with a tip, then slides shut unless it's
+  // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
+  // until it has fully slid in, then point at it, which keeps it open (the player is using it).
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    const there = await page
+      .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
+      .then(() => true, () => false);
+    if (!there) continue;
+    await page.hover("#orders h2", { timeout: 10_000 }).catch(() => {});
+    if (await page.locator("#orders.open").count()) return;
+  }
+}
 async function sail(page, button) {
   const t0 = Date.now();
+  await openOrders(page);
   const during = frames(page, 4); // overlaps the busy period
   await page.click(button, { noWaitAfter: true });
   await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 10 * MIN });
@@ -114,6 +131,7 @@ async function play(browser, sc) {
 
     // Controls: three clicks around the heading dial, then a power slider drag.
     await watchInputs(page);
+    await openOrders(page);
     const dial = await page.locator("#dial").boundingBox();
     if (dial) {
       const cx = dial.x + dial.width / 2, cy = dial.y + dial.height / 2, rad = Math.min(dial.width, dial.height) * 0.38;

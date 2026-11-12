@@ -189,6 +189,10 @@ export interface Spell {
   /** The goal: a mark this far away, on this bearing from the start. */
   markM: number;
   markBearing: number;
+  /** A course instead (practice off Annapolis): marks to reach in order, metres east and north of the start. */
+  marks?: { x: number; y: number }[];
+  /** How close counts as reaching a mark (default 40 m). */
+  markRadiusM?: number;
 }
 
 export interface WheelState {
@@ -211,6 +215,11 @@ export interface WheelState {
   tacks: number;
   side: -1 | 1; // which side the wind is on (port -1, starboard +1)
   done: boolean;
+  /** On a course: the mark sailing for now, and the time (s) each one was reached. */
+  mark: number;
+  markTimes: number[];
+  /** Ended in water too shallow for her keel. */
+  aground: boolean;
 }
 
 export class Wheel {
@@ -247,6 +256,9 @@ export class Wheel {
       tacks: 0,
       side: wrap180(wind.fromDeg - start.heading) >= 0 ? 1 : -1,
       done: false,
+      mark: 0,
+      markTimes: [],
+      aground: false,
     };
   }
 
@@ -287,7 +299,33 @@ export class Wheel {
     return true;
   }
 
+  /** Where the mark sailed for now is, metres east and north of the start. */
+  markXY(): { x: number; y: number } {
+    const m = this.spell.marks;
+    if (m?.length) return m[Math.min(this.s.mark, m.length - 1)];
+    const b = (this.spell.markBearing * Math.PI) / 180;
+    return { x: Math.sin(b) * this.spell.markM, y: Math.cos(b) * this.spell.markM };
+  }
+
+  /** Compass bearing from the boat to the mark. */
+  markBearing(): number {
+    const m = this.markXY();
+    return wrap360((Math.atan2(m.x - this.s.x, m.y - this.s.y) * 180) / Math.PI);
+  }
+
+  /** The keel touched: the spell ends there. */
+  ground(): void {
+    this.s.aground = true;
+    this.s.done = true;
+    this.s.speedKn = 0;
+  }
+
   distToMark(): number {
+    const m = this.spell.marks;
+    if (m?.length) {
+      const k = m[Math.min(this.s.mark, m.length - 1)];
+      return Math.hypot(k.x - this.s.x, k.y - this.s.y);
+    }
     const b = (this.spell.markBearing * Math.PI) / 180;
     return Math.hypot(Math.sin(b) * this.spell.markM - this.s.x, Math.cos(b) * this.spell.markM - this.s.y);
   }
@@ -352,7 +390,13 @@ export class Wheel {
       s.sumSecs += dt;
     }
     s.t += dt;
-    if (this.distToMark() < 40) s.done = true;
+    if (this.distToMark() < (this.spell.markRadiusM ?? 40)) {
+      if (this.spell.marks?.length) {
+        s.markTimes.push(s.t);
+        s.mark++;
+        if (s.mark >= this.spell.marks.length) s.done = true;
+      } else s.done = true;
+    }
   }
   private wasOver = false;
 

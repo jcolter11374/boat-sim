@@ -11,6 +11,10 @@ import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea } from "./water";
 import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
+import { BayDepths } from "./land/depth";
+import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon } from "./helm/course";
+import { Buoys } from "./helm/buoys";
+import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
@@ -40,7 +44,8 @@ import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { loadPorts, portHint, portName } from "./helm/ports";
-import { localTime } from "./replay/localtime";
+import { localTime, shortLocal } from "./replay/localtime";
+import { Hud, showStrip } from "./helm/hud";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
@@ -236,7 +241,9 @@ void loadPorts(new URL(params.get("ports") ?? "./ports.json", location.href).hre
     $("porthint").textContent = p ? portHint(p, list) : "The usual start: our support boat drops the drone here, then heads home.";
   };
   sel.addEventListener("change", hint);
+  sel.addEventListener("change", showProloguePick);
   hint();
+  showProloguePick();
 });
 /** The chosen challenge, if any (a shared link names it with ?c=). */
 function chosenChallenge(): Challenge | undefined {
@@ -263,6 +270,8 @@ const page = {
   standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
   frames: 0,
+  /** Where the lens has slid the boat (fractions of the screen; Leo's plan item 1). */
+  third: [0, 0] as number[],
   /** The voyage hour the picture shows, and the hour the simulator has reached (for tests). */
   hour: 0,
   simHour: 0,
@@ -285,6 +294,8 @@ const page = {
   pois: { loaded: 0, shown: [] as string[] },
   /** Real land in view: the place, how far off its box (km), buildings and trees; and the view's reach (m). */
   land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0 } as NearbyLand["shown"],
+  /** Practice sailing: true once the Bay's depths are known to be on this copy of the site (Annapolis courses offered). */
+  practiceBay: false,
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
@@ -323,6 +334,16 @@ game.onProgress = (t) => {
 void sandboxThere(sandboxBase).then((ok) => (ok ? game.warm() : undefined));
 
 const compass = new Compass($<HTMLCanvasElement>("dial"), (deg) => setOrder(deg));
+// The sailing screen's panels (src/helm/hud.ts): strip, drawer, corner map, toasts.
+const hud = new Hud({
+  mapResized: () => {
+    chartDirty = true;
+  },
+  forecastOpened: () => {
+    if (lastForecast) drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
+  },
+  keysOff: () => !page.ready || !!page.status?.over,
+});
 
 function rep(which = watch): Replay | null {
   return which === "boat" ? game.boat : game.ghost;
@@ -434,6 +455,7 @@ function showOrder(): void {
       : order === "finish"
         ? "Straight at the finish"
         : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+  $("c-orderv").textContent = order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
   $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
   $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
@@ -657,6 +679,9 @@ function drawWhen(force = false): void {
   $("day").textContent = day;
   $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
   $("local").textContent = localTime(ms, whenHere[0], whenHere[1]);
+  // The strip's date beside the day: local, short; UTC on hover.
+  $("c-date").textContent = shortLocal(ms, whenHere[0], whenHere[1]);
+  $("c-date").title = $("when").textContent ?? "";
 }
 
 function showStatus(): void {
@@ -702,6 +727,21 @@ function showStatus(): void {
     $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
   }
   compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
+  // The race with the ghost; in base mode, also what base knows (the picture's numbers would be the truth).
+  showStrip(
+    est
+      ? { lead, guess: true, heading: last?.hdg ?? null, speedKn: null, ...(s.sailing ? { heel: null } : { battery: socNow == null ? null : soc }) }
+      : {
+          lead,
+          guess: false,
+          heading: Number.isFinite(b.heading) ? b.heading : null,
+          speedKn: b.stw * KN,
+          ...(s.sailing ? { heel: s.sailing.heel_deg ?? null } : { battery: socNow == null ? null : soc }),
+          ...(w ? { windKn: kn, windTo, waves: w.hs } : {}),
+        },
+  );
+  $("m-togo").textContent = `${est ? "about " : ""}${Math.round(toGo).toLocaleString()} km to go`;
+  $("c-wind").title = `${$("weather").textContent}. Click for the 5-day forecast (F)`;
   if (s.mode === "base" && s.base) {
     const last = dayOf(s.base.last_report.t);
     const w = s.base.waiting;
@@ -715,17 +755,10 @@ function showStatus(): void {
 }
 
 // ---------- notes ----------
+/** A toast at the top (Leo's plan, item 6): gone on its own, longer for a warning; the reason
+ * the clock stopped stays until it runs again. All of them go into the big map's log. */
 function note(text: string, when: string, colour: string): void {
-  const el = document.createElement("div");
-  el.className = "note glass";
-  el.style.borderLeftColor = colour;
-  el.innerHTML = `<div class="when"></div><div class="txt"></div>`;
-  (el.querySelector(".when") as HTMLElement).textContent = when;
-  (el.querySelector(".txt") as HTMLElement).textContent = text;
-  const box = $("notes");
-  box.prepend(el);
-  while (box.children.length > 5) box.lastElementChild?.remove();
-  setTimeout(() => el.classList.add("old"), 12000);
+  hud.toast(text, when, colour, { warn: colour === TONE_COLOUR.warn || colour === TONE_COLOUR.bad, sticky: /^Paused:/.test(text) });
 }
 
 function newEvents(): void {
@@ -911,6 +944,8 @@ function setRate(r: number, drain = false): void {
   if (r > 0) {
     $("decide").hidden = true;
     $("fcbox").classList.remove("lit");
+    hud.unstick();
+    hud.clockRuns();
     lastRate = r;
     if (!rate) armed = untilOptions();
   } else armed = null;
@@ -1041,8 +1076,10 @@ addEventListener("blur", () => {
 // time. The voyage clock waits while you do; for now a spell doesn't move the voyage.
 let wheelRate = 0; // the clock's speed before the spell, to carry on at
 let wheelNow: WheelFrame | null = null;
+/** Where the last wheel frame had the boat (metres from the spell's start). */
+let wheelLast: { x: number; y: number } | null = null;
 const wheel = new WheelSession({
-  ended: (r) => void (PRACTICE ? practiceEnded(r) : wheelEnded(r)),
+  ended: (r) => void (prologueDone ? prologueEnded(r) : PRACTICE ? practiceEnded(r) : wheelEnded(r)),
   note: (text) => note(text, "At the wheel", TONE_COLOUR.warn),
 });
 (window as unknown as { __wheel: WheelSession }).__wheel = wheel;
@@ -1076,44 +1113,323 @@ async function wheelEnded(r: WheelResult): Promise<void> {
   setRate(wheelRate);
 }
 // "Practice sailing" (Leo): helm.html?practice. The cruiser, no voyage and no simulator to
-// load: a spell to a mark in a steady wind, a new one each time (a reach, a beat, a run).
+// load. Off Annapolis (Leo's plan, Maya approved 12 Nov) it's a course: the triangle or the
+// run to Thomas Point Light, in a breeze you pick, timed against your best, and the Bay's
+// depths end the run in shallow water. Where this copy of the site has no Bay squares, it's
+// the old drills: a spell to a mark in a steady wind, a new one each time.
+// Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
 const PRACTICE = params.has("practice");
+/** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
+const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
 let practiceWind: { u: number; v: number } | null = null;
 let practiceN = 0;
-async function practiceSpell(): Promise<void> {
+/** Where the practice spell began (the boat is there plus the wheel's x, y), or null. */
+let practiceAt: LatLon | null = null;
+/** The last place the boat was, so the view stays put between runs. */
+let practiceHere: LatLon | null = null;
+let practiceCourse: Course | null = null;
+let practiceBreeze: Breeze = "good";
+let depths: BayDepths | null = null;
+const depthsReady = BayDepths.create().then((d) => {
+  depths = d;
+  showProloguePick();
+  return d;
+});
+const buoys = new Buoys();
+scene.add(buoys.group);
+function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
+  const ms = kn / 1.943844;
+  const toward = ((fromDeg + 180) * Math.PI) / 180;
+  return { u: Math.sin(toward) * ms, v: Math.cos(toward) * ms };
+}
+async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
   $("practice-end").hidden = true;
-  const kinds = [
-    { kn: 12, off: 90, name: "a reach: the wind from the side" },
-    { kn: 10, off: 0, name: "a beat: the mark is upwind, so zigzag (tack) toward it" },
-    { kn: 16, off: 165, name: "a run: the wind behind you" },
-    { kn: 22, off: 70, name: "a fresh breeze: reef if she leans too far" },
-  ];
-  const k = kinds[practiceN++ % kinds.length];
-  const from = (practiceN * 137) % 360; // a different compass each time
-  const ms = k.kn / 1.943844;
-  const toward = ((from + 180) * Math.PI) / 180;
-  practiceWind = { u: Math.sin(toward) * ms, v: Math.cos(toward) * ms };
-  // Mark bearing: `off` degrees from the wind; for a beat the mark is straight upwind and the
-  // boat starts close-hauled.
-  const mark = (from + k.off + 360) % 360;
-  const heading = k.off === 0 ? (from + 50) % 360 : mark;
-  const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
-  if (ok) {
-    $("practice-what").textContent = `Practice ${practiceN}: ${k.kn} knots, ${k.name}.`;
-    $("practice-what").hidden = false;
+  buoys.set([]);
+  if (kind === "drill" || !depths?.known) {
+    const kinds = [
+      { kn: 12, off: 90, name: "a reach: the wind from the side" },
+      { kn: 10, off: 0, name: "a beat: the mark is upwind, so zigzag (tack) toward it" },
+      { kn: 16, off: 165, name: "a run: the wind behind you" },
+      { kn: 22, off: 70, name: "a fresh breeze: reef if she leans too far" },
+    ];
+    const k = kinds[practiceN++ % kinds.length];
+    const from = (practiceN * 137) % 360; // a different compass each time
+    practiceWind = windFrom(from, k.kn);
+    // Mark bearing: `off` degrees from the wind; for a beat the mark is straight upwind and the
+    // boat starts close-hauled.
+    const mark = (from + k.off + 360) % 360;
+    const heading = k.off === 0 ? (from + 50) % 360 : mark;
+    practiceCourse = null;
+    practiceAt = practiceHere = null;
+    const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
+    if (ok) {
+      banner(`Practice ${practiceN}: ${k.kn} knots, ${k.name}.`);
+    }
+    return;
   }
+  const from = BAY_WINDS[Math.floor(Math.random() * BAY_WINDS.length)];
+  const br = BREEZES[practiceBreeze];
+  practiceWind = windFrom(from, br.kn);
+  const c = kind === "triangle" ? triangle(from) : toTheLight();
+  practiceCourse = c;
+  practiceAt = practiceHere = c.start;
+  depths.prefetch(c.start.lat, c.start.lon, 3000);
+  const o = c.start;
+  buoys.set(c.kind === "triangle" ? c.marks.slice(0, 2).map((m) => toXY(o, m)).concat([{ x: 0, y: 0 }]) : []);
+  const ok = await wheel.start({
+    boatKey: "stock_cruiser31",
+    heading: c.heading,
+    speedMs: 0,
+    windU: practiceWind.u,
+    windV: practiceWind.v,
+    plan: practiceBreeze === "fresh" ? "reef1" : "full",
+    course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name })), radiusM: c.radiusM },
+    depthAt: (x, y) => {
+      const p = toLatLon(o, { x, y });
+      depths!.prefetch(p.lat, p.lon);
+      // The light's stones aren't in the survey: treat them as just awash.
+      const s = toXY(THOMAS_POINT, p);
+      if (Math.hypot(s.x, s.y) < LIGHT_STONES_M) return 0;
+      return depths!.at(p.lat, p.lon);
+    },
+  });
+  if (ok) {
+    const point = (d: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(d / 45) % 8];
+    banner(c.kind === "triangle" ? `The triangle · ${br.kn} knots from the ${point(from)}` : `To Thomas Point Light · ${br.kn} knots from the ${point(from)} · keep off its shoal`);
+  } else practiceAt = null;
 }
 function practiceEnded(r: WheelResult): void {
-  $("practice-sum").textContent = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
+  const c = practiceCourse;
+  if (practiceAt && wheelLast) practiceHere = toLatLon(practiceAt, wheelLast);
+  practiceAt = null;
+  buoys.set([]);
+  let text = wheelSummary(r, null).replace(/ (Sail at least a minute|Your voyage waited|For the next).*$/, "");
+  if (c) {
+    const key = bestKey(c.kind, practiceBreeze);
+    const pct = Math.round(r.share * 100);
+    if (r.aground) text = `Shallow water: her keel touched the bottom ${r.markTimes.length ? `after ${r.markTimes.length} of ${r.marks} marks` : "before the first mark"}, so this run ends here. Watch the depth at the top of the wheel panel and steer for deeper water. Try again?`;
+    else if (!r.reached) text = `Handed back after ${runTime(r.seconds)}, with ${r.markTimes.length} of ${r.marks} marks. Try again?`;
+    else {
+      const before = saveBest(key, r.seconds);
+      const pb = before == null ? "Your first time on this course in this breeze." : r.seconds < before ? `A new best (it was ${runTime(before)})!` : `Your best: ${runTime(before)}.`;
+      const splits = c.kind === "triangle" ? ` Marks at ${r.markTimes.map(runTime).join(", ")}.` : "";
+      text = `Finished ${c.name} in ${runTime(r.seconds)} of boat time, trimmed at ${pct}% of her best speed.${splits} ${pb}`;
+    }
+  }
+  $("practice-sum").textContent = text;
+  if (c) practiceCard();
   $("practice-end").hidden = false;
   $("practice-what").hidden = true;
+}
+/** The course card: pick a course and a breeze. */
+function practiceCard(): void {
+  const annapolis = !!depths?.known;
+  $("practice-courses").hidden = !annapolis;
+  $("practice-again").hidden = annapolis;
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button"))) b.setAttribute("aria-pressed", String(b.dataset.b === practiceBreeze));
+  for (const b of Array.from(document.querySelectorAll<HTMLElement>("#practice-courses [data-best]"))) {
+    const t = readBest(bestKey(b.dataset.best as CourseKind, practiceBreeze));
+    b.textContent = t == null ? "" : `your best ${runTime(t)}`;
+  }
 }
 if (PRACTICE) {
   document.body.classList.add("practice");
   $("start").hidden = true;
   useBoat("stock_cruiser31");
-  $("practice-again").addEventListener("click", () => void practiceSpell());
-  void practiceSpell();
+  $("practice-again").addEventListener("click", () => void practiceSpell("drill"));
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-courses [data-course]"))) b.addEventListener("click", () => void practiceSpell(b.dataset.course as CourseKind | "drill"));
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button")))
+    b.addEventListener("click", () => {
+      practiceBreeze = b.dataset.b as Breeze;
+      practiceCard();
+    });
+  void depthsReady.then((d) => {
+    page.practiceBay = d.known;
+    if (d.known) {
+      // Open on the course card, the boat already off Annapolis with the town behind.
+      practiceHere = ANNAPOLIS_COURSE;
+      $("practice-sum").textContent = "Sail a 31 ft cruiser yourself off Annapolis, on the Chesapeake Bay. Pick a breeze and a course.";
+      practiceCard();
+      $("practice-end").hidden = false;
+      aimAt(290); // toward the town and the Naval Academy
+    } else void practiceSpell("drill");
+  });
+}
+
+// "Sail her out of the harbour" (Leo's plan, phase 2): before a voyage from Annapolis in a
+// boat you can sail by hand, an optional spell out of the harbour to the open Bay. Then
+// "four days later" the voyage starts at the Bay mouth exactly as without it: the trip
+// down the Bay is skipped and doesn't count (said plainly on the card), and nothing of the
+// spell reaches the simulator.
+let prologueDone: ((r: WheelResult) => void) | null = null;
+/** The boat key the start card would sail, if it can be sailed by hand. */
+function handBoat(): string | null {
+  const pick = chosenBoat();
+  const k = pick === MINE ? String(startMine?.choices.base ?? "") : pick;
+  return canTakeWheel(k) ? k : null;
+}
+function showProloguePick(): void {
+  const can = !shared && $<HTMLSelectElement>("port").value === "annapolis" && !!handBoat() && !!depths?.known;
+  $("prologuepick").hidden = !can;
+  if (can) $("porthint").textContent = "Annapolis is up the Chesapeake Bay. The crossing starts at the Bay mouth, 4 days' sail down the Bay; that trip is skipped.";
+}
+async function runPrologue(boatKey: string): Promise<void> {
+  const c = harbourExit();
+  useBoat(boatKey); // the boat you'll sail, not the page's default kayak
+  const from = HARBOUR_WINDS[Math.floor(Math.random() * HARBOUR_WINDS.length)];
+  practiceWind = windFrom(from, BREEZES.good.kn);
+  practiceCourse = c;
+  practiceAt = practiceHere = c.start;
+  depths!.prefetch(c.start.lat, c.start.lon, 4000);
+  const o = c.start;
+  buoys.set(c.marks.slice(0, -1).map((m) => toXY(o, m)));
+  $("start").hidden = true;
+  const ended = new Promise<WheelResult>((res) => (prologueDone = res));
+  const ok = await wheel.start({
+    boatKey,
+    speed: 5, // about 20 boat-minutes, so about 4 minutes (Leo: the checkbox says so)
+    backLabel: "Skip to the Bay mouth",
+    heading: c.heading,
+    speedMs: 0,
+    windU: practiceWind.u,
+    windV: practiceWind.v,
+    plan: "full",
+    course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name })), radiusM: c.radiusM },
+    depthAt: (x, y) => {
+      const p = toLatLon(o, { x, y });
+      depths!.prefetch(p.lat, p.lon);
+      return depths!.at(p.lat, p.lon);
+    },
+  });
+  if (!ok) {
+    prologueDone = null;
+    practiceAt = practiceHere = null;
+    buoys.set([]);
+    return;
+  }
+  banner("Out of Annapolis harbour · follow the marks to the open Bay · Esc skips");
+  const r = await ended;
+  const how = r.aground
+    ? "She touched the bottom on the way out (no harm done: the harbour spell doesn't count)."
+    : r.reached
+      ? `You're out of the harbour: ${Math.max(1, Math.round(r.seconds / 60))} minutes at the wheel.`
+      : "You skipped the rest of the way out.";
+  $("prologue-sum").textContent = how;
+  $("prologue-end").hidden = false;
+  await new Promise<void>((res) => $("prologue-go").addEventListener("click", () => res(), { once: true }));
+  $("prologue-end").hidden = true;
+  practiceAt = practiceHere = null;
+}
+function prologueEnded(r: WheelResult): void {
+  const done = prologueDone;
+  prologueDone = null;
+  practiceAt = null;
+  buoys.set([]);
+  $("practice-what").hidden = true;
+  done?.(r);
+}
+
+/** How high the boat's rig stands above the water (m), from the model once it's loaded. */
+const rigBox = new THREE.Box3();
+let rigFor: unknown = null;
+let rigTopM = 0;
+function rigTop(): number {
+  if (model && rigFor !== model.root) {
+    rigBox.setFromObject(model.root);
+    if (Number.isFinite(rigBox.max.y) && rigBox.max.y > 0.5) {
+      rigTopM = rigBox.max.y - model.root.position.y;
+      rigFor = model.root;
+    }
+  }
+  return rigTopM || spec.length * 1.5; // GUESS until the model is in
+}
+// The sailing camera at the wheel (src/helm/chaseCam.ts; Elena approved the plan). V switches to
+// the old orbit view and back; dragging the view takes it over until 4 s after you let go.
+const chase = new ChaseCam();
+controls.addEventListener("start", () => chase.drag(true));
+controls.addEventListener("end", () => chase.drag(false));
+const chaseLook = new THREE.Vector3();
+let wheelFov = false;
+function wheelCamera(dt: number, t: number): void {
+  if (cine.on) return; // the cinematic owns the lens
+  const ours = !!wheelNow && chase.on;
+  // Ease the lens in and out (45 is the page's own).
+  const fov = ours ? CHASE_FOV : 45;
+  if (ours || wheelFov) {
+    camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt / 0.6));
+    if (Math.abs(camera.fov - fov) < 0.05) camera.fov = fov;
+    camera.updateProjectionMatrix();
+    wheelFov = camera.fov !== 45;
+  }
+  if (!wheelNow || !wheel.wheel) {
+    chase.reset();
+    return;
+  }
+  // Compose in the screen above the wheel strip and below the top bar and goal banner.
+  const strip = document.getElementById("wheel")?.getBoundingClientRect();
+  const goal = document.getElementById("wheel-goal")?.getBoundingClientRect();
+  const frame = { w: innerWidth, h: innerHeight, top: goal && goal.height ? goal.bottom + 6 : 50, bottom: strip && strip.height ? strip.top - 6 : innerHeight - 70, fovDeg: CHASE_FOV };
+  const s = chase.update(dt, wheelNow.heading, wheel.wheel.twa(), spec.length, rigTop(), frame, stillCamera);
+  if (!s) return;
+  // A hand on the camera: a chase boat's slow bob (none with reduced motion).
+  const bob = stillCamera ? 0 : Math.sin(t * 0.6) * 0.25 + Math.sin(t * 1.7 + 1) * 0.08;
+  camera.position.lerp(chaseLook.set(s.pos[0], s.pos[1] + bob, s.pos[2]), s.blend);
+  controls.target.lerp(chaseLook.set(s.look[0], s.look[1], s.look[2]), s.blend);
+}
+
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>(".practice-note .info")))
+  b.addEventListener("click", () => {
+    const more = b.nextElementSibling as HTMLElement;
+    more.hidden = !more.hidden;
+    b.setAttribute("aria-expanded", String(!more.hidden));
+  });
+// One "Credits" link in place of the long line (Elena); the full text opens on a click.
+$("credbtn").addEventListener("click", () => {
+  const t = $("credtext");
+  t.hidden = !t.hidden;
+  $("credbtn").setAttribute("aria-expanded", String(!t.hidden));
+});
+/** The run's one-line banner under the goal: says what this is, then gets out of the way. */
+let flashTimer = 0;
+function banner(text: string): void {
+  const el = $("practice-what");
+  el.textContent = text;
+  el.hidden = false;
+  el.style.opacity = "1";
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => {
+    el.style.opacity = "0";
+    flashTimer = window.setTimeout(() => (el.hidden = true), 900);
+  }, 6000);
+}
+
+// A small pointer to the next mark (Leo): over it when it's in view, at the screen's edge when it isn't.
+const markV = new THREE.Vector3();
+function markPointer(): void {
+  const el = $("markptr");
+  const w = wheel.wheel;
+  if (!wheelNow || !w || $("wheel-goal").hidden) {
+    el.hidden = true;
+    return;
+  }
+  const m = w.markXY();
+  camera.updateMatrixWorld();
+  markV.set(m.x - wheelNow.x, 3, -(m.y - wheelNow.y)).project(camera);
+  const behind = markV.z > 1;
+  let x = behind ? -markV.x : markV.x;
+  let y = behind ? -markV.y : markV.y;
+  const inView = !behind && Math.abs(x) < 0.95 && Math.abs(y) < 0.9;
+  if (!inView) {
+    const k = 0.9 / Math.max(Math.abs(x), Math.abs(y), 1e-6);
+    x *= k;
+    y = Math.max(-0.7, Math.min(0.75, y * k)); // keep clear of the strip and the banner
+  }
+  el.hidden = false;
+  el.dataset.edge = inView ? "" : x < -0.85 ? "left" : x > 0.85 ? "right" : y < 0 ? "down" : "up";
+  const d = w.distToMark();
+  el.textContent = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
+  el.style.left = `${((x + 1) / 2) * innerWidth}px`;
+  el.style.top = `${((1 - y) / 2) * innerHeight}px`;
 }
 
 /** Hand-trimmed watches this game, as hours from the start, for the chart. */
@@ -1161,19 +1477,22 @@ $("b-wheel").addEventListener("click", (e) => {
   (e.currentTarget as HTMLElement).blur(); // the keys go to the wheel, not back to this button
   void takeWheel();
 });
-/** "?" (or K) brings the key list back, and hides it again. */
-function toggleKeyHint(): void {
-  const k = $("keyhint");
-  const showing = !k.hidden && !k.classList.contains("gone");
-  if (showing) return hideKeyHint();
-  clearTimeout(keyHintTimer);
-  k.classList.remove("gone");
-  k.hidden = false;
-}
 addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
+  // N: sound on or off, at the wheel or not (one key, one meaning: Elena).
+  if (e.code === "KeyN" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea") && document.body.classList.contains("sailing")) {
+    e.preventDefault();
+    sound.toggle();
+    return;
+  }
   // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's (practice has no game).
   if (wheel.on && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
+    if (e.code === "KeyV" && !e.repeat) {
+      chase.on = !chase.on;
+      note(chase.on ? "The chase camera." : "The deck view: drag to look around. V for the chase camera.", "At the wheel", TONE_COLOUR.info);
+      e.preventDefault();
+      return;
+    }
     if (wheel.key(e, true)) e.preventDefault();
     return;
   }
@@ -1184,18 +1503,31 @@ addEventListener("keydown", (e) => {
     void takeWheel();
     return;
   }
+  if (hud.key(e)) {
+    e.preventDefault();
+    return;
+  }
+  if (!e.repeat && e.code === "KeyC") {
+    e.preventDefault();
+    $("cinebtn").click();
+    return;
+  }
   const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
     setRate(rate ? 0 : lastRate);
   } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
   else if (e.key === "?" || e.code === "KeyK") {
-    toggleKeyHint();
+    hideKeyHint();
+    hud.keys();
     e.preventDefault();
     return;
   } else if (ax) {
     // The autopilot sets its own power (#327); steering takes the boat off it.
-    if (!(ax.axis === "power" && order === "auto") && !e.repeat) axes[ax.axis].down(ax.dir, e.shiftKey, performance.now());
+    if (!(ax.axis === "power" && order === "auto") && !e.repeat) {
+      axes[ax.axis].down(ax.dir, e.shiftKey, performance.now());
+      hud.peekOrders(); // the drawer peeks open to show the dial moving
+    }
   } else if (e.key === "Shift") {
     axes.heading.setFine(true);
     axes.power.setFine(true);
@@ -1387,6 +1719,7 @@ function showDecision(d: { text: string; choices: Choice[] }): void {
   }
   $("decide").hidden = false;
   $("fcbox").classList.add("lit");
+  hud.forecast(true, true);
 }
 
 /** Things to say once the picture reaches a voyage hour: the simulator runs ahead of it. */
@@ -1608,6 +1941,8 @@ async function begin(): Promise<void> {
   }
   page.challenge = ch?.id ?? "";
   page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
+  const hb = handBoat();
+  if (!shared && hb && !$("prologuepick").hidden && $<HTMLInputElement>("prologue").checked) await runPrologue(hb);
   $("start").hidden = true;
   $("loading").hidden = false;
   setBusy(true, "Loading the simulator (about 30 MB the first time)...");
@@ -1657,18 +1992,13 @@ async function begin(): Promise<void> {
     if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
-    else if (spec === RANDOLPH)
-      note(`You have the helm of ${loadMyBoat()?.name ?? "your boat"}. Its wing sail trims itself: pick a heading; time is running (change its speed at the top). Power only matters if you fitted motors in the Boatyard.`, d, TONE_COLOUR.info);
-    else if (spec !== KAYAK) note(`You have the helm of the ${spec.name}. The sails look after themselves: pick a heading, and how hard the engine works when the wind dies. Time is running: change its speed at the top.`, d, TONE_COLOUR.info);
-    else note("You're under way, at 6 hours a second. Steer with the dial or the arrow keys, and set the power; change the speed or pause at the top.", d, TONE_COLOUR.info);
-    // #327: say why an untouched game stays level with the ghost.
-    if (!shared && mode === "hands_on" && order === "auto")
-      note("For now the autopilot is steering, exactly as it steers the ghost, so change nothing and the two boats stay level. Pick a heading on the dial, or Aim at the finish, to take over.", d, TONE_COLOUR.info);
+    // The game's hints are one coach line in the orders drawer, open for the first seconds (Leo's plan).
     if (page.status?.over) await finish();
     // Time runs from the start, at the speed a hop used to play at. A shared game opens
     // paused where it was left; ?clock=paused starts paused (for tests).
     forecastAt = page.status!.day * 24;
     document.body.classList.add("sailing");
+    hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "Steer here, or with ← →. O opens and closes this.");
     $("loading").hidden = true;
     setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
     $("keyhint").hidden = false;
@@ -1781,6 +2111,7 @@ function rememberBoat(pick: string, mine: MyBoat | null): void {
 }
 powerFor(chosenBoat());
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="boat"]'))) r.addEventListener("change", () => powerFor(r.value));
+$("boats").addEventListener("change", () => showProloguePick());
 
 // Base mode turns the boat's own battery guard on by default, as the simulator does.
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="mode"]')))
@@ -1877,6 +2208,7 @@ const clock = new THREE.Clock();
 const bowW = new THREE.Vector3();
 let last = 0;
 let smoothYaw: number | null = null;
+let stripAt = -1;
 let storm = 0;
 let rigHeave = 0;
 const ghostTag = $("ghosttag");
@@ -1901,7 +2233,7 @@ function showWreck(lat: number, lon: number): void {
 }
 const poiSeen = new Set<string>();
 let poiH = 0;
-const poiCards = new PoiCards();
+const poiCards = new PoiCards(document, { compact: true });
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   page.pois.loaded = p.length;
@@ -1978,12 +2310,113 @@ function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: numb
     camera.far = far;
     camera.updateProjectionMatrix();
   }
+  $("osm").hidden = !/OpenStreetMap|Overture/.test(land.credit);
   const credit = $("landcredit");
   const text = land.credit;
   if (credit.dataset.text !== text) {
     credit.dataset.text = text;
     credit.textContent = text ? `${text} · ` : "";
   }
+}
+
+// ---------- your order on the water, and the boat on a third (Leo's plan, items 1 and 4) ----------
+/** A faint orange line ahead of the boat along your order, lying on the waves, so you see where
+ * you're steering with the drawer shut. */
+const DASHES = 6;
+const orderGeo = new THREE.BufferGeometry();
+orderGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((DASHES * 4 + 3) * 3), 3));
+{
+  // Dashes that fade out along the way, then a small arrowhead: alpha in the vertex colours.
+  const n = DASHES * 4 + 3;
+  const col = new Float32Array(n * 4);
+  const idx: number[] = [];
+  for (let d = 0; d < DASHES; d++) {
+    const a = 1 - (0.75 * d) / DASHES;
+    for (let k = 0; k < 4; k++) col.set([1, 0.5, 0.15, a], (d * 4 + k) * 4);
+    const o = d * 4;
+    idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2);
+  }
+  for (let k = 0; k < 3; k++) col.set([1, 0.5, 0.15, 0.3], (DASHES * 4 + k) * 4);
+  idx.push(DASHES * 4, DASHES * 4 + 1, DASHES * 4 + 2);
+  orderGeo.setAttribute("color", new THREE.BufferAttribute(col, 4));
+  orderGeo.setIndex(idx);
+}
+const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+orderLine.frustumCulled = false;
+orderLine.visible = false;
+orderLine.renderOrder = 11; // over the sea, like the wake
+scene.add(orderLine);
+/** Your order on the water (Elena, 12 Nov): a short, faint dashed arrow 30 to 60 m ahead of the
+ * bow that fades out, dimmer at night. Not a beam to the horizon. */
+function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: number): void {
+  const s = page.status;
+  const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare");
+  orderLine.visible = on;
+  if (!on || !s) return;
+  const to =
+    typeof order === "number"
+      ? order
+      : order === "finish"
+        ? bearing([s.boat.lat, s.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number])
+        : hdg;
+  const a = THREE.MathUtils.degToRad(to);
+  const dx = Math.sin(a);
+  const dz = -Math.cos(a);
+  const half = Math.max(0.09, spec.length * 0.012);
+  const from = spec.length * 0.8;
+  const len = THREE.MathUtils.clamp(spec.length * 5, 30, 60);
+  const step = len / (DASHES + 0.5);
+  const dash = step * 0.55;
+  const pos = orderGeo.getAttribute("position") as THREE.BufferAttribute;
+  const put = (i: number, d: number, side: number) => {
+    const x = dx * d + dz * side;
+    const z = dz * d - dx * side;
+    pos.setXYZ(i, x, heightAt(comps, x, z, t) + 0.08, z);
+  };
+  for (let k = 0; k < DASHES; k++) {
+    const d0 = from + k * step;
+    put(k * 4, d0, -half);
+    put(k * 4 + 1, d0, half);
+    put(k * 4 + 2, d0 + dash, -half);
+    put(k * 4 + 3, d0 + dash, half);
+  }
+  const tip = from + DASHES * step + step * 0.6;
+  put(DASHES * 4, tip - step * 0.5, -half * 4);
+  put(DASHES * 4 + 1, tip - step * 0.5, half * 4);
+  put(DASHES * 4 + 2, tip, 0);
+  pos.needsUpdate = true;
+  (orderLine.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.4 * THREE.MathUtils.smoothstep(atmos.ambient, 0.2, 0.8);
+}
+
+/** The default view keeps the boat on the lower third, with room ahead of the bow and clear
+ * of the strip: the lens slides, the orbit doesn't (so dragging still turns about the boat). */
+const third = { x: 0, y: 0 };
+const ahead = new THREE.Vector3();
+const here0 = new THREE.Vector3();
+function frameBoat(dt: number): void {
+  const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
+  let tx = 0;
+  let ty = 0;
+  if (want && smoothYaw !== null) {
+    here0.set(0, 0, 0).project(camera);
+    ahead.set(Math.cos(smoothYaw) * 20, 0, -Math.sin(smoothYaw) * 20).project(camera);
+    const side = ahead.x - here0.x; // + when the bow points right on screen
+    // A boat that already fills much of the frame (zoomed in, or a big yacht) stays nearer the
+    // middle, so the strip never covers its hull.
+    // How much of the frame's height the boat takes (a hull stands about a third of its length tall, mast aside).
+    const fill = (spec.length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
+    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
+    ty = -0.1 * room;
+  }
+  const k = Math.min(1, dt * 1.2);
+  third.x += (tx - third.x) * k;
+  third.y += (ty - third.y) * k;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  if (Math.abs(third.x) < 1e-3 && Math.abs(third.y) < 1e-3) {
+    if (camera.view?.enabled) camera.clearViewOffset();
+  } else camera.setViewOffset(W, H, third.x * W, third.y * H, W, H);
 }
 
 /** Turn the camera to look the given compass bearing past the boat, keeping its distance. */
@@ -2045,6 +2478,7 @@ renderer.setAnimationLoop(() => {
   sea.update(comps, t);
   // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).
   wheelNow = wheel.on ? wheel.frame(dt) : null;
+  if (wheelNow) wheelLast = { x: wheelNow.x, y: wheelNow.y };
   const hdg = wheelNow ? wheelNow.heading : r ? angleAt(r, r.heading, h) ?? 90 : 90;
   const yaw = THREE.MathUtils.degToRad(90 - hdg);
   if (smoothYaw === null) smoothYaw = yaw;
@@ -2103,8 +2537,11 @@ renderer.setAnimationLoop(() => {
   // Before the first hour is logged the track is empty (positionAt would be NaN, and a NaN sun
   // turns the whole picture black, #334): stand at the boat's reported start instead.
   const st0 = page.status?.boat;
-  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : (SPOT ?? [36.65, -74.94]));
-  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
+  // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
+  const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
+  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0);
+  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
@@ -2127,7 +2564,10 @@ renderer.setAnimationLoop(() => {
   wake?.setLight(atmos.ambient);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
   sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target) });
+  wheelCamera(dt, t);
+  markPointer();
   if (!cine.update(dt)) controls.update();
+  frameBoat(dt);
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
   // The other boat: a tag on the horizon in its direction, with the distance.
@@ -2148,8 +2588,11 @@ renderer.setAnimationLoop(() => {
       ghostTag.style.left = `${((proj.x + 1) / 2) * window.innerWidth}px`;
       ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
       ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
+      if (km < 1) ghostTag.hidden = true; // the strip says "level"
     }
   } else ghostTag.hidden = true;
+  showOrderLine(hdg, comps, t);
+  page.third = [third.x, third.y];
   renderer.getDrawingBufferSize(bufSize);
   mirror.setSize(bufSize.x, bufSize.y);
   mirror.update(renderer, scene, camera, sea.waveHeight);
@@ -2174,6 +2617,27 @@ renderer.setAnimationLoop(() => {
   }
   if (!(r && page.ready)) $("clock").textContent = "";
   else drawWhen();
+  // The strip's instruments read the picture too, a few times a second (not in base mode: base only knows its reports).
+  if (r && page.ready && t - stripAt > 0.25) {
+    stripAt = t;
+    // Only what the track has logged: before its first hour the first status's numbers stay (Leo).
+    const live: Parameters<typeof showStrip>[0] = {};
+    if (valueAt(r, r.wind_u, h) != null && valueAt(r, r.wind_v, h) != null) {
+      live.windKn = Math.hypot(wu, wv) * KN;
+      live.windTo = (Math.atan2(wu, wv) * 180) / Math.PI;
+    }
+    if (valueAt(r, r.hs, h) != null) live.waves = hs;
+    if (!hidden()) {
+      live.heading = wheelNow ? wheelNow.heading : hdg;
+      live.speedKn = stw * KN;
+      // Before the first logged hour there's no reading yet: the status's own stays.
+      const heel = r.heel ? valueAt(r, r.heel, h) : null;
+      const soc = r.heel ? null : valueAt(r, r.soc, h);
+      if (heel != null) live.heel = heel;
+      if (soc != null) live.battery = soc * 100;
+    }
+    showStrip(live);
+  }
   page.frames++;
   page.hour = hour;
   page.simHour = shownTo;
