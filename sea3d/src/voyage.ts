@@ -77,6 +77,10 @@ const REPLAY = params.get("replay");
 if (REPLAY) document.body.classList.add("single");
 const GAME = params.get("mode") === "game" || document.documentElement.dataset.mode === "game"; // or <html data-mode="game">
 if (GAME) document.body.classList.add("game");
+/** Proof pictures only (tools/proof): ?drawas=stock_pearson31_2 draws the replay's boat as
+ * another model, for boats that have no replays of their own yet (the Pearson sails a
+ * cruiser replay). Never linked from the pages. */
+const DRAW_AS = (params.get("drawas") || null) as Rev | null;
 /**
  * Live tracker: ?live (or <html data-mode="live">) shows the boat at its reported
  * positions from the tracker feed, then the simulator's forecast after now.
@@ -186,6 +190,7 @@ const STOCK_ABOUT: Record<StockKey, string> = {
 /** Which boat a replay's boat name is. The stock boats go by their names ("31 ft cruiser");
  * otherwise anything not Randolph is ours, and a Randolph boat is Rev B unless it says Rev C. */
 const keyOf = (boat: string | undefined): Rev => {
+  if (DRAW_AS) return DRAW_AS;
   const b = boat ?? "";
   return stockKeyOf(b) ?? (!/randolph/i.test(b) ? "kayak" : /rev[\s_-]*c\b/i.test(b) ? "randolph_c" : "randolph");
 };
@@ -322,6 +327,15 @@ function seaTarget(rep: Replay, hour: number): number {
     live.setSeaState(chop.hs, chop.tp, (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360);
     return chop.hs;
   }
+  const fs = status.force.sea;
+  if (fs.length >= 2) {
+    // Forced for proof pictures: one wind sea from the given direction (or the wind's).
+    seaNow = null;
+    const [wu, wv] = windAt(rep, hour);
+    const from = fs[2] !== undefined && fs[2] >= 0 ? fs[2] : (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360;
+    live.setSeaState(fs[0], fs[1], from);
+    return fs[0];
+  }
   const [lat, lon] = positionAt(rep, hour);
   seaNow = LIVE ? null : seaFeed.at(new Date(utc(rep.start) + hour * 3600e3), lat, lon);
   if (seaNow) {
@@ -447,7 +461,15 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1 },
+  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[] },
+  // force.sea (proof pictures, tools/proof): [Hs m, Tp s, from degrees or -1 = from the wind]
+  // replaces the logged sea; [] follows the log.
+  /** Proof camera: held relative to the bow every frame while set; null gives the
+   * camera back to the mouse. az: degrees from the bow, clockwise (180 = astern),
+   * dist and h in metres (scaled with the boat), fov degrees, look: aim this high above the boat. */
+  cam: null as null | { az: number; dist: number; h: number; fov?: number; look?: number },
+  /** Sun elevation (degrees) at the boat at a voyage hour (proof pictures pick times of day by it). */
+  sunAt: (h: number): number => sunElAt(h),
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
@@ -1046,6 +1068,22 @@ const sound = new OceanSound();
 filmButtons(cine, sound);
 (status as unknown as { cine: Cinema }).cine = cine;
 
+/** The proof camera (status.cam): placed from the bow each frame, so it rides with the boat. */
+function placeCam(r: NonNullable<typeof status.cam>): void {
+  const yaw = smoothYaw ?? 0;
+  const fx = Math.cos(yaw), fz = -Math.sin(yaw); // bow
+  const rx = -fz, rz = fx; // starboard
+  const a = THREE.MathUtils.degToRad(r.az);
+  const d = r.dist * viewScale;
+  const tg = controls.target;
+  camera.position.set(tg.x + (fx * Math.cos(a) + rx * Math.sin(a)) * d, tg.y + r.h * viewScale, tg.z + (fz * Math.cos(a) + rz * Math.sin(a)) * d);
+  if (r.fov && r.fov !== camera.fov) {
+    camera.fov = r.fov;
+    camera.updateProjectionMatrix();
+  }
+  camera.lookAt(tg.x, tg.y + (r.look ?? 0) * viewScale, tg.z);
+}
+
 // ---------- loop ----------
 const guard = new FpsGuard();
 const bowW = new THREE.Vector3();
@@ -1252,7 +1290,10 @@ renderer.setAnimationLoop(() => {
       near: camera.position.distanceTo(controls.target),
     });
   }
-  if (!cine.update(dt)) controls.update();
+  if (!cine.update(dt)) {
+    if (status.cam) placeCam(status.cam);
+    else controls.update();
+  }
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;

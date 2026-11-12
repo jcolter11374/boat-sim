@@ -1,0 +1,224 @@
+# Proof frames and clips for a branch (Ada, 12 Nov): builds the branch's site once,
+# renders a named shot set (tools/proof/shots.json) at High quality on 2 to 8 runners
+# side by side, and publishes one zip per branch on the "proofs" release:
+#   https://github.com/<repo>/releases/download/proofs/<branch, / as ->.zip
+# Threads unpack it into the project's shared folder with tools/proof/fetch.sh.
+#
+# Start it by hand (Actions -> Proof frames -> Run workflow, or the API), or put the
+# "proofs" label on a pull request (standard set, 4 runners). Never on every push:
+# a standard set is about 75 runner-minutes of software rendering (Kai's runner budget:
+# no more than 8 runners at once).
+name: Proof frames
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to render (its site is built from its own commit)"
+        required: true
+        default: main
+      set:
+        description: "Shot set from tools/proof/shots.json"
+        type: choice
+        options: [standard, quick, sea, sky, boats, cinematic]
+        default: standard
+      shards:
+        description: "Runners side by side (2-8; max 8 by the team's runner budget)"
+        default: "4"
+      only:
+        description: "Optional: only units whose name matches this regex, e.g. kayak-f8"
+        default: ""
+      size:
+        description: "Optional: frame size, e.g. 1920x1080 (default: the set's)"
+        default: ""
+      quality:
+        description: "Optional: low, high or ultra (default: the set's, high)"
+        default: ""
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+concurrency:
+  # Per branch; a label other than "proofs" lands in its own group, so it never cancels a run.
+  group: proofs-${{ github.event.inputs.branch || github.head_ref }}-${{ github.event.label.name || 'run' }}
+  cancel-in-progress: true
+jobs:
+  plan:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'proofs'
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.p.outputs.branch }}
+      safe: ${{ steps.p.outputs.safe }}
+      set: ${{ steps.p.outputs.set }}
+      shards: ${{ steps.p.outputs.shards }}
+      matrix: ${{ steps.p.outputs.matrix }}
+    steps:
+      - id: p
+        env:
+          BRANCH: ${{ github.event.inputs.branch || github.head_ref }}
+          SET: ${{ github.event.inputs.set || 'standard' }}
+          SHARDS: ${{ github.event.inputs.shards || '4' }}
+        run: |
+          SHARDS=${SHARDS//[^0-9]/}
+          SHARDS=${SHARDS:-4}
+          n=$(( SHARDS < 1 ? 1 : SHARDS > 8 ? 8 : SHARDS ))
+          safe=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '-')
+          {
+            echo "branch=$BRANCH"
+            echo "safe=$safe"
+            echo "set=$SET"
+            echo "shards=$n"
+            echo "matrix=[$(seq -s, 1 "$n")]"
+          } >> "$GITHUB_OUTPUT"
+          echo "Rendering set $SET of $BRANCH on $n runners" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sea3d/package-lock.json
+      - run: npm ci
+        working-directory: sea3d
+      # The Blender boats, as the deploy builds them (same cache key as sea3d.yml).
+      - name: Cache the Blender boats
+        id: boats
+        uses: actions/cache@v4
+        with:
+          path: |
+            sea3d/public/models/kayak.glb
+            sea3d/public/models/randolph.glb
+            sea3d/public/models/shape_*.glb
+            sea3d/public/models/stock_*.glb
+          key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
+      - uses: actions/setup-python@v5
+        if: steps.boats.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.11"
+      - name: Build the boats with Blender
+        if: steps.boats.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: tools/build_boats.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the site from the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pip install -q numpy pyyaml
+          tools/build_site.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proof-site
+          path: sea3d/dist
+          retention-days: 1
+
+  render:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      # The capture tool from this workflow's own commit (main, or the labelled PR), so a
+      # branch from before tools/proof existed still gets rendered.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: proof-site
+          path: site
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Playwright and Chromium
+        working-directory: tools/proof
+        run: |
+          npm init -y > /dev/null
+          npm install --no-save playwright@1
+          timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
+      - name: Render shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shards }}
+        env:
+          SET: ${{ needs.plan.outputs.set }}
+          SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.shards }}
+          ONLY: ${{ github.event.inputs.only }}
+          SIZE: ${{ github.event.inputs.size }}
+          QUALITY: ${{ github.event.inputs.quality }}
+        run: |
+          (cd site && python3 -m http.server 4180 > /dev/null 2>&1 &)
+          sleep 1
+          args=(--site http://localhost:4180/ --out out --set "$SET" --shard "$SHARD")
+          [ -n "$ONLY" ] && args+=(--only "$ONLY")
+          [ -n "$SIZE" ] && args+=(--size "$SIZE")
+          [ -n "$QUALITY" ] && args+=(--quality "$QUALITY")
+          node tools/proof/capture.mjs "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof-part-${{ matrix.shard }}
+          path: out
+          retention-days: 1
+          if-no-files-found: ignore
+
+  publish:
+    needs: [plan, build, render]
+    if: always() && needs.plan.result == 'success' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # the "proofs" release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/proof
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: proof-part-*
+          path: proofs
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Proof page and contact sheet
+        working-directory: tools/proof
+        env:
+          BRANCH: ${{ needs.plan.outputs.branch }}
+        run: |
+          npm init -y > /dev/null
+          npm install --no-save playwright@1
+          timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
+          sha=$(git ls-remote "https://github.com/${{ github.repository }}" "refs/heads/$BRANCH" | cut -f1)
+          node sheet.mjs ../../proofs --title "$BRANCH" --commit "$sha" || echo "::warning::some proof units failed: see index.html"
+      - name: Publish on the proofs release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SAFE: ${{ needs.plan.outputs.safe }}
+          BRANCH: ${{ needs.plan.outputs.branch }}
+          SET: ${{ needs.plan.outputs.set }}
+        run: |
+          (cd proofs && zip -q -r "../$SAFE.zip" .)
+          gh release view proofs > /dev/null 2>&1 || gh release create proofs --prerelease --title "Proof frames" \
+            --notes "Proof frames and clips per branch, made by the Proof frames workflow (tools/proof). One zip per branch, replaced on every run. Not a software release."
+          gh release upload proofs "$SAFE.zip" --clobber
+          url="https://github.com/${{ github.repository }}/releases/download/proofs/$SAFE.zip"
+          {
+            echo "### Proofs for \`$BRANCH\` (set $SET)"
+            echo "$(ls proofs/*.png proofs/*.mp4 2>/dev/null | wc -l) files, $(du -h "$SAFE.zip" | cut -f1) zipped: $url"
+            echo ""
+            echo "Into the project folder from a thread: \`tools/proof/fetch.sh $BRANCH\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proofs-${{ needs.plan.outputs.safe }}
+          path: proofs
+          retention-days: 7
