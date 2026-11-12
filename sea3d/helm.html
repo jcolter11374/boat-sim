@@ -58,6 +58,7 @@
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
   #decidebtns button { text-align: left; white-space: normal; }
   #decidebtns button:first-child { font-weight: 600; }
+  #decidebtns .stake { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 400; color: #b9d3f0; }
   #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
   #soundask button { white-space: nowrap; }
   #soundask[hidden] { display: none; }
@@ -316,6 +317,7 @@
   .note { padding: 6px 12px; border-left: 3px solid #8ab4ff; font-size: 13.5px; background: var(--hud-solid); border-radius: 9px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     animation: toast-in .35s cubic-bezier(.2,.8,.2,1); transition: opacity .6s, transform .6s; }
   .note .when { font-size: 10.5px; color: var(--dim); letter-spacing: .3px; }
+  .note .txt { color: #f4f8fc; }
   .note.out { opacity: 0; transform: translateY(-6px); }
   @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
   #ghosttag { position: fixed; transform: translate(-50%, -120%); font: 600 11.5px system-ui, sans-serif; color: #dbe6f5; background: var(--hud); border-radius: 8px; padding: 2px 8px;

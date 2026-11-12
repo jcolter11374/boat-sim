@@ -38,7 +38,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
-import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
+import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Outlook, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
 import { askedChallenge } from "./sailLink";
 import { drawForecast } from "./helm/forecast";
@@ -284,6 +284,8 @@ const page = {
   preview: null as Preview | null,
   /** Decisions the game stopped for (#328): which, and on what day (for tests). */
   decisions: [] as { kind: string; day: number }[],
+  /** The open call's forecast lines and stakes (Game.outlook), for its map; null when none. */
+  outlook: null as Outlook | null,
   /** The challenge being sailed, if any (for tests and share links). */
   challenge: "",
   /** The challenge a link preselected (?challenge=, from the Sea page's "Sail this sea"); "" = none. */
@@ -758,8 +760,8 @@ function showStatus(): void {
 // ---------- notes ----------
 /** A toast at the top (Leo's plan, item 6): gone on its own, longer for a warning; the reason
  * the clock stopped stays until it runs again. All of them go into the big map's log. */
-function note(text: string, when: string, colour: string): void {
-  hud.toast(text, when, colour, { warn: colour === TONE_COLOUR.warn || colour === TONE_COLOUR.bad, sticky: /^Paused:/.test(text) });
+function note(text: string, when: string, colour: string, hl?: string): void {
+  hud.toast(text, when, colour, { warn: colour === TONE_COLOUR.warn || colour === TONE_COLOUR.bad, sticky: /^Paused:/.test(text), hl });
 }
 
 function newEvents(): void {
@@ -1592,10 +1594,14 @@ function untilOptions(): Record<string, number | boolean> {
 // forecast, a night that could run the battery flat, the Gulf Stream. Each is asked once
 // per spell (a gale is not asked again for 2 days, a night for a day, the Stream until you
 // leave it). Hands on only: from base, orders go by satellite and the forecast is the same.
-type Choice = { label: string; title: string; act: () => Promise<void> | void };
+/** `order`: what the choice would steer, so the card can show its forecast stake against the ghost. */
+type Choice = { label: string; title: string; act: () => Promise<void> | void; order?: { heading: Heading; power?: number } };
+type Decision = { kind: string; text: string; choices: Choice[] };
 const asked = { gale: -Infinity, night: -Infinity, stream: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
-let streamCall: { h: number; chose: string; lead: number } | null = null;
+let streamCall: { h: number; chose: string; lead: number; later: string[] } | null = null;
+/** A later call made before the Stream's three days were up, so its debrief credits both (Leo). */
+const alsoCalled = (what: string) => streamCall?.later.push(what);
 const KT = 1.943844; // knots per m/s
 const GALE_MS = 17; // 33 knots, gale force
 const BIG_WAVES_M = 4;
@@ -1615,7 +1621,7 @@ function inWords(hours: number): string {
 let spell: { kind: string; h: number; chose: string; km: number } | null = null;
 
 /** The decision due now, if any. */
-function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text: string; choices: Choice[] } | null {
+function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   if (mode !== "hands_on" || st.over || shared) return null;
   const h = st.day * 24;
   const w = st.weather;
@@ -1648,8 +1654,11 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
       const kind = peakW >= GALE_MS ? "gale" : "waves";
       const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
       const south = Math.round(((toFinish + 50) % 360) / 5) * 5;
+      const what = kind === "gale" ? "the gale" : "the waves";
+      const did: Record<string, string> = { hold: `held course through ${what}`, dodge: `dodged ${what}`, slow: `slowed for ${what}` };
       const call = (chose: string, act: () => Promise<void> | void) => () => {
         spell = { kind, h, chose, km: st.boat.km_to_finish };
+        alsoCalled(did[chose]);
         return act();
       };
       const choices: Choice[] = [
@@ -1673,8 +1682,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
         kind: "night",
         text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
         choices: [
-          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => setOrder(order, 0.1) },
-          { ...carryOn, label: "Keep the power up: faster, but may run flat overnight" },
+          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
+          { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
         ],
       };
     }
@@ -1684,8 +1693,13 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
     const km = Math.round(st.lead_km);
     const was = Math.round(streamCall.lead);
     const where = Math.abs(km) < 1 ? "level with the ghost" : `${Math.abs(km).toLocaleString()} km ${km > 0 ? "ahead of" : "behind"} the ghost`;
-    const text = `${streamCall.chose}: ${where} after 3 days${Math.abs(km - was) >= 1 ? ` (${km - was > 0 ? "+" : "-"}${Math.abs(km - was).toLocaleString()} km since you chose)` : ""}.`;
-    whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn));
+    // One number, and no credit to the Stream for a later call's doing: fold the later calls in.
+    const later = streamCall.later;
+    const also = later.length ? ` You also ${later.length > 1 ? `${later.slice(0, -1).join(", ")} and ${later[later.length - 1]}` : later[0]}.` : "";
+    const text = later.length ? `Since the Stream: ${where} after 3 days.${also}` : `${streamCall.chose}: ${where} after 3 days.`;
+    // White on the strip's glass, with the colour on the number only (Elena).
+    const num = Math.abs(km) < 1 ? undefined : `${Math.abs(km).toLocaleString()} km`;
+    whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn, num));
     streamCall = null;
   }
   // The Gulf Stream: a river of warm water in the sea, running north-east at up to 4 knots.
@@ -1699,27 +1713,31 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
     // Wind against the current heaps the sea up into short steep waves: the Stream's real danger.
     const against = nowWind > 6 && (w.wind_u * w.current_u + w.wind_v * w.current_v) / (nowWind * cur) < -0.3;
     const knots = Math.round(cur * KT);
+    const across = Math.round(toFinish) % 360;
+    // One line (Elena): the card's options and their stakes carry the rest.
     return {
       kind: "stream",
-      text: `You've reached the Gulf Stream: a river in the sea carrying the boat ${towards(w.current_u, w.current_v)} at about ${knots} knot${knots === 1 ? "" : "s"}.${against ? " Right now the wind is blowing against it, which heaps the waves up short and steep." : ""} Ride it, or cut across?`,
+      text: `The Gulf Stream: a ${knots}-knot river running ${towards(w.current_u, w.current_v)}.${against ? " Wind against it makes steep seas." : ""}`,
       choices: [
         {
-          label: `Ride it ${towards(w.current_u, w.current_v)}: a free push, but a longer way round${against ? ", and rough while the wind is against it" : ""}`,
+          label: `Ride it ${towards(w.current_u, w.current_v)}: a free push, the longer way${against ? ", rough for now" : ""}`,
           title: "Follow the planned route, which rides the current",
+          order: { heading: "route", power },
           act: () => {
-            streamCall = { h, chose: "Riding the Stream", lead: st.lead_km };
+            streamCall = { h, chose: "Riding the Stream", lead: st.lead_km, later: [] };
             return setOrder("route");
           },
         },
         {
-          label: `Cut straight across (${String(Math.round(toFinish) % 360).padStart(3, "0")}°): the shortest way, but slower while you cross`,
+          label: `Cut straight across (${String(across).padStart(3, "0")}°): the short way, slower while you cross`,
           title: "Hold a straight course for the finish",
+          order: { heading: across, power },
           act: () => {
-            streamCall = { h, chose: "Cutting across the Stream", lead: st.lead_km };
+            streamCall = { h, chose: "Cutting across the Stream", lead: st.lead_km, later: [] };
             return setOrder(Math.round(toFinish));
           },
         },
-        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto") },
+        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
   }
@@ -1739,22 +1757,45 @@ function maybeDecide(): boolean {
   // Asked once the picture gets there, so the question and the view agree. Carrying on
   // before then skips it; a later question replaces it.
   const seq = ++decisionSeq;
-  whenAt(st.day * 24, () => {
-    if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d);
+  // Each option's stake against the ghost in 2 days, from the forecast as issued (never the
+  // truth), while the picture catches up. An older simulator, or a failure: no stakes.
+  const orders = d.choices.map((c) => c.order);
+  const stakes: Promise<Outlook | null> = orders.some(Boolean)
+    ? game.outlook(orders.map((o) => o ?? { heading: "auto" })).catch(() => null)
+    : Promise.resolve(null);
+  whenAt(st.day * 24, async () => {
+    const o = await stakes;
+    if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, o, orders.map((x) => !!x));
   });
   return true;
 }
 
-function showDecision(d: { text: string; choices: Choice[] }): void {
+/** "about 40 km ahead of the ghost": rounded, because it's a forecast. */
+function againstGhost(km: number): string {
+  const r = Math.abs(km) < 10 ? Math.round(km) : Math.round(km / 5) * 5;
+  return Math.abs(r) < 1 ? "level with the ghost" : `about ${Math.abs(r).toLocaleString()} km ${r > 0 ? "ahead of" : "behind"} the ghost`;
+}
+
+function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []): void {
   $("decidetext").textContent = d.text;
   const box = $("decidebtns");
   box.replaceChildren();
-  for (const c of d.choices) {
+  // For the call's map (Rosa's cards): each option's forecast line, and the ghost's.
+  page.outlook = o;
+  for (const [i, c] of d.choices.entries()) {
     const b = document.createElement("button");
     b.textContent = c.label;
     b.title = c.title;
+    const p = o && has[i] ? o.orders[i] : null;
+    if (p) {
+      const k = document.createElement("span");
+      k.className = "stake";
+      k.textContent = `Forecast, ${Math.round(o!.hours / 24) === 2 ? "2 days" : `${Math.round(o!.hours)} h`} on: ${againstGhost(p.lead_km)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      b.append(k);
+    }
     b.addEventListener("click", async () => {
       $("decide").hidden = true;
+      page.outlook = null;
       await c.act();
       setRate(lastRate);
     });
@@ -2631,12 +2672,15 @@ renderer.setAnimationLoop(() => {
     const b = bearing(me, it);
     const a = THREE.MathUtils.degToRad(b);
     proj.set(Math.sin(a) * 2500, 2, -Math.cos(a) * 2500).project(camera);
-    const vis = proj.z < 1 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1;
+    // Only while the ghost's direction is on screen, and the whole tag stays inside it (a
+    // tag half off the right edge read as a stray "2" under the map: Leo and Elena, F5).
+    const vis = proj.z < 1 && Math.abs(proj.x) < 1 && Math.abs(proj.y) < 1;
     ghostTag.hidden = !vis;
     if (vis) {
-      ghostTag.style.left = `${((proj.x + 1) / 2) * window.innerWidth}px`;
-      ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
       ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
+      const half = ghostTag.offsetWidth / 2 + 8;
+      ghostTag.style.left = `${THREE.MathUtils.clamp(((proj.x + 1) / 2) * window.innerWidth, half, window.innerWidth - half)}px`;
+      ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
       if (km < 1) ghostTag.hidden = true; // the strip says "level"
     }
   } else ghostTag.hidden = true;

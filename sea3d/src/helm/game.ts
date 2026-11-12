@@ -87,6 +87,15 @@ export interface Preview {
   /** km made towards the finish (negative: further away). */
   km: number;
   outcome: string;
+  /** The line it sails, [lat, lon] every 3 h (newer simulators). */
+  track?: [number, number][];
+}
+/** Each order's stake against the ghost, from the forecast as issued (sandbox/helm.py Game.outlook). */
+export interface Outlook {
+  hours: number;
+  lead_now_km: number;
+  ghost: Preview;
+  orders: (Preview & { heading: Heading; power?: number; lead_km: number })[];
 }
 export interface ForecastRow {
   t: string;
@@ -273,6 +282,11 @@ export class HelmGame {
   preview(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, hours = 24): Promise<Preview | null> {
     const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
     return this.ask<Preview | null>({ type: "preview", heading, power, hours, ...extra });
+  }
+
+  /** What each order would do against the ghost over the next `hours`, or null where the simulator can't say. */
+  outlook(orders: { heading: Heading; power?: number }[], hours = 48): Promise<Outlook | null> {
+    return this.ask<Outlook | null>({ type: "outlook", orders, hours });
   }
 
   forecast(): Promise<ForecastRow[]> {

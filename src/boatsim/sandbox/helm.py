@@ -109,7 +109,8 @@ PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 
 # note (status "last_pass"). Leo's play, 12 Nov: a 1 km pass stopping the clock
 # felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
 PASS_STOP_SWING_KM = 25.0
-OUTLOOK_HOURS = 48.0  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
+OUTLOOK_HOURS = 48.0
+TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
 def day_seed(start: datetime) -> int:
@@ -496,19 +497,27 @@ class Game:
         t0, soc0, km0 = w.state.t, w.state.soc, self._km_to_finish(w)
         stw, n = 0.0, 0
         end = t0 + timedelta(hours=hours)
+        # The line it sails, a point every TRACK_EVERY_H, for a call's map (Rosa's cards).
+        track = [[round(w.state.lat, 3), round(w.state.lon, 3)]]
+        next_pt = t0 + timedelta(hours=TRACK_EVERY_H)
         try:
             while not w.done and w.state.t < end:
                 w.step()
                 stw += w.state.speed_through_water
                 n += 1
+                if w.state.t >= next_pt:
+                    track.append([round(w.state.lat, 3), round(w.state.lon, 3)])
+                    next_pt += timedelta(hours=TRACK_EVERY_H)
         except OutsideCoverage:  # the forecast ran past the end of the weather: a shorter preview
             pass
+        last = [round(w.state.lat, 3), round(w.state.lon, 3)]
         return {
             "hours": (w.state.t - t0).total_seconds() / 3600,
             "stw": stw / n if n else 0.0,
             "soc": float(w.state.soc - soc0),
             "km": km0 - self._km_to_finish(w),
             "outcome": self._outcome(w) if w.done else "at_sea",
+            "track": track if track[-1] == last else [*track, last],
         }
 
     def outlook(self, orders: list[dict], hours: float = OUTLOOK_HOURS) -> dict:

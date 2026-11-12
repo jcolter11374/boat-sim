@@ -15,6 +15,9 @@ def test_outlook_on_auto_matches_the_ghost_and_leaves_the_game_alone(env):  # no
     # On auto the boat is the ghost: the same forecast, the same steering, level.
     assert auto["lead_km"] == pytest.approx(o["lead_now_km"], abs=0.05)
     assert drift["lead_km"] < auto["lead_km"]  # drifting west, motors off, loses ground
+    # Each line starts at the boat and has a point every 3 h, for the call's map.
+    for t in (auto["track"], drift["track"], o["ghost"]["track"]):
+        assert t[0] == [round(g.mine.state.lat, 3), round(g.mine.state.lon, 3)] and len(t) == 3
     assert (g.mine.state.t, g.mine.state.lat, g.ghost.state.lat, len(g.orders)) == before
 
 
