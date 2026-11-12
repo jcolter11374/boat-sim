@@ -28,12 +28,95 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
+from itertools import pairwise
 from pathlib import Path
 
 SEASON_BUNDLE = "forcing_2020.npz"
 DAYS_BEFORE = 1
 DAYS_AFTER = 155  # 150 days of sailing + 5 days of forecast look-ahead
 STORM_NOTE = "Storm winds approximate (ERA5 smooths hurricanes)"
+
+# Sandy's centre, 6-hourly, 22 Oct 12 UTC to 31 Oct 12 UTC 2012: (iso time, lat, lon).
+# GUESS: typed from memory of NHC's report, not yet checked. The "Challenge storm
+# dates" workflow compares these with IBTrACS on every PR that touches them, prints the
+# real points, and fails if any is more than TRACK_TOLERANCE_KM off (storm_dates.py).
+SANDY_TRACK_6H: list[tuple[str, float, float]] = [
+    ("2012-10-22T12:00:00Z", 13.1, -78.0),
+    ("2012-10-22T18:00:00Z", 12.7, -78.3),
+    ("2012-10-23T00:00:00Z", 12.6, -78.4),
+    ("2012-10-23T06:00:00Z", 13.0, -78.0),
+    ("2012-10-23T12:00:00Z", 13.7, -77.8),
+    ("2012-10-23T18:00:00Z", 14.6, -77.5),
+    ("2012-10-24T00:00:00Z", 15.6, -77.1),
+    ("2012-10-24T06:00:00Z", 16.6, -76.9),
+    ("2012-10-24T12:00:00Z", 17.2, -76.8),
+    ("2012-10-24T18:00:00Z", 17.7, -76.6),
+    ("2012-10-25T00:00:00Z", 18.9, -76.4),
+    ("2012-10-25T06:00:00Z", 20.1, -76.0),
+    ("2012-10-25T12:00:00Z", 21.7, -75.5),
+    ("2012-10-25T18:00:00Z", 23.3, -75.3),
+    ("2012-10-26T00:00:00Z", 24.8, -75.9),
+    ("2012-10-26T06:00:00Z", 25.7, -76.4),
+    ("2012-10-26T12:00:00Z", 26.4, -76.9),
+    ("2012-10-26T18:00:00Z", 27.0, -77.2),
+    ("2012-10-27T00:00:00Z", 27.5, -77.1),
+    ("2012-10-27T06:00:00Z", 28.1, -76.9),
+    ("2012-10-27T12:00:00Z", 28.8, -76.5),
+    ("2012-10-27T18:00:00Z", 29.7, -75.6),
+    ("2012-10-28T00:00:00Z", 30.5, -74.7),
+    ("2012-10-28T06:00:00Z", 31.3, -73.9),
+    ("2012-10-28T12:00:00Z", 32.0, -72.9),
+    ("2012-10-28T18:00:00Z", 33.1, -71.6),
+    ("2012-10-29T00:00:00Z", 34.5, -70.8),
+    ("2012-10-29T06:00:00Z", 35.9, -70.6),
+    ("2012-10-29T12:00:00Z", 37.5, -71.5),
+    ("2012-10-29T18:00:00Z", 38.8, -73.1),
+    ("2012-10-30T00:00:00Z", 39.5, -74.7),
+    ("2012-10-30T06:00:00Z", 39.9, -76.2),
+    ("2012-10-30T12:00:00Z", 40.1, -77.8),
+    ("2012-10-30T18:00:00Z", 40.4, -78.9),
+    ("2012-10-31T00:00:00Z", 40.7, -79.8),
+    ("2012-10-31T06:00:00Z", 41.0, -80.3),
+    ("2012-10-31T12:00:00Z", 41.3, -80.5),
+]
+
+
+def _t(iso: str) -> datetime:
+    return datetime.fromisoformat(iso.replace("Z", ""))
+
+
+def hourly(track: list[tuple[str, float, float]]) -> list[list]:
+    """A 6-hourly track as hourly [iso, lat, lon], straight lines between fixes, so a
+    fast storm can't slip between rows (Ravi's judge and the page use the same points)."""
+    out: list[list] = []
+    for (ta, la, lo), (tb, lb, lob) in pairwise(track):
+        a, b = _t(ta), _t(tb)
+        n = round((b - a).total_seconds() / 3600)
+        for k in range(n):
+            f = k / n
+            t = a + timedelta(hours=k)
+            out.append(
+                [t.isoformat() + "Z", round(la + f * (lb - la), 3), round(lo + f * (lob - lo), 3)]
+            )
+    ta, la, lo = track[-1]
+    out.append([ta, la, lo])
+    return out
+
+
+def storm_at(track: list[list], t: datetime) -> tuple[float, float] | None:
+    """The storm centre at `t` from an hourly track, or None outside it."""
+    if not track:
+        return None
+    t0 = _t(track[0][0])
+    i = (t - t0).total_seconds() / 3600
+    if i < 0 or i > len(track) - 1:
+        return None
+    k = min(int(i), len(track) - 2) if len(track) > 1 else 0
+    f = i - k
+    if len(track) == 1:
+        return track[0][1], track[0][2]
+    a, b = track[k], track[k + 1]
+    return a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2])
 
 
 @dataclass(frozen=True)
@@ -45,6 +128,23 @@ class Challenge:
     story: str  # plain words, for John and the page
     hurricane: bool = False  # winds weaker than real in ERA5 (#117)
     season: bool = False  # inside the 2020 Boatyard bundle already
+    # A mission (Sandy's shadow first: sandy-first-mission-plan.md): the deadline, the
+    # storm to keep clear of, the stars and the debrief. The page and sandbox/helm.py
+    # both read it from challenges.json / goal_record(); None for an open crossing.
+    goal: dict | None = None
+
+    def goal_record(self) -> dict | None:
+        """The goal as the page reads it: the storm track hourly."""
+        if self.goal is None:
+            return None
+        g = {k: v for k, v in self.goal.items() if k != "storm"}
+        if "storm" in self.goal:
+            st = self.goal["storm"]
+            g["storm"] = {
+                **{k: v for k, v in st.items() if k != "track_6h"},
+                "track": hourly(st["track_6h"]),
+            }
+        return g
 
     @property
     def bundle(self) -> str:
@@ -69,6 +169,9 @@ class Challenge:
         # a Holland/Young vortex behind a flag) for these once it lands.
         d["weather_note"] = STORM_NOTE if self.hurricane else ""
         d["storm_boost"] = self.hurricane
+        d["goal"] = self.goal_record()
+        if d["goal"] is None:
+            del d["goal"]
         return d
 
 
@@ -98,6 +201,17 @@ CHALLENGES: list[Challenge] = [
         "Hurricane Sandy comes up the coast a week after the drop. It is 400 km off Cape "
         "Hatteras on 29 October and comes ashore in New Jersey that night.",
         hurricane=True,
+        # Ravi's stars from real runs, retuned (250/300 km, Elena approved); Rosa's page shape.
+        goal={
+            "until": "2012-10-31T12:00:00Z",
+            "storm": {"name": "Sandy", "track_6h": SANDY_TRACK_6H, "clear_km": 250, "well_km": 300},
+            "stars3": {"east_of": -68.0, "battery_min": 0.2},
+            "call_day": 3,
+            "debrief": {
+                "text": "Sandy came ashore in New Jersey on the evening of 29 October 2012.",
+                "url": "https://www.nhc.noaa.gov/data/tcr/AL182012_Sandy.pdf",
+            },
+        },
     ),
     Challenge(
         "dorian",

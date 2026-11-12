@@ -221,10 +221,10 @@ const CHECKS = {
       let decided = null;
       for (let i = 0; i < 12 && !decided; i++) {
         if (await page.evaluate(() => window.__helm.card || window.__helm.status?.over)) break;
-        // Key 4 is "4 days a second" (the key hint); a key can't be blocked by a panel over the button.
+        // Key 5 is "4 days a second" (key 1 is real time since T1) (the key hint); a key can't be blocked by a panel over the button.
         if (await page.evaluate(() => window.__helm.clock === 0)) {
-          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => page.keyboard.press("4"));
-          else await page.keyboard.press("4");
+          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => page.keyboard.press("5"));
+          else await page.keyboard.press("5");
         }
         await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.error || window.__helm.card, null, { timeout: 4 * MIN }).catch(() => {});
         must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");

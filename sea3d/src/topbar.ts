@@ -27,7 +27,7 @@ export const LINKS: BarLink[] = [
   { page: "index", href: "./", label: "Home", short: "Home", title: "The title screen, with the live sea behind it" },
   { page: "boatyard", href: "./boatyard.html", label: "Build", short: "Build", title: "Boatyard: design your boat" },
   { page: "helm", href: "./helm.html", label: "Take the helm", short: "Helm", title: "Sail it yourself: you give the orders as the days pass" },
-  { page: "voyage", href: "./voyage.html", label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail and watch it, sped up" },
+  { page: "voyage", href: "./voyage.html", label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail, and watch her go." },
   { page: "race", href: "./race.html", label: "Race", short: "Race", title: "Race two designs on the same weather" },
   { page: "leaderboard", href: "./leaderboard.html", label: "Leaderboard", short: "Board", title: "Which designs reach the finish most often" },
 ];
