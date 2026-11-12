@@ -41,6 +41,10 @@ export class Hud {
       this.orders(true);
     });
     $("orders-x").addEventListener("click", () => this.orders(false));
+    // Reaching into the drawer means you're using it: the tip's or a peek's timer mustn't
+    // slide it away under your pointer (a click at second 9.9 used to miss).
+    $("orders").addEventListener("pointerenter", () => this.keep());
+    $("orders").addEventListener("focusin", () => this.keep());
     $("c-wind").addEventListener("click", () => this.forecast());
     $("chart").addEventListener("click", () => {
       if (!$("mapbox").classList.contains("big")) this.map(true);

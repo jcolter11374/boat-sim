@@ -16,9 +16,18 @@ const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--
 const fail = (msg) => { console.error("FAIL:", msg); server.kill(); process.exit(1); };
 /** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
 async function openOrders(page) {
-  if ((await page.locator("#orders-tab").count()) && !(await page.locator("#orders.open").count())) {
-    await page.click("#orders-tab");
-    await page.waitForTimeout(400); // it slides in
+  if (!(await page.locator("#orders-tab").count())) return;
+  // At the start the drawer opens by itself for 10 s with a tip, then slides shut unless it's
+  // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
+  // until it has fully slid in, then point at it, which keeps it open (the player is using it).
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    const there = await page
+      .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
+      .then(() => true, () => false);
+    if (!there) continue;
+    await page.hover("#orders h2", { timeout: 10_000 }).catch(() => {});
+    if (await page.locator("#orders.open").count()) return;
   }
 }
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
