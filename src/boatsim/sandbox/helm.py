@@ -584,7 +584,15 @@ class Game:
                     cu = cv = 0.0
                 us.append(round(cu, 2))
                 vs.append(round(cv, 2))
-        return {"lat0": lat0, "lon0": lon0, "step": step, "nlat": nlat, "nlon": nlon, "u": us, "v": vs}
+        return {
+            "lat0": lat0,
+            "lon0": lon0,
+            "step": step,
+            "nlat": nlat,
+            "nlon": nlon,
+            "u": us,
+            "v": vs,
+        }
 
     def best_heading(
         self, hours: float = OUTLOOK_HOURS, fan=(-30, -20, -10, 0, 10, 20, 30)
