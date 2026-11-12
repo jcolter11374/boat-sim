@@ -76,7 +76,7 @@ export interface LanternLook {
 }
 
 let glowTex: THREE.Texture | null = null;
-/** A soft round glow with a bright core. */
+/** A bright point with a small glow (Ines, 12 Nov: a lantern is a point, not a moon-sized disc). */
 function glow(): THREE.Texture | null {
   if (glowTex) return glowTex;
   if (typeof document === "undefined") return null; // no page (unit tests)
@@ -85,9 +85,10 @@ function glow(): THREE.Texture | null {
   const g = c.getContext("2d")!;
   const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   r.addColorStop(0, "rgba(255,255,255,1)");
-  r.addColorStop(0.12, "rgba(255,255,255,0.9)");
-  r.addColorStop(0.3, "rgba(255,255,255,0.25)");
-  r.addColorStop(1, "rgba(255,255,255,0)");
+  r.addColorStop(0.1, "rgba(255,255,255,0.95)");
+  r.addColorStop(0.2, "rgba(255,255,255,0.22)");
+  r.addColorStop(0.45, "rgba(255,255,255,0.04)");
+  r.addColorStop(0.7, "rgba(255,255,255,0)");
   g.fillStyle = r;
   g.fillRect(0, 0, 64, 64);
   glowTex = new THREE.CanvasTexture(c);
@@ -112,7 +113,7 @@ export function addLanterns(group: THREE.Object3D, lanterns: Lantern[], look: La
     for (const a of l.arcs) {
       const s = new THREE.Sprite(lanternMaterial(a, look.range ?? NO_RANGE));
       s.position.copy(l.at);
-      s.scale.setScalar(look.size ?? 0.034);
+      s.scale.setScalar(look.size ?? 0.024);
       s.renderOrder = 30;
       lights.add(s);
     }
@@ -129,6 +130,12 @@ function lanternMaterial(a: Arc, range: { value: number }): THREE.SpriteMaterial
     sh.uniforms.uRange = range;
     sh.vertexShader = sh.vertexShader
       .replace("void main() {", "uniform vec2 uArc;\nuniform float uRange;\nvarying float vLit;\nvoid main() {")
+      // The same size on screen whatever the lens (a 24 degree cinema lens made it a moon on the
+      // masthead), and a little smaller far off: a lantern is a hard point with a tight glow.
+      .replace(
+        "vec2 alignedPosition",
+        "scale *= 2.4142 / projectionMatrix[1][1] * mix(1.0, 0.6, smoothstep(20.0, 200.0, -mvPosition.z));\n\tvec2 alignedPosition",
+      )
       .replace(
         "#include <logdepthbuf_vertex>",
         `#include <logdepthbuf_vertex>
@@ -149,7 +156,7 @@ function lanternMaterial(a: Arc, range: { value: number }): THREE.SpriteMaterial
       .replace("void main() {", "uniform float uNight;\nvarying float vLit;\nvoid main() {")
       .replace("#include <opaque_fragment>", "diffuseColor.a *= vLit * uNight;\n#include <opaque_fragment>");
   };
-  m.customProgramCacheKey = () => "boatsim-navlight-v2";
+  m.customProgramCacheKey = () => "boatsim-navlight-v3";
   return m;
 }
 
