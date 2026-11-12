@@ -4,6 +4,7 @@
    "id": "cape-henry",
    "kind": "history",
    "title": "Cape Henry, 1607",
+   "teaser": "English settlers landed here in April 1607 and named the cape.",
    "at": [
     [
      36.926,
@@ -19,6 +20,7 @@
    "id": "battle-of-the-capes",
    "kind": "history",
    "title": "Battle of the Capes, 1781",
+   "teaser": "In 1781 a French fleet beat the British here and sealed Yorktown's fate.",
    "at": [
     [
      36.95,
@@ -34,6 +36,7 @@
    "id": "u-85",
    "kind": "wreck",
    "title": "U-boat U-85",
+   "teaser": "A German U-boat lies 27 m down here, sunk by a US destroyer in 1942.",
    "at": [
     [
      35.92,
@@ -54,6 +57,7 @@
    "id": "uss-monitor",
    "kind": "wreck",
    "title": "USS Monitor",
+   "teaser": "The Civil War ironclad Monitor sank in a storm near here in 1862.",
    "at": [
     [
      35.00195,
@@ -74,6 +78,7 @@
    "id": "sandy-hook-light",
    "kind": "history",
    "title": "Sandy Hook Lighthouse, 1764",
+   "teaser": "The oldest working lighthouse in the US, first lit in 1764.",
    "at": [
     [
      40.4618,
@@ -89,6 +94,7 @@
    "id": "block-island-wind",
    "kind": "history",
    "title": "Block Island Wind Farm",
+   "teaser": "Five turbines here were the first offshore wind farm in the US.",
    "at": [
     [
      41.12,
@@ -104,6 +110,7 @@
    "id": "ss-portland",
    "kind": "wreck",
    "title": "Steamship Portland, 1898",
+   "teaser": "The steamer Portland was lost near here in the great gale of 1898.",
    "at": [
     [
      42.37,
@@ -124,6 +131,7 @@
    "id": "fundy-tides",
    "kind": "ocean",
    "title": "The Gulf of Maine and the Bay of Fundy",
+   "teaser": "The Bay of Fundy to the north has the highest tides on Earth.",
    "at": [
     [
      42.8,
@@ -147,6 +155,7 @@
    "id": "birchtown",
    "kind": "history",
    "title": "Birchtown, 1783",
+   "teaser": "In 1783 Black Loyalists founded Birchtown, Nova Scotia, near here.",
    "at": [
     [
      43.74,
@@ -162,6 +171,7 @@
    "id": "halifax-explosion",
    "kind": "history",
    "title": "Halifax Explosion, 1917",
+   "teaser": "In 1917 a ship full of explosives blew up in Halifax harbour.",
    "at": [
     [
      44.67,
@@ -177,6 +187,7 @@
    "id": "sable-island",
    "kind": "wreck",
    "title": "Sable Island",
+   "teaser": "Sable Island, a sandbar with wild horses, has wrecked over 350 ships.",
    "at": [
     [
      43.93,
@@ -192,6 +203,7 @@
    "id": "louisbourg",
    "kind": "history",
    "title": "Louisbourg",
+   "teaser": "France's fortress town of Louisbourg fell to the British twice.",
    "at": [
     [
      45.89,
@@ -207,6 +219,7 @@
    "id": "gulf-stream",
    "kind": "ocean",
    "title": "The Gulf Stream",
+   "teaser": "The Gulf Stream, a warm river in the sea, runs faster than the kayak.",
    "at": [
     [
      35.5,
@@ -246,6 +259,7 @@
    "id": "andrea-doria",
    "kind": "wreck",
    "title": "Andrea Doria",
+   "teaser": "The liner Andrea Doria sank near here in 1956 after a collision in fog.",
    "at": [
     [
      40.4917,
@@ -266,6 +280,7 @@
    "id": "bermuda-triangle",
    "kind": "ocean",
    "title": "The 'Bermuda Triangle'",
+   "teaser": "You're near Bermuda, a corner of the famous 'Triangle'.",
    "at": [
     [
      32.3,
@@ -281,6 +296,7 @@
    "id": "sargasso-sea",
    "kind": "ocean",
    "title": "The Sargasso Sea",
+   "teaser": "The Sargasso Sea is the only sea with no coast.",
    "at": [
     [
      33.5,
@@ -308,6 +324,7 @@
    "id": "grand-banks",
    "kind": "ocean",
    "title": "Fog off the Grand Banks",
+   "teaser": "Off the Grand Banks, cold and warm currents meet in famous fog.",
    "at": [
     [
      43.5,
@@ -327,6 +344,7 @@
    "id": "titanic",
    "kind": "wreck",
    "title": "RMS Titanic",
+   "teaser": "The Titanic lies nearly 4 km down, not far from here.",
    "at": [
     [
      41.732,
@@ -347,6 +365,7 @@
    "id": "azores-high",
    "kind": "ocean",
    "title": "The Azores High",
+   "teaser": "The Azores High sets the westerly winds that carry boats to Europe.",
    "at": [
     [
      35.0,
@@ -362,6 +381,7 @@
    "id": "mid-atlantic-ridge",
    "kind": "ocean",
    "title": "The Mid-Atlantic Ridge",
+   "teaser": "You're crossing the seam where the Atlantic floor pulls apart.",
    "at": [
     [
      35.0,
@@ -397,6 +417,7 @@
    "id": "horta-cables",
    "kind": "history",
    "title": "Horta, the cable town",
+   "teaser": "Horta was once a crossroads of the world's undersea telegraph.",
    "at": [
     [
      38.532,
@@ -412,6 +433,7 @@
    "id": "azores-whaling",
    "kind": "history",
    "title": "Azores whalers",
+   "teaser": "Azoreans hunted sperm whales from open boats until 1987.",
    "at": [
     [
      38.4,
@@ -427,6 +449,7 @@
    "id": "columbus-santa-maria",
    "kind": "history",
    "title": "Columbus at Santa Maria, 1493",
+   "teaser": "Columbus sheltered at Santa Maria from a storm in 1493.",
    "at": [
     [
      37.006,
@@ -442,6 +465,7 @@
    "id": "gorringe-bank",
    "kind": "ocean",
    "title": "Gorringe Bank",
+   "teaser": "Gorringe Bank, a mountain under the sea, rises to 50 m below you.",
    "at": [
     [
      36.53,
@@ -457,6 +481,7 @@
    "id": "cabo-da-roca",
    "kind": "history",
    "title": "Cabo da Roca",
+   "teaser": "Due east is Cabo da Roca, the westernmost point of mainland Europe.",
    "at": [
     [
      38.7819,
@@ -472,6 +497,7 @@
    "id": "lisbon-1755",
    "kind": "history",
    "title": "The Lisbon earthquake, 1755",
+   "teaser": "In 1755 an earthquake and tsunami destroyed much of Lisbon.",
    "at": [
     [
      38.71,
