@@ -1627,14 +1627,17 @@ type Choice = {
   order?: { heading: Heading; power?: number };
   /** The label once the forecast tag is beside it: no claims ("safer", "fastest") the forecast may contradict. */
   plain?: string;
+  /** The option in running text, for a note ("Riding it"). */
+  gist?: string;
 };
 /** look: the compass bearing of the problem (the gale, the Stream), for the camera to turn to as the call nears. */
-type Decision = { kind: string; text: string; choices: Choice[]; look?: number };
+type Decision = { kind: string; text: string; choices: Choice[]; look?: number; intro?: string };
 /** Compass bearing (deg) of a vector given as east and north parts. */
 const compassOf = (east: number, north: number): number => ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
 const asked = { gale: -Infinity, night: -Infinity, stream: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
-let streamCall: { h: number; chose: string; lead: number; later: string[] } | null = null;
+/** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
+let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number } | null = null;
 /** A later call made before the Stream's three days were up, so its debrief credits both (Leo). */
 const alsoCalled = (what: string) => streamCall?.later.push(what);
 const KT = 1.943844; // knots per m/s
@@ -1746,14 +1749,15 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     }
   }
   // Three days after the Stream call: what it bought, against the ghost on autopilot (Leo).
-  if (streamCall && h - streamCall.h >= 72) {
+  if (streamCall && h - streamCall.h >= (streamCall.after ?? 72)) {
     const km = Math.round(st.lead_km);
     const was = Math.round(streamCall.lead);
     const where = Math.abs(km) < 1 ? "level with the ghost" : `${Math.abs(km).toLocaleString()} km ${km > 0 ? "ahead of" : "behind"} the ghost`;
     // One number, and no credit to the Stream for a later call's doing: fold the later calls in.
     const later = streamCall.later;
     const also = later.length ? ` You also ${later.length > 1 ? `${later.slice(0, -1).join(", ")} and ${later[later.length - 1]}` : later[0]}.` : "";
-    const text = later.length ? `Since the Stream: ${where} after 3 days.${also}` : `${streamCall.chose}: ${where} after 3 days.`;
+    const span = `${Math.round((streamCall.after ?? 72) / 24)} days`;
+    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : `${streamCall.chose}: ${where} after ${span}.`;
     // White on the strip's glass, with the colour on the number only (Elena).
     const num = Math.abs(km) < 1 ? undefined : `${Math.abs(km).toLocaleString()} km`;
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn, num));
@@ -1774,11 +1778,13 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     // One line (Elena): the card's options and their stakes carry the rest.
     return {
       kind: "stream",
+      intro: `You're in the Gulf Stream, a warm current pushing ${towards(w.current_u, w.current_v)} at about ${knots} knots.`,
       look: compassOf(w.current_u, w.current_v), // down the Stream, the way it runs
       text: `The Gulf Stream: a ${knots}-knot river running ${towards(w.current_u, w.current_v)}.${against ? " Wind against it makes steep seas." : ""}`,
       choices: [
         {
           label: `Ride it ${towards(w.current_u, w.current_v)}: a free push, the longer way${against ? ", rough for now" : ""}`,
+          gist: "Riding it",
           title: "Follow the planned route, which rides the current",
           order: { heading: "route", power },
           act: () => {
@@ -1788,6 +1794,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         },
         {
           label: `Cut straight across (${String(across).padStart(3, "0")}°): the short way, slower while you cross`,
+          gist: "Cutting straight across",
           title: "Hold a straight course for the finish",
           order: { heading: across, power },
           act: () => {
@@ -1825,11 +1832,21 @@ function orderWords(o: Heading): string {
   return typeof o === "number" ? `your ${fmtDeg(o)}` : o === "auto" ? "the autopilot's line" : o === "route" ? "the planned route" : "straight at the finish";
 }
 
+/** The first chase (Rosa, Elena, 12 Nov): in a crossing's first days, the first time the forecast's
+ * best line beats the autopilot's by over half a day AND costs something, the route check asks
+ * then and there instead of waiting out its quiet days. Once a voyage. */
+let chaseAsked = false;
+const CHASE_UNTIL_H = 120; // looked for in the first 5 days only: each look pauses about a second
+const CHASE_EVERY_H = 12;
+const CHASE_GAIN_DAYS = 0.5;
+
 /** Look for a better line; true if the clock was stopped to look. */
 function maybeRouteCheck(st: Status): boolean {
   if (mode !== "hands_on" || st.over || shared) return false;
   const h = st.day * 24;
-  if (h - Math.max(lastCallH, 0) < quietGapH() || h - routeLookedH < 24) return false;
+  const quiet = h - Math.max(lastCallH, 0) >= quietGapH() && h - routeLookedH >= 24;
+  const early = !chaseAsked && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
+  if (!quiet && !early) return false;
   routeLookedH = h;
   setRate(0, true);
   const seq = ++decisionSeq;
@@ -1851,8 +1868,43 @@ function maybeRouteCheck(st: Status): boolean {
     const rougher = (best.hs_max ?? 0) - (now.hs_max ?? 0) >= 0.75;
     const drains = (now.soc_min ?? 1) - (best.soc_min ?? 1) >= 0.08;
     const better = gainDays >= ROUTE_GAIN_DAYS && turn >= ROUTE_MIN_TURN;
-    const ask = better && (rougher || drains);
+    // The chase is weighed against the autopilot (what the ghost does), not your order.
+    const autoDays = pace > 1 ? (best.lead_km - auto.lead_km) / pace : 0;
+    const chaseRougher = (best.hs_max ?? 0) - (auto.hs_max ?? 0) >= 0.75;
+    const chaseDrains = (auto.soc_min ?? 1) - (best.soc_min ?? 1) >= 0.08;
+    const chase = early && autoDays > CHASE_GAIN_DAYS && turn >= ROUTE_MIN_TURN && (chaseRougher || chaseDrains);
+    const ask = chase || (quiet && better && (rougher || drains));
     page.routeChecks.push({ day: st.day, best: b.best, gain: gainKm, turn, asked: ask });
+    if (chase) {
+      chaseAsked = true;
+      lastCallH = h;
+      callCount++;
+      page.decisions.push({ kind: "chase", day: st.day });
+      // Relative words, not a compass point (Leo): "south-east" reads as "away from Portugal".
+      const rad = Math.PI / 180;
+      const side = Math.cos(b.best * rad) < Math.cos(b.heading * rad) ? "south" : "north";
+      const deg = Math.max(5, Math.round(turn / 5) * 5);
+      // "Stronger wind" only when the forecast's line really has more of it.
+      const windier = (best.wind_max ?? 0) - (auto.wind_max ?? 0) >= 1;
+      const d: Decision = {
+        kind: "chase",
+        text: windier ? `Stronger wind ${deg}° further ${side}. Chase it?` : `The forecast shows a faster line ${deg}° further ${side}. Take it?`,
+        choices: [
+          { label: `Bend ${deg}° ${side}`, title: `Steer ${fmtDeg(b.best)}; the route check looks again in a few days`, act: () => {
+            // What it bought, told when the forecast's 4 days are up (Rosa): the truth, which can be less.
+            streamCall = { h, chose: `Since you bent ${deg}° ${side}`, since: `Since you bent ${deg}° ${side}`, lead: st.lead_km, later: [], after: LOOK_H };
+            return setOrder(b.best);
+          }, order: { heading: b.best, power } },
+          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (what the ghost does)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
+        ],
+      };
+      const view: Outlook = { ...o, orders: [best, auto] };
+      whenAt(h, () => {
+        if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, view, [true, true]);
+      });
+      return;
+    }
+    if (!quiet) return resume(); // an early look that found no chase: nothing to say
     if (better && !ask) {
       // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
       const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} over ${orderWords(order)} for the next 4 days (${timeChange(gainKm, pace)}), in no worse seas. Change it in Orders.`;
@@ -1902,12 +1954,15 @@ function notWorthAsking(d: Decision, o: Outlook, has: boolean[]): string | null 
     if (priced) return null; // a real trade: ask
     if (!free || days > free.days) free = { i, days };
   }
+  // Leo's words: km, as in the strip's cell; "forecast" kept so it isn't read as a promise.
   const days = Math.round(o.hours / 24);
+  const intro = d.intro ?? d.text;
   if (free) {
-    const p = o.orders[free.i];
-    return `${d.text} The forecast for the next ${days} days favours ${d.choices[free.i].plain ?? d.choices[free.i].label.split(":")[0].toLowerCase()} (${timeChange(p.lead_km - base.lead_km, pace)}), in no worse seas. Change it in Orders.`;
+    const km = Math.round((o.orders[free.i].lead_km - base.lead_km) / 5) * 5;
+    const gist = d.choices[free.i].gist ?? d.choices[free.i].label.split(":")[0];
+    return `${intro} ${gist} looks about ${km} km better than the autopilot's line over the next ${days} days, in no rougher seas (forecast). Want to? Open Orders.`;
   }
-  return `${d.text} The forecast for the next ${days} days has every way through come out about the same as the autopilot's, so she carries on.`;
+  return `${intro} The forecast shows no better way through than the autopilot's, so she carries on.`;
 }
 
 function maybeDecide(): boolean {
@@ -1955,13 +2010,14 @@ function maybeDecide(): boolean {
  * Maya's 2 s budget; 4 days took about 1.6 s. Stakes beyond 2 days, because a 2-day gain
  * can turn into days lost at the finish (gameplay/router-north-bias.md). */
 const LOOK_H = 96;
-/** The gap change in the race's own terms, time (Leo, Maya): km over the ghost's own pace. */
+/** The gap change against the ghost, in km like the strip's "vs the ghost" cell (Leo, 12 Nov:
+ * one unit on the card, the toasts and the strip). Under a quarter of a day at the ghost's
+ * pace is "about the same". */
 function timeChange(km: number, kmPerDay: number): string {
   const d = kmPerDay > 1 ? km / kmPerDay : 0;
-  const half = Math.round(Math.abs(d) * 2) / 2;
-  if (half < 0.5) return "about the same against the ghost";
-  const n = half === 0.5 ? "half a day" : half === 1 ? "a day" : `${half % 1 ? `${Math.floor(half)} and a half` : half} days`;
-  return d > 0 ? `about ${n} gained on the ghost` : `about ${n} lost to the ghost`;
+  if (Math.abs(d) < 0.25) return "about the same against the ghost";
+  const n = Math.max(5, Math.round(Math.abs(km) / 5) * 5);
+  return km > 0 ? `about ${n} km gained on the ghost` : `about ${n} km lost to the ghost`;
 }
 /** Its cost beside it, where the options differ: the roughest sea, the lowest battery. */
 function costWords(p: Preview, all: Preview[], waves = false): string {
