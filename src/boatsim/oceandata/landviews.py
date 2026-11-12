@@ -681,6 +681,10 @@ def main(argv: list[str] | None = None) -> None:
             paths = bake_region(place, a.out, cache, release=a.overture_release)
         elif place == "annapolis":
             paths = bake_annapolis(a.out, cache, a.overture_release)
+        elif place == "baytiles":  # the Bay as coast squares (landtiles.py)
+            from boatsim.oceandata import landtiles
+
+            paths = landtiles.bake(Path(a.out), cache=cache)
         else:
             raise SystemExit(f"unknown place {place!r}")
         for p in paths:
