@@ -40,15 +40,19 @@ float vn(vec2 p) {
 void main() {
   float edge = 1.0 - smoothstep(0.35, 1.0, abs(vUv.x));
   // Thick under the cloud, ragged where it meets the sea, lost in the cloud at the top.
-  float up = smoothstep(0.0, 0.12, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y));
+  // Down to the waterline (a shower reaches the sea), lost into its cloud at the top.
+  float up = smoothstep(0.0, 0.015, vUv.y) * (1.0 - smoothstep(0.75, 1.0, vUv.y));
+  float foot = 1.0 - smoothstep(0.0, 0.1, vUv.y); // the misty foot where the rain lands
   // Streaks of heavier rain, leaning with the wind, slowly shifting.
   float s = vn(vec2(vUv.x * 7.0 + vUv.y * uSlant + vShaft.x * 50.0, vUv.y * 1.5 - uTime * 0.05));
   s = 0.45 + 0.55 * s + 0.25 * vn(vec2(vUv.x * 23.0 + vUv.y * uSlant * 3.0, vShaft.x * 9.0));
   float near = smoothstep(30.0, 150.0, vDist);
   float far = 1.0 - smoothstep(0.7 * uFar, 1.05 * uFar, vDist); // lost in the haze
-  float a = uAmount * vShaft.y * edge * up * s * near * far * 0.9;
+  float a = uAmount * vShaft.y * edge * up * s * near * far * (1.05 + 0.25 * foot);
   if (a < 0.003) discard;
-  gl_FragColor = vec4(mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.45), a);
+  vec3 c = mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.45);
+  c = mix(c, uHaze * 1.08, 0.55 * foot); // spray off the sea, paler than the rain above it
+  gl_FragColor = vec4(c, min(a, 0.92));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -161,7 +165,7 @@ export class RainBands {
     u.uTime.value = t;
     u.uSlant.value = THREE.MathUtils.clamp(Math.hypot(windX, windZ) / 15, 0, 1.5);
     const l = 0.2 + 0.8 * light;
-    u.uColor.value.copy(fog.color).multiplyScalar(0.42 * l + 0.06); // darker than the haze, so a curtain reads against it
+    u.uColor.value.copy(fog.color).multiplyScalar(0.32 * l + 0.05); // darker than the haze, so a curtain reads against it
     u.uHaze.value.copy(fog.color);
   }
 
