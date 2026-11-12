@@ -55,7 +55,7 @@ fetch sandbox-data sandbox 'forcing_2020.npz'
 # files on the same release are left out until a page reads them (#287).
 fetch seastate-data seastate 'seastate_*'
 # Land for the 3D views (landdata.yml, display only).
-fetch land-data land 'pico_*' 'baymouth_*' 'lisbon_*' 'annapolis*'
+fetch land-data land 'pico_*' 'baymouth_*' 'lisbon_*' 'annapolis*' 'bay_*'
 # Weather challenges for the helm page's picker (challenges.yml).
 fetch challenge-data challenges 'challenge*'
 # Today's weather (forecast.yml, display only).
