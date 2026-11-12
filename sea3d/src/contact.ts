@@ -129,7 +129,7 @@ export interface ContactState {
 }
 
 export class Contact {
-  /** How hard the bow dropped into the water this frame, 0..1 (0 most frames). */
+  /** This frame's splash for the sound (sound.ts), 0..1: a slam's sheet or the bow meeting a steep face; 0 most frames. */
   splash = 0;
   readonly collar: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   readonly spray: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -141,8 +141,6 @@ export class Contact {
   private lastT = -1;
   private lastClear = 0;
   private lastBowSea = 0;
-  /** This frame's splash for the sound, 0..1 (a slam's sheet or the bow meeting a steep face); 0 otherwise. */
-  splash = 0;
   private pending = 0;
   /** Green water over the deck: when it hit (s), how long the deck stays wet and foamy
    *  (s), how hard (0..1), and where along the hull (s, -1 stern .. 1 bow, and half width). */
