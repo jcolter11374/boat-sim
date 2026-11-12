@@ -254,6 +254,10 @@ void main() {
   col = mix(col, uShade * 0.85 * alpha, rainC);
   if (alpha < 0.004) discard;
   gl_FragColor = vec4(col / max(alpha, 1e-3), alpha);
+  // Same exposure and colour space as everything else when drawn straight to the screen
+  // (Low, or no post-processing); no-ops when drawn into the post-processing target.
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 const BANK_H = 70; // m, how tall a fog bank stands
@@ -283,6 +287,8 @@ void main() {
   float a = bank * (1.0 - smoothstep(0.15 * top, top, vH)) * smoothstep(0.0, 0.04, vH) * uFog;
   if (a < 0.004) discard;
   gl_FragColor = vec4(uColor, a * 0.9);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 export class Clouds {

@@ -352,7 +352,7 @@ export class Atmosphere {
     // Broken cloud leaves the sun out most of the time; only a closing sky shades the day.
     const overcast = smooth(this.cloud, 0.35, 0.95);
     // In steady rain the deck is thick and low: the sun is all but gone, and so is its glitter on the sea.
-    const shade = Math.max(0.6 * storm, 0.75 * overcast, 0.93 * this.rain);
+    const shade = Math.max(0.6 * storm, 0.75 * overcast, 0.99 * this.rain);
     this.sunLight = day * (1 - shade);
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;
