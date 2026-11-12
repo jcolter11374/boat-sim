@@ -46,7 +46,9 @@ fig, ax = plt.subplots(figsize=(8, 4.8), dpi=110)
 ax.fill_between(forces, lo, hi, alpha=0.25, label="quietest to loudest moments (5-95%)")
 ax.plot(forces, mean, "o-", lw=2, label="average")
 for f, m in zip(forces, mean):
-    ax.annotate(f"{m:.0f}", (f, m), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=9)
+    ax.annotate(
+        f"{m:.0f}", (f, m), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=9
+    )
 ax.set_xlabel("wind force (Beaufort: 1 near calm, 4 good sailing breeze, 8 gale)")
 ax.set_ylabel("dB full scale")
 ax.set_title("Loudness climbs with the wind (Pearson 31, sailing)")
@@ -61,7 +63,15 @@ for ax, n in zip(axs, names):
     rate, x = wavfile.read(d / f"{n}.wav")
     f, t, s = spectrogram(x.astype(np.float32) / 32768, fs=rate, nperseg=2048, noverlap=1024)
     keep = f <= 8000
-    ax.pcolormesh(t, f[keep] / 1000, 10 * np.log10(s[keep] + 1e-14), vmin=-130, vmax=-50, shading="auto", cmap="magma")
+    ax.pcolormesh(
+        t,
+        f[keep] / 1000,
+        10 * np.log10(s[keep] + 1e-14),
+        vmin=-130,
+        vmax=-50,
+        shading="auto",
+        cmap="magma",
+    )
     ax.set_ylabel("kHz", fontsize=7)
     ax.text(0.5, 6.6, n, color="white", fontsize=8, va="top")
     ax.tick_params(labelsize=7)
