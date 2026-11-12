@@ -26,6 +26,18 @@ export interface LandGrid {
   lat1: number;
   /** Present only for places baked with land cover (landviews.py, cover=True): then <land>_cover.png and _trees.json exist. */
   cover?: unknown;
+  /** Metres per unit of the heights (the Bay squares store decimetres: 0.1); 1 when absent. */
+  scale?: number;
+  /** True when the heights carry the real sea floor (below 0), not a sea clamped flat. */
+  depths?: boolean;
+}
+
+/** How an island is laid out, for the Bay's coast squares (squares.ts). */
+export interface LandOptions {
+  /** Lay it out at this latitude, not its own middle: squares sharing one keep their seams closed. */
+  mid?: number;
+  /** Leave out the ground where this is true (lon, lat): a place with its own, finer land is there. */
+  skip?: (lon: number, lat: number) => boolean;
 }
 
 export class Island {
@@ -38,6 +50,8 @@ export class Island {
   };
   /** Surf sheet size (for tests). */
   surfTriangles = 0;
+  /** Ground triangles drawn (fewer when part of it is left to a finer place). */
+  groundTriangles = 0;
   /** True once the files have loaded and the land is in the scene. */
   ready = false;
   /** The land's grid and heights (m), for layers that stand on it (trees). */
@@ -48,7 +62,7 @@ export class Island {
   }
 
   /** Load the place's land; null when the files aren't published on this copy of the site. */
-  static async load(place: Place, quality: Quality, base = "./land"): Promise<Island | null> {
+  static async load(place: Place, quality: Quality, base = "./land", opt: LandOptions = {}): Promise<Island | null> {
     const get = async (f: string) => {
       const r = await fetch(`${base}/${place.land ?? place.key}_${f}`);
       if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) throw new Error(f);
@@ -67,16 +81,19 @@ export class Island {
     const isl = new Island(place);
     map.colorSpace = THREE.SRGBColorSpace;
     map.anisotropy = 8;
-    isl.build(meta, hgt, map, quality === "low" ? 4 : 2);
+    isl.build(meta, hgt, map, quality === "low" ? 4 : 2, opt);
     isl.grid = { meta, hgt };
     isl.ready = true;
     return isl;
   }
 
-  private build(meta: LandGrid, hgt: Int16Array, map: THREE.Texture, step: number): void {
+  private build(meta: LandGrid, hgt: Int16Array, map: THREE.Texture, step: number, opt: LandOptions = {}): void {
     const { place } = this;
-    const { mx, my } = metresPerDegree((meta.lat0 + meta.lat1) / 2);
-    const at = (i: number, j: number) => hgt[Math.min(j, meta.ny - 1) * meta.nx + Math.min(i, meta.nx - 1)];
+    const { mx, my } = metresPerDegree(opt.mid ?? (meta.lat0 + meta.lat1) / 2);
+    const scale = meta.scale ?? 1;
+    const at = (i: number, j: number) => hgt[Math.min(j, meta.ny - 1) * meta.nx + Math.min(i, meta.nx - 1)] * scale;
+    const lonOf = (i: number) => meta.lon0 + ((meta.lon1 - meta.lon0) * i) / (meta.nx - 1);
+    const latOf = (j: number) => meta.lat1 - ((meta.lat1 - meta.lat0) * j) / (meta.ny - 1);
     const xOf = (i: number) => (meta.lon0 + ((meta.lon1 - meta.lon0) * i) / (meta.nx - 1) - place.lon) * mx;
     const zOf = (j: number) => -(meta.lat1 - ((meta.lat1 - meta.lat0) * j) / (meta.ny - 1) - place.lat) * my;
 
@@ -93,7 +110,10 @@ export class Island {
         pos[k * 3] = xOf(si);
         const h = at(si, sj);
         if (h > 0) pos[k * 3 + 1] = h;
-        else {
+        else if (meta.depths) {
+          // The real sea floor, kept a little under the water so wave troughs don't bare it.
+          pos[k * 3 + 1] = Math.min(h, -2);
+        } else {
           // The files have no sea floor. Drop sea points next to a cliff deep enough that
           // the slope between them meets the water close to the real shore, not out at sea.
           let nb = 0;
@@ -105,18 +125,27 @@ export class Island {
         uv[k * 2] = si / (meta.nx - 1);
         uv[k * 2 + 1] = 1 - sj / (meta.ny - 1);
       }
+    // Where another place has its own, finer land, this ground leaves a hole for it.
+    const skip = opt.skip;
+    const out = (i: number, j: number) => {
+      const si = Math.min(i * step, meta.nx - 1);
+      const sj = Math.min(j * step, meta.ny - 1);
+      return skip!(lonOf(si), latOf(sj));
+    };
     const idx = new Uint32Array((nx - 1) * (ny - 1) * 6);
     let n = 0;
     for (let j = 0; j < ny - 1; j++)
       for (let i = 0; i < nx - 1; i++) {
+        if (skip && out(i, j) && out(i + 1, j) && out(i, j + 1) && out(i + 1, j + 1)) continue;
         const a = j * nx + i;
         idx.set([a, a + nx, a + 1, a + 1, a + nx, a + nx + 1], n);
         n += 6;
       }
+    this.groundTriangles = n / 3;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
-    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.setIndex(new THREE.BufferAttribute(idx.subarray(0, n), 1));
     geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({ map, roughness: 0.93, metalness: 0, color: new THREE.Color(1.2, 1.2, 1.2) });
     const lu = this.landUniforms;
@@ -192,6 +221,7 @@ export class Island {
         const ds = [signed(i, j), signed(i + 1, j), signed(i, j + 1), signed(i + 1, j + 1)];
         if (Math.min(...ds) > REACH || Math.max(...ds) < -cell) continue; // open water, or inland
         if (Math.hypot(xOf(i), zOf(j)) > FAR) continue; // a harbour's far shores are too far to see a wash on
+        if (skip && skip(lonOf(i), latOf(j))) continue; // the finer place has its own surf
         const a = vert(i, j);
         const b = vert(i + 1, j);
         const c = vert(i, j + 1);

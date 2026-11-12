@@ -188,6 +188,11 @@ stored in git. Resampled by us.
 - Terrain: AWS Terrain Tiles (Mapzen/Tilezen), from SRTM, GMTED2010, ETOPO1,
   USGS 3DEP and others; see
   https://github.com/tilezen/joerd/blob/master/docs/attribution.md.
+- Heights and depths of the Chesapeake Bay coast squares (`bay_*`, built by
+  `landtiles.py`): NOAA NCEI Continuously Updated Digital Elevation Model
+  (CUDEM), 1/9 arc-second topobathy, via the NOAA Open Data Dissemination
+  program. US Government work, public domain; credited as a courtesy. Their
+  colour is the Sentinel-2 credit below. Shown on the helm page near Annapolis.
 - Colour of Pico and Faial: contains modified Copernicus Sentinel data 2023-2024
   (Sentinel-2 L2A, via the Registry of Open Data on AWS).
   Shown at voyage.html?place=pico ("Off Pico, Azores"), with both credits on the
