@@ -14,7 +14,7 @@
 // new ones only appear out of sight, so nothing pops in or out in view.
 
 import * as THREE from "three";
-import { makeShip, SHIP_SIZE, type ShipKind } from "./boats/ships";
+import { dressShip, makeShip, SHIP_SIZE, type ShipKind } from "./boats/ships";
 import { metresPerDegree, R_EARTH } from "./land/shader";
 import { reflectable } from "./mirror";
 
@@ -165,12 +165,12 @@ export function shipsNear(g: ShipGrid, lat: number, lon: number, t: number, radi
 function sighting(g: ShipGrid, i: number, j: number, k: number, n: number, phase: number, d: number, r: () => number): Sighting | null {
   const lat = g.lat0 + (i + r()) * g.res;
   const lon = g.lon0 + (j + r()) * g.res;
-  // The mix of kinds (GUESS: roughly the share of big ships on AIS: cargo, tankers, fishing).
+  // The mix of kinds (GUESS: roughly the share of big ships on AIS: box ships, tankers, bulk carriers, fishing).
   const u = r();
-  const kind: ShipKind = u < 0.4 ? "container" : u < 0.7 ? "tanker" : "fishing";
+  const kind: ShipKind = u < 0.35 ? "container" : u < 0.6 ? "tanker" : u < 0.85 ? "bulk" : "fishing";
   // In crowded port water half the merchant ships wait at anchor (GUESS).
   const anchored = kind !== "fishing" && d > 0.01 && r() < 0.5;
-  const speed = anchored ? 0 : kind === "container" ? 8 + 2 * r() : kind === "tanker" ? 6 + 1.2 * r() : 1.5 + 2 * r();
+  const speed = anchored ? 0 : kind === "container" ? 8 + 2 * r() : kind === "tanker" ? 6 + 1.2 * r() : kind === "bulk" ? 6.2 + 1.2 * r() : 1.5 + 1.0 * r(); // a trawler fishing makes 3 to 5 knots (Sam)
   const lane = kind === "fishing" || anchored ? null : laneHeading(g, i, j);
   const heading = lane == null ? r() * 360 : (lane + (r() < 0.5 ? 0 : 180) + (r() - 0.5) * 30 + 360) % 360;
   const s: Sighting = { id: `${i}:${j}:${k}:${n}`, kind, lat, lon, heading, speed, anchored, tMid: phase + (n + 0.5) * HOUR, seed: r() };
@@ -190,16 +190,42 @@ interface Live {
 export class Traffic {
   readonly root = new THREE.Group();
   /** What's in the scene (for tests and the page). */
-  readonly shown = { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } as Record<ShipKind, number> };
+  readonly shown = { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, bulk: 0, fishing: 0 } as Record<ShipKind, number> };
   /** Lights fade out by this distance (m). */
   private readonly lightRange = { value: 8000 };
   private live = new Map<string, Live>();
   /** Ships out of use, kept to reuse. */
-  private spare: Record<ShipKind, THREE.Group[]> = { container: [], tanker: [], fishing: [] };
+  private spare: Record<ShipKind, THREE.Group[]> = { container: [], tanker: [], bulk: [], fishing: [] };
   private last: { t: number; lat: number; lon: number } | null = null;
+
+  /** ?ship=container|tanker|bulk|fishing puts one ship of that kind under way near the boat (testing, proofs). */
+  private readonly forcedKind: ShipKind | null;
+  /** &near=metres: how far off she starts (default 900, 100 to 5000). */
+  private readonly forcedRange: number;
 
   private constructor(private readonly grid: ShipGrid | null) {
     this.root.name = "traffic";
+    const q = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("ship");
+    const near = typeof location === "undefined" ? NaN : Number(new URLSearchParams(location.search).get("near"));
+    this.forcedRange = Number.isFinite(near) && near > 0 ? THREE.MathUtils.clamp(near, 100, 5000) : 900;
+    this.forcedKind = q === "container" || q === "tanker" || q === "bulk" || q === "fishing" ? q : null;
+    // For playtest checks: where the ships are, so a check can point its camera at one.
+    if (typeof window !== "undefined") (window as unknown as { __traffic: { ships: () => ReturnType<Traffic["list"]> } }).__traffic = { ships: () => this.list() };
+  }
+
+  /** The ships in the scene now: scene position (m, our boat at the origin, east +x, north -z), range, bearing and how she's going. */
+  list(): { id: string; kind: ShipKind; x: number; z: number; distance: number; bearing: number; heading: number; speed: number; anchored: boolean }[] {
+    return [...this.live.values()].map(({ s, obj }) => ({
+      id: s.id,
+      kind: s.kind,
+      x: obj.position.x,
+      z: obj.position.z,
+      distance: Math.hypot(obj.position.x, obj.position.z),
+      bearing: (THREE.MathUtils.radToDeg(Math.atan2(obj.position.x, -obj.position.z)) + 360) % 360,
+      heading: s.heading,
+      speed: s.speed,
+      anchored: s.anchored,
+    }));
   }
 
   /** Load the traffic map; with none published there are simply no ships. */
@@ -240,17 +266,29 @@ export class Traffic {
       const want = new Set(near.map((s) => s.id));
       for (const [id, l] of this.live) {
         const p = shipAt(l.s, t);
+        // The test ship stays until she has passed well clear (then a fresh one comes), whatever the density map says.
+        if (id === "forced") {
+          if (jumped || metresTo(lat, lon, p) > Math.max(3000, 3 * this.forcedRange)) this.remove(id);
+          continue;
+        }
         const d = metresTo(lat, lon, p);
         // After a jump in time or place, only the ships that are really there now stay.
         const keep = want.has(id) || (!jumped && d <= hidden);
         if (!keep || d > RANGE || densityAt(g, p.lat, p.lon) === 0) this.remove(id);
+      }
+      if (this.forcedKind && !this.live.has("forced")) {
+        // Off on the starboard bow (900 m unless &near= says), crossing ahead from east to west.
+        const { mx, my } = metresPerDegree(lat);
+        const b = THREE.MathUtils.degToRad(40);
+        const fishing = this.forcedKind === "fishing";
+        this.add({ id: "forced", kind: this.forcedKind, lat: lat + (Math.cos(b) * this.forcedRange) / my, lon: lon + (Math.sin(b) * this.forcedRange) / mx, heading: 270, speed: fishing ? 2 : 8.5, anchored: false, tMid: t, seed: 0.3 });
       }
       for (const s of near) if (!this.live.has(s.id) && (jumped || metresTo(lat, lon, shipAt(s, t)) > hidden)) this.add(s);
     }
     // Place them: east is +x, north is -z, sunk by the earth's curve.
     const { mx, my } = metresPerDegree(lat);
     const k = this.shown.kinds;
-    k.container = k.tanker = k.fishing = 0;
+    k.container = k.tanker = k.bulk = k.fishing = 0;
     let nearest = Infinity;
     let bearing = 0;
     let inSight = 0;
@@ -269,7 +307,7 @@ export class Traffic {
       const { length: L, beam: B } = SHIP_SIZE[s.kind];
       const w = 2 * Math.PI * (0.08 + 0.04 * s.seed);
       const a = s.seed * 50;
-      obj.position.set(x, -(d * d) / (2 * R_EARTH) + (s.kind === "fishing" ? 0.25 * hs * Math.sin(w * t + a) : 0), z);
+      obj.position.set(x, (obj.userData.lift ?? 0) - (d * d) / (2 * R_EARTH) + (s.kind === "fishing" ? 0.25 * hs * Math.sin(w * t + a) : 0), z);
       obj.rotation.set(
         Math.min(0.15, (0.6 * hs) / B) * Math.sin(w * t * 0.8 + a), // roll
         -THREE.MathUtils.degToRad(s.heading + 90), // bow (builder -x) to the heading
@@ -281,8 +319,7 @@ export class Traffic {
 
   private add(s: Sighting): void {
     const obj = this.spare[s.kind].pop() ?? makeShip(s.kind, this.lightRange);
-    obj.getObjectByName("underway")!.visible = !s.anchored;
-    obj.getObjectByName("anchored")!.visible = s.anchored;
+    dressShip(obj, s.kind, s.seed, s.anchored, s.speed); // under way she makes a bow wave
     reflectable(obj);
     this.root.add(obj);
     this.live.set(s.id, { s, obj });

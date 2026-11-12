@@ -1,0 +1,71 @@
+# Channel buoys and beacons near Annapolis for the 3D practice view
+# (src/boatsim/oceandata/seamarks.py). The USCG Light List and Overpass are not
+# reachable from thread sandboxes, so this runs on a free runner.
+# Run it by hand: Actions tab -> "Seamarks" -> Run workflow.
+#   explore: print what the USCG Light List offers (links, the start of the files) to the log
+#   bake: write sea3d/public/seamarks-annapolis.json and upload it as an artifact;
+#         tick "commit" to commit it to the branch the workflow ran on.
+name: Seamarks
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "explore or bake"
+        default: "explore"
+      commit:
+        description: "Commit the baked file to this branch"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  seamarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write  # only for the commit step
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . requests
+      - name: Explore the USCG Light List
+        if: inputs.mode == 'explore'
+        run: |
+          mkdir -p runs/seamarks
+          for u in https://www.navcen.uscg.gov/light-list https://www.navcen.uscg.gov/?pageName=lightLists; do
+            echo "=== $u"; curl -sSL --max-time 60 -A "boat-sim seamarks" "$u" -o page.html || true
+            grep -oiE 'href="[^"]+\.(xml|pdf|zip|csv|xlsx)"' page.html | sort -u | head -80 || true
+          done
+          python - <<'PY'
+          import re, requests
+          html = open("page.html", errors="ignore").read()
+          links = sorted(set(re.findall(r'href="([^"]+\.(?:xml|zip))"', html, re.I)))
+          print("XML/ZIP links:", len(links))
+          for l in links:
+              if re.search(r"v2|vol.?2|d0?5|district.?5", l, re.I):
+                  print("candidate:", l)
+          PY
+          python -m boatsim.oceandata.seamarks --raw runs/seamarks/overpass.json --out runs/seamarks/seamarks-annapolis.json || true
+          head -c 3000 runs/seamarks/seamarks-annapolis.json || true
+      - name: Bake
+        if: inputs.mode == 'bake'
+        run: python -m boatsim.oceandata.seamarks --raw runs/seamarks/overpass.json --out sea3d/public/seamarks-annapolis.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seamarks
+          path: |
+            runs/seamarks/
+            sea3d/public/seamarks-annapolis.json
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Commit
+        if: inputs.mode == 'bake' && inputs.commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sea3d/public/seamarks-annapolis.json
+          git commit -m "Seamarks: bake Annapolis channel buoys and beacons" || exit 0
+          git push

@@ -25,7 +25,7 @@ export const BASE_LONG: Record<BaseKey, string> = {
 };
 
 export const RANDOLPH_CREDIT = {
-  text: "Randolph boat: parts, prices and design from the Randolph team's drone-boat (MIT licence, see THIRD_PARTY_NOTICES). Our model of it, not their own simulator.",
+  text: "Randolph boat: parts and design from the Randolph team's drone-boat (MIT licence, see THIRD_PARTY_NOTICES). Our model of it, not their own simulator.",
   url: "https://github.com/sheltonr2/drone-boat",
 };
 
@@ -39,7 +39,7 @@ const FIGURES: Record<string, Record<string, Figures>> = {
   drive: {
     wing: { cost: 155, kg: 0, thr: 0, d: "Free-rotating rigid wing with a tail flap; weathervanes on its own. Foam ribs and glass skin on a 30 x 22 mm carbon spar (Rev C3: stronger, bearings 130 mm apart; Rev C4: acetal ball bearings with glass balls, which can't rust, and plain lands that take a wave's load), balanced by a weight on a solid fibreglass arm. Rev C5: shorter and wider, 0.80 m tall by 0.375 m across, with the same area: it heels the boat less." },
     // Their design.py has a 35 W thruster; no price in the build plan. GUESS: one of our T200s.
-    "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Price and weight are our guess." },
+    "wing-thruster": { cost: 155 + 378.8, kg: 0.45, thr: 1, est: 1, d: "The wing plus a small motor (their 35 W thruster), used like our wing-and-motors build. Weight is our guess." },
   },
   brain: {
     // The autopilot, GPS and companion computer are in the rest of the boat; this is the sealed box.

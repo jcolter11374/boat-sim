@@ -325,9 +325,49 @@ def tube(name, pts, r, mat, segs=12) -> bpy.types.Object:
     return ob
 
 
+@dataclass
+class HullFinish:
+    """How each painted zone of a hull takes the light (Yuki, 12 Nov 2026): roughness
+    and clear-coat weight per zone. Exported as the hull's roughness and clearcoat
+    maps, so glossy gelcoat, matte bottom paint and non-skid deck are one material.
+    All values are GUESS, set by eye against reference photos."""
+
+    top_rough: float = 0.16  # polished gelcoat topsides
+    top_coat: float = 1.0
+    boot_rough: float = 0.14  # painted boot stripe, glossy
+    boot_coat: float = 1.0
+    bottom_rough: float = 0.86  # antifouling: dead matte
+    bottom_coat: float = 0.0
+    deck_rough: float = 0.45  # smooth deck margins
+    deck_coat: float = 0.35
+    nonskid_rough: float = 0.88  # the raised non-skid diamonds
+    nonskid_coat: float = 0.0
+
+
 # ------------------------------------------------------------- textures ----
 def hull_texture(f: HullForm, paint: HullPaint, W: int, H: int, NT: int, ND: int) -> np.ndarray:
     """Paint for a hull, indexed by (s along the hull, ring position)."""
+    return _hull_paint(f, paint, W, H, NT, ND)[0]
+
+
+def hull_finish_texture(
+    f: HullForm, paint: HullPaint, fin: HullFinish, W: int, H: int, NT: int, ND: int
+) -> np.ndarray:
+    """Finish map in the paint's layout: R = clear-coat weight, G = roughness."""
+    z = _hull_paint(f, paint, W, H, NT, ND)[1]
+    out = np.zeros((H, W, 3), np.float32)
+    for c, key in ((0, "coat"), (1, "rough")):
+        v = {
+            zone: getattr(fin, f"{zone}_{key}")
+            for zone in ("top", "boot", "bottom", "deck", "nonskid")
+        }
+        side = z["below"] * v["bottom"] + z["stripe"] * v["boot"] + z["above"] * v["top"]
+        deck = np.where(z["diamond"], v["nonskid"], v["deck"])
+        out[..., c] = np.where(z["deck"], deck, side)
+    return out
+
+
+def _hull_paint(f: HullForm, paint: HullPaint, W: int, H: int, NT: int, ND: int):
     M = 2 * NT + ND  # ring index runs 0..M (keel, starboard, deck, port, keel)
     u = (np.arange(W) + 0.5) / W
     v = (np.arange(H) + 0.5) / H
@@ -371,7 +411,8 @@ def hull_texture(f: HullForm, paint: HullPaint, W: int, H: int, NT: int, ND: int
 
     if paint.lettering:
         col = letter(col, paint, x, height, side_s, side_p, f)
-    return col
+    zones = {"below": below, "stripe": stripe, "above": above, "deck": deck, "diamond": diamond}
+    return col, zones
 
 
 def letter(col, paint: HullPaint, x, height, side_s, side_p, f: HullForm):
@@ -393,7 +434,8 @@ def letter(col, paint: HullPaint, x, height, side_s, side_p, f: HullForm):
             pass
     if font is None:
         return col
-    img = Image.new("L", (1000, 260), 0)
+    bb = font.getbbox(paint.lettering)
+    img = Image.new("L", (bb[2] + 40, 260), 0)  # wide enough for the whole text
     ImageDraw.Draw(img).text((10, 10), paint.lettering, fill=255, font=font)
     img = img.crop(img.getbbox())
     glyph = np.asarray(img, np.float32) / 255
@@ -436,9 +478,18 @@ def cell_texture(cols: int, rows: int, px_per_cell: int = 64) -> np.ndarray:
 
 # ---------------------------------------------------------------- parts ----
 def hull(
-    f: HullForm, paint: HullPaint, rough=0.32, coat=0.5, nx=180, nt=32, nd=18, tex=(2048, 512)
+    f: HullForm,
+    paint: HullPaint,
+    rough=0.32,
+    coat=0.5,
+    nx=180,
+    nt=32,
+    nd=18,
+    tex=(2048, 512),
+    finish: HullFinish | None = None,
 ):
     """The hull from its form, as parts.ts hull() but dense; painted texture.
+    With a finish, roughness and clear coat vary by zone (finish map).
     Returns (object, image, rgb) for baking."""
     M = 2 * nt + nd
     verts, faces, uvs, sharp = [], [], [], []
@@ -481,12 +532,27 @@ def hull(
     img = new_image("hull_paint", *tex)
     rgb = hull_texture(f, paint, tex[0], tex[1], nt, nd)
     set_pixels(img, rgb)
+    hull_mat = material("hull", image=img, rough=rough, coat=coat)
+    if finish is not None:
+        fw, fh = tex[0] // 2, tex[1] // 2
+        fimg = bpy.data.images.new("hull_finish", fw, fh, alpha=False)
+        fimg.colorspace_settings.name = "Non-Color"
+        set_pixels(fimg, hull_finish_texture(f, paint, finish, fw, fh, nt, nd))
+        nt_ = hull_mat.node_tree
+        bsdf = nt_.nodes["Principled BSDF"]
+        ftex = nt_.nodes.new("ShaderNodeTexImage")
+        ftex.image = fimg
+        sep = nt_.nodes.new("ShaderNodeSeparateColor")
+        nt_.links.new(ftex.outputs["Color"], sep.inputs["Color"])
+        nt_.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+        nt_.links.new(sep.outputs["Red"], bsdf.inputs["Coat Weight"])
+        bsdf.inputs["Coat Roughness"].default_value = 0.05
     ob = mesh_object(
         "hull",
         verts,
         faces + transom,
         uvs=uvs + [[(0.999, 0.5)] * 3 for _ in transom],
-        mat=material("hull", image=img, rough=rough, coat=coat),
+        mat=hull_mat,
         sharp_edges=sharp,
     )
     ob.data.materials.append(
