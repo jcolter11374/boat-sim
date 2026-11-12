@@ -519,6 +519,37 @@ const CHECKS = {
       return `odds ${before}, picked a part marked ${delta}, now ${after}`;
     },
   },
+  // #309 (first-time items 10 and 23): the title menu shows on a first visit, "Just watch the sea"
+  // brings the sea panel back (with "Sail this sea", #349), and every top-bar link opens its page with the bar.
+  "title-nav": {
+    path: "?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 2 * MIN });
+      if (!(await page.locator("#title").count())) throw new SkipCheck("this build has no title menu (#309 not deployed)");
+      must(await page.locator("#title").isVisible(), "the title menu didn't show on a first visit");
+      const menu = await page.evaluate(() => [...document.querySelectorAll("#title a, #title button")].filter((e) => e.offsetParent).map((e) => e.textContent.trim().split("\n")[0]));
+      await page.screenshot({ path: `play-${BROWSER}-title.png` }).catch(() => {});
+      await page.click("#t-sea", { noWaitAfter: true, timeout: 10_000 }).catch(() => {
+        throw new CheckFail(`couldn't click "Just watch the sea"`);
+      });
+      await page.waitForFunction(() => document.getElementById("title").hidden, null, { timeout: 10_000 }).catch(() => {
+        throw new CheckFail(`"Just watch the sea" didn't close the menu`);
+      });
+      must(await page.locator("#panel").isVisible(), `"Just watch the sea" didn't bring the sea panel back`);
+      const way = await page.locator("#sail").isVisible().catch(() => false);
+      const links = await page.evaluate(() => [...document.querySelectorAll("#topbar a.nav")].map((a) => ({ href: a.href, text: a.textContent.trim() })));
+      must(links.length >= 5, `the top bar has ${links.length} links: ${JSON.stringify(links)}`);
+      const bad = [];
+      for (const l of links) {
+        const r = await page.goto(l.href, { waitUntil: "load", timeout: 2 * MIN }).catch((e) => ({ status: () => String(e).split("\n")[0] }));
+        const st = r?.status?.() ?? "no response";
+        const bar = await page.locator("#topbar a.nav").count().catch(() => 0);
+        if (st !== 200 || bar < 5) bad.push(`${l.text} (${l.href}): HTTP ${st}, ${bar} bar links`);
+      }
+      must(!bad.length, `top bar links that don't open a page with the bar: ${bad.join("; ")}`);
+      return `menu: ${menu.join(" / ")}; sea panel back${way ? ' with "Sail this sea"' : ""}; ${links.length} bar links all open (${links.map((l) => l.text).join(", ")})`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
