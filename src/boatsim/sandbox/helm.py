@@ -50,6 +50,7 @@ Owner: Sam.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import math
 import zlib
@@ -246,6 +247,8 @@ class Trimmed:
         return cmd
 
     def __getattr__(self, name):  # on_message_received and the like
+        if name == "inner" or name.startswith("__"):  # inner unset under copy; dunders stay ours
+            raise AttributeError(name)
         return getattr(self.inner, name)
 
 
@@ -428,6 +431,68 @@ class Game:
         o.update(self._send(heading, power, sails, engine))
         self.orders.append(o)
         return o
+
+    def preview(
+        self,
+        heading: float | str,
+        power: float,
+        sails: str | None = None,
+        engine: bool | None = None,
+        hours: float = 24.0,
+    ) -> dict:
+        """What an order would do, without doing it (#330): a copy of your boat
+        sails on with it for `hours` in today's forecast (the one base would get
+        now, as forecast() shows, never the true weather: the ghost only ever
+        sees forecasts, so the preview gives the player no peek it doesn't get),
+        and is thrown away. Issuing a forecast is pure (its errors come from the
+        seed and the issue time), so the game's own forecasts don't change.
+        Breakdowns and knockdowns are off in the copy, so the preview neither
+        spends nor shows the voyage's dice. Hands on only. Returns the copy's
+        mean speed through the water (m/s), battery change (0-1), km made
+        towards the finish, and the hours it actually sailed (shorter if it
+        finished, ran aground or reached the end of the weather)."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        if self.mode != "hands_on":
+            raise ValueError("a preview is for hands-on games")
+        if heading == AUTO and (sails is not None or engine is not None):
+            raise ValueError("on auto the autopilot sets the sails and engine")
+        v = self.mine
+        c = v.c
+        # Share what is read-only and big (the weather, the land); copy the rest.
+        memo = {id(x): x for x in (c.env, c.forecast, c.land) if x is not None}
+        w = copy.deepcopy(v, memo)
+        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
+        _no_breakdowns(w.c)
+        if heading == AUTO:
+            steer, base = copy.deepcopy(self._auto, memo)
+        else:
+            steer = copy.deepcopy(self.helm, memo)
+            steer.set_order(heading, power, sails, engine)
+            base = copy.deepcopy(self.base, memo)
+        # A wrapper round the steerer (a running trim, #350) stays, with the new steerer inside it.
+        if hasattr(w.c.autopilot, "inner"):
+            w.c.autopilot.inner = steer
+        else:
+            w.c.autopilot = steer
+        w.c.base = base
+        t0, soc0, km0 = w.state.t, w.state.soc, self._km_to_finish(w)
+        stw, n = 0.0, 0
+        end = t0 + timedelta(hours=hours)
+        try:
+            while not w.done and w.state.t < end:
+                w.step()
+                stw += w.state.speed_through_water
+                n += 1
+        except OutsideCoverage:  # the forecast ran past the end of the weather: a shorter preview
+            pass
+        return {
+            "hours": (w.state.t - t0).total_seconds() / 3600,
+            "stw": stw / n if n else 0.0,
+            "soc": float(w.state.soc - soc0),
+            "km": km0 - self._km_to_finish(w),
+            "outcome": self._outcome(w) if w.done else "at_sea",
+        }
 
     @property
     def on_auto(self) -> bool:
