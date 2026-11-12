@@ -43,9 +43,11 @@ const FINISHES: Record<string, Finish> = {
     m.roughness = 0.5;
     m.clearcoat = 0.3;
     m.clearcoatRoughness = 0.18;
-    m.sheen = 0.25;
-    m.sheenRoughness = 0.5;
-    m.sheenColor.set(0xffe2c8);
+    // Only a faint, orange-tinted sheen: a strong pale one washed the low sun out
+    // to salmon and, at night, drew a neon strip along the sheer under the deck lamp.
+    m.sheen = 0.08;
+    m.sheenRoughness = 0.6;
+    m.sheenColor.set(0xffb080);
     withGrain(m, 40);
   },
   transom: (m) => FINISHES.hull(m),
