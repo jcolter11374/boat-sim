@@ -68,6 +68,7 @@ def test_cudem_heights_leave_nan_where_no_file():
 
 
 def test_fill_gaps_takes_the_nearest_seen_colour():
+    pytest.importorskip("scipy")  # bake-time only (the Land data workflow installs it)
     col = np.full((4, 4, 3), 100, np.uint8)
     col[:, 3] = 0  # the scene's edge
     col[0, 0] = (10, 200, 30)
@@ -106,6 +107,8 @@ def test_bake_square_writes_decimetres_depths_and_meta(tmp_path):
 
 
 def test_bake_square_refuses_missing_heights(tmp_path):
+    pytest.importorskip("PIL")  # bake-time only (the Land data workflow installs it)
+
     def heights(lons, lats):
         h = np.zeros((len(lats), len(lons)))
         h[3, 3] = np.nan
