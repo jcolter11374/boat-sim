@@ -871,9 +871,11 @@ void main() {`,
     float solid = exp(-xs / (0.09 * uBow.y));
     float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y + uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid * smoothstep(0.35, 0.6, n));
     // The stem itself, up to the crest, is all white: nothing dark pokes through where the two sides meet.
-    foam = max(foam, (1.0 - smoothstep(2.0, 5.0, vLocal.x)) * (1.0 - smoothstep(top * 0.85, top, vLocal.y + uBow.z)) * step(0.15, uBow.x) * (0.88 + 0.12 * n));
+    foam = max(foam, (1.0 - smoothstep(2.0, 5.0, vLocal.x)) * (1.0 - smoothstep(top * 0.85, top, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * step(0.15, uBow.x) * smoothstep(0.25, 0.55, n + 0.25 * (1.0 - smoothstep(0.0, 1.5, vLocal.y + uBow.z))));
+    // The stem edge itself (its thin end triangles carry the boot-top paint high up) is solid white to the crest.
+    foam = max(foam, (1.0 - smoothstep(0.6, 1.6, vLocal.x)) * (1.0 - smoothstep(top * 0.8, top, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * step(0.15, uBow.x));
     // Right at the waterline forward the hull is buried in white water: no dark boot-top showing through.
-    foam = max(foam, (1.0 - smoothstep(0.5, 1.4, vLocal.y + uBow.z)) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
+    foam = max(foam, (1.0 - smoothstep(1.2, 1.8, vLocal.y + uBow.z)) * smoothstep(-0.5, 0.0, vLocal.y + uBow.z) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.95), foam * 0.95);
   }`,
       )
@@ -917,7 +919,7 @@ export function shipFoam(speed: number, length: number): number {
 }
 
 export function bowWaveOnStem(speed: number, length: number): number {
-  return ((1.1 * speed * speed) / (2 * 9.81)) * Math.sqrt(shipFoam(speed, length));
+  return ((0.6 * speed * speed) / (2 * 9.81)) * Math.sqrt(shipFoam(speed, length)); // ~2.4 m on a box ship at 18 kn
 }
 
 /**
@@ -953,9 +955,9 @@ function bowWaveGeometry(kind: ShipKind): THREE.BufferGeometry {
         // Cross-section, in units of the stem height: up the hull (t 0..0.35), over the
         // lip (0.35..0.55), down the face to the sea (0.55..1). y is height, w is out from the hull.
         const lip = 0.45;
-        const y = t < lip ? 0.15 + 0.85 * Math.sin((t / lip) * Math.PI * 0.5) : Math.cos(((t - lip) / (1 - lip)) * Math.PI * 0.5) - 0.12;
+        const y = t < lip ? 0.15 + 0.85 * Math.sin((t / lip) * Math.PI * 0.5) : Math.cos(((t - lip) / (1 - lip)) * Math.PI * 0.5) + 0.01; // ends on the sea, never under it
         const w = t < lip ? 0.25 * (t / lip) : 0.25 + 1.6 * Math.pow((t - lip) / (1 - lip), 1.4);
-        const rake = stemX(h, 4) * Math.exp(-x / 6); // the stem rakes forward above the water: start the sheet on it
+        const rake = stemX(h, 4) * Math.exp(-x / 6) * THREE.MathUtils.clamp(y, 0, 1); // the stem rakes forward above the water: follow it, but not at the waterline
         pos.push(x + rake + 0.6 * w * u, y, sgn * (hb + 0.15 * Math.min(1, x / 3))); // z gets the outward width in the shader
         uv.push(u, t);
         side.push(sgn * w);
@@ -990,6 +992,7 @@ function bowWaveMaterial(): THREE.MeshStandardMaterial {
 uniform float uSeaTime;
 attribute float aOut;
 varying vec2 vBw;
+varying float vBwY;
 void main() {
   vBw = uv;`,
       )
@@ -1002,13 +1005,15 @@ void main() {
   float lump = sin(uv.x * 61.0 + uSeaTime * 2.3) * 0.5 + sin(uv.x * 23.0 - uSeaTime * 1.7 + 1.3) * 0.5;
   float atLip = exp(-pow((uv.y - 0.45) / 0.15, 2.0));
   transformed.y *= hk * (1.0 + 0.22 * lump * atLip);
-  transformed.z += aOut * hk * (1.0 + 2.5 * uv.x);`,
+  transformed.z += aOut * hk * (1.0 + 2.5 * uv.x);
+  vBwY = transformed.y;`,
       );
     sh.fragmentShader = sh.fragmentShader
       .replace(
         "void main() {",
         `uniform float uSeaTime;
 varying vec2 vBw;
+varying float vBwY;
 float bwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float bwNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -1051,6 +1056,7 @@ void main() {`,
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.26, 0.6, 0.58), edge * 0.7);
     float tear = bwNoise(vec2(vBw.x * 95.0 - uSeaTime * 2.0, vBw.y * 14.0 + uSeaTime));
     a *= 1.0 - exp(-pow((vBw.y - 0.42) / 0.06, 2.0)) * smoothstep(0.55, 0.75, tear) * smoothstep(0.03, 0.12, vBw.x);
+    a *= smoothstep(0.0, 0.35, vBwY); // nothing of it below the sea surface (the sea is see-through near hulls)
     diffuseColor.a *= a;
     if (diffuseColor.a < 0.02) discard;
   }`,
