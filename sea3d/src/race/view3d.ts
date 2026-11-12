@@ -138,8 +138,10 @@ export class BoatView {
     }
     this.model = BUILDERS[this.spec.key](this.quality);
     this.contact = new Contact(this.model.form, this.spec, this.quality, this.model.root);
+    this.contact.surface = (c, x, z, t) => this.sea.surfaceAt(c, x, z, t);
     this.contact.collar.visible = this.contact.spray.visible = !this.model.twinHull;
     this.wake = new Wake(this.quality, this.spec.cruiseSpeed, this.spec.beam, this.model.stern.x);
+    this.wake.surface = (c, x, z, t) => this.sea.surfaceAt(c, x, z, t);
     this.scene.add(this.model.root, this.wake.points, this.contact.collar, this.contact.spray);
   }
 

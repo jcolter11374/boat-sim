@@ -148,9 +148,11 @@ function buildBoat(): void {
   model = BUILDERS[spec.key](quality);
   reflectable(model.root);
   contact = new Contact(model.form, spec, quality, model.root);
+  contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   // The foam line fits single hulls the size of ours or bigger; not the twin hulls or the little Randolph boat.
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
+  wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
   placeDeckLight();
 }

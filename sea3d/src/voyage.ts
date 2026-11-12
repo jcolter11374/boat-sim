@@ -272,10 +272,12 @@ function buildBoat(q: Quality): void {
     viewScale = k;
   }
   contact = new Contact(model.form, spec, q, model.root);
+  contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(contact.collar, contact.spray);
   // Two hulls: the collar and spray follow one centred hull, so leave them off.
   contact.collar.visible = contact.spray.visible = !model.twinHull;
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
+  wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   shadowsOn(model.root);
   scene.add(model.root, wake.points);
   reflectable(model.root);

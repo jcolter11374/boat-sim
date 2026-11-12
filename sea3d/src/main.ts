@@ -123,8 +123,10 @@ function buildBoats(q: Quality): void {
     }
     b.model = BUILDERS[b.spec.key](q);
     b.contact = new Contact(b.model.form, b.spec, q, b.model.root);
+    b.contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
     scene.add(b.contact.collar, b.contact.spray);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
+    b.wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
     shadowsOn(b.model.root);
     scene.add(b.model.root, b.wake.points);
   }
