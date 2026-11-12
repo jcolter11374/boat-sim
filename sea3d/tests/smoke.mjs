@@ -669,8 +669,9 @@ try {
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, clock: window.__helm.clock, lastStop: window.__helm.lastStop, msg: document.querySelector("#startmsg").textContent }));
       if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
-      // Without clock=paused, time runs from Set sail at 6 hours a second (unless something already paused it).
-      if (mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start at 6 h/s: ${JSON.stringify(mg)}`);
+      // Without clock=paused, time runs from Set sail: the first hours at 1 hour a second, then 6
+      // (unless something already paused it).
+      if (mg.clock !== 1 && mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start by itself: ${JSON.stringify(mg)}`);
       // Picking another boat on the start card makes it my boat, for the other pages.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
