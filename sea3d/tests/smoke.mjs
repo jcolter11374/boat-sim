@@ -673,8 +673,9 @@ try {
       if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
       // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
-      const next = await page.evaluate(() => ({ head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-next .next a")].map((a) => a.getAttribute("href")) }));
-      if (!next.head || next.links.length !== 3 || !next.links[2].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
+      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Voyage replays.
+      const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
+      if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
       await page.screenshot({ path: "test-output/helm-result.png" });
       log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
       // Start from a port (John hit "can't start from a port yet" when the page
