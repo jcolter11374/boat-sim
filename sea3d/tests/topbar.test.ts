@@ -45,7 +45,7 @@ test("the boat chip: Our kayak by default on every page, my boat named safely", 
     assert.equal(d.href, "./boatyard.html");
   }
   assert.equal(boatChip(null).name, "Our kayak");
-  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice: Cruiser 31");
+  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Cruiser 31");
   assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Cruiser 31");
   const c = boatChip({ name: 'Rev C <b>"x"</b> & co', href: "./boatyard.html#base=revc" });
   assert.equal(c.href, "./boatyard.html#base=revc");
