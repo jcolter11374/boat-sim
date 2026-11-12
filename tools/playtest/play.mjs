@@ -839,7 +839,11 @@ const CHECKS = {
       // #415: ships in the Channel.
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 5 && window.__helm.ships?.ships > 0, null, { timeout: 2 * MIN }).catch(() => {});
       await page.waitForTimeout(5000);
-      const ships = await page.evaluate(() => JSON.stringify(window.__helm.ships?.kinds ?? window.__helm.ships));
+      const ships = await page.evaluate(() => JSON.stringify(window.__helm.ships));
+      console.log(`M0-415 ${ships}`);
+      // The start box covers the scene; set it aside for the picture only (the ships sit behind it).
+      await page.evaluate(() => { const s = document.getElementById("start"); if (s) s.style.display = "none"; });
+      await page.waitForTimeout(1500);
       await lookShot(page, `m0-${BROWSER}-ships.jpg`);
       await page.keyboard.press("c"); await page.waitForTimeout(6000); // cinematic may go looking at traffic
       await lookShot(page, `m0-${BROWSER}-ships-cine.jpg`);
@@ -847,6 +851,12 @@ const CHECKS = {
       // #408: the cruiser's sails and hull in practice.
       await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 5, null, { timeout: 2 * MIN });
+      await page.waitForFunction(() => !document.getElementById("practice-courses")?.hidden, null, { timeout: MIN }).catch(() => {});
+      await page.evaluate(() => document.querySelector('#practice-breeze button[data-b="fresh"]')?.click());
+      await page.waitForTimeout(500);
+      await page.evaluate(() => document.querySelector('#practice-courses button[data-course="triangle"]')?.click());
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => {});
+      await page.keyboard.down("ArrowLeft"); await page.waitForTimeout(2500); await page.keyboard.up("ArrowLeft");
       await page.waitForTimeout(6000);
       await lookShot(page, `m0-${BROWSER}-sails-hull.jpg`);
       // #422: Watch a voyage at 1024: the wind/waves cell, the end card with the drawer open, the broken-part count.
