@@ -32,6 +32,7 @@
 // with the mesh origin at the centre of gravity (cgBelowWaterline below the
 // static waterline).
 
+import { gerstnerSurface, type SeaSurface } from "./seaSurface";
 import { G, type WaveComponent } from "./waves";
 
 export const RHO = 1025; // kg/m^3, sea water
@@ -547,12 +548,15 @@ const GRID_Z = [-0.5, 0, 0.5]; // fractions of waterline beam
 
 export function seaUnderHull(
   p: HullParams,
-  comps: WaveComponent[],
+  sea: WaveComponent[] | SeaSurface,
   x: number,
   z: number,
   yaw: number,
   t: number,
 ): SeaUnderHull {
+  // The drawn surface (sharp, forward-leaning crests), not plain sines: the boat floats
+  // on the sea we draw. A bare list of trains is the shader's Gerstner sea.
+  const surf = Array.isArray(sea) ? gerstnerSurface(sea) : sea;
   // yaw rotates the boat about +y: local +x (bow) -> world (cos yaw, 0, -sin yaw)
   const cx = Math.cos(yaw);
   const sx = Math.sin(yaw);
@@ -568,7 +572,7 @@ export function seaUnderHull(
       const lz = fz * p.waterlineBeam;
       const wx = x + lx * cx + lz * sx;
       const wz = z - lx * sx + lz * cx;
-      const e = waveHeight(comps, wx, wz, t);
+      const e = surf.heightAt(wx, wz, t);
       n++;
       se += e;
       sxe += lx * e;
@@ -589,6 +593,7 @@ export interface Pose {
 
 export class BoatMotion {
   static readonly DT = 0.005; // s, substep
+  static readonly SEA_DT = 0.02; // s, between samples of the sea under the hull
   readonly p: HullParams;
   readonly d: Derived;
   pose: Pose;
@@ -606,6 +611,8 @@ export class BoatMotion {
    * over and floats upside down, rocking about 180 deg (a boat with nobody to right it). */
   capsized = 0;
   private prevEta: number | null = null;
+  private seaA: { t: number; x: number; z: number; yaw: number; s: SeaUnderHull } | null = null;
+  private seaB: { t: number; x: number; z: number; yaw: number; s: SeaUnderHull } | null = null;
 
   constructor(p: HullParams, pose: Pose = { x: 0, z: 0, yaw: 0 }) {
     this.p = p;
@@ -614,16 +621,39 @@ export class BoatMotion {
   }
 
   /** Advance to time `t` (s) in substeps of DT. */
-  advance(comps: WaveComponent[], t: number): void {
+  advance(sea: WaveComponent[] | SeaSurface, t: number): void {
     if (t <= this.t) return;
+    const surf = Array.isArray(sea) ? gerstnerSurface(sea) : sea;
     const steps = Math.min(Math.ceil((t - this.t) / BoatMotion.DT), 2000); // cap a long pause
     const dt = (t - this.t) / steps;
-    for (let i = 0; i < steps; i++) this.step(comps, dt);
+    for (let i = 0; i < steps; i++) this.step(surf, dt);
   }
 
-  step(comps: WaveComponent[], dt: number): void {
+  /** The sea under the hull at time t: sampled every SEA_DT and interpolated, as the
+   *  drawn surface costs a few fixed-point steps per point. */
+  private seaAt(sea: SeaSurface, t: number): SeaUnderHull {
+    const { x, z, yaw } = this.pose;
+    const moved = (s: { x: number; z: number; yaw: number }) => s.x !== x || s.z !== z || s.yaw !== yaw;
+    let a = this.seaA;
+    let b = this.seaB;
+    if (!a || !b || t < a.t || t > b.t + BoatMotion.SEA_DT || moved(b)) {
+      const t0 = Math.floor(t / BoatMotion.SEA_DT) * BoatMotion.SEA_DT;
+      a = { t: t0, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, t0) };
+      b = { t: t0 + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, t0 + BoatMotion.SEA_DT) };
+    } else if (t > b.t) {
+      a = b;
+      b = { t: a.t + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, a.t + BoatMotion.SEA_DT) };
+    }
+    this.seaA = a;
+    this.seaB = b;
+    const f = (t - a.t) / (b.t - a.t);
+    const lerp = (u: number, v: number) => u + (v - u) * f;
+    return { eta: lerp(a.s.eta, b.s.eta), slopeX: lerp(a.s.slopeX, b.s.slopeX), slopeZ: lerp(a.s.slopeZ, b.s.slopeZ) };
+  }
+
+  step(sea: WaveComponent[] | SeaSurface, dt: number): void {
     const { p, d } = this;
-    const s = seaUnderHull(p, comps, this.pose.x, this.pose.z, this.pose.yaw, this.t + dt);
+    const s = this.seaAt(Array.isArray(sea) ? gerstnerSurface(sea) : sea, this.t + dt);
     const etaRate = this.prevEta === null ? 0 : (s.eta - this.prevEta) / dt;
     this.prevEta = s.eta;
     const W = d.displacementN;

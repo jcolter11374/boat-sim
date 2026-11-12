@@ -62,6 +62,9 @@ try {
     });
   }
   const page = await context.newPage();
+  // A screenshot that times out says which one it was (a bare "page.screenshot: Timeout" left
+  // #426's smoke (2) unplaceable).
+  const snap = (opts) => page.screenshot(opts).catch((e) => fail(`screenshot ${opts.path}: ${e.message.split("\n")[0]}`));
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   // SMOKE_PART=1 or 2 runs one half on its own runner (the pre-release gate runs
@@ -121,7 +124,7 @@ try {
         }
         if (Math.abs(b.pitch) > 1.2 || Math.abs(b.roll) > 1.2) fail(`${b.key} capsized-looking pose in ${sea}`);
       }
-      const png = await page.screenshot({ path: `test-output/sea-${sea}.png` });
+      const png = await snap({ path: `test-output/sea-${sea}.png` });
       // A blank canvas compresses to almost nothing; a rendered sea doesn't.
       if (png.length < 20000) fail(`${sea} screenshot looks blank (${png.length} bytes)`);
       log.push(`${sea} Hs ${s.hs} m`);
@@ -133,7 +136,7 @@ try {
     await page.waitForTimeout(500);
     vHigh = await page.evaluate(() => window.__sea3d.seaVertices);
     if (!(vLow > 0 && vLow < vHigh)) fail(`low quality should use fewer sea vertices (high ${vHigh}, low ${vLow})`);
-    const pngHigh = await page.screenshot({ path: "test-output/sea-gale-high.png" });
+    const pngHigh = await snap({ path: "test-output/sea-gale-high.png" });
     if (pngHigh.length < 20000) fail(`high-quality screenshot looks blank (${pngHigh.length} bytes)`);
     await page.selectOption("#quality", "low");
 
@@ -226,7 +229,7 @@ try {
       if (JSON.stringify([...g1.failed].sort()) !== JSON.stringify(broke)) fail(`${v.file}: gear shows broken ${JSON.stringify(g1.failed)}, log says ${JSON.stringify(broke)}`);
       const unsigned = broke.filter((p) => !g1.now.signs.includes(p));
       if (real && unsigned.length) fail(`${v.file}: no warning sign for ${unsigned.join(", ")}`);
-      const pngV = await page.screenshot({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
+      const pngV = await snap({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
       if (pngV.length < 20000) fail(`voyage screenshot looks blank (${pngV.length} bytes)`);
       log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} rows, ${whole.length} whole hours checked`);
     }
@@ -277,10 +280,10 @@ try {
     // Its moving parts: wing, wind vane, rudder, comms light; no propellers.
     const gR = (await page.evaluate(() => window.__replay.gear)).parts ?? {};
     if (gR.props !== 0 || !gR.wing || !gR.vane || !gR.rudder || !gR.light) fail(`Randolph gear missing: ${JSON.stringify(gR)}`);
-    await page.screenshot({ path: "test-output/voyage-race-randolph.png" });
+    await snap({ path: "test-output/voyage-race-randolph.png" });
     await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
     await page.waitForSelector("#outcome.show", { timeout: 10000 });
-    const pngR = await page.screenshot({ path: "test-output/voyage-race-end.png" });
+    const pngR = await snap({ path: "test-output/voyage-race-end.png" });
     if (pngR.length < 20000) fail(`race screenshot looks blank (${pngR.length} bytes)`);
     log.push(`${raceDate ? "" : "fixture "}race ${date}`);
     if (errors.length) fail(`page errors: ${errors.join("; ")}`);
@@ -685,7 +688,7 @@ try {
       // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Watch a voyage.
       const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
       if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
-      await page.screenshot({ path: "test-output/helm-result.png" });
+      await snap({ path: "test-output/helm-result.png" });
       log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
       // Start from a port (John hit "can't start from a port yet" when the page
       // got ahead of its simulator): the packed simulator must take the port.
@@ -842,7 +845,7 @@ try {
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
-    await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
+    await snap({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
     // Race view: with the simulator files it races our kayak against Rev C for a
     // day from the same launch; without them (or with an older simulator) it says so.
@@ -857,7 +860,7 @@ try {
       const r = await page.evaluate(() => ({ s: window.__race.status, stops: window.__race.stops, err: window.__race.error, tracks: window.__race.tracks.map((t) => t.length) }));
       const names = r.s?.boats.map((b) => b.name) ?? [];
       if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
-        || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
+        || names[0] !== "Our kayak" || !/Rev C5 \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
         fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
       // The 3D views: each boat on its own sea, drawing, and the right boat in each.
       await page.locator("#views").scrollIntoViewIfNeeded();
@@ -865,7 +868,7 @@ try {
         .catch(async () => fail(`race 3D views: ${JSON.stringify(await page.evaluate(() => window.__race.views))}`));
       const vb = await page.evaluate(() => window.__race.views.map((v) => v.boat));
       if (vb.join() !== "kayak,randolph") fail(`race 3D views show ${vb.join()}`);
-      await page.screenshot({ path: "test-output/race.png", fullPage: true });
+      await snap({ path: "test-output/race.png", fullPage: true });
       log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
       // My boat is boat A to start with, and the race sails its own parts.
       await page.evaluate(() => localStorage.setItem("boatsim.myboat.v1", JSON.stringify({ v: 1, kind: "yard", base: "kayak", hash: "#thr=one-t200", name: "One motor", choices: { thr: "one-t200", cruise_w: 25 }, saved: "2026-11-11T00:00:00.000Z" })));

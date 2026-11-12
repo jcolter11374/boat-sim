@@ -120,7 +120,8 @@ function build(): void {
   motion = new BoatMotion(KAYAK_V4, place);
   model = BUILDERS.kayak(quality);
   shadowsOn(model.root);
-  contact = new Contact(model.form, KAYAK, quality);
+  contact = new Contact(model.form, KAYAK, quality, model.root);
+  contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, contact.collar, contact.spray);
   outfit = new Outfit(model);
   outfit.onShapeLoaded = () => cat && redraw();
@@ -1084,7 +1085,7 @@ renderer.setAnimationLoop(() => {
       model.root.updateMatrixWorld();
       bowW.set(contact.bow[0], KAYAK.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
-      contact.update(comps, t, place, hsOf(comps), { speed: 0, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
+      contact.update(comps, t, place, hsOf(comps), { speed: 0, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.foamLight });
     }
   }
   controls.update();

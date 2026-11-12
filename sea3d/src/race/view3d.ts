@@ -68,9 +68,14 @@ export class BoatView {
   /** For the smoke test: frames drawn, and what the boat shows. */
   readonly shown = { frames: 0, boat: "kayak", heading: 0, hs: 0 };
 
+  /** The picture's quality: as asked, or for "auto" High on a graphics card and Low on
+   *  software graphics, as the helm and Boatyard do (High there drew under one frame a
+   *  second, so a click or screenshot in CI could wait 30 s). */
+  private readonly quality: "high" | "low";
+
   constructor(
     private readonly box: HTMLElement,
-    private readonly quality: "high" | "low",
+    asked: "high" | "low" | "auto",
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -84,6 +89,7 @@ export class BoatView {
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.enableZoom = true;
     this.atmos = new Atmosphere(this.renderer, this.scene, this.camera);
+    const quality = (this.quality = asked === "auto" ? (this.atmos.software ? "low" : "high") : asked);
     const ratio = quality === "high" ? Math.min(window.devicePixelRatio, 2) : this.atmos.software ? 0.5 : 1;
     this.renderer.setPixelRatio(ratio);
     this.atmos.setPixelRatio(ratio);
@@ -137,9 +143,11 @@ export class BoatView {
       this.contact.dispose();
     }
     this.model = BUILDERS[this.spec.key](this.quality);
-    this.contact = new Contact(this.model.form, this.spec, this.quality);
+    this.contact = new Contact(this.model.form, this.spec, this.quality, this.model.root);
+    this.contact.surface = (c, x, z, t) => this.sea.surfaceAt(c, x, z, t);
     this.contact.collar.visible = this.contact.spray.visible = !this.model.twinHull;
     this.wake = new Wake(this.quality, this.spec.cruiseSpeed, this.spec.beam, this.model.stern.x);
+    this.wake.surface = (c, x, z, t) => this.sea.surfaceAt(c, x, z, t);
     this.scene.add(this.model.root, this.wake.points, this.contact.collar, this.contact.spray);
   }
 
@@ -189,7 +197,7 @@ export class BoatView {
       if (this.contact) {
         this.bowW.set(this.contact.bow[0], this.spec.cgBelowWaterline, this.contact.bow[1]);
         m.root.localToWorld(this.bowW);
-        this.contact.update(comps, t, this.place, hs, { speed: stw, bowClearance: this.bowW.y - heightAt(comps, this.bowW.x, this.bowW.z, t), light: this.atmos.ambient });
+        this.contact.update(comps, t, this.place, hs, { speed: stw, bowClearance: this.bowW.y - heightAt(comps, this.bowW.x, this.bowW.z, t), light: this.atmos.foamLight });
       }
       m.gear.update(
         { speed: stw / this.spec.cruiseSpeed, rudder: rudderFor(dt > 0 ? step / dt : 0), sun: (w?.ghi ?? 500) / 1000, comms: "", flow, failed: new Map() },
@@ -214,7 +222,7 @@ export class BoatView {
     this.clouds.closeIn(this.atmos.fog);
     this.rain.update(t, this.camera, rainFromRate(w?.rain ?? 0), wu, -wv, this.atmos.ambient);
     this.sea.setSun(this.atmos.glintDir, this.atmos.glintLight);
-    this.wake?.setLight(this.atmos.ambient);
+    this.wake?.setLight(this.atmos.foamLight);
     this.controls.update();
     const floor = heightAt(comps, this.camera.position.x, this.camera.position.z, t) + 0.35;
     if (this.camera.position.y < floor) this.camera.position.y = floor;

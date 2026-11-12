@@ -65,9 +65,10 @@ test("a calm makes no short waves and no foam; foam grows with the wind and fade
   };
   const f5 = cover(9.4, 2, 6.6);
   const f8 = cover(19, 5, 10);
-  // Whitecap cover near Monahan's: about 1 % at force 5, 5-10 % at force 8 (storm.ts whitecaps()).
+  // Cover near storm.ts whiteCrests(): Monahan's ~1 % at force 5; at force 8 the crests and the
+  // foam they leave, about 30 % (Elena: a gale's sea has to look it).
   assert.ok(f5 > 0.002 && f5 < 0.03, `force 5 foam ${f5}`);
-  assert.ok(f8 > 0.03 && f8 < 0.2 && f8 > 3 * f5, `force 8 foam ${f8} vs force 5 ${f5}`);
+  assert.ok(f8 > 0.15 && f8 < 0.45 && f8 > 3 * f5, `force 8 foam ${f8} vs force 5 ${f5}`);
   // Without fresh breaking, foam fades by half in FOAM_HALF_LIFE.
   const c = new Cascade(32, 31.7, 0.2, Infinity, 3);
   c.foam.fill(1);
