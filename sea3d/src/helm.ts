@@ -2805,7 +2805,8 @@ function aimAt(bearing: number): void {
 
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
-  if (judging) {
+  // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
+  if (judging && !document.hidden && !page.busy) {
     // Unclamped frame time: the judge wants the real one.
     const v = judge.tick((t - last) * 1000);
     if (v !== "wait") {

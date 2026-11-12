@@ -1,7 +1,7 @@
 // The helm's starting picture quality, picked for the computer it runs on (Maya, Elena, 12 Nov).
 // Start on Medium. Under the goal card, time the frames for about 3 s, after the first frames
-// (shader compiling) have passed; if the typical frame is slower than about 33 ms (under 30 a
-// second), step down to Low once. "Typical" is the mean with the slowest 5% dropped, not the
+// (shader compiling) have passed; if the typical frame is slower than about 36 ms (under
+// 30 a second), step down to Low once. "Typical" is the mean with the slowest 5% dropped, not the
 // median: a browser can call back every 16.7 ms and stall on every few frames (the graphics card
 // can't keep up), and a median would miss those stalls entirely. Never step up by itself. A level
 // the player picked is remembered and always wins; software graphics (no graphics card) start on Low; ?quality=
@@ -36,8 +36,11 @@ export interface JudgeOptions {
   windowMs: number;
   /** A typical frame (mean, slowest 5% dropped) slower than this (ms) means: step down. */
   slowMs: number;
+  /** A gap longer than this (ms) is a pause (a hidden tab, a stall), not a frame: it isn't timed. */
+  pauseMs: number;
 }
-export const JUDGE: JudgeOptions = { skipFrames: 20, skipMs: 1000, windowMs: 3000, slowMs: 33 };
+// 36 ms, not 33: a screen refreshing 30 times a second gives every frame 33.3 ms, and that's smooth (Kai).
+export const JUDGE: JudgeOptions = { skipFrames: 20, skipMs: 1000, windowMs: 3000, slowMs: 36, pauseMs: 500 };
 
 /**
  * Times frames once and gives one verdict. Feed it each frame's duration in ms; it answers
@@ -54,7 +57,7 @@ export class FrameJudge {
 
   tick(dtMs: number): "wait" | "slow" | "ok" | "done" {
     if (this.told) return "done";
-    if (!(dtMs > 0) || !Number.isFinite(dtMs)) return "wait";
+    if (!(dtMs > 0) || !Number.isFinite(dtMs) || dtMs > this.o.pauseMs) return "wait";
     this.seen++;
     this.sinceStart += dtMs;
     if (this.seen <= this.o.skipFrames || this.sinceStart < this.o.skipMs) return "wait";
@@ -66,11 +69,14 @@ export class FrameJudge {
     return this.verdict;
   }
 
-  /** The mean of the timed frames (ms) with the slowest 5% left out (one-off hitches), or NaN before any. */
+  /** The mean of the timed frames (ms) with the slowest 5% left out (one-off hitches; at least one
+   * from 10 frames up, so a short window on a slow computer still drops its one hitch: Kai), or NaN before any. */
   typical(): number {
-    if (!this.dts.length) return NaN;
+    const n = this.dts.length;
+    if (!n) return NaN;
     const s = [...this.dts].sort((a, b) => a - b);
-    const keep = s.slice(0, Math.max(1, Math.ceil(s.length * 0.95)));
+    const drop = n >= 10 ? Math.max(1, Math.floor(n * 0.05)) : 0;
+    const keep = s.slice(0, n - drop);
     return keep.reduce((a, b) => a + b, 0) / keep.length;
   }
 

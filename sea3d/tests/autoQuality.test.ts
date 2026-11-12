@@ -14,16 +14,16 @@ test("?quality= pins it, a player's pick wins next, software graphics start Low,
 const run = (j: FrameJudge, dts: number[]) => dts.map((d) => j.tick(d));
 
 test("the compile frames don't count; a slow median steps down once", () => {
-  const j = new FrameJudge({ skipFrames: 3, skipMs: 100, windowMs: 300, slowMs: 33 });
+  const j = new FrameJudge({ skipFrames: 3, skipMs: 100, windowMs: 300, slowMs: 36, pauseMs: 500 });
   // Three huge compile frames, then steady 50 ms frames: slow.
-  const out = run(j, [900, 800, 700, ...Array(7).fill(50)]);
+  const out = run(j, [450, 400, 300, ...Array(7).fill(50)]);
   assert.equal(out.filter((x) => x === "slow").length, 1);
   assert.equal(j.median(), 50);
   assert.equal(j.tick(50), "done");
 });
 
 test("a few spikes don't make a fast computer slow", () => {
-  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 1000, slowMs: 33 });
+  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 1000, slowMs: 36, pauseMs: 500 });
   const dts = Array.from({ length: 70 }, (_, i) => (i % 10 === 0 ? 120 : 16));
   const out = run(j, dts);
   assert.ok(out.includes("ok"));
@@ -31,15 +31,36 @@ test("a few spikes don't make a fast computer slow", () => {
 });
 
 test("stalls every few frames count, though the median looks fast (a browser waiting on the graphics card)", () => {
-  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 33 });
+  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
   const dts = Array.from({ length: 200 }, (_, i) => (i % 4 === 3 ? 200 : 16.7));
   const out = run(j, dts);
   assert.equal(j.median(), 16.7);
   assert.ok(out.includes("slow"));
 });
 
+test("a short window on a slow computer still drops its one hitch (Kai)", () => {
+  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 800, slowMs: 36, pauseMs: 500 });
+  const out = run(j, [...Array(14).fill(30), 400, 30]);
+  assert.ok(out.includes("ok"), String(j.typical()));
+});
+
+test("a hidden tab's long gap is a pause, not a slow frame (Kai)", () => {
+  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
+  assert.equal(j.tick(30000), "wait");
+  assert.equal(j.frames, 0);
+  const out = run(j, Array(10).fill(16.7));
+  assert.ok(!out.includes("slow") && !out.includes("ok"), "ten frames are not 3 s");
+});
+
+test("a steady 30 frames a second is fine; 40 a second on a 60 Hz screen too (Kai)", () => {
+  const a = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
+  assert.ok(run(a, Array(100).fill(33.3)).includes("ok"));
+  const b = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 3000, slowMs: 36, pauseMs: 500 });
+  assert.ok(run(b, Array.from({ length: 200 }, (_, i) => (i % 2 ? 33.3 : 16.7))).includes("ok"));
+});
+
 test("it waits for the whole window, and ignores bad frame times", () => {
-  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 100, slowMs: 33 });
+  const j = new FrameJudge({ skipFrames: 0, skipMs: 0, windowMs: 100, slowMs: 36, pauseMs: 500 });
   assert.equal(j.tick(NaN), "wait");
   assert.equal(j.tick(-5), "wait");
   assert.equal(j.tick(40), "wait");
