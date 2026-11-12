@@ -11,15 +11,18 @@
  * textContent. Reduced motion is respected by the page's camera code, not here.
  */
 
+import { depthState, type DepthState } from "../land/depth";
 import { CRUISER_HANDLING, Guide, PEARSON31_2_HANDLING, SAIL_WORDS, Wheel, type Handling, type TrimTable } from "./wheel";
 
-/** Boats that can be sailed by hand, and their trim tables (written by vpp.py --trim). */
-const TABLES: Record<string, { url: URL; handling: Handling; name: string }> = {
-  stock_cruiser31: { url: new URL("../../../configs/polars/cruiser31_trim.json", import.meta.url), handling: CRUISER_HANDLING, name: "31 ft cruiser" },
+/** Boats that can be sailed by hand, their trim tables (written by vpp.py --trim) and their drafts (from their configs). */
+const TABLES: Record<string, { url: URL; handling: Handling; name: string; draftM: number }> = {
+  // configs/stock_cruiser31.yaml (deep-keel First 31.7)
+  stock_cruiser31: { url: new URL("../../../configs/polars/cruiser31_trim.json", import.meta.url), handling: CRUISER_HANDLING, name: "31 ft cruiser", draftM: 1.9 },
   stock_pearson31_2: {
     url: new URL("../../../configs/polars/pearson31_2_trim.json", import.meta.url),
     handling: PEARSON31_2_HANDLING,
     name: "Pearson 31-2 (our model of Randolph's boat)",
+    draftM: 1.71, // configs: the deep-keel version
   },
 };
 
@@ -42,6 +45,10 @@ export interface WheelStart {
   plan?: string | null;
   /** Where the mark is (default: dead ahead). */
   markBearing?: number;
+  /** A practice course instead: marks in order (metres east and north of the start), the last the finish. */
+  course?: { marks: { x: number; y: number; name: string }[]; radiusM: number };
+  /** Practice off Annapolis: the ground's height (m, - is depth) at metres east and north of the start; null = not known there. */
+  depthAt?: (x: number, y: number) => number | null;
 }
 
 export interface WheelFrame {
@@ -51,6 +58,9 @@ export interface WheelFrame {
   speedMs: number;
   plan: string;
   sheet: number;
+  /** Metres east and north of where the spell began. */
+  x: number;
+  y: number;
 }
 
 export interface WheelResult {
@@ -64,6 +74,11 @@ export interface WheelResult {
   reached: boolean;
   tacks: number;
   roundUps: number;
+  /** Ran into shallow water (practice off Annapolis). */
+  aground: boolean;
+  /** On a course: when (s) each mark was reached, and how many there were. */
+  markTimes: number[];
+  marks: number;
 }
 
 const tables = new Map<string, Promise<TrimTable>>();
@@ -93,6 +108,11 @@ export class WheelSession {
   private startedAt = 0;
   /** The guided first spell (Leo), until the player has done it or skipped it once. */
   guide: Guide | null = null;
+  private course: WheelStart["course"] = undefined;
+  private depthAt: WheelStart["depthAt"] = undefined;
+  private draftM = 2;
+  /** The water under her now (practice with depths only), for the panel and tests. */
+  depth: { state: DepthState; m: number | null } = { state: "unknown", m: null };
 
   constructor(
     private readonly host: {
@@ -109,7 +129,7 @@ export class WheelSession {
     this.root.setAttribute("aria-label", "At the wheel");
     // Constant markup only; every value below goes in by textContent.
     this.root.innerHTML = `
-      <div class="w-top"><b>At the wheel</b> <span class="w-goal"></span>
+      <div class="w-top"><b>At the wheel</b> <span class="w-goal"></span> <span class="w-depth" hidden></span>
         <span class="w-speeds" role="group" aria-label="How fast time runs">
           <button data-x="0" title="Pause (space bar)">❚❚</button><button data-x="1" title="Real time (key 1)">1×</button><button data-x="2" title="Twice as fast (key 2)">2×</button><button data-x="5" title="Five times (key 3)">5×</button><button data-x="10" title="Ten times (key 4)">10×</button>
         </span>
@@ -159,8 +179,13 @@ export class WheelSession {
       // She was sailing on autopilot until now, so start at the best speed for this heading
       // (a new game reports 0 kn through the water before its first step).
       { heading: s.heading, speedKn: undefined, plan: s.plan ?? undefined, autoTrim: localStorage.getItem("boatsim.wheel.auto") === "1" },
-      { markM: 800, markBearing: s.markBearing ?? s.heading }, // GUESS: 800 m, about 3 minutes at 1x (Leo: 2-4 minute spells)
+      // GUESS: 800 m, about 3 minutes at 1x (Leo: 2-4 minute spells)
+      { markM: 800, markBearing: s.markBearing ?? s.heading, marks: s.course?.marks, markRadiusM: s.course?.radiusM },
     );
+    this.course = s.course;
+    this.depthAt = s.depthAt;
+    this.draftM = spec.draftM;
+    this.depth = { state: "unknown", m: null };
     this.on = true;
     this.paused = false;
     this.speed = 1;
@@ -205,6 +230,9 @@ export class WheelSession {
       reached,
       tacks: w.s.tacks,
       roundUps: w.s.roundUps,
+      aground: w.s.aground,
+      markTimes: [...w.s.markTimes],
+      marks: this.course?.marks.length ?? 1,
     });
   }
 
@@ -283,14 +311,19 @@ export class WheelSession {
         this.guide?.update(w, total / n);
       }
       if (this.guide?.done) this.endGuide();
+      if (this.depthAt) {
+        const h = this.depthAt(w.s.x, w.s.y);
+        this.depth = { state: depthState(h, this.draftM), m: h == null ? null : -h };
+        if (this.depth.state === "aground" && !w.s.done) w.ground();
+      }
       if (w.s.done) {
         this.draw();
-        this.stop(true);
+        this.stop(!w.s.aground);
         return null;
       }
     }
     this.draw();
-    return { heading: w.s.heading, heelDeg: w.heelSigned(), speedMs: w.s.speedKn / KNOTS_PER_MS, plan: w.s.plan, sheet: w.s.sheet };
+    return { heading: w.s.heading, heelDeg: w.heelSigned(), speedMs: w.s.speedKn / KNOTS_PER_MS, plan: w.s.plan, sheet: w.s.sheet, x: w.s.x, y: w.s.y };
   }
 
   private lastDraw = 0;
@@ -307,7 +340,19 @@ export class WheelSession {
     const g = el(r, ".w-guide");
     g.hidden = !this.guide;
     if (this.guide) el(r, ".w-gtext").textContent = this.guide.text;
-    el(r, ".w-goal").textContent = `${toGo >= 1000 ? `${(toGo / 1000).toFixed(1)} km` : `${Math.round(toGo / 10) * 10} m`} to the mark`;
+    const dist = toGo >= 1000 ? `${(toGo / 1000).toFixed(1)} km` : `${Math.round(toGo / 10) * 10} m`;
+    if (this.course) {
+      const k = this.course.marks[Math.min(w.s.mark, this.course.marks.length - 1)];
+      el(r, ".w-goal").textContent = `${k.name[0].toUpperCase()}${k.name.slice(1)}: ${dist}, ${aside(w.markBearing() - w.s.heading)}`;
+    } else el(r, ".w-goal").textContent = `${dist} to the mark`;
+    const dep = el(r, ".w-depth");
+    dep.hidden = !this.depthAt;
+    if (this.depthAt) {
+      const d = this.depth;
+      dep.dataset.state = d.state;
+      dep.textContent =
+        d.state === "unknown" ? "Depth: not known here yet (the chart is still loading)" : d.state === "shallow" ? `Shallow water: ${d.m!.toFixed(1)} m. Steer for deeper water` : `Depth ${Math.round(d.m!)} m`;
+    }
     for (const btn of Array.from(r.querySelectorAll<HTMLButtonElement>(".w-speeds button"))) {
       const x = Number(btn.dataset.x);
       btn.setAttribute("aria-pressed", String(x === 0 ? this.paused : !this.paused && x === this.speed));
@@ -352,6 +397,14 @@ export class WheelSession {
   get realSeconds(): number {
     return this.on ? (performance.now() - this.startedAt) / 1000 : 0;
   }
+}
+
+/** Where something is, from the bow: "ahead", "to the right", "behind you". */
+export function aside(rel: number): string {
+  const a = ((((rel + 180) % 360) + 360) % 360) - 180;
+  const side = a > 0 ? "right" : "left";
+  const m = Math.abs(a);
+  return m < 15 ? "dead ahead" : m < 60 ? `ahead to the ${side}` : m < 120 ? `to the ${side}` : m < 165 ? `behind you to the ${side}` : "behind you";
 }
 
 /** The spell's payoff line (Leo: the summary is the reward). */
