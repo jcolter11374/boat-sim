@@ -1992,11 +1992,18 @@ function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
   const m = mission();
   const box = $("r-stars");
   box.hidden = !m || !c.stars;
+  // A challenge: the stars tell its story (whether she came through, not who won), and it has its own day.
+  const ch = !!m && !!c.stars;
+  $("result").classList.toggle("mission", ch);
+  $("again").textContent = ch ? "Try again" : "Play again";
+  if (ch) $("r-story").textContent = "";
   if (!m || !c.stars) return;
   const t = starsText(c.stars, m.goal, c.ghost_stars);
   box.querySelector(".s-stars")!.textContent = t.stars;
   box.querySelector(".s-stars")!.setAttribute("aria-label", `${c.stars.stars} of 3 stars`);
-  box.querySelector(".s-why")!.textContent = t.why.join(" ");
+  box.querySelector(".s-none")!.textContent = t.none;
+  box.querySelector(".s-why")!.textContent = t.why;
+  box.querySelector(".s-ghost")!.textContent = t.ghost;
   const real = box.querySelector<HTMLElement>(".s-real")!;
   real.hidden = !m.goal.debrief;
   if (m.goal.debrief) {

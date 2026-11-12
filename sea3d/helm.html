@@ -219,6 +219,16 @@
   .overlay[hidden] { display: none; }
   /* The results sit above the bottom strip, never under it; a long card scrolls inside, with a fade at its foot (Ines, 12 Nov). */
   #result { bottom: calc(var(--strip-h) + var(--edge) + 8px); }
+  /* A challenge's result inside #406's card (Elena, 12 Nov): the stars, why, the ghost and what really
+     happened take the story's place; Try again replays the same challenge. */
+  #r-stars .s-row { margin: 2px 0 6px; display: flex; align-items: baseline; gap: 10px; }
+  #r-stars .s-stars { font-size: 26px; letter-spacing: 4px; color: #ffd75e; }
+  #r-stars .s-none { font-size: 14px; color: var(--dim); }
+  #r-stars .s-why { font-size: 15px; color: var(--ink); margin: 4px 0; }
+  #r-stars .s-ghost, #r-stars .s-real { font-size: 14px; margin: 4px 0; }
+  #r-stars .s-ghost:empty { display: none; }
+  /* A challenge has its own day, so no other launch day to try. */
+  #result.mission #r-day { display: none; }
   #result .card { max-height: calc(100% - 16px); padding-bottom: 32px; -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
   .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
@@ -668,7 +678,7 @@
     <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
     <p id="r-caveat" class="muted" hidden></p>
     <p id="r-story"></p>
-    <div id="r-stars" hidden><span class="s-stars"></span><p class="s-why"></p><p class="s-real"><b>What really happened.</b> <span class="s-text"></span> <a target="_blank" rel="noopener">Source</a></p></div>
+    <div id="r-stars" hidden><p class="s-row"><span class="s-stars"></span> <span class="s-none"></span></p><p class="s-why"></p><p class="s-ghost"></p><p class="s-real"><b>What really happened.</b> <span class="s-text"></span> <a target="_blank" rel="noopener">Source</a></p></div>
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>

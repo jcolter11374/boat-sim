@@ -110,13 +110,23 @@ export interface Stars {
   battery_low: number;
   sailing: boolean;
 }
-/** The stars line and the reasons, plainly; with the ghost's stars, one plain line on how the autopilot fared (Elena). */
-export function starsText(s: Stars, goal: Goal, ghost?: Stars): { stars: string; why: string[] } {
-  const why = [`Closest to the centre: ${Math.round(s.closest_km).toLocaleString("en-US")} km.`];
-  // No stars: say plainly what earns the first one, so three empty stars don't read as broken (Ines).
-  if (s.stars === 0) why.unshift(goal.storm ? `No stars this time. To earn the first, stay more than ${goal.storm.clear_km} km from the centre and keep sailing to the end.` : "No stars this time. To earn the first, keep sailing to the end.");
-  if (!s.sailing) why.push("The boat didn't make it to the end.");
-  if (goal.stars3) why.push(`Ended at ${Math.abs(s.end_lon).toFixed(1)}°W, with the battery at ${Math.round(s.battery_low * 100)}% at its lowest.`);
-  if (ghost && goal.storm) why.push(`The autopilot kept to its usual route, which crossed ${goal.storm.name}'s path: the ghost passed ${Math.round(ghost.closest_km).toLocaleString("en-US")} km from the eye.`);
-  return { stars: "★".repeat(s.stars) + "☆".repeat(Math.max(0, 3 - s.stars)), why };
+/**
+ * The result card's first view (Elena, 12 Nov: story first, as #406): the stars, a short word
+ * when there are none, one line on why (with what the next star needs), one line on the ghost.
+ * Everything else goes behind Details.
+ */
+export function starsText(s: Stars, goal: Goal, ghost?: Stars): { stars: string; none: string; why: string; ghost: string } {
+  const km = (x: number) => `${Math.round(x).toLocaleString("en-US")} km`;
+  const st = goal.storm;
+  let why = st ? `Closest to the storm's centre: ${km(s.closest_km)}.` : "";
+  if (!s.sailing) why = `${why} She didn't make it to the end.`.trim();
+  else if (st && s.stars === 0) why += ` ★ needs ${km(st.clear_km)}.`;
+  else if (st && s.stars === 1) why += ` ★★ needs ${km(st.well_km)}.`;
+  else if (s.stars === 2 && goal.stars3) why += ` ★★★ needs you east of ${Math.abs(goal.stars3.east_of)}°W, battery never under ${Math.round(goal.stars3.battery_min * 100)}%.`;
+  return {
+    stars: "★".repeat(s.stars) + "☆".repeat(Math.max(0, 3 - s.stars)),
+    none: s.stars === 0 ? "No stars this time" : "",
+    why: why.trim(),
+    ghost: ghost && st ? `The ghost held its usual route and passed ${km(ghost.closest_km)} from the storm's centre.` : "",
+  };
 }

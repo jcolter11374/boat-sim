@@ -44,12 +44,13 @@ test("the toast and the stars say what happened, in plain words", () => {
   assert.equal(callToast("auto", 0.3), "Following the autopilot: level with the autopilot so far.");
   const s = starsText({ stars: 2, closest_km: 512.4, end_lon: -69.2, battery_low: 0.14, sailing: true }, SANDY);
   assert.equal(s.stars, "★★☆");
-  assert.equal(s.why[0], "Closest to the centre: 512 km.");
+  assert.equal(s.none, "");
+  assert.ok(s.why.startsWith("Closest to the storm's centre: 512 km."), s.why);
 });
 
 test("the debrief says plainly how the autopilot fared", () => {
   const s = starsText({ stars: 3, closest_km: 640, end_lon: -66.6, battery_low: 0.23, sailing: true }, SANDY, { stars: 0, closest_km: 16.2, end_lon: -70.5, battery_low: 0.14, sailing: true });
-  assert.equal(s.why.at(-1), "The autopilot kept to its usual route, which crossed Sandy's path: the ghost passed 16 km from the eye.");
+  assert.equal(s.ghost, "The ghost held its usual route and passed 16 km from the storm's centre.");
 });
 
 test("the result card's challenge headline says whether she was still sailing, not who won", async () => {
@@ -60,8 +61,9 @@ test("the result card's challenge headline says whether she was still sailing, n
   assert.equal(missionHead(true, { until: goal.until }), "Still sailing at the deadline.");
 });
 
-test("no stars: the card says what earns the first one", () => {
+test("no stars: a short word beside the outlines, and the why line says what earns one", () => {
   const s = starsText({ stars: 0, closest_km: 125, end_lon: -69.3, battery_low: 0.6, sailing: true }, SANDY);
   assert.equal(s.stars, "☆☆☆");
-  assert.match(s.why[0], /^No stars this time\. To earn the first, stay more than \d+ km from the centre and keep sailing to the end\.$/);
+  assert.equal(s.none, "No stars this time");
+  assert.match(s.why, /^Closest to the storm's centre: 125 km\. ★ needs [\d,]+ km\.$/);
 });
