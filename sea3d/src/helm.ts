@@ -978,7 +978,13 @@ async function clockRun(): Promise<void> {
     shownTo = Math.max(lastHour(game.boat!), shownTo);
     present();
     chartDirty = true;
-    if (stopped !== "time") {
+    if (stopped === "battery") {
+      // A big drop in the battery is news, not a choice: a note, and the clock runs on.
+      // The night call ("ease off before dark?") is the battery stop with a choice in it (Leo, F5).
+      armed = untilOptions(); // the next one 30 points lower, or the reserve
+      const d = `Day ${game.status!.day.toFixed(1)}`;
+      whenAt(game.status!.day * 24, () => note(stopText(stopped, game.status), d, TONE_COLOUR.info));
+    } else if (stopped !== "time") {
       setRate(0, true);
       const d = `Day ${game.status!.day.toFixed(1)}`;
       if (stopped === "breakdown") {
@@ -992,7 +998,7 @@ async function clockRun(): Promise<void> {
       forecastAt = game.status!.day * 24;
       await refreshForecast();
     }
-    if (stopped === "time") maybeDecide();
+    if (stopped === "time" || stopped === "battery") maybeDecide();
     if (game.status?.over) {
       // The picture plays on to the end, slowing for the last hours; then the results (#329).
       setRate(0, true);
@@ -1575,6 +1581,8 @@ function untilOptions(): Record<string, number | boolean> {
 // leave it). Hands on only: from base, orders go by satellite and the forecast is the same.
 type Choice = { label: string; title: string; act: () => Promise<void> | void };
 const asked = { gale: -Infinity, night: -Infinity, stream: false };
+/** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
+let streamCall: { h: number; chose: string; lead: number } | null = null;
 const KT = 1.943844; // knots per m/s
 const GALE_MS = 17; // 33 knots, gale force
 const BIG_WAVES_M = 4;
@@ -1658,25 +1666,47 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): { kind: string; text
       };
     }
   }
+  // Three days after the Stream call: what it bought, against the ghost on autopilot (Leo).
+  if (streamCall && h - streamCall.h >= 72) {
+    const km = Math.round(st.lead_km);
+    const was = Math.round(streamCall.lead);
+    const where = Math.abs(km) < 1 ? "level with the ghost" : `${Math.abs(km).toLocaleString()} km ${km > 0 ? "ahead of" : "behind"} the ghost`;
+    const text = `${streamCall.chose}: ${where} after 3 days${Math.abs(km - was) >= 1 ? ` (${km - was > 0 ? "+" : "-"}${Math.abs(km - was).toLocaleString()} km since you chose)` : ""}.`;
+    whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn));
+    streamCall = null;
+  }
   // The Gulf Stream: a river of warm water in the sea, running north-east at up to 4 knots.
-  // Riding it already: a word, not a stop. Fighting it: ask (Leo).
+  // The first real call of a crossing (Leo's first-five-minutes audit, F5; Maya's build plan):
+  // asked once a voyage, the first time the boat is in it, whatever the order. Both answers
+  // are ordinary orders the simulator sails in the real current; the ghost stays on auto.
   const cur = w ? Math.hypot(w.current_u, w.current_v) : 0;
-  if (w && cur < 0.5) asked.stream = false;
   if (w && cur >= 1 && !asked.stream) {
     asked.stream = true;
-    const setTo = (Math.atan2(w.current_u, w.current_v) * 180) / Math.PI;
-    const off = Math.abs(((st.boat.heading - setTo + 540) % 360) - 180);
-    if (off < 90 || order === "route") {
-      const text = `You're riding the Gulf Stream: ${kmh(cur)} of current carrying you ${towards(w.current_u, w.current_v)}, for free.`;
-      whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.good));
-      return null;
-    }
+    const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
+    // Wind against the current heaps the sea up into short steep waves: the Stream's real danger.
+    const against = nowWind > 6 && (w.wind_u * w.current_u + w.wind_v * w.current_v) / (nowWind * cur) < -0.3;
+    const knots = Math.round(cur * KT);
     return {
       kind: "stream",
-      text: `You're in the Gulf Stream, and steering against it: ${kmh(cur)} of current is carrying the boat ${towards(w.current_u, w.current_v)}. Ridden well it's a free ride towards Europe; fought, it pushes you sideways.`,
+      text: `You've reached the Gulf Stream: a river in the sea carrying the boat ${towards(w.current_u, w.current_v)} at about ${knots} knot${knots === 1 ? "" : "s"}.${against ? " Right now the wind is blowing against it, which heaps the waves up short and steep." : ""} Ride it, or cut across?`,
       choices: [
-        { label: "Follow the planned route (it rides the Stream)", title: "The autopilot's planned route allows for the current", act: () => setOrder("route") },
-        { ...carryOn, label: "Carry on as I am: keep fighting it" },
+        {
+          label: `Ride it ${towards(w.current_u, w.current_v)}: a free push, but a longer way round${against ? ", and rough while the wind is against it" : ""}`,
+          title: "Follow the planned route, which rides the current",
+          act: () => {
+            streamCall = { h, chose: "Riding the Stream", lead: st.lead_km };
+            return setOrder("route");
+          },
+        },
+        {
+          label: `Cut straight across (${String(Math.round(toFinish) % 360).padStart(3, "0")}°): the shortest way, but slower while you cross`,
+          title: "Hold a straight course for the finish",
+          act: () => {
+            streamCall = { h, chose: "Cutting across the Stream", lead: st.lead_km };
+            return setOrder(Math.round(toFinish));
+          },
+        },
+        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto") },
       ],
     };
   }
