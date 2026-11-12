@@ -531,7 +531,7 @@ function drawMine(): void {
 }
 function saveMine(): void {
   if (!cat) return;
-  const name = $<HTMLInputElement>("mb-name").value.trim().slice(0, 40) || defaultName();
+  const name = $<HTMLInputElement>("mb-name").value.trim().slice(0, 20) || defaultName();
   saveMyBoat({ kind: "yard", base, hash: status.share, name, choices: simChoices(design, plannedDesign(cat)) });
   nameTyped = false;
   toast(`Saved "${name}" as your boat, in this browser.`);
