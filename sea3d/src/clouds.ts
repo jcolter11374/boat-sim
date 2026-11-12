@@ -181,6 +181,12 @@ float cells(vec2 p) {
 // The deck in wind coordinates (x along the wind, y across): big lumpy cells (a little
 // longer along the wind, so they line up in rolls), broken into separate masses by a
 // slow field, with smaller bumps on their undersides.
+float deckSide(float azD, float el, float calmDeck, float drift) {
+  vec2 sv = vec2(azD * mix(9.0, 5.0, calmDeck) + drift, el * mix(40.0, 22.0, calmDeck)) + uSeed;
+  vec2 warp = vec2(fbmL(sv * 0.5, 0.0, 2), fbmL(sv * 0.5 + 3.1, 0.0, 2)) - 0.5;  // no honeycomb
+  vec2 sw = sv * vec2(1.0, 0.8) + 0.7 * warp;
+  return 0.25 * fbmL(sv * 1.3, 0.0, 2) * (1.0 - 0.6 * calmDeck) + 0.5 * cells(sw) + 0.25 * cells(sw * 2.1 + 5.7) * (1.0 - 0.5 * calmDeck) + 0.15 * calmDeck;
+}
 float deckD(vec2 r, float lod, int oct) {
   vec2 w = r + 0.35 * vec2(vnoise(r * 0.5 + 2.7), vnoise(r * 0.5 + 6.1));
   float big = cells(w * 1.9);
@@ -289,7 +295,9 @@ void main() {
     float dist = length(q - uDrift * 0.6 - uCam.xz);
     float lod = footprint(dist, el, 2600.0);
     vec2 wd = length(uWind) > 0.1 ? normalize(uWind) : vec2(1.0, 0.0);
-    vec2 r = vec2(dot(q, wd), dot(q, vec2(-wd.y, wd.x))) / (vec2(7400.0, 6600.0) * (0.45 + 0.55 * h / 1600.0)) + uSeed;
+    // Outside a storm the sheet is broader and softer (Ines: big soft lumps, not veins).
+    float calmDeck = 1.0 - smoothstep(0.25, 0.6, uStorm);
+    vec2 r = vec2(dot(q, wd), dot(q, vec2(-wd.y, wd.x))) / (vec2(7400.0, 6600.0) * (0.45 + 0.55 * h / 1600.0) * (1.0 + 0.7 * calmDeck)) + uSeed;
     // Low skips the rolls and knobs (one plain noise), as Kai's cheap path does.
     float n = uQ > 0.5 ? deckD(r, lod, oct) : mix(fbmL(r, lod, oct), 0.5, lod);
     // Far off, where the detail has blurred away, the deck is seen edge-on: thin level
@@ -299,10 +307,10 @@ void main() {
     if (uQ > 0.5) {
       // Heavy masses, not combed lines (Elena): mostly lumps, a few degrees across, and
       // they take over low in the sky, where the deck's own pattern squashes into streaks.
-      vec2 sv = vec2(azD * 9.0 + dot(uDrift, vec2(-wd.y, wd.x)) * 0.00015, el * 40.0) + uSeed;
-      vec2 warp = vec2(fbmL(sv * 0.5, 0.0, 2), fbmL(sv * 0.5 + 3.1, 0.0, 2)) - 0.5;  // no honeycomb
-      vec2 sw = sv * vec2(1.0, 0.8) + 0.7 * warp;
-      float side = 0.25 * fbmL(sv * 1.3, 0.0, 2) + 0.5 * cells(sw) + 0.25 * cells(sw * 2.1 + 5.7);
+      float sdrift = dot(uDrift, vec2(-wd.y, wd.x)) * 0.00015;
+      float side = deckSide(azD, el, calmDeck, sdrift);
+      // atan wraps at +-pi: blend in a copy measured from the opposite way, so no seam.
+      if (abs(azD) > 2.6) side = mix(side, deckSide(azD - sign(azD) * 6.2831853, el, calmDeck, sdrift + 31.7), smoothstep(2.6, 3.1, abs(azD)));
       float sideW = max(smoothstep(0.0, 0.55, lod), (1.0 - smoothstep(0.04, 0.22, el)) * (1.0 - smoothstep(0.25, 0.6, uStorm)));
       n = mix(n, 0.34 + 0.46 * side, sideW);
     }
@@ -330,6 +338,8 @@ void main() {
     c += uBrk * under * (0.15 + 0.6 * (1.0 - thick)) * 0.45;
     c += uGlow * uWarm * 0.25 * smoothstep(-0.2, 0.9, facing) * (1.0 - thick);
     c += vec3(0.5, 0.56, 0.68) * moonG * (1.0 - 0.85 * thick);
+    // A plain overcast sheet: gentle value changes, no bright veins.
+    c = mix(c, mix(uSteel, uBelly, 0.62), 0.55 * calmDeck * smoothstep(0.7, 0.95, uCover));
     c = mix(c, uHaze, smoothstep(20000.0, 90000.0, dist) * 0.7);
     // Above the deck: a paler, smooth upper layer (no blue sky in a gale). In the break,
     // beyond the deck's far edge, warm clear light low on the horizon.
