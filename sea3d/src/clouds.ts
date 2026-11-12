@@ -465,6 +465,9 @@ void main() {
   // Under a deck the horizon settles on the tone the mist band above it draws (HORIZON_DECK x
   // haze), not the bare haze, which showed as a bright hairline over the sea (Ines, Priya).
   vec3 hzC = uHaze * mix(1.0, 0.86, deckAmt);
+  // gl_FragColor is in the output space here (sRGB on screen or in an sRGB target), so the haze
+  // must be converted too, as three does for the sea's fog; written raw it came out ~2.5x dark.
+  hzC = linearToOutputTexel(vec4(hzC, 1.0)).rgb;
   gl_FragColor = vec4(mix(gl_FragColor.rgb, hzC, asFog), max(gl_FragColor.a, asFog));
 }`;
 
