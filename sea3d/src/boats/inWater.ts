@@ -70,13 +70,21 @@ const BODY = /* glsl */ `
     // the deck, streaming down and off as it drains; the hull stays solid under it.
     float ovh = washOverAt(vSeaW.xz);
     if (ovh > 0.01) {
-      vec2 qs = vec2((vSeaW.x + vSeaW.z) * 1.4, vSeaW.y * 3.0 + uSeaTime * 3.0); // streams down
-      float sn = iwNoise(qs) * 0.55 + iwNoise(qs * 2.3 + 3.1) * 0.3 + iwNoise(vSeaW.xz * 9.0) * 0.15;
-      float edge = (iwNoise(vec2((vSeaW.x + vSeaW.z) * 2.5, uSeaTime * 1.5)) - 0.5) * 0.5 * ovh; // ragged top
-      float cover = 1.0 - smoothstep(0.7 * ovh, ovh, h + edge);
-      float sheet = cover * smoothstep(0.42, 0.52, sn);
-      gl_FragColor.rgb *= mix(1.0, 0.75, cover); // wet and darker under it
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.92, 0.95, 0.97) * uWetLight, 0.95 * sheet);
+      // Its own colour, never the paint showing through (Ines r6): blue-grey where it's a
+      // thin clear sheet, white where it's aerated, in streaks running down the side, with
+      // a bright edge along the top where it's breaking over.
+      float along = sAl * 1.5; // along the hull, roughly metres on a small boat
+      vec2 qs = vec2(along * 11.0, vSeaW.y * 2.0 + uSeaTime * 3.0);
+      float sn = iwNoise(qs) * 0.5 + iwNoise(qs * vec2(2.3, 1.7) + 3.1) * 0.3 + iwNoise(vec2(along * 3.0, vSeaW.y * 6.0 - uSeaTime * 2.0)) * 0.2;
+      float edge = (iwNoise(vec2(along * 2.5, uSeaTime * 1.5)) - 0.5) * 0.5 * ovh; // ragged top
+      float hh = h + edge;
+      float cover = 1.0 - smoothstep(0.85 * ovh, ovh, hh);
+      float topness = smoothstep(0.0, ovh, hh); // aerated near the top, clearer lower down
+      float streak = smoothstep(0.55, 0.78, sn) * (0.35 + 0.65 * topness);
+      vec3 sheetC = mix(vec3(0.17, 0.26, 0.33) * (0.85 + 0.3 * sn), vec3(0.88, 0.92, 0.95), streak);
+      float lip = smoothstep(0.5 * ovh, 0.9 * ovh, hh) * cover * (0.6 + 0.4 * sn); // the breaking top edge
+      sheetC = mix(sheetC, vec3(0.95, 0.97, 0.98), 0.9 * lip);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, sheetC * uWetLight, cover);
     }
   }
 }
