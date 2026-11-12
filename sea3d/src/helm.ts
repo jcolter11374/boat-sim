@@ -2668,8 +2668,8 @@ scene.add(orderLine);
  * bow that fades out, dimmer at night. Not a beam to the horizon. */
 function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: number): void {
   const s = page.status;
-  const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare");
-  orderLine.visible = on;
+  const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare") && !document.body.classList.contains("goal");
+  orderLine.visible = on; // not under the goal card: the opening frame is the boat and the sea (Ines)
   if (!on || !s) return;
   const to =
     typeof order === "number"

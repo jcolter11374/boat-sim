@@ -201,10 +201,10 @@
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
   /* F3: the goal card, over the opening view in the clear sky at the top left (Iris's box: top 45%, left 60%). */
   #goalcard { position: fixed; left: 8vw; top: calc(var(--bar, 0px) + 14vh); max-width: min(52vw, 640px); z-index: 7; pointer-events: none;
-    color: #fff; text-shadow: 0 2px 18px rgba(0,10,25,.55), 0 1px 3px rgba(0,10,25,.5); opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
+    color: #fff; text-shadow: 0 1px 2px rgba(0,10,25,.45), 0 0 8px rgba(0,10,25,.22); opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
   #goalcard.in { opacity: 1; transform: none; }
   #goalcard { isolation: isolate; }
-  #goalcard::before { content: ""; position: absolute; inset: -90px -160px; z-index: -1; background: radial-gradient(closest-side at 50% 50%, rgba(4,14,28,.4), rgba(4,14,28,.24) 35%, rgba(4,14,28,.1) 65%, rgba(4,14,28,0)); }
+  /* No scrim behind the goal card: a tight shadow keeps the words legible and the sky clean (Ines). */
   /* While the goal card is up, the instruments wait (Leo): the sea and the goal, nothing else. */
   body.goal #strip, body.goal #mapbox, body.goal #orders-tab, body.goal #orders, body.goal #poidock { opacity: 0; pointer-events: none; }
   #strip, #mapbox, #orders-tab { transition: opacity .8s; }
