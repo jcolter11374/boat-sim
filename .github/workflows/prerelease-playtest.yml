@@ -90,7 +90,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [1, 2]
+        part: [2] # SCRATCH (Omar): only the helm half, for #383's results frame
     defaults:
       run:
         working-directory: sea3d
@@ -120,6 +120,7 @@ jobs:
           path: sea3d/test-output/
           retention-days: 30
   play:
+    if: false # SCRATCH (Omar): not needed for the frame
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 120

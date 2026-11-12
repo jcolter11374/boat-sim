@@ -649,6 +649,17 @@ try {
       const next = await page.evaluate(() => ({ head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-next .next a")].map((a) => a.getAttribute("href")) }));
       if (!next.head || next.links.length !== 3 || !next.links[2].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
       await page.screenshot({ path: "test-output/helm-result.png" });
+      // SCRATCH (Omar, for Milo #383): the results card frame and its words into the log.
+      {
+        const { readFileSync } = await import("node:fs");
+        await page.screenshot({ path: "test-output/helm-result.jpg", type: "jpeg", quality: 85 });
+        const b64 = readFileSync("test-output/helm-result.jpg").toString("base64");
+        console.log("LOOK-BEGIN helm-result-383.jpg");
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log("LOOK-END helm-result-383.jpg");
+        const words = await page.evaluate(() => ({ card: document.getElementById("result")?.innerText ?? "", preview: document.getElementById("preview")?.textContent ?? "(no #preview)", money: (document.body.innerText.match(/.{0,50}(\$|\bbill|\bcost|\bplan\b).{0,50}/gi) ?? []) }));
+        console.log("CARD-TEXT " + JSON.stringify(words));
+      }
       log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
       // Start from a port (John hit "can't start from a port yet" when the page
       // got ahead of its simulator): the packed simulator must take the port.
