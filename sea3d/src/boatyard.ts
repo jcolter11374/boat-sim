@@ -559,14 +559,14 @@ window.addEventListener("hashchange", () => {
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
   kayak: "Build your own version of our kayak. Swap a part and watch the boat and its odds of finishing change.",
-  revc: "The Randolph team's Rev C5: a 1.5 m self-righting boat with a rigid wing sail and two rudders. Swap a part and watch its odds change.",
-  revb: "The Randolph team's earlier Rev B: the same wing sail, one rudder and an 8.2 kg keel.",
+  revc: "Our model of the Randolph team's Rev C5: a 1.5 m self-righting boat with a rigid wing sail and two rudders. Swap a part and watch its odds change.",
+  revb: "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder and an 8.2 kg keel.",
 };
 /** Behind the intro's "i" (Leo): where the parts come from. No prices (John: no money in the game). */
 const INTRO_NOTE: Record<BaseKey, string> = {
   kayak: "The parts are real ones you can buy. A ~ before a number means it's our estimate: nobody has weighed or measured it yet.",
-  revc: "Our model of their boat (11 Nov 2026), from their published build plan. ~ marks our estimates.",
-  revb: "Our model of their boat (11 Nov 2026), from their published build plan. ~ marks our estimates.",
+  revc: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
+  revb: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
 };
 /** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
 function useBase(hash: string): void {
