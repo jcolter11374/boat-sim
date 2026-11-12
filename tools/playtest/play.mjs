@@ -703,6 +703,66 @@ const CHECKS = {
       return t.card.split("\n").filter((l) => /board|order|Launch/i.test(l)).join(" | ").slice(0, 400);
     },
   },
+  // Maya's batch (12 Nov): #411 chase camera 42 deg off the stern, #412 opaque sea (no keel "stilts"),
+  // #393 practice time trials (clock, best, medals, ghost), #404 no link, no orders. Frames + text.
+  "look-maya": {
+    manual: true,
+    path: "helm.html",
+    run: async (page) => {
+      const out = [];
+      await page.setViewportSize({ width: 1280, height: 720 });
+      // #411/#412: the default crossing, a few seconds after Set sail.
+      await helmStart(page);
+      await page.evaluate(() => { if (!window.__helm.clock) document.getElementById("t-pause")?.click(); }); // let her move
+      await page.waitForTimeout(6000);
+      await lookShot(page, `look-maya-${BROWSER}-helm-chase.jpg`);
+      out.push("helm chase frame");
+      // #393: practice, triangle in a good breeze: the goal banner with its clock.
+      await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.waitForFunction(() => !document.getElementById("practice-courses")?.hidden, null, { timeout: MIN }).catch(() => {});
+      await page.click('#practice-breeze button[data-b="good"]', { timeout: 10_000 }).catch(() => {});
+      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 15_000 });
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => { throw new CheckFail("the triangle didn't put me at the wheel"); });
+      await page.keyboard.down("ArrowLeft"); await page.waitForTimeout(1500); await page.keyboard.up("ArrowLeft");
+      await page.waitForTimeout(8000);
+      const what = await page.evaluate(() => (document.getElementById("practice-what")?.innerText ?? "").replace(/\s+/g, " "));
+      console.log(`PRACTICE ${JSON.stringify(what)}`);
+      await lookShot(page, `look-maya-${BROWSER}-practice.jpg`);
+      must(/\d+:\d\d/.test(what) || /\d+ s\b/.test(what), `no clock in the practice banner: "${what}"`);
+      out.push(`practice banner "${what.slice(0, 80)}"`);
+      // #404: 1 May 2020, both boats lose the main box on day 3.9: the orders lock with "no link".
+      if (BROWSER === "chromium") {
+        await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await helmStart(page, async (p) => p.selectOption("#launch", "2"));
+        let st = null;
+        for (let i = 0; i < 30; i++) {
+          st = await page.evaluate(() => ({ nl: window.__helm.status?.no_link ?? null, card: !!window.__helm.card, day: window.__helm.status?.day }));
+          if (st.nl || st.card) break;
+          await openOrders(page);
+          await page.click("#sevent");
+          await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 4 * MIN });
+        }
+        await page.waitForTimeout(3000);
+        if (await page.locator("#result").isVisible().catch(() => false)) await lookShot(page, `look-maya-${BROWSER}-nolink-card.jpg`);
+        await page.evaluate(() => { const c = document.getElementById("result"); if (c) c.hidden = true; }); // see what's behind it
+        await openOrders(page);
+        await page.waitForTimeout(1500);
+        const nl = await page.evaluate(() => ({
+          tab: document.querySelector("#orders-tab span")?.textContent ?? "",
+          banner: document.getElementById("nolink")?.hidden === false ? document.getElementById("nolinktext")?.textContent : "(hidden)",
+          strip: document.getElementById("c-orderv")?.textContent ?? "",
+          status: window.__helm.status?.no_link ?? null,
+        }));
+        console.log(`NOLINK ${JSON.stringify({ ...nl, st })}`);
+        await lookShot(page, `look-maya-${BROWSER}-nolink.jpg`);
+        must(nl.status, `no_link never set (day ${st?.day})`);
+        must(/no link/i.test(nl.tab) && /no link/i.test(nl.strip), `orders not locked: ${JSON.stringify(nl)}`);
+        out.push(`no link on day ${st.day?.toFixed?.(1)}: tab "${nl.tab}", strip "${nl.strip}"`);
+      }
+      return out.join("; ");
+    },
+  },
   // #380 (audit item 9, Leo's copy): player names on the leaderboard and in the Boatyard.
   "names-380": {
     manual: true,
