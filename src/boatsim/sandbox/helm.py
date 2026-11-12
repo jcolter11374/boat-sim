@@ -1131,19 +1131,29 @@ class Game:
 
     def _stars(self) -> dict:
         """A mission's stars, yours and the ghost's ({"stars", "ghost_stars"}, Rosa), from Ravi's
-        judge (boatsim.sandbox.stars.judge(goal, rows, closest_km)) once it lands; until
-        then nothing, and the page shows none."""
-        if not getattr(self, "goal", None):
+        judge (boatsim.sandbox.stars.judge(rows, outcome, track, rule)). The storm track and the
+        thresholds come from the goal (challenges.goal_record), so the page, the judge and the
+        CI check use the same numbers. No goal, or no judge yet: nothing, and the page shows none."""
+        goal = getattr(self, "goal", None)
+        if not goal or not goal.get("storm"):
             return {}
         try:
-            from boatsim.sandbox.stars import judge  # Ravi's, not on main yet
+            from boatsim.sandbox.stars import StormStars, judge, storm_track_from
         except ImportError:
             return {}
+        st, s3 = goal["storm"], goal.get("stars3", {})
+        track = storm_track_from(st["track"])
+        rule = StormStars(
+            storm=str(st.get("name", "")).upper(),
+            season=track[0][0].year if track else 0,
+            goal_km=float(st["clear_km"]),
+            clear_km=float(st["well_km"]),
+            east_of=float(s3.get("east_of", 180.0)),
+            soc_min=float(s3.get("battery_min", 1.0)),
+        )
         return {
-            "stars": judge(self.goal, self.mine.log.rows, self.storm_closest.get(id(self.mine))),
-            "ghost_stars": judge(
-                self.goal, self.ghost.log.rows, self.storm_closest.get(id(self.ghost))
-            ),
+            "stars": judge(self.mine.log.rows, self._outcome(self.mine), track, rule),
+            "ghost_stars": judge(self.ghost.log.rows, self._outcome(self.ghost), track, rule),
         }
 
     # ------------------------------------------------------- save and resume

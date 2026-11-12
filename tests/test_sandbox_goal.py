@@ -62,5 +62,13 @@ def test_a_mission_ends_at_its_deadline_as_goal(monkeypatch):
     card = g.result()
     assert card["boat"]["outcome"] == "goal" and card["ghost"]["outcome"] == "goal"
     assert card["boat"]["ending"]["headline"] == "Made it"
+    # Ravi's judge on a finished mission (Rosa found result() threw here): stars for both boats,
+    # from the goal's own track and distances. Still sailing at the end, so the outcome isn't
+    # what holds a star back; the closest approach decides.
+    for k in ("stars", "ghost_stars"):
+        got = card[k]
+        assert 0 <= got["stars"] <= 3 and got["sailing"]
+        want = (got["closest_km"] > 300) + (got["closest_km"] > 400)  # no stars3: never 3
+        assert got["stars"] == want
     h = Game.load(june, g.save())  # a share link replays to the same end
     assert h.status()["goal"]["closest_km"] == pytest.approx(st["goal"]["closest_km"])
