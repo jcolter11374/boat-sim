@@ -379,7 +379,7 @@ export class Contact {
       this.wetBoost = x >= 0 && x < 6 ? 0.3 * this.over.h * Math.exp(-x / 2.5) : 0;
     }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
-    this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.1 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5) });
+    this.water?.update({ wetH: 0.05 + 0.03 * Math.min(speedK, 1.2) + 0.12 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5) });
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.

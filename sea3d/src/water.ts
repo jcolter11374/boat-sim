@@ -569,6 +569,10 @@ if (wreckShade > 0.0) {
   // Its edge catches a little light from above: a faint paler outline against the deep blue.
   outgoingLight += vec3(0.05, 0.1, 0.1) * wreckRim * up * (1.0 - foamMask);
 }
+#ifndef SEA_LITE
+// The hull hides the sky from the water right beside it: a soft dark contact line.
+outgoingLight *= 1.0 - 0.45 * washShade(vWPos.xz) * (1.0 - foamMask);
+#endif
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec4 pc = uMirrorM * vec4(vWPos.x, uMirrorY, vWPos.z, 1.0);
@@ -702,7 +706,7 @@ export class Sea {
         .replace("#include <fog_fragment>", FRAG_HAZE + "\n#include <fog_fragment>")
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v14";
+    material.customProgramCacheKey = () => "boatsim-sea-v14-shade";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls (and "See under the water" lets them show through)
     this.mesh.frustumCulled = false;

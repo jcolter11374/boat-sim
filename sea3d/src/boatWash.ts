@@ -161,6 +161,24 @@ float washAlong(vec2 xz) {
   }
   return s;
 }
+/** How much of the sky a hull hides from the water right beside it, 0..1: the sea along
+ *  the hull is darker (it mirrors the dark topsides, not the bright sky), the contact
+ *  line that seats a boat in the water at any sea state (Ines: no "sticker" on the sea). */
+float washShade(vec2 xz) {
+  float o = 0.0;
+  for (int i = 0; i < ${MAX_WASH_BOATS}; i++) {
+    if (i >= uWashN) break;
+    vec4 dim = uWashDim[i];
+    if (dim.x <= 0.0) continue;
+    vec2 dd = xz - uWashPos[i].xy;
+    float rr = dim.x + dim.y + 1.0;
+    if (dot(dd, dd) > rr * rr) continue;
+    vec4 l = washLocal(i, xz);
+    float reach = 0.25 + 0.5 * dim.y; // GUESS: about the freeboard, a bit more on a beamy hull
+    o = max(o, exp(-pow(max(l.w, 0.0) / reach, 2.0)));
+  }
+  return o;
+}
 /** The hulls' waves on the open water (none inside a hull). */
 float boatWave(vec2 xz) { return boatWaveK(xz, 0.0); }
 /** The same, read from the hull's own skin: the height the water climbs to there. */
