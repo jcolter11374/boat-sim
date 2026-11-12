@@ -471,7 +471,7 @@ export function summary(r: WheelResult, counts: { hours: number } | null = null)
   const worth = counts
     ? `She keeps your trim for the next ${counts.hours} hours.`
     : r.sailedSecs < COUNTS_AFTER_S
-      ? "Sail a minute or more and she keeps your trim for the next watch."
+      ? "Sail a minute or more and she keeps your trim for the next 4 hours." // TRIM_HOURS in sandbox/helm.py
       : "Your voyage waited while you sailed.";
   return `${r.reached ? "Mark reached!" : "Handed back."} ${how}${pb} ${worth}`;
 }
