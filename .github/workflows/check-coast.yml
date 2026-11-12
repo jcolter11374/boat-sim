@@ -10,6 +10,10 @@ on:
       - "src/boatsim/oceandata/coast_check.py"
 permissions:
   contents: read
+# A new push to a pull request cancels that branch's older run; runs on main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
     runs-on: ubuntu-latest
