@@ -505,7 +505,7 @@ const CHECKS = {
       await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
-      await page.locator('input[name="boat"][value="stock_cruiser31"]').check();
+      await tickBoat(page.locator('input[name="boat"][value="stock_cruiser31"]'));
       await page.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN });
       await page.selectOption("#port", "annapolis");
       const offered = await page.waitForFunction(() => !document.getElementById("prologuepick").hidden, null, { timeout: 30_000 }).then(() => true).catch(() => false);
@@ -783,7 +783,8 @@ const CHECKS = {
       });
       must(await page.locator("#panel").isVisible(), `"Just watch the sea" didn't bring the sea panel back`);
       const way = await page.locator("#sail").isVisible().catch(() => false);
-      const links = await page.evaluate(() => [...document.querySelectorAll("#topbar a.nav")].map((a) => ({ href: a.href, text: a.textContent.trim() })));
+      // Since #437 the bar has Set sail, Boatyard and Practice, and the rest under More (Credits leaves the site).
+      const links = await page.evaluate(() => { const seen = new Set(); return [...document.querySelectorAll("#topbar a.nav, #topbar .more .menu a")].filter((a) => a.href.startsWith(location.origin) && !seen.has(a.href) && seen.add(a.href)).map((a) => ({ href: a.href, text: (a.querySelector(".l") ?? a).textContent.trim() })); });
       must(links.length >= 5, `the top bar has ${links.length} links: ${JSON.stringify(links)}`);
       const bad = [];
       // Each link in its own tab: leaving this page mid-load would abort its textures (console noise, not a fault).
