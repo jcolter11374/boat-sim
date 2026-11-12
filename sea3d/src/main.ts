@@ -48,7 +48,6 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const app = $("app");
 const seaSelect = $<HTMLSelectElement>("sea");
 const qualitySelect = $<HTMLSelectElement>("quality");
-mountSailLink(); // "Sail this sea" follows the sea-state picker
 const headingSelect = $<HTMLSelectElement>("heading");
 const underCheck = $<HTMLInputElement>("under");
 const tourCheck = $<HTMLInputElement>("tour");
@@ -80,6 +79,7 @@ atmos.set(10, 330, 0, true);
 const clock = new THREE.Clock();
 // ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
 let look: Look = startLook(qualitySelect);
+mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 scene.add(sea.mesh);

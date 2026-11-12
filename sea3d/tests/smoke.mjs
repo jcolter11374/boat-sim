@@ -640,16 +640,16 @@ try {
   // the usual launch), and "Build a boat" opens the Boatyard. ?title=0 skips #309's menu.
   await page.goto(`${URL}?quality=low&title=0`);
   await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 2, null, { timeout: 30000 });
-  const WANT = { calm: "helm.html?challenge=gentle-june", moderate: "helm.html", gale: "helm.html?challenge=spring-gale" };
+  // The page is on Low (?quality=low), so the link carries it: the helm opens on Low in one step.
+  const WANT = { calm: "helm.html?challenge=gentle-june&quality=low", moderate: "helm.html?quality=low", gale: "helm.html?challenge=spring-gale&quality=low" };
   for (const [sea, want] of Object.entries(WANT)) {
     await page.selectOption("#sea", sea);
     const w = await page.evaluate(() => ({ sail: document.getElementById("sail").href, build: document.getElementById("build").href, shown: !!document.getElementById("sail").offsetParent && !!document.getElementById("build").offsetParent }));
     if (w.sail !== URL + want) fail(`Sea page, ${sea}: "Sail this sea" goes to ${w.sail}, want ${URL + want}`);
     if (w.build !== `${URL}boatyard.html` || !w.shown) fail(`Sea page: "Build a boat" should show and open the Boatyard: ${JSON.stringify(w)}`);
   }
-  await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale$/, { timeout: 30000 }), page.click("#sail")]);
-  // On to the helm at Low quality, as the rest of this test runs it (software graphics).
-  await page.goto(`${page.url()}&quality=low`);
+  // One click, one navigation, as a player does (a second load would abort the helm's first downloads).
+  await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale&quality=low$/, { timeout: 30000 }), page.click("#sail")]);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
   const chJson = await page.evaluate(async () => {
     try {

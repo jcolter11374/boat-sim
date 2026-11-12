@@ -225,9 +225,10 @@ CHECKS["sea-sail"] = {
     const build = await page.evaluate(() => (document.getElementById("build")?.offsetParent ? document.getElementById("build").href : ""));
     must(build === `${SITE}boatyard.html`, `"Build a boat" should show and open the Boatyard, not ${JSON.stringify(build)}`);
     await page.selectOption("#sea", "gale");
-    await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale$/, { timeout: 2 * MIN }), clickNamed(page, "#sail", "Sail this sea")]);
-    // Low quality from here, like the other helm checks (software graphics on runners).
-    await page.goto(`${page.url()}&quality=low`, { waitUntil: "load", timeout: 2 * MIN });
+    // The Sea page is on Low, so the link carries it and the helm opens on Low, like the
+    // other helm checks, in one navigation. (Reloading the helm to add ?quality=low aborted
+    // its first simulator downloads, which Firefox logs as NS_BINDING_ABORTED; #349.)
+    await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale&quality=low$/, { timeout: 2 * MIN }), clickNamed(page, "#sail", "Sail this sea")]);
     return helm(
       async (p) => {
         await p.waitForFunction(() => !document.querySelector("#chpick").hidden, null, { timeout: MIN }).catch(() => {

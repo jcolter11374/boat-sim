@@ -12,6 +12,12 @@ test("each sea state opens the helm in matching weather", () => {
   assert.equal(helmHref("no-such-sea"), "./helm.html");
 });
 
+test("a quality other than High carries over to the helm", () => {
+  assert.equal(helmHref("gale", "low"), "./helm.html?challenge=spring-gale&quality=low");
+  assert.equal(helmHref("moderate", "ultra"), "./helm.html?quality=ultra");
+  assert.equal(helmHref("calm", "high"), "./helm.html?challenge=gentle-june");
+});
+
 test("every sea state on the page has a mapping", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = [...html.matchAll(/<select id="sea">([\s\S]*?)<\/select>/g)][0][1];

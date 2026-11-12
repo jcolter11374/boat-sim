@@ -16,10 +16,18 @@ export const SEA_CHALLENGE: Record<string, string | null> = {
   gale: "spring-gale",
 };
 
-/** Where "Sail this sea" goes for a sea state (relative to the site root). */
-export function helmHref(sea: string): string {
+/**
+ * Where "Sail this sea" goes for a sea state (relative to the site root). A
+ * quality other than the default High carries over, so a player on Low (or the
+ * tests, on software graphics) arrives at the helm on the same setting.
+ */
+export function helmHref(sea: string, quality = "high"): string {
+  const q = new URLSearchParams();
   const id = SEA_CHALLENGE[sea] ?? null;
-  return id ? `./helm.html?challenge=${encodeURIComponent(id)}` : "./helm.html";
+  if (id) q.set("challenge", id);
+  if (quality && quality !== "high") q.set("quality", quality);
+  const s = q.toString();
+  return s ? `./helm.html?${s}` : "./helm.html";
 }
 
 /**
@@ -36,10 +44,14 @@ export function askedChallenge(search: string, offered: string[], shared: boolea
 export function mountSailLink(doc: Document = document): void {
   const a = doc.getElementById("sail") as HTMLAnchorElement | null;
   const sel = doc.getElementById("sea") as HTMLSelectElement | null;
+  const quality = doc.getElementById("quality") as HTMLSelectElement | null;
   if (!a || !sel) return;
   const draw = () => {
-    a.href = helmHref(sel.value);
+    a.href = helmHref(sel.value, quality?.value);
   };
   draw();
   sel.addEventListener("change", draw);
+  quality?.addEventListener("change", draw);
+  // The page itself can drop Ultra to High when it's too slow, without a change event.
+  a.addEventListener("click", draw);
 }
