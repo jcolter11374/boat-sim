@@ -426,21 +426,21 @@ function bowGear(h: HullLines, mastX: number, mastTop: number): THREE.BufferGeom
 /** Where each kind's lights and house are; the builders and shipLights() read the same numbers. */
 const C_HULL: HullLines = {
   L: 294, B: 32.2, T: 12, F: 10, rake: 9, entrance: 70, run: 60, transom: 3, bilge: 2.2, sheerFwd: 1.6, fcsle: [26, 2.6],
-  bulb: { length: 6, r: 3.6, y: -7.5 }, colours: { anti: 0x7a2b25, boot: 0x17181a, deck: 0x4c5a55 }, boot: [-1.2, 1.4],
+  bulb: { length: 6, r: 3.6, y: -7.5 }, colours: { anti: 0x7a2b25, boot: 0x17181a, deck: 0x4c5a55 }, boot: [1.6, 3.0],
 };
 const C_HOUSE: House = { x0: 222, x1: 238, hw: 10.5, y0: C_HULL.F, bridge: 39.5, wing: C_HULL.B / 2 };
 const C_FUNNEL = { x0: 242, x1: 252, top: 46 };
 
 const T_HULL: HullLines = {
   L: 250, B: 44, T: 14.5, F: 7.4, rake: 6.5, entrance: 52, run: 52, transom: 2.5, bilge: 2.6, sheerFwd: 1.2, fcsle: [22, 2.6],
-  bulb: { length: 6.5, r: 4.4, y: -9 }, colours: { anti: 0x6e2722, boot: 0x141516, deck: 0x6a3a2c }, boot: [-1.0, 1.3],
+  bulb: { length: 6.5, r: 4.4, y: -9 }, colours: { anti: 0x6e2722, boot: 0x141516, deck: 0x6a3a2c }, boot: [1.2, 2.6],
 };
 const T_HOUSE: House = { x0: 206, x1: 222, hw: 13, y0: T_HULL.F, bridge: 24.6, wing: T_HULL.B / 2 };
 const T_FUNNEL = { x0: 226, x1: 234, top: 35 };
 
 const B_HULL: HullLines = {
   L: 200, B: 32.2, T: 12, F: 7.2, rake: 6, entrance: 44, run: 42, transom: 2.5, bilge: 2.2, sheerFwd: 1.2, fcsle: [18, 2.6],
-  bulb: { length: 5, r: 3.4, y: -7.5 }, colours: { anti: 0x732a24, boot: 0x151617, deck: 0x6b6f6a }, boot: [-1.0, 1.3],
+  bulb: { length: 5, r: 3.4, y: -7.5 }, colours: { anti: 0x732a24, boot: 0x151617, deck: 0x6b6f6a }, boot: [1.2, 2.6],
 };
 const B_HOUSE: House = { x0: 166, x1: 180, hw: 11, y0: B_HULL.F, bridge: 27.8, wing: B_HULL.B / 2 };
 const B_FUNNEL = { x0: 183, x1: 190, top: 37 };
@@ -449,6 +449,9 @@ const F_HULL: HullLines = {
   L: 24, B: 7, T: 2.8, F: 2.1, rake: 2.4, entrance: 9, run: 7, transom: 0.4, bilge: 0.7, sheerFwd: 1.6, fcsle: [6, 0.9],
   colours: { anti: 0x2a2d31, boot: 0xe9e7e0, deck: 0x6c6f70 }, boot: [-0.25, 0.25],
 };
+
+/** Each kind's hull lines (for the paint: boot-top, sheer, forecastle). */
+const LINES: Record<ShipKind, HullLines> = { container: C_HULL, tanker: T_HULL, bulk: B_HULL, fishing: F_HULL };
 
 /** Each big ship's bridge: the front of the wheelhouse (x) and its floor (y), m. */
 export function bridgeOf(kind: "container" | "tanker" | "bulk"): { x: number; floor: number } {
@@ -734,13 +737,17 @@ const BANDS = [0xc8a03a, 0xe8e6df, 0x2f7f86, 0xb03a2e, 0x2d5fa0, 0x6e8b3d];
 
 /** Painted steel, one per ship (they share one shader program; only the paint differs). */
 function shipMaterial(kind: ShipKind): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.08, envMapIntensity: 0.5 });
+  // Painted steel: a satin paint (the env reflection is what shows the curve of the bow), roughness set per plate below.
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.0, envMapIntensity: 0.6 });
   const u = {
     uPaint: { value: new THREE.Color(HULL_COLOURS[kind][0]) },
     uBand: { value: new THREE.Color(BANDS[0]) },
     uFlood: { value: 0 },
     uNight: NAV_NIGHT,
     uHawse: { value: new THREE.Vector2(SHIP_SIZE[kind].length * 0.03, kind === "fishing" ? -9 : hawseY(kind)) },
+    uBoot: { value: new THREE.Vector2(...LINES[kind].boot) },
+    uPlate: { value: kind === "fishing" ? new THREE.Vector2(3, 1.2) : new THREE.Vector2(10.5, 2.6) },
+    uSheer: { value: new THREE.Vector3(LINES[kind].F, LINES[kind].fcsle[0], LINES[kind].fcsle[1] + LINES[kind].sheerFwd) },
     /** The bow wave's height at the stem (m; 0 at anchor) and the ship's length (m). */
     uBow: { value: new THREE.Vector3(0, SHIP_SIZE[kind].length, 0) },
     uSeaTime: seaUniforms.uSeaTime,
@@ -758,7 +765,10 @@ uniform vec3 uBand;
 uniform float uFlood;
 uniform float uNight;
 uniform vec2 uHawse;
-uniform vec3 uBow; // bow wave height at the stem, ship length, how far she floats above her marks (ballast), m
+uniform vec2 uBoot; // antifouling top, boot-top top (m about the marks)
+uniform vec2 uPlate; // shell plate length and strake height (m)
+uniform vec3 uSheer; // deck edge height amidships, forecastle length, its extra rise (m)
+uniform vec3 uBow; // bow wave height at the stem, ship length, how far she floats above her marks (ballast), m: the sea is at vLocal.y = -uBow.z
 uniform float uSeaTime;
 varying vec3 vMark;
 varying vec3 vLocal;
@@ -773,18 +783,64 @@ void main() {`,
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
-  if (vMark.y > 0.5 && vMark.y < 1.5) {
-    // Topsides: the ship's own colour, with faint rust streaks running down from the deck
-    // (long and thin: stretched up and down), heavier under the hawse pipes.
-    float n = sNoise(vec2(vLocal.x * 0.8, vLocal.y * 0.05)) * 0.7 + sNoise(vec2(vLocal.x * 2.3, vLocal.y * 0.12)) * 0.3;
-    float streak = smoothstep(0.66, 0.95, n) * 0.4;
+  // Painted steel, weathered (Yuki, Lighting & Materials; Elena's "reads as plastic" note,
+  // 12 Nov). Sizes are real metres (vLocal: x aft of the stem, y above the loaded marks).
+  float shipRough = 0.0; // 0 = keep the material's own
+  bool hullSkin = vMark.x < 0.01 && vMark.z < 0.5 && ((vMark.y > 0.5 && vMark.y < 1.5) || vLocal.y < uBoot.y + 0.05);
+  // Shell plating: strakes uPlate.y tall, butts every uPlate.x, staggered strake to strake.
+  vec2 pl = vLocal.xy / uPlate;
+  pl.x += 0.5 * mod(floor(pl.y), 2.0);
+  vec2 pc = floor(pl), pf = fract(pl);
+  float tone = sHash(pc + 17.0) - 0.5; // each plate a slightly different age of paint
+  vec2 fw = fwidth(pl);
+  vec2 bead = vec2(0.035) / uPlate; // weld beads about 3.5 cm
+  vec2 on = 1.0 - smoothstep(bead, bead + 1.5 * fw, min(pf, 1.0 - pf));
+  float seam = max(on.x, on.y) * (1.0 - smoothstep(0.04, 0.12, fw.y)); // gone once smaller than a pixel
+  float seaN = sNoise(vLocal.xy * vec2(0.07, 0.45));
+  if (hullSkin && vMark.y > 0.5) {
+    // Topsides: the ship's colour, plate by plate, chalkier high up where the sun works on it.
+    vec3 paint = uPaint * (1.0 + 0.09 * tone) * (0.93 + 0.12 * seaN);
+    paint = mix(paint, vec3(dot(paint, vec3(0.3, 0.59, 0.11))) * 1.25 + 0.01, 0.08 * smoothstep(2.0, 9.0, vLocal.y));
+    paint *= 1.0 - 0.07 * seam;
+    // Rust weeping from the deck edge and its scuppers: thin runs, some long, most short.
+    float top = uSheer.x + uSheer.z * (1.0 - smoothstep(uSheer.y - 2.0, uSheer.y + 2.0, vLocal.x));
+    float cx = vLocal.x / 1.9;
+    float ci = floor(cx);
+    float wid = 0.06 + 0.12 * sHash(vec2(ci, 7.7));
+    float inCol = 1.0 - smoothstep(wid * 0.35, wid, abs(fract(cx) - 0.3 - 0.4 * sHash(vec2(ci, 2.9))));
+    float down = top - 0.2 - vLocal.y;
+    float len = mix(1.2, 8.0, pow(sHash(vec2(ci, 1.3)), 2.0));
+    float run = inCol * step(0.72, sHash(vec2(ci, 3.1))) * (1.0 - smoothstep(0.0, len, down)) * step(-0.4, down);
+    run *= 0.55 + 0.45 * sNoise(vec2(vLocal.x * 5.0, vLocal.y * 0.5));
+    // Heavy rust under the hawse pipes, where the anchor chain scrapes.
     float hx = abs(vLocal.x - uHawse.x);
     float below = uHawse.y - vLocal.y;
-    float hawse = (1.0 - smoothstep(0.5 + below * 0.06, 1.3 + below * 0.1, hx)) * step(0.0, below) * (1.0 - smoothstep(2.0, 9.0, below));
-    vec3 rust = vec3(0.16, 0.055, 0.025);
-    diffuseColor.rgb = mix(uPaint * (0.9 + 0.16 * sNoise(vLocal.xy * vec2(0.04, 0.25))), rust, clamp(streak + 0.7 * hawse, 0.0, 0.8));
+    float hawse = (1.0 - smoothstep(0.6 + below * 0.08, 1.6 + below * 0.14, hx)) * step(-0.3, below) * (1.0 - smoothstep(3.0, 12.0, below));
+    hawse *= 0.75 + 0.25 * sNoise(vec2(vLocal.x * 3.0, vLocal.y * 0.4));
+    vec3 rustHi = vec3(0.17, 0.06, 0.022);
+    vec3 rustLo = vec3(0.08, 0.04, 0.025);
+    float rust = clamp(run * 0.5 + 0.85 * hawse, 0.0, 0.85);
+    paint = mix(paint, mix(rustLo, rustHi, smoothstep(0.0, 4.0, vLocal.y - (top - 6.0))), rust);
+    diffuseColor.rgb = paint;
+    shipRough = mix(0.52 + 0.12 * tone, 0.85, rust);
   } else if (vMark.y > 1.5) {
     diffuseColor.rgb = uBand;
+  } else if (hullSkin) {
+    // Boot-top and antifouling: flatter paints; the red bleaches pink near the top, with weed at the old waterlines.
+    bool anti = vLocal.y < uBoot.x;
+    diffuseColor.rgb *= (1.0 + 0.07 * tone) * (0.92 + 0.14 * seaN) * (1.0 - 0.07 * seam);
+    if (anti) diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.3 + vec3(0.02, 0.012, 0.01), 0.5 * smoothstep(uBoot.x - 4.0, uBoot.x, vLocal.y));
+    float weed = smoothstep(0.5, 0.85, sNoise(vec2(vLocal.x * 0.6, vLocal.y * 2.5))) * (1.0 - smoothstep(0.0, 1.2, abs(vLocal.y - uBoot.x + 0.4)));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.06, 0.03), weed * 0.6);
+    shipRough = anti ? 0.82 : 0.55 + 0.1 * tone;
+  }
+  if (hullSkin) {
+    // A brown salt-and-grime line where she usually floats, and the curve of the hull
+    // shading towards the water: faces turned to the sky paler, the bilge and under the flare darker.
+    float line = 1.0 - smoothstep(0.0, 0.9 + 0.6 * seaN, abs(vLocal.y - 0.3));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.06, 0.04), 0.45 * line);
+    vec3 nW = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
+    diffuseColor.rgb *= 0.66 + 0.42 * smoothstep(-0.6, 0.55, nW.y);
   }
   if (vMark.z > 0.5) {
     // Boxes, hatches and deck: grime and a little rust, so no two read as clean plastic.
@@ -794,8 +850,8 @@ void main() {`,
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.08, 0.04), rs * 0.35);
   }
   // Hull steel darkens towards the water (wet, salt-stained, and in the shade of the flare).
-  if (vMark.x < 0.01 && vMark.z < 0.5) diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(uBow.z - 1.0, uBow.z + 7.0, vLocal.y));
-  if (uBow.x > 0.0 && vLocal.y > uBow.z - 0.6) {
+  if (vMark.x < 0.01 && vMark.z < 0.5) diffuseColor.rgb *= mix(0.8, 1.0, smoothstep(-uBow.z - 1.0, -uBow.z + 7.0, vLocal.y));
+  if (uBow.x > 0.0 && vLocal.y > -uBow.z - 0.6) {
     // Under way: the bow wave climbing the stem and breaking white down the bow, a
     // lower, broken wash along the sides (the same foam the sea draws, boatWash.ts).
     float xs = max(vLocal.x, 0.0);
@@ -804,13 +860,17 @@ void main() {`,
     float edge = top * (0.65 + 0.5 * n);
     // Solid white where it heaps up against the stem, breaking into lace further aft.
     float solid = exp(-xs / (0.09 * uBow.y));
-    float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y - uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid * smoothstep(0.35, 0.6, n));
+    float foam = (1.0 - smoothstep(edge * 0.8, edge, vLocal.y + uBow.z)) * mix(smoothstep(0.3, 0.6, n), 0.85 + 0.15 * n, solid * smoothstep(0.35, 0.6, n));
     // The stem itself, up to the crest, is all white: nothing dark pokes through where the two sides meet.
-    foam = max(foam, (1.0 - smoothstep(2.0, 5.0, vLocal.x)) * (1.0 - smoothstep(top * 0.85, top, vLocal.y - uBow.z)) * step(0.15, uBow.x) * (0.88 + 0.12 * n));
+    foam = max(foam, (1.0 - smoothstep(2.0, 5.0, vLocal.x)) * (1.0 - smoothstep(top * 0.85, top, vLocal.y + uBow.z)) * step(0.15, uBow.x) * (0.88 + 0.12 * n));
     // Right at the waterline forward the hull is buried in white water: no dark boot-top showing through.
-    foam = max(foam, (1.0 - smoothstep(0.5, 1.4, vLocal.y - uBow.z)) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
+    foam = max(foam, (1.0 - smoothstep(0.5, 1.4, vLocal.y + uBow.z)) * exp(-xs / (0.18 * uBow.y)) * smoothstep(0.1, 0.6, uBow.x) * (0.85 + 0.15 * n));
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.95), foam * 0.95);
   }`,
+      )
+      .replace(
+        "#include <roughnessmap_fragment>",
+        "#include <roughnessmap_fragment>\n  if (shipRough > 0.0) roughnessFactor = shipRough;",
       )
       .replace(
         "#include <emissivemap_fragment>",
@@ -822,7 +882,7 @@ void main() {`,
       // Fogged out over a longer distance than the sea (traffic.ts HULL_REACH), since a dark hull shows through haze.
       .replace("#include <fog_fragment>", "#ifdef USE_FOG\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, 0.85 * smoothstep(fogNear, fogFar * 2.2, vFogDepth));\n#endif");
   };
-  m.customProgramCacheKey = () => "boatsim-ship-v3";
+  m.customProgramCacheKey = () => "boatsim-ship-v4-steel";
   return m;
 }
 
