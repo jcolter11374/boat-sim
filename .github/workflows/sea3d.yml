@@ -65,6 +65,7 @@ jobs:
             sea3d/public/models/randolph.glb
             sea3d/public/models/shape_*.glb
             sea3d/public/models/stock_*.glb
+            sea3d/public/models/landmark_*.glb
           key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
       - uses: actions/setup-python@v5
         if: steps.kayak-cache.outputs.cache-hit != 'true'
@@ -105,19 +106,20 @@ jobs:
         with:
           path: sea3d/dist
   # Smoke test (animates, wave heights right, not blank, every page opens) on the
-  # build above, in two halves (SMOKE_PART in smoke.mjs): about 18 min in one job
-  # held every deploy for that long (Kai, 12 Nov). Deploy waits for both halves.
-  # On main it is one job ("all"), both halves in turn: with PRs filling the account's
-  # runners, each extra job waited 15-30 min for a slot, longer than the half it saves
-  # (Maya, 12 Nov). Pull requests that change this file keep the two halves.
+  # build above, in two halves (SMOKE_PART in smoke.mjs). Not on pushes to main any
+  # more: the deploy doesn't wait behind tests (John and the coordinator, 12 Nov); the
+  # full smoke runs nightly on main (prerelease-playtest.yml), and Nina checks the live
+  # site after each deploy. Pull requests that change this file and hand dispatches
+  # still run it.
   smoke:
     needs: build
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(github.event_name == 'pull_request' && '["1", "2"]' || '["all"]') }}
+        part: [1, 2]
     defaults:
       run:
         working-directory: sea3d
@@ -154,7 +156,7 @@ jobs:
           retention-days: 30
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [build, smoke]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       pages: write

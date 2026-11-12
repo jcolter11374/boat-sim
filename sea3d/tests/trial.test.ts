@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BREEZES, toTheLight, toXY, triangle, type Breeze } from "../src/helm/course.ts";
+import { BREEZES, toTheLight, toXY, triangle, type Breeze, type XY } from "../src/helm/course.ts";
 import { CRUISER_HANDLING, Wheel, type TrimTable } from "../src/helm/wheel.ts";
 import { robotSail } from "../src/helm/robot.ts";
 import { LIGHT_WIND_FROM, ROBOT_SECS, Recorder, clock, ghostAt, medalFor, splitText, turnTrack } from "../src/helm/trial.ts";
@@ -15,7 +15,7 @@ function sailCourse(kind: "triangle" | "light", b: Breeze, from: number): Wheel 
     CRUISER_HANDLING,
     { twsKn: BREEZES[b].kn, fromDeg: from },
     { heading: c.heading, speedKn: 0, plan: b === "fresh" ? "reef1" : "full" },
-    { markM: 0, markBearing: 0, marks: c.marks.map((m) => toXY(c.start, m)), markRadiusM: c.radiusM },
+    { markM: 0, markBearing: 0, marks: c.marks.map((m) => ({ ...toXY(c.start, m), gate: m.gate && ([toXY(c.start, m.gate[0]), toXY(c.start, m.gate[1])] as [XY, XY]) })), markRadiusM: c.radiusM },
   );
 }
 

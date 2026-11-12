@@ -166,13 +166,15 @@ export function bestSheet(t: TrimTable, plan: string, twsKn: number, twaDeg: num
 /** How far outside the best sheets still counts as "Drawing well" (deg). */
 const GOOD_TOL = 0.5;
 
-export type SailState = "flapping" | "ease" | "good" | "in" | "stalled";
+export type SailState = "flapping" | "ease" | "good" | "in" | "stalled" | "irons";
 export const SAIL_WORDS: Record<SailState, string> = {
-  flapping: "Flapping: pull the sail in (Up)",
-  in: "Drawing, a little loose: pull in (Up)",
+  // Short enough for the strip's sail cell at 1280 (Ines: no cut-off words).
+  flapping: "Flapping: pull in (Up)",
+  in: "A little loose: pull in (Up)",
   good: "Drawing well",
-  ease: "Drawing, a little tight: ease out (Down)",
-  stalled: "Stalled: ease the sail out (Down)",
+  ease: "A little tight: ease out (Down)",
+  stalled: "Stalled: ease out (Down)",
+  irons: "Too close to the wind",
 };
 
 export interface Inputs {
@@ -188,12 +190,23 @@ export interface Wind {
   fromDeg: number;
 }
 
+type P = { x: number; y: number };
+/** Did the step a -> b cross the line between g0 and g1 (either way)? A gate finish. */
+export function crosses(a: P, b: P, g0: P, g1: P): boolean {
+  const side = (p: P, q: P, r: P) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = side(g0, g1, a);
+  const d2 = side(g0, g1, b);
+  const d3 = side(a, b, g0);
+  const d4 = side(a, b, g1);
+  return ((d1 > 0 && d2 <= 0) || (d1 < 0 && d2 >= 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
 export interface Spell {
   /** The goal: a mark this far away, on this bearing from the start. */
   markM: number;
   markBearing: number;
   /** A course instead (practice off Annapolis): marks to reach in order, metres east and north of the start. */
-  marks?: { x: number; y: number }[];
+  marks?: { x: number; y: number; gate?: [{ x: number; y: number }, { x: number; y: number }] }[];
   /** How close counts as reaching a mark (default 40 m). */
   markRadiusM?: number;
 }
@@ -286,11 +299,13 @@ export class Wheel {
   }
 
   sailState(): SailState {
+    // Pointing too close to the wind no trim fills the sail: say so, not "Drawing well" (Ines, 12 Nov).
+    const b = this.best();
+    if (b.speedKn <= 0.2) return "irons";
     const alpha = this.awa() - this.s.sheet;
     if (alpha < 2) return "flapping";
     // Judged against the sweet spot, not the raw angle: running before the wind the best
     // trim is a stalled sail (it pushes by drag), so "stalled" means too tight for here.
-    const b = this.best();
     if (this.s.sheet >= b.lo - GOOD_TOL && this.s.sheet <= b.hi + GOOD_TOL) return "good";
     if (this.s.sheet > b.hi) return "in";
     return alpha > this.table.alpha_stall_deg + 4 ? "stalled" : "ease";
@@ -328,6 +343,15 @@ export class Wheel {
   }
 
   /** Compass bearing from the boat to the mark. */
+  /** Where to steer for: the middle of the mark's finish gate when it has one, else the mark. */
+  aimBearing(): number {
+    const m = this.spell.marks?.[Math.min(this.s.mark, this.spell.marks.length - 1)];
+    if (!m?.gate) return this.markBearing();
+    const x = (m.gate[0].x + m.gate[1].x) / 2;
+    const y = (m.gate[0].y + m.gate[1].y) / 2;
+    return wrap360((Math.atan2(x - this.s.x, y - this.s.y) * 180) / Math.PI);
+  }
+
   markBearing(): number {
     const m = this.markXY();
     return wrap360((Math.atan2(m.x - this.s.x, m.y - this.s.y) * 180) / Math.PI);
@@ -403,6 +427,8 @@ export class Wheel {
     this.wasOver = s.overNow;
     // Move.
     const m = s.speedKn * KNOT * dt;
+    const px = s.x;
+    const py = s.y;
     const hr = (s.heading * Math.PI) / 180;
     s.x += Math.sin(hr) * m;
     s.y += Math.cos(hr) * m;
@@ -412,7 +438,8 @@ export class Wheel {
       s.sumSecs += dt;
     }
     s.t += dt;
-    if (this.distToMark() < (this.spell.markRadiusM ?? 40)) {
+    const gate = this.spell.marks?.[Math.min(s.mark, this.spell.marks.length - 1)]?.gate;
+    if (gate ? crosses({ x: px, y: py }, s, gate[0], gate[1]) : this.distToMark() < (this.spell.markRadiusM ?? 40)) {
       if (this.spell.marks?.length) {
         s.markTimes.push(s.t);
         s.mark++;

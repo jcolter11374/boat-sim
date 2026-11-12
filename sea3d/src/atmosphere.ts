@@ -7,6 +7,7 @@
 
 import { NAV_NIGHT } from "./boats/navlights";
 import * as THREE from "three";
+import { setNightLook } from "./boats/nightlook";
 import { setSailSun } from "./boats/sailcloth";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
@@ -389,6 +390,7 @@ export class Atmosphere {
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
     for (const m of this.starMats) m.opacity = night * (1 - storm);
     NAV_NIGHT.value = 1 - smooth(elDeg, -6, 2); // boats' lights show from dusk
+    setNightLook(night, moonlight, MOON);
     if (this.catalogue) {
       const u = this.catalogue.material.uniforms;
       u.uOpacity.value = night * (1 - storm);
@@ -432,6 +434,11 @@ export class Atmosphere {
     su.uTwilight.value = smooth(elDeg, -12, -4) * (1 - smooth(elDeg, -1, 5)) * (1 - 0.85 * storm);
     su.uWarm.value = (1 - smooth(elDeg, 1, 14)) * smooth(elDeg, -6, -1) * (1 - storm);
 
+    // Reflections fade with the light: on a moonless night the boat is barely there (Elena,
+    // 12 Nov: glossy panels must not glow as if under a spotlight); a full moon gives some back.
+    const nightEnv = 0.03 + 0.17 * moonlight;
+    this.scene.environmentIntensity = nightEnv + (1 - nightEnv) * day;
+
     // Re-light reflections when the sky has changed enough, a few times a second at most
     // (every few seconds on software graphics, where each re-light costs about a frame).
     const now = performance.now();
@@ -440,7 +447,6 @@ export class Atmosphere {
     if (forceEnv || (moved && now - this.envAt > (this.software ? 5000 : 250))) {
       const rt = this.pmrem.fromScene(this.envScene);
       this.scene.environment = rt.texture;
-      this.scene.environmentIntensity = 0.25 + 0.75 * day;
       this.envRT?.dispose();
       this.envRT = rt;
       this.envKey = [elDeg, azDeg, storm];
