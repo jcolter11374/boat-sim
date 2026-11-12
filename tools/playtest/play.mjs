@@ -165,6 +165,20 @@ async function calmReload(page) {
   await page.waitForTimeout(3000);
   await page.reload({ waitUntil: "load", timeout: 2 * MIN });
 }
+/** Ada's proof clock (tools/proof/capture.mjs), plus release(): held, the page's rAF,
+ * performance.now and Date.now only move when stepped, so each filmed frame is exactly 1/fps. */
+const FILM_CLOCK = `(() => {
+  const realRaf = window.requestAnimationFrame.bind(window), realNow = performance.now.bind(performance), realDate = Date.now.bind(Date);
+  let held = null, vt = 0, lag = 0; const q = [];
+  window.__proofClock = {
+    hold() { if (held === null) { held = realNow(); vt = held - lag; } },
+    step(ms) { vt += ms; const cbs = q.splice(0); for (const cb of cbs) { try { cb(vt); } catch (e) { console.error(e); } } return cbs.length; },
+    release() { if (held === null) return; lag = realNow() - vt; held = null; for (const cb of q.splice(0)) realRaf(cb); },
+  };
+  performance.now = () => (held === null ? realNow() - lag : vt);
+  Date.now = () => realDate() - (realNow() - performance.now());
+  window.requestAnimationFrame = (cb) => (held === null ? realRaf((t) => cb(t - lag)) : (q.push(cb), q.length));
+})();`;
 /** #385: count the page's AudioContexts (an init script, so it sees the very first one). */
 const soundSpy = () => {
   window.__ac = [];
@@ -1253,6 +1267,69 @@ const CHECKS = {
         await shot("ships-container-200m");
       }
       return `container ship at ${c0.d} m on bearing ${c0.b}°, speed ${c0.sp}; ${s0.length} ships in all${shots.length ? `; frames ${shots.join(", ")}` : ""}`;
+    },
+  },
+  // Manual: the opening of Elena's 60 s film for John (title, the helm's start, the first sailing),
+  // frame by frame so it's smooth on a runner without a graphics card: the page's clock is held
+  // and stepped 1/30 s per frame (Ada's proof clock, tools/proof/capture.mjs), captured over CDP
+  // (page.screenshot hangs while the clock is held), and joined into an MP4 with ffmpeg. The MP4
+  // prints to the log like the look frames. Ada renders the sea shots; the cut is joined after.
+  "film-opening": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("filmed in Chromium only");
+      const { execSync } = await import("node:child_process");
+      const { mkdirSync, writeFileSync } = await import("node:fs");
+      try { execSync("ffmpeg -version", { stdio: "ignore" }); } catch { execSync("sudo apt-get install -y -qq ffmpeg", { stdio: "ignore", timeout: 5 * MIN }); }
+      const FPS = 30;
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.addInitScript(FILM_CLOCK);
+      const cdp = await page.context().newCDPSession(page);
+      mkdirSync("film", { recursive: true });
+      let n = 0;
+      const frame = async () => {
+        await page.evaluate((ms) => window.__proofClock.step(ms), 1000 / FPS);
+        const r = await cdp.send("Page.captureScreenshot", { format: "jpeg", quality: 92 });
+        writeFileSync(`film/${String(n++).padStart(5, "0")}.jpg`, Buffer.from(r.data, "base64"));
+      };
+      const film = async (secs) => {
+        await page.evaluate(() => window.__proofClock.hold());
+        await cdp.send("Page.captureScreenshot", { format: "jpeg", quality: 10 }); // the first one can be blank
+        for (let i = 0; i < secs * FPS; i++) await frame();
+        await page.evaluate(() => window.__proofClock.release());
+      };
+      const out = [];
+      // 1. The title (4 s).
+      await page.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 2 * MIN });
+      await page.waitForTimeout(3000);
+      await film(4);
+      out.push(`title ${n} frames`);
+      // 2. The helm's start card (3 s), then Set sail on the real clock.
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await page.goto(SITE + "helm.html", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN });
+      await page.waitForTimeout(3000);
+      const n1 = n;
+      await film(3);
+      out.push(`start card ${n - n1}`);
+      await page.click("#go", { timeout: 30_000 });
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "Set sail failed");
+      await page.click("#soundno", { timeout: 5000 }).catch(() => {});
+      await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(2000);
+      // 3. Sailing at the helm (13 s), the clock running by itself as a new player sees it.
+      const n2 = n;
+      await film(13);
+      out.push(`sailing ${n - n2}`);
+      execSync(`ffmpeg -y -loglevel error -framerate ${FPS} -i film/%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 24 -movflags +faststart film-opening.mp4`);
+      const b64 = readFileSync("film-opening.mp4").toString("base64");
+      console.log("LOOK-BEGIN film-opening.mp4");
+      for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+      console.log("LOOK-END film-opening.mp4");
+      return `${out.join(", ")} frames at ${FPS} fps: film-opening.mp4, ${(b64.length * 0.75 / 1e6).toFixed(1)} MB`;
     },
   },
   "look-marks": {
