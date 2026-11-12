@@ -3,7 +3,8 @@
 // the time in the vertex shader), so it costs almost nothing on the CPU.
 // How hard it rains comes from the replay's logged rain (rainFromRate); older replays
 // without it follow the wind (rainFromStorm). Subtle on purpose: thin, varied streaks,
-// fewer and fainter in drizzle, never water on the lens.
+// fewer and fainter in drizzle, no drops stuck on the lens
+// (a downpour does smear a few soft, out-of-focus streaks past it).
 
 import * as THREE from "three";
 
@@ -31,7 +32,8 @@ void main() {
   // Shorter close to the lens, so the nearest drops are flecks, not lines across the frame.
   float dh = length(p - uCam);
   float lucky = step(1.0 - uLucky, fract(aSeed.w * 13.7 + aSeed.z * 5.1)); // one drop in ~17 catches the light: a long bright streak
-  p -= normalize(vel) * uLen * (1.0 + 3.0 * lucky) * clamp(dh / 7.0, 0.15, 1.0) * aEnd;
+  // Never longer than about a tenth of the frame height at that distance (Ines: no scratched film).
+  p -= normalize(vel) * min(uLen * (1.0 + 3.0 * lucky) * clamp(dh / 7.0, 0.15, 1.0), 0.08 * dh) * aEnd;
   vEnd = aEnd;
   vec3 d = p - uCam;
   // Close drops are the streaks you see; a few metres off they thin into a grey texture.
@@ -109,8 +111,72 @@ function dropMaterial(box: number, fade: THREE.Vector4): THREE.ShaderMaterial {
   });
 }
 
+// Soft streaks right by the lens: drops a hand's breadth away, far too close to be in focus,
+// so they show as wide, faint, blurred smears sliding down the frame, slanted with the wind.
+// Drawn straight in screen space (no depth); only in a downpour.
+const lensVert = /* glsl */ `
+uniform float uTime, uAspect, uLean;
+attribute vec4 aSeed; // x, y place, z size, w speed
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  float speed = 0.9 + 1.4 * aSeed.w;              // screen heights a second: close drops cross fast
+  float len = 0.14 + 0.2 * aSeed.z;                 // a long smear (the exposure at that range)
+  float w = 0.012 + 0.02 * aSeed.z;             // wide for a raindrop: it's out of focus
+  vec2 dir = normalize(vec2(uLean, -1.0));
+  float y = 1.4 - mod(aSeed.y * 2.8 + uTime * speed, 2.8);
+  float x = mod(aSeed.x * 2.4 - (1.4 - y) * uLean + 1.2, 2.4) - 1.2;
+  vec2 side = vec2(-dir.y, dir.x);
+  vec2 q = vec2(x, y) + dir * (uv.y - 0.5) * len + side * (uv.x - 0.5) * w * 2.0;
+  gl_Position = vec4(q, 0.0, 1.0);
+  gl_Position.x /= max(uAspect, 0.5) / 1.78; // keep the smears the same shape on a narrow screen
+}`;
+const lensFrag = /* glsl */ `
+uniform float uAmount;
+uniform vec3 uColor;
+varying vec2 vUv;
+void main() {
+  float across = 1.0 - abs(vUv.x * 2.0 - 1.0);
+  float along = smoothstep(0.0, 0.4, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y));
+  float a = uAmount * across * across * along;
+  if (a < 0.002) discard;
+  gl_FragColor = vec4(uColor, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+function lensStreaks(count: number): THREE.Mesh {
+  const g = new THREE.InstancedBufferGeometry();
+  const quad = new THREE.PlaneGeometry(1, 1);
+  g.index = quad.index;
+  g.setAttribute("position", quad.getAttribute("position"));
+  g.setAttribute("uv", quad.getAttribute("uv"));
+  const seed = new Float32Array(count * 4);
+  let s = 4242;
+  for (let i = 0; i < seed.length; i++) seed[i] = (s = (s * 16807) % 2147483647) / 2147483647;
+  g.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seed, 4));
+  g.instanceCount = count;
+  const m = new THREE.Mesh(
+    g,
+    new THREE.ShaderMaterial({
+      vertexShader: lensVert,
+      fragmentShader: lensFrag,
+      uniforms: { uTime: { value: 0 }, uAspect: { value: 1.78 }, uLean: { value: 0 }, uAmount: { value: 0 }, uColor: { value: new THREE.Color() } },
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      fog: false,
+    }),
+  );
+  m.frustumCulled = false;
+  m.renderOrder = 21;
+  return m;
+}
+
 /** The far layer: from 8 m out to ~45 m, only in heavy rain, a grey veil of fine drops. */
 const FAR_BOX = 100;
+const LENS_STREAKS = 24;
 
 export class Rain {
   /** The near drops; the far veil is its child, so adding this adds both. */
@@ -118,6 +184,9 @@ export class Rain {
   private mat: THREE.ShaderMaterial;
   private far: THREE.LineSegments;
   private farMat: THREE.ShaderMaterial;
+  private lens: THREE.Mesh;
+  private lensMat: THREE.ShaderMaterial;
+  private right = new THREE.Vector3();
   amount = 0;
 
   constructor(drops = 70000, farDrops = 60000) {
@@ -131,6 +200,9 @@ export class Rain {
     this.far.frustumCulled = false;
     this.far.renderOrder = 19;
     this.mesh.add(this.far);
+    this.lens = lensStreaks(LENS_STREAKS);
+    this.lensMat = this.lens.material as THREE.ShaderMaterial;
+    this.mesh.add(this.lens);
   }
 
   /**
@@ -144,11 +216,19 @@ export class Rain {
     // Drops drift with the wind, but slower than it (they're heavy and near the sea, where it's slower).
     // In a gale they fly nearly flat; in light air they barely lean.
     const k = 0.4 + 0.3 * THREE.MathUtils.smoothstep(Math.hypot(windX, windZ), 8, 20);
+    // Looking straight up or down the wind the drops would fall dead vertical on screen; gusts
+    // swirl, so give them at least a third of the wind's lean across the view (Ines: lean in every shot).
+    this.right.setFromMatrixColumn(camera.matrixWorld, 0);
+    const wx = windX * k, wz = windZ * k;
+    const cross = wx * this.right.x + wz * this.right.z;
+    const want = 0.35 * Math.hypot(wx, wz);
+    const add = Math.abs(cross) < want ? (cross < 0 ? -1 : 1) * (want - Math.abs(cross)) : 0;
+    const leanX = this.right.x * add, leanZ = this.right.z * add;
     for (const m of [this.mat, this.farMat]) {
       const u = m.uniforms;
       u.uTime.value = t;
       u.uCam.value.copy(camera.position);
-      u.uWind.value.set(windX * k, windZ * k);
+      u.uWind.value.set(windX * k + leanX, windZ * k + leanZ);
       // A little darker than the pale storm sky, so the streaks read against it as well as against the sea.
       u.uColor.value.setRGB(0.3 + 0.32 * light, 0.33 + 0.34 * light, 0.38 + 0.36 * light);
     }
@@ -166,6 +246,17 @@ export class Rain {
     this.farMat.uniforms.uLen.value = 0.3 + 0.3 * amount; // a little longer than near, never lines across the sea
     this.farMat.uniforms.uLucky.value = 0; // no long bright streaks out there
     this.far.geometry.setDrawRange(0, Math.ceil(this.far.geometry.getAttribute("aEnd").count * heavy / 2) * 2);
+    // Soft smears by the lens, only in a downpour, leaning as the wind blows across the view.
+    const sheets2 = THREE.MathUtils.smoothstep(amount, 0.55, 0.85);
+    this.lens.visible = sheets2 > 0.01;
+    const lu = this.lensMat.uniforms;
+    lu.uTime.value = t;
+    lu.uAmount.value = 0.13 * sheets2;
+    lu.uColor.value.copy(this.mat.uniforms.uColor.value).multiplyScalar(1.15);
+    lu.uLean.value = THREE.MathUtils.clamp((cross + add) / FALL, -0.8, 0.8);
+    const pc = camera as THREE.PerspectiveCamera;
+    lu.uAspect.value = pc.aspect ?? 1.78;
+    (this.lens.geometry as THREE.InstancedBufferGeometry).instanceCount = Math.ceil(LENS_STREAKS * sheets2);
   }
 
   dispose(): void {
@@ -173,5 +264,7 @@ export class Rain {
     this.mat.dispose();
     this.far.geometry.dispose();
     this.farMat.dispose();
+    this.lens.geometry.dispose();
+    this.lensMat.dispose();
   }
 }
