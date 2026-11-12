@@ -240,7 +240,7 @@ void main() {
   // ---- cumulus ----
   // Under a closing deck the heaps lose their sun and merge into it.
   // Overcast, a blow, or steady rain (rain falls from a deck, whatever the sunlight said) close the sky.
-  float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.1, 1.5, uRain));
+  float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.05, 0.8, uRain));
   float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
   if (cuAmt > 0.01 && alpha < 0.99) {
     vec2 q = onLayer(dir, 1200.0) + uDrift;
@@ -594,7 +594,7 @@ export class Clouds {
     // Rain, mm/h: the logged rate, or (older replays) what the storm suggests.
     const rainWant = rainMmH ?? 6 * SM(storm, 0.4, 1);
     // Rain falls from a deck: steady rain covers the sky (and so dims the sun and its glitter on the sea).
-    const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7), SM(this.rain, 0.1, 1.5));
+    const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7), SM(this.rain, 0.05, 0.8));
     const k = this.snapped ? 1 : Math.min(1, dt * 0.8);
     this.snapped = false;
     this.cover += (want - this.cover) * k;
@@ -658,7 +658,7 @@ export class Clouds {
   seaSky(out: THREE.Vector4): THREE.Vector4 {
     const u = this.layer.material.uniforms;
     const h = u.uHaze.value as THREE.Color;
-    const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7), SM(this.rain, 0.1, 1.5));
+    const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7), SM(this.rain, 0.05, 0.8));
     return out.set(h.r, h.g, h.b, deck);
   }
 
@@ -711,9 +711,10 @@ export class Clouds {
     this.layer.material.uniforms.uQ.value = q === "low" ? 0 : q === "ultra" ? 2 : 1;
   }
 
-  /** How much the rain hides the sun, 0..1 (for the atmosphere's light): from 0.5 mm/h, all by 4. */
+  /** How much the rain hides the sun, 0..1 (for the atmosphere's light): drizzle already
+   * mutes it by half (an overcast day), steady rain from 4 mm/h hides it. */
   get rainShade(): number {
-    return SM(this.rain, 0.5, 4);
+    return 0.5 * SM(this.rain, 0.1, 0.8) + 0.5 * SM(this.rain, 0.8, 4);
   }
 
   /** Jump straight to the weather at the next update (after a seek), rather than easing into it. */
@@ -726,11 +727,15 @@ export class Clouds {
     const thick = SM(this.fog, 0.55, 1);
     fog.near = THREE.MathUtils.lerp(fog.near, 15, thick);
     fog.far = THREE.MathUtils.lerp(fog.far, 380, thick);
-    // Heavy rain is a mist of its own: the horizon goes and the haze closes to a few km
-    // (about 2.5 km in a 10 mm/h downpour), on the same haze colour as the sea's far fade.
-    const mist = SM(this.rain, 2, 10);
-    fog.near = Math.min(fog.near, THREE.MathUtils.lerp(fog.near, 60, mist));
-    fog.far = Math.min(fog.far, THREE.MathUtils.lerp(fog.far, 2500, mist));
+    // Rain is a mist of its own, on the same haze colour as the sea's far fade: drizzle
+    // softens the horizon, and a downpour shuts the world in to a few hundred metres
+    // (about 400 m by 6 mm/h). Eased in log distance so the close-in is even, not sudden.
+    const mist = 0.35 * SM(this.rain, 0.1, 1) + 0.65 * SM(this.rain, 1, 6);
+    if (mist > 0) {
+      const far = Math.exp(THREE.MathUtils.lerp(Math.log(fog.far), Math.log(400), mist));
+      fog.far = Math.min(fog.far, far);
+      fog.near = Math.min(fog.near, THREE.MathUtils.lerp(fog.near, 20, mist));
+    }
   }
 
   dispose(): void {

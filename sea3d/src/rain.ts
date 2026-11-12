@@ -51,7 +51,8 @@ void main() {
 
 /** How hard it rains, 0..1, from a logged rain rate in mm per hour (heavy at 4 mm/h and over). */
 export function rainFromRate(mmPerHour: number): number {
-  return THREE.MathUtils.smoothstep(mmPerHour, 0.1, 4);
+  // Drizzle still shows (fine, sparse streaks); a steady 4 mm/h is the full downpour.
+  return 0.75 * THREE.MathUtils.smoothstep(mmPerHour, 0.1, 4) + 0.25 * THREE.MathUtils.smoothstep(mmPerHour, 0.05, 0.6);
 }
 
 /** Fallback for replays with no rain column: how hard it rains, 0..1, for a storm level 0 (fair) .. 1 (gale). */
