@@ -104,6 +104,10 @@ export class GridLauncher implements Launcher {
   async build(id: string): Promise<GridBuild | null> {
     return (await this.index)?.builds.find((b) => b.id === id) ?? null;
   }
+  /** Every grid build (empty without the grid). */
+  async all(): Promise<GridBuild[]> {
+    return (await this.index)?.builds ?? [];
+  }
   /** Which launches the odds come from, or null. */
   async source(): Promise<GridIndex["odds_source"] | null> {
     return (await this.index)?.odds_source ?? null;

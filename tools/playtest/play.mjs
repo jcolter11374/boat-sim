@@ -52,19 +52,32 @@ async function visibleNotices(page) {
 
 async function helmStart(page, setup = async () => {}) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+  // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
+  await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
   await setup(page);
   await page.click("#go");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
   const s = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
+  // Time runs by itself once you set sail (#339): pause it, and let the picture settle, so a hop measures only the hop.
+  await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+  let last = -1;
+  for (let i = 0; i < 60; i++) {
+    const d = await page.evaluate(() => window.__helm.status?.day ?? 0);
+    if (d === last) break;
+    last = d;
+    await page.waitForTimeout(1000);
+  }
 }
 
 async function hop(page, button) {
   const t0 = Date.now();
+  const day0 = await page.evaluate(() => window.__helm.status?.day ?? 0);
   await page.click(button);
   await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 10 * MIN });
   const st = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error, over: window.__helm.status?.over }));
   st.secs = Math.round((Date.now() - t0) / 1000);
+  st.day0 = day0;
   must(!st.err, `sailing failed: ${st.err}`);
   must(STOPS.includes(st.stop), `unknown stop ${JSON.stringify(st.stop)} at day ${st.day}`);
   return st;
@@ -109,7 +122,7 @@ const CHECKS = {
     run: async (page) => {
       await helmStart(page);
       const a = await hop(page, "#s6");
-      must(a.day > 0.2 || a.stop !== "time", `"Sail 6 hours" only reached day ${a.day}`);
+      must(a.day - a.day0 > 0.2 || a.stop !== "time", `"Sail 6 hours" only went from day ${a.day0} to ${a.day}`);
       const b = await hop(page, "#sday");
       return `6 h hop to day ${a.day.toFixed(2)} (${a.secs} s), 1 day hop to ${b.day.toFixed(2)} (${b.secs} s, stop ${b.stop})`;
     },
@@ -120,8 +133,8 @@ const CHECKS = {
     run: async (page) => {
       await helmStart(page);
       const st = await hop(page, "#sevent");
-      must(st.day <= 3 + 1e-3, `"until something happens" ran past 72 h (day ${st.day})`);
-      return `stopped at day ${st.day.toFixed(2)} for "${st.stop}" (${st.secs} s)`;
+      must(st.day - st.day0 <= 3 + 1e-3, `"until something happens" ran past 72 h (day ${st.day0} to ${st.day})`);
+      return `from day ${st.day0.toFixed(2)}, stopped at day ${st.day.toFixed(2)} for "${st.stop}" (${st.secs} s)`;
     },
   },
   // Sam's spot 3: real base station, an order takes about a day to arrive.

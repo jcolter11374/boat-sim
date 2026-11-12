@@ -68,6 +68,17 @@
   .row.chance { font-size: 15px; align-items: baseline; }
   .row.chance b { font-size: 20px; color: var(--good); }
   .row.chance b.untested { font-size: 14px; color: var(--dim); font-weight: 600; }
+  .row.chance b.estimate { color: var(--ink); }
+  .row.chance b.up { animation: flash-up 0.9s ease-out; }
+  .row.chance b.down { animation: flash-down 0.9s ease-out; }
+  @keyframes flash-up { from { color: #fff; text-shadow: 0 0 12px var(--good); } }
+  @keyframes flash-down { from { color: var(--bad); text-shadow: 0 0 12px var(--bad); } }
+  .opt .delta { margin-left: 6px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .opt .delta.up { color: var(--good); }
+  .opt .delta.down { color: var(--bad); }
+  .opt .delta.same, .opt .delta.none { color: var(--dim); font-weight: 500; }
+  @media (prefers-reduced-motion: reduce) { .row.chance b.up, .row.chance b.down { animation: none; } }
+  #legend { margin: 8px 16px 0; }
   #s-odds-note { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .row.total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; font-size: 15px; }
   #sum .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -103,16 +114,17 @@
     <div id="bases" role="group" aria-label="Start from">
       <span class="muted">Start from</span>
       <button data-base="kayak" aria-pressed="true">Our kayak</button>
-      <button data-base="revc" aria-pressed="false" title="Our model of the Randolph team's Rev C: a 1.5 m wing-sail boat">Randolph Rev C</button>
+      <button data-base="revc" aria-pressed="false" title="Our model of the Randolph team's Rev C5: a 1.5 m wing-sail boat">Randolph Rev C5 (our model)</button>
       <button data-base="revb" aria-pressed="false" title="Our model of the Randolph team's earlier Rev B">Randolph Rev B</button>
     </div>
   </header>
+  <p id="legend" class="muted" hidden>Green and red numbers on a part: how your odds of finishing would change if you picked it.</p>
   <div id="slots"></div>
   <p id="credit" class="muted credits"></p>
 </aside>
 <section id="sum" class="glass">
   <h2>Your build</h2>
-  <div class="row chance"><span>Odds</span><b id="s-odds">-</b></div>
+  <div class="row chance"><span>Odds of finishing</span><b id="s-odds">-</b></div>
   <div class="muted" id="s-odds-note"></div>
   <div class="row"><span>Boat and parts</span><b id="s-cost">-</b></div>
   <div class="row"><span>Licences, airtime, trials</span><b id="s-prog">-</b></div>

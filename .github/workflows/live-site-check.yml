@@ -15,11 +15,10 @@ on:
       site:
         description: "Site to check"
         default: "https://jcolter11374.github.io/boat-sim/"
-  pull_request:
-    paths:
-      - ".github/workflows/live-site-check.yml"
-      - "tools/live_site_check.mjs"
-      - "tools/live_visual_checks.mjs"
+  # No pull_request trigger: a PR that changes these checks is played by the
+  # pre-release playtest (prerelease-playtest.yml), which runs the PR's own
+  # tools/live_site_check.mjs against the PR's own build in Chrome and Firefox.
+  # The 23-runner PR run here only replayed it against the old live site.
 permissions:
   contents: read
 concurrency:
@@ -40,30 +39,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check:
-          - index
-          - helm-drop
-          - helm-port
-          - helm-challenge
-          - helm-base
-          - helm-share
-          - helm-boats
-          - helm-stock_cruiser31
-          - helm-stock_sail_drone7
-          - helm-stock_ocean_rower45
-          - helm-stock_dinghy14
-          - helm-stock_beachcat16
-          - boatyard
-          - voyage-replay
-          - voyage-annapolis
-          - race
-          - leaderboard
-          - helm-small-window
-          - visual-sea
-          - visual-voyage
-          - visual-helm
-          - visual-boatyard
-          - visual-race
+        # Four runners, each playing every 4th check in one browser (SHARD in
+        # tools/live_site_check.mjs). Was one runner per check: 23 runners per
+        # deploy, each paying setup, a browser download and the 90 s wait, and
+        # they filled the free plan's 20-runner limit, so PR gates queued behind them.
+        shard: [1, 2, 3, 4]
     env:
       SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
     steps:
@@ -79,10 +59,12 @@ jobs:
       # Pages takes a minute to serve a fresh deploy everywhere.
       - if: github.event_name == 'workflow_run'
         run: sleep 90
-      - run: node tools/live_site_check.mjs ${{ matrix.check }}
+      - run: node tools/live_site_check.mjs
+        env:
+          SHARD: ${{ matrix.shard }}/4
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: live-${{ matrix.check }}
+          name: live-shard-${{ matrix.shard }}
           path: live-*.png
           if-no-files-found: ignore

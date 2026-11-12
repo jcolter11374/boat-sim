@@ -70,6 +70,17 @@ export interface Status {
   show_true_position?: boolean;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
 }
+/** An order's next day, sailed by a copy of the boat (sandbox/helm.py Game.preview, #330). */
+export interface Preview {
+  hours: number;
+  /** Mean speed through the water, m/s. */
+  stw: number;
+  /** Battery change, 0-1 of full. */
+  soc: number;
+  /** km made towards the finish (negative: further away). */
+  km: number;
+  outcome: string;
+}
 export interface ForecastRow {
   t: string;
   wind_u: number;
@@ -187,6 +198,14 @@ export class HelmGame {
     if (v.ghost) this.ghost = v.ghost;
   }
 
+  /** Load Python, the simulator and the 2020 weather now, so Set sail starts at once. Errors are left for start() to report. */
+  warm(): Promise<void> {
+    return this.ask<null>({ type: "warm" }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
    *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
    *  boat (e.g. "stock_cruiser31"), or is a Boatyard design's simulator choices
@@ -234,6 +253,12 @@ export class HelmGame {
     const v = await this.ask<{ stopped: Stop; status: Status; boat: Replay; ghost: Replay }>({ type: "run", ...o });
     this.take(v);
     return v.stopped;
+  }
+
+  /** What an order would do over the next `hours` (a copy of the boat sails it; the game is untouched), or null where the simulator can't say (#330). */
+  preview(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, hours = 24): Promise<Preview | null> {
+    const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+    return this.ask<Preview | null>({ type: "preview", heading, power, hours, ...extra });
   }
 
   forecast(): Promise<ForecastRow[]> {
