@@ -307,6 +307,75 @@ const CHECKS = {
       return `${n} coast squares around the boat; credit "${credit.trim().slice(0, 100)}"`;
     },
   },
+  // #374 (Kai's NOW list): the default start is a good day with a "Rough start" offered, the chip
+  // says "My boat: Our kayak" with no boat saved, both day labels agree running and after a player's
+  // pause, and an event that happens to you and the ghost together is one note.
+  "helm-now": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      const card = await page.evaluate(() => ({
+        sel: document.querySelector("#launch option:checked")?.textContent ?? "",
+        rough: [...document.querySelectorAll("#launch option")].some((o) => /rough start/i.test(o.textContent)),
+        chip: document.querySelector("#topbar .boat")?.textContent.trim() ?? "",
+      }));
+      if (!/23 April/.test(card.sel)) throw new SkipCheck(`this build's default launch is "${card.sel}" (#374 not deployed)`);
+      must(card.rough, 'no "Rough start" launch on the card');
+      must(/My boat:\s*Our kayak/.test(card.chip), `the top bar chip says "${card.chip}" with no boat saved`);
+      await page.click("#go");
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+      await page.waitForFunction(() => (window.__helm.hour ?? 0) > 24 || window.__helm.clock === 0, null, { timeout: 3 * MIN }).catch(() => {});
+      const read = () => page.evaluate(() => [document.getElementById("clock").textContent.trim(), document.getElementById("day").textContent.trim()]);
+      const running = await read();
+      if (await page.evaluate(() => window.__helm.clock > 0)) await page.click("#t-pause", { noWaitAfter: true });
+      await page.waitForTimeout(2500);
+      const paused = await read();
+      await page.screenshot({ path: `play-${BROWSER}-now-paused.png` }).catch(() => {});
+      must(paused[0] && paused[0] === paused[1], `after pressing pause the picture says "${paused[0]}" and the panel "${paused[1]}"`);
+      must(running[0] === running[1], `while running the picture said "${running[0]}" and the panel "${running[1]}" in the same frame`);
+      // Shared events: no two notes with the same words for "You" and "Ghost" at the same time.
+      const notes = await page.evaluate(() => [...document.querySelectorAll("#notes .note")].map((n) => ({ when: n.querySelector(".when")?.textContent ?? "", txt: n.querySelector(".txt")?.textContent ?? "" })));
+      const seen = new Map();
+      const doubled = [];
+      for (const n of notes) {
+        const day = n.when.replace(/^(You|Ghost)\s*·\s*/, "");
+        const k = `${day}|${n.txt}`;
+        if (seen.has(k) && seen.get(k) !== n.when) doubled.push(`"${n.txt.slice(0, 60)}" (${seen.get(k)} and ${n.when})`);
+        seen.set(k, n.when);
+      }
+      must(!doubled.length, `the same event shows twice: ${doubled.join("; ")}`);
+      return `default "${card.sel}", rough start offered, chip "${card.chip}"; labels ${running.join(" = ")} running, ${paused.join(" = ")} paused; ${notes.length} notes, none doubled`;
+    },
+  },
+  // #374: Watch a voyage has no text cut off with "..." and nothing hanging off the window.
+  "voyage-fit": {
+    path: "voyage.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
+      await page.waitForTimeout(3000);
+      for (const [w, h] of [[1400, 900], [1280, 720], [1024, 700]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(1500);
+        const bad = await page.evaluate(() => {
+          const out = [];
+          for (const e of document.querySelectorAll("body *")) {
+            if (!e.offsetParent || e.closest("canvas, svg, select, option, #cine, .cinema")) continue;
+            const cs = getComputedStyle(e);
+            const r = e.getBoundingClientRect();
+            if (!r.width || !r.height) continue;
+            const text = (e.textContent || "").trim().slice(0, 40);
+            if (cs.textOverflow === "ellipsis" && e.scrollWidth > e.clientWidth + 1) out.push(`cut off: "${text}"`);
+            if (e.children.length === 0 && text && r.right > innerWidth + 1 && cs.position === "fixed") out.push(`off the right edge: "${text}"`);
+          }
+          return [...new Set(out)].slice(0, 6);
+        });
+        await page.screenshot({ path: `play-${BROWSER}-voyage-${w}.png` }).catch(() => {});
+        must(!bad.length, `at ${w}x${h}: ${bad.join("; ")}`);
+      }
+      return "no cut-off text at 1400x900, 1280x720 or 1024x700";
+    },
+  },
   // Sam's spot 5: "Sail until something happens" stops within 72 h.
   "helm-until": {
     path: "helm.html?quality=low",
