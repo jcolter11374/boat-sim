@@ -81,10 +81,16 @@ jobs:
           retention-days: 3
   # The page's smoke test (animates, wave heights right, not blank, every page
   # opens), as the deploy used to run it on PRs, on this run's build.
+  # Two halves side by side (SMOKE_PART in smoke.mjs): it was 18 min in one job,
+  # the gate's longest.
   smoke:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
     defaults:
       run:
         working-directory: sea3d
@@ -105,10 +111,12 @@ jobs:
           timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Smoke test (animates, wave heights right, not blank)
         run: npm test
+        env:
+          SMOKE_PART: ${{ matrix.part }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sea3d-screenshots
+          name: sea3d-screenshots-${{ matrix.part }}
           path: sea3d/test-output/
           retention-days: 30
   play:
