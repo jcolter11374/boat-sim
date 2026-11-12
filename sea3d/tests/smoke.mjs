@@ -30,6 +30,13 @@ async function openOrders(page) {
     if (await page.locator("#orders.open").count()) return;
   }
 }
+/** Watch a voyage's replay drawer (it slides shut after 10 s of play): open it and wait until it's in place. Old builds: nothing. */
+async function openReplay(page) {
+  if (!(await page.locator("#replay-tab").count())) return;
+  if (!(await page.locator("#top.open").count())) await page.click("#replay-tab");
+  await page.waitForFunction(() => { const o = document.getElementById("top"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20000 });
+  await page.hover("#top h2").catch(() => {});
+}
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
@@ -251,6 +258,7 @@ try {
     }
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+    await openReplay(page); // the close-up buttons live in the replay drawer
     await page.click('#focus button[data-lane="1"]');
     await page.waitForTimeout(800);
     if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
@@ -462,7 +470,7 @@ try {
     }
     if (shots.some((s) => Math.abs(Number(s.split("@")[1]) - 150) > 0.5)) fail(`cinematic: the voyage clock jumped (${shots})`);
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
+    await page.waitForFunction(() => !window.__replay.cine.on && getComputedStyle(document.getElementById("strip") ?? document.getElementById("top")).opacity === "1", null, { timeout: 30000 })
       .catch(() => fail("cinematic: a key didn't bring the panels back"));
     const back = await page.evaluate(() => ({ hour: window.__replay.hour, sound: document.getElementById("soundbtn").textContent }));
     if (Math.abs(back.hour - 150) > 0.5) fail(`cinematic: the replay hour moved (${back.hour})`);
@@ -788,15 +796,17 @@ try {
       banner: document.querySelector("#banner").textContent,
       tiers: [...document.querySelectorAll("#rows tr")].map((r) => Number(r.dataset.tier)),
       ref: document.querySelectorAll("#rows tr.ref").length,
-      // Randolph's boats say "our model" behind the name's "i", not in the name (Leo, audit item 9).
+      // Randolph's boats: a quiet "our model" tag beside the name, the "i" with the detail (Maya); never "(our model)" in the name.
       model: [...document.querySelectorAll("#rows .name .info")].map((c) => c.getAttribute("title") ?? ""),
       names: [...document.querySelectorAll("#rows .name")].map((c) => c.firstChild?.textContent ?? ""),
       tags: document.querySelectorAll("#rows .name .modeltag").length,
+      // A folded group row that names a Randolph boat carries the tag too.
+      untagged: [...document.querySelectorAll("#rows tr.group")].filter((r) => /Randolph/.test(r.textContent) && !r.querySelector(".modeltag")).length,
     }));
     const leaked = lb.names.filter((n) => /Drive:|: [a-z0-9]+-|W cruise|\(our model\)|GUESS/.test(n));
     if (leaked.length) fail(`leaderboard shows internal build names: ${JSON.stringify(leaked)}`);
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
-    if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1)
+    if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
     await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);

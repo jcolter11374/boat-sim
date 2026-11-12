@@ -1,4 +1,4 @@
-import { bestHeadline, launchSetWords, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
+import { bestHeadline, groupSummary, launchSetWords, tierName, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
 import { type BuildName, loadNames, nameOf } from "./names";
 import { standing, standingText } from "./results";
 // Design leaderboard page: draws the board JSON the "Design leaderboard"
@@ -79,6 +79,41 @@ function chip(text: string): HTMLElement {
   return el("span", `chip ${kind}`.trim(), text);
 }
 
+/** A group's one row: its tier, "Our kayak and 4 builds just as good ▸", the finish range. */
+function groupRow(tier: number, groups: number, members: Row[], reference: string | null, open: boolean): HTMLElement {
+  const tr = el("tr", "group tierstart");
+  tr.dataset.tier = String(tier);
+  tr.append(el("td", "tier", tierName(tier, groups)));
+  const lead = members.find((m) => m.design === reference) ?? members[0];
+  const btn = el("button", "grouptoggle");
+  btn.type = "button";
+  const names = [lead, ...members.filter((m) => m !== lead)].map((m) => m.label);
+  const words = el("span", undefined, groupSummary(names, tier === 1));
+  // Randolph's boats are tagged wherever their names show (Maya), folded rows too: only the
+  // names the row actually says (groupSummary names one for Best or 4+, else all of them),
+  // so "Our kayak and 4 builds just as good" isn't tagged for a Randolph build folded inside it.
+  const ordered = [lead, ...members.filter((m) => m !== lead)];
+  const named = tier === 1 || ordered.length > 3 ? ordered.slice(0, 1) : ordered;
+  if (named.some((m) => m.badges.some(isModelBadge))) words.append(" ", el("span", "modeltag", "our model"));
+  const arrow = el("span", "arrow");
+  btn.append(words, " ", arrow);
+  const set = (on: boolean) => {
+    btn.setAttribute("aria-expanded", String(on));
+    arrow.textContent = on ? "▾" : "▸";
+    for (const row of Array.from(document.querySelectorAll<HTMLElement>(`#rows tr.member[data-tier="${tier}"]`))) row.hidden = !on;
+  };
+  btn.addEventListener("click", () => set(btn.getAttribute("aria-expanded") !== "true"));
+  btn.setAttribute("aria-expanded", String(open));
+  arrow.textContent = open ? "▾" : "▸";
+  const td = el("td");
+  td.append(btn);
+  const rates = members.map((m) => m.finish_rate);
+  const lo = Math.round(Math.min(...rates) * 100);
+  const hi = Math.round(Math.max(...rates) * 100);
+  tr.append(td, el("td", "muted", lo === hi ? `${lo}%` : `${lo} to ${hi}%`), el("td"), el("td", "stat"));
+  return tr;
+}
+
 /** A small "i": the model and evidence notes behind a name (Leo: never in the name itself). */
 function info(text: string): HTMLElement {
   const i = el("span", "info", "i");
@@ -94,7 +129,7 @@ const isModelBadge = (t: string) => /^our model of /.test(t);
 function verdictCell(r: Row, s: Summary): HTMLElement {
   const td = el("td", "verdict");
   if (r.design === s.reference) {
-    td.append(el("span", "muted", "This is our kayak: the others are compared with it"));
+    td.append(el("span", "muted", "The one we compare with"));
     return td;
   }
   const v = r.vs_reference;
@@ -104,7 +139,9 @@ function verdictCell(r: Row, s: Summary): HTMLElement {
   }
   // Plain words first (#318); the numbers behind them show with "Show the statistics".
   const w = versusWords(v);
-  td.append(el("div", w.tone, w.head), el("div", "muted stat-line", w.detail));
+  const head = el("div", w.tone, w.short);
+  head.append(" ", info(`${w.head}. ${w.detail}`));
+  td.append(head, el("div", "muted stat-line", w.detail));
   return td;
 }
 
@@ -177,14 +214,25 @@ function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
   } catch {
     // a mangled link: mark nothing
   }
+  // Each group is one row that opens in place (Milo M6); only the top group, and the
+  // group with a marked build, start open. Groups are named, not numbered (M7).
+  const groups = Math.max(0, ...s.rows.map((r) => r.tier));
+  const open = new Set<number>([1, ...s.rows.filter((r) => mine && r.design === mine).map((r) => r.tier)]);
   let lastTier = 0;
   for (const r of s.rows) {
+    if (r.tier !== lastTier) {
+      const members = s.rows.filter((x) => x.tier === r.tier);
+      if (members.length > 1) tbody.append(groupRow(r.tier, groups, members, s.reference, open.has(r.tier)));
+    }
     const tr = el("tr");
-    if (r.tier !== lastTier) tr.classList.add("tierstart");
+    const single = s.rows.filter((x) => x.tier === r.tier).length === 1;
+    if (r.tier !== lastTier && single) tr.classList.add("tierstart");
     if (r.design === s.reference) tr.classList.add("ref");
     tr.dataset.design = r.design;
     tr.dataset.tier = String(r.tier);
-    tr.append(el("td", "tier", r.tier !== lastTier ? String(r.tier) : ""));
+    tr.classList.add("member");
+    tr.hidden = !single && !open.has(r.tier);
+    tr.append(el("td", "tier", r.tier !== lastTier && single ? tierName(r.tier, groups) : ""));
     lastTier = r.tier;
 
     const name = el("td");
@@ -230,7 +278,9 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     else {
       sub.textContent = "Builds in the same group can't be told apart with this many launches. ";
       const n = s.rows[0]?.launches ?? 0;
-      sub.append(info(`Each build sailed the same ${n} launches, ${launchSetWords(b.board.launch_set).replace(/ launches every \d+ days,/, ",")}. The groups are the builds whose odds overlap.`));
+      const when = launchSetWords(b.board.launch_set).replace(/ launches every \d+ days, /, ", ");
+      // One sentence from one source for both pages' "i" (Milo M4).
+      sub.append(info(`Every build sails the same ${n} launches, ${when}, so the weather is identical for all. The Boatyard tests on a wider set of 100 launches, so its odds can differ by a few points.`));
     }
   }
   box.replaceChildren(head, sub);
