@@ -524,14 +524,20 @@ if (uSeaBreak.w > 0.001) {
   vec3 Vb = normalize(cameraPosition - vWPos);
   // From the big waves' faces only (not the ripples), so it reads as a dull sheen on the
   // wave faces toward the slot, not a lace of sparks (Sam, Elena).
-  vec3 Rb = reflect(-Vb, inverseTransformDirection(geometryNormal, viewMatrix));
-  // The sky's own weight on the bearing, narrowed again so it reads as a column toward
-  // the slot, not sparks across the whole sea (Elena: no glitter under a gale deck).
-  float onB = smoothstep(0.35, 0.97, dot(normalize(Rb.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
-  // Broad, soft weights only: a steep one draws contour rims round every facet (Ines).
-  onB *= onB;
-  float lowB = exp(-6.0 * max(Rb.y, 0.0)) * smoothstep(-0.1, 0.05, Rb.y) * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)); // a low sun's break only
-  radiance += 0.25 * uSeaBreak.rgb * uSeaBreak.w * (1.0 - uRain.x) * onB * lowB; // none through a downpour (Kai)
+  // Half-flattened toward straight up, so the reflected ray swings slowly across the faces
+  // and the sheen comes in broad gradients, not as a bright rim on every facet (Elena, Ines).
+  vec3 Nb = normalize(mix(vec3(0.0, 1.0, 0.0), inverseTransformDirection(geometryNormal, viewMatrix), 0.5));
+  vec3 Rb = reflect(-Vb, Nb);
+  // A column toward the slot, picked by the view's own bearing (smooth across the screen),
+  // not by each facet's reflected bearing, which drew a copper rim round every facet (Elena, Ines).
+  float col = smoothstep(0.8, 1.0, dot(normalize(-Vb.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
+  col *= col;
+  // On the far sea only, where the water mirrors the sky just over the horizon; the near
+  // water mirrors the deck overhead (a wash over it all read as a brown sea).
+  col *= 1.0 - smoothstep(0.02, 0.12, Vb.y);
+  // The faces tilted to catch the low light; broad and soft only.
+  float lowB = exp(-12.0 * max(Rb.y, 0.0)) * smoothstep(-0.4, 0.1, Rb.y) * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)); // a low sun's break only
+  radiance += 0.22 * uSeaBreak.rgb * uSeaBreak.w * (1.0 - uRain.x) * col * lowB; // none through a downpour (Kai)
 }
 #endif
 `;
