@@ -91,7 +91,12 @@ if (GAME) document.body.classList.add("game");
 /** Proof pictures only (tools/proof): ?drawas=stock_pearson31_2 draws the replay's boat as
  * another model, for boats that have no replays of their own yet (the Pearson sails a
  * cruiser replay). Never linked from the pages. */
-const DRAW_AS = (params.get("drawas") || null) as Rev | null;
+const DRAW_AS_RAW = params.get("drawas");
+// Only a known boat key (Lena): anything else is ignored.
+const DRAW_AS: Rev | null =
+  DRAW_AS_RAW && ["kayak", "randolph", "randolph_c", "stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7", "stock_ocean_rower45", "stock_pearson31_2"].includes(DRAW_AS_RAW)
+    ? (DRAW_AS_RAW as Rev)
+    : null;
 /**
  * Live tracker: ?live (or <html data-mode="live">) shows the boat at its reported
  * positions from the tracker feed, then the simulator's forecast after now.
