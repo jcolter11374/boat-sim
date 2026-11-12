@@ -32,7 +32,7 @@ test("the headline says who won, and by how much", () => {
 test("the story is said once when both boats ended the same way", () => {
   const both = card({ verdict: "neither_finished", margin_days: null, boat: side("lost", 3.9, silent), ghost: side("lost", 3.9, silent) });
   const s = story(both);
-  assert.match(s, /^Both electronics boxes failed out in the open ocean on day 3\.9/);
+  assert.match(s, /^Both electronics boxes failed out in the open ocean, on day 3\.9\./);
   assert.match(s, /same bad luck/);
   assert.equal(s.match(/electronics/g)?.length, 1);
   const apart = card({ verdict: "lost", margin_days: null, boat: side("lost", 9, { ...silent, day: 9 }), ghost: side("arrived", 55, { headline: "Finished", words: "", where: null, day: 55, boat: null }) });

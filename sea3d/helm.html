@@ -58,8 +58,10 @@
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
   #decidebtns button { text-align: left; white-space: normal; }
   #decidebtns button:first-child { font-weight: 600; }
-  #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
-  #soundask button { white-space: nowrap; }
+  /* A slim line at top centre, never over the boat or its wake (Elena); asked a minute in or after the first call (Leo). */
+  #soundask { position: fixed; top: calc(var(--bar, 0px) + var(--edge)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 14px; z-index: 8; font-size: 13px; white-space: nowrap; border-radius: 999px; background: var(--hud-solid); }
+  #soundask button { white-space: nowrap; font-size: 12.5px; padding: 3px 11px; border-radius: 999px; }
+  body.asking-sound #notes { top: calc(var(--bar, 0px) + var(--edge) + 42px); }
   #soundask[hidden] { display: none; }
   #flash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; }
   #flash.spray { background: radial-gradient(ellipse at 50% 60%, rgba(255,255,255,.75), rgba(220,235,245,.35) 60%, transparent); animation: flash-out 1.6s ease-out forwards; }
@@ -192,8 +194,8 @@
   .card label { display: block; margin: 8px 0; }
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
   /* Results, story first (Leo's plan, Elena 12 Nov): headline, story, map and three numbers, your calls, where this leaves you, one bright button. */
-  #result { background: rgba(5,12,22,.28); transition: opacity .5s; }
-  #result .rc { width: min(640px, 94vw); padding: 22px 26px 16px; }
+  #result { background: rgba(5,12,22,.28); transition: opacity .5s; z-index: 30; padding-bottom: calc(var(--edge) + var(--strip-h) * .5); box-sizing: border-box; }
+  #result .rc { width: min(640px, 94vw); padding: 22px 26px 16px; background: var(--hud-solid); max-height: calc(100dvh - var(--bar, 0px) - var(--edge) * 2 - var(--strip-h) * .5 - 16px); }
   .rc-top { display: flex; align-items: flex-start; gap: 10px; }
   .rc-top h1 { flex: 1; font-size: 26px; line-height: 1.2; margin: 0; }
   .rc .i { width: 22px; height: 22px; padding: 0; border-radius: 50%; font: italic 600 13px Georgia, serif; flex: none; margin-top: 4px; color: var(--dim); background: rgba(255,255,255,.06); border-color: var(--line); }
@@ -225,7 +227,8 @@
   #r-details summary::after { content: " \25B8"; }
   #r-details[open] summary::after { content: " \25BE"; }
   #r-standing:empty { display: none; }
-  body.results #strip, body.results #mapbox, body.results #compass { opacity: .35; transition: opacity .5s; }
+  body.results #strip, body.results #mapbox { opacity: .3; transition: opacity .5s; pointer-events: none; }
+  body.results #keyhint, body.results #keylist, body.results #orders-tab, body.results #poidock, body.results .poi-card, body.results #notes { display: none !important; }
   @media (max-width: 560px) { .rc-mid { grid-template-columns: 1fr; } #r-nums { flex-direction: row; justify-content: space-between; } .rc-top h1 { font-size: 21px; } }
   #r-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
   #r-table th { text-align: left; color: var(--dim); font-weight: 600; padding: 3px 5px; }
@@ -410,8 +413,8 @@
 </div>
 <div id="flash" aria-hidden="true"></div>
 <div id="soundask" class="glass" role="dialog" aria-label="Sound" hidden>
-  <span>The sea sounds good: wind, waves and rain, made from the weather. Turn sound on?</span>
-  <button id="soundyes">&#128266; Sound on</button><button id="soundno">No thanks</button>
+  <span title="Wind, waves and rain, made from the weather">Turn on sound?</span>
+  <button id="soundyes" class="go">Yes</button><button id="soundno">No thanks</button>
 </div>
 <div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
@@ -455,7 +458,7 @@
 <button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>
 <section id="orders" class="glass" aria-label="Your orders">
   <h2>Your orders <button id="orders-x" class="x" aria-label="Close (O)" title="Close (O)">&times;</button></h2>
-  <div id="coach" hidden>Steer here, or with &larr; &rarr;. O opens and closes this.</div>
+  <div id="coach" hidden>The autopilot is steering, just like the ghost&rsquo;s. To get ahead, you&rsquo;ll have to make better calls than it does. The first one is coming.</div>
   <div id="dialrow">
     <canvas id="dial" title="Tap or drag to steer. Orange: your order · white: where the bow points · green: the finish · blue: the wind"></canvas>
     <div class="side">

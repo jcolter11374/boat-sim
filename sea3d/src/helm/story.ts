@@ -65,8 +65,8 @@ export function story(c: Card): string {
   if (me.outcome === "arrived" && gh.outcome === "arrived")
     return `Both boats crossed the line west of Lisbon: you after ${days(me.days)}, the ghost after ${days(gh.days)}.`;
   if (a && b && a === b && me.outcome === gh.outcome) {
-    const luck = me.outcome !== "arrived" && !c.breakdowns_differ ? " The ghost had the same bad luck: breakdowns roll the same dice for both boats." : "";
-    return `${cap(a)} on day ${d1(endDay(me))}, on both boats.${luck}`;
+    const luck = !c.breakdowns_differ ? " The ghost had the same bad luck: breakdowns roll the same dice for both boats." : " The ghost ended the same way.";
+    return `${cap(a)}, on day ${d1(endDay(me))}.${luck}`;
   }
   const say = (who: string, x: Side) => {
     const e = x.ending;

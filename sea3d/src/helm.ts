@@ -794,11 +794,25 @@ const lastNote: Record<string, number> = {};
 // No autoplay, ever; but sound sells the sea, and it's easy to miss the button. So once you
 // set sail, ask once. "No thanks" is remembered (the sound module stores it as muted), and the
 // question goes away by itself after 20 seconds.
+/** The sound ask waits: one thing to read at a time at the start (Leo). It comes a minute in, or after the first call, whichever is first. */
+let soundAskTimer = 0;
+function askSoundLater(): void {
+  if (sound.on || sound.muted || sound.remembered) return;
+  clearTimeout(soundAskTimer);
+  soundAskTimer = window.setTimeout(askSound, 60_000);
+}
+let soundAsked = false;
 function askSound(): void {
-  if (sound.on || sound.muted || sound.remembered) return; // turned on last visit: it comes back at the first click
+  clearTimeout(soundAskTimer);
+  if (soundAsked || page.card || sound.on || sound.muted || sound.remembered) return; // turned on last visit: it comes back at the first click
+  soundAsked = true;
   const box = $("soundask");
   box.hidden = false;
-  const close = () => (box.hidden = true);
+  document.body.classList.add("asking-sound");
+  const close = () => {
+    box.hidden = true;
+    document.body.classList.remove("asking-sound");
+  };
   $("soundyes").onclick = () => {
     sound.enable();
     close();
@@ -1732,6 +1746,7 @@ function showDecision(d: { text: string; choices: Choice[] }): void {
       if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km });
       await c.act();
       setRate(lastRate);
+      if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
     });
     box.append(b);
   }
@@ -1891,7 +1906,7 @@ async function showStanding(build: string): Promise<void> {
   const s = standing(build, board, grid);
   const rate = s.kind === "board" ? s.row.finish_rate : s.kind === "odds" ? (s.build.odds?.odds ?? null) : null;
   const mine = loadMyBoat();
-  const name = !mine ? "Our kayak" : "This build";
+  const name = !mine || !mine.base || mine.base === "kayak" ? "Our kayak" : "This build";
   const p = document.createElement("p");
   p.className = "standing";
   p.textContent = leaves(page.card, rate, name);
@@ -2076,12 +2091,12 @@ async function begin(): Promise<void> {
     // paused where it was left; ?clock=paused starts paused (for tests).
     forecastAt = page.status!.day * 24;
     document.body.classList.add("sailing");
-    hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "Steer here, or with ← →. O opens and closes this.");
+    hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "The autopilot is steering, just like the ghost's. To get ahead, you'll have to make better calls than it does. The first one is coming.");
     $("loading").hidden = true;
     setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
     $("keyhint").hidden = false;
     setTimeout(hideKeyHint, 60_000);
-    askSound();
+    askSoundLater();
   } catch (e) {
     $("loading").hidden = true;
     const err = String(e);
