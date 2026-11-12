@@ -84,7 +84,9 @@ varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
 varying float vFade;
+#ifndef SEA_LITE
 varying float vCell;
+#endif
 vec3 gDisp;
 vec3 gNorm;
 // Same as waves.ts displace(), plus the surface slope for the normal.
@@ -128,12 +130,16 @@ transformed += gDisp;
 // The sea is flat, so its rim (3 km off) would sit a few pixels under the horizon with a
 // sliver of sky below it (Ines's hairline). Lift the rim to the eye's own level: the
 // last stretch then rises to the horizon line and fades into the haze there.
+#ifndef SEA_LITE
 if (edge > 0.5) transformed.y = cameraPosition.y - 1e-4 * length(transformed.xz - cameraPosition.xz);
+#endif
 `;
 const VERT_BODY = /* glsl */ `
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vFade = fade;
+#ifndef SEA_LITE
 vCell = cell;
+#endif
 float hRel = uAmp > 0.0 ? gDisp.y / uAmp : 0.0; // about -2..2
 vCrest = clamp(gDisp.y / max(uAmp, 0.05), -1.0, 1.5);
 vFoam = uFoamAmt > 0.0 ? uFoamAmt * smoothstep(0.4, 1.3, hRel) : 0.0;
@@ -176,7 +182,9 @@ varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
 varying float vFade;
+#ifndef SEA_LITE
 varying float vCell;
+#endif
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -254,7 +262,7 @@ vec2 swellSlope(vec2 p, float t, float fp) {
     float th = a.y * dot(u, p) - a.z * t + a.w;
     float L = 6.2831853 / a.y;
 #ifdef SEA_LITE
-    float left = 1.0 - vFade; // Low's grid draws every train it carries
+    float left = 1.0; // Low: weighted once, outside the loop (as main)
 #else
     float left = 1.0 - vFade * seaCarry(a.y, vCell); // what the grid didn't draw
     if (left < 0.01) continue;
@@ -429,7 +437,9 @@ if (SEA_DET_N > 0) roughnessFactor = mix(roughnessFactor, 0.05 + 0.22 * uRoughFa
 // Ripples finer than anything drawn still scatter the light (Cox and Munk): a
 // floor on the roughness that rises with the wind, so the sun's and moon's
 // paths break into glints instead of lying on a wave face as one bright rod.
+#ifndef SEA_LITE
 roughnessFactor = max(roughnessFactor, 0.06 + 0.14 * uRoughFar);
+#endif
 // Matte where there's foam, but eased in from the FFT's smooth foam field rather than the
 // crisp lace mask, so foam patches don't get glossy rims (Ines: puddle outlines).
 float foamShade = SEA_DET_N > 0 ? max(0.8 * smoothstep(0.05, 0.6, detA.w), 0.5 * foamMask) : foamMask;
@@ -448,7 +458,11 @@ const FRAG_NORMAL = /* glsl */ `
 #ifndef SEA_LITE
   s += rainSlope(vWPos.xz + uFlow, uTime, fp) * (1.0 - foamMask); // rain rings (Kai, rainRings.ts); not on Low (budget)
 #endif
+#ifdef SEA_LITE
+  if (vFade < 0.999) s += swellSlope(vWPos.xz, uTime, fp) * (1.0 - vFade); // Low: no vCell, as main
+#else
   if (vFade < 0.999 || vCell > 0.0) s += swellSlope(vWPos.xz, uTime, fp); // no gate on the cell size: that made a step 20-30 m off (Kai, Ines)
+#endif
   vec3 nW = (vec4(normal, 0.0) * viewMatrix).xyz; // view -> world
   nW = normalize(nW + vec3(-s.x, 0.0, -s.y));
   normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
@@ -482,13 +496,9 @@ const FRAG_SKY = /* glsl */ `
 // warm slot or blue patch of it shows as squiggles on the wave facets (Elena, F8 dusk).
 float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
 #ifdef SEA_LITE
-// Low: only what a deck, rain or the Bay needs, and nothing at all under a clear sky
-// (uniform branches, so a clear day pays nothing: Maya's frame budget).
-if (deckS > 0.0 || uRain.x > 0.0) {
-  radiance = mix(radiance, uSeaSky.rgb, deckS);
-  radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(uRain.x, deckS));
-}
-if (uBay > 0.0) radiance = mix(radiance, dot(radiance, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.9, 1.02, 0.92), 0.6 * uBay);
+// Low: the deck's colour and no sun glitter under it, without branches (Maya's frame budget).
+radiance = mix(radiance, uSeaSky.rgb, deckS);
+reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
 #else
 radiance = mix(seaColdSky(radiance), uSeaSky.rgb, deckS);
 // The sea's body is lit by the deck too, not the clear sky's blue: same brightness, the deck's hue.
@@ -502,10 +512,12 @@ radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(
 // so it never reads as open-ocean blue at noon (Ines #5, backlog 16).
 radiance = mix(radiance, dot(radiance, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.9, 1.02, 0.92), 0.6 * uBay);
 #endif
+#ifndef SEA_LITE
 radiance = max(radiance, vec3(0.014, 0.019, 0.032));
 // The sun's own highlight (direct light): on water this smooth even a 1 % sun makes a
 // glitter path, so rain or a closed deck takes it out too (Kai, Ines F8 #3).
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
+#endif
 // Through a break in the deck, the one glitter left: a column in the break's warm light,
 // from rays reflected low toward the sun's bearing, weighted as the sky draws it (Hana, Sam).
 #ifndef SEA_LITE
@@ -540,7 +552,9 @@ if (uMirror > 0.001) {
   vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
   vec2 uv = pc.xy / pc.w + nWm.xz * (0.03 + 0.25 * (1.0 - uMirror));
   vec4 m = texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)));
+#ifndef SEA_LITE
   m.rgb = seaColdSky(m.rgb);
+#endif
   vec3 Vm = normalize(cameraPosition - vWPos);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(nWm, Vm), 0.0), 5.0);
   float k = m.a * uMirror * clamp(0.25 + fres, 0.0, 0.95) * (1.0 - foamMask);
