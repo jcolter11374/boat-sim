@@ -65,7 +65,7 @@ export class Rain {
   private mat: THREE.ShaderMaterial;
   amount = 0;
 
-  constructor(drops = 9000) {
+  constructor(drops = 18000) {
     const seed = new Float32Array(drops * 2 * 4);
     const end = new Float32Array(drops * 2);
     let s = 12345;
@@ -124,7 +124,7 @@ export class Rain {
     // A little darker than the pale storm sky, so the streaks read against it as well as against the sea.
     u.uColor.value.setRGB(0.3 + 0.32 * light, 0.33 + 0.34 * light, 0.38 + 0.36 * light);
     // Show only a share of the drops in light rain.
-    this.mesh.geometry.setDrawRange(0, Math.ceil(this.mesh.geometry.getAttribute("aEnd").count * (0.25 + 0.75 * amount) / 2) * 2);
+    this.mesh.geometry.setDrawRange(0, Math.ceil(this.mesh.geometry.getAttribute("aEnd").count * (0.12 + 0.38 * amount + 0.5 * THREE.MathUtils.smoothstep(amount, 0.6, 1)) / 2) * 2); // a downpour twice as dense as steady rain
   }
 
   dispose(): void {

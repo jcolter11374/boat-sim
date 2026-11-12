@@ -217,7 +217,8 @@ void main() {
     col += (1.0 - alpha) * deckAmt * c; alpha += (1.0 - alpha) * deckAmt;
   }
   // The horizon: everything goes to the haze over the last few degrees, as the sea does.
-  float hz = 1.0 - smoothstep(0.0, 0.16, el);
+  // In a downpour the mist swallows the lower sky too, not just the last few degrees.
+  float hz = 1.0 - smoothstep(0.0, 0.16 + 0.3 * smoothstep(2.0, 8.0, uRain), el);
   // Under a deck the cloud goes to the haze (the sea's far fade); in clear weather it thins
   // away and the sky's own horizon shows, which the haze would only darken.
   float hz2 = hz * hz * (3.0 - 2.0 * hz);
