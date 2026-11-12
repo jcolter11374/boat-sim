@@ -721,8 +721,10 @@ const CHECKS = {
       await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await page.waitForFunction(() => !document.getElementById("practice-courses")?.hidden, null, { timeout: MIN }).catch(() => {});
-      await page.click('#practice-breeze button[data-b="good"]', { timeout: 10_000 }).catch(() => {});
-      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 15_000 });
+      // A DOM click: Playwright's click waited out 15 s on the busy page (live 9cfdc91, both browsers).
+      await page.evaluate(() => document.querySelector('#practice-breeze button[data-b="good"]')?.click());
+      await page.waitForTimeout(500);
+      await page.evaluate(() => document.querySelector('#practice-courses button[data-course="triangle"]')?.click());
       await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => { throw new CheckFail("the triangle didn't put me at the wheel"); });
       await page.keyboard.down("ArrowLeft"); await page.waitForTimeout(1500); await page.keyboard.up("ArrowLeft");
       await page.waitForTimeout(8000);
