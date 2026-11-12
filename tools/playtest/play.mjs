@@ -128,6 +128,20 @@ async function cinematic(page, framesOf) {
   return `cinematic ran ${f1 - f0} frames in 8 s and a key press left it`;
 }
 
+/** #385: count the page's AudioContexts (an init script, so it sees the very first one). */
+const soundSpy = () => {
+  window.__ac = [];
+  const Orig = window.AudioContext;
+  if (Orig) window.AudioContext = class extends Orig { constructor(...a) { super(...a); window.__ac.push(this); } };
+};
+const soundState = (page) =>
+  page.evaluate(() => {
+    const b = document.getElementById("soundbtn");
+    let stored = null;
+    try { stored = localStorage.getItem("boatsim-sound"); } catch {}
+    return { contexts: (window.__ac ?? []).length, state: (window.__ac ?? []).map((c) => c.state).join(",") || "none", pressed: b?.getAttribute("aria-pressed") === "true", text: b?.textContent.trim(), icon: b?.textContent.trim(), stored };
+  });
+
 const CHECKS = {
   // The four pages load and draw in this browser.
   index: {
@@ -926,6 +940,141 @@ const CHECKS = {
       await page.waitForTimeout(5000);
       await shot("bow-voyage-cinematic");
       return `${shots.length} looks: ${shots.join(", ")}`;
+    },
+  },
+  // #385 (Felix): sound waits for a click, "No thanks" is remembered, N and the speaker button
+  // agree, cinematic with sound on is clean, and a remembered "on" returns at the first click,
+  // never on load. Nobody can hear on a runner: this checks state and errors, not the sound.
+  "sound-helm": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.addInitScript(soundSpy);
+      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      const out = [];
+      const loaded = async () => {
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+        await page.waitForTimeout(3000);
+      };
+      const sailed = () => page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      const watchAsk = () => page.evaluate(() => {
+        window.__askedSound = false;
+        const a = document.getElementById("soundask");
+        if (a) new MutationObserver(() => { if (!a.hidden) window.__askedSound = true; }).observe(a, { attributes: true });
+      });
+      // 1. First visit: nothing on load; "Set sail" asks once; "No thanks" is remembered.
+      await loaded();
+      let s = await soundState(page);
+      must(s.contexts === 0, `an AudioContext existed on load, before any click (${s.contexts})`);
+      must(!s.pressed, `the speaker button says on before any click`);
+      await watchAsk();
+      await page.click("#go", { timeout: 15_000 });
+      await sailed();
+      s = await soundState(page);
+      must(s.contexts === 0, `clicking "Set sail" started sound without being asked (${s.contexts} AudioContext)`);
+      const asked = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
+      must(asked, `"Sound on?" was never asked after Set sail`);
+      const clicked = await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true, () => false);
+      await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 });
+      s = await soundState(page);
+      if (clicked) must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
+      out.push(`load: no AudioContext, button off; "Sound on?" asked after Set sail, ${clicked ? '"No thanks" stored "off"' : "closed by itself"}`);
+      // 2. Second visit after "No thanks": no question.
+      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await loaded();
+      await watchAsk();
+      await page.click("#go", { timeout: 15_000 });
+      await sailed();
+      await page.waitForTimeout(2000);
+      const again = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
+      if (clicked) must(!again, `"Sound on?" was asked again after "No thanks"`);
+      s = await soundState(page);
+      must(s.contexts === 0, `sound started after "No thanks" without N or the button (${s.contexts} AudioContext)`);
+      out.push(`reload after "No thanks": not asked again, still silent`);
+      // 3. N while sailing: on, then off; the speaker button follows.
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(s.pressed && s.contexts === 1, `N didn't turn sound on: button pressed ${s.pressed}, ${s.contexts} AudioContext`);
+      const on1 = `${s.icon} ${s.state}`;
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(!s.pressed && s.stored === "off", `N didn't turn sound off: button pressed ${s.pressed}, stored ${s.stored}`);
+      const off1 = s.icon;
+      await page.click("#soundbtn", { noWaitAfter: true, timeout: 10_000 });
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(s.pressed && s.stored === "on" && s.contexts === 1, `the speaker button didn't turn sound on: pressed ${s.pressed}, stored ${s.stored}, ${s.contexts} AudioContext`);
+      out.push(`N on (${on1}), N off (${off1}), button on again; one AudioContext`);
+      // 4. Cinematic with sound on (paused, so the clock check in cinematic() holds).
+      await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForFunction(() => window.__helm.clock === 0 && !window.__helm.busy, null, { timeout: 2 * MIN }).catch(() => {});
+      out.push(await cinematic(page, () => window.__helm.frames));
+      // 5. Second visit after "on": silent on load, back at the first click, no question.
+      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await loaded();
+      s = await soundState(page);
+      must(s.contexts === 0 && !s.pressed, `a remembered "on" started sound on load (${s.contexts} AudioContext, button ${s.pressed})`);
+      await watchAsk();
+      await page.click("#go", { timeout: 15_000 });
+      await page.waitForTimeout(1000);
+      s = await soundState(page);
+      must(s.contexts === 1 && s.pressed, `a remembered "on" didn't come back at the first click (${s.contexts} AudioContext, button ${s.pressed})`);
+      await sailed();
+      await page.waitForTimeout(2000);
+      must(!(await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound)), `"Sound on?" was asked although sound was on`);
+      out.push(`reload after "on": silent on load, on at the first click (${s.state}), not asked`);
+      return out.join("; ");
+    },
+  },
+  "sound-voyage": {
+    manual: true,
+    path: "voyage.html?voyage=2020-04-15&quality=low",
+    run: async (page) => {
+      await page.addInitScript(soundSpy);
+      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      const out = [];
+      const loaded = async () => {
+        await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 2 * MIN });
+        must(!(await page.evaluate(() => window.__replay.error)), "the replay didn't load");
+        await page.waitForTimeout(3000);
+      };
+      await loaded();
+      let s = await soundState(page);
+      must(s.contexts === 0 && !s.pressed, `sound before any click: ${s.contexts} AudioContext, button ${s.pressed}`);
+      // A click on the sea is not "sound on".
+      await page.mouse.click(700, 450);
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(s.contexts === 0, `a click on the sea started sound (${s.contexts} AudioContext)`);
+      out.push("load and a click on the sea: no AudioContext, button off");
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(s.pressed && s.contexts === 1, `N didn't turn sound on: button pressed ${s.pressed}, ${s.contexts} AudioContext`);
+      const on1 = `"${s.text}" ${s.state}`;
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(!s.pressed && s.stored === "off", `N didn't turn sound off: button pressed ${s.pressed}, stored ${s.stored}`);
+      const off1 = `"${s.text}"`;
+      await page.click("#soundbtn", { noWaitAfter: true, timeout: 10_000 });
+      await page.waitForTimeout(800);
+      s = await soundState(page);
+      must(s.pressed && s.stored === "on", `the Sound button didn't turn sound on: pressed ${s.pressed}, stored ${s.stored}`);
+      out.push(`N on (${on1}), N off (${off1}), button on again`);
+      out.push(await cinematic(page, () => window.__replay.frames));
+      await page.reload({ waitUntil: "load", timeout: 2 * MIN });
+      await loaded();
+      s = await soundState(page);
+      must(s.contexts === 0 && !s.pressed, `a remembered "on" started sound on load (${s.contexts} AudioContext, button ${s.pressed})`);
+      await page.mouse.click(700, 450);
+      await page.waitForTimeout(1000);
+      s = await soundState(page);
+      must(s.contexts === 1 && s.pressed, `a remembered "on" didn't come back at the first click (${s.contexts} AudioContext, button ${s.pressed})`);
+      out.push(`reload after "on": silent on load, on at the first click (${s.state})`);
+      return out.join("; ");
     },
   },
   "my-boat": {
