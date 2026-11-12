@@ -496,7 +496,8 @@ async function oddsModel(): Promise<OddsModel | null> {
   if (!m) modelFor.set(base, (m = new OddsModel(cat, builds)));
   return m;
 }
-/** Each part's effect on the odds if you picked it now: "+6", "−24", "no data yet". */
+/** Each part's effect on the odds if you picked it now: "+6", "−24", or nothing when no tested build covers it
+ *  (Milo: the "~" and "Our estimate." already say a part is a guess; a third badge was noise). */
 function drawDeltas(model: OddsModel | null): void {
   const here = model?.odds(design)?.p ?? null;
   document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => {
@@ -508,7 +509,7 @@ function drawDeltas(model: OddsModel | null): void {
     let cls = "delta";
     if (model && here !== null && design.picks[slot] !== opt && !b.classList.contains("na")) {
       const p = model.odds({ ...design, picks: { ...design.picks, [slot]: opt } })?.p ?? null;
-      if (p === null) [text, cls] = ["no data yet", "delta none"];
+      if (p === null) [text, cls] = ["", "delta none"];
       else {
         const n = Math.round((p - here) * 100);
         [text, cls] = Math.abs(n) < NOISE_PTS ? ["about the same", "delta same"] : [`${n > 0 ? "+" : "−"}${Math.abs(n)}`, n > 0 ? "delta up" : "delta down"];
@@ -516,7 +517,7 @@ function drawDeltas(model: OddsModel | null): void {
     }
     span.textContent = text;
     span.className = cls;
-    span.title = text && text !== "no data yet" ? "Change in the odds if you pick this part (quick estimate)" : "";
+    span.title = text ? "Change in the odds if you pick this part (quick estimate)" : "";
   });
 }
 // What "Test it" does, on the button (#315 item 13): the simulator in this browser

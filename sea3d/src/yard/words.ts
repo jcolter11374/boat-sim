@@ -22,13 +22,36 @@ export function playerWords(s: string): string {
     .replace(/^As on our kayak\.\.$/, "As on our kayak.");
 }
 
+/** A part's description as a sentence (Milo): the badge already says "Planned", the
+ *  team's notes start in lower case and join with semicolons. */
+export function sentence(s: string): string {
+  let t = playerWords(s)
+    .replace(/^Planned\.\s*/, "")
+    .replace(/\bRandolph's Rev B\b/g, "the Randolph team's Rev B")
+    .replace(/; (no motors|motors hold)/g, (_, w: string) => `. ${w[0].toUpperCase()}${w.slice(1)}`)
+    .trim();
+  if (!t) return t;
+  t = t[0].toUpperCase() + t.slice(1);
+  return /[.!?)]$/.test(t) ? t : `${t}.`;
+}
+
+/** One line for a row, the detail behind its "i" (Ines, 12 Nov): the kayak's wing options. */
+const ROW_COPY: Record<string, { d: string; more: string }> = {
+  "drive/wing-sail": { d: "A rigid wing and no motors, so it tacks upwind.", more: "Scaled from the Randolph team's Rev B. Size, weight and breakage are our estimates." },
+  "drive/hybrid": { d: "A rigid wing, with the motors holding course upwind.", more: "Scaled from the Randolph team's Rev B. Size, weight and breakage are our estimates." },
+};
+
 /** The catalog as a player reads it: every option's name and description tidied. */
 export function tidyCatalog(c: Catalog): Catalog {
   return {
     ...c,
     slots: c.slots.map((s) => ({
       ...s,
-      opts: s.opts.map((o) => ({ ...o, n: optionName(o.n), d: o.d ? playerWords(o.d) : o.d, ...(o.more ? { more: playerWords(o.more) } : {}) })),
+      opts: s.opts.map((o) => {
+        const row = ROW_COPY[`${s.id}/${o.id}`];
+        const more = row?.more ?? (o.more ? playerWords(o.more) : undefined);
+        return { ...o, n: optionName(o.n), d: row?.d ?? (o.d ? sentence(o.d) : o.d), ...(more ? { more } : {}) };
+      }),
     })),
   };
 }

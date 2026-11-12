@@ -49,16 +49,21 @@ const FIGURES: Record<string, Record<string, Figures>> = {
     "two-box": { cost: 40 + 83, kg: 0.4, wh: 32, boxes: 2, est: 1, d: "A second, separate safe-mode box, like ours. Our guess for their boat." },
   },
   rudder: {
-    twin: { cost: 186, kg: 0, d: "Two spade rudders, each with its own servo: either one can steer alone. Rev C3: a spring servo-saver on each and stops at ±40°, so a wave can push a blade over without breaking its servo." },
+    twin: {
+      cost: 186,
+      kg: 0,
+      d: "Two spade rudders, each with its own servo: either one can steer alone.",
+      more: "Rev C3: a spring servo-saver on each and stops at ±40°, so a wave can push a blade over without breaking its servo.",
+    },
     single: { cost: 93, kg: -0.5, d: "One rudder and one servo, as on Rev B." },
   },
   rsol: {
     "deck-40w": { cost: 80, kg: 0, wp: 40, d: "Two 20 W semi-flexible ETFE panels on the deck." },
-    "deck-60w": { cost: 120, kg: 0.4, wp: 60, est: 1, d: "About 60 W: as much as fits the narrow deck. Our guess." },
+    "deck-60w": { cost: 120, kg: 0.4, wp: 60, est: 1, d: "About 60 W: as much as fits the narrow deck. Our estimate." },
   },
   rbat: {
     "lfp-192wh": { cost: 150, kg: 0, bat: 192, d: "Bioenno 12 V 15 Ah LiFePO4, in its own sealed box." },
-    "lfp-384wh": { cost: 300, kg: 1.9, bat: 384, est: 1, d: "Two of the same packs. Our guess." },
+    "lfp-384wh": { cost: 300, kg: 1.9, bat: 384, est: 1, d: "Two of the same packs. Our estimate." },
   },
   keel: {
     "bulb-9kg": { cost: 67, kg: 0, d: "About 9 kg of lead cast into the keel bulb (Rev C, design D72), on a hardwood-cored fin set in a keel box (Rev C2: about ten times stronger). Makes it right itself from upside down." },
