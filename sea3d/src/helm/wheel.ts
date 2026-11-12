@@ -343,6 +343,15 @@ export class Wheel {
   }
 
   /** Compass bearing from the boat to the mark. */
+  /** Where to steer for: the middle of the mark's finish gate when it has one, else the mark. */
+  aimBearing(): number {
+    const m = this.spell.marks?.[Math.min(this.s.mark, this.spell.marks.length - 1)];
+    if (!m?.gate) return this.markBearing();
+    const x = (m.gate[0].x + m.gate[1].x) / 2;
+    const y = (m.gate[0].y + m.gate[1].y) / 2;
+    return wrap360((Math.atan2(x - this.s.x, y - this.s.y) * 180) / Math.PI);
+  }
+
   markBearing(): number {
     const m = this.markXY();
     return wrap360((Math.atan2(m.x - this.s.x, m.y - this.s.y) * 180) / Math.PI);

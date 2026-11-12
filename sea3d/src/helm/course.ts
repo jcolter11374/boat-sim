@@ -125,8 +125,8 @@ export const BAY_WINDS = [180, 200, 225, 160, 315, 340, 0, 135];
 
 /** Practice best times, per course and breeze, in this browser only. */
 const BEST_KEY = "boatsim.practice.best.v1";
-// The light run has had a fixed wind since the time trials (12 Nov), so its old times start afresh.
-export const bestKey = (c: CourseKind, b: Breeze) => `annapolis-${c === "light" ? "light-wsw" : c}-${b}`;
+// The light run has had a fixed wind since the time trials, and finishes through a gate (12 Nov): old times start afresh.
+export const bestKey = (c: CourseKind, b: Breeze) => `annapolis-${c === "light" ? "light-gate" : c}-${b}`;
 export function readBest(key: string): number | null {
   try {
     const all = JSON.parse(localStorage.getItem(BEST_KEY) ?? "{}") as Record<string, number>;
