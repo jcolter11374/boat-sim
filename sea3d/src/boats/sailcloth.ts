@@ -89,6 +89,7 @@ uniform vec2 uSize;
 varying vec3 vSailWorld;
 varying vec2 vSailUv;
 varying float vFlog;
+varying float vFold;
 void main() {`,
       )
       .replace(
@@ -103,7 +104,8 @@ void main() {`,
   float wave = sin(uv.x * 26.0 - uSailTime * (14.0 + 10.0 * uLuff) + uv.y * 7.0)
              * (0.6 + 0.4 * sin(uv.y * 11.0 + uSailTime * 4.3));
   vFlog = uLuff * wLuff;
-  transformed += objectNormal * (vFlog * wave * uSize.x * 0.035 * (1.0 - 0.5 * uv.y));`,
+  vFold = wave;
+  transformed += objectNormal * (vFlog * wave * uSize.x * 0.06 * (1.0 - 0.5 * uv.y));`,
       )
       .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\n  vSailWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
     sh.fragmentShader = sh.fragmentShader
@@ -116,6 +118,7 @@ uniform vec2 uSize;
 varying vec3 vSailWorld;
 varying vec2 vSailUv;
 varying float vFlog;
+varying float vFold;
 // The sail's layers: x = seam (two strips overlapping), y = tapes along the
 // edges and corner patches (several layers). 0 on single cloth.
 vec2 sailLayers(vec2 uv) {
@@ -149,7 +152,9 @@ void main() {`,
         "#include <color_fragment>",
         `#include <color_fragment>
   vec2 sailDbl = sailLayers(vSailUv);
-  diffuseColor.rgb *= 1.0 - 0.02 * sailDbl.x - 0.04 * sailDbl.y; // barely there in front light`,
+  diffuseColor.rgb *= 1.0 - 0.02 * sailDbl.x - 0.04 * sailDbl.y; // barely there in front light
+  // A flogging luff: the cloth folds, and the folds shade each other.
+  diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);`,
       )
       .replace(
         "#include <normal_fragment_maps>",
@@ -158,7 +163,7 @@ void main() {`,
   if (vFlog > 0.01) {
     vec3 fn = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
     if (dot(fn, normal) < 0.0) fn = -fn;
-    normal = normalize(mix(normal, fn, clamp(vFlog * 1.5, 0.0, 0.8)));
+    normal = normalize(mix(normal, fn, clamp(vFlog * 1.5, 0.0, 0.6)));
   }`,
       )
       .replace(
