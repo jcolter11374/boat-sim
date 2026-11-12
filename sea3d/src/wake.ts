@@ -93,6 +93,11 @@ const frag = /* glsl */ `
     // Fresh foam under the stern is a churned white mass, the hull's width.
     float fresh = (1.0 - smoothstep(0.0, 0.08, age)) * (1.0 - smoothstep(0.4, 1.1, across / max(centreW, 0.05) + wob));
     foam = max(foam, 0.8 * fresh * lumps(q * 1.3 + 5.7, 0.55) * smoothstep(0.45, 0.7, st));
+#ifdef WAKE_LITE
+    // Low: one soft trail fading aft, not scattered flecks (Elena: "scraps of paper" at
+    // Low's size); a gentle streak keeps it from reading as a painted stripe.
+    foam = body * (0.55 + 0.45 * st) * (1.0 - smoothstep(0.0, 0.85, age)) * 0.55;
+#endif
     float a = foam * uI * smoothstep(0.0, 0.04, age);   // soft start under the stern
     // Bubbles just under the surface make the whole band a pale, milky turquoise.
     float milk = centre * uI * 0.07 * (1.0 - 0.7 * age) * smoothstep(0.45, 0.8, isl);
@@ -144,6 +149,7 @@ export class Wake {
     const mat = new THREE.ShaderMaterial({
       vertexShader: vert,
       fragmentShader: frag,
+      defines: quality === "low" ? { WAKE_LITE: "" } : {},
       uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 }, uBeam: { value: beam }, ...FOAM_LAMP_UNIFORMS },
       transparent: true,
       depthWrite: false,
