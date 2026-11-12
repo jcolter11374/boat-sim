@@ -182,6 +182,47 @@ const CHECKS = {
       return `first screen clean; ran by itself from day ${d0.toFixed(2)}; paused at day ${p.day?.toFixed(2)} (${p.stop}): "${p.note}"; labels ${labels.join(" = ")}`;
     },
   },
+  // #334 "Sound on?" and #341 decision stops: the question shows once, "No thanks" closes it;
+  // running at speed, a decision stops the clock with buttons, and picking one carries on.
+  "helm-moments": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.locator("#decide").count())) throw new SkipCheck("this build has no decision stops (#341 not deployed)");
+      await page.click("#go");
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      const out = [];
+      if (await page.locator("#soundask").count()) {
+        const asked = await page.locator("#soundask").isVisible();
+        must(asked, `"Sound on?" didn't show after Set sail`);
+        await page.click("#soundno");
+        must(!(await page.locator("#soundask").isVisible()), `"No thanks" didn't close the sound question`);
+        out.push(`"Sound on?" asked and closed`);
+      }
+      const fast = page.locator('#timebar .rate[data-rate="96"]');
+      let decided = null;
+      for (let i = 0; i < 12 && !decided; i++) {
+        if (await page.evaluate(() => window.__helm.card || window.__helm.status?.over)) break;
+        if (await page.evaluate(() => window.__helm.clock === 0)) await fast.click({ noWaitAfter: true });
+        await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.error || window.__helm.card, null, { timeout: 4 * MIN }).catch(() => {});
+        must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");
+        const shown = await page.waitForFunction(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length, null, { timeout: 15_000 }).then(() => true).catch(() => false);
+        if (shown) {
+          const d = await page.evaluate(() => ({ text: document.getElementById("decidetext").textContent, btns: [...document.querySelectorAll("#decidebtns button")].map((b) => b.textContent) }));
+          must(d.text.trim() && d.btns.length >= 2, `a decision showed without a question or choices: ${JSON.stringify(d)}`);
+          await page.screenshot({ path: `play-${BROWSER}-decision.png` }).catch(() => {});
+          await page.locator("#decidebtns button").first().click({ noWaitAfter: true });
+          await page.waitForFunction(() => document.getElementById("decide").hidden && window.__helm.clock > 0, null, { timeout: 20_000 }).catch(() => {
+            throw new CheckFail(`picking "${d.btns[0]}" didn't close the question and carry on`);
+          });
+          decided = `asked "${d.text.slice(0, 90)}", picked "${d.btns[0]}", carried on`;
+        }
+      }
+      if (!decided) out.push("no decision came up in this voyage (not a fail)");
+      else out.push(decided);
+      return out.join("; ");
+    },
+  },
   // Sam's spot 5: "Sail until something happens" stops within 72 h.
   "helm-until": {
     path: "helm.html?quality=low",
@@ -289,6 +330,11 @@ const CHECKS = {
     run: async (page) => {
       await helmStart(page);
       if (!(await page.$("#r-next"))) throw new SkipCheck("the deployed helm has no Results 'where this leaves you' yet");
+      // The finish scene (#334): note whether the banner showed before the card.
+      await page.evaluate(() => {
+        const a = document.getElementById("arrive");
+        if (a) new MutationObserver(() => { if (!a.hidden) window.__sawArrive = document.getElementById("arrivehead")?.textContent || "(no headline)"; }).observe(a, { attributes: true });
+      });
       let hops = 0;
       for (; hops < 60 && !(await page.evaluate(() => window.__helm.card)); hops++) {
         // The voyage can end while the button is hidden behind the card: wait for the card then.
@@ -303,6 +349,8 @@ const CHECKS = {
       }
       const card = await page.evaluate(() => window.__helm.card);
       must(card, `no results card after ${hops} hops of "until something happens"`);
+      const arrive = await page.evaluate(() => ({ outcome: window.__helm.card?.boat?.outcome, saw: window.__sawArrive ?? null, has: !!document.getElementById("arrive") }));
+      if (arrive.has && arrive.outcome === "arrived") must(arrive.saw, "the boat arrived but the finish scene's banner never showed");
       must(await page.locator("#result").isVisible(), "the results card isn't shown");
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: MIN }).catch(() => {
         throw new CheckFail("the results card never said where the build stands");
@@ -326,7 +374,7 @@ const CHECKS = {
       await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: MIN }).catch(() => {
         throw new CheckFail(`the card's Leaderboard link (${lb.href}) didn't open a working board`);
       });
-      return `${hops} hops to the card (${card.verdict}, day ${card.boat.days.toFixed(1)}); "${next.head.trim()}" [${next.kind}]; links ${next.links.map((l) => l.text.trim()).join(" / ")}; the Leaderboard link opened the board`;
+      return `${hops} hops to the card (${card.verdict}, day ${card.boat.days.toFixed(1)}); "${next.head.trim()}" [${next.kind}]; links ${next.links.map((l) => l.text.trim()).join(" / ")}; the Leaderboard link opened the board${arrive.saw ? `; finish scene: "${arrive.saw}"` : `; outcome ${arrive.outcome}, no finish scene`}`;
     },
   },
   // Randolph Rev C5 preset (#304): labelled as our model, its weight, and it launches.
@@ -354,6 +402,39 @@ const CHECKS = {
   // race and voyage pages in the same browser. The name has tags in it, which
   // must show as plain text everywhere: the visible text has to include them
   // literally (the page's own <b> formatting around the name is fine). Skips until the deployed Boatyard has it.
+  // #346: a hint by the replay's speed bar for a few seconds as a replay opens.
+  "voyage-hint": {
+    path: "voyage.html?quality=low",
+    run: async (page) => {
+      if (!(await page.locator("#warphint").count())) throw new SkipCheck("this build has no speed-bar hint (#346 not deployed)");
+      const text = await page.waitForFunction(() => { const e = document.getElementById("warphint"); return !e.hidden && e.textContent.trim(); }, null, { timeout: 2 * MIN }).then((h) => h.jsonValue()).catch(() => "");
+      must(text, "no hint showed by the speed bar as the replay opened");
+      await page.screenshot({ path: `play-${BROWSER}-warphint.png` }).catch(() => {});
+      const gone = await page.waitForFunction(() => document.getElementById("warphint").hidden, null, { timeout: 15_000 }).then(() => true).catch(() => false);
+      must(gone, `the speed-bar hint "${text}" didn't go away`);
+      return `hint "${text}" showed, then went`;
+    },
+  },
+  // #344: the Boatyard's odds update as you swap a part, and parts show how they'd change them.
+  "boatyard-odds": {
+    path: "boatyard.html?quality=low",
+    run: async (page) => {
+      if (!(await page.locator("#s-odds").count())) throw new SkipCheck("this build has no live odds (#344 not deployed)");
+      await page.waitForFunction(() => /\d+%/.test(document.getElementById("s-odds").textContent) && document.querySelector(".opt .delta.up, .opt .delta.down"), null, { timeout: 2 * MIN }).catch(async () => {
+        const t = await page.evaluate(() => document.getElementById("s-odds").textContent);
+        throw new CheckFail(`no odds with part changes showed (odds "${t}")`);
+      });
+      const before = await page.evaluate(() => document.getElementById("s-odds").textContent.trim());
+      const opt = page.locator(".opt:has(.delta.down), .opt:has(.delta.up)").first();
+      const delta = (await opt.locator(".delta").textContent())?.trim();
+      await opt.scrollIntoViewIfNeeded().catch(() => {});
+      await opt.click({ noWaitAfter: true });
+      const after = await page.waitForFunction((b) => { const t = document.getElementById("s-odds").textContent.trim(); return t !== b && /\d+%/.test(t) && t; }, before, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => "");
+      must(after, `picking a part marked ${delta} left the odds at "${before}"`);
+      await page.screenshot({ path: `play-${BROWSER}-odds.png` }).catch(() => {});
+      return `odds ${before}, picked a part marked ${delta}, now ${after}`;
+    },
+  },
   "my-boat": {
     path: "boatyard.html?quality=low",
     run: async (page) => {
