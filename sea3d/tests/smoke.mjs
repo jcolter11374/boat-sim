@@ -772,11 +772,12 @@ try {
       // Randolph's boats say "our model" behind the name's "i", not in the name (Leo, audit item 9).
       model: [...document.querySelectorAll("#rows .name .info")].map((c) => c.getAttribute("title") ?? ""),
       names: [...document.querySelectorAll("#rows .name")].map((c) => c.firstChild?.textContent ?? ""),
+      tags: document.querySelectorAll("#rows .name .modeltag").length,
     }));
     const leaked = lb.names.filter((n) => /Drive:|: [a-z0-9]+-|W cruise|\(our model\)|GUESS/.test(n));
     if (leaked.length) fail(`leaderboard shows internal build names: ${JSON.stringify(leaked)}`);
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
-    if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)))
+    if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
     await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);

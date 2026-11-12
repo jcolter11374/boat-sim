@@ -1359,7 +1359,7 @@
   {
    "id": "k-p25-drive.hybrid",
    "boat": "v4 kayak",
-   "label": "Our kayak + wing sail",
+   "label": "Our kayak + wing sail and motors",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",

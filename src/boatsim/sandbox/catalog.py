@@ -668,7 +668,8 @@ CHANGE_NAMES = {
     ("paint", "none"): "no bottom paint",
     ("spares", "spares-no-pixhawk"): "fewer spares",
     ("spares", "none"): "no spares",
-    ("drive", "hybrid"): "wing sail",  # added: "Our kayak + wing sail"
+    # added: "Our kayak + wing sail and motors" (Ines: not to be confused with wing sail only)
+    ("drive", "hybrid"): "wing sail and motors",
     ("drive", "wing-sail"): "wing sail only (no motors)",
     ("material", "fibreglass"): "fibreglass hull",
     ("material", "carbon"): "carbon hull",

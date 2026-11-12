@@ -47,7 +47,7 @@ def test_leos_names():
     want = {
         "k-p25": "Our kayak",
         "k-p20": "Our kayak, motors turned down (20 W)",
-        "k-p25-drive.hybrid": "Our kayak + wing sail",
+        "k-p25-drive.hybrid": "Our kayak + wing sail and motors",
         "k-p0-drive.wing-sail": "Our kayak, wing sail only (no motors)",
         "k-p25-sol.solar-300-bat.two-100ah": "Our kayak, bigger panels and batteries",
         "k-p30-sol.solar-300-bat.two-100ah": "Our kayak, bigger panels and batteries, motors turned up",

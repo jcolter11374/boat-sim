@@ -20,12 +20,12 @@ test("internalWords catches what the old names showed", () => {
   assert.ok(internalWords("Randolph's Rev C as built (our model)", s).length > 0);
   assert.ok(internalWords("ROUGH", s).length > 0);
   assert.deepEqual(internalWords("Our kayak, bigger panels and batteries", s), []);
-  assert.deepEqual(internalWords("Our kayak + wing sail", s), []);
+  assert.deepEqual(internalWords("Our kayak + wing sail and motors", s), []);
 });
 
 test("the leaderboard takes the grid's name over a board's old label", () => {
   const names = namesFrom(index);
-  assert.equal(nameOf(names, "k-p25-drive.hybrid", "25 W cruise, Drive: hybrid").label, "Our kayak + wing sail");
+  assert.equal(nameOf(names, "k-p25-drive.hybrid", "25 W cruise, Drive: hybrid").label, "Our kayak + wing sail and motors");
   assert.match(nameOf(names, "revc", "Randolph Rev C as published (our model)").note ?? "", /^Our model of/);
   assert.equal(nameOf(names, "not-on-grid", "Something else").label, "Something else");
   // The sample board the smoke test uses: every row gets a clean name.
@@ -35,14 +35,14 @@ test("the leaderboard takes the grid's name over a board's old label", () => {
 
 test("the headline answers who's best", () => {
   const top = [
-    { label: "Our kayak + wing sail", finish_rate: 0.85 },
     { label: "Our kayak", finish_rate: 0.83 },
+    { label: "Our kayak + wing sail and motors", finish_rate: 0.85 },
     { label: "Our kayak, bigger panels and batteries", finish_rate: 0.83 },
     { label: "Our kayak, motors turned up (30 W)", finish_rate: 0.83 },
     { label: "Our kayak, motors turned down (20 W)", finish_rate: 0.82 },
   ];
-  assert.equal(bestHeadline(top, 3), "Best: our kayak + wing sail and 4 others, about 83 % finish.");
-  assert.equal(bestHeadline(top.slice(1, 2), 3), "Best: our kayak, about 83 % finish.");
-  assert.equal(bestHeadline(top, 1), "Too close to call: every build finishes about 83 % of the time.");
+  assert.equal(bestHeadline(top, 3), "Best: Our kayak and 4 others, about 83% finish.");
+  assert.equal(bestHeadline(top.slice(0, 1), 3), "Best: Our kayak, about 83% finish.");
+  assert.equal(bestHeadline(top, 1), "Too close to call: every build finishes about 83% of the time.");
   assert.equal(bestHeadline([], 2), "");
 });

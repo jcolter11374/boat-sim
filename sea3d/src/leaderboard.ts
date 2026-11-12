@@ -189,6 +189,8 @@ function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
 
     const name = el("td");
     const nm = el("div", "name", r.label);
+    // Randolph's boats say so on screen, not only behind the "i" (Maya): a quiet tag.
+    if (r.badges.some(isModelBadge)) nm.append(" ", el("span", "modeltag", "our model"));
     if (r.note) nm.append(" ", info(r.note));
     name.append(nm);
     const chips = el("div");
@@ -220,7 +222,8 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     head.textContent = `Your build: ${t.head.slice(t.head.indexOf(": ") + 2)}`; // drop "On the board of ...: "
     sub.textContent = t.detail;
   } else {
-    const top = s.rows.filter((r) => r.tier === 1);
+    // Our kayak leads the sentence when it's in the top group ("Best: Our kayak and 4 others").
+    const top = s.rows.filter((r) => r.tier === 1).sort((x, y) => Number(y.design === s.reference) - Number(x.design === s.reference));
     const groups = Math.max(0, ...s.rows.map((r) => r.tier));
     head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
     if (mine) sub.textContent = "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others.";
