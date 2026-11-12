@@ -191,6 +191,7 @@ uniform vec2 uWd[${MAX_WAVES}];
 uniform sampler2D tMirror;
 uniform mat4 uMirrorM;
 uniform float uMirror;
+uniform float uMirrorY;
 varying vec3 vWPos;
 varying float vFoam;
 varying float vCrest;
@@ -570,9 +571,16 @@ if (wreckShade > 0.0) {
 }
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
-  vec4 pc = uMirrorM * vec4(vWPos.x, 0.0, vWPos.z, 1.0);
-  vec2 uv = pc.xy / pc.w + nWm.xz * (0.06 + 0.25 * (1.0 - uMirror)); // the ripples break it up
-  vec4 m = texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)));
+  vec4 pc = uMirrorM * vec4(vWPos.x, uMirrorY, vWPos.z, 1.0);
+  vec2 uv = pc.xy / pc.w + nWm.xz * (0.1 + 0.25 * (1.0 - uMirror)); // the ripples break it up
+  // Three taps smeared up and down, as ripples stretch a reflection (Ines r5: not
+  // mirror-crisp, no stair-stepped edge). The mirror clears to transparent black, so
+  // un-premultiply or the edges go dark.
+  vec2 bl = vec2(0.0015, 0.004);
+  vec4 m = (2.0 * texture2D(tMirror, clamp(uv, vec2(0.001), vec2(0.999)))
+          + texture2D(tMirror, clamp(uv + bl, vec2(0.001), vec2(0.999)))
+          + texture2D(tMirror, clamp(uv - bl, vec2(0.001), vec2(0.999)))) * 0.25;
+  m.rgb /= max(m.a, 0.05);
 #ifndef SEA_LITE
   m.rgb = seaColdSky(m.rgb);
 #endif
@@ -644,6 +652,7 @@ export class Sea {
     tMirror: { value: null as THREE.Texture | null },
     uMirrorM: { value: new THREE.Matrix4() },
     uMirror: { value: 0 },
+    uMirrorY: { value: 0 },
   };
   private detail = 0; // wind chop on (High) or off (Low)
   /** The FFT short waves (seaDetail.ts); "off" keeps the old ripples. */
@@ -871,7 +880,8 @@ export class Sea {
   }
 
   /** Mirror the land and boats (mirror.ts): its texture, world-to-texture matrix and strength (0 off). */
-  setMirror(tex: THREE.Texture | null, m: THREE.Matrix4, strength: number): void {
+  setMirror(tex: THREE.Texture | null, m: THREE.Matrix4, strength: number, level = 0): void {
+    this.uniforms.uMirrorY.value = level;
     this.uniforms.tMirror.value = tex;
     this.uniforms.uMirrorM.value.copy(m);
     this.uniforms.uMirror.value = tex ? strength : 0;

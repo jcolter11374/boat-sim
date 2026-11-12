@@ -2863,8 +2863,8 @@ renderer.setAnimationLoop(() => {
   page.third = [third.x, third.y];
   renderer.getDrawingBufferSize(bufSize);
   mirror.setSize(bufSize.x, bufSize.y);
-  mirror.update(renderer, scene, camera, sea.waveHeight);
-  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
+  mirror.update(renderer, scene, camera, sea.waveHeight, motion.heave);
+  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   page.mirror = mirror.strength;
   atmos.render();
   if (chart && game.boat && game.ghost) {

@@ -48,12 +48,13 @@ const collarFrag = /* glsl */ `
             + vnoise(q * 3.0) * 0.15;
     float edge = 1.0 - smoothstep(0.0, 1.0, vUV.y);           // thick at the hull, thin outside
     float bow = 1.0 + 0.8 * (1.0 - smoothstep(0.0, 0.25, vUV.x)); // more at the bow
-    float a = smoothstep(0.55 - 0.45 * edge * uI * bow, 0.75, n) * edge * edge * uI;
+    // Never a solid rim: even at the bow under half of it is foam (Ines r5: no white skirt).
+    float a = smoothstep(0.6 - 0.2 * edge * uI * bow, 0.78, n) * edge * edge * edge * uI;
     // Thick at the bow, thinning aft and breaking into patches with gaps (Elena, WIP 2).
     float aft = smoothstep(0.15, 0.9, vUV.x);
     float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
     a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
-    gl_FragColor = vec4(vec3(0.84, 0.88, 0.9) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.6));
+    gl_FragColor = vec4(vec3(0.74, 0.8, 0.83) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.45));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -384,6 +385,31 @@ export class Contact {
         this.sv[i * 3 + 2] = sideSign * power * (0.7 + jit * Math.random());
         this.born[i] = t;
         this.mist[i] = Math.random() < 0.2 ? 1 : 0;
+      }
+      // Green water pouring off the gunwale: drops spill out over both sides where the
+      // water on deck is, falling back into the sea (Ines r5: runs off broken and white).
+      {
+        const o = this.over;
+        const u = (t - o.t) / o.dur;
+        if (u >= 0.15 && u <= 1.1) {
+          const sAt = o.from + (o.to - o.from) * Math.min(u, 1);
+          const pour = Math.round(10 * Math.min(1, o.h / 0.5) * Math.sin(Math.PI * Math.min(u, 1)) + Math.random());
+          for (let e = 0; e < pour; e++) {
+            const i = this.next;
+            this.next = (this.next + 1) % this.n;
+            const side = Math.random() < 0.5 ? -1 : 1;
+            const sx = this.wlMid + (sAt + (Math.random() - 0.5) * 0.5) * this.wlLength / 2;
+            this.sp[i * 3] = sx;
+            this.sp[i * 3 + 2] = side * this.wlHalfBeam * 1.05;
+            const [wx, wz] = toWorld(sx, this.sp[i * 3 + 2], place);
+            this.sp[i * 3 + 1] = this.surface(comps, wx, wz, t) + o.h * (0.5 + 0.5 * Math.random());
+            this.sv[i * 3] = (Math.random() - 0.5) * 0.6;
+            this.sv[i * 3 + 1] = 0.3 * Math.random();
+            this.sv[i * 3 + 2] = side * (0.6 + 0.9 * Math.random());
+            this.born[i] = t;
+            this.mist[i] = Math.random() < 0.1 ? 1 : 0;
+          }
+        }
       }
       // The wind in the boat's frame (x forward, z to starboard as toWorld has it), relative to the water.
       const [wwx, wwz] = s.wind ?? [0, 0];

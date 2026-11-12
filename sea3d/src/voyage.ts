@@ -1465,8 +1465,8 @@ renderer.setAnimationLoop(() => {
   skyGuide();
   renderer.getDrawingBufferSize(bufSize);
   mirror.setSize(bufSize.x, bufSize.y);
-  mirror.update(renderer, scene, camera, sea.waveHeight);
-  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength);
+  mirror.update(renderer, scene, camera, sea.waveHeight, motion.heave);
+  sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   status.mirror = mirror.strength;
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());

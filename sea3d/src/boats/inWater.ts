@@ -50,7 +50,7 @@ const BODY = /* glsl */ `
     // Gelcoat: surfaces facing down sit in the hull's own shade; a faint water mark
     // just above the waterline.
     vec3 nW = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
-    gl_FragColor.rgb *= 1.0 - 0.18 * clamp(-nW.y, 0.0, 1.0);
+    gl_FragColor.rgb *= 1.0 - 0.45 * clamp(-nW.y, 0.0, 1.0); // seen mostly in the reflection: dark, not a pale gap (Ines r5)
     float mark = (1.0 - smoothstep(0.02, 0.18, h)) * (0.6 + 0.4 * iwNoise(vSeaW.xz * vec2(1.3, 9.0)));
     gl_FragColor.rgb *= 1.0 - 0.08 * mark;
     vec2 q = vSeaW.xz * 7.0 + vec2(uSeaTime * 0.9, -uSeaTime * 0.6);
@@ -66,6 +66,18 @@ const BODY = /* glsl */ `
     float gaps = smoothstep(0.3, 0.6, iwNoise(vSeaW.xz * 1.6 + vec2(uSeaTime * 0.7, 0.0)));
     bits *= mix(gaps, 1.0, bowK) * (0.45 + 0.55 * bowK);
     gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.78, 0.83, 0.86) * uWetLight, line * bits * uWetFoam * 0.5);
+    // Green water coming aboard (Ines r5): a broken white sheet climbing the side and over
+    // the deck, streaming down and off as it drains; the hull stays solid under it.
+    float ovh = washOverAt(vSeaW.xz);
+    if (ovh > 0.01) {
+      vec2 qs = vec2((vSeaW.x + vSeaW.z) * 1.4, vSeaW.y * 3.0 + uSeaTime * 3.0); // streams down
+      float sn = iwNoise(qs) * 0.55 + iwNoise(qs * 2.3 + 3.1) * 0.3 + iwNoise(vSeaW.xz * 9.0) * 0.15;
+      float edge = (iwNoise(vec2((vSeaW.x + vSeaW.z) * 2.5, uSeaTime * 1.5)) - 0.5) * 0.5 * ovh; // ragged top
+      float cover = 1.0 - smoothstep(0.7 * ovh, ovh, h + edge);
+      float sheet = cover * smoothstep(0.42, 0.52, sn);
+      gl_FragColor.rgb *= mix(1.0, 0.75, cover); // wet and darker under it
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.92, 0.95, 0.97) * uWetLight, 0.95 * sheet);
+    }
   }
 }
 `;

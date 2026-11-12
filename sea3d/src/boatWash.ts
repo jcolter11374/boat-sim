@@ -98,6 +98,23 @@ vec4 washLocal(int i, vec2 xz) {
   if (abs(a) > hl) out_ = length(vec2(abs(a) - hl, abs(b)));
   return vec4(a, b, hw, out_);
 }
+// Boat i's green water at a point (local frame l, s along): metres, 0 when none.
+float washOverK(int i, vec4 l, float s) {
+  vec4 ov = uWashOver[i];
+  if (ov.x <= 0.001) return 0.0;
+  return ov.x * exp(-pow((s - ov.y) / ov.z, 2.0)) * (1.0 - smoothstep(0.0, 0.8, l.w));
+}
+/** Green water over any hull at xz (m above the local waterline), for the hull's skin. */
+float washOverAt(vec2 xz) {
+  float y = 0.0;
+  for (int i = 0; i < ${MAX_WASH_BOATS}; i++) {
+    if (i >= uWashN) break;
+    if (uWashOver[i].x <= 0.001) continue;
+    vec4 l = washLocal(i, xz);
+    y = max(y, washOverK(i, l, l.x / max(uWashDim[i].x, 0.01)));
+  }
+  return y;
+}
 float boatWaveK(vec2 xz, float onHull) {
   float y = 0.0;
   for (int i = 0; i < ${MAX_WASH_BOATS}; i++) {
@@ -105,6 +122,10 @@ float boatWaveK(vec2 xz, float onHull) {
     vec4 dim = uWashDim[i];
     float H = dim.z;
     if (H <= 0.0005 && uWashOver[i].x <= 0.001) continue;
+    // Cheap reject first: nothing reaches more than a few crest widths past the hull ends.
+    vec2 dd = xz - uWashPos[i].xy;
+    float rr = dim.x + 0.6 + 0.4 * dim.x;
+    if (dot(dd, dd) > rr * rr) continue;
     vec4 l = washLocal(i, xz);
     float hl = dim.x;
     float s = l.x / hl;
@@ -116,12 +137,11 @@ float boatWaveK(vec2 xz, float onHull) {
     float k = side * (bow - 0.35 * mid + 0.45 * stern);
     // The sea keeps its full rise a little way inside the hull outline, so a mesh triangle
     // spanning the hull side still reaches it; deeper inside, none (the hull hides it).
-    k *= max(onHull, smoothstep(-0.45, -0.15, l.w));
+    k *= max(onHull, smoothstep(-0.2, -0.03, l.w));
     y += H * k;
-    // Green water: a crest breaking over the deck covers the hull itself for a moment
-    // (Ines, Sam: the kayak is buried by crests and pops back up), inside the outline too.
-    vec4 ov = uWashOver[i];
-    if (ov.x > 0.001) y += ov.x * exp(-pow((s - ov.y) / ov.z, 2.0)) * (1.0 - smoothstep(0.0, 0.8, l.w));
+    // Green water is not drawn by lifting the sea (a smooth mound through or beside the
+    // hull, Ines r5): it's a white sheet on the hull's skin (washOverAt, inWater.ts) and
+    // the drops pouring off (contact.ts).
   }
   return y;
 }
@@ -146,9 +166,14 @@ float boatFoam(vec2 xz, float t) {
     if (i >= uWashN) break;
     vec4 dim = uWashDim[i];
     if (dim.w <= 0.001) continue;
+    // Cheap reject first (most of the screen is far from any hull): skip the noise there.
+    vec2 dd = xz - uWashPos[i].xy;
+    float rr = dim.x + dim.y + 1.25 * (0.06 + 0.3 * dim.w + 2.0 * dim.z) + 0.2;
+    if (dot(dd, dd) > rr * rr) continue;
     vec4 l = washLocal(i, xz);
     float hl = dim.x;
     float s = l.x / hl;
+    if (l.w > 1.25 * (0.06 + 0.3 * dim.w + 2.0 * dim.z)) continue;
     // Thick where the bow wave breaks, thinning aft, with gaps along the sides (Elena, WIP 2).
     float bowK = smoothstep(-0.6, 0.85, s);
     float reach = (0.06 + 0.3 * dim.w + 2.0 * dim.z) * mix(0.4, 1.25, bowK); // m out from the hull
