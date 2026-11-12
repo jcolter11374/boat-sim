@@ -10,17 +10,18 @@
 # Those used to run in the "3D sea page" workflow on every PR too, which built
 # the same site a second time; that workflow now only builds on main (deploy).
 # No secrets: it only reads public releases and serves on the runner itself.
+#
+# Merge fast, test the whole game nightly (John and the coordinator, 12 Nov). A pull
+# request gets the fast gate only, about 5-8 min: the build (typecheck + unit tests)
+# and "quick" (tests/quick.mjs: every page opens, the sea and a replay animate, Real
+# time is on every speed bar). The full suite (both smoke halves, both browsers'
+# live checks and playtests) runs nightly on main and on a hand dispatch. After each
+# deploy Nina checks the live site by hand; anything broken is reverted.
 name: Pre-release playtest
-# Fast on every push, full before a merge (Maya, coordinator, 12 Nov: the runner jam).
-# Every PR push: build (with the unit tests) and smoke (1). The full suite (smoke (2) and
-# the four play jobs) runs when the PR carries the "ready-to-merge" label (added by the
-# merge desk after sign-off, and on every later push while it stays on) and on a hand
-# dispatch. Same job names as before, so "all green" reads the same; the merge desk merges
-# only on a green full run of the head. Main is covered by the deploy (sea3d.yml) and the
-# post-deploy Playtest and Live site check.
 on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC, about 2-3 AM in Maryland
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
     paths:
       - "sea3d/**"
       - "src/boatsim/**"
@@ -36,13 +37,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Adding some other label starts a run that does nothing: its own group, so it can't
-  # cancel the run in progress.
-  group: prerelease-playtest-${{ github.event.action == 'labeled' && github.event.label.name != 'ready-to-merge' && format('skip-{0}', github.run_id) || github.ref }}
+  group: prerelease-playtest-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
-    if: github.event.action != 'labeled' || github.event.label.name == 'ready-to-merge'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -94,15 +92,41 @@ jobs:
   # opens), as the deploy used to run it on PRs, on this run's build.
   # Two halves side by side (SMOKE_PART in smoke.mjs): it was 18 min in one job,
   # the gate's longest.
+  # The fast pre-merge browser check (every PR): a few minutes in Chromium.
+  quick:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sea3d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sea3d/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: sea3d/dist
+      - run: |
+          npm install --no-save playwright@1
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
+      - name: Quick smoke (pages open, animate, Real time on every speed bar)
+        run: npm run test:quick
+  # The full suite: nightly on main and on a hand dispatch, not on pull requests.
   smoke:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        # smoke (1) on every push; smoke (2) only in the full suite.
-        part: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')) && '[1, 2]' || '[1]') }}
+        part: [1, 2]
     defaults:
       run:
         working-directory: sea3d
@@ -133,7 +157,7 @@ jobs:
           retention-days: 30
   play:
     needs: build
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
