@@ -66,25 +66,18 @@ const BODY = /* glsl */ `
     float gaps = smoothstep(0.3, 0.6, iwNoise(vSeaW.xz * 1.6 + vec2(uSeaTime * 0.7, 0.0)));
     bits *= mix(gaps, 1.0, bowK) * (0.45 + 0.55 * bowK);
     gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.78, 0.83, 0.86) * uWetLight, line * bits * uWetFoam * 0.5);
-    // Green water coming aboard (Ines r5): a broken white sheet climbing the side and over
-    // the deck, streaming down and off as it drains; the hull stays solid under it.
-    float ovh = washOverAt(vSeaW.xz);
-    if (ovh > 0.01) {
-      // Its own colour, never the paint showing through (Ines r6): blue-grey where it's a
-      // thin clear sheet, white where it's aerated, in streaks running down the side, with
-      // a bright edge along the top where it's breaking over.
-      float along = sAl * 1.5; // along the hull, roughly metres on a small boat
-      vec2 qs = vec2(along * 11.0, vSeaW.y * 2.0 + uSeaTime * 3.0);
-      float sn = iwNoise(qs) * 0.5 + iwNoise(qs * vec2(2.3, 1.7) + 3.1) * 0.3 + iwNoise(vec2(along * 3.0, vSeaW.y * 6.0 - uSeaTime * 2.0)) * 0.2;
-      float edge = (iwNoise(vec2(along * 2.5, uSeaTime * 1.5)) - 0.5) * 0.5 * ovh; // ragged top
-      float hh = h + edge;
-      float cover = 1.0 - smoothstep(0.85 * ovh, ovh, hh);
-      float topness = smoothstep(0.0, ovh, hh); // aerated near the top, clearer lower down
-      float streak = smoothstep(0.55, 0.78, sn) * (0.35 + 0.65 * topness);
-      vec3 sheetC = mix(vec3(0.17, 0.26, 0.33) * (0.85 + 0.3 * sn), vec3(0.88, 0.92, 0.95), streak);
-      float lip = smoothstep(0.5 * ovh, 0.9 * ovh, hh) * cover * (0.6 + 0.4 * sn); // the breaking top edge
-      sheetC = mix(sheetC, vec3(0.95, 0.97, 0.98), 0.9 * lip);
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, sheetC * uWetLight, cover);
+    // Green water that came aboard (Ines r7): no painted sheet, just what it leaves. The
+    // paint goes dark and wet and dries back; broken white foam sits on the deck and the
+    // upper hull, thinning and draining down the sides over a second or two.
+    float ovw = washOverAt(vSeaW.xz); // 0..1, fading after the hit
+    if (ovw > 0.01) {
+      float along = sAl * 1.5;
+      gl_FragColor.rgb *= 1.0 - 0.4 * ovw;
+      vec2 qd = vec2(along * 7.0, vSeaW.y * 2.5 + uSeaTime * 1.6); // drains downward
+      float fn = iwNoise(qd) * 0.5 + iwNoise(qd * 2.7 + 5.3) * 0.3 + iwNoise(vSeaW.xz * 14.0) * 0.2;
+      float up = smoothstep(0.08, 0.3, h); // on deck and the topsides, not at the waterline
+      float foamOn = up * smoothstep(0.82 - 0.3 * ovw, 0.92 - 0.25 * ovw, fn);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.88, 0.92, 0.94) * uWetLight, 0.9 * foamOn);
     }
   }
 }

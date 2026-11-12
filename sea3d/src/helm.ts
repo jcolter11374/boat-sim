@@ -2739,7 +2739,7 @@ renderer.setAnimationLoop(() => {
   flowStw = stw;
   if (model) {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
-    model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - spec.cgBelowWaterline, 0);
+    model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
     model.root.updateMatrixWorld();

@@ -1298,7 +1298,7 @@ renderer.setAnimationLoop(() => {
         pourAt = Infinity;
         drain?.pour();
       }
-      model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - SPEC[boatKey].cgBelowWaterline, 0);
+      model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - SPEC[boatKey].cgBelowWaterline, 0);
       model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);

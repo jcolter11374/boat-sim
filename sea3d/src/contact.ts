@@ -119,16 +119,19 @@ export class Contact {
   /** This frame's splash for the sound, 0..1 (a slam's sheet or the bow meeting a steep face); 0 otherwise. */
   splash = 0;
   private pending = 0;
-  /** Green water over the deck: start time (s), how long, peak height (m), crest s from/to. */
-  private over = { t: -1e9, dur: 1, h: 0, from: 1.2, to: -1.2 };
+  /** Green water over the deck: when it hit (s), how long the deck stays wet and foamy
+   *  (s), how hard (0..1), and where along the hull (s, -1 stern .. 1 bow, and half width). */
+  private over = { t: -1e9, dur: 2.5, h: 0, at: 0.5, w: 0.8 };
+  /** The hull pushed down into the crest as it comes aboard (m, display only): the sea
+   *  itself hides the low hull for a moment, then she pops back up (Ines r7). */
+  sink = 0;
 
-  /** A crest breaks over the deck now: water h metres deep sweeps aft along it. */
+  /** A crest comes aboard now, strength h (0..1). */
   private greenWater(t: number, h: number): void {
     const small = this.spec.length < 5;
     // A small boat is swept end to end; a yacht takes it over the bow (GUESS by eye).
-    // h is the depth over the deck, so the hump is raised by the freeboard too (a kayak's
-    // ~0.3 m GUESS from the model), or it would stay hidden behind the hull's side.
-    this.over = small ? { t, dur: 1.1, h: h + 0.3, from: 1.3, to: -1.3 } : { t, dur: 0.9, h, from: 1.25, to: 0.15 };
+    this.over = small ? { t, dur: 2.5, h: Math.min(1, h), at: 0.3, w: 0.9 } : { t, dur: 2.0, h: Math.min(1, h), at: 0.75, w: 0.35 };
+    this.pending = Math.max(this.pending, 0.35 * Math.min(1, h)); // the hit throws spray
   }
 
   /** A breaking crest hits the boat now (a knockdown): a big sheet of spray next frame, 0..1. */
@@ -145,6 +148,7 @@ export class Contact {
   private readonly sprayScale: number;
   // spray pool, boat frame x/z with world y
   private readonly n: number;
+  private readonly low: boolean;
   private readonly sp: Float32Array; // x, y, z
   private readonly sv: Float32Array; // vx, vy, vz
   private readonly born: Float32Array;
@@ -237,6 +241,10 @@ export class Contact {
     this.collar.name = "foam_collar";
 
     this.n = SPRAY[quality];
+    // Low quality: no foam at all (Ravi's frame budget: the sea alone fills Low's +15%).
+    // The sea's wash foam is skipped per pixel when its strength is 0, and the collar is hidden.
+    this.low = quality === "low";
+    this.collar.visible = !this.low;
     this.sp = new Float32Array(this.n * 3);
     this.sv = new Float32Array(this.n * 3);
     this.born = new Float32Array(this.n).fill(-99);
@@ -308,12 +316,16 @@ export class Contact {
     // The bow wave and wash in the sea, and the wet line on the hull, from the same speed and sea.
     const [cx, cz] = toWorld(this.wlMid, 0, place);
     {
-      const u = (t - this.over.t) / this.over.dur;
+      // Wet and foamy at once, draining away over the next couple of seconds; the hull
+      // dips into the crest and comes back up in about a second.
+      const x = t - this.over.t;
       const o = this.over;
-      if (u >= 0 && u <= 1) this.wash?.setOver(o.h * Math.sin(Math.PI * u), o.from + (o.to - o.from) * u);
-      else this.wash?.setOver(0, 0);
+      const env = x < 0 || x > o.dur ? 0 : o.h * Math.min(1, x / 0.12) * Math.exp(-2.2 * x / o.dur);
+      this.wash?.setOver(env, o.at, o.w);
+      const small = this.spec.length < 5;
+      this.sink = small && x >= 0 && x < 1.4 ? 0.22 * o.h * Math.sin(Math.PI * Math.min(1, x / 1.4)) ** 0.7 : 0;
     }
-    this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
+    this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
     this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.05 * seaK, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
@@ -341,8 +353,8 @@ export class Contact {
           // just past the steepest part of the face: throw the sheet once for this face
           crest = this.risePeak;
           // From force 6 a fast-rising face breaks over a low deck (Sam's checklist 3).
-          const gw = THREE.MathUtils.smoothstep(hs, 2.0, 4.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) * Math.min(0.45, 0.14 + 0.35 * (crest - CREST_RISE)); // a gale's every steep face
-          if (gw > 0.05 && t - this.over.t > this.over.dur) this.greenWater(t, gw);
+          const gw = THREE.MathUtils.smoothstep(hs, 2.0, 4.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) * Math.min(1, 0.4 + 0.8 * (crest - CREST_RISE)); // a gale's steep faces
+          if (gw > 0.05 && t - this.over.t > 0.8 * this.over.dur) this.greenWater(t, gw);
           burst += Math.min(220, Math.round((this.risePeak - CREST_RISE) * 150 * (0.4 + speedK) * slamK * slamK));
           this.risePeak = -1;
         }
@@ -350,11 +362,11 @@ export class Contact {
       // Between the big faces a small low deck in a gale is still awash: the short crests
       // slop over it every few seconds (Sam's checklist 3; GUESS by eye, display only).
       const awashK = THREE.MathUtils.smoothstep(hs, 3.5, 5.5) * Math.min(1, 4 / Math.max(this.spec.length, 1)) ** 2;
-      if (awashK > 0.05 && t - this.over.t > this.over.dur + 0.5 && Math.random() < dt * 0.5 * awashK) {
-        this.greenWater(t, (0.12 + 0.14 * Math.random()) * awashK);
+      if (awashK > 0.05 && t - this.over.t > this.over.dur + 1.0 && Math.random() < dt * 0.2 * awashK) {
+        this.greenWater(t, (0.5 + 0.5 * Math.random()) * awashK);
       }
       if (this.pending > 0) {
-        this.greenWater(t, 0.45 * this.pending);
+        if (t - this.over.t > 0.5) this.greenWater(t, this.pending);
         burst += Math.round(200 * this.pending);
         crest = Math.max(crest, 2.5 * this.pending);
         this.pending = 0;
@@ -390,19 +402,18 @@ export class Contact {
       // water on deck is, falling back into the sea (Ines r5: runs off broken and white).
       {
         const o = this.over;
-        const u = (t - o.t) / o.dur;
-        if (u >= 0.15 && u <= 1.1) {
-          const sAt = o.from + (o.to - o.from) * Math.min(u, 1);
-          const pour = Math.round(10 * Math.min(1, o.h / 0.5) * Math.sin(Math.PI * Math.min(u, 1)) + Math.random());
+        const x = t - o.t;
+        if (x >= 0.1 && x <= 1.6) {
+          const pour = Math.round(8 * o.h * Math.exp(-1.5 * x) + Math.random() * 0.7);
           for (let e = 0; e < pour; e++) {
             const i = this.next;
             this.next = (this.next + 1) % this.n;
             const side = Math.random() < 0.5 ? -1 : 1;
-            const sx = this.wlMid + (sAt + (Math.random() - 0.5) * 0.5) * this.wlLength / 2;
+            const sx = this.wlMid + (o.at + (Math.random() * 2 - 1) * o.w) * this.wlLength / 2;
             this.sp[i * 3] = sx;
             this.sp[i * 3 + 2] = side * this.wlHalfBeam * 1.05;
             const [wx, wz] = toWorld(sx, this.sp[i * 3 + 2], place);
-            this.sp[i * 3 + 1] = this.surface(comps, wx, wz, t) + o.h * (0.5 + 0.5 * Math.random());
+            this.sp[i * 3 + 1] = this.surface(comps, wx, wz, t) + 0.25 + 0.1 * Math.random();
             this.sv[i * 3] = (Math.random() - 0.5) * 0.6;
             this.sv[i * 3 + 1] = 0.3 * Math.random();
             this.sv[i * 3 + 2] = side * (0.6 + 0.9 * Math.random());
