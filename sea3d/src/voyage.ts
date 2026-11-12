@@ -673,11 +673,12 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
     status.maxHour = endHour();
     status.outcome = r.outcome;
     status.shown = [];
-    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: tracked.simulated, fixes: tracked.fixes.length };
+    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: false, fixes: tracked.fixes.length };
     $<HTMLInputElement>("scrub").max = String(endHour());
     $("boat").hidden = $("voyage").hidden = true;
     $("now").hidden = $("c-report").hidden = $("c-eta").hidden = false;
-    $("h1").textContent = tracked.simulated ? "Live tracker (simulated voyage)" : "Live tracker";
+    // No "simulated" label, even on the demo feed: John's call S2 (11 Nov), the demo is obvious.
+    $("h1").textContent = "Live tracker";
     $("sub").textContent =
       "Where the kayak last reported (the main box's daily satellite report and the backup beacon's pings), then the simulator's forecast from that report: the dashed line on the chart, with the shaded band showing where most forecast runs end up. Wind and waves aren't reported, so the sea here is a stand-in.";
     $("lg-ours").textContent = "reported track";
