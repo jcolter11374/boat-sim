@@ -8,6 +8,7 @@ import * as THREE from "three";
 import type { Quality } from "../boats/parts";
 import { reflectable } from "../mirror";
 import { Island, type LandGrid } from "./island";
+import { Landmarks } from "./landmarks";
 import { PLACES, type Place } from "./place";
 import { CoastSquares, SQUARE_CREDIT } from "./squares";
 import { metresPerDegree } from "./shader";
@@ -99,9 +100,11 @@ export class NearbyLand {
   /** The place's land, moved each frame so it stays put as the boat sails. */
   private readonly placeRoot = new THREE.Group();
   /** What's loaded (for tests and the page): the place's key, its distance (km), the town and trees. */
-  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0 };
+  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0 };
   /** The Bay's coast squares (squares.ts), around and between the places. */
   private squares: CoastSquares | null = null;
+  /** Lighthouses and the like at their true spots (landmarks.ts). */
+  private readonly landmarks = new Landmarks();
   private tiles: Tile[] = [];
   private now: Loaded | null = null;
   private loading = false;
@@ -112,7 +115,7 @@ export class NearbyLand {
     private readonly base: string,
   ) {
     this.root.name = "nearby-land";
-    this.root.add(this.placeRoot);
+    this.root.add(this.placeRoot, this.landmarks.root);
   }
 
   /** Learn where the land files reach (their small meta files); none published means no land. */
@@ -166,6 +169,8 @@ export class NearbyLand {
       if (km > DROP_KM || (near && near.tile !== cur.tile && near.km < LOAD_KM && near.km < km)) this.drop();
     }
     if (!this.now && !this.loading && near && near.km < LOAD_KM) void this.load(near.tile);
+    this.landmarks.update(lat, lon, t, a.sunEl);
+    this.shown.landmarks = this.landmarks.count;
     const l = this.now;
     // The squares wait while a place loads: they leave a hole for its finer land, so they'd only be laid out twice.
     if (this.squares && !this.loading) {
@@ -234,12 +239,13 @@ export class NearbyLand {
       release(g);
     }
     this.now = null;
-    Object.assign(this.shown, { place: "", km: Infinity, buildings: 0, trees: 0 });  // squares: kept, they're counted each frame
+    Object.assign(this.shown, { place: "", km: Infinity, buildings: 0, trees: 0 });  // squares and landmarks: kept, they're counted each frame
   }
 
   dispose(): void {
     this.gone = true;
     this.drop();
     this.squares?.dispose();
+    this.landmarks.dispose();
   }
 }
