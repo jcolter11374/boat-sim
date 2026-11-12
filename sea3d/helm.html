@@ -200,17 +200,17 @@
   .card label { display: block; margin: 8px 0; }
   .card select { font: inherit; color: var(--ink); background: rgba(27,51,82,.9); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
   /* F3: the goal card, over the opening view in the clear sky at the top left (Iris's box: top 45%, left 60%). */
-  #goalcard { position: fixed; left: 8vw; top: calc(var(--bar, 0px) + 14vh); max-width: min(52vw, 640px); z-index: 7; pointer-events: none;
-    color: #fff; text-shadow: 0 1px 2px rgba(0,10,25,.45), 0 0 8px rgba(0,10,25,.22); opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
+  #goalcard { position: fixed; left: 6vw; top: 5vh; max-width: min(64vw, 800px); z-index: 7; pointer-events: none; box-sizing: border-box;
+    padding: 20px 28px 22px; border-radius: 16px; background: rgba(8,18,32,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.14);
+    color: #fff; /* on its own glass, above the horizon: legible on any sky (Ines, r4) */ opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
   #goalcard.in { opacity: 1; transform: none; }
   #goalcard { isolation: isolate; }
-  /* No scrim behind the goal card: a tight shadow keeps the words legible and the sky clean (Ines). */
   /* While the goal card is up, the instruments wait (Leo): the sea and the goal, nothing else. */
   body.goal #strip, body.goal #mapbox, body.goal #orders-tab, body.goal #orders, body.goal #poidock { opacity: 0; pointer-events: none; }
   #strip, #mapbox, #orders-tab { transition: opacity .8s; }
   #goalcard[hidden] { display: none; }
-  #goalcard h2 { margin: 0 0 10px; font-size: clamp(28px, 3.6vw, 52px); font-weight: 650; line-height: 1.08; letter-spacing: -.01em; text-wrap: balance; }
-  #goalcard p { text-shadow: 0 1px 2px rgba(0,10,25,.6), 0 0 6px rgba(0,10,25,.35); margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.4; color: rgba(255,255,255,.92); text-wrap: balance; }
+  #goalcard h2 { margin: 0 0 8px; font-size: clamp(26px, 3.2vw, 46px); font-weight: 650; line-height: 1.08; letter-spacing: -.01em; text-wrap: balance; }
+  #goalcard p { margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.4; color: rgba(255,255,255,.92); text-wrap: balance; }
   #goalcard b { font-weight: 650; color: #fff; }
   @media (prefers-reduced-motion: reduce) { #goalcard { transition: opacity .3s; transform: none; } }
   /* Results, story first (Leo's plan, Elena 12 Nov): headline, story, map and three numbers, your calls, where this leaves you, one bright button. */
@@ -269,6 +269,7 @@
   body.sailing.immersive { --bar: 0px; }
   body.sailing.immersive #topbar { height: 40px; transform: translateY(-100%); transition: transform .35s ease; }
   body.sailing.immersive.peek #topbar { transform: none; }
+  body.sailing.immersive:not(.peek) #topbar { box-shadow: none; } /* no dark band along the top while it's tucked away (Ines) */
   body.sailing #topbar { transition: transform .35s ease; }
   body.no-bar-anim #topbar { transition: none !important; }
 
