@@ -80,7 +80,7 @@ export function buoyGeometry(kind: BuoyKind): THREE.BufferGeometry {
   } else if (kind === "lit_red" || kind === "lit_green") {
     const c = kind === "lit_red" ? RED : GREEN;
     parts.push(cyl(0.85, 1.0, d, 0.45, c, 20), cyl(1.0, 0.9, 0.45, 0.65, c, 20)); // the float and its deck
-    parts.push(cyl(0.95, 1.0, -0.15, 0.0, 0x26292c, 20)); // fendering band at the waterline
+    parts.push(cyl(0.99, 1.01, 0.02, 0.16, 0x26292c, 20)); // fendering band just above the waterline (nothing proud of the float below it)
     // The lattice tower: four legs closing in, three rings of rails, panels for the colour.
     const foot = 0.62;
     const top = 3.9;
