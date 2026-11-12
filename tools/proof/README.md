@@ -20,7 +20,9 @@ script and two or three hours of waiting on software graphics.
    clips playing) and `contact-sheet.png` (one picture of everything, for review).
 
 The standard set on 4 runners takes about 25 minutes end to end, 8 runners about 15.
-Keep to 8 runners or fewer (the team's runner budget, Kai). Use `quick` while working.
+The team budget is 8 proof runners at once across all proof runs (Kai): a run shrinks when
+another is going, and waits (up to 20 min, then fails with "proof queue full") when two are.
+Use `quick` while working.
 
 ## Sets (tools/proof/shots.json)
 

@@ -7,7 +7,13 @@
 # Start it by hand (Actions -> Proof frames -> Run workflow, or the API), or put the
 # "proofs" label on a pull request (standard set, 4 runners). Never on every push:
 # a standard set is about 75 runner-minutes of software rendering (Kai's runner budget:
-# no more than 8 runners at once).
+# no more than 8 runners at once, counted across all proof runs: the plan job shrinks
+# or holds a run while others are going).
+#
+# Security: the publish job has contents: write and runs tools/proof from the labelled
+# PR's own commit. That is fine only because fork PRs get a read-only token and only
+# collaborators can label. Never add a secret to this workflow (team rule: no
+# secret-using workflow runs on pull_request).
 name: Proof frames
 on:
   workflow_dispatch:
@@ -37,6 +43,8 @@ on:
     types: [labeled]
 permissions:
   contents: read
+env:
+  PLAYWRIGHT: "1.49.1" # the pre-release playtest's pin
 concurrency:
   # Per branch; a label other than "proofs" lands in its own group, so it never cancels a run.
   group: proofs-${{ github.event.inputs.branch || github.head_ref }}-${{ github.event.label.name || 'run' }}
@@ -45,6 +53,9 @@ jobs:
   plan:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'proofs'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read # count the other proof runs going now
     outputs:
       branch: ${{ steps.p.outputs.branch }}
       safe: ${{ steps.p.outputs.safe }}
@@ -57,10 +68,31 @@ jobs:
           BRANCH: ${{ github.event.inputs.branch || github.head_ref }}
           SET: ${{ github.event.inputs.set || 'standard' }}
           SHARDS: ${{ github.event.inputs.shards || '4' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           SHARDS=${SHARDS//[^0-9]/}
           SHARDS=${SHARDS:-4}
-          n=$(( SHARDS < 1 ? 1 : SHARDS > 8 ? 8 : SHARDS ))
+          # The team's budget is 8 proof runners at once across ALL proof runs (Kai):
+          # each other run going counts as 4. Two or more others: wait up to 20 min.
+          others() {
+            for st in in_progress queued; do
+              gh api "repos/${{ github.repository }}/actions/workflows/proofs.yml/runs?status=$st&per_page=50" \
+                --jq '.workflow_runs[] | select(.id != ${{ github.run_id }}) | .id'
+            done | sort -u | wc -l
+          }
+          o=$(others)
+          for i in $(seq 1 40); do
+            [ "$o" -lt 2 ] && break
+            echo "proof queue full: $o other proof runs going; waiting ($i/40)"
+            sleep 30
+            o=$(others)
+          done
+          if [ "$o" -ge 2 ]; then
+            echo "::error::proof queue full ($o other proof runs going for 20 min): try again later"
+            exit 1
+          fi
+          room=$(( 8 - 4 * o )); room=$(( room < 1 ? 1 : room ))
+          n=$(( SHARDS < 1 ? 1 : SHARDS > room ? room : SHARDS ))
           safe=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '-')
           {
             echo "branch=$BRANCH"
@@ -69,7 +101,7 @@ jobs:
             echo "shards=$n"
             echo "matrix=[$(seq -s, 1 "$n")]"
           } >> "$GITHUB_OUTPUT"
-          echo "Rendering set $SET of $BRANCH on $n runners" >> "$GITHUB_STEP_SUMMARY"
+          echo "Rendering set $SET of $BRANCH on $n runners ($o other proof runs going)" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: plan
@@ -141,11 +173,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # Pinned, so every shard draws with the same browser build; the browser is cached.
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: proof-playwright-${{ env.PLAYWRIGHT }}
       - name: Playwright and Chromium
         working-directory: tools/proof
         run: |
           npm init -y > /dev/null
-          npm install --no-save playwright@1
+          npm install --no-save "playwright@$PLAYWRIGHT"
           timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Render shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shards }}
         env:
@@ -189,13 +227,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: proof-playwright-${{ env.PLAYWRIGHT }}
       - name: Proof page and contact sheet
         working-directory: tools/proof
         env:
           BRANCH: ${{ needs.plan.outputs.branch }}
         run: |
           npm init -y > /dev/null
-          npm install --no-save playwright@1
+          npm install --no-save "playwright@$PLAYWRIGHT"
           timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
           sha=$(git ls-remote "https://github.com/${{ github.repository }}" "refs/heads/$BRANCH" | cut -f1)
           node sheet.mjs ../../proofs --title "$BRANCH" --commit "$sha" || echo "::warning::some proof units failed: see index.html"
