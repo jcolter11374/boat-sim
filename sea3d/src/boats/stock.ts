@@ -13,6 +13,7 @@
 
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
+import { clotheSails } from "./sailcloth";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
@@ -132,6 +133,7 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
               for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat.side = THREE.DoubleSide;
             }
           });
+          clotheSails(g); // sailcloth: takes the sun's colour, glows with the sun behind it
           detailed.set(key, g);
           return true;
         } catch {

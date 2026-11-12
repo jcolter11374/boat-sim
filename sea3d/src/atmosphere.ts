@@ -7,6 +7,7 @@
 
 import { NAV_NIGHT } from "./boats/navlights";
 import * as THREE from "three";
+import { setSailSun } from "./boats/sailcloth";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
@@ -354,6 +355,7 @@ export class Atmosphere {
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;
     this.sun.position.copy(this.sunDir).multiplyScalar(100);
+    setSailSun(this.sunDir, this.sun.color, this.sunLight * smooth(elDeg, -1, 3));
     const moonUp = smooth(this.moonEl, -1, 4);
     // How much the moon lights the night: a half moon gives about a tenth of a full
     // moon's light (it falls off much faster than the lit fraction), a new moon none.
