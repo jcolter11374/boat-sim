@@ -476,10 +476,10 @@ export class Clouds {
     fog.far = THREE.MathUtils.lerp(fog.far, 380, thick);
     // Rain is a mist of its own, on the same haze colour as the sea's far fade: drizzle
     // softens the horizon, and a downpour shuts the world in to a few hundred metres
-    // (about 300 m by 6 mm/h). Eased in log distance so the close-in is even, not sudden.
+    // (about 140 m by 6 mm/h: a tropical downpour's grey wall). Eased in log distance so the close-in is even, not sudden.
     const mist = 0.55 * SM(this.rain, 0.05, 0.7) + 0.45 * SM(this.rain, 1, 6);
     if (mist > 0) {
-      const far = Math.exp(THREE.MathUtils.lerp(Math.log(fog.far), Math.log(300), mist));
+      const far = Math.exp(THREE.MathUtils.lerp(Math.log(fog.far), Math.log(140), mist));
       fog.far = Math.min(fog.far, far);
       // Grey from close by: a downpour's air is thick, not just its horizon (Elena).
       fog.near = Math.min(fog.near, THREE.MathUtils.lerp(fog.near, 0, mist));

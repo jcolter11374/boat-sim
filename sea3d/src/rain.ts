@@ -13,6 +13,7 @@ const FALL = 9; // m/s, a raindrop's falling speed
 const vert = /* glsl */ `
 uniform float uTime, uBox, uFall, uLen;
 uniform vec4 uFadeR; // fades in from x to y m, out from z to w m
+uniform float uLucky; // share of drops drawn as long bright streaks
 uniform vec3 uCam;
 uniform vec2 uWind;     // m/s the drops drift sideways (x, z)
 attribute vec4 aSeed;   // x, y, z in 0..1, and a speed jitter
@@ -29,7 +30,7 @@ void main() {
   // The streak: the drop's path over a short exposure.
   // Shorter close to the lens, so the nearest drops are flecks, not lines across the frame.
   float dh = length(p - uCam);
-  float lucky = step(0.94, fract(aSeed.w * 13.7 + aSeed.z * 5.1)); // one drop in ~17 catches the light: a long bright streak
+  float lucky = step(1.0 - uLucky, fract(aSeed.w * 13.7 + aSeed.z * 5.1)); // one drop in ~17 catches the light: a long bright streak
   p -= normalize(vel) * uLen * (1.0 + 3.0 * lucky) * clamp(dh / 7.0, 0.15, 1.0) * aEnd;
   vEnd = aEnd;
   vec3 d = p - uCam;
@@ -96,6 +97,7 @@ function dropMaterial(box: number, fade: THREE.Vector4): THREE.ShaderMaterial {
       uFall: { value: FALL },
       uLen: { value: 0.6 },
       uFadeR: { value: fade },
+      uLucky: { value: 0.06 },
       uCam: { value: new THREE.Vector3() },
       uWind: { value: new THREE.Vector2() },
       uAmount: { value: 0 },
@@ -152,14 +154,16 @@ export class Rain {
     }
     const u = this.mat.uniforms;
     u.uAmount.value = 0.9 * Math.sqrt(amount) * (1 + 0.7 * THREE.MathUtils.smoothstep(amount, 0.6, 1)); // drizzle faint, a downpour a dense texture, never a wall
-    u.uLen.value = 0.07 + 0.09 * amount; // short flecks; heavier drops a little longer
+    const sheets = THREE.MathUtils.smoothstep(amount, 0.6, 1);
+    u.uLen.value = 0.07 + 0.09 * amount + 0.2 * sheets; // short flecks; a downpour's drops streak into sheets
+    u.uLucky.value = 0.06 + 0.24 * sheets;
     // Show only a share of the drops in light rain.
     this.mesh.geometry.setDrawRange(0, Math.ceil(this.mesh.geometry.getAttribute("aEnd").count * (0.12 + 0.38 * amount + 0.5 * THREE.MathUtils.smoothstep(amount, 0.6, 1)) / 2) * 2); // a downpour twice as dense as steady rain
     // The far veil: only in heavy rain, so a downpour greys the air out to the mist.
     const heavy = THREE.MathUtils.smoothstep(amount, 0.45, 0.95);
     this.far.visible = heavy > 0.01;
-    this.farMat.uniforms.uAmount.value = 0.75 * heavy;
-    this.farMat.uniforms.uLen.value = 0.5 + 0.4 * amount; // farther off, so longer to show at all
+    this.farMat.uniforms.uAmount.value = 1.0 * heavy;
+    this.farMat.uniforms.uLen.value = 0.8 + 0.7 * amount; // farther off, so longer to show at all
     this.far.geometry.setDrawRange(0, Math.ceil(this.far.geometry.getAttribute("aEnd").count * heavy / 2) * 2);
   }
 
