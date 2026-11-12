@@ -540,10 +540,13 @@ const CHECKS = {
       const links = await page.evaluate(() => [...document.querySelectorAll("#topbar a.nav")].map((a) => ({ href: a.href, text: a.textContent.trim() })));
       must(links.length >= 5, `the top bar has ${links.length} links: ${JSON.stringify(links)}`);
       const bad = [];
+      // Each link in its own tab: leaving this page mid-load would abort its textures (console noise, not a fault).
       for (const l of links) {
-        const r = await page.goto(l.href, { waitUntil: "load", timeout: 2 * MIN }).catch((e) => ({ status: () => String(e).split("\n")[0] }));
+        const tab = await page.context().newPage();
+        const r = await tab.goto(l.href, { waitUntil: "load", timeout: 2 * MIN }).catch((e) => ({ status: () => String(e).split("\n")[0] }));
         const st = r?.status?.() ?? "no response";
-        const bar = await page.locator("#topbar a.nav").count().catch(() => 0);
+        const bar = await tab.locator("#topbar a.nav").count().catch(() => 0);
+        await tab.close().catch(() => {});
         if (st !== 200 || bar < 5) bad.push(`${l.text} (${l.href}): HTTP ${st}, ${bar} bar links`);
       }
       must(!bad.length, `top bar links that don't open a page with the bar: ${bad.join("; ")}`);
