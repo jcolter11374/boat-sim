@@ -1641,6 +1641,7 @@ async function begin(): Promise<void> {
     }
     startMs = utc(game.boat!.start);
     page.ready = true;
+    sailedAt = performance.now();
     shownTo = shared ? lastHour(game.boat!) : 0;
     hour = shownTo;
     resetPois();
@@ -1911,14 +1912,52 @@ loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then(
 function resetPois(): void {
   poiSeen.clear();
   poiCards.hide(true);
+  poiHeld = [];
+  poiDock();
   if (page.ready && game.boat && hour > 0) passes(game.boat, 0, hour - 1e-6, pois, poiSeen);
   poiH = hour;
+}
+/** The first half minute of a voyage is for the boat and the sea: a history card reached
+ *  then waits in a small tab at the right edge until you open it (Elena, 12 Nov: Cape Henry
+ *  opened on top of the boat in the first seconds). Cards after that open as before. */
+const POI_QUIET_MS = 30_000;
+let sailedAt = -Infinity;
+let poiHeld: { p: Parameters<PoiCards["add"]>[0]; when: string }[] = [];
+function poiDock(): void {
+  let tab = document.getElementById("poidock") as HTMLButtonElement | null;
+  if (!poiHeld.length) {
+    tab?.remove();
+    return;
+  }
+  if (!tab) {
+    tab = document.createElement("button");
+    tab.id = "poidock";
+    tab.title = "Open the history notes you've passed";
+    Object.assign(tab.style, {
+      position: "fixed", right: "0", top: "50%", transform: "translateY(-50%)", zIndex: "6", padding: "10px 8px",
+      borderRadius: "10px 0 0 10px", borderRight: "none", writingMode: "vertical-rl", font: "600 12px system-ui, sans-serif",
+    });
+    tab.addEventListener("click", () => {
+      const held = poiHeld;
+      poiHeld = [];
+      poiDock();
+      for (const h of held) poiCards.add(h.p, h.when);
+    });
+    document.body.appendChild(tab);
+  }
+  tab.textContent = poiHeld.length === 1 ? "History nearby" : `History nearby (${poiHeld.length})`;
 }
 function poisReached(): void {
   if (!page.ready || !game.boat || !pois.length || hour < poiH) return;
   const ps = passes(game.boat, poiH, hour, pois, poiSeen);
   poiH = hour;
-  for (const p of ps) poiCards.add(p, `Day ${(p.h / 24).toFixed(1)}`);
+  const quiet = performance.now() - sailedAt < POI_QUIET_MS;
+  for (const p of ps) {
+    const when = `Day ${(p.h / 24).toFixed(1)}`;
+    if (quiet) poiHeld.push({ p, when });
+    else poiCards.add(p, when);
+  }
+  if (quiet && ps.length) poiDock();
   page.pois.shown.push(...ps.map((x) => x.poi.id));
 }
 
