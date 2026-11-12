@@ -73,8 +73,8 @@ export function triangle(fromDeg: number, centre: LatLon = ANNAPOLIS_COURSE, leg
     // Close-hauled on port, about 15 degrees off the windward mark (it's 30 degrees off the wind from here).
     heading: (fromDeg + 45) % 360,
     marks: [
-      { ...windward, name: "the windward mark" },
-      { ...wing, name: "the wing mark" },
+      { ...windward, name: "next mark (upwind)" }, // plain words for a first-timer (Leo)
+      { ...wing, name: "next mark (downwind)" },
       { ...start, name: "the finish" },
     ],
     radiusM: MARK_RADIUS_M,
@@ -111,7 +111,8 @@ export const BAY_WINDS = [180, 200, 225, 160, 315, 340, 0, 135];
 
 /** Practice best times, per course and breeze, in this browser only. */
 const BEST_KEY = "boatsim.practice.best.v1";
-export const bestKey = (c: CourseKind, b: Breeze) => `annapolis-${c}-${b}`;
+// The light run has had a fixed wind since the time trials (12 Nov), so its old times start afresh.
+export const bestKey = (c: CourseKind, b: Breeze) => `annapolis-${c === "light" ? "light-wsw" : c}-${b}`;
 export function readBest(key: string): number | null {
   try {
     const all = JSON.parse(localStorage.getItem(BEST_KEY) ?? "{}") as Record<string, number>;

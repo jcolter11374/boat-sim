@@ -163,6 +163,9 @@ export function bestSheet(t: TrimTable, plan: string, twsKn: number, twaDeg: num
 }
 
 /** The sails as the telltales show them, in words a non-sailor can act on. */
+/** How far outside the best sheets still counts as "Drawing well" (deg). */
+const GOOD_TOL = 0.5;
+
 export type SailState = "flapping" | "ease" | "good" | "in" | "stalled";
 export const SAIL_WORDS: Record<SailState, string> = {
   flapping: "Flapping: pull the sail in (Up)",
@@ -220,6 +223,8 @@ export interface WheelState {
   markTimes: number[];
   /** Ended in water too shallow for her keel. */
   aground: boolean;
+  /** How much the sails luff, 0..1, eased (luffTarget()). */
+  luff: number;
 }
 
 export class Wheel {
@@ -258,6 +263,7 @@ export class Wheel {
       done: false,
       mark: 0,
       markTimes: [],
+      luff: 0,
       aground: false,
     };
   }
@@ -285,9 +291,23 @@ export class Wheel {
     // Judged against the sweet spot, not the raw angle: running before the wind the best
     // trim is a stalled sail (it pushes by drag), so "stalled" means too tight for here.
     const b = this.best();
-    if (this.s.sheet >= b.lo - 0.5 && this.s.sheet <= b.hi + 0.5) return "good";
+    if (this.s.sheet >= b.lo - GOOD_TOL && this.s.sheet <= b.hi + GOOD_TOL) return "good";
     if (this.s.sheet > b.hi) return "in";
     return alpha > this.table.alpha_stall_deg + 4 ? "stalled" : "ease";
+  }
+
+  /**
+   * How much the sails are luffing (flapping at the front edge), 0..1, for the sail shader and
+   * the flog sound (agreed with Yuki and Felix, 12 Nov). From the sail's angle to the apparent
+   * wind: a flutter from 8 degrees, "Flapping" (0.6) by 2, and flogging (1) at -4 or head to wind.
+   */
+  luffTarget(): number {
+    const alpha = this.awa() - this.s.sheet;
+    const byTrim = alpha >= 8 ? 0 : alpha >= 2 ? 0.15 + ((8 - alpha) / 6) * 0.45 : Math.min(1, 0.6 + ((2 - alpha) / 6) * 0.4);
+    // Head to wind (closer than 25 degrees): the whole sail shakes, whatever the sheet.
+    const twa = Math.abs(this.twa());
+    const irons = twa >= 30 ? 0 : twa <= 25 ? 1 : (30 - twa) / 5;
+    return Math.max(byTrim, irons);
   }
 
   /** Tuck in a reef (deeper = +1) or shake one out (-1). */
@@ -375,6 +395,8 @@ export class Wheel {
     const tau = target > s.speedKn ? h.accelS : h.decelS;
     s.speedKn += (target - s.speedKn) * (1 - Math.exp(-dt / tau));
     // Heel follows the sails' push quickly (GUESS 1.5 s).
+    // The luff eases (about 0.3 s) so it doesn't jitter.
+    s.luff += (this.luffTarget() - s.luff) * (1 - Math.exp(-dt / 0.3));
     const heelTarget = s.overNow ? Math.max(l.heelDeg, this.table.heel_max_deg + 5) : l.heelDeg;
     s.heelDeg += (heelTarget - s.heelDeg) * (1 - Math.exp(-dt / 1.5));
     if (s.overNow && !this.wasOver) s.roundUps++;
@@ -474,3 +496,22 @@ export class Guide {
  * flips: she always leans away from the wind (Sam, 12 Nov: she was leaning into it).
  */
 export const rollFromWheel = (heelDeg: number): number => (-heelDeg * Math.PI) / 180;
+
+/**
+ * The sail gauge as a spirit level (Ines, 12 Nov: a green word over an almost empty bar read
+ * wrong). The sweet spot is always the green band in the middle (40-60% of the gauge); the
+ * needle sits in it when the trim is right and slides off toward "pulled in" (left) or
+ * "let out" (right), reaching the end 30 degrees past the band. Percentages of the gauge.
+ */
+export function trimGauge(sheet: number, lo: number, hi: number): { needle: number; bandLeft: number; bandWidth: number } {
+  const SLACK = 30;
+  // The same tolerance as sailState()'s "good", so the needle is inside the green exactly when the
+  // label says "Drawing well" (Ines), and drawn well inside it (42-58%), never on its edge.
+  const a = lo - GOOD_TOL;
+  const b = hi + GOOD_TOL;
+  let needle: number;
+  if (sheet < a) needle = 38 - Math.min((a - sheet) / SLACK, 1) * 38;
+  else if (sheet > b) needle = 62 + Math.min((sheet - b) / SLACK, 1) * 38;
+  else needle = 42 + ((sheet - a) / (b - a)) * 16;
+  return { needle, bandLeft: 40, bandWidth: 20 };
+}
