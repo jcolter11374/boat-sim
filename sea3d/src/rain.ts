@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 
-const BOX = 36; // m, the cube of rain kept round the camera
+const BOX = 26; // m, the cube of rain kept round the camera
 const FALL = 9; // m/s, a raindrop's falling speed
 
 const vert = /* glsl */ `
@@ -26,11 +26,16 @@ void main() {
   vec3 p = aSeed.xyz * uBox + vel * uTime;
   p = mod(p - uCam + 0.5 * uBox, uBox) - 0.5 * uBox + uCam;
   // The streak: the drop's path over a short exposure.
-  p -= normalize(vel) * uLen * aEnd;
+  // Shorter close to the lens, so the nearest drops are flecks, not lines across the frame.
+  float dh = length(p - uCam);
+  p -= normalize(vel) * uLen * clamp(dh / 7.0, 0.15, 1.0) * aEnd;
   vEnd = aEnd;
   vec3 d = p - uCam;
-  vFade = (1.0 - smoothstep(0.35 * uBox, 0.5 * uBox, length(d))) * smoothstep(0.6, 2.5, length(d));
-  vBright = 0.35 + 0.65 * fract(aSeed.w * 7.31 + aSeed.x * 3.7); // drops catch the light unevenly
+  // Close drops are the streaks you see; a few metres off they thin into a grey texture.
+  float dl = length(d);
+  vFade = (1.0 - smoothstep(1.5, 0.45 * uBox, dl)) * (1.0 - smoothstep(0.35 * uBox, 0.5 * uBox, dl)) * smoothstep(1.2, 3.0, dl);
+  float b = fract(aSeed.w * 7.31 + aSeed.x * 3.7);
+  vBright = 0.12 + 0.88 * b * b; // drops catch the light unevenly: most dim, a few bright
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }`;
 const frag = /* glsl */ `
@@ -65,7 +70,7 @@ export class Rain {
   private mat: THREE.ShaderMaterial;
   amount = 0;
 
-  constructor(drops = 18000) {
+  constructor(drops = 40000) {
     const seed = new Float32Array(drops * 2 * 4);
     const end = new Float32Array(drops * 2);
     let s = 12345;
@@ -119,8 +124,8 @@ export class Rain {
     // In a gale they fly nearly flat; in light air they barely lean.
     const k = 0.4 + 0.3 * THREE.MathUtils.smoothstep(Math.hypot(windX, windZ), 8, 20);
     u.uWind.value.set(windX * k, windZ * k);
-    u.uAmount.value = 0.75 * Math.sqrt(amount); // drizzle is faint, a downpour clear but never a wall
-    u.uLen.value = 0.35 + 0.5 * amount; // heavier drops, longer streaks
+    u.uAmount.value = 0.9 * Math.sqrt(amount); // drizzle is faint, a downpour a texture but never a wall
+    u.uLen.value = 0.16 + 0.24 * amount; // short streaks; heavier drops a little longer
     // A little darker than the pale storm sky, so the streaks read against it as well as against the sea.
     u.uColor.value.setRGB(0.3 + 0.32 * light, 0.33 + 0.34 * light, 0.38 + 0.36 * light);
     // Show only a share of the drops in light rain.

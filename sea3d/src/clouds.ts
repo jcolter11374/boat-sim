@@ -456,6 +456,10 @@ void main() {
   // (Low, or no post-processing); no-ops when drawn into the post-processing target.
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  // Where the sky is haze it is the fog's own colour, put on after tone mapping as three
+  // puts fog on the sea, so the fogged-out sea meets the sky without a line.
+  float asFog = max(hz2 * deckAmt, hb);
+  gl_FragColor = vec4(mix(gl_FragColor.rgb, uHaze, asFog), max(gl_FragColor.a, asFog));
 }`;
 
 const BANK_H = 70; // m, how tall a fog bank stands
@@ -731,7 +735,7 @@ export class Clouds {
     // Rain is a mist of its own, on the same haze colour as the sea's far fade: drizzle
     // softens the horizon, and a downpour shuts the world in to a few hundred metres
     // (about 400 m by 6 mm/h). Eased in log distance so the close-in is even, not sudden.
-    const mist = 0.35 * SM(this.rain, 0.1, 1) + 0.65 * SM(this.rain, 1, 6);
+    const mist = 0.5 * SM(this.rain, 0.1, 1) + 0.5 * SM(this.rain, 1, 6);
     if (mist > 0) {
       const far = Math.exp(THREE.MathUtils.lerp(Math.log(fog.far), Math.log(400), mist));
       fog.far = Math.min(fog.far, far);

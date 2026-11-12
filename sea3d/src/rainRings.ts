@@ -13,7 +13,11 @@ import * as THREE from "three";
 export const rainUniforms = {
   /** x: how hard it rains here 0..1; y: Low quality (1) draws one layer only. */
   uRain: { value: new THREE.Vector2(0, 0) },
+  /** The passing showers (rainbands.ts), for the sea under them: world x, z (m), width (m),
+   *  and how hard it rains there 0..1 (0 when no showers show). Fixed at RAIN_SHOWERS. */
+  uShowers: { value: Array.from({ length: 10 }, () => new THREE.Vector4()) },
 };
+export const RAIN_SHOWERS = 10;
 
 /** Per frame: rate 0..1 (rainFromRate) and the shower over the boat 0..1 (bands.local). */
 export function setRainOnSea(rate: number, local: number, low: boolean): void {
@@ -22,6 +26,7 @@ export function setRainOnSea(rate: number, local: number, low: boolean): void {
 
 export const RAIN_RINGS = /* glsl */ `
 uniform vec2 uRain;
+uniform vec4 uShowers[10]; // x, z, width, dense: weight = dense * (1 - smoothstep(0.4, 1.1, dist / (width / 2)))
 float rrHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
 // One layer of rings: cell size in metres, a seed, how many cells have a drop (0..1).
 vec2 rainLayer(vec2 p, float cell, float t, float dens, float seed) {
@@ -46,7 +51,7 @@ vec2 rainLayer(vec2 p, float cell, float t, float dens, float seed) {
   // The splash: a sharp little spike as the drop lands.
   float sx = dl / 0.03;
   g += -2.0 * sx * exp(-sx * sx) * 0.4 * size * (1.0 - smoothstep(0.0, 0.12, age)) / 0.03;
-  return (d / dl) * g * 0.009 / cell;
+  return (d / dl) * g * 0.014 / cell;
 }
 vec2 rainSlope(vec2 p, float t, float fp) {
   if (uRain.x < 0.01) return vec2(0.0);
