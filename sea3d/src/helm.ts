@@ -690,9 +690,22 @@ function drawWhen(force = false): void {
   $("c-date").title = $("when").textContent ?? "";
 }
 
+/** The battery level last told: a fall of 30 points from it is told again, without pausing. */
+let socTold: number | null = null;
+function batteryNote(s: Status): void {
+  if (hidden() || s.over) return;
+  const soc = s.boat.soc;
+  if (socTold === null || soc > socTold) socTold = soc; // a sunny day raises the bar
+  else if (soc <= socTold - 0.3 && soc > 0.2) {
+    socTold = soc;
+    note(`The battery is down to ${Math.round(soc * 100)}%.`, `Day ${s.day.toFixed(1)}`, TONE_COLOUR.info);
+  }
+}
+
 function showStatus(): void {
   const s = shown ?? page.status;
   if (!s) return;
+  batteryNote(s);
   showTrimChip(page.status ?? s);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
@@ -987,9 +1000,9 @@ async function clockRun(): Promise<void> {
     present();
     chartDirty = true;
     if (stopped === "battery") {
-      // A big drop in the battery is news, not a choice: a note, and the clock runs on.
+      // Reaching the reserve is news, not a choice: a note, and the clock runs on.
       // The night call ("ease off before dark?") is the battery stop with a choice in it (Leo, F5).
-      armed = untilOptions(); // the next one 30 points lower, or the reserve
+      armed = untilOptions(); // only the reserve stops it now; big drops are batteryNote's
       const d = `Day ${game.status!.day.toFixed(1)}`;
       whenAt(game.status!.day * 24, () => note(stopText(stopped, game.status), d, TONE_COLOUR.info));
     } else if (stopped !== "time") {
@@ -1594,7 +1607,9 @@ function untilOptions(): Record<string, number | boolean> {
   const wind = w ? Math.hypot(w.wind_u, w.wind_v) : 0;
   // No hours: the simulator stops by itself after 3 days of quiet sailing.
   const o: Record<string, number | boolean> = { breakdown: true };
-  if (soc > 0.2) o.soc_below = Math.max(0.1, soc - 0.3); // a big drop, or the reserve
+  // Only the 20% reserve stops the clock: a big drop is a note that doesn't pause (batteryNote;
+  // Leo, Rosa, 12 Nov: a stop with nothing to choose becomes a toast).
+  if (soc > 0.2) o.soc_below = 0.2;
   if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
   return o;
 }
