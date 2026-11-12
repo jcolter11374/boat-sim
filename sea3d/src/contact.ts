@@ -63,14 +63,26 @@ const collarFrag = /* glsl */ `
 const sprayVert = /* glsl */ `
   attribute float aAlpha;
   attribute float aSize;
+  attribute vec3 aVel;
   varying float vAlpha;
   varying vec3 vW;
+  varying vec2 vDir;     // the drop's motion on screen (unit)
+  varying float vStretch; // streak length over width
   void main() {
     vAlpha = aAlpha;
     vW = (modelMatrix * vec4(position, 1.0)).xyz;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = max(aSize * (320.0 / -mv.z), 1.5);
-    gl_Position = projectionMatrix * mv;
+    // A drop drawn as a streak along its motion (Ines r8: streaks, not dots): where it
+    // will be 1/30 s on, on screen, sets the streak's direction and length.
+    vec4 c0 = projectionMatrix * mv;
+    vec4 c1 = projectionMatrix * (mv + viewMatrix * vec4(aVel * 0.033, 0.0));
+    vec2 sd = c1.xy / c1.w - c0.xy / c0.w;
+    float base = max(aSize * (320.0 / -mv.z), 1.5);
+    float lenPx = length(sd) * 0.5 * 900.0; // GUESS: about the screen height in px
+    vStretch = clamp(1.0 + lenPx / base, 1.0, 3.5);
+    vDir = length(sd) > 1e-6 ? normalize(sd) : vec2(0.0, 1.0);
+    gl_PointSize = base * vStretch;
+    gl_Position = c0;
   }
 `;
 const sprayFrag = /* glsl */ `
@@ -78,18 +90,23 @@ const sprayFrag = /* glsl */ `
   uniform float uLight;
   varying float vAlpha;
   varying vec3 vW;
+  varying vec2 vDir;
+  varying float vStretch;
   void main() {
-    vec2 d = gl_PointCoord - 0.5;
-    float r = dot(d, d) * 4.0;
+    vec2 c = (gl_PointCoord - 0.5) * 2.0;
+    c.y = -c.y; // gl_PointCoord runs down the screen
+    float along = dot(c, vDir);
+    float across = dot(c, vec2(-vDir.y, vDir.x)) * vStretch;
+    float r = along * along + across * across;
     if (r > 1.0) discard;
-    gl_FragColor = vec4(vec3(0.9, 0.94, 0.97) * (uLight + foamLamp(vW)), vAlpha * exp(-3.0 * r) * (1.0 - r));
+    gl_FragColor = vec4(vec3(0.97, 0.99, 1.0) * (uLight + foamLamp(vW)), min(1.0, 1.3 * vAlpha * exp(-1.8 * r) * (1.0 - r)));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
 
 const SPRAY: Record<Quality, number> = { low: 0, high: 600 };
-const SPRAY_LIFE = 1.3; // s
+const SPRAY_LIFE = 1.0; // s: a burst is gone in about a second (Ines r8)
 /** Water rising at the bow faster than this (m/s) meets it as a steep face (GUESS, by eye). */
 const CREST_RISE = 0.8;
 
@@ -131,7 +148,7 @@ export class Contact {
     const small = this.spec.length < 5;
     // A small boat is swept end to end; a yacht takes it over the bow (GUESS by eye).
     this.over = small ? { t, dur: 2.5, h: Math.min(1, h), at: 0.3, w: 0.9 } : { t, dur: 2.0, h: Math.min(1, h), at: 0.75, w: 0.35 };
-    this.pending = Math.max(this.pending, 0.35 * Math.min(1, h)); // the hit throws spray
+    this.pending = Math.max(this.pending, 0.6 * Math.min(1, h)); // the hit throws spray
   }
 
   /** A breaking crest hits the boat now (a knockdown): a big sheet of spray next frame, 0..1. */
@@ -253,6 +270,7 @@ export class Contact {
     sg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.n * 3), 3));
     sg.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(this.n), 1));
     sg.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(this.n), 1));
+    sg.setAttribute("aVel", new THREE.BufferAttribute(new Float32Array(this.n * 3), 3));
     this.spray = new THREE.Points(
       sg,
       new THREE.ShaderMaterial({ vertexShader: sprayVert, fragmentShader: sprayFrag, uniforms: { uLight: { value: 1 }, ...FOAM_LAMP_UNIFORMS }, transparent: true, depthWrite: false }),
@@ -323,7 +341,8 @@ export class Contact {
       const env = x < 0 || x > o.dur ? 0 : o.h * Math.min(1, x / 0.12) * Math.exp(-2.2 * x / o.dur);
       this.wash?.setOver(env, o.at, o.w);
       const small = this.spec.length < 5;
-      this.sink = small && x >= 0 && x < 1.4 ? 0.22 * o.h * Math.sin(Math.PI * Math.min(1, x / 1.4)) ** 0.7 : 0;
+      // Down fast as the crest lands, back up within the second (so the foam shows after).
+      this.sink = small && x >= 0 && x < 0.9 ? 0.22 * o.h * (x < 0.25 ? Math.sin((Math.PI / 2) * (x / 0.25)) : 0.5 + 0.5 * Math.cos((Math.PI * (x - 0.25)) / 0.65)) : 0;
     }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
     this.water?.update({ wetH: 0.03 + 0.03 * Math.min(speedK, 1.2) + 0.05 * seaK, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light });
@@ -368,7 +387,7 @@ export class Contact {
       if (this.pending > 0) {
         if (t - this.over.t > 0.5) this.greenWater(t, this.pending);
         burst += Math.round(200 * this.pending);
-        crest = Math.max(crest, 2.5 * this.pending);
+        crest = Math.max(crest, 1.6 * this.pending);
         this.pending = 0;
       }
       if (burst >= 10) { this.shown.bursts++; this.shown.lastBurst = burst; }
@@ -380,7 +399,7 @@ export class Contact {
         const i = this.next;
         this.next = (this.next + 1) % this.n;
         const sideSign = Math.random() < 0.5 ? -1 : 1;
-        const back = Math.random() ** 1.5 * 0.25 * this.spec.length; // most of it right at the stem
+        const back = Math.random() ** 2.5 * 0.25 * this.spec.length; // most of it right at the stem
         this.sp[i * 3] = bx - back;
         this.sp[i * 3 + 2] = bz + sideSign * (this.beam * 0.3 * Math.min(1, back * 4 + 0.2));
         const [wx, wz] = toWorld(this.sp[i * 3], this.sp[i * 3 + 2], place);
@@ -396,7 +415,7 @@ export class Contact {
         this.sv[i * 3 + 1] = power * (1.0 + jit * Math.random()) * (sheet ? aftK * 1.25 : 1) + Math.max(rise, 0); // thrown off water that is itself rising
         this.sv[i * 3 + 2] = sideSign * power * (0.7 + jit * Math.random());
         this.born[i] = t;
-        this.mist[i] = Math.random() < 0.2 ? 1 : 0;
+        this.mist[i] = Math.random() < 0.08 ? 1 : 0;
       }
       // Green water pouring off the gunwale: drops spill out over both sides where the
       // water on deck is, falling back into the sea (Ines r5: runs off broken and white).
@@ -404,7 +423,7 @@ export class Contact {
         const o = this.over;
         const x = t - o.t;
         if (x >= 0.1 && x <= 1.6) {
-          const pour = Math.round(8 * o.h * Math.exp(-1.5 * x) + Math.random() * 0.7);
+          const pour = Math.round(4 * o.h * Math.exp(-1.5 * x) + Math.random() * 0.6);
           for (let e = 0; e < pour; e++) {
             const i = this.next;
             this.next = (this.next + 1) % this.n;
@@ -426,9 +445,16 @@ export class Contact {
       const [wwx, wwz] = s.wind ?? [0, 0];
       const cy = Math.cos(place.yaw), sy = Math.sin(place.yaw);
       const windB: [number, number] = [wwx * cy - wwz * sy, wwx * sy + wwz * cy];
+      // Spray carries at most a couple of boat lengths downwind before it's gone (Ines r8).
+      {
+        const wl = Math.hypot(windB[0], windB[1]);
+        const cap = (2.2 * this.spec.length) / SPRAY_LIFE;
+        if (wl > cap) { windB[0] *= cap / wl; windB[1] *= cap / wl; }
+      }
       const ppos = this.spray.geometry.attributes.position.array as Float32Array;
       const alpha = this.spray.geometry.attributes.aAlpha.array as Float32Array;
       const size = this.spray.geometry.attributes.aSize.array as Float32Array;
+      const vel = this.spray.geometry.attributes.aVel.array as Float32Array;
       let live = 0;
       for (let i = 0; i < this.n; i++) {
         const age = t - this.born[i];
@@ -449,17 +475,22 @@ export class Contact {
         ppos[i * 3] = wx;
         ppos[i * 3 + 1] = this.sp[i * 3 + 1];
         ppos[i * 3 + 2] = wz;
+        const vbx = this.sv[i * 3] - s.speed, vbz = this.sv[i * 3 + 2];
+        vel[i * 3] = vbx * cy + vbz * sy;
+        vel[i * 3 + 1] = this.sv[i * 3 + 1];
+        vel[i * 3 + 2] = -vbx * sy + vbz * cy;
         const k = age / SPRAY_LIFE;
         // Drops spread into a mist as they fly: bigger, softer and fainter with age.
         // A sheet is many small drops and a few soft puffs of mist that hang a little longer.
         const m = this.mist[i];
-        alpha[i] = (m ? 0.3 * (1 - k) : 0.95 * (1 - k) ** 1.2) * Math.min(1, age * 10);
+        alpha[i] = (m ? 0.2 * (1 - k) : 0.95 * (1 - k) ** 1.5) * Math.min(1, age * 10);
         size[i] = (m ? 0.25 + 0.9 * k : 0.07 + 0.14 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
         live++;
       }
       this.spray.geometry.attributes.position.needsUpdate = true;
       this.spray.geometry.attributes.aAlpha.needsUpdate = true;
       this.spray.geometry.attributes.aSize.needsUpdate = true;
+      this.spray.geometry.attributes.aVel.needsUpdate = true;
       this.spray.material.uniforms.uLight.value = s.light;
       this.shown.spray = live;
     }

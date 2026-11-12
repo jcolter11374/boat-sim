@@ -76,8 +76,8 @@ const BODY = /* glsl */ `
       vec2 qd = vec2(along * 7.0, vSeaW.y * 2.5 + uSeaTime * 1.6); // drains downward
       float fn = iwNoise(qd) * 0.5 + iwNoise(qd * 2.7 + 5.3) * 0.3 + iwNoise(vSeaW.xz * 14.0) * 0.2;
       float up = smoothstep(0.08, 0.3, h); // on deck and the topsides, not at the waterline
-      float foamOn = up * smoothstep(0.82 - 0.3 * ovw, 0.92 - 0.25 * ovw, fn);
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.88, 0.92, 0.94) * uWetLight, 0.9 * foamOn);
+      float foamOn = up * smoothstep(0.74 - 0.38 * ovw, 0.86 - 0.3 * ovw, fn);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.95, 0.97, 0.98) * uWetLight, foamOn);
     }
   }
 }
