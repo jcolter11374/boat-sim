@@ -1204,6 +1204,58 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Manual: #400 (Marco), ships at sea live. ?ship=container puts one under way 900 m off the
+  // starboard bow, crossing ahead; window.__traffic.ships() says where. Checks she's there, under
+  // way (speed > 0, so the bow wave shows), runs without errors, and prints frames as she crosses.
+  "look-ships": {
+    manual: true,
+    path: "helm.html?ship=container",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        if (BROWSER !== "chromium") return;
+        const path = `look-${name}.jpg`;
+        if (!(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.evaluate(() => typeof window.__traffic?.ships === "function"))) throw new SkipCheck("this build has no traffic hook (Marco's traffic patch not deployed)");
+      await page.click("#go", { timeout: 15_000 });
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+      // Paused: traffic moves in boat time, and any fast-forward carries her off (Marco). The frame
+      // shows her where she was put, 900 m off the starboard bow.
+      await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
+      const ships = () => page.evaluate(() => window.__traffic.ships().map((s) => ({ kind: s.kind, d: Math.round(s.distance ?? Math.hypot(s.x, s.z)), b: Math.round(s.bearing ?? 0), sp: s.speed, anch: s.anchored })));
+      const s0 = await ships();
+      const ours = s0.filter((s) => /container/.test(s.kind));
+      must(ours.length, `?ship=container didn't put a container ship near us: ${JSON.stringify(s0)}`);
+      must(ours.some((s) => !s.anch && s.sp > 0), `the container ship isn't under way (speed ${ours.map((s) => s.sp).join(", ")}), so there's no bow wave`);
+      await page.waitForTimeout(4000);
+      await shot("ships-container");
+      const c0 = ours[0];
+      // Close: the same ship started 200 m off (&near=, Marco).
+      if (BROWSER === "chromium") {
+        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+        await page.goto(SITE + "helm.html?ship=container&near=200", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+        await page.click("#go", { timeout: 15_000 });
+        await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+        await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+        await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+        await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
+        await page.waitForTimeout(4000);
+        await shot("ships-container-200m");
+      }
+      return `container ship at ${c0.d} m on bearing ${c0.b}°, speed ${c0.sp}; ${s0.length} ships in all${shots.length ? `; frames ${shots.join(", ")}` : ""}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
