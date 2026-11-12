@@ -7,6 +7,7 @@
 
 import * as THREE from "three";
 import { R_EARTH } from "./land/shader";
+import { RAIN_SHOWERS, rainUniforms } from "./rainRings";
 
 const SHAFTS = 10;
 const FIELD = 6000; // m, the square of sky the bands drift through, kept round the camera
@@ -38,17 +39,21 @@ float vn(vec2 p) {
   return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y);
 }
 void main() {
-  float edge = 1.0 - smoothstep(0.35, 1.0, abs(vUv.x));
+  // Sheets lean downwind and their edges are ragged, not ruled.
+  float x = vUv.x + uSlant * 0.2 * (0.5 - vUv.y); // leans about the middle, so it stays on its quad
+  float rag = vn(vec2(vUv.y * 4.0 + vShaft.x * 30.0, uTime * 0.03)) - 0.5;
+  float edge = (1.0 - smoothstep(0.2, 0.85, abs(x) + 0.3 * rag)) * (1.0 - smoothstep(0.8, 1.0, abs(vUv.x)));
   // Thick under the cloud, ragged where it meets the sea, lost in the cloud at the top.
   // Down to the waterline (a shower reaches the sea), lost into its cloud at the top.
   float up = smoothstep(0.0, 0.015, vUv.y) * (1.0 - smoothstep(0.75, 1.0, vUv.y));
   float foot = 1.0 - smoothstep(0.0, 0.1, vUv.y); // the misty foot where the rain lands
   // Streaks of heavier rain, leaning with the wind, slowly shifting.
-  float s = vn(vec2(vUv.x * 7.0 + vUv.y * uSlant + vShaft.x * 50.0, vUv.y * 1.5 - uTime * 0.05));
-  s = 0.45 + 0.55 * s + 0.25 * vn(vec2(vUv.x * 23.0 + vUv.y * uSlant * 3.0, vShaft.x * 9.0));
+  // Soft sheets of heavier and lighter rain (broad noise, no fine vertical comb).
+  float s = vn(vec2(x * 2.2 + vShaft.x * 50.0, vUv.y * 1.3 - uTime * 0.05));
+  s = 0.65 + 0.45 * s + 0.2 * vn(vec2(x * 5.0 + vShaft.x * 9.0, vUv.y * 3.0 - uTime * 0.08));
   float near = smoothstep(30.0, 150.0, vDist);
   float far = 1.0 - smoothstep(0.7 * uFar, 1.05 * uFar, vDist); // lost in the haze
-  float a = uAmount * vShaft.y * edge * up * s * near * far * (1.05 + 0.25 * foot);
+  float a = uAmount * vShaft.y * edge * up * s * near * far * (1.5 + 0.2 * foot);
   if (a < 0.003) discard;
   vec3 c = mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.45);
   c = mix(c, uHaze * 1.08, 0.55 * foot); // spray off the sea, paler than the rain above it
@@ -136,6 +141,7 @@ export class RainBands {
       const x = wrap(sh.x + windX * 0.9 * t, cx);
       const z = wrap(sh.z + windZ * 0.9 * t, cz);
       const d = Math.hypot(x - cx, z - cz);
+      if (i < RAIN_SHOWERS) rainUniforms.uShowers.value[i].set(x, z, sh.width, amount > 0.02 ? sh.dense * THREE.MathUtils.smoothstep(amount, 0.02, 0.25) : 0);
       // Under a band: full in its middle, easing off over its edge.
       const r = d / (sh.width / 2);
       under = Math.max(under, sh.dense * (1 - THREE.MathUtils.smoothstep(r, 0.4, 1.1)));
@@ -165,7 +171,7 @@ export class RainBands {
     u.uTime.value = t;
     u.uSlant.value = THREE.MathUtils.clamp(Math.hypot(windX, windZ) / 15, 0, 1.5);
     const l = 0.2 + 0.8 * light;
-    u.uColor.value.copy(fog.color).multiplyScalar(0.32 * l + 0.05); // darker than the haze, so a curtain reads against it
+    u.uColor.value.copy(fog.color).multiplyScalar(0.26 * l + 0.04); // darker than the haze, so a curtain reads against it
     u.uHaze.value.copy(fog.color);
   }
 
