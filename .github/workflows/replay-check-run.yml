@@ -39,8 +39,9 @@ jobs:
           d = Path("sea3d/public/voyages")
           names = os.environ.get("FILES", "").split()
           if not names:
-              idx = json.loads((d / "index.json").read_text())["voyages"]
-              names = [min(idx, key=lambda e: e["days"])["file"]] if idx else []
+              # Every committed replay, every boat (#335: checking only the
+              # shortest one let replays with a mid-voyage failure go stale).
+              names = sorted(f.name for f in d.glob("voyage_*.json"))
           reps = [json.loads((d / n).read_text()) for n in names]
           if reps:
               t0 = min(datetime.fromisoformat(r["start"]) for r in reps)
@@ -78,4 +79,4 @@ jobs:
         run: python -m boatsim.oceandata fetch-era5 ${{ steps.pick.outputs.era5_from }} ${{ steps.pick.outputs.era5_to }} --workers 4
       - name: Re-simulate and compare
         if: steps.pick.outputs.files != '' && !inputs.warm_only
-        run: python -m boatsim.runner.replay verify ${{ steps.pick.outputs.files }}
+        run: python -m boatsim.runner.replay verify --workers 4 ${{ steps.pick.outputs.files }}

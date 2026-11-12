@@ -50,7 +50,7 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
-import { seaTestFrom } from "./seaTest";
+import { forcedSea, seaTestFrom } from "./seaTest";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { seaUniforms } from "./seaSurface";
@@ -67,7 +67,7 @@ import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
-import { OceanSound } from "./sound";
+import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { loadMyBoat } from "./myboat";
 
@@ -329,6 +329,13 @@ function seaTarget(rep: Replay, hour: number): number {
     live.setSystems(SEATEST.sea.ws, SEATEST.sea.s1, null);
     return Math.hypot(SEATEST.sea.ws.hs, SEATEST.sea.s1?.hs ?? 0);
   }
+  if (status.force.hs >= 0) {
+    // Forced for pictures and tests (Iris's storm sequence): one wind sea of that height, downwind.
+    seaNow = null;
+    const [wu, wv] = windAt(rep, hour);
+    live.setSystems(forcedSea(status.force.hs, wu, wv), null, null);
+    return Math.max(status.force.hs, 0.05);
+  }
   if (PLACE?.fetch) {
     // A sheltered harbour: only the local wind's chop, running downwind.
     seaNow = null;
@@ -398,7 +405,7 @@ const status = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
-  ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } } as Traffic["shown"],
+  ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, bulk: 0, fishing: 0 } } as Traffic["shown"],
   /** The wreck showing through the water below, if any (its id), and the catalogue stars in the sky. */
   wreck: "",
   stars: 0,
@@ -463,7 +470,7 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1 },
+  force: { cloud: -1, fog: -1, wind: -1, hs: -1 }, // hs: a forced wind sea (m), for pictures and tests
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
@@ -474,7 +481,7 @@ const status = {
    * Pictures of the sea (with ?seatest=): "chase" (the page's own view), "long"
    * (20 degree lens, 2.5 m up, 140 m off with the sun behind the boat) or "over"
    * (45 m up, looking down at the boat) or "low" (from a boat 40 m off, the
-   * lens 2 m above the water there, riding its own waves: the troughs hide the boat).
+   * lens 1.5 m above the water there (seated in a small boat), riding its own waves: the troughs hide the boat).
    */
   view: (kind: "chase" | "long" | "over" | "low"): void => {
     photoBoat = kind === "low";
@@ -552,6 +559,35 @@ function showWreck(lat: number, lon: number): void {
 const poiSeen = new Set<string>();
 let poiH = 0;
 const poiCards = new PoiCards();
+/** The history card hangs just below the dials, as wide as they are, and grows downward, so it
+ *  never covers the Equipment rows and stops above the time bar (Leo, #378). */
+function poiPlace(): void {
+  const root = document.documentElement.style;
+  const hud = document.getElementById("hud")?.getBoundingClientRect();
+  if (!hud?.height) {
+    for (const k of ["--poi-top", "--poi-bottom", "--poi-max", "--poi-w"]) root.removeProperty(k);
+    document.documentElement.classList.remove("poi-tight");
+    return;
+  }
+  const tr = document.getElementById("transport")?.getBoundingClientRect();
+  const top = Math.round(hud.bottom + 6);
+  const floor = tr?.height ? tr.top - 6 : innerHeight - 12;
+  // Narrow windows: the Equipment rows wrap and push the card down, so it takes the free
+  // water between the map and the right edge instead, to keep long stories from scrolling.
+  const map = document.getElementById("chartbox")?.getBoundingClientRect();
+  const wide = map?.width && innerWidth < 1100 ? Math.min(520, innerWidth - 12 - (map.right + 12)) : 0;
+  root.setProperty("--poi-w", `${Math.round(Math.max(hud.width, wide))}px`);
+  document.documentElement.classList.toggle("poi-tight", innerWidth < 1100); // drops "N more nearby" there
+  root.setProperty("--poi-top", `${top}px`);
+  root.setProperty("--poi-bottom", "auto");
+  root.setProperty("--poi-max", `${Math.max(120, Math.round(floor - top))}px`);
+}
+{
+  const hud = document.getElementById("hud");
+  if (hud) new ResizeObserver(poiPlace).observe(hud);
+  addEventListener("resize", poiPlace);
+  poiPlace();
+}
 loadPois(new URL(params.get("pois") ?? "./pois.json", location.href).href).then((p) => {
   pois = p;
   status.pois.loaded = p.length;
@@ -569,7 +605,7 @@ function poisReached(): void {
   if (!rep || !pois.length || hour < poiH) return;
   const ps = passes(rep, poiH, hour, pois, poiSeen);
   poiH = hour;
-  for (const p of ps) poiCards.add(p, `Day ${(p.h / 24).toFixed(1)}`);
+  for (const p of ps) poiCards.add(p); // no day here: the Day dial and the time bar already show it (Leo)
   status.pois.shown.push(...ps.map((x) => x.poi.id));
 }
 
@@ -895,6 +931,12 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setPlaying(!playing);
   }
+  // N: sound on or off, as on every 3D page (one key, one meaning).
+  const t = e.target as HTMLElement | null;
+  if (e.code === "KeyN" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
+    e.preventDefault();
+    sound.toggle();
+  }
 });
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -1083,6 +1125,7 @@ const cine = new Cinema({
   cloud: () => clouds.cover,
   landmark: () => (island ? PLACE!.look : null),
   toggleSound: () => sound.toggle(),
+  fade: (sec) => sound.duck(sec),
   scale: () => viewScale,
 });
 const sound = new OceanSound();
@@ -1300,12 +1343,18 @@ renderer.setAnimationLoop(() => {
       if (fresh) liveHud(tracked);
     }
     status.hour = hour;
+    sound.rig = rigFor(boatKey);
+    sound.length = SPEC[boatKey].length;
+    const feel = smoothYaw != null ? apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)) : null;
+    if (contact?.splash) sound.splash(contact.splash);
     sound.update(dt, {
       wind: Math.hypot(wu, wv),
       hs,
       tp: valueAt(rep, rep.tp, hour) ?? 3 + 2.5 * Math.sqrt(hs),
       rain: rain.amount,
       near: camera.position.distanceTo(controls.target),
+      stw,
+      apparent: feel ? Math.hypot(feel.x, feel.z) : undefined,
     });
   }
   if (photoBoat) camera.lookAt(controls.target); // the orbit controls would lift it above the boat
@@ -1315,7 +1364,7 @@ renderer.setAnimationLoop(() => {
     if (camera.position.y < floor) camera.position.y = floor;
     // Test view "low": the lens rides the water where it is, not the boat's heave.
     if (photoBoat) {
-      camera.position.y = floor - 0.35 + 2 + 0.5 * sea.detailHeightAt(camera.position.x, camera.position.z);
+      camera.position.y = floor - 0.35 + 1.5 + 0.5 * sea.detailHeightAt(camera.position.x, camera.position.z);
       camera.lookAt(controls.target);
     }
   }

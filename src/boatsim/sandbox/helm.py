@@ -104,6 +104,12 @@ LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the b
 SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
 PASS_MARGIN_KM = 1.0  # a lead change counts once the other boat is this far clear (Maya, 11 Nov)
 PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 11 Nov)
+# A pass only stops the clock when the lead has swung by this much: the old
+# leader's best margin plus the new leader's margin. Smaller passes are a quiet
+# note (status "last_pass"). Leo's play, 12 Nov: a 1 km pass stopping the clock
+# felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
+PASS_STOP_SWING_KM = 25.0
+OUTLOOK_HOURS = 48.0  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
 def day_seed(start: datetime) -> int:
@@ -367,6 +373,10 @@ class Game:
         # leader after that is a pass.
         self.leader: str | None = None
         self.last_pass: str | None = None
+        # The current leader's best margin (km) since it took the lead, and the
+        # latest pass: who, when, how big the swing was, and whether it stopped.
+        self.lead_best_km = 0.0
+        self.pass_note: dict | None = None
         self.close_armed = self._land_km() > LAND_CLOSE_KM
         self.last_close = False
         self._events_seen = 0  # mine's log events already looked at (_step)
@@ -451,8 +461,6 @@ class Game:
         mean speed through the water (m/s), battery change (0-1), km made
         towards the finish, and the hours it actually sailed (shorter if it
         finished, ran aground or reached the end of the weather)."""
-        from boatsim.oceandata.grid import OutsideCoverage
-
         if self.mode != "hands_on":
             raise ValueError("a preview is for hands-on games")
         if heading == AUTO and (sails is not None or engine is not None):
@@ -461,15 +469,24 @@ class Game:
         c = v.c
         # Share what is read-only and big (the weather, the land); copy the rest.
         memo = {id(x): x for x in (c.env, c.forecast, c.land) if x is not None}
-        w = copy.deepcopy(v, memo)
-        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
-        _no_breakdowns(w.c)
         if heading == AUTO:
             steer, base = copy.deepcopy(self._auto, memo)
         else:
             steer = copy.deepcopy(self.helm, memo)
             steer.set_order(heading, power, sails, engine)
             base = copy.deepcopy(self.base, memo)
+        return self._sail_copy(v, steer, base, hours, memo)
+
+    def _sail_copy(self, v: Voyage, steer, base, hours: float, memo: dict) -> dict:
+        """Sail a throw-away copy of voyage `v` for `hours` in the forecast issued
+        now (never the truth), steered by `steer` with `base`, breakdowns off."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        c = v.c
+        memo = {**memo, **{id(x): x for x in (c.env, c.forecast, c.land) if x is not None}}
+        w = copy.deepcopy(v, memo)
+        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
+        _no_breakdowns(w.c)
         # A wrapper round the steerer (a running trim, #350) stays, with the new steerer inside it.
         if hasattr(w.c.autopilot, "inner"):
             w.c.autopilot.inner = steer
@@ -492,6 +509,48 @@ class Game:
             "soc": float(w.state.soc - soc0),
             "km": km0 - self._km_to_finish(w),
             "outcome": self._outcome(w) if w.done else "at_sea",
+        }
+
+    def outlook(self, orders: list[dict], hours: float = OUTLOOK_HOURS) -> dict:
+        """Each order's honest stake against the ghost, for a "Your call" card
+        (helm decisions plan, Leo and Rosa, 12 Nov): a copy of your boat sails
+        each order, and a copy of the ghost sails its autopilot, for `hours` in
+        the forecast issued now (the one the autopilot plans with; never the
+        true weather), breakdowns off. orders: [{"heading", "power"}, ...]
+        (heading may be "auto"). Returns the ghost's km and, for each order, km
+        made towards the finish and the forecast lead over the ghost then
+        (negative: behind). A forecast, so it can be wrong; the card says so."""
+        g = self.ghost
+        memo = {id(x): x for x in (g.c.env, g.c.forecast, g.c.land) if x is not None}
+        ghost = self._sail_copy(
+            g, copy.deepcopy(g.c.autopilot, memo), copy.deepcopy(g.c.base, memo), hours, memo
+        )
+        lead = self.lead_km()
+        out = []
+        for o in orders:
+            p = self.preview(o["heading"], float(o.get("power", self._cruise())), hours=hours)
+            out.append({**o, **p, "lead_km": lead + p["km"] - ghost["km"]})
+        return {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+
+    def best_heading(
+        self, hours: float = OUTLOOK_HOURS, fan=(-30, -20, -10, 0, 10, 20, 30)
+    ) -> dict:
+        """The route check (plan #10): the heading the forecast favours for the
+        next `hours`, from a fan around where the boat points now, at the power
+        in use. Returns the boat's heading now, the best heading, and the km
+        each makes towards the finish (forecast, breakdowns off)."""
+        now = self.mine.state.heading
+        power = self._cruise() if self.on_auto else self.helm.power
+        made = {}
+        for d in fan:
+            h = round(now + d) % 360
+            made[h] = self.preview(h, power, hours=hours)["km"]
+        best = max(made, key=made.get)
+        return {
+            "heading": now,
+            "best": best,
+            "km": made,
+            "gain_km": made[best] - made[round(now) % 360],
         }
 
     @property
@@ -705,20 +764,32 @@ class Game:
 
     def _update_leader(self) -> str | None:
         """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
-        None. A lead of a few metres flips back and forth with every wave, so a
+        None (pass_note says whether it is big enough to stop the clock). A lead of a few metres flips back and forth with every wave, so a
         pass needs the other boat PASS_MARGIN_KM clear, none counts in the
         first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in),
         and the first boat to get clear of the other is not a pass."""
         if self.mine.state.t < self.start + timedelta(hours=PASS_QUIET_H):
             return None
         lead = self.lead_km()
+        mine = lead if self.leader == "me" else -lead
+        if self.leader is not None and mine > self.lead_best_km:
+            self.lead_best_km = mine
         now = "me" if lead > PASS_MARGIN_KM else "ghost" if lead < -PASS_MARGIN_KM else None
         if now is None or now == self.leader:
             return None
         first, self.leader = self.leader is None, now
+        swing, self.lead_best_km = self.lead_best_km + abs(lead), abs(lead)
         if first:
             return None
-        return "ghost_passed" if now == "ghost" else "passed_ghost"
+        kind = "ghost_passed" if now == "ghost" else "passed_ghost"
+        self.pass_note = {
+            "kind": kind,
+            "day": (self.mine.state.t - self.start).total_seconds() / 86400.0,
+            "lead_km": lead,
+            "swing_km": swing,
+            "stopped": swing >= PASS_STOP_SWING_KM,
+        }
+        return kind
 
     def run(
         self,
@@ -740,7 +811,9 @@ class Game:
         Stop reasons: time, battery, wind, land, breakdown, silence,
         ghost_passed, passed_ghost, order_arrived (Real base station mode), over. A pass
         means the lead changed hands by more than PASS_MARGIN_KM, after the
-        first PASS_QUIET_H (see _update_leader). "land" fires on entering
+        first PASS_QUIET_H (see _update_leader); it stops the clock only when
+        the lead swung by PASS_STOP_SWING_KM or more, and smaller ones are
+        status()["last_pass"] notes. "land" fires on entering
         land_within_km, and also the first time the boat closes inside
         LAND_CLOSE_KM (see _update_close), so a start near land still warns.
         "silence" warns before the race's silence limits disqualify the boat
@@ -792,7 +865,7 @@ class Game:
                 near = now_near
             if stopped is None and silence and self.last_silence:
                 stopped = self.last_silence
-            if stopped is None and ghost_passes and self.last_pass:
+            if stopped is None and ghost_passes and self.last_pass and self.pass_note["stopped"]:
                 stopped = self.last_pass
         return {"stopped": stopped, "status": self.status(), "track": self.track(since=t0)}
 
@@ -819,6 +892,7 @@ class Game:
             "boat": self._boat(v),
             "ghost": self._boat(self.ghost),
             "lead_km": self.lead_km(),
+            "last_pass": self.pass_note,
             "mode": self.mode,
             "show_true_position": True,
             "order": (

@@ -360,6 +360,18 @@ def solve_trim(
     )
 
 
+# Hand sailing ("Take the wheel") has a crew aboard: two people sitting on the high
+# side. Without them the trim table heeled the 31 footers 18.7-22.6 deg at 12 kn
+# upwind, where Sam's sailor check says 12-18 (GUESS: 2 x 80 kg at 1.3 m out).
+HAND_CREW_KG = 160.0
+HAND_CREW_ARM_M = 1.3
+
+
+def hand_sailed(p: VPPParams) -> VPPParams:
+    """The boat as a player sails it: the autopilot boat plus two crew on the rail."""
+    return replace(p, crew_kg=HAND_CREW_KG, crew_arm_m=HAND_CREW_ARM_M)
+
+
 def trim_table(p: VPPParams, tws_kn=TWS_KN, twa_deg=None, sheets: int = TRIM_SHEETS) -> dict:
     """Speeds for every sheet a player can hold (Take the wheel, sea3d/src/helm):
     speed (kn), heel and leeway (deg) and overpowered (0/1) by plan, TWS, TWA and
@@ -563,8 +575,11 @@ def main(argv=None) -> None:
     out.write_text(json.dumps(table, separators=(",", ":")) + "\n")
     print(f"wrote {out}")
     if a.trim:
-        trim = trim_table(solo)
-        trim["source"] = source + "; every sheet angle, a crew's speed (no autopilot_factor)"
+        trim = trim_table(hand_sailed(solo))
+        trim["source"] = (
+            source + "; every sheet angle, a crew's speed (no autopilot_factor), "
+            f"with two crew ({HAND_CREW_KG:.0f} kg, GUESS) on the rail at {HAND_CREW_ARM_M} m"
+        )
         t_out = out.with_name(out.stem + "_trim.json")
         t_out.write_text(json.dumps(trim, separators=(",", ":")) + "\n")
         print(f"wrote {t_out}")

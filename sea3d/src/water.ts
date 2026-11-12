@@ -62,12 +62,14 @@ const CARRY = /* glsl */ `
 #else
 #define SEA_DET_N uSeaDetN
 #endif
-float seaCarry(float k, float cell) { return 1.0 - smoothstep(0.2, 0.33, k * cell * 0.15915494); }
+// A train is carried by the grid only with 5+ cells per wavelength: fewer alias into curved moire arcs (Ines).
+float seaCarry(float k, float cell) { return 1.0 - smoothstep(0.12, 0.2, k * cell * 0.15915494); }
 `;
 
 const VERT_HEAD = SEA_SURFACE_PARS + CARRY + /* glsl */ `
 attribute float fade;      // 1 where the waves move the grid, 0 at the flat edge
 attribute float cell;      // the grid's spacing here (m)
+attribute float edge;      // 1 on the grid's outer rim: lifted to the eye's level so it meets the horizon
 uniform float uAmp;        // Hs / 2
 uniform float uFoamAmt;    // crest foam, 0..1
 uniform float uTime;
@@ -123,6 +125,10 @@ objectNormal = gNorm;
 `;
 const VERT_POS = /* glsl */ `
 transformed += gDisp;
+// The sea is flat, so its rim (3 km off) would sit a few pixels under the horizon with a
+// sliver of sky below it (Ines's hairline). Lift the rim to the eye's own level: the
+// last stretch then rises to the horizon line and fades into the haze there.
+if (edge > 0.5) transformed.y = cameraPosition.y - 1e-4 * length(transformed.xz - cameraPosition.xz);
 `;
 const VERT_BODY = /* glsl */ `
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
@@ -231,7 +237,7 @@ vec2 microSlope(vec2 p, float t, float fp) {
     L *= 1.32;
   }
   float gust = 0.45 + 1.0 * smoothstep(0.3, 0.8, vnoise(p * 0.025 - uWind * t * 0.04 + 9.0));
-  return g * gust * uRoughFar;
+  return g * gust * max(uRoughFar, 0.3); // even light airs keep fine ripples near the lens (Ines: title hero)
 }
 // Out where the grid is flat, the same wave trains the near sea moves with,
 // carried on in the shading only: their slopes, each faded out once it is too
@@ -277,11 +283,13 @@ vec3 seaColdSky(vec3 c) {
 const FRAG_COLOUR = /* glsl */ `
 // Rain and a closed cloud deck take the colour out of the water itself too:
 // paler and greyer, not a saturated blue under a downpour (Ines, Kai).
-{
+#ifndef SEA_LITE
+if (uRain.x > 0.0 || uSeaSky.w > 0.0) { // uniform branch: a clear day pays nothing
   float grey = max(0.65 * uRain.x, 0.8 * uSeaSky.w); // no bright blue under cloud (Sam, Ines)
   float lumW = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lumW * 1.25) * vec3(0.93, 0.97, 1.0), grey);
 }
+#endif
 float distXZ = length(vWPos.xz - cameraPosition.xz);
 // A wreck on the bottom, seen as a dark shape through clear, calm water; the
 // surface's movement makes it waver, and the deeper it lies the softer it is.
@@ -365,12 +373,12 @@ if (SEA_DET_N > 0) {
   vec2 r2 = mat2(0.96, -0.28, 0.28, 0.96) * vec2(pf.x * 0.6, pf.y); // wind-aligned too, so caps tear along the wind
   float tex = vnoise(qf * 1.1) * 0.25 + vnoise(r1 * 2.9 + 7.0) * 0.3
             + mix(vnoise(r2 * 7.7 + 3.0), 0.5, o3) * 0.25 + mix(vnoise(pf * 19.0 + 1.0), 0.5, o3) * 0.2;
-  float th = mix(0.7, 0.26, smoothstep(0.02, 0.7, fresh));
+  float th = mix(0.7, 0.32, smoothstep(0.02, 0.7, fresh)); // even fresh foam leaves holes: no solid clumps (Ines)
   // Thick and opaque where it's piled up, thin and see-through elsewhere; the
   // edge softens with the pixel's footprint so it never cuts out sharp from afar.
   // A breaking crest has a crisp edge; old foam goes to lace (holes through it) (Ines, Elena).
   float edge = mix(0.2, 0.04, smoothstep(0.3, 0.9, fresh)) + 1.5 * fpF;
-  float lace = mix(smoothstep(0.35, 0.6, mix(vnoise(r2 * 13.0 + 5.0), 0.5, o3)), 1.0, 0.6 * smoothstep(0.25, 0.9, fresh)); // even a fresh cap is torn
+  float lace = mix(smoothstep(0.35, 0.6, mix(vnoise(r2 * 13.0 + 5.0), 0.5, o3)), 1.0, 0.4 * smoothstep(0.25, 0.9, fresh)); // even a fresh cap is torn
   float young = smoothstep(th, th + edge, tex) * mix(0.35, 1.0, smoothstep(th + 0.08, th + 0.35, tex))
               * mix(0.6, 0.95, smoothstep(0.6, 1.0, fresh)) * lace;
   float near = young + 0.35 * vFoam * smoothstep(0.66, 0.78, tex + 0.3 * fresh) * step(0.002, uCover);
@@ -378,6 +386,18 @@ if (SEA_DET_N > 0) {
 }
 // Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
 // downwind; where they're finer than a pixel, their average whiteness instead.
+#ifdef SEA_LITE
+// Low keeps main's cheaper lanes (four noises instead of six), for its frame budget.
+if (uStreak > 0.001) {
+  vec2 qs = q - vec2(uTime * 1.2, 0.0);
+  qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
+  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 0.9)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 2.3) + 17.0), 0.5, smoothstep(0.1, 0.4, fpF)) * 0.4;
+  float thrS = 0.5 + 0.51 * (0.5 - uStreak);
+  float lanes = smoothstep(thrS - 0.03, thrS + 0.07, ns) * (0.7 + 0.3 * fn);
+  float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
+  foamMask = max(foamMask, 0.9 * streak);
+}
+#else
 if (uStreak > 0.001) {
   vec2 qs = q - vec2(uTime * 1.2, 0.0);
   // Wander the lanes sideways a little, so they meander and split instead of running as ruled bars.
@@ -395,9 +415,11 @@ if (uStreak > 0.001) {
   // dashes within that, so none reads as one long straight stick (Ines, Iris).
   float present = smoothstep(0.62 - uStreak, 0.8 - uStreak, vnoise(vec2(qs.x * 0.035, qs.y * 0.12) + 3.0));
   float lanes = line * smoothstep(0.45, 0.75, brk) * present;
-  float streak = mix(0.35 * lanes, 0.4 * (uStreak + uCover), smoothstep(0.4, 1.5, fpF));
+  // Lanes clearer near the lens, fainter where many crowd into a pixel (Ines).
+  float streak = mix(mix(0.6, 0.35, smoothstep(10.0, 60.0, length(vWPos - cameraPosition))) * lanes, 0.4 * (uStreak + uCover), smoothstep(0.4, 1.5, fpF));
   foamMask = max(foamMask, streak);
 }
+#endif
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), foamMask * (SEA_DET_N > 0 ? 0.88 : 1.0)); // off-white, a little see-through
 /* boat wash (boatWash.ts) */
 `;
@@ -408,15 +430,25 @@ if (SEA_DET_N > 0) roughnessFactor = mix(roughnessFactor, 0.05 + 0.22 * uRoughFa
 // floor on the roughness that rises with the wind, so the sun's and moon's
 // paths break into glints instead of lying on a wave face as one bright rod.
 roughnessFactor = max(roughnessFactor, 0.06 + 0.14 * uRoughFar);
-roughnessFactor = mix(roughnessFactor, 0.75, foamMask);
+// Matte where there's foam, but eased in from the FFT's smooth foam field rather than the
+// crisp lace mask, so foam patches don't get glossy rims (Ines: puddle outlines).
+float foamShade = SEA_DET_N > 0 ? max(0.8 * smoothstep(0.05, 0.6, detA.w), 0.5 * foamMask) : foamMask;
+roughnessFactor = mix(roughnessFactor, 0.75, foamShade);
 `;
 
 const FRAG_NORMAL = /* glsl */ `
 {
   float fp = max(length(fwidth(vWPos.xz)), 1e-4);
-  vec2 s = SEA_DET_N > 0 ? (detB.xy + microSlope(vWPos.xz + uFlow, uTime, fp) * (1.0 - 0.3 * uRain.x)) * (1.0 - 0.5 * foamMask) : rippleSlope(vWPos.xz, uTime, fp, farMix) * (1.0 - 0.7 * foamMask);
-  s += rainSlope(vWPos.xz + uFlow, uTime, fp) * (1.0 - foamMask); // rain rings (Kai, rainRings.ts)
-  if (vFade < 0.999 || vCell > 0.5) s += swellSlope(vWPos.xz, uTime, fp);
+  // Chosen by the preprocessor, not a ?: (a software renderer may run both sides).
+#ifdef SEA_LITE
+  vec2 s = rippleSlope(vWPos.xz, uTime, fp, farMix) * (1.0 - 0.7 * foamMask);
+#else
+  vec2 s = uSeaDetN > 0 ? (detB.xy + microSlope(vWPos.xz + uFlow, uTime, fp) * (1.0 - 0.3 * uRain.x)) * (1.0 - 0.5 * foamShade) : rippleSlope(vWPos.xz, uTime, fp, farMix) * (1.0 - 0.7 * foamMask);
+#endif
+#ifndef SEA_LITE
+  s += rainSlope(vWPos.xz + uFlow, uTime, fp) * (1.0 - foamMask); // rain rings (Kai, rainRings.ts); not on Low (budget)
+#endif
+  if (vFade < 0.999 || vCell > 0.0) s += swellSlope(vWPos.xz, uTime, fp); // no gate on the cell size: that made a step 20-30 m off (Kai, Ines)
   vec3 nW = (vec4(normal, 0.0) * viewMatrix).xyz; // view -> world
   nW = normalize(nW + vec3(-s.x, 0.0, -s.y));
   normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
@@ -446,31 +478,51 @@ const FRAG_SKY = /* glsl */ `
 // Under a cloud deck the sea mirrors the deck (its colour from the sky's owner,
 // seaUniforms.uSeaSky), so the far sea meets the sky's own horizon colour with
 // no line between them. The planar mirror (boats, land) keeps its picture.
-radiance = mix(seaColdSky(radiance), uSeaSky.rgb, uSeaSky.w);
+// A mostly closed deck already hides the clear sky map: swap it out early, so no
+// warm slot or blue patch of it shows as squiggles on the wave facets (Elena, F8 dusk).
+float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
+#ifdef SEA_LITE
+// Low: only what a deck, rain or the Bay needs, and nothing at all under a clear sky
+// (uniform branches, so a clear day pays nothing: Maya's frame budget).
+if (deckS > 0.0 || uRain.x > 0.0) {
+  radiance = mix(radiance, uSeaSky.rgb, deckS);
+  radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(uRain.x, deckS));
+}
+if (uBay > 0.0) radiance = mix(radiance, dot(radiance, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.9, 1.02, 0.92), 0.6 * uBay);
+#else
+radiance = mix(seaColdSky(radiance), uSeaSky.rgb, deckS);
+// The sea's body is lit by the deck too, not the clear sky's blue: same brightness, the deck's hue.
+iblIrradiance = mix(iblIrradiance, uSeaSky.rgb * (dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722)) / max(dot(uSeaSky.rgb, vec3(0.2126, 0.7152, 0.0722)), 1e-3)), deckS);
 // Rain or a closed deck hides the sun: no bright spot of it left in the sky map's
 // reflection (a capped, cloud-lit sky instead).
-radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(uRain.x, uSeaSky.w));
+radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(uRain.x, deckS));
 // Even a moonless night sky glows a little (starlight, airglow): enough for the
 // wave faces to read faintly instead of a black void (Leo). Nothing by day.
 // The Bay's silty water: the sky it mirrors comes back greyer and a little green,
 // so it never reads as open-ocean blue at noon (Ines #5, backlog 16).
 radiance = mix(radiance, dot(radiance, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.9, 1.02, 0.92), 0.6 * uBay);
+#endif
 radiance = max(radiance, vec3(0.014, 0.019, 0.032));
 // The sun's own highlight (direct light): on water this smooth even a 1 % sun makes a
 // glitter path, so rain or a closed deck takes it out too (Kai, Ines F8 #3).
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
 // Through a break in the deck, the one glitter left: a column in the break's warm light,
 // from rays reflected low toward the sun's bearing, weighted as the sky draws it (Hana, Sam).
+#ifndef SEA_LITE
 if (uSeaBreak.w > 0.001) {
   vec3 Vb = normalize(cameraPosition - vWPos);
-  vec3 Rb = reflect(-Vb, inverseTransformDirection(normal, viewMatrix));
+  // From the big waves' faces only (not the ripples), so it reads as a dull sheen on the
+  // wave faces toward the slot, not a lace of sparks (Sam, Elena).
+  vec3 Rb = reflect(-Vb, inverseTransformDirection(geometryNormal, viewMatrix));
   // The sky's own weight on the bearing, narrowed again so it reads as a column toward
   // the slot, not sparks across the whole sea (Elena: no glitter under a gale deck).
   float onB = smoothstep(0.35, 0.97, dot(normalize(Rb.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
-  onB = pow(onB, 8.0);
-  float lowB = (1.0 - smoothstep(0.0, 0.12, Rb.y)) * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)); // a low sun's break only
-  radiance += 0.6 * uSeaBreak.rgb * uSeaBreak.w * onB * lowB * step(0.0, Rb.y);
+  // Broad, soft weights only: a steep one draws contour rims round every facet (Ines).
+  onB *= onB;
+  float lowB = exp(-6.0 * max(Rb.y, 0.0)) * smoothstep(-0.1, 0.05, Rb.y) * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)); // a low sun's break only
+  radiance += 0.25 * uSeaBreak.rgb * uSeaBreak.w * (1.0 - uRain.x) * onB * lowB; // none through a downpour (Kai)
 }
+#endif
 `;
 
 const FRAG_MIRROR = /* glsl */ `
@@ -494,6 +546,22 @@ if (uMirror > 0.001) {
   float k = m.a * uMirror * clamp(0.25 + fres, 0.0, 0.95) * (1.0 - foamMask);
   outgoingLight = mix(outgoingLight, m.rgb, k);
 }
+`;
+
+// Under a deck the far sea converges on the sky's own horizon colour (seaSky().rgb, Hana), over the last
+// ~1 degree below it (15-35 px at 720p, by lens), in the same space the fog and the sky's
+// haze are mixed in, so sea and sky meet without a knife edge (Ines, Hana).
+const FRAG_HAZE = /* glsl */ `
+#ifndef SEA_LITE
+if (uSeaSky.w > 0.2) { // uniform branch: only under a deck
+  vec3 Vh = normalize(vWPos - cameraPosition);
+  float hz = 1.0 - smoothstep(0.0, 0.015, -Vh.y); // the last degree or so
+  // Toward a break the sky's horizon is the break's light, not the haze: leave the sea be there.
+  hz *= 1.0 - uSeaBreak.w * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)) * smoothstep(0.35, 0.97, dot(normalize(Vh.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
+  // gl_FragColor is already in the output space here, so the haze goes there too.
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * hz * smoothstep(0.2, 0.8, uSeaSky.w));
+}
+#endif
 `;
 
 export class Sea {
@@ -570,9 +638,10 @@ export class Sea {
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
         .replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n" + FRAG_SKY)
         .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>")
+        .replace("#include <fog_fragment>", FRAG_HAZE + "\n#include <fog_fragment>")
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v13";
+    material.customProgramCacheKey = () => "boatsim-sea-v14";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls, so keels show through
     this.mesh.frustumCulled = false;
@@ -594,7 +663,11 @@ export class Sea {
     const m = this.mesh.material as THREE.MeshStandardMaterial;
     const lite = d === "off";
     if (lite !== "SEA_LITE" in (m.defines ?? {})) {
-      m.defines = lite ? { SEA_LITE: "" } : {};
+      // Keep three's own defines (STANDARD, PHYSICAL): only add or drop ours.
+      const defs: Record<string, string> = { ...(m.defines ?? {}) };
+      if (lite) defs.SEA_LITE = "";
+      else delete defs.SEA_LITE;
+      m.defines = defs;
       m.needsUpdate = true;
     }
   }
@@ -671,6 +744,7 @@ export class Sea {
     const p = geo.attributes.position.array as Float32Array;
     const fade = new Float32Array(p.length / 3);
     const cell = new Float32Array(p.length / 3);
+    const edge = new Float32Array(p.length / 3);
     // Low keeps the old, cheap sea (Maya's frame budget: Low within 15% of before):
     // waves only in the patch round the boat, flat beyond with the far swell in
     // the shading, as main drew it. cell 0 draws every train in the patch.
@@ -686,12 +760,14 @@ export class Sea {
       const r = Math.hypot(p[i], p[i + 2]);
       fade[i / 3] = 1 - (low ? THREE.MathUtils.smoothstep(r, FADE_IN, FADE_OUT) : THREE.MathUtils.smoothstep(r, FLAT_IN, FLAT_OUT));
       cell[i / 3] = Math.max(step(u), step(v));
+      edge[i / 3] = Math.max(Math.abs(u), Math.abs(v)) > 0.9999 ? 1 : 0;
     }
     this.base = Float32Array.from(p);
     this.colours = new Float32Array(p.length);
     geo.setAttribute("color", new THREE.BufferAttribute(this.colours, 3));
     geo.setAttribute("fade", new THREE.BufferAttribute(fade, 1));
     geo.setAttribute("cell", new THREE.BufferAttribute(cell, 1));
+    geo.setAttribute("edge", new THREE.BufferAttribute(edge, 1));
     this.mesh.geometry.dispose();
     this.mesh.geometry = geo;
     this.paintFlat();
