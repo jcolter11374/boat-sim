@@ -246,7 +246,7 @@ void main() {
     float heaps = cells(w * 1.15 + uSeed);
     float n = mix(0.5 * heaps + 0.5 * fbmL(w, lod, oct) + 0.05, 0.45, lod);
     float edge = 1.0 - (0.3 + 0.42 * uCover);
-    float d = smoothstep(edge - 0.01, edge + 0.08 + 0.4 * lod, n);
+    float d = smoothstep(edge - 0.004, edge + 0.025 + 0.4 * lod, n); // crisp cauliflower edge
     // Far heaps thin out into the clear sky's own horizon (not into the fog colour, which is darker).
     d *= 1.0 - smoothstep(9000.0, 30000.0, dist);
     if (d > 0.003) {
@@ -259,13 +259,14 @@ void main() {
         shade = clamp(0.5 * thick + 2.4 * toward, 0.0, 1.0);
       } else shade = 0.3 + 0.4 * thick;
       float side = smoothstep(2500.0, 12000.0, dist); // far off you see the sunlit sides, not the base
-      float baseShade = mix(0.5 + 0.5 * shade, shade * (0.25 + 0.75 * smoothstep(-0.3, 0.6, facing)), side);
+      // Overhead: thin rims glow white with the sun through them, thick middles are the flat grey base.
+      float baseShade = mix(0.15 + 0.6 * thick + 0.25 * shade, shade * (0.25 + 0.75 * smoothstep(-0.3, 0.6, facing)), side);
       // Golden hour: sunlit sides go warm gold, the shade stays cool blue-grey.
       float gold = smoothstep(0.0, 0.06, uSunDir.y) * (1.0 - smoothstep(0.14, 0.45, uSunDir.y));
       // (the flat bases overhead see the blue sky more than the sun: they stay neutral)
       // Sunlit tops bright white; at golden hour gold on the sun side, pink further round.
       vec3 goldC = mix(vec3(1.3, 0.85, 0.72), vec3(1.35, 1.0, 0.62), smoothstep(-0.2, 0.7, facing));
-      vec3 lit = uLit * 1.3 * mix(vec3(1.0), goldC, gold * (0.2 + 0.8 * side));
+      vec3 lit = uLit * 1.3 * mix(vec3(1.0), goldC, gold * (0.6 + 0.4 * side));
       // Shade is cool blue-grey (lit by the blue sky), never the haze's warm brown.
       vec3 cool = dot(uShade, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.84, 0.92, 1.1);
       vec3 c = mix(lit, mix(uShade, cool, 0.75), clamp(baseShade, 0.0, 1.0));
@@ -324,7 +325,7 @@ void main() {
     c += uBrk * under * (0.15 + 0.6 * (1.0 - thick)) * 0.45;
     c += uGlow * uWarm * 0.25 * smoothstep(-0.2, 0.9, facing) * (1.0 - thick);
     c += vec3(0.5, 0.56, 0.68) * moonG * (1.0 - 0.85 * thick);
-    c = mix(c, uHaze, smoothstep(8000.0, 60000.0, dist) * 0.8);
+    c = mix(c, uHaze, smoothstep(20000.0, 90000.0, dist) * 0.7);
     // Above the deck: a paler, smooth upper layer (no blue sky in a gale). In the break,
     // beyond the deck's far edge, warm clear light low on the horizon.
     vec3 upper = mix(uSteel * 1.25, uHaze, 0.3) + vec3(0.5, 0.56, 0.68) * moonG;
@@ -356,7 +357,7 @@ void main() {
   }
   // The horizon: everything goes to the haze over the last few degrees, as the sea does.
   // Only the last few degrees: the cloud base runs down into the haze, with no flat band above it (Ines).
-  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.06, deckAmt), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
+  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.02, deckAmt), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
   // Under a deck the cloud goes to the haze (the sea's far fade); in clear weather it thins
   // away and the sky's own horizon shows, which the haze would only darken.
   float hz2 = hz * hz * (3.0 - 2.0 * hz);
@@ -369,19 +370,39 @@ void main() {
   if (uWall > 0.01) {
     float az = atan(dir.z, dir.x);
     float on = smoothstep(mix(0.82, 0.35, uWall), 1.0, dot(normalize(dir.xz + 1e-5), uWallDir));
-    // A lumpy top: towering heaps along the wall, slowly changing.
-    // Rounded towers along its top (big heaps with smaller knobs), lower at its ends.
-    float towers = 0.45 + 0.6 * cells(vec2(az * 7.0 + uTime * 0.001, 0.3) + uSeed) + 0.12 * fbmL(vec2(az * 12.0, 2.3) + uSeed, 0.0, 3);
-    float top = mix(0.012, 0.14, uWall * uWall) * towers * (0.35 + 0.65 * on);
-    float h01 = clamp(el / max(top, 1e-4), 0.0, 1.0);
-    float wall = on * (1.0 - smoothstep(0.6, 1.0, h01)) * smoothstep(-0.01, 0.004, el);
-    // Dark and rain-grey at its foot, hazier far off, its towering tops paler where the sun catches them.
-    // Its base sits a little above the horizon in an arch, with grey rain hanging below it.
-    float arch = 0.004 + 0.012 * uWall * on * (0.6 + 0.4 * cos(az * 3.0 + uSeed.x));
-    vec3 wc = mix(uHaze * 0.6, uBelly * 0.5, smoothstep(0.05, 0.6, uWall) * (1.0 - 0.35 * h01));
-    wc = mix(uBelly * 0.9 + uHaze * 0.25, wc, smoothstep(arch * 0.6, arch, el)); // the rain under the base
-    wc = mix(wc, uLit * 0.8, smoothstep(0.45, 1.0, h01) * 0.45 * sunUp);
-    float wa = wall * mix(0.55, 0.98, uWall);
+    // A thunderstorm seen from afar (Ines: never a coastline): towering heaps with bright
+    // sunlit tops and an anvil spreading at the top, a dark flat base lifted off the
+    // horizon, and soft grey rain curtains hanging from it with paler sky between them.
+    // Outline: a few broad heaps, smaller turrets on them, cauliflower lumps along the rim.
+    float az1 = az + uTime * 0.0005;
+    float towers = 0.55 * cells(vec2(az1 * 5.0, 0.3) + uSeed) + 0.3 * cells(vec2(az1 * 13.0, 1.7) + uSeed) + 0.15 * cells(vec2(az1 * 31.0, 2.9) + uSeed);
+    towers = towers * towers;
+    float rim = cells(vec2(az1 * 70.0, el * 150.0) + uSeed * 3.0);
+    float top = mix(0.03, 0.2, uWall) * (0.15 + 0.85 * towers) * (0.4 + 0.6 * on) * (0.85 + 0.15 * rim);
+    // The base: flat, a little ragged, lifted off the horizon.
+    float base = mix(0.008, 0.028, uWall) * (0.8 + 0.4 * fbmL(vec2(az1 * 30.0, 4.1) + uSeed, 0.0, 2));
+    float h01 = clamp((el - base) / max(top - base, 1e-4), 0.0, 1.0);
+    float body = on * smoothstep(base - 0.002, base + 0.002, el) * (1.0 - smoothstep(top * 0.97, top * 1.03, el));
+    // The anvil: a thinner, wider shelf at the top, brightest of all.
+    float onA = smoothstep(mix(0.9, 0.3, uWall), 1.0, dot(normalize(dir.xz + 1e-5), uWallDir));
+    float topA = mix(0.03, 0.2, uWall) * 0.8;
+    float anvil = onA * smoothstep(topA * 0.84, topA * 0.9, el) * (1.0 - smoothstep(topA * 0.97, topA * 1.04, el)) * smoothstep(0.3, 0.8, uWall);
+    // Rain under the base: soft slanting veils with paler gaps, fading into the sea haze.
+    float curtains = smoothstep(0.3, 0.75, fbmL(vec2(az1 * 9.0 + el * 25.0 + uTime * 0.002, el * 30.0) + uSeed * 2.0, 0.0, 3));
+    float rain = on * (1.0 - smoothstep(base - 0.004, base + 0.002, el)) * smoothstep(-0.004, base * 0.8, el) * (0.15 + 0.55 * curtains);
+    vec3 dark = mix(uHaze * 0.75, uBelly * 0.75, smoothstep(0.05, 0.6, uWall));
+    vec3 lit = mix(uHaze, uLit * 1.45, 0.4 + 0.6 * sunUp);
+    // Each lump lit on top and shaded under, so the towers read as heaped cloud.
+    float lump = cells(vec2(az1 * 28.0, el * 90.0) + uSeed);
+    float litK = smoothstep(0.0, 0.45, h01 + 0.15 * (lump - 0.5));
+    vec3 wc = mix(dark, lit, litK);
+    wc *= 0.8 + 0.2 * mix(1.0, lump, smoothstep(0.1, 0.5, h01));
+    wc = mix(wc, lit * 1.05, anvil);
+    vec3 rc = mix(uHaze * 0.9, dark * 1.1, curtains);
+    float wa = max(body, anvil * 0.8) * mix(0.55, 0.97, uWall);
+    float ra = rain * mix(0.35, 0.8, uWall);
+    wc = mix(wc, rc, ra * (1.0 - max(body, anvil)));
+    wa = max(wa, ra);
     col += (1.0 - alpha) * wa * wc; alpha += (1.0 - alpha) * wa;
   }
   // A low sun behind a deck: the far edge of the cloud lights up warm along the horizon

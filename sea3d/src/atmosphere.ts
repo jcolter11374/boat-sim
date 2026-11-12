@@ -373,7 +373,8 @@ export class Atmosphere {
       u.uOpacity.value = night * (1 - storm);
       u.uLimit.value = nakedEyeLimit(elDeg, moonlight);
     }
-    this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day));
+    // Hidden behind a full deck (its unlit side showed as a dark ellipse in the cloud, Ines).
+    this.moonDisc.material.uniforms.uAlpha.value = moonUp * (1 - 0.85 * storm) * (0.35 + 0.65 * (1 - day)) * (1 - Math.max(overcast, smooth(storm, 0.2, 0.7)));
     this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
     const dark = 0.05 + 0.13 * moonlight; // what the night leaves, moonless .. full moon
