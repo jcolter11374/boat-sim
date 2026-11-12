@@ -68,6 +68,11 @@ def storm_track(csv_path, name: str, season: int) -> list[tuple[datetime, float,
     return out
 
 
+def storm_track_from(points) -> list[tuple[datetime, float, float]]:
+    """A goal record's track ([iso, lat, lon], challenges.hourly) in the judge's form (Sam)."""
+    return sorted((_t(t), float(lat), float(lon)) for t, lat, lon in points)
+
+
 def centre_at(track, t: datetime) -> tuple[float, float] | None:
     """The storm centre at t, straight-line between best-track points; None outside the track."""
     t = _t(t)

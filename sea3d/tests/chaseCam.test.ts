@@ -25,8 +25,8 @@ const diff = (a: number, b: number) => ((((a - b) % 360) + 540) % 360) - 180;
 
 test("the camera stands behind her and to leeward", () => {
   // Heading north, wind on starboard (from the east): she heels to port, so we stand south-west.
-  assert.equal(standAt(0, 1), 210);
-  assert.equal(standAt(0, -1), 150);
+  assert.equal(standAt(0, 1), 222);
+  assert.equal(standAt(0, -1), 138);
   const s = placeFor(0, standAt(0, 1), 9.5, 14, F);
   assert.ok(s.pos[0] < 0 && s.pos[2] > 0, "south-west of the boat");
   assert.ok(s.pos[1] > 3 && s.pos[1] < 15, `raised a little: ${s.pos[1]}`);
@@ -50,7 +50,7 @@ test("at 1280x720, 1920x1080 and 1024x768 the whole boat is in the band above th
 });
 
 test("she sits a third off-centre, with the open side of the frame ahead of her bow", () => {
-  const s = placeFor(0, 210, 9.5, 14, F);
+  const s = placeFor(0, 222, 9.5, 14, F);
   const look = bearingOf(s.look[0] - s.pos[0], s.look[2] - s.pos[2]);
   const toBoat = bearingOf(-s.pos[0], -s.pos[2]);
   const off = diff(look, toBoat);
@@ -62,7 +62,7 @@ test("she sits a third off-centre, with the open side of the frame ahead of her 
 test("it eases round on a tack and doesn't flicker on a dead run", () => {
   const c = new ChaseCam();
   c.update(1 / 30, 0, 45, 9.5, 14, F, false);
-  const first = placeFor(0, 210, 9.5, 14, F).pos;
+  const first = placeFor(0, 222, 9.5, 14, F).pos;
   let s = c.update(1 / 30, 0, 45, 9.5, 14, F, false)!;
   assert.ok(Math.abs(s.pos[0] - first[0]) < 0.5);
   // Tack: wind now on the port side. One frame later the camera has barely moved...

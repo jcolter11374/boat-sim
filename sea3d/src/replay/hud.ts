@@ -250,6 +250,17 @@ export function equipmentIcons(parts: Part[], quiet = false, note = ""): Part[] 
     }),
   );
   for (const p of fresh) box.querySelector(`[data-part="${p.key}"]`)?.classList.add("pulse");
+  // A red dot with the count of broken parts on the cell, so one red glyph among nine isn't missed (Elena).
+  const bad = parts.filter((p) => p.bad);
+  const cell = box.parentElement;
+  const lab = box.nextElementSibling as HTMLElement | null;
+  if (lab) {
+    if (bad.length) lab.dataset.bad = String(bad.length);
+    else delete lab.dataset.bad;
+  }
+  if (cell) {
+    cell.title = bad.length ? `Not working: ${bad.map((p) => p.name).join(", ")}. Click for the log.` : "Equipment: hover an icon for its name, click for the log";
+  }
   const l = box.nextElementSibling;
   if (l) l.textContent = note || "equipment";
   return fresh;
