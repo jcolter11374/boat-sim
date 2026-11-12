@@ -42,11 +42,23 @@ camera is placed from the bow: `az` degrees clockwise from the bow, so 180 is as
 ## On your own machine or sandbox
 
 ```
+# The boat models (*.glb) are not in git: rebuild them from the branch you shoot, or
+# you shoot stale boats (Theo, 12 Nov: a sandbox still had "V4" on the kayak after #379).
+# Blender as a Python module needs Python 3.11:
+python3.11 -m venv /tmp/bpy && /tmp/bpy/bin/pip install -q bpy==4.2.0 pillow numpy
+/tmp/bpy/bin/python sea3d/blender/build_kayak.py sea3d/public/models/kayak.glb
+/tmp/bpy/bin/python sea3d/blender/build_stock.py pearson sea3d/public/models/stock_pearson.glb
+/tmp/bpy/bin/python sea3d/blender/build_stock.py cruiser sea3d/public/models/stock_cruiser.glb
+# (or all of them: tools/build_boats.sh, as CI does)
 tools/build_site.sh                      # or: cd sea3d && npm run build
 (cd sea3d/dist && python3 -m http.server 4180 &)
 node tools/proof/capture.mjs --set quick --out /tmp/proofs
 node tools/proof/sheet.mjs /tmp/proofs   # index.html + contact-sheet.png
 ```
+
+The contact sheet's top-right corner says which model build a proof used. CI stamps
+it (last commit to `sea3d/blender`); a local site without `dist/models/stamp.json` shows
+"unknown", so check your models yourself.
 
 Options: `--set`, `--only`, `--size 1920x1080`, `--quality low|high|ultra`, `--fps 24`,
 `--shard 2/4`, `--list` (show the units and stop).
