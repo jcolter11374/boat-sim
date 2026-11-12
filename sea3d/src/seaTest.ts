@@ -1,3 +1,4 @@
+import * as THREE from "three";
 // Test hook for pictures of the sea (never in a player-facing link): fixed sea
 // states and suns, so before/after frames compare like with like.
 //
@@ -38,6 +39,12 @@ export const SUN_TESTS: Record<string, { el: number; az: number }> = {
   blue: { el: -4, az: 250 },
   night: { el: -25, az: 250 },
 };
+
+/** A wind sea of forced height Hs (m) for pictures and tests: the period of a fully developed sea
+ *  (Pierson-Moskowitz: U = sqrt(Hs / 0.0246), Tp = 0.73 U, so Tp = 4.65 sqrt(Hs)), running downwind. */
+export function forcedSea(hs: number, wu: number, wv: number): { hs: number; tp: number; dirFrom: number } {
+  return { hs, tp: Math.max(4.65 * Math.sqrt(hs), 1.5), dirFrom: (THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv)) + 360) % 360 };
+}
 
 /** The test sea and sun this page was asked for, if any. */
 export function seaTestFrom(search: string): { sea: SeaTest | null; sun: { el: number; az: number } | null } {

@@ -9,6 +9,7 @@ import { NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
+import { forcedSea } from "./seaTest";
 import { seaUniforms } from "./seaSurface";
 import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
@@ -281,6 +282,8 @@ let chartDirty = true;
 let shownEvents = { boat: 0, ghost: 0 };
 const page = {
   ready: false,
+  /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
+  force: { wind: -1, hs: -1 },
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
@@ -2507,7 +2510,12 @@ renderer.setAnimationLoop(() => {
   const at: [Date, number, number] | null = r && r.h.length
     ? [new Date(utc(r.start) + h * 3600e3), ...positionAt(r, h)]
     : pre ? [pre, SPOT?.[0] ?? DROP[0], SPOT?.[1] ?? DROP[1]] : null;
-  const sys: Systems | null = at ? seaFeed.at(at[0], at[1], at[2]) : null;
+  let sys: Systems | null = at ? seaFeed.at(at[0], at[1], at[2]) : null;
+  if (page.force.hs >= 0) {
+    // Forced for pictures: one wind sea of that height, running with the (forced) wind.
+    const fw = r ? [valueAt(r, r.wind_u, h) ?? 0, valueAt(r, r.wind_v, h) ?? 0] : [0, -1];
+    sys = { ws: forcedSea(page.force.hs, fw[0], fw[1]), s1: null, s2: null } as Systems;
+  }
   let hs: number;
   let tp: number;
   if (sys && (sys.ws || sys.s1 || sys.s2)) {
@@ -2536,8 +2544,12 @@ renderer.setAnimationLoop(() => {
     sea.flow(fx, fz);
   }
   const comps = live.advance(t);
-  const wu = r ? valueAt(r, r.wind_u, h) ?? 0 : preWind ? preWind * Math.sin(preTo) : practiceWind?.u ?? 3;
-  const wv = r ? valueAt(r, r.wind_v, h) ?? 0 : preWind ? preWind * Math.cos(preTo) : practiceWind?.v ?? 0;
+  let wu = r ? valueAt(r, r.wind_u, h) ?? 0 : preWind ? preWind * Math.sin(preTo) : practiceWind?.u ?? 3;
+  let wv = r ? valueAt(r, r.wind_v, h) ?? 0 : preWind ? preWind * Math.cos(preTo) : practiceWind?.v ?? 0;
+  if (page.force.wind >= 0) {
+    const w = Math.hypot(wu, wv);
+    [wu, wv] = w > 0.01 ? [(wu * page.force.wind) / w, (wv * page.force.wind) / w] : [0, -page.force.wind];
+  }
   sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv));
   sea.update(comps, t);
   // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).

@@ -50,7 +50,7 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
-import { seaTestFrom } from "./seaTest";
+import { forcedSea, seaTestFrom } from "./seaTest";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { seaUniforms } from "./seaSurface";
@@ -329,6 +329,13 @@ function seaTarget(rep: Replay, hour: number): number {
     live.setSystems(SEATEST.sea.ws, SEATEST.sea.s1, null);
     return Math.hypot(SEATEST.sea.ws.hs, SEATEST.sea.s1?.hs ?? 0);
   }
+  if (status.force.hs >= 0) {
+    // Forced for pictures and tests (Iris's storm sequence): one wind sea of that height, downwind.
+    seaNow = null;
+    const [wu, wv] = windAt(rep, hour);
+    live.setSystems(forcedSea(status.force.hs, wu, wv), null, null);
+    return Math.max(status.force.hs, 0.05);
+  }
   if (PLACE?.fetch) {
     // A sheltered harbour: only the local wind's chop, running downwind.
     seaNow = null;
@@ -463,7 +470,7 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1 },
+  force: { cloud: -1, fog: -1, wind: -1, hs: -1 }, // hs: a forced wind sea (m), for pictures and tests
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */

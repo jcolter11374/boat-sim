@@ -594,12 +594,12 @@ export class Atmosphere {
     if (this.ultra) {
       // A real lens: the boat sharp, the far sea and sky gently soft.
       this.bokeh = new BokehPass(this.scene, this.camera, { focus: 6, aperture: 0.00035, maxblur: 0.0035 });
-      // Nearer than the focus, only a fifth of the blur: water close to the lens is
+      // Nearer than the focus, no blur at all: water close to the lens is
       // the sharpest thing in a storm shot, not smeared (Elena). Further off as before.
       const mat = this.bokeh.materialBokeh;
       mat.fragmentShader = mat.fragmentShader.replace(
         "vec2 dofblur = vec2 ( clamp( factor * aperture, -maxblur, maxblur ) );",
-        "factor = factor > 0.0 ? factor * 0.2 : factor;\n\t\t\tvec2 dofblur = vec2 ( clamp( factor * aperture, -maxblur, maxblur ) );",
+        "factor = min(factor, 0.0);\n\t\t\tvec2 dofblur = vec2 ( clamp( factor * aperture, -maxblur, maxblur ) );",
       );
       composer.addPass(this.bokeh);
     }
