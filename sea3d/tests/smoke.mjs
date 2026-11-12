@@ -377,7 +377,7 @@ try {
   await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
   await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
   const rc = await page.evaluate(() => ({ base: window.__yard.base, s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));
-  if (rc.base !== "revc" || rc.s.solarW !== 40 || rc.s.batteryWh !== 192 || rc.s.thrusters !== 0 || Math.abs(rc.s.massKg - 24.85) > 0.01)
+  if (rc.base !== "revc" || rc.s.solarW !== 40 || rc.s.batteryWh !== 192 || rc.s.thrusters !== 0 || Math.abs(rc.s.massKg - 26.55) > 0.01) // Rev C3 26.9 kg, less 0.35 for one rudder
     fail(`boatyard Rev C totals: ${JSON.stringify(rc)}`);
   if (rc.d.rudders !== 1 || !rc.d.tracker) fail(`boatyard Rev C model didn't dress to the picks: ${JSON.stringify(rc.d)}`);
   if (rc.share !== "#base=revc&rudder=single") fail(`boatyard Rev C share link: ${rc.share}`);
@@ -503,8 +503,13 @@ try {
   log.push("helm start panel reachable at 960x540, 390x844, 844x390");
 
   // Take the helm: the page draws; with the simulator files it sails 6 hours, without them it says so.
-  await page.goto(`${URL}helm.html?quality=low`);
+  // clock=paused: time waits for the skip buttons, so the hops below are exact.
+  await page.goto(`${URL}helm.html?quality=low&clock=paused`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
+  // Before Set sail only the start card shows (Nina's review): the game's panels wait.
+  const pre = await page.evaluate(() => ["status", "orders", "mapbox", "fcbox"].map((id) => getComputedStyle(document.getElementById(id)).visibility));
+  if (pre.some((v) => v !== "hidden") || (await page.isVisible("#timebar"))) fail(`helm: game controls show before Set sail: ${pre}`);
+  if ((await page.textContent("#go")).trim() !== "Set sail") fail(`helm: the start button says "${await page.textContent("#go")}"`);
   // The boat picker: our kayak and the one stock boat cleared for play (the game below sails the kayak).
   const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
   if (picks.join() !== ",stock_cruiser31") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
@@ -515,6 +520,7 @@ try {
   log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);
   // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
   // so a whole game fits in the smoke test.
+  await page.evaluate(() => (document.getElementById("more").open = true)); // More options
   await page.selectOption("#launch", "2");
   await page.click("#go");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
@@ -528,6 +534,22 @@ try {
     const sixOk = six.stop === "time" ? Math.abs(six.day - 0.25) < 0.01 : ["battery", "wind", "land", "silence", "ghost_passed", "passed_ghost", "over", "order_arrived"].includes(six.stop) && six.day < 0.25;
     if (!sixOk || six.err) fail(`helm: "sail 6 hours" stopped at day ${six.day} (${six.stop}${six.err ? `, ${six.err}` : ""})`);
     if (await page.evaluate(() => !document.getElementById("sailrow").hidden)) fail("helm: sail and engine buttons show for the kayak");
+    // The clock (John, 11 Nov): a speed button sets time running, the simulator keeps
+    // ahead of the picture, and pause holds it. A skip button pauses it again.
+    if (!(await page.isVisible("#timebar")) || (await page.evaluate(() => window.__helm.clock)) !== 0) fail("helm: no time bar, or the clock isn't paused after a skip");
+    await page.click('#timebar .rate[data-rate="24"]');
+    const run0 = six.day;
+    await page.waitForFunction((d) => window.__helm.status.day > d + 0.4 || window.__helm.clock === 0 || window.__helm.error, run0, { timeout: 240000 })
+      .catch(() => fail(`helm: at 1 day a second the clock didn't move from day ${run0}`));
+    const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent }));
+    if (ran.err || (ran.clock === 0 ? ran.stop === "time" : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
+    await page.evaluate(() => window.__helm.clock && document.getElementById("t-pause").click()); // pause, unless it paused itself
+    await page.waitForFunction(() => window.__helm.clock === 0, null, { timeout: 10000 });
+    await page.waitForTimeout(4000); // a run already under way lands
+    const held = await page.evaluate(() => window.__helm.status.day);
+    await page.waitForTimeout(4000);
+    if ((await page.evaluate(() => window.__helm.status.day)) !== held) fail("helm: the clock kept running after pause");
+    log.push(`helm clock: 1 day a second ran day ${run0.toFixed(2)} to ${ran.day.toFixed(2)}${ran.clock ? "" : ` (paused itself: ${ran.stop})`}, pause held`);
     const local = await page.evaluate(() => document.getElementById("local").textContent);
     if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
     // Ravi's gates in the page: the ghost never ahead of the player's clock, every
@@ -580,8 +602,10 @@ try {
     if (mineRow.v !== "mine" || !mineRow.text.includes("Test <i>Rev C</i>") || mineRow.tags) fail(`helm: my boat isn't offered first: ${JSON.stringify(mineRow)}`);
     await page.click("#go");
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
-    const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, msg: document.querySelector("#startmsg").textContent }));
+    const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, clock: window.__helm.clock, lastStop: window.__helm.lastStop, msg: document.querySelector("#startmsg").textContent }));
     if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
+    // Without clock=paused, time runs from Set sail at 6 hours a second (unless something already paused it).
+    if (mg.clock !== 6 && !(mg.clock === 0 && mg.lastStop && mg.lastStop !== "time")) fail(`helm: the clock didn't start at 6 h/s: ${JSON.stringify(mg)}`);
     // Picking another boat on the start card makes it my boat, for the other pages.
     await page.goto(`${URL}helm.html?quality=low`);
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
@@ -599,7 +623,7 @@ try {
   // Weather challenges start live: with the challenge files
   // published, pick the first one with its own weather bundle from the picker and
   // sail 6 hours on it. Without the files the picker stays hidden, and that's fine.
-  await page.goto(`${URL}helm.html?quality=low`);
+  await page.goto(`${URL}helm.html?quality=low&clock=paused`);
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
   const chFile = await page.evaluate(async () => {
     try {
@@ -618,6 +642,7 @@ try {
     log.push(`helm challenges: files there but no simulator (${hm.err})`);
   } else {
     if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
+    await page.evaluate(() => (document.getElementById("more").open = true));
     await page.selectOption("#challenge", chFile.id);
     await page.click("#go");
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });

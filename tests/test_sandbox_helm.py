@@ -110,6 +110,7 @@ def test_results_card(env):
     g = Game(env, launch_index=MAY1, max_days=1)
     g.order("finish", 0.3)
     g.run(ghost_passes=False, land_within_km=None, breakdown=False)
+    assert g.status()["trim_gain_km"] == pytest.approx(g.watch_gain_m / 1000.0)  # one watch ran
     r = g.result()
     assert r["verdict"] == "neither_finished" and r["margin_days"] is None
     assert r["build"] == "k-p25" and r["launch"] == "2020-05-01T12:00"
@@ -645,3 +646,50 @@ def test_a_game_with_no_orders_sails_the_ghosts_voyage(env):
     assert Game.load(env, code).orders[-1]["heading"] == "auto"
     with pytest.raises(ValueError):
         Game(env, launch_index=0, mode="base").order("auto", 0.25)
+
+
+def test_a_helm_spell_sets_the_trim_for_one_watch(env):
+    """Rosa's "Take the wheel" (wheel-to-voyage proposal): a spell's share of the
+    boat's best speed rides on every Command for TRIM_HOURS, whoever steers, then
+    stops. Clamped in the simulator; the ghost never gets it; saves carry it."""
+    from boatsim.sandbox.helm import TRIM_BELOW, TRIM_HOURS
+
+    cruiser = {"base": "stock_cruiser31"}
+    g = Game(env, choices=cruiser, launch_index=MAY1, max_days=2)
+    seen = []
+    step = g.mine.c.vessel.step
+
+    def spy(state, cmd, *a, **k):
+        seen.append((state.t, cmd.trim_share))
+        return step(state, cmd, *a, **k)
+
+    g.mine.c.vessel.step = spy
+    g._advance_to(g.start + timedelta(hours=2))
+    assert {s for _, s in seen} == {None} and g.status()["trim"] is None
+    o = g.order("auto", 0, trim=0.2)  # a clumsy spell, handed back to the autopilot
+    assert o["trim"] == pytest.approx(g.autopilot_factor - TRIM_BELOW) and g.on_auto
+    assert g.order("finish", 0.5, trim=1.7)["trim"] == 1.0  # a better spell restarts the watch
+    t0 = g.mine.state.t
+    code, mid = g.save(), g.status()["trim"]
+    assert mid["share"] == 1.0 and mid["factor"] == g.autopilot_factor and mid["gain_km"] == 0.0
+    g._advance_to(t0 + timedelta(hours=TRIM_HOURS + 2))
+    during = [s for t, s in seen if t0 <= t < t0 + timedelta(hours=TRIM_HOURS)]
+    after = [s for t, s in seen if t >= t0 + timedelta(hours=TRIM_HOURS)]
+    assert during and set(during) == {1.0} and after and set(after) == {None}
+    assert g.status()["trim"] is None
+    r = g.result()
+    assert (
+        r["trim_watches"] == 2 and r["trim_gain_km"] >= 0.0
+    )  # 100% beats the autopilot (0 under engine)
+    h = Game.load(env, code)  # mid-watch (load checks it lands on the same position)
+    assert h.status()["trim"] == mid and h.orders[-1]["trim"] == 1.0
+    # The ghost sails as if no spell happened.
+    plain = Game(env, choices=cruiser, launch_index=MAY1, max_days=2)
+    plain._advance_to(g.ghost.state.t)
+    assert (plain.ghost.state.lat, plain.ghost.state.lon) == (g.ghost.state.lat, g.ghost.state.lon)
+    with pytest.raises(ValueError):
+        Game(env, launch_index=0, max_days=1).order(
+            "finish", 0.25, trim=0.9
+        )  # the kayak has no sails
+    with pytest.raises(ValueError):
+        Game(env, choices=cruiser, launch_index=MAY1, mode="base").order("finish", 0.5, trim=0.9)
