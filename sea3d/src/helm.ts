@@ -33,7 +33,7 @@ import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
-import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
+import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -371,9 +371,29 @@ function fail(e: unknown): void {
 // satellite link goes silent for good, nothing from base reaches it. The orders drawer locks
 // with the reason; the clock and the camera keep working, and you watch the backup box sail.
 const NO_LINK_WORDS: Record<string, string> = {
-  main_box: "The main box has died, and the satellite modem with it. Your orders can't reach the boat any more. The backup box keeps it going east on the stored route.",
-  comms_silent: "The satellite link has gone silent for good. Your orders can't reach the boat any more. It sails on with the last order it heard.",
+  main_box: "The main computer has failed, and the satellite link went with it. Your orders can't reach her any more. The backup steers her east on the stored route.",
+  comms_silent: "The satellite link has gone silent for good. Your orders can't reach her any more. She sails on with the last order she heard.",
 };
+/** The drawer's banner, after "No link.": what you can still do (Leo, Elena). */
+const NO_LINK_BANNER: Record<string, string> = {
+  main_box: "She can't hear you now. The backup steers her east on her own. Watch, or jump ahead to see how she does.",
+  comms_silent: "She can't hear you now. She sails on with the last order she heard. Watch, or jump ahead to see how she does.",
+};
+/** The log event that cuts the link, if this one does: its toast is the no-link toast (one toast, not two). */
+function linkCutBy(e: ReplayEvent): string | null {
+  // A sailboat has one box and no backup: its own words (describeEvent) say so.
+  if (e.kind !== "part_failed" || document.body.classList.contains("sailboat")) return null;
+  const { part } = failedPart(e);
+  return part === "electronics_main" ? "main_box" : part === "comms_silent" ? "comms_silent" : null;
+}
+/** Link-cutting events already told by the note of the pause they caused. */
+const pausedFor = new Set<number>();
+/** "You and the ghost · Day 1.5" when the ghost lost it at the same hour (same dice), else "You · Day 1.5". */
+function linkLabel(e: ReplayEvent): string {
+  const both = (rep("ghost")?.events ?? []).some((o) => Math.abs(o.h - e.h) < 1 && describeEvent(o, "") === describeEvent(e, ""));
+  return `${both ? "You and the ghost" : "You"} · Day ${(e.h / 24).toFixed(1)}`;
+}
+const LOCKED_IDS = ["coach", "dialrow", "powerrow", "power", "sailrow", "preview", "powerhint", "sendrow"];
 let linkCut = "";
 function lockOrders(why: string, announce: boolean): void {
   if (linkCut) return;
@@ -381,12 +401,16 @@ function lockOrders(why: string, announce: boolean): void {
   document.body.classList.add("no-link");
   $("orders").classList.add("locked");
   // Out of reach for the keyboard too, not only the mouse (Lena). The clock and share link stay.
-  for (const id of ["coach", "dialrow", "powerrow", "power", "sailrow", "preview", "powerhint", "sendrow"]) {
+  for (const id of LOCKED_IDS) {
     const el = document.getElementById(id);
     if (el) el.inert = true;
   }
+  // What no longer applies goes (Leo): the day-of-this-order preview and the autopilot hint.
+  $("preview").hidden = true;
+  $("powerhint").hidden = true;
   $("nolink").hidden = false;
-  $("nolinktext").textContent = NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.";
+  $("nolinktext").textContent = NO_LINK_BANNER[why] ?? "She can't hear you now.";
+  $("c-orderv").textContent = "No link";
   $("orders-tab").classList.add("nolink");
   $("orders-tab").querySelector("span")!.textContent = "Orders: no link";
   if (announce) note(NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.", `Day ${(shown ?? page.status)!.day.toFixed(1)}`, TONE_COLOUR.bad);
@@ -394,7 +418,7 @@ function lockOrders(why: string, announce: boolean): void {
 
 async function setOrder(h: Heading, p = power): Promise<void> {
   if (linkCut) {
-    note("No link: the boat can't hear you.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.warn);
+    note("No link: she can't hear you.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.warn);
     return;
   }
   order = h;
@@ -488,7 +512,7 @@ function showOrder(): void {
       : order === "finish"
         ? "Straight at the finish"
         : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
-  $("c-orderv").textContent = order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
+  $("c-orderv").textContent = linkCut ? "No link" : order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
   $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
   $("b-finish").setAttribute("aria-pressed", String(order === "finish"));
@@ -721,7 +745,8 @@ function showStatus(): void {
   const s = shown ?? page.status;
   if (!s) return;
   // The link goes when the picture gets there (a shared game opens with it already gone: no toast).
-  if (s.no_link && !linkCut) lockOrders(s.no_link, page.ready && hour > 0 && !shared);
+  // Its toast comes with the failure itself (newEvents): one toast, not two (Leo, Elena).
+  if (s.no_link && !linkCut) lockOrders(s.no_link, false);
   showTrimChip(page.status ?? s);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
@@ -809,7 +834,9 @@ function newEvents(): void {
       const both = other.some((o) => same(e, o));
       if (both && who === "ghost") continue; // told with your boat's note
       const label = both ? "You and the ghost" : who === "boat" ? "You" : "Ghost";
-      const text = describeEvent(e, who === "boat" ? "your boat" : "the ghost");
+      const cut = who === "boat" ? linkCutBy(e) : null;
+      if (cut && pausedFor.has(e.h)) continue; // the pause's own note tells it
+      const text = cut ? NO_LINK_WORDS[cut] : describeEvent(e, who === "boat" ? "your boat" : "the ghost");
       // The log can name one failure twice (the part, then what it means): one note is enough.
       const key = `${who} ${text}`;
       if (lastNote[key] !== undefined && e.h - lastNote[key] < 6) continue;
@@ -890,7 +917,7 @@ function kickRoll(t: number): number {
 }
 
 // ---------- running time ----------
-async function sail(kind: "6h" | "day" | "event"): Promise<void> {
+async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
   if (busy || !page.ready || page.status?.over) return;
   setRate(0); // a skip pauses the clock: you see where it got to
   setBusy(true, "Sailing...");
@@ -903,7 +930,9 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
         ? { hours: 6, breakdown: false }
         : kind === "day"
           ? { hours: 24, breakdown: false }
-          : untilOptions();
+          : kind === "end"
+            ? { hours: 24 * 200, breakdown: false } // the game ends by itself (finish, landfall or max days)
+            : untilOptions();
     const stopped = await game.run(opts);
     page.status = game.status;
     page.stops.push(stopped);
@@ -915,7 +944,10 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
     if (stopped === "breakdown") {
       // The note for it is already up (newEvents): say so plainly instead of twice.
       const e = game.boat!.events.filter(isNotable).at(-1);
-      note(e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, TONE_COLOUR.warn);
+      // A lost link is told once, by its own toast (newEvents), not again here (Leo, Elena).
+      const cut = e ? linkCutBy(e) : null;
+      if (cut && e) pausedFor.add(e.h); // told here, with the pause; newEvents leaves it
+      note(cut ? NO_LINK_WORDS[cut] : e ? `Stopped: ${describeEvent(e, "your boat")}` : stopText(stopped, page.status), cut && e ? linkLabel(e) : `Day ${page.status!.day.toFixed(1)}`, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn);
     } else if (!(kind !== "event" && stopped === "time"))
       note(stopText(stopped, page.status), `Day ${page.status!.day.toFixed(1)}`, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info);
     await refreshForecast();
@@ -1018,7 +1050,9 @@ async function clockRun(): Promise<void> {
       const d = `Day ${game.status!.day.toFixed(1)}`;
       if (stopped === "breakdown") {
         const e = game.boat!.events.filter(isNotable).at(-1);
-        whenAt(game.status!.day * 24, () => note(`Paused: ${e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, d, TONE_COLOUR.warn));
+        const cut = e ? linkCutBy(e) : null;
+        if (cut && e) pausedFor.add(e.h); // one toast for a lost link, with the pause (Leo, Elena)
+        whenAt(game.status!.day * 24, () => note(`Paused: ${cut ? NO_LINK_WORDS[cut] : e ? describeEvent(e, "your boat") : stopText(stopped, game.status)}`, cut && e ? linkLabel(e) : d, cut ? TONE_COLOUR.bad : TONE_COLOUR.warn));
       } else if (stopped !== "over")
         whenAt(game.status!.day * 24, () => note(`Paused: ${stopText(stopped, game.status)}`, d, stopped === "ghost_passed" || stopped === "silence" ? TONE_COLOUR.warn : stopped === "passed_ghost" ? TONE_COLOUR.good : TONE_COLOUR.info));
     }
@@ -2100,6 +2134,18 @@ $<HTMLInputElement>("power").addEventListener("input", (e) => {
 $<HTMLInputElement>("power").addEventListener("change", () => void setOrder(order, power));
 $("s6").addEventListener("click", () => void sail("6h"));
 $("sday").addEventListener("click", () => void sail("day"));
+$("nl-end").addEventListener("click", () => void sail("end"));
+// A tap on a locked control says why (Leo). Inert controls don't get the click; their drawer does.
+$("orders").addEventListener("click", (ev) => {
+  if (!linkCut || ev.target !== $("orders")) return;
+  const hit = LOCKED_IDS.some((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.hidden) return false;
+    const r = el.getBoundingClientRect();
+    return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+  });
+  if (hit) note("No link: she can't hear you.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.warn);
+});
 $("sevent").addEventListener("click", () => void sail("event"));
 $("go").addEventListener("click", () => void begin());
 $("send").addEventListener("click", () => void sendOrder());

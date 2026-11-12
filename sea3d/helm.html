@@ -64,6 +64,10 @@
   /* Only the steering locks: the clock (Jump ahead) and the share link keep working (Maya). */
   #orders.locked > :is(#coach, #dialrow, #powerrow, #power, #sailrow, #preview, #powerhint, #sendrow) { opacity: .35; pointer-events: none; filter: grayscale(1); }
   #orders-tab.nolink span { color: #ff8a7a; }
+  #nolink .nlbtns { margin-top: 7px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #nolink .nlbtns a { color: #ffd0c8; font-size: 12px; }
+  body.no-link #strip #c-order .v { color: #ff8a7a; }
+  body.no-link #strip #c-order .v::after { content: none; }
   #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
   #soundask button { white-space: nowrap; }
   #soundask[hidden] { display: none; }
@@ -425,7 +429,8 @@
 <button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>
 <section id="orders" class="glass" aria-label="Your orders">
   <h2>Your orders <button id="orders-x" class="x" aria-label="Close (O)" title="Close (O)">&times;</button></h2>
-  <div id="nolink" role="status" hidden><b>No link</b><span id="nolinktext"></span></div>
+  <div id="nolink" role="status" hidden><b>No link</b><span id="nolinktext"></span>
+    <div class="nlbtns"><button id="nl-end" class="needs-idle go" title="Sail on to the end of the voyage">Watch her go (jump to the end)</button> <a href="helm.html">Try another launch day</a></div></div>
   <div id="coach" hidden>Steer here, or with &larr; &rarr;. O opens and closes this.</div>
   <div id="dialrow">
     <canvas id="dial" title="Tap or drag to steer. Orange: your order · white: where the bow points · green: the finish · blue: the wind"></canvas>
