@@ -297,9 +297,14 @@ void main() {
     float azD = atan(dir.z, dir.x);
     // Lumpy along the horizon (a degree or two across), thin in height: rolls seen side on.
     if (uQ > 0.5) {
-      vec2 sv = vec2(azD * 28.0 + dot(uDrift, vec2(-wd.y, wd.x)) * 0.00025, el * 260.0) + uSeed;
-      float side = 0.55 * fbmL(sv, 0.0, 4) + 0.45 * cells(sv * vec2(1.0, 0.45));
-      n = mix(n, 0.36 + 0.4 * side, smoothstep(0.0, 0.55, lod) * 0.9);
+      // Heavy masses, not combed lines (Elena): mostly lumps, a few degrees across, and
+      // they take over low in the sky, where the deck's own pattern squashes into streaks.
+      vec2 sv = vec2(azD * 9.0 + dot(uDrift, vec2(-wd.y, wd.x)) * 0.00015, el * 40.0) + uSeed;
+      vec2 warp = vec2(fbmL(sv * 0.5, 0.0, 2), fbmL(sv * 0.5 + 3.1, 0.0, 2)) - 0.5;  // no honeycomb
+      vec2 sw = sv * vec2(1.0, 0.8) + 0.7 * warp;
+      float side = 0.25 * fbmL(sv * 1.3, 0.0, 2) + 0.5 * cells(sw) + 0.25 * cells(sw * 2.1 + 5.7);
+      float sideW = max(smoothstep(0.0, 0.55, lod), (1.0 - smoothstep(0.04, 0.22, el)) * (1.0 - smoothstep(0.25, 0.6, uStorm)));
+      n = mix(n, 0.34 + 0.46 * side, sideW);
     }
     float wet = smoothstep(0.5, 5.0, uRain);
     // In a full gale with rain it closes right over; seams open where it thins.
@@ -313,7 +318,7 @@ void main() {
     float slope = 0.0;
     if (uQ > 0.5) slope = deckD(r + sr * 0.05, lod, oct) - n;
     vec3 c = mix(uSteel, uBelly, pow(thick, 0.75));
-    c *= 1.0 + clamp(-slope * 5.0, -0.45, 0.6) * (1.0 - lod) * (0.3 + 0.7 * uLight);
+    c *= 1.0 + clamp(-slope * 5.0, -0.45, 0.6) * (1.0 - lod) * (0.3 + 0.7 * uLight) * smoothstep(0.1, 0.35, el); // edge-on it combs into lines
     // Darkest overhead, lighter towards the horizon through miles of thinner cloud.
     float overhead = smoothstep(0.04, 0.6, el);
     c *= 1.0 - (0.1 + 0.1 * wet) * overhead;
@@ -357,11 +362,13 @@ void main() {
   }
   // The horizon: everything goes to the haze over the last few degrees, as the sea does.
   // Only the last few degrees: the cloud base runs down into the haze, with no flat band above it (Ines).
-  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.02, deckAmt), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
+  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.07, deckAmt), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
   // Under a deck the cloud goes to the haze (the sea's far fade); in clear weather it thins
   // away and the sky's own horizon shows, which the haze would only darken.
   float hz2 = hz * hz * (3.0 - 2.0 * hz);
-  col = mix(col, uHaze * alpha, hz2 * deckAmt);
+  // Under a deck, a soft mist band a few degrees deep (Elena: no knife line), paling
+  // toward the sea where the far rain and spray are lit.
+  col = mix(col, uHaze * alpha * (1.0 + 0.25 * hz), hz * hz * deckAmt);
   float keep = 1.0 - hz2 * (1.0 - deckAmt);
   col *= keep; alpha *= keep;
   // ---- storm wall (Hana) ---- (after the clear-sky horizon fade, which would hide it)
