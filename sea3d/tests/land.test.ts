@@ -80,3 +80,20 @@ test("trees: thin evenly to the cap, keep out of buildings, add mapped ones off 
   const doubled = treeSpots(grid, cls, hgt, { lat, lon }, O, undefined, { points: [[lon + 100 / mx, lat, 12]] });
   assert.equal(doubled.length, treeSpots(grid, cls, hgt, { lat, lon }, O).length, "no extra tree inside a wood");
 });
+
+test("trees on the Bay's squares: decimetre heights, more per bigger cell, laid out at a shared latitude", () => {
+  // The same land in decimetres (scale 0.1): the same trees, standing on the same ground.
+  const dm = new Int16Array(N * N).map((_, k) => (k % N < 50 ? 0 : 50));
+  const a = treeSpots(grid, cls, hgt, { lat, lon }, O);
+  const b = treeSpots({ ...grid, scale: 0.1 }, cls, dm, { lat, lon }, O);
+  assert.deepEqual(a, b);
+  // tree_cell 3: about three times the trees from the same cells.
+  const big = { ...O, max: 50000 };
+  const c = treeSpots({ ...grid, tree_cell: 3 }, cls, hgt, { lat, lon }, big);
+  const r = c.length / treeSpots(grid, cls, hgt, { lat, lon }, big).length;
+  assert.ok(r > 2.6 && r < 3.4, `${r}`);
+  // Laid out at a latitude a little south: about the same trees, a touch wider apart east-west.
+  const d = treeSpots(grid, cls, hgt, { lat, lon, mid: lat - 0.05 }, O);
+  assert.ok(Math.abs(d.length / a.length - 1) < 0.02);
+  assert.notDeepEqual(d, a);
+});

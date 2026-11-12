@@ -50,12 +50,16 @@ export function treeSpots(
   grid: LandGrid,
   cls: Uint8Array,
   hgt: Int16Array,
-  at: { lat: number; lon: number },
+  at: { lat: number; lon: number; mid?: number },
   o: TreeOptions,
   blocked: (x: number, z: number) => boolean = () => false,
   mapped: MappedTrees = {},
 ): Float32Array {
-  const { mx, my } = metresPerDegree((grid.lat0 + grid.lat1) / 2);
+  // at.mid: the latitude the land was laid out at, when not its own middle (the Bay's squares share one).
+  const { mx, my } = metresPerDegree(at.mid ?? (grid.lat0 + grid.lat1) / 2);
+  const scale = grid.scale ?? 1;
+  // Bigger cells than the 11 m the density was tuned on hold more trees each (the squares' "tree_cell").
+  const perCell = o.perCell * (grid.tree_cell ?? 1);
   const dlon = (grid.lon1 - grid.lon0) / (grid.nx - 1);
   const dlat = (grid.lat1 - grid.lat0) / (grid.ny - 1);
   const cx = dlon * mx;
@@ -72,7 +76,7 @@ export function treeSpots(
     if (i < 0 || j < 0 || i >= grid.nx - 1 || j >= grid.ny - 1) return -1;
     const a = fi - i;
     const b = fj - j;
-    const h = (ii: number, jj: number) => hgt[jj * grid.nx + ii];
+    const h = (ii: number, jj: number) => hgt[jj * grid.nx + ii] * scale;
     return (h(i, j) * (1 - a) + h(i + 1, j) * a) * (1 - b) + (h(i, j + 1) * (1 - a) + h(i + 1, j + 1) * a) * b;
   };
   const i0 = Math.max(Math.floor(iOf(-o.radius)), 0);
@@ -86,7 +90,7 @@ export function treeSpots(
     for (let i = i0; i <= i1; i++) {
       if (cls[j * grid.nx + i] !== TREE_CLASS || hgt[j * grid.nx + i] <= 0) continue;
       const d = Math.hypot(xOf(i), zOf(j));
-      if (d <= o.radius) expected += o.perCell * keep(d);
+      if (d <= o.radius) expected += perCell * keep(d);
     }
   const fit = expected > o.max ? o.max / expected : 1;
   const out: number[] = [];
@@ -103,7 +107,7 @@ export function treeSpots(
       const z = zOf(j);
       const d = Math.hypot(x, z);
       if (d > o.radius) continue;
-      const p = o.perCell * keep(d) * fit;
+      const p = perCell * keep(d) * fit;
       const r = rnd((Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ o.seed) >>> 0);
       const n = Math.floor(p) + (r() < p - Math.floor(p) ? 1 : 0);
       // Far trees stand for the ones left out, so they're drawn a little bigger.
@@ -275,6 +279,7 @@ export class Trees {
     grid: { meta: LandGrid; hgt: Int16Array },
     blocked?: (x: number, z: number) => boolean,
     base = "./land",
+    opt: { mid?: number; options?: Partial<TreeOptions> } = {},
   ): Promise<Trees | null> {
     const name = place.land ?? place.key;
     // Only places baked with land cover have the files: don't ask for them elsewhere (a 404 in the console, #342).
@@ -300,7 +305,8 @@ export class Trees {
     const mapped: MappedTrees = await get("trees.json")
       .then((r) => r.json() as Promise<MappedTrees>)
       .catch(() => ({}));
-    return new Trees(treeSpots(grid.meta, cls, grid.hgt, place, TREE_OPTIONS[quality], blocked, mapped));
+    const o = { ...TREE_OPTIONS[quality], ...opt.options };
+    return new Trees(treeSpots(grid.meta, cls, grid.hgt, { lat: place.lat, lon: place.lon, mid: opt.mid }, o, blocked, mapped));
   }
 
   /** Each frame: the wind (m/s) for the sway, and the air's colour and the storm for the haze. */
