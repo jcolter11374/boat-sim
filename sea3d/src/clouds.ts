@@ -104,6 +104,12 @@ export function stormWall(km: number): number {
   return Number.isFinite(km) ? 1 - SM(km, 150, 900) : 0;
 }
 
+/**
+ * The new fair-weather cumulus is on look-hold (Ines, 12 Nov): until it passes, fair skies
+ * keep main's clouds and ?cumulus=new shows the new heaps. Everything else in the sky is new.
+ */
+export const CUMULUS_NEW = typeof location !== "undefined" && new URLSearchParams(location.search).get("cumulus") === "new";
+
 const cloudVert = /* glsl */ `
 varying vec3 vWorld;
 void main() {
@@ -130,7 +136,7 @@ void main() {
 // wind (drift and the scud's direction). uQ: 0 Low, 1 High, 2 Ultra.
 const cloudFrag = /* glsl */ `
 uniform float uCover, uStorm, uRain, uWarm, uQ, uTime, uLight;
-uniform float uBreak, uMoon, uWall;
+uniform float uBreak, uMoon, uWall, uCuNew;
 uniform vec2 uWallDir;
 uniform vec2 uDrift, uScud, uWind, uSeed;
 uniform vec3 uCam, uSunDir, uMoonDir, uLit, uShade, uHaze, uGlow, uSteel, uBelly, uBrk;
@@ -199,6 +205,21 @@ float deckD(vec2 r, float lod, int oct) {
   float v = 0.46 * big * k + 0.14 * bumps * (1.0 - smoothstep(0.0, 0.5, lod)) + 0.5 * mass - 0.04;
   return mix(0.5, v, 1.0 - 0.6 * lod) + 0.01;
 }
+// main's fair-weather cumulus (until the new heaps pass review; ?cumulus=new shows them).
+float fbmOld(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int k = 0; k < 5; k++) { v += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
+  return v;
+}
+float billowOld(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int k = 0; k < 4; k++) { v += a * abs(vnoise(p) * 2.0 - 1.0); p = p * 2.07 + vec2(5.3, 11.9); a *= 0.5; }
+  return v;
+}
+float densOld(vec2 p) {
+  vec2 w = p + 0.45 * vec2(vnoise(p * 0.8 + 3.1), vnoise(p * 0.8 + 8.3));
+  return 0.9 * fbmOld(w) + 0.26 * (1.0 - billowOld(w * 3.0 + 1.7)) - 0.15;
+}
 void main() {
   vec3 dir = normalize(vWorld - uCam);
   if (dir.y < -0.02) discard;
@@ -245,7 +266,29 @@ void main() {
   // Overcast, a blow, or steady rain (rain falls from a deck, whatever the sunlight said) close the sky.
   float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.05, 0.8, uRain));
   float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
-  if (cuAmt > 0.01 && alpha < 0.99) {
+  if (cuAmt > 0.01 && alpha < 0.99 && uCuNew < 0.5 && dir.y > 0.0) {
+    // main's layer at 600 m, as it was drawn before the new sky (same look, now on the dome).
+    vec2 qo = onLayer(dir, 600.0);
+    vec2 po = (qo + uDrift) / 900.0;
+    float n = densOld(po);
+    float edge = 1.0 - (0.42 + 0.5 * uCover);
+    float d = smoothstep(edge - 0.015, edge + 0.07, n);
+    if (d > 0.004) {
+      float thick = smoothstep(edge, edge + 0.3, n);
+      vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+      float toward = densOld(po + sunH * 0.09) - n;
+      float shade = clamp(0.55 * thick + 2.6 * toward, 0.0, 1.0);
+      float dist = length(qo - uCam.xz);
+      float side = smoothstep(700.0, 3500.0, dist);
+      float baseShade = mix(0.35 + 0.65 * shade, shade * (0.4 + 0.6 * smoothstep(-0.3, 0.6, facing)), side);
+      vec3 c = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uStorm));
+      c += uLit * pow(max(facing, 0.0), 5.0) * (1.0 - thick) * 0.9;
+      c += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
+      c = mix(c, uHaze, smoothstep(2500.0, 8000.0, dist));
+      float a = d * (1.0 - smoothstep(5000.0, 8500.0, dist)) * 0.96 * cuAmt;
+      col += (1.0 - alpha) * a * c; alpha += (1.0 - alpha) * a;
+    }
+  } else if (cuAmt > 0.01 && alpha < 0.99) {
     vec2 q = onLayer(dir, 1200.0) + uDrift;
     float dist = length(q - uDrift - uCam.xz);
     float lod = footprint(dist, el, 700.0);
@@ -544,6 +587,7 @@ export class Clouds {
         uMoon: { value: 0 },
         uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
         uWall: { value: 0 },
+        uCuNew: { value: CUMULUS_NEW ? 1 : 0 },
         uWallDir: { value: new THREE.Vector2(1, 0) },
       },
       transparent: true,

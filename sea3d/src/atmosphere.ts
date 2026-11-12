@@ -136,15 +136,19 @@ function deepenSky(m: THREE.ShaderMaterial): void {
         // Clear air: bluer and darker going up, but not in the bright glow round the sun.
         float glow = smoothstep(0.75, 0.995, cosTheta);
         float up = smoothstep(0.0, 0.55, hgt);
-        vec3 deep = mix(vec3(1.0), vec3(0.42, 0.62, 1.08), up * (1.0 - glow));
-        vec3 graded = mix(vec3(lum), retColor, 1.35) * deep;
+        // At a low sun the zenith is a deeper, duskier blue, not midday's saturated one (Ines).
+        vec3 zen = mix(vec3(0.42, 0.62, 1.08), vec3(0.34, 0.44, 0.78), uWarm);
+        vec3 deep = mix(vec3(1.0), zen, up * (1.0 - glow));
+        vec3 graded = mix(vec3(lum), retColor, mix(1.35, 1.1, uWarm)) * deep;
         // Just above the horizon: a pale, bright band of haze rather than flat white.
         float band = 1.0 - smoothstep(0.0, 0.12, hgt);
         graded = mix(graded, retColor * vec3(0.8, 0.9, 1.03), band * 0.6);
         // Low sun: warm the sky on the sun's side, rose and violet opposite (the "belt of Venus").
         float sunSide = 0.5 + 0.5 * cosTheta;
         vec3 dusk = mix(vec3(0.95, 0.82, 1.0), vec3(1.18, 0.86, 0.62), sunSide);
-        graded *= mix(vec3(1.0), dusk, uWarm * (1.0 - 0.6 * up));
+        // ...and the warmth climbs higher round the sun.
+        float nearSun = smoothstep(0.2, 0.95, cosTheta);
+        graded *= mix(vec3(1.0), dusk, uWarm * (1.0 - 0.6 * up * (1.0 - 0.75 * nearSun)));
         retColor = mix(retColor, max(graded, 0.0), uClear);
         // Twilight, sun just below the horizon: the sky keeps a glow for half an hour
         // or so. Orange low on the sun's side, a deepening blue overhead, and a
