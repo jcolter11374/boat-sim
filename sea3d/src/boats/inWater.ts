@@ -60,7 +60,12 @@ const BODY = /* glsl */ `
     gl_FragColor.rgb *= mix(1.0, 0.62, wet); // darker where it's wet
     float line = 1.0 - smoothstep(0.0, 0.03 + 0.03 * n, h);
     float bits = smoothstep(0.42, 0.7, iwNoise(vSeaW.xz * 18.0 + uSeaTime * 2.3));
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.88, 0.93, 0.96) * uWetLight, line * bits * uWetFoam * 0.8);
+    // More at the bow, thin and broken aft (none read where no hull is known).
+    float sAl = washAlong(vSeaW.xz);
+    float bowK = sAl < -1.5 ? 0.6 : smoothstep(-0.6, 0.85, sAl);
+    float gaps = smoothstep(0.3, 0.6, iwNoise(vSeaW.xz * 1.6 + vec2(uSeaTime * 0.7, 0.0)));
+    bits *= mix(gaps, 1.0, bowK) * (0.45 + 0.55 * bowK);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.88, 0.93, 0.96) * uWetLight, line * bits * uWetFoam * 0.75);
   }
 }
 `;

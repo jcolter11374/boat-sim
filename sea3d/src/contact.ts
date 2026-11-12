@@ -4,6 +4,7 @@
 // components) and the motion model's pose, so it never disagrees with the log.
 
 import * as THREE from "three";
+import { FOAM_LAMP_GLSL, FOAM_LAMP_UNIFORMS } from "./boats/navlights";
 import type { HullForm, Quality } from "./boats/parts";
 import type { BoatSpec } from "./boats/specs";
 import { toWorld, type Placement } from "./standin";
@@ -25,6 +26,7 @@ const collarVert = /* glsl */ `
   }
 `;
 const collarFrag = /* glsl */ `
+  ${FOAM_LAMP_GLSL}
   uniform float uTime;
   uniform float uFlow;  // water distance run, m (foam streams aft with it)
   uniform float uI;     // strength 0..1
@@ -47,7 +49,11 @@ const collarFrag = /* glsl */ `
     float edge = 1.0 - smoothstep(0.0, 1.0, vUV.y);           // thick at the hull, thin outside
     float bow = 1.0 + 0.8 * (1.0 - smoothstep(0.0, 0.25, vUV.x)); // more at the bow
     float a = smoothstep(0.55 - 0.45 * edge * uI * bow, 0.75, n) * edge * edge * uI;
-    gl_FragColor = vec4(vec3(0.95, 0.97, 1.0) * uLight, clamp(a, 0.0, 0.9));
+    // Thick at the bow, thinning aft and breaking into patches with gaps (Elena, WIP 2).
+    float aft = smoothstep(0.15, 0.9, vUV.x);
+    float gaps = smoothstep(0.3, 0.6, vnoise(q * vec2(0.9, 2.5) + 3.7));
+    a *= mix(1.0, gaps, aft) * (1.0 - 0.45 * aft);
+    gl_FragColor = vec4(vec3(0.95, 0.97, 1.0) * (uLight + foamLamp(vW)), clamp(a, 0.0, 0.9));
   }
 `;
 
@@ -55,21 +61,25 @@ const sprayVert = /* glsl */ `
   attribute float aAlpha;
   attribute float aSize;
   varying float vAlpha;
+  varying vec3 vW;
   void main() {
     vAlpha = aAlpha;
+    vW = (modelMatrix * vec4(position, 1.0)).xyz;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = aSize * (320.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
   }
 `;
 const sprayFrag = /* glsl */ `
+  ${FOAM_LAMP_GLSL}
   uniform float uLight;
   varying float vAlpha;
+  varying vec3 vW;
   void main() {
     vec2 d = gl_PointCoord - 0.5;
     float r = dot(d, d) * 4.0;
     if (r > 1.0) discard;
-    gl_FragColor = vec4(vec3(0.93, 0.96, 1.0) * uLight, vAlpha * (1.0 - r));
+    gl_FragColor = vec4(vec3(0.93, 0.96, 1.0) * (uLight + foamLamp(vW)), vAlpha * (1.0 - r));
   }
 `;
 
@@ -179,7 +189,7 @@ export class Contact {
       new THREE.ShaderMaterial({
         vertexShader: collarVert,
         fragmentShader: collarFrag,
-        uniforms: { uTime: { value: 0 }, uFlow: { value: 0 }, uI: { value: 0 }, uLight: { value: 1 }, uDir: { value: new THREE.Vector2(1, 0) } },
+        uniforms: { uTime: { value: 0 }, uFlow: { value: 0 }, uI: { value: 0 }, uLight: { value: 1 }, uDir: { value: new THREE.Vector2(1, 0) }, ...FOAM_LAMP_UNIFORMS },
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -199,7 +209,7 @@ export class Contact {
     sg.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(this.n), 1));
     this.spray = new THREE.Points(
       sg,
-      new THREE.ShaderMaterial({ vertexShader: sprayVert, fragmentShader: sprayFrag, uniforms: { uLight: { value: 1 } }, transparent: true, depthWrite: false }),
+      new THREE.ShaderMaterial({ vertexShader: sprayVert, fragmentShader: sprayFrag, uniforms: { uLight: { value: 1 }, ...FOAM_LAMP_UNIFORMS }, transparent: true, depthWrite: false }),
     );
     this.spray.frustumCulled = false;
     this.spray.renderOrder = 12;

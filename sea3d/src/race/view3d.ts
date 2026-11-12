@@ -189,7 +189,7 @@ export class BoatView {
       if (this.contact) {
         this.bowW.set(this.contact.bow[0], this.spec.cgBelowWaterline, this.contact.bow[1]);
         m.root.localToWorld(this.bowW);
-        this.contact.update(comps, t, this.place, hs, { speed: stw, bowClearance: this.bowW.y - heightAt(comps, this.bowW.x, this.bowW.z, t), light: this.atmos.ambient });
+        this.contact.update(comps, t, this.place, hs, { speed: stw, bowClearance: this.bowW.y - heightAt(comps, this.bowW.x, this.bowW.z, t), light: this.atmos.foamLight });
       }
       m.gear.update(
         { speed: stw / this.spec.cruiseSpeed, rudder: rudderFor(dt > 0 ? step / dt : 0), sun: (w?.ghi ?? 500) / 1000, comms: "", flow, failed: new Map() },
@@ -214,7 +214,7 @@ export class BoatView {
     this.clouds.closeIn(this.atmos.fog);
     this.rain.update(t, this.camera, rainFromRate(w?.rain ?? 0), wu, -wv, this.atmos.ambient);
     this.sea.setSun(this.atmos.glintDir, this.atmos.glintLight);
-    this.wake?.setLight(this.atmos.ambient);
+    this.wake?.setLight(this.atmos.foamLight);
     this.controls.update();
     const floor = heightAt(comps, this.camera.position.x, this.camera.position.z, t) + 0.35;
     if (this.camera.position.y < floor) this.camera.position.y = floor;

@@ -5,7 +5,7 @@
 // the results card. Display only: the physics is all in the simulator.
 
 import * as THREE from "three";
-import { NAV_NIGHT } from "./boats/navlights";
+import { FOAM_LAMP_UNIFORMS, NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
@@ -161,9 +161,11 @@ function buildBoat(): void {
 // material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
 const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
 deckLight.name = "deck_light";
-/** Candela at full night, and the foam's floor of light: tuned on the kayak at 1 AM, moonless. */
+/** Candela at full night, and the lamp's light on the foam right beside it (falling away
+ *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
 const FOAM_AT_NIGHT = 0.3;
+const lampW = new THREE.Vector3();
 function placeDeckLight(): void {
   if (!model) return;
   deckLight.removeFromParent();
@@ -2736,7 +2738,10 @@ renderer.setAnimationLoop(() => {
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
-      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: Math.max(atmos.ambient, FOAM_AT_NIGHT * NAV_NIGHT.value) });
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.foamLight });
+      deckLight.getWorldPosition(lampW);
+      FOAM_LAMP_UNIFORMS.uFoamLamp.value.set(lampW.x, lampW.y, lampW.z, FOAM_AT_NIGHT * NAV_NIGHT.value);
+      FOAM_LAMP_UNIFORMS.uFoamLampR.value = 1.5 * Math.max(1, spec.length / KAYAK.length);
     }
     model.gear.update(
       {
@@ -2812,7 +2817,7 @@ renderer.setAnimationLoop(() => {
   spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
   page.spindrift = spray.amount;
   sea.setSun(atmos.glintDir, atmos.glintLight);
-  wake?.setLight(atmos.ambient);
+  wake?.setLight(atmos.foamLight);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
   sound.rig = rigOf(spec.key);
   sound.length = spec.length;

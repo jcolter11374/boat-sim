@@ -28,6 +28,23 @@ export type NavLighting = "all_round" | "tricolour";
 /** Night 0..1 for every boat's lights (Atmosphere.set sets it): lights are on day and night but only show in the dark. */
 export const NAV_NIGHT = { value: 0 };
 
+/** The boat's own lamp as it falls on foam near it (wake, collar, spray): world x, y, z and
+ *  strength (0 by day). Shared by reference: foam materials merge FOAM_LAMP_UNIFORMS, the
+ *  page that owns the lamp moves it. Unlit foam can't take a real PointLight. */
+export const FOAM_LAMP_UNIFORMS = {
+  uFoamLamp: { value: new THREE.Vector4(0, 0, 0, 0) },
+  uFoamLampR: { value: 1.5 }, // m: the light falls to half at this distance
+};
+/** GLSL: foamLamp(worldPos), the lamp's extra light on foam there. */
+export const FOAM_LAMP_GLSL = /* glsl */ `
+uniform vec4 uFoamLamp;
+uniform float uFoamLampR;
+float foamLamp(vec3 w) {
+  vec3 d = w - uFoamLamp.xyz;
+  return uFoamLamp.w / (1.0 + dot(d, d) / (uFoamLampR * uFoamLampR));
+}
+`;
+
 /** One lantern's arc, in degrees from dead ahead, clockwise (to starboard): from, to. */
 export interface Arc {
   colour: number;

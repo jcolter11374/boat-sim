@@ -5,6 +5,7 @@
 // floating dots. Cosmetic; driven by the logged speed through the water.
 
 import * as THREE from "three";
+import { FOAM_LAMP_GLSL, FOAM_LAMP_UNIFORMS } from "./boats/navlights";
 import type { Quality } from "./boats/parts";
 import { toWorld, type Placement } from "./standin";
 import { displace, type WaveComponent } from "./waves";
@@ -26,6 +27,7 @@ const vert = /* glsl */ `
   }
 `;
 const frag = /* glsl */ `
+  ${FOAM_LAMP_GLSL}
   uniform float uOdo;   // water distance run, m
   uniform float uLen;   // strip length, m
   uniform float uI;     // strength 0..1
@@ -88,7 +90,7 @@ const frag = /* glsl */ `
     // Bubbles just under the surface turn the water a pale turquoise around the foam.
     float bub = centre * (0.4 + 0.6 * patches) * uI * 0.22;
     vec3 col = mix(vec3(0.35, 0.75, 0.78), vec3(0.95, 0.97, 1.0), clamp(a / max(a + bub, 1e-3), 0.0, 1.0));
-    gl_FragColor = vec4(col * uLight, clamp(max(a, bub), 0.0, 0.9));
+    gl_FragColor = vec4(col * (uLight + foamLamp(vW)), clamp(max(a, bub), 0.0, 0.9));
   }
 `;
 
@@ -131,7 +133,7 @@ export class Wake {
     const mat = new THREE.ShaderMaterial({
       vertexShader: vert,
       fragmentShader: frag,
-      uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 } },
+      uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 }, ...FOAM_LAMP_UNIFORMS },
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,

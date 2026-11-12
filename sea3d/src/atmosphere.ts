@@ -210,6 +210,10 @@ export class Atmosphere {
   sprayFar = Infinity;
   /** Overall light level for unlit things like foam particles, 0..1. */
   ambient = 1;
+  /** Light for unlit foam (wake, collar, spray), 0..1: the same as ambient by day, but at
+   *  night only what the moon and stars give it, so foam is a dim grey just above the dark
+   *  sea (Elena) and the boat's own lamp (FOAM_LAMP, navlights.ts) brightens it close by. */
+  foamLight = 1;
 
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
@@ -375,6 +379,7 @@ export class Atmosphere {
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
     const dark = 0.05 + 0.13 * moonlight; // what the night leaves, moonless .. full moon
     this.ambient = dark + (1 - dark) * day * (1 - Math.max(0.4 * storm, 0.35 * overcast));
+    this.foamLight = this.ambient - 0.7 * dark * (1 - day); // GUESS: 0.3 of the night's level
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);

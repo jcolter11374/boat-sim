@@ -281,7 +281,7 @@ renderer.setAnimationLoop(() => {
     b.contact.update(comps, t, b.place, hsOf(comps), {
       speed: b.spec.cruiseSpeed,
       bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t),
-      light: atmos.ambient,
+      light: atmos.foamLight,
     });
     status.maxRoll[b.spec.key] = Math.max(status.maxRoll[b.spec.key] ?? 0, Math.abs(b.motion.roll));
     return {
