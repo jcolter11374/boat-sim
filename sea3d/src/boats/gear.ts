@@ -13,6 +13,7 @@
 
 import * as THREE from "three";
 import { Rowers } from "./rowers";
+import { NAV_NIGHT } from "./navlights";
 
 /** Part names as the replay's part_failed events give them. */
 export type Part =
@@ -286,10 +287,12 @@ export class Gear {
     // Wind vane on the stern pole: points straight downwind, with a little flutter.
     if (this.vane) this.vane.rotation.y = wingAngle(s.flow, 0) + 0.05 * Math.sin(t * 5.3);
 
-    // Solar panels: a cool sheen in strong sun.
+    // Solar panels: a cool sheen in strong sun. Only while the drawn sky is day: the logged
+    // sun can disagree with the picture (a forced night sky), and at night the panels lit
+    // up blue from inside, the brightest thing in the frame (Ines, 12 Nov).
     for (const m of this.panels) {
       m.emissive.setRGB(0.12, 0.25, 0.55);
-      m.emissiveIntensity = 0.5 * THREE.MathUtils.clamp(s.sun, 0, 1);
+      m.emissiveIntensity = 0.5 * THREE.MathUtils.clamp(s.sun, 0, 1) * (1 - NAV_NIGHT.value);
     }
     this.shown.sun = s.sun;
 
