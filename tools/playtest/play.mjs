@@ -911,6 +911,22 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #415 by eye: the nearest Channel ship from 50.0,-2.0 was 5.4 km at 260°, so start beside it.
+  "ships-415": {
+    manual: true,
+    path: "helm.html?spot=49.993,-2.068",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 5 && window.__helm.ships?.ships > 0, null, { timeout: 2 * MIN }).catch(() => {});
+      await page.waitForTimeout(5000);
+      await page.evaluate(() => { const s = document.getElementById("start"); if (s) s.style.display = "none"; });
+      const ships = await page.evaluate(() => JSON.stringify(window.__helm.ships));
+      console.log(`M0-415 ${ships}`);
+      await lookShot(page, `s415-${BROWSER}-1.jpg`);
+      for (let i = 2; i <= 4; i++) { await page.keyboard.press("c"); await page.waitForTimeout(5000); await lookShot(page, `s415-${BROWSER}-${i}.jpg`); }
+      return `ships ${ships}`;
+    },
+  },
   "m0-maya": {
     manual: true,
     path: "helm.html?spot=50.0,-2.0",
