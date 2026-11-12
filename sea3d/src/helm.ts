@@ -36,6 +36,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failuresAt, isNotable, lastHour, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
+import { rollFromWheel } from "./helm/wheel";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type Preview, type Status, type Stop } from "./helm/game";
 import { Compass } from "./helm/compass";
@@ -2491,7 +2492,7 @@ renderer.setAnimationLoop(() => {
   off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
   camera.position.copy(controls.target).add(off);
   // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
-  motion.heel = wheelNow ? THREE.MathUtils.degToRad(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  motion.heel = wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   if (model) {

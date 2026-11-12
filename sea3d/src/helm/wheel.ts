@@ -467,3 +467,10 @@ export class Guide {
     return GUIDE_WORDS[this.step];
   }
 }
+
+/**
+ * The wheel's lean as the 3D boat's roll (radians). The wheel says + to port (wind from
+ * starboard pushes her over to port); the boat's motion rolls + to starboard. So the sign
+ * flips: she always leans away from the wind (Sam, 12 Nov: she was leaning into it).
+ */
+export const rollFromWheel = (heelDeg: number): number => (-heelDeg * Math.PI) / 180;
