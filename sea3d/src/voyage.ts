@@ -23,7 +23,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
-import { BEACHCAT, CRUISER, DINGHY, KAYAK, OCEAN_ROWER, RANDOLPH, SAIL_DRONE, STOCK, STOCK_HULL, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
+import { BEACHCAT, CRUISER, DINGHY, KAYAK, OCEAN_ROWER, PEARSON, RANDOLPH, SAIL_DRONE, STOCK, STOCK_HULL, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
@@ -66,6 +66,7 @@ import { localTime } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
+import { loadMyBoat } from "./myboat";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -121,6 +122,7 @@ const MODEL: Record<Rev, BoatKey> = {
   stock_beachcat16: "stock_beachcat16",
   stock_sail_drone7: "stock_sail_drone7",
   stock_ocean_rower45: "stock_ocean_rower45",
+  stock_pearson31_2: "stock_pearson31_2",
 };
 const SPEC: Record<BoatKey, BoatSpec> = {
   kayak: KAYAK,
@@ -130,6 +132,7 @@ const SPEC: Record<BoatKey, BoatSpec> = {
   stock_beachcat16: BEACHCAT,
   stock_sail_drone7: SAIL_DRONE,
   stock_ocean_rower45: OCEAN_ROWER,
+  stock_pearson31_2: PEARSON,
 };
 // Rev C rolls on Rev B's numbers until Theo's Rev C righting curve (their revC_gz_curve.csv) lands.
 const HULL: Record<Rev, HullParams> = {
@@ -147,6 +150,7 @@ const LABEL: Record<Rev, string> = {
   stock_beachcat16: "A 16 ft beach cat (stock boat)",
   stock_sail_drone7: "A wind-powered ocean drone (stock boat)",
   stock_ocean_rower45: "An ocean rowing boat for four (stock boat)",
+  stock_pearson31_2: "Our model of Randolph's own boat, a Pearson 31-2 (from the builder's published numbers)",
 };
 const SHORT: Record<Rev, string> = {
   kayak: "Our kayak",
@@ -157,6 +161,7 @@ const SHORT: Record<Rev, string> = {
   stock_beachcat16: "16 ft beach cat",
   stock_sail_drone7: "Ocean drone",
   stock_ocean_rower45: "Ocean rowing boat",
+  stock_pearson31_2: "Randolph's Pearson 31-2 (our model)",
 };
 /** What the voyage menu calls each stock boat, with what it is in plain words. */
 const STOCK_MENU: Record<StockKey, string> = {
@@ -165,6 +170,7 @@ const STOCK_MENU: Record<StockKey, string> = {
   stock_beachcat16: "16 ft beach cat (a stock catamaran, nobody aboard)",
   stock_sail_drone7: "Wind-powered ocean drone (a stock 7 m sailing drone with a rigid wing)",
   stock_ocean_rower45: "Ocean rowing boat (a stock 8.6 m boat, a crew of four taking turns at the oars)",
+  stock_pearson31_2: "Pearson 31-2 (our model of Randolph's own sailing yacht, on autopilot)",
 };
 /** One more line about each stock boat for the replay's intro. */
 const STOCK_ABOUT: Record<StockKey, string> = {
@@ -174,6 +180,8 @@ const STOCK_ABOUT: Record<StockKey, string> = {
   stock_sail_drone7: "Its deep keel rights it from any angle; the wing sail turns itself to the wind.",
   stock_ocean_rower45:
     "Two row while two rest, around the clock. In a strong head wind or a gale they put out a sea anchor (a parachute in the water) and wait below.",
+  stock_pearson31_2:
+    "Randolph's own 31 ft yacht, heavier and steadier than the stock cruiser. Its autopilot reefs (makes the sails smaller) as the wind rises and runs the engine in a calm.",
 };
 /** Which boat a replay's boat name is. The stock boats go by their names ("31 ft cruiser");
  * otherwise anything not Randolph is ours, and a Randolph boat is Rev B unless it says Rev C. */
@@ -347,7 +355,12 @@ let focus = 0; // which lane the close-up and the cards follow
 let rep: Replay | null = null; // lanes[focus].rep
 let hour = 0;
 let playing = false;
-let warp = 1 / 3600; // voyage hours per real second: real time to start (John)
+let warp = 1 / 3600; // voyage hours per real second: real time (the game and the live tracker start here)
+/** A replay opens already playing at this speed: real time (John, 10 Nov, kept on
+ * 11 Nov when Leo asked for faster). One constant, so it's a one-line change. */
+const REPLAY_WARP = 1 / 3600; // real time
+/** Visitors who ask for less motion get the replay paused at the start instead. */
+const REDUCED_MOTION = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 let ended = false;
 /** The live tracker's voyage (?live), and whether the page is showing the forecast. */
 let tracked: Tracked | null = null;
@@ -384,6 +397,8 @@ const status = {
   hour: 0,
   maxHour: 0,
   playing: false,
+  /** Voyage hours per real second (test hook). */
+  warp: 1 / 3600,
   frames: 0,
   outcome: "",
   shown: [] as string[],
@@ -580,7 +595,7 @@ function showOutcome(): void {
   $("outcome").classList.add("show");
 }
 
-async function selectVoyage(f: string, autoplay = true): Promise<void> {
+async function selectVoyage(f: string, autoplay = !REDUCED_MOTION): Promise<void> {
   await load([f], f, autoplay);
 }
 /** Race: our kayak and one Randolph revision from the same launch date. */
@@ -596,7 +611,7 @@ function choose(v: string): void {
   else if (v.startsWith("race-c:")) selectRace(v.slice(7), "randolph_c");
   else selectVoyage(v);
 }
-async function load(files: string[], pick = files[0], autoplay = true): Promise<void> {
+async function load(files: string[], pick = files[0], autoplay = !REDUCED_MOTION): Promise<void> {
   try {
     const reps = await Promise.all(files.map((f) => (f === REPLAY ? loadReplay(".", f.replace(/^\.\//, "")) : loadReplay(BASE, f))));
     lanes = reps.map((r, i) => ({ key: keyOf(r.boat), file: files[i], rep: r, shown: 0 }));
@@ -774,12 +789,30 @@ function fail(msg: string): void {
 // ---------- controls ----------
 $("play").addEventListener("click", () => setPlaying(!playing));
 $("now").addEventListener("click", () => tracked && seek(tracked.nowHour));
+function setWarp(w: number): void {
+  warp = status.warp = w;
+  // The buttons carry rounded values (0.000277778 for 1/3600): light the nearest.
+  const bs = Array.from(document.querySelectorAll<HTMLButtonElement>("#warp button"));
+  const near = bs.reduce((m, b) => (Math.abs(Math.log(Number(b.dataset.warp) / w)) < Math.abs(Math.log(Number(m.dataset.warp) / w)) ? b : m), bs[0]);
+  bs.forEach((x) => x.setAttribute("aria-pressed", String(x === near)));
+}
 document.querySelectorAll<HTMLButtonElement>("#warp button").forEach((b) =>
   b.addEventListener("click", () => {
-    warp = Number(b.dataset.warp);
-    document.querySelectorAll("#warp button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    setWarp(Number(b.dataset.warp));
+    $("warphint").hidden = true;
   }),
 );
+/** A short hint by the speed bar as a replay opens, so the lit speed button gets noticed. */
+function warpHint(): void {
+  const el = $("warphint");
+  // Over the faster buttons, not the lit "Real time" one, so it doesn't read as that button's label (Leo).
+  el.style.left = `${($("warp").children[2] as HTMLElement).offsetLeft}px`;
+  el.textContent = REDUCED_MOTION ? "Paused at the start: press play when you're ready." : "Playing in real time. Faster speeds →";
+  el.classList.remove("fade");
+  el.hidden = false;
+  window.setTimeout(() => el.classList.add("fade"), 6000); // fades out (at once with reduced motion)
+  window.setTimeout(() => (el.hidden = true), 7000);
+}
 const scrub = $<HTMLInputElement>("scrub");
 scrub.addEventListener("input", () => seek(Number(scrub.value)));
 $<HTMLSelectElement>("voyage").addEventListener("change", (e) => {
@@ -841,6 +874,7 @@ const byKey: Record<Rev, Map<string, IndexEntry>> = {
   stock_beachcat16: new Map(),
   stock_sail_drone7: new Map(),
   stock_ocean_rower45: new Map(),
+  stock_pearson31_2: new Map(),
 };
 const raceDates = (rev: "randolph" | "randolph_c" = "randolph") => [...byKey.kayak.keys()].filter((d) => byKey[rev].has(d)).sort();
 const OUT: Record<string, string> = { arrived: "finished", lost: "lost", aground: "aground", disqualified: "disqualified", timeout: "still at sea" };
@@ -961,19 +995,28 @@ if (PLACE) {
       // The feed is rebuilt hourly; look again every 10 minutes.
       setInterval(() => loadLive(course, true), 10 * 60e3);
     } else if (REPLAY) {
+      setWarp(REPLAY_WARP);
       await selectVoyage(REPLAY);
+      warpHint();
     } else if (GAME) {
       // The sea behind the picker: our kayak's first launch day, waiting at the start.
       const first = [...byKey.kayak.values()].sort((a, b) => a.start.localeCompare(b.start))[0] ?? index[0];
       await selectVoyage(first.file, false);
       openPicker();
-    } else if (wantRace) await selectRace(wantRace, params.get("rev") === "c" ? "randolph_c" : "randolph");
-    else {
-      // Default: our longest voyage, which has the most to watch.
-      const ours = [...byKey.kayak.values()];
+    } else if (wantRace) {
+      setWarp(REPLAY_WARP);
+      await selectRace(wantRace, params.get("rev") === "c" ? "randolph_c" : "randolph");
+      warpHint();
+    } else {
+      setWarp(REPLAY_WARP);
+      // Default: the longest voyage (the most to watch) of my boat's kind, if it has replays; else our kayak's.
+      const mine = loadMyBoat();
+      const mineKey: Rev | null = !mine ? null : mine.base === "revb" ? "randolph" : mine.base === "revc" ? "randolph_c" : mine.base === "kayak" || isStock(mine.base) ? (mine.base as Rev) : null;
+      const ours = [...((mineKey && byKey[mineKey]?.size ? byKey[mineKey] : byKey.kayak).values())];
       const pool = ours.length ? ours : index;
       const longest = pool.reduce((m, v) => (v.days > m.days ? v : m), pool[0]);
       await selectVoyage(index.find((v) => v.file === want)?.file ?? longest.file);
+      warpHint();
     }
   } catch (e) {
     fail(String(e instanceof Error ? e.message : e));
@@ -1472,6 +1515,7 @@ const EQUIPMENT: Record<BoatKey, string[]> = {
   stock_beachcat16: ["sail", "rudder", "electronics_main", "comms", "beacon"],
   stock_sail_drone7: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
   stock_ocean_rower45: ["rudder", "electronics_main", "comms", "beacon", "leak"],
+  stock_pearson31_2: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
 };
 let lastEquip = "";
 function equipment(r: Replay, failed: Map<string, string>): void {

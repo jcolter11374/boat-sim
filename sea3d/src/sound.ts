@@ -156,6 +156,48 @@ export class OceanSound {
     src.stop(t + attack + decay * 1.5);
   }
 
+  /** A breaking wave landing on the boat (a knockdown, #329): a roar of water and a thump. */
+  crash(): void {
+    if (!this.ctx || !this.on) return;
+    this.burst("white", "lowpass", 1600, 0.75, 0.04, 2.4);
+    this.burst("brown", "lowpass", 140, 1, 0.008, 0.5);
+  }
+
+  /** Two short beeps, like an instrument's alarm: something broke (#329). */
+  alarm(): void {
+    if (!this.ctx || !this.on) return;
+    for (const at of [0, 0.22]) this.tone([1046], "square", 0.06, at, 0.12, 2200);
+  }
+
+  /** A ship's horn for the finish (#329): two low notes together. */
+  horn(): void {
+    if (!this.ctx || !this.on) return;
+    this.tone([110, 165], "sawtooth", 0.16, 0, 1.8, 900);
+  }
+
+  /** Oscillators at the given pitches, through a low-pass, for `hold` seconds. */
+  private tone(freqs: number[], type: OscillatorType, peak: number, delay: number, hold: number, cut: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + delay;
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = cut;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.04);
+    g.gain.setValueAtTime(peak, t + hold);
+    g.gain.linearRampToValueAtTime(0, t + hold + 0.25);
+    f.connect(g).connect(this.master!);
+    for (const hz of freqs) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = hz;
+      o.connect(f);
+      o.start(t);
+      o.stop(t + hold + 0.3);
+    }
+  }
+
   /** Follow the weather; call every frame (cheap when off). */
   update(dt: number, w: SeaWeather): void {
     const ctx = this.ctx;

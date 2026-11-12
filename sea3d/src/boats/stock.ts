@@ -16,7 +16,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
-import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, SAIL_DRONE, STOCK, type StockKey } from "./specs";
+import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, PEARSON, SAIL_DRONE, STOCK, type StockKey } from "./specs";
 
 /** The Blender file each one is built into (sea3d.yml). */
 const FILE: Record<StockKey, string> = {
@@ -25,6 +25,7 @@ const FILE: Record<StockKey, string> = {
   stock_beachcat16: "stock_beachcat",
   stock_sail_drone7: "stock_drone",
   stock_ocean_rower45: "stock_rower",
+  stock_pearson31_2: "stock_pearson",
 };
 
 /** Sail sizes for each plan, as fractions of full (configs' vpp.plans). Anything
@@ -40,6 +41,12 @@ const PLANS: Record<StockKey, Record<string, { main: number; jib: number }>> = {
   stock_beachcat16: { full: { main: 1, jib: 1 }, main_only: { main: 1, jib: 0 } },
   stock_sail_drone7: {},
   stock_ocean_rower45: {},
+  stock_pearson31_2: {
+    full: { main: 1, jib: 1 },
+    reef1: { main: 0.82, jib: 0.7 },
+    reef2: { main: 0.64, jib: 0.45 },
+    storm: { main: 0.45, jib: 0.18 },
+  },
 };
 
 // ---------------------------------------------------------------- hull shapes ----
@@ -54,6 +61,16 @@ const CRUISER_FORM: HullForm = {
   hb: (s) => (s <= 0.56 ? 1.6 * pos(1 - (1 - s / 0.56) ** 2) ** 0.62 : 1.6 - (1.6 - 1.32) * ((s - 0.56) / 0.44) ** 2),
   kz: (s) => 0.62 * pos(1 - s / 0.2) ** 2 + 0.36 * pos((s - 0.72) / 0.28) ** 1.8,
   dz: (s) => 1.5 - 0.28 * s + 0.12 * pos(1 - s / 0.15) ** 2,
+};
+// Randolph's Pearson 31-2: raked bow overhang, short counter, fullest just aft of the middle.
+const PEARSON_FORM: HullForm = {
+  L: 9.39,
+  n: 2.1,
+  crown: 0.06,
+  wl: PEARSON.waterline,
+  hb: (s) => (s <= 0.55 ? 1.645 * pos(1 - (1 - s / 0.55) ** 2) ** 0.6 : 1.645 - (1.645 - 1.22) * ((s - 0.55) / 0.45) ** 2),
+  kz: (s) => 1.3 * pos(1 - s / 0.25) ** 2 + 0.75 * pos((s - 0.68) / 0.32) ** 1.6,
+  dz: (s) => 1.62 - 0.3 * s + 0.14 * pos(1 - s / 0.18) ** 2,
 };
 const DINGHY_FORM: HullForm = {
   L: 4.2,
@@ -284,6 +301,29 @@ function drawCruiser(kit: Kit, g: THREE.Group): void {
   triangle(kit, jp, "sail_jib", [0.12, 0.37, 0], [3.35 - 0.25 - bow[0], ym + 11.5 - bow[1], 0], [4.77, deckY(f, 4.95) + 0.55 - bow[1], 0]);
 }
 
+function drawPearson(kit: Kit, g: THREE.Group): void {
+  const f = PEARSON_FORM;
+  const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.02, side: THREE.DoubleSide }));
+  kit.mesh(kit.hull(f, { top: 0xf6f5f0, deck: 0xe9e6dd, bottom: 0x2b3a55, boot: 0x1a2a4a }), hullMat, g);
+  const bottom = kit.std(0x2b3a55);
+  kit.mesh(kit.foil(1.65, 0.85, 3.55, 4.05, 0.2, -1.1, 0.12), bottom, g);
+  const rp = pivot(g, "rudder_pivot", 8.2, 0.42);
+  kit.mesh(kit.foil(0.62, 0.36, 8.08, 8.24, 0.42, -0.95, 0.12), bottom, rp).position.set(-8.2, -0.42, 0);
+  const cab = kit.std(0xf2f1ec);
+  kit.box(g, cab, 2.55, 6.2, deckY(f, 4.4) - 0.02, deckY(f, 3.25) + 0.46, -1.05, 1.05);
+  const alu = kit.std(0xc9ced3, { metalness: 0.7, roughness: 0.3 });
+  const mx = 4.06;
+  const ym = deckY(f, mx) + 0.44;
+  const mh = f.wl + 14.11 - ym;
+  kit.cyl(g, alu, 0.075, mx, ym, ym + mh);
+  const mp = pivot(g, "main_pivot", mx, ym);
+  kit.rod(mp, alu, 0.05, [0.09, 1.15, 0], [3.66, 1.15, 0]);
+  triangle(kit, mp, "sail_main", [0.1, 1.2, 0], [0.08, 12.37, 0], [3.58, 1.2, 0]);
+  const bow = [0.16, deckY(f, 0.16) + 0.05, 0];
+  const jp = pivot(g, "jib_pivot", bow[0], bow[1]);
+  triangle(kit, jp, "sail_jib", [0.14, 0.35, 0], [mx - 0.25 - bow[0], ym + mh - 0.9 - bow[1], 0], [5.27 - bow[0], deckY(f, 5.4) + 0.55 - bow[1], 0]);
+}
+
 function drawDinghy(kit: Kit, g: THREE.Group): void {
   const f = DINGHY_FORM;
   const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02, side: THREE.DoubleSide }));
@@ -371,6 +411,7 @@ const DRAW: Record<StockKey, (kit: Kit, g: THREE.Group) => void> = {
   stock_beachcat16: drawCat,
   stock_sail_drone7: drawDrone,
   stock_ocean_rower45: drawRower,
+  stock_pearson31_2: drawPearson,
 };
 const FORM: Record<StockKey, HullForm> = {
   stock_cruiser31: CRUISER_FORM,
@@ -378,11 +419,12 @@ const FORM: Record<StockKey, HullForm> = {
   stock_beachcat16: CAT_HULL,
   stock_sail_drone7: DRONE_FORM,
   stock_ocean_rower45: ROWER_FORM,
+  stock_pearson31_2: PEARSON_FORM,
 };
 /** Name tag height above the waterline: the masthead (the drone's wing tip, the rower's light pole). */
 /** Where the masthead lantern stands along the boat (builder x, m from the bow): the mast (the drone's sensor mast, the rower's light pole). */
-const LANTERN_X: Record<StockKey, number> = { stock_cruiser31: 3.35, stock_dinghy14: 1.05, stock_beachcat16: 1.45, stock_sail_drone7: 2.6, stock_ocean_rower45: 7.7 };
-const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5, stock_sail_drone7: 5.8, stock_ocean_rower45: 2.4 };
+const LANTERN_X: Record<StockKey, number> = { stock_cruiser31: 3.35, stock_dinghy14: 1.05, stock_beachcat16: 1.45, stock_sail_drone7: 2.6, stock_ocean_rower45: 7.7, stock_pearson31_2: 4.06 };
+const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5, stock_sail_drone7: 5.8, stock_ocean_rower45: 2.4, stock_pearson31_2: 14.11 };
 
 /** A stock boat as a BoatModel (boats/model.ts), with its rig. */
 export function buildStock(key: StockKey, quality: Quality) {

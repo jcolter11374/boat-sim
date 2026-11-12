@@ -4,7 +4,7 @@
 
 import type { Replay } from "../replay/data";
 
-export type Heading = number | "finish" | "route";
+export type Heading = number | "finish" | "route" | "auto";
 export type Mode = "hands_on" | "base";
 export interface Report {
   t: string;
@@ -21,6 +21,9 @@ export interface OrderResult {
   next_allowed?: string;
   arrives?: string | null;
   from_report?: string;
+  /** A wheel spell's trim as the simulator took it (clamped), and until when it holds. */
+  trim?: number;
+  trim_until?: string;
 }
 export interface BoatNow {
   t: string;
@@ -68,7 +71,22 @@ export interface Status {
   silence?: { days_in_a_row: number; days_total: number; limit_in_a_row: number; limit_total: number };
   /** False in base mode: the page shows what base knows, not the true boat (#214). */
   show_true_position?: boolean;
+  /** A hand-trimmed watch running now (Take the wheel, phase 2): null when none; older simulators leave it out. */
+  trim?: { share: number; until: string; factor: number; gain_km?: number } | null;
+  /** What every wheel watch so far has gained (km through the water vs the autopilot's trim). */
+  trim_gain_km?: number;
   weather?: { wind_u: number; wind_v: number; hs: number; tp: number; wave_dir: number; current_u: number; current_v: number; ghi: number; rain: number };
+}
+/** An order's next day, sailed by a copy of the boat (sandbox/helm.py Game.preview, #330). */
+export interface Preview {
+  hours: number;
+  /** Mean speed through the water, m/s. */
+  stw: number;
+  /** Battery change, 0-1 of full. */
+  soc: number;
+  /** km made towards the finish (negative: further away). */
+  km: number;
+  outcome: string;
 }
 export interface ForecastRow {
   t: string;
@@ -117,6 +135,9 @@ export interface Card {
   verdict: "won" | "lost" | "draw" | "neither_finished";
   breakdowns_differ: boolean;
   orders: { t: string; heading: Heading; power: number }[];
+  /** Take the wheel spells (phase 2): watches a spell set, and what they were worth through the water vs the autopilot's trim (km). */
+  trim_watches?: number;
+  trim_gain_km?: number;
 }
 export type Stop = "time" | "battery" | "wind" | "land" | "breakdown" | "silence" | "ghost_passed" | "passed_ghost" | "over" | "order_arrived";
 export interface RunOptions {
@@ -134,7 +155,8 @@ export class HelmGame {
   ghost: Replay | null = null;
   status: Status | null = null;
   launches: string[] = [];
-  /** The boat being sailed: "" for our kayak, else a ready-made boat's id ("stock_cruiser31"). */
+  /** The boat being sailed: "" for our kayak, "revc"/"revb" for a design on our model of the Randolph boat,
+   *  else a ready-made boat's id ("stock_cruiser31"). */
   boatBase = "";
   onProgress: (text: string) => void = () => {};
   private worker: Worker;
@@ -186,11 +208,20 @@ export class HelmGame {
     if (v.ghost) this.ghost = v.ghost;
   }
 
+  /** Load Python, the simulator and the 2020 weather now, so Set sail starts at once. Errors are left for start() to report. */
+  warm(): Promise<void> {
+    return this.ask<null>({ type: "warm" }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
   /** A new game. With a challenge, `launch` is ignored and `bundle` is the URL of
    *  its weather (left out when it's the 2020 bundle). `boat` names a ready-made
-   *  boat (e.g. "stock_cruiser31"); left out, it's our kayak. `startPort`: a port id
+   *  boat (e.g. "stock_cruiser31"), or is a Boatyard design's simulator choices
+   *  ("my boat"); left out, it's our kayak. `startPort`: a port id
    *  from ports.json to start from instead of the usual drop. */
-  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string, startPort?: string): Promise<Status> {
+  async start(launch: number, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string | Record<string, string | number>, startPort?: string): Promise<Status> {
     const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
       type: "new",
       launch,
@@ -199,7 +230,7 @@ export class HelmGame {
       mode,
       challenge: challenge?.id,
       bundle: challenge?.bundle,
-      choices: boat ? { base: boat } : undefined,
+      choices: typeof boat === "string" ? { base: boat } : boat && Object.keys(boat).length ? boat : undefined,
       start_port: startPort || undefined,
     });
     this.launches = v.launches;
@@ -220,9 +251,12 @@ export class HelmGame {
     return this.ask<string>({ type: "save" });
   }
 
-  /** sails and engine: sailboats only; null or left out lets the boat decide. */
-  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null): Promise<OrderResult> {
-    const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+  /** sails and engine: sailboats only; null or left out lets the boat decide.
+   * trim: a "Take the wheel" spell's share of the best speed (sailboats only): the
+   * simulator sails at it for the next watch instead of the autopilot's own trim. */
+  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, trim?: number | null): Promise<OrderResult> {
+    const extra: Record<string, unknown> = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+    if (trim != null) extra.trim = trim;
     const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power, ...extra });
     this.status = v.status;
     return v.order;
@@ -232,6 +266,12 @@ export class HelmGame {
     const v = await this.ask<{ stopped: Stop; status: Status; boat: Replay; ghost: Replay }>({ type: "run", ...o });
     this.take(v);
     return v.stopped;
+  }
+
+  /** What an order would do over the next `hours` (a copy of the boat sails it; the game is untouched), or null where the simulator can't say (#330). */
+  preview(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, hours = 24): Promise<Preview | null> {
+    const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
+    return this.ask<Preview | null>({ type: "preview", heading, power, hours, ...extra });
   }
 
   forecast(): Promise<ForecastRow[]> {

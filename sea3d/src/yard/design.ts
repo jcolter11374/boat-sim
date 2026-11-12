@@ -25,6 +25,8 @@ export interface CatalogOption {
   effect?: string;
   basis?: string;
   simEst?: boolean;
+  /** The simulator settings this option changes (sim-slots.json "sim"); [] = none. */
+  simKeys?: string[];
   /** No price or weight yet (the simulator's new slots: drive, hull material, hull shape). */
   priceTbd?: boolean;
   [k: string]: unknown;
@@ -109,7 +111,7 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
     ...s,
     opts: s.opts.map((o) => {
       const so = by.get(s.id)?.get(o.id);
-      return so ? { ...o, effect: so.effect, basis: so.basis, simEst: so.est } : o;
+      return so ? { ...o, effect: so.effect, basis: so.basis, simEst: so.est, ...(so.sim ? { simKeys: so.sim } : {}) } : o;
     }),
   }));
   // The simulator's slots the parts catalog doesn't have yet (drive, hull material, hull shape) go at the end.
@@ -129,6 +131,7 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
         effect: o.effect,
         basis: o.basis,
         simEst: o.est,
+        ...(o.sim ? { simKeys: o.sim } : {}),
         priceTbd: i !== 0,
       })),
     });

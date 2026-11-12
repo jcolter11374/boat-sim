@@ -17,6 +17,7 @@ import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, type WaveComponent } from "./waves";
 import { PLACE } from "./land/place";
 import { foamStreaks, whitecaps } from "./storm";
+import { writeSeaUniforms } from "./seaSurface";
 
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
@@ -229,6 +230,7 @@ if (uStreak > 0.001) {
   foamMask = max(foamMask, 0.9 * streak);
 }
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.98), foamMask);
+/* boat wash (boatWash.ts) */
 `;
 
 const FRAG_ROUGH = /* glsl */ `
@@ -485,6 +487,8 @@ export class Sea {
     u.uN.value = n;
     u.uAmp.value = this.hs / 2;
     u.uFoamAmt.value = this.foamAmount;
+    // The same sea for every material that reads it (seaSurface.ts: boats' waterline, underwater fade).
+    writeSeaUniforms(comps, t, this.steepness);
   }
 
   dispose(): void {

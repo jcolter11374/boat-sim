@@ -18,6 +18,7 @@ import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Atmosphere } from "./atmosphere";
 import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./waves";
+import { mountSailLink } from "./sailLink";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -78,6 +79,7 @@ atmos.set(10, 330, 0, true);
 const clock = new THREE.Clock();
 // ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
 let look: Look = startLook(qualitySelect);
+mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 scene.add(sea.mesh);
