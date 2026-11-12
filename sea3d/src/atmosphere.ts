@@ -394,7 +394,7 @@ export class Atmosphere {
     // The moon makes the glints at night.
     if (day > 0.15 || this.moonEl < 0) {
       this.glintDir.copy(this.sunDir);
-      this.glintLight = day > 0.15 ? this.sunLight : 0;
+      this.glintLight = day > 0.15 ? this.sunLight * (1 - this.rain) : 0; // no glitter path through rain
     } else {
       this.glintDir.copy(this.moon.position).normalize();
       this.glintLight = this.moon.intensity * 0.6;

@@ -246,7 +246,8 @@ void main() {
     float hang = 1.0 - smoothstep(0.0, tall, el);
     hang *= hang * (3.0 - 2.0 * hang);
     float streak = 0.8 + 0.2 * vnoise(vec2(az * 420.0, el * 3.0 + uTime * 0.5));
-    rainC = curtain * hang * streak * smoothstep(0.05, 3.0, uRain) * 0.75 * deckAmt;
+    // In a downpour the mist is all round: far curtains are lost in it, and the horizon is haze.
+    rainC = curtain * hang * streak * smoothstep(0.05, 3.0, uRain) * 0.75 * deckAmt * (1.0 - 0.85 * smoothstep(2.0, 8.0, uRain));
   }
   float hb = (1.0 - smoothstep(-0.01, 0.09, el)) * deckAmt;
   col += (1.0 - alpha) * uHaze * hb; alpha += (1.0 - alpha) * hb;
