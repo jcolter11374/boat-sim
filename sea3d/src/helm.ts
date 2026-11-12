@@ -601,7 +601,7 @@ function previewText(p: Preview): string {
   const prog = km > 0 ? `${km.toLocaleString()} km closer to the finish` : km < 0 ? `${(-km).toLocaleString()} km further from the finish` : "no closer to the finish";
   const left = page.status?.boat.km_to_finish ?? 0;
   const pace = km > 5 && p.hours >= 23.5 ? ` (about ${Math.round(left / km)} days to go at that pace)` : "";
-  return `${when}: about ${kn.toFixed(1)} knots (${(kn * 1.852).toFixed(1)} km/h), battery ${soc > 0 ? "+" : soc < 0 ? "−" : "±"}${Math.abs(soc)}%, ${prog}${pace}.`;
+  return `${when}: about ${kn.toFixed(1)} kn (${(kn * 1.852).toFixed(1)} km/h), battery ${soc > 0 ? "+" : soc < 0 ? "−" : "±"}${Math.abs(soc)}%, ${prog}${pace}.`;
 }
 
 function bearing(a: [number, number], b: [number, number]): number {
@@ -2034,7 +2034,10 @@ async function finish(): Promise<void> {
       `Satellite link: ${air.up.messages} reports sent and ${air.down.messages} orders received, ${(air.up.bytes + air.down.bytes).toLocaleString("en-US")} bytes in all. The backup beacon sent ${air.beacon_pings} positions on its own.`,
     );
   const ch = challenges.find((x) => x.id === page.challenge);
-  bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
+  // Plain words (Milo): "1 order given", "Launched 1 May 2020, with breakdowns on."
+  const launched = new Date(`${c.launch.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const brk = c.breakdowns_on ? "with breakdowns on" : "with breakdowns off";
+  bits.push(`${c.orders.length} order${c.orders.length === 1 ? "" : "s"} given. ${ch ? `Challenge: ${ch.title}, launched` : "Launched"} ${launched}, ${brk}.`);
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
   if (me.outcome === "arrived" && finishesOffLisbon()) {
     showArrival();

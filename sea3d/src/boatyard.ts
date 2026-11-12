@@ -9,6 +9,8 @@
 
 import * as THREE from "three";
 import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
+import { tidyCatalog } from "./yard/words";
+import { tierOf, type BoardTiers } from "./yard/tier";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -232,6 +234,14 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   const d = document.createElement("div");
   d.className = "d";
   d.textContent = o.d;
+  // The longer story stays one hover away (Milo: the Rev C5 wing was a 9-line history).
+  // The "i" sits inside the option's button, so it can't take focus itself: the same words go in
+  // hidden text that screen readers read with the button (Lena), and the "i" is for hover.
+  if (o.more) {
+    const i = Object.assign(document.createElement("span"), { className: "info", textContent: "i", title: o.more });
+    i.setAttribute("aria-hidden", "true");
+    d.append(" ", i, Object.assign(document.createElement("span"), { className: "sr", textContent: ` ${o.more}` }));
+  }
   b.append(top, d);
   b.addEventListener("click", () => choose(slot.id, o.id));
   return b;
@@ -442,14 +452,19 @@ async function drawChance(): Promise<void> {
       : "";
   if (c.tested || !e || e.p === null) {
     v.textContent = c.value;
-    $("s-odds-note").textContent =
+    const note = $("s-odds-note");
+    note.textContent =
       e && e.p === null && e.missing ? `No estimate yet: "${e.missing}" hasn't been tested. Press "Test it" to find out.` : `${c.note}${vs}`;
+    // One sentence from one source on both pages (Milo M4): which launches, behind the "i".
+    if (c.about) note.append(" ", Object.assign(document.createElement("span"), { className: "info", textContent: "i", tabIndex: 0, title: c.about, role: "note", ariaLabel: c.about }));
   } else {
     v.textContent = `about ${Math.round(e.p * 100)}%`;
     $("s-odds-note").textContent = `Quick estimate from builds we've tested.${vs} Press "Test it" to sail it for real.`;
   }
   v.classList.toggle("untested", !c.tested && (!e || e.p === null));
   v.classList.toggle("estimate", !c.tested && !!e && e.p !== null);
+  // Green only for the leaderboard's Best group; Long shot in amber; anything else plain (Milo).
+  v.dataset.tier = c.tested && n?.exact ? tierOf(boardTiers, n.build.id) : "";
   // A short flash when the figure moves: green up, red down (Leo).
   v.classList.remove("up", "down");
   if (was !== null && shownOdds !== null && Math.round(was * 100) !== Math.round(shownOdds * 100)) {
@@ -461,6 +476,15 @@ async function drawChance(): Promise<void> {
   $("legend").hidden = !model;
 }
 let shownOdds: number | null = null;
+/** The leaderboard's groups by build id, once loaded (the odds colour follows them). */
+let boardTiers: BoardTiers | null = null;
+fetch("./leaderboard/board.json")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((b) => {
+    boardTiers = b?.summary?.rows ? new Map(b.summary.rows.map((r: { design: string; tier: number }) => [r.design, r.tier])) : null;
+    if (boardTiers) redraw();
+  })
+  .catch(() => null);
 let shownBase = "";
 // Under 3 points is inside the grid's own noise (100 launches a build), so it reads
 // "about the same" rather than suggesting, say, that dropping the AIS helps (Ravi's rule on #323).
@@ -474,7 +498,8 @@ async function oddsModel(): Promise<OddsModel | null> {
   if (!m) modelFor.set(base, (m = new OddsModel(cat, builds)));
   return m;
 }
-/** Each part's effect on the odds if you picked it now: "+6", "−24", "no data yet". */
+/** Each part's effect on the odds if you picked it now: "+6", "−24", or nothing when no tested build covers it
+ *  (Milo: the "~" and "Our estimate." already say a part is a guess; a third badge was noise). */
 function drawDeltas(model: OddsModel | null): void {
   const here = model?.odds(design)?.p ?? null;
   document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => {
@@ -486,7 +511,7 @@ function drawDeltas(model: OddsModel | null): void {
     let cls = "delta";
     if (model && here !== null && design.picks[slot] !== opt && !b.classList.contains("na")) {
       const p = model.odds({ ...design, picks: { ...design.picks, [slot]: opt } })?.p ?? null;
-      if (p === null) [text, cls] = ["no data yet", "delta none"];
+      if (p === null) [text, cls] = ["", "delta none"];
       else {
         const n = Math.round((p - here) * 100);
         [text, cls] = Math.abs(n) < NOISE_PTS ? ["about the same", "delta same"] : [`${n > 0 ? "+" : "−"}${Math.abs(n)}`, n > 0 ? "delta up" : "delta down"];
@@ -494,7 +519,7 @@ function drawDeltas(model: OddsModel | null): void {
     }
     span.textContent = text;
     span.className = cls;
-    span.title = text && text !== "no data yet" ? "Change in the odds if you pick this part (quick estimate)" : "";
+    span.title = text ? "Change in the odds if you pick this part (quick estimate)" : "";
   });
 }
 // What "Test it" does, on the button (#315 item 13): the simulator in this browser
@@ -508,7 +533,7 @@ void sandboxReady.then((inBrowser) => {
 });
 
 // ---------- my boat (remembered in this browser, carried to the other pages) ----------
-const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C", revb: "Rev B" };
+const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C5", revb: "Rev B" };
 let nameTyped = false; // the player has typed a name: keep it while they change parts
 const defaultName = () => `My ${SHORT[base]}`;
 function drawMine(): void {
@@ -589,7 +614,7 @@ function useBase(hash: string): void {
   if (c.credit) {
     credit.append(`${c.credit.text} `, Object.assign(document.createElement("a"), { href: c.credit.url, target: "_blank", rel: "noopener", textContent: "Their repository" }));
   }
-  $("reset").textContent = base === "kayak" ? "Reset to our kayak" : `Reset to ${SHORT[base]} as built`;
+  $("reset").textContent = base === "kayak" ? "Start again from our kayak" : `Start again from ${SHORT[base]}`;
   // The Randolph boat has no "see inside" yet (our model has no cut-away).
   const inside = document.querySelector<HTMLButtonElement>('#views button[data-view="inside"]');
   if (inside) inside.hidden = base !== "kayak";
@@ -894,10 +919,10 @@ Promise.all([
 ])
   .then(([catalog, sim]) => {
     const c = withSim(catalog, sim);
-    catalogs.set("kayak", c);
+    catalogs.set("kayak", tidyCatalog(c));
     for (const k of ["revc", "revb"] as const) {
       const rc = randolphCatalog(k, sim, c);
-      if (rc) catalogs.set(k, rc);
+      if (rc) catalogs.set(k, tidyCatalog(rc));
     }
     // Only offer the boats the slot table has.
     document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => (b.hidden = !catalogs.has(b.dataset.base as BaseKey)));
