@@ -329,7 +329,7 @@ void loadPorts(new URL(params.get("ports") ?? "./ports.json", location.href).hre
   $("portpick").hidden = false;
   const hint = () => {
     const p = list.find((q) => q.id === sel.value);
-    $("porthint").textContent = p ? portHint(p, list) : "The usual start: our support boat drops the drone here, then heads home.";
+    $("porthint").textContent = p ? portHint(p, list) : "The usual start: our support boat drops her here, then heads home.";
   };
   sel.addEventListener("change", hint);
   sel.addEventListener("change", showProloguePick);

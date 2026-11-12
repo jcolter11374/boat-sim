@@ -224,6 +224,9 @@
      she is framed in the band under the bar. */
   #start { justify-content: flex-start; align-items: center; padding-left: max(16px, 5vw); }
   #ss-card { width: min(360px, calc(100vw - 32px)); background: rgba(8,18,32,.78); padding: 16px 20px 12px; }
+  /* Tall cards: More options scrolls inside the card, so its top and Set sail stay put (Elena); the
+     height is set by setsailCard.ts to what's left of the window. */
+  #more-body { overflow-y: auto; overscroll-behavior: contain; }
   @media (max-width: 699px) { #start { align-items: flex-end; padding: 0 16px 12px; } #ss-card { max-height: calc(100dvh - var(--bar, 0px) - 200px); } }
   .ss-pill small { display: block; margin: 1px 0 0 !important; font-size: 11.5px; }
   #ss-card h1 { font: 800 28px/1.1 "Fraunces", Georgia, serif; margin: 0 0 6px; }
@@ -674,15 +677,23 @@
     </div>
     <details id="more">
       <summary>More options</summary>
+      <div id="more-body">
     <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
     <span id="porthint" class="muted"></span>
-      <fieldset id="modes"><legend>How you steer</legend>
-        <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
-        <label><input type="radio" name="mode" value="base"> <b>From home, by satellite</b>: what steering a real drone is like. You send one order a day; it reaches the boat at its next daily check-in, about a day later, and you only see where the boat was at its last report.</label>
-      </fieldset>
-      <label><input type="checkbox" id="breakdowns" checked> Breakdowns: parts can fail at sea, with the same luck for you and the autopilot</label>
-      <label><input type="checkbox" id="safe"> Save the battery: the boat slows itself down when the battery runs low, as the autopilot does</label>
+      <!-- How you steer, breakdowns and the battery as pills like the rest of the card (Elena); the
+           radios and boxes stay as their sources (begin() reads them), never shown. -->
+      <div class="ss-l">How you steer</div><div class="ss-opts" id="ss-mode-opts"></div><p class="muted ss-line" id="ss-mode-line"></p>
+      <div class="ss-opts" id="ss-toggles"></div><p class="muted ss-line" id="ss-toggle-line"></p>
+      <div id="ss-more-sources" hidden>
+        <fieldset id="modes"><legend>How you steer</legend>
+          <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
+          <label><input type="radio" name="mode" value="base"> <b>From home, by satellite</b>: what steering a real drone is like. You send one order a day; it reaches the boat at its next daily check-in, about a day later, and you only see where the boat was at its last report.</label>
+        </fieldset>
+        <label><input type="checkbox" id="breakdowns" checked> Breakdowns: parts can fail at sea, with the same luck for you and the autopilot</label>
+        <label><input type="checkbox" id="safe"> Save the battery: the boat slows itself down when the battery runs low, as the autopilot does</label>
+      </div>
       <p class="muted">The autopilot's ghost sails the same boat through the same weather and the same bad luck. It never shows you what's ahead of your clock. Finish more than a day ahead of it to win; within a day is a draw, because that much is down to the weather's luck.</p>
+      </div>
     </details>
   </div>
 </div>

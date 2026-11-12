@@ -20,6 +20,16 @@ export const CARD_WORDS = {
     drill: "Short spells: a reach, a beat and a run.",
   } as Record<string, string>,
   wind: { light: ["Light", "8 kn"], good: ["Steady", "12 kn"], fresh: ["Strong", "18 kn"] } as Record<string, readonly [string, string]>,
+  /** More options (Elena, Leo): how you steer, with one line for the picked way. */
+  steer: [
+    ["hands_on", "Hands on", "Your orders reach her at once, and you always see where she is."],
+    ["base", "From home, by satellite", "One order a day, as a real robot boat is steered. It arrives about a day later, and you see only her last report."],
+  ] as [string, string, string][],
+  /** On/off choices: the box they drive, the pill, and the line shown while it's on. */
+  toggles: [
+    ["breakdowns", "Breakdowns", "Parts can fail at sea, with the same luck for you and the autopilot."],
+    ["safe", "Save the battery", "She slows down when her battery runs low, as the autopilot does."],
+  ] as [string, string, string][],
 } as const;
 
 /** One plain line per challenge for the card (Ines, Leo's rules): what the weather does, no
@@ -166,6 +176,32 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const date = opt?.textContent?.match(/\(([^)]*)\)\s*$/)?.[1] ?? "";
     $("ss-why").hidden = !challenge.value;
     $("ss-why").textContent = challenge.value ? challengeLine(challenge.value, $("chstory").textContent ?? "", date) : "";
+    // More options: how you steer, and two on/off pills, over the helm's own radios and boxes (Elena).
+    const mode = document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value ?? "hands_on";
+    pills($("ss-mode-opts"), CARD_WORDS.steer.map(([key, label]) => ({ key, label })), mode, (k) => {
+      const r = document.querySelector<HTMLInputElement>(`input[name="mode"][value="${k}"]`);
+      if (r) {
+        r.checked = true;
+        r.dispatchEvent(new Event("change", { bubbles: true })); // the helm turns Save the battery on for satellite steering
+      }
+      draw();
+    });
+    $("ss-mode-line").textContent = CARD_WORDS.steer.find(([key]) => key === mode)?.[2] ?? "";
+    const box = $("ss-toggles");
+    box.replaceChildren();
+    for (const [id, label, line] of CARD_WORDS.toggles) {
+      const cb = $<HTMLInputElement>(id);
+      const one = document.createElement("div");
+      pills(one, [{ key: "x", label, sub: cb.checked ? "On" : "Off" }], cb.checked ? "x" : "", () => {
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+        draw();
+      });
+      const b = one.firstElementChild as HTMLElement;
+      b.title = line;
+      box.append(b);
+    }
+    $("ss-toggle-line").textContent = CARD_WORDS.toggles.map(([id, , line]) => ($<HTMLInputElement>(id).checked ? line : "")).filter(Boolean).join(" ");
   };
 
   // Set sail: the crossing starts as it always has (#go's own listener reads the controls);
@@ -193,6 +229,23 @@ export function mountSetSailCard(hooks: CardHooks): void {
     row.dispatchEvent(new Event("change", { bubbles: true }));
     draw();
   });
+  // More options scrolls inside the card when it would run off the window (Elena). On a phone, where
+  // the card sits low and little is left, the whole card scrolls instead, More options brought into view.
+  const fitMore = () => {
+    const body = $("more-body");
+    const card = $("ss-card");
+    body.style.maxHeight = "";
+    card.style.overflowY = "";
+    if (!more.open) return;
+    const left = window.innerHeight - 16 - body.getBoundingClientRect().top - (parseFloat(getComputedStyle(card).paddingBottom) || 0);
+    if (left >= 160) body.style.maxHeight = `${Math.floor(left)}px`;
+    else {
+      card.style.overflowY = "auto";
+      more.scrollIntoView({ block: "start" });
+    }
+  };
+  more.addEventListener("toggle", fitMore);
+  window.addEventListener("resize", fitMore);
   launch.addEventListener("change", draw);
   challenge.addEventListener("change", () => setTimeout(draw)); // after the helm's own showChallenge
   document.getElementById("boats")?.addEventListener("change", draw);

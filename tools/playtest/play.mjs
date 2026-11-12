@@ -550,7 +550,7 @@ const CHECKS = {
   "helm-base-order": {
     path: "helm.html?quality=low",
     run: async (page) => {
-      await helmStart(page, async (p) => p.locator('input[name="mode"][value="base"]').check());
+      await helmStart(page, async (p) => p.evaluate(() => document.querySelector('#ss-mode-opts .ss-pill:nth-child(2)').click()));
       await openOrders(page); // Send lives in the orders drawer
       const visible = await page.isVisible("#send");
       must(visible, "in base-station mode there's no Send button");
