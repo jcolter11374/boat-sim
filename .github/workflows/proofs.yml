@@ -185,6 +185,9 @@ jobs:
           npm init -y > /dev/null
           npm install --no-save "playwright@$PLAYWRIGHT"
           timeout 180 npx playwright install --with-deps chromium || npx playwright install chromium
+      # Clips are encoded with ffmpeg, which the runner image doesn't have.
+      - name: ffmpeg
+        run: command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null; }
       - name: Render shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shards }}
         env:
           SET: ${{ needs.plan.outputs.set }}
