@@ -1409,6 +1409,8 @@ function banner(text: string): void {
 /** The in-view tag fades between these distances (m): the real-size buoy is easy to see by then. GUESS */
 const MARK_TAG_FADE_M = 200;
 const MARK_TAG_GONE_M = 70;
+/** Beyond this (m) the in-view tag stays orange: the buoy is too small to see there. GUESS (Leo) */
+const MARK_TAG_FAR_M = 300;
 const markV = new THREE.Vector3();
 function markPointer(): void {
   const el = $("markptr");
@@ -1434,6 +1436,8 @@ function markPointer(): void {
   const d = w.distToMark();
   // Over the buoy it's a quiet tag that fades once the buoy is plain to see (Elena, 12 Nov);
   // at the edge it stays a bold orange arrow, as that's the only way to find the mark.
+  // Far off the buoy is a speck: keep the mark's orange so it reads as the mark (Leo); quiet once the buoy shows.
+  el.toggleAttribute("data-far", inView && d > MARK_TAG_FAR_M);
   el.style.opacity = inView ? String(THREE.MathUtils.clamp((d - MARK_TAG_GONE_M) / (MARK_TAG_FADE_M - MARK_TAG_GONE_M), 0, 1)) : "1";
   el.textContent = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
   el.style.left = `${((x + 1) / 2) * innerWidth}px`;

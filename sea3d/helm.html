@@ -116,6 +116,8 @@
   #markptr[data-edge=""] { background: rgba(16,22,32,.42); color: #ffd9c2; font-weight: 500; font-size: calc(var(--ui) * .82); }
   #markptr::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: rgba(255,106,26,.85); }
   #markptr[data-edge=""]::after { border-top-color: rgba(16,22,32,.42); }
+  #markptr[data-edge=""][data-far] { background: rgba(255,106,26,.85); color: #fff; font-weight: 600; }
+  #markptr[data-edge=""][data-far]::after { border-top-color: rgba(255,106,26,.85); }
   #markptr[data-edge="left"]::before { content: "◀ "; } #markptr[data-edge="right"]::before { content: "▶ "; }
   #markptr[data-edge="up"]::before { content: "▲ "; } #markptr[data-edge="down"]::before { content: "▼ "; }
   #markptr[data-edge="left"]::after, #markptr[data-edge="right"]::after, #markptr[data-edge="up"]::after, #markptr[data-edge="down"]::after { display: none; }
