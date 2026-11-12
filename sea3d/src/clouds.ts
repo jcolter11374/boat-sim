@@ -156,7 +156,7 @@ void main() {
   // ---- cumulus ----
   // Under a closing deck the heaps lose their sun and merge into it.
   // Overcast, a blow, or steady rain (rain falls from a deck, whatever the sunlight said) close the sky.
-  float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.3, 2.5, uRain));
+  float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.1, 1.5, uRain));
   float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
   if (cuAmt > 0.01 && alpha < 0.99) {
     vec2 q = onLayer(dir, 1200.0) + uDrift;
@@ -380,7 +380,7 @@ export class Clouds {
     // Rain, mm/h: the logged rate, or (older replays) what the storm suggests.
     const rainWant = rainMmH ?? 6 * SM(storm, 0.4, 1);
     // Rain falls from a deck: steady rain covers the sky (and so dims the sun and its glitter on the sea).
-    const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7), SM(this.rain, 0.3, 2.5));
+    const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7), SM(this.rain, 0.1, 1.5));
     const k = this.snapped ? 1 : Math.min(1, dt * 0.8);
     this.snapped = false;
     this.cover += (want - this.cover) * k;
@@ -436,7 +436,7 @@ export class Clouds {
   seaSky(out: THREE.Vector4): THREE.Vector4 {
     const u = this.layer.material.uniforms;
     const h = u.uHaze.value as THREE.Color;
-    const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7), SM(this.rain, 0.3, 2.5));
+    const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(u.uStorm.value as number, 0.15, 0.7), SM(this.rain, 0.1, 1.5));
     return out.set(h.r, h.g, h.b, deck);
   }
 
