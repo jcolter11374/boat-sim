@@ -195,7 +195,7 @@
      The world gets the screen: one instrument strip at the bottom, the orders in a drawer on the left,
      a corner map top right, toasts top centre. Everything else is one key or one click away. */
   :root { --hud: rgba(8,16,28,.46); --hud-solid: rgba(8,16,28,.82); --hud-line: rgba(200,220,245,.14);
-    --strip-w: min(960px, calc(100vw - 16px)); --strip-h: 58px; --edge: 10px; --strip-bg: rgba(8,16,28,.62); }
+    --strip-w: min(calc(var(--ui) * 80), calc(100vw - 16px)); --strip-h: calc(var(--ui) * 4.83); --edge: 10px; --strip-bg: rgba(10,18,28,.62); }
   .hud { background: var(--hud); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); border-radius: 10px; }
   .num, #strip .v, #wheel .w-cell b, #wheel-goal { font-variant-numeric: tabular-nums; }
   button.x { background: none; border: 0; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--dim); }
@@ -209,17 +209,17 @@
 
   /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 26px; align-items: center; gap: 0; padding: 0 8px 0 14px; z-index: 6;
+    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
-  #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; height: 42px; box-sizing: border-box;
+  #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
   #strip .cell:first-child { border-left: 0; padding-left: 0; }
-  #strip .v { font: 650 17px/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .1px; }
-  #strip .v .sub { font-size: 12px; font-weight: 500; color: var(--dim); }
-  #strip .l { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-  #strip button.cell { cursor: pointer; border: 0; border-left: 1px solid var(--hud-line); border-radius: 0; background: none; padding: 0 10px; }
+  #strip .v { font: 650 1.42em/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .1px; }
+  #strip .v .sub { font-size: .7em; font-weight: 500; color: var(--dim); }
+  #strip .l { font-size: .875em; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  #strip button.cell { cursor: pointer; border: 0; border-left: 1px solid var(--hud-line); border-radius: 0; background: none; padding: 0 .83em; }
   #strip button.cell:hover .v, #strip button.cell[aria-expanded="true"] .v { color: #ffb070; }
-  #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: 13px; }
+  #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: .76em; }
   #strip .c-order[aria-expanded="true"] .v::after { content: " ◂"; }
   #c-lead.ahead .v { color: var(--good); } #c-lead.behind .v { color: #ff8a7a; }
   #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
@@ -227,18 +227,18 @@
   #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
   #timebar { display: flex; gap: 2px; margin-top: 3px; }
   #timebar[hidden] { display: none; }
-  #timebar button { padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 16px; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
+  #timebar button { padding: .1em .5em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
   #timebar button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
-  #timebar #t-pause { min-width: 26px; }
+  #timebar #t-pause { min-width: 2.2em; }
   #timebar.paused #t-pause { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
-  #keysbtn { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
+  #keysbtn { width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
   #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
   #keylist[hidden] { display: none; }
   #keylist .kh { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 2px 0 4px; }
   #keylist:not([hidden]) { display: flex; gap: 22px; }
   #keylist .kg { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
   #keylist kbd { font: 600 11px system-ui, sans-serif; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--hud-line); background: rgba(255,255,255,.06); text-align: center; white-space: nowrap; justify-self: start; min-width: 14px; }
-  #keyhint { position: fixed; left: 50%; bottom: calc(var(--edge) + var(--strip-h) + 8px); transform: translateX(-50%); font: 500 12px system-ui, sans-serif;
+  #keyhint { position: fixed; left: 50%; bottom: calc(var(--edge) + var(--strip-h) + 8px); transform: translateX(-50%); font: 500 var(--ui) system-ui, sans-serif;
     color: rgba(225,235,248,.9); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; z-index: 5; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
   #timestate { display: none !important; } /* the pause shows on the strip's button; a stop says why in a toast */
@@ -326,27 +326,27 @@
 
   /* Rosa's wheel strip, in the same slot and the same style as the instrument strip. */
   /* One strip design for both modes (Elena): same slot, glass, height, cells and type. */
-  #wheel { bottom: var(--edge); width: var(--strip-w); background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); padding: 0 8px 0 14px; box-sizing: border-box; }
-  #wheel .w-guide { margin: 8px 0 0; }
+  #wheel { bottom: var(--edge); width: var(--strip-w); background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); padding: 0 .67em 0 1.17em; box-sizing: border-box; font-size: var(--ui); }
+  #wheel .w-guide { margin: .67em 0 0; }
   #wheel .w-strip { height: var(--strip-h); grid-template-columns: 1.05fr 1.5fr .85fr 1.15fr auto; gap: 0; }
-  #wheel .w-cell:not(.w-ctl) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; align-items: baseline; height: 42px; align-content: center;
-    padding: 0 10px; border-left: 1px solid var(--hud-line); }
+  #wheel .w-cell:not(.w-ctl) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .5em; align-items: baseline; height: 3.5em; align-content: center;
+    padding: 0 .83em; border-left: 1px solid var(--hud-line); }
   #wheel .w-cell:first-child { border-left: 0; padding-left: 0; }
-  #wheel .w-cell .w-lbl { grid-row: 2; grid-column: 1 / 3; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; margin-top: 2px; order: 2; }
-  #wheel .w-cell b, #wheel .w-cell .w-tell { grid-row: 1; grid-column: 1; font: 650 17px/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #wheel .w-cell .w-tell { font-size: 14px; }
+  #wheel .w-cell .w-lbl { grid-row: 2; grid-column: 1 / 3; font-size: .875em; letter-spacing: .5px; text-transform: uppercase; margin-top: 2px; order: 2; }
+  #wheel .w-cell b, #wheel .w-cell .w-tell { grid-row: 1; grid-column: 1; font: 650 1.42em/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #wheel .w-cell .w-tell { font-size: 1.17em; }
   #wheel .w-cell .w-sub { grid-row: 1; grid-column: 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #wheel .w-cell .w-bar, #wheel .w-cell .w-gauge { grid-row: 3; grid-column: 1 / 3; height: 3px; margin: 3px 0 0; }
-  #wheel .w-ctl { justify-content: flex-end; padding-left: 10px; border-left: 1px solid var(--hud-line); height: 42px; }
-  #wheel .w-speeds button, #wheel .w-ctl > button { padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 16px; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
+  #wheel .w-ctl { justify-content: flex-end; padding-left: .83em; border-left: 1px solid var(--hud-line); height: 3.5em; }
+  #wheel .w-speeds button, #wheel .w-ctl > button { padding: .1em .5em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
   #wheel .w-speeds button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
-  #wheel .w-help { width: 22px; height: 22px; padding: 0 !important; border-radius: 50% !important; }
+  #wheel .w-help { width: 1.83em; height: 1.83em; padding: 0 !important; border-radius: 50% !important; }
   #wheel-goal { background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: none; }
 
   /* Narrow windows: the strip wraps to two rows, the drawer takes the width, the map is a button. */
   @media (max-width: 1100px) {
-    :root { --strip-h: 104px; }
-    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; grid-auto-rows: 48px; align-content: center; }
+    :root { --strip-h: calc(var(--ui) * 8.67); }
+    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; grid-auto-rows: 4em; align-content: center; }
     #strip #c-bat { border-left: 0; padding-left: 0; }
     #keysbtn { justify-self: end; margin-right: 4px; }
     #notes { width: min(420px, calc(100vw - 24px)); top: calc(var(--bar, 0px) + 54px); }
