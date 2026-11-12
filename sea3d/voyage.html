@@ -234,9 +234,16 @@
     background: rgba(200,220,255,.18); border: 1px dashed rgba(220,232,255,.8); color: #e8f0ff; font: 700 12px system-ui, sans-serif; letter-spacing: 1px; pointer-events: none; }
   body.live #c-wind, body.live #playlink, body.live #livelink, body.game #livelink, body.live #top a[href="./index.html"] { display: none !important; }
   /* Narrow windows: the strip wraps to two rows, the drawer takes the width, the map is a button. */
+  /* Switches, not the browser's blue boxes (audit item 7): a small pill, orange when on. */
+  #top input[type=checkbox], #mside input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 26px; height: 15px; margin: 0 6px 0 0; vertical-align: -3px;
+    border-radius: 8px; background: rgba(255,255,255,.16); border: 1px solid var(--hud-line); cursor: pointer; transition: background .15s; flex: none; }
+  #top input[type=checkbox]::before, #mside input[type=checkbox]::before { content: ""; position: absolute; top: 1px; left: 1px; width: 11px; height: 11px; border-radius: 50%; background: #cfd8e3; transition: transform .15s, background .15s; }
+  #top input[type=checkbox]:checked, #mside input[type=checkbox]:checked { background: rgba(255,138,42,.85); border-color: rgba(255,138,42,.9); }
+  #top input[type=checkbox]:checked::before, #mside input[type=checkbox]:checked::before { transform: translateX(11px); background: #fff; }
+  #top input[type=checkbox]:focus-visible, #mside input[type=checkbox]:focus-visible { outline: 2px solid var(--orange, #ff8a2a); outline-offset: 2px; }
   @media (max-width: 1100px) {
     :root { --strip-h: calc(var(--ui) * 8.67); }
-    #strip { flex-wrap: wrap; align-content: center; height: var(--strip-h); padding-top: .3em; }
+    #strip { flex-wrap: wrap; align-content: center; height: var(--strip-h); padding-top: .3em; background: rgba(10,18,28,.8); } /* the taller strip shows more sea: a whitecap under thin glass read as a stray box (Ines, Leo) */
     #strip .cell { flex: 0 0 20%; height: 3.6em; }
     #strip .c-time { flex-basis: 32%; } #strip #c-day { flex-basis: 28%; }
     #strip #c-bat { flex-basis: 26%; border-left: 0; padding-left: 0; } #strip #c-wind { flex-basis: 30%; } #strip #c-eq { flex: 1 1 0; }
@@ -259,7 +266,7 @@
 <button id="replay-tab" aria-controls="top" aria-expanded="true" title="Replay settings (R)"><span>Replay</span></button>
 <div id="top" class="open" aria-label="Replay settings">
   <h2><span id="h1">Voyage replay</span><button class="x" id="top-x" aria-label="Close the replay settings (R)" title="Close (R)">&times;</button></h2>
-  <p class="sub" id="sub">Our kayak on one voyage through a real spring's weather, waves and currents, battery and breakdowns included.</p>
+  <p class="sub" id="sub">Our kayak on one voyage through real weather, waves and currents, battery and breakdowns included.</p>
   <select id="boat" aria-label="Boat"></select>
   <select id="voyage" aria-label="Voyage"></select>
   <div id="guesschip" hidden>Your prediction: <b id="g-chip"></b></div>
@@ -275,7 +282,7 @@
     <a href="./voyage.html" id="quitlink" hidden>Leave the game</a>
   </div>
   <div class="row">
-    <label id="placelabel" title="Real land from satellite pictures and height maps"><select id="placepick" aria-label="Sail by real land"><option value="">Sail by real land&hellip;</option></select></label>
+    <label id="placelabel" title="Real land from satellite pictures and height maps"><select id="placepick" aria-label="Sail past a real coast"><option value="">Sail past a real coast&hellip;</option></select></label>
   </div>
   <div class="lh">View</div>
   <div class="row">

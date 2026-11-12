@@ -879,6 +879,8 @@ window.addEventListener("resize", () => {
 if (!location.pathname.endsWith("voyage.html")) document.querySelector<HTMLElement>("#top a")!.style.display = "none";
 
 // ---------- voyage list ----------
+/** The replay opens on this launch day when the boat has one: the calmest start of the April-to-June window. */
+const CALM_START = "2020-06-01";
 /** Index entries by boat, keyed by launch date. */
 const byKey: Record<Rev, Map<string, IndexEntry>> = {
   kayak: new Map(),
@@ -1031,7 +1033,10 @@ if (PLACE) {
       const ours = [...((mineKey && byKey[mineKey]?.size ? byKey[mineKey] : byKey.kayak).values())];
       const pool = ours.length ? ours : index;
       const longest = pool.reduce((m, v) => (v.days > m.days ? v : m), pool[0]);
-      await selectVoyage(index.find((v) => v.file === want)?.file ?? longest.file);
+      // A calm start, as the helm opens on one (Elena): 1 Jun 2020 sets out in 1.2 m seas and 17 kn,
+      // where 1 Apr starts in the tail of a gale. Replays exist only for the odds launch days, so not 23 Apr.
+      const calm = pool.find((v) => v.start.startsWith(CALM_START));
+      await selectVoyage(index.find((v) => v.file === want)?.file ?? (calm ?? longest).file);
       warpHint();
     }
   } catch (e) {
@@ -1683,14 +1688,14 @@ function hud(r: Replay, stw: number, hs: number): boolean {
   $("h-charge").textContent = sunNow != null && sunNow > 50 ? "charging" : "battery";
   const hdg = angleAt(r, r.heading, hour);
   num("h-head", hdg == null ? "-" : `${String(Math.round(((hdg % 360) + 360) % 360)).padStart(3, "0")}°`, hdg == null ? "" : ` ${compass(hdg)}`);
-  num("h-stw", (stw * 1.94384).toFixed(1), "kt");
+  num("h-stw", (stw * 1.94384).toFixed(1), "kn");
   const u = valueAt(r, r.wind_u, hour);
   const v = valueAt(r, r.wind_v, hour);
   let windWords = "";
   if (u != null && v != null) {
     const spd = Math.hypot(u, v) * 1.94384;
     const from = (THREE.MathUtils.radToDeg(Math.atan2(-u, -v)) + 360) % 360;
-    num("h-wind", spd.toFixed(0), `kt ${compass(from)}`);
+    num("h-wind", spd.toFixed(0), `kn ${compass(from)}`);
     windWords = `Wind ${spd.toFixed(0)} knots from the ${compass(from)}. `;
   }
   num("h-hs", `· ${hs.toFixed(1)}`, "m");
