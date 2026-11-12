@@ -232,6 +232,7 @@ export class OceanSound {
   private ctx: BaseAudioContext | null = null;
   private master: GainNode | null = null;
   private duckGain: GainNode | null = null;
+  private echo: GainNode | null = null;
   private L: Record<"windLo" | "windHi" | "rig" | "rig2" | "hull" | "wash" | "sizzle" | "rain", Layer> | null = null;
   private bufs: Record<NoiseKind, AudioBuffer> | null = null;
   private rnd: () => number = Math.random;
@@ -356,11 +357,26 @@ export class OceanSound {
     shelf.frequency.value = 4500;
     shelf.gain.value = -8;
     shelf.connect(limiter);
-    this.duckGain = ctx.createGain();
-    this.duckGain.connect(shelf);
+    // The beds go through the duck (cinematic fades, a knockdown, the result card); one-off
+    // moments go straight to the master, so a duck makes room for them.
     this.master = ctx.createGain();
     this.master.gain.value = offline(ctx) ? LEVEL : 0; // a review render plays from the start
-    this.master.connect(this.duckGain);
+    this.master.connect(shelf);
+    this.duckGain = ctx.createGain();
+    this.duckGain.connect(this.master);
+    // Echo off the water for far sounds (the finish horn, the bell): two soft, darker repeats.
+    this.echo = ctx.createGain();
+    const dark = ctx.createBiquadFilter();
+    dark.type = "lowpass";
+    dark.frequency.value = 1100;
+    dark.connect(this.master);
+    for (const [at, g] of [[0.31, 0.3], [0.74, 0.16]] as const) {
+      const dl = ctx.createDelay(1.5);
+      dl.delayTime.value = at;
+      const dg = ctx.createGain();
+      dg.gain.value = g;
+      this.echo.connect(dl).connect(dg).connect(dark);
+    }
     const layer = (buf: AudioBuffer, type: BiquadFilterType, freq: number, q: number): Layer => {
       const src = ctx.createBufferSource();
       src.buffer = buf;
@@ -372,7 +388,7 @@ export class OceanSound {
       filter.Q.value = q;
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      src.connect(filter).connect(gain).connect(this.master!);
+      src.connect(filter).connect(gain).connect(this.duckGain!);
       src.start(0, rnd() * buf.duration);
       return { gain, filter };
     };
@@ -443,11 +459,18 @@ export class OceanSound {
     if (this.ctx) this.burst("brown", "lowpass", 380, 0.1, 0.18, 0.9, 0.08);
   }
 
-  /** A breaking wave landing on the boat (a knockdown, #329): a roar of water and a thump. */
+  /**
+   * Knocked flat by a breaking wave (#329): the crest's rush arriving, a heavy thump on the
+   * hull, the rig shaking, then water pouring off the deck. The sea ducks 4 dB to make room.
+   */
   crash(): void {
     if (!this.live) return;
-    this.burst("white", "lowpass", 1400, 0.6, 0.04, 2.4);
-    this.burst("brown", "lowpass", 130, 0.9, 0.008, 0.5);
+    const r = this.rnd;
+    this.duck(3, 0.63);
+    this.burst("white", "bandpass", 900, 0.25, 0.35, 0.7, 0, 0.5);
+    this.burst("brown", "lowpass", 110, 0.6, 0.012, 0.55, 0.35);
+    this.burst("pink", "lowpass", 1500, 0.12, 0.3, 2.6, 0.5);
+    for (let i = 0; i < 6; i++) this.burst("white", "bandpass", 1600 + r() * 600, 0.025 * (1 - i / 7), 0.006, 0.06, 0.4 + i * (0.1 + r() * 0.06), 3);
   }
 
   /** Spray flying off the bow (strength 0..1): a short hiss, darker when it's small. */
@@ -474,33 +497,167 @@ export class OceanSound {
     if (strength > 0.45) this.spray(strength * near);
   }
 
-  /** Two short beeps, like an instrument's alarm: something broke (#329). */
-  alarm(): void {
+  /** The cockpit instrument's soft double chirp: something needs you (#329). */
+  alarm(delay = 0): void {
     if (!this.live) return;
-    for (const at of [0, 0.22]) this.tone([1046], "triangle", 0.07, at, 0.12, 2200);
-  }
-
-  /** A ship's horn for the finish (#329): two low notes together. */
-  horn(): void {
-    if (!this.live) return;
-    this.tone([110, 165], "sawtooth", 0.16, 0, 1.8, 900);
+    this.tone([1175], "sine", 0.024, delay, 0.07, 2000);
+    this.tone([880], "sine", 0.024, delay + 0.12, 0.07, 2000);
   }
 
   /**
-   * Dip the whole mix about 2 dB for a fade to black between cinematic sequences, and come
-   * back as the picture does. The beds keep running: it's a breath, not a restart.
+   * Something on board broke (#329). You hear the part first, then the instrument's chirp:
+   * a motor winding down and stopping, the electrical hum cutting out, or a crack and the
+   * flap of loose gear (a sail, the wing, the rudder).
    */
-  duck(seconds = 0.8): void {
+  breakdown(kind: string): void {
+    if (!this.live) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const r = this.rnd;
+    if (kind === "one_motor" || kind === "motors_off") {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(420, t);
+      o.frequency.exponentialRampToValueAtTime(60, t + 1.5);
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = 900;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.034, t);
+      g.gain.setTargetAtTime(0, t + 0.6, 0.3);
+      o.connect(f).connect(g).connect(this.master!);
+      o.start(t);
+      o.stop(t + 2.2);
+      this.alarm(1.4);
+    } else if (kind === "battery_empty") {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.02, t);
+      g.gain.setTargetAtTime(0, t + 0.4, 0.08);
+      g.connect(this.master!);
+      for (const hz of [120, 240]) {
+        const o = ctx.createOscillator();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(hz, t);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.8, t + 0.7);
+        o.connect(g);
+        o.start(t);
+        o.stop(t + 1);
+      }
+      this.alarm(0.9);
+    } else if (kind === "ship_strike") {
+      this.ship();
+      this.alarm(3.2);
+    } else {
+      this.burst("white", "bandpass", 1800, 0.15, 0.008, 0.12, 0, 1);
+      this.burst("brown", "lowpass", 220, 0.17, 0.005, 0.15, 0.01);
+      let at = 0.15;
+      for (let i = 0; i < 8; i++) {
+        this.burst("pink", "lowpass", 700 + r() * 400, 0.075 * (1 - i / 9), 0.01, 0.09, at);
+        at += 0.12 + r() * 0.1;
+      }
+      this.alarm(1.1);
+    }
+  }
+
+  /** A ship passing close: its engine's throb swells and fades, then its wash slaps the hull. */
+  ship(): void {
+    if (!this.live) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.bufs!.brown;
+    src.loop = true;
+    src.playbackRate.setValueAtTime(1.06, t);
+    src.playbackRate.linearRampToValueAtTime(0.94, t + 5); // a slow Doppler as she passes
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 95;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.17, t + 2.2);
+    g.gain.setTargetAtTime(0, t + 2.6, 1);
+    // The engine's beat: a big slow diesel turns about 1.5 times a second (real, so it may pulse).
+    const throb = ctx.createOscillator();
+    throb.frequency.value = 1.6;
+    const depth = ctx.createGain();
+    depth.gain.value = 0.25;
+    const am = ctx.createGain();
+    am.gain.value = 0.75;
+    throb.connect(depth).connect(am.gain);
+    src.connect(f).connect(g).connect(am).connect(this.master!);
+    src.start(t, this.rnd() * 5);
+    throb.start(t);
+    src.stop(t + 7);
+    throb.stop(t + 7);
+    for (const at of [3.6, 4.3, 4.9, 5.6]) this.slapAt(at, 0.5);
+  }
+
+  /** The finish (#329): a ship's horn far off, echoing over the water. A moment, not a blast. */
+  horn(): void {
+    if (!this.live) return;
+    this.duck(4, 0.7);
+    this.tone([98, 147], "sawtooth", 0.028, 0, 2.6, 600, 0.35, true);
+  }
+
+  /**
+   * A ship's bell rung out over the water: one strike for bronze, two for silver, three for
+   * gold (Elena), in the ship's-bell rhythm (strikes in pairs). A real sound, not a jingle.
+   */
+  bell(strikes: 1 | 2 | 3): void {
+    if (!this.live) return;
+    const at = [0, 0.5, 1.45].slice(0, strikes);
+    for (const d of at) this.strike(d);
+  }
+
+  private strike(delay: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + delay;
+    const base = 610;
+    // A bell's partials: the hum an octave down, the strike note, a minor third, a fifth, the
+    // octave and two upper ones (all under 2 kHz, Elena), each ringing out at its own rate.
+    const parts: [number, number, number][] = [[0.5, 0.35, 4.5], [1, 1, 3.6], [1.183, 0.55, 2.8], [1.506, 0.4, 2.2], [2, 0.3, 1.6], [2.514, 0.16, 1.1], [2.662, 0.12, 0.9]];
+    const out = ctx.createGain();
+    out.gain.value = 0.018;
+    out.connect(this.master!);
+    out.connect(this.echo!);
+    for (const [k, a, len] of parts) {
+      const o = ctx.createOscillator();
+      o.frequency.value = base * k * (1 + (this.rnd() - 0.5) * 0.002);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(a, t + 0.005);
+      g.gain.setTargetAtTime(0, t + 0.005, len / 4);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + len * 1.6);
+    }
+    // The clapper's knock, softened (no hard click).
+    this.burst("white", "bandpass", 1500, 0.03, 0.004, 0.03, delay, 1.5);
+  }
+
+  /** The result card settles: a soft knock, and the sea drops to half under it for a while. */
+  settle(): void {
+    if (!this.live) return;
+    this.duck(6, 0.5);
+    this.burst("brown", "lowpass", 180, 0.15, 0.01, 0.25, 0.05);
+  }
+
+  /**
+   * Dip the beds (wind, sea, rain) for a moment and bring them back: about 2 dB for a fade to
+   * black between cinematic sequences, more to make room for a knockdown or the finish. They
+   * keep running: it's a breath, not a restart. One-off moments aren't ducked.
+   */
+  duck(seconds = 0.8, level = 0.78): void {
     if (!this.ctx || !this.duckGain) return;
     const t = this.ctx.currentTime;
     const g = this.duckGain.gain;
     g.cancelScheduledValues(t);
-    g.setTargetAtTime(0.78, t, seconds * 0.2);
+    g.setTargetAtTime(level, t, Math.min(seconds * 0.2, 0.3));
     g.setTargetAtTime(1, t + seconds * 0.6, seconds * 0.25);
   }
 
   /** Oscillators at the given pitches, through a low-pass, for `hold` seconds. */
-  private tone(freqs: number[], type: OscillatorType, peak: number, delay: number, hold: number, cut: number): void {
+  private tone(freqs: number[], type: OscillatorType, peak: number, delay: number, hold: number, cut: number, attack = 0.04, far = false): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime + delay;
     const f = ctx.createBiquadFilter();
@@ -508,17 +665,18 @@ export class OceanSound {
     f.frequency.value = cut;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(peak, t + 0.04);
+    g.gain.linearRampToValueAtTime(peak, t + attack);
     g.gain.setValueAtTime(peak, t + hold);
-    g.gain.linearRampToValueAtTime(0, t + hold + 0.25);
+    g.gain.linearRampToValueAtTime(0, t + hold + (far ? 0.8 : 0.25));
     f.connect(g).connect(this.master!);
+    if (far) g.connect(this.echo!);
     for (const hz of freqs) {
       const o = ctx.createOscillator();
       o.type = type;
       o.frequency.value = hz;
       o.connect(f);
       o.start(t);
-      o.stop(t + hold + 0.3);
+      o.stop(t + hold + (far ? 0.9 : 0.3));
     }
   }
 

@@ -828,7 +828,7 @@ function moment(e: ReplayEvent): void {
     flash("spray");
     slowUntil = now + 4;
   } else if (["part_failed", "ship_strike", "one_motor", "motors_off", "battery_empty"].includes(e.kind)) {
-    sound.alarm();
+    sound.breakdown(e.kind); // the part stopping, then the instrument's chirp
     flash("alarm");
     slowUntil = now + 3;
   } else if (e.kind === "arrived" || e.kind === "finish_line") {
@@ -1823,6 +1823,7 @@ async function finish(): Promise<void> {
   bits.unshift("Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.");
   $("r-notes").textContent = bits.join(" ");
   $("result").hidden = false;
+  sound.settle(); // a soft knock, and the sea drops to half under the card
   void showStanding(c.build);
 }
 
