@@ -66,6 +66,8 @@
   /* 720 tall (a laptop): the whole menu fits, no row cut off at the card's edge (Ines). */
   @media (max-height: 820px) { #title { padding: 16px 20px 14px; } #title h1 { font-size: 38px; margin-bottom: 2px; } #title .tag { font-size: 13.5px; margin: 4px 0 12px; }
     #title nav { gap: 5px; } #title nav a, #title nav button { padding: 8px 13px; } #title nav small { font-size: 11.5px; margin-top: 1px; } #title .fine { margin-top: 10px; } }
+  /* A phone's title: the credits shrink to the one "Credits" link (the full list is behind it), so they don't print over the menu (Elena). */
+  @media (max-width: 600px) { body.title #credits .long { display: none; } }
   @media (max-height: 560px) { #title { padding: 14px 16px 12px; } #title h1 { font-size: 32px; } #title .tag { margin-bottom: 10px; } #title nav small { display: none; } }
   /* The way into the game (src/sailLink.ts): sail this sea at the helm, or build a boat first. */
   #ways { display: flex; gap: 8px; align-items: stretch; margin: 8px 0 6px; }
@@ -143,6 +145,6 @@
 <script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/title.ts"></script>
 <script type="module" src="./src/main.ts"></script>
-<div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto"><span class="long">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · </span><a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
 </body>
 </html>
