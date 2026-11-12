@@ -58,10 +58,10 @@ export function drawForecast(c: HTMLCanvasElement, rows: ForecastRow[], start: n
     g.restore();
     g.fillStyle = "#e9f1fb";
     g.font = "600 11px system-ui, sans-serif";
-    if (i % 2 === 0 || col > 26) g.fillText(kn.toFixed(0), x, 46);
+    if (i % 2 === 0 || col > 26) g.fillText(i === 0 ? `${kn.toFixed(0)} kn` : kn.toFixed(0), x, 46);
     g.fillStyle = "#9fb3c8";
     g.font = "10px system-ui, sans-serif";
-    if (i % 2 === 0 || col > 26) g.fillText(`${r.hs.toFixed(1)}m`, x, 60);
+    if (i % 2 === 0 || col > 26) g.fillText(i === 0 ? `${r.hs.toFixed(1)} m` : r.hs.toFixed(1), x, 60);
     // Sunshine bar along the bottom.
     const sun = Math.min(r.ghi / 900, 1);
     g.fillStyle = `rgba(255,194,71,${0.15 + 0.75 * sun})`;
