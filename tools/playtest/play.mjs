@@ -879,10 +879,10 @@ const CHECKS = {
       await shot("heel-tack-a");
       // Turn through the wind onto the other tack: hold left until the wind changes side (up to 25 s).
       const sideA = /port/.test(a) ? "port" : "starboard";
-      await page.keyboard.down(sideA === "port" ? "ArrowRight" : "ArrowLeft");
+      await page.keyboard.down(sideA === "port" ? "ArrowLeft" : "ArrowRight");
       await page.waitForFunction((side) => { const m = document.body.innerText.match(/off the bow on the (port|starboard)/); return m && m[1] !== side; }, sideA, { timeout: 25_000 }).catch(() => {});
       await page.waitForTimeout(1500);
-      await page.keyboard.up(sideA === "port" ? "ArrowRight" : "ArrowLeft");
+      await page.keyboard.up(sideA === "port" ? "ArrowLeft" : "ArrowRight");
       await page.waitForTimeout(6000);
       const b = await wind();
       await shot("heel-tack-b");
