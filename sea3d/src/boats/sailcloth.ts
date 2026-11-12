@@ -105,22 +105,29 @@ void main() {`,
         "#include <begin_vertex>",
         `#include <begin_vertex>
   vSailUv = uv;
-  // Luff flutter: ripples run aft from the luff (u = 0, held by the mast or stay,
-  // so no movement right at it), reaching further back as the sail is let go;
-  // at 1 (head to wind) the whole sail shakes. Size scales with the sail's foot.
+  // Luff flutter: ripples run aft from the luff, reaching further back as the sail is
+  // let go; at 1 (head to wind) the whole sail shakes. Ines (clip 2): the luff edge itself
+  // must bulge and snap (it is only held at the hanks or the mast track), so it keeps
+  // 40% of the motion. The mesh carries the big, slow bulges (about 1.6 m long, in
+  // metres along the chord, so a big sail and a small one fold alike); the hand-wide
+  // folds on top are drawn per pixel in the fragment shader.
+  float chordM = uSize.x * (1.0 - uv.y);
+  float xm = uv.x * chordM;
   float reach = 0.3 + 0.7 * uLuff * uLuff;
-  float wLuff = smoothstep(0.0, 0.05, uv.x) * (1.0 - smoothstep(0.0, reach, uv.x));
-  float wave = sin(uv.x * 26.0 - uSailTime * (14.0 + 10.0 * uLuff) + uv.y * 7.0)
-             * (0.6 + 0.4 * sin(uv.y * 11.0 + uSailTime * 4.3));
+  float wLuff = mix(0.4, 1.0, smoothstep(0.0, 0.08, uv.x)) * (1.0 - smoothstep(0.0, reach, uv.x));
+  float ph = 6.2832 * xm / 1.6 - uSailTime * (9.0 + 8.0 * uLuff) + 1.3 * sin(uv.y * 4.0 + uSailTime * 1.7);
+  float s1 = sin(ph);
+  float wave = sign(s1) * pow(abs(s1), 0.6) * (0.7 + 0.3 * sin(uv.y * 9.0 + uSailTime * 4.3)); // sharp crests: a snap
   vFlog = uLuff * wLuff;
   vFold = wave;
-  transformed += objectNormal * (vFlog * wave * uSize.x * 0.06 * (1.0 - 0.5 * uv.y));`,
+  transformed += objectNormal * (vFlog * wave * min(uSize.x, 5.0) * 0.045 * (1.0 - 0.4 * uv.y));`,
       )
       .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\n  vSailWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
     sh.fragmentShader = sh.fragmentShader
       .replace(
         "void main() {",
         `uniform vec3 uSailSunDir;
+uniform float uSailTime;
 uniform vec3 uSailSunCol;
 uniform float uSailSun;
 uniform float uSailNight;
@@ -172,8 +179,18 @@ void main() {`,
   // A headsail sits partly in the main's shade (and the main's luff in the jib's wash): a soft
   // darker band along the jib's after part.
   diffuseColor.rgb *= 1.0 - 0.12 * uJib * smoothstep(0.45, 0.95, vSailUv.x) * (1.0 - 0.5 * vSailUv.y);
-  // A flogging luff: the cloth folds, and the folds shade each other.
-  diffuseColor.rgb *= 1.0 - 0.28 * vFlog * smoothstep(-0.2, 0.9, vFold);
+  // A flogging luff: the cloth folds, and the folds shade each other. Hand- to forearm-wide
+  // folds (about 0.5 m from crest to crest) curve a little and travel aft from the luff,
+  // each with a lit face and a shadowed face (Ines: strong contrast, not faint streaks).
+  if (vFlog > 0.003) {
+    float fx = vSailUv.x * uSize.x * (1.0 - vSailUv.y);
+    float fph = 6.2832 * fx / 0.5 - mod(uSailTime, 100.0) * 18.0 + 2.2 * sin(vSailUv.y * 5.0 + 0.8 * vFold) + 1.5 * vFold;
+    float fc = cos(fph);
+    float face = sign(fc) * pow(abs(fc), 0.5);      // which way this bit of the fold faces
+    float big = 0.5 + 0.5 * vFold;                  // the big bulge's lit side
+    float shade = 0.55 * face + 0.35 * (big * 2.0 - 1.0);
+    diffuseColor.rgb *= max(0.3, 1.0 + min(1.0, vFlog * 1.3) * (shade > 0.0 ? 0.35 * shade : 1.1 * shade));
+  }
   // So jib and main read as two sails from the chase camera (Elena): a darker line of
   // tape and stitching along each leech and foot, and the main's luff in the mast's lee,
   // so the slot between the sails shows as a gap.
@@ -218,7 +235,7 @@ void main() {`,
   totalEmissiveRadiance += diffuseColor.rgb * vec3(0.05, 0.066, 0.1) * 0.35 * uSailNight;`,
       );
   };
-  pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v4`;
+  pm.customProgramCacheKey = () => `${prevKey()}|boatsim-sailcloth-v5`;
   pm.needsUpdate = true;
   return pm as THREE.MeshPhysicalMaterial | M;
 }
