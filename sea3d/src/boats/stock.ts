@@ -13,7 +13,10 @@
 
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
+import { applyStockFinishes } from "./finishes";
+import { DACRON, clotheSails, tickSails } from "./sailcloth";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { holdWires } from "./wire";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, PEARSON, SAIL_DRONE, STOCK, type StockKey } from "./specs";
@@ -132,6 +135,8 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
               for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat.side = THREE.DoubleSide;
             }
           });
+          applyStockFinishes(g, key); // gelcoat, bottom paint, non-skid (shared by every copy)
+          holdWires(g); // stays and lifelines stay a fine unbroken line at any distance
           detailed.set(key, g);
           return true;
         } catch {
@@ -208,6 +213,7 @@ export class StockRig {
 
   update(dt: number, s: RigState): void {
     this.t += dt;
+    tickSails(dt);
     const plan = s.plan ?? "full";
     const size = PLANS[this.key][plan] ?? { main: 0, jib: 0 };
     this.shown.plan = plan;
@@ -262,14 +268,45 @@ export class StockRig {
 }
 
 // ----------------------------------------------------------- drawn-in-code boats ----
-const SAIL = 0xf4f2ea;
-function triangle(kit: Kit, parent: THREE.Object3D, name: string, a: number[], b: number[], c: number[]): THREE.Mesh {
+const SAIL = DACRON;
+/** A sail between three corners (builder frame) with camber, as blender/build_stock.py sail():
+ * the chord bellies out to builder +z, deepest about 40% back, flatter towards the head.
+ * UVs: u luff (0) to leech (1), v foot (0) to head (1), for the sailcloth's seams and luff. */
+function triangle(kit: Kit, parent: THREE.Object3D, name: string, a: number[], b: number[], c: number[], depth = 0.07): THREE.Mesh {
+  const [tack, head, clew] = [a, b, c].map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+  const nrm = new THREE.Vector3().crossVectors(head.clone().sub(tack), clew.clone().sub(tack)).normalize();
+  if (nrm.z < 0) nrm.negate();
+  const n = 12;
+  const m = 8;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const luff = tack.clone().lerp(head, t);
+    const leech = clew.clone().lerp(head, t);
+    const chord = luff.distanceTo(leech);
+    for (let j = 0; j <= m; j++) {
+      const u = j / m;
+      const bulge = Math.sin(Math.PI * u ** 0.8) * depth * chord * (1 - 0.55 * t);
+      const p = luff.clone().lerp(leech, u).addScaledVector(nrm, bulge);
+      pos.push(p.x, p.y, p.z);
+      uv.push(u, t);
+    }
+  }
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < m; j++) {
+      const k = i * (m + 1) + j;
+      idx.push(k, k + 1, k + m + 2, k, k + m + 2, k + m + 1);
+    }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute([...a, ...b, ...c], 3));
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
   geo.computeVertexNormals();
-  const m = kit.mesh(geo, kit.std(SAIL, { roughness: 0.75 }), parent);
-  m.name = name;
-  return m;
+  const mesh = kit.mesh(geo, kit.std(SAIL, { roughness: 0.8, side: THREE.DoubleSide }), parent);
+  mesh.name = name;
+  return mesh;
 }
 function pivot(parent: THREE.Object3D, name: string, x: number, y: number, z = 0): THREE.Group {
   const p = new THREE.Group();
@@ -440,6 +477,13 @@ export function buildStock(key: StockKey, quality: Quality) {
   const model = detailed.get(key);
   if (model) g.add(model.clone(true));
   else DRAW[key](kit, g);
+  // Sailcloth, one material per sail on this copy (each has its own luff flutter).
+  clotheSails(g, quality);
+  const sailMats: THREE.Material[] = [];
+  g.traverse((o) => {
+    const mat = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (mat && !Array.isArray(mat) && mat.userData.sailcloth) sailMats.push(mat);
+  });
   const rig = new StockRig(key, g);
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   // Navigation lights: a tricolour lantern at the masthead (or the rower's light pole).
@@ -486,6 +530,7 @@ export function buildStock(key: StockKey, quality: Quality) {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      for (const m of sailMats) m.dispose();
       disposeNavLights(root);
     },
   };

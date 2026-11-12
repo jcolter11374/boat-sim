@@ -1,0 +1,91 @@
+# Frame-time budget (Ravi, QA; Maya asked for runner numbers, 12 Nov): milliseconds
+# per frame on voyage.html, Low and High quality, on a clear hour and a rainy hour
+# of the 1 April voyage, median of N runs, for each git ref given. Compare a branch
+# with its own base, e.g. refs "main claude/some-sea-branch".
+# The runner draws in software (SwiftShader) like the sandbox, so read the
+# percentages between refs, not the milliseconds; a real GPU check is separate.
+# Run it by hand: Actions tab -> "Frame-time budget" -> Run workflow.
+name: Frame-time budget
+on:
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: "Git refs to measure, space-separated (first is the base)"
+        required: true
+        default: "main"
+      runs:
+        description: "Runs per cell (the median is reported)"
+        required: true
+        default: "3"
+      qualities:
+        description: "Quality levels to measure, comma-separated (low, high)"
+        required: true
+        default: "low,high"
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install headless browser
+        working-directory: sea3d
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save playwright@1
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
+      - name: Build and measure each ref, one at a time
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REFS: ${{ inputs.refs }}
+          RUNS: ${{ inputs.runs }}
+          QUALITIES: ${{ inputs.qualities }}
+        run: |
+          set -euo pipefail
+          pip install -q numpy pyyaml
+          mkdir -p fps
+          echo "| ref | Low clear | Low rain | High clear | High rain |" > fps/table.md
+          echo "|---|---|---|---|---|" >> fps/table.md
+          i=0
+          for ref in $REFS; do
+            i=$((i+1)); wt="wt$i"
+            git worktree add -q --detach "$wt" "origin/$ref" 2>/dev/null || git worktree add -q --detach "$wt" "$ref"
+            ( cd "$wt/sea3d" && npm ci --no-audit --no-fund >/dev/null )
+            # The site as it deploys (data releases included) where the ref has the script.
+            if [ -x "$wt/tools/build_site.sh" ] && (cd "$wt" && GITHUB_SHA="" tools/build_site.sh >/dev/null); then :; else (cd "$wt/sea3d" && npx vite build >/dev/null); fi
+            ( cd "$wt/sea3d/dist" && exec python3 -m http.server 4810 >/dev/null 2>&1 ) & srv=$!
+            sleep 2
+            # The harness runs from this checkout, where Playwright is installed.
+            node sea3d/tests/fps_budget.mjs http://localhost:4810/ "$RUNS" "$ref" "$QUALITIES" | tee -a fps/results.jsonl
+            kill $srv; wait $srv 2>/dev/null || true
+          done
+          python3 - <<'EOF' >> fps/table.md
+          import json
+          rows = [json.loads(l) for l in open("fps/results.jsonl")]
+          base = rows[0]["cells"]
+          for r in rows:
+              cells = []
+              for k in ("low/clear", "low/rain", "high/clear", "high/rain"):
+                  if k not in r["cells"]:
+                      cells.append("-")
+                      continue
+                  ms, b = r["cells"][k]["median_ms"], base[k]["median_ms"]
+                  cells.append(f"{ms}" if r is rows[0] else f"{ms} ({(ms - b) / b:+.0%})")
+              print(f"| {r['label']} | " + " | ".join(cells) + " |")
+          EOF
+          cat fps/table.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fps-budget
+          path: fps/
+          retention-days: 30

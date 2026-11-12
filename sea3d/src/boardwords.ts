@@ -36,7 +36,10 @@ const signed = (x: number) => `${x >= 0 ? "+" : "−"}${per100(x)}`;
 const awayFromZero = (x: number) => `${x >= 0 ? "+" : "−"}${Math.max(1, Math.ceil(Math.abs(x) * 100 - 1e-9))}`;
 
 /** A design against our kayak: a plain headline ("good", "bad" or "" for its colour) and a statistics line. */
-export function versusWords(v: Versus): { head: string; tone: "good" | "bad" | ""; detail: string } {
+/** A design against our kayak: a plain headline ("good", "bad" or "" for its colour), a
+ *  statistics line, and the short cell words (Milo M8: "Same as ours", "Maybe worse (could
+ *  be luck)", "Worse: 12 fewer finishes in 100"); the headline goes behind the cell's "i". */
+export function versusWords(v: Versus): { head: string; short: string; tone: "good" | "bad" | ""; detail: string } {
   const n = per100(v.gap);
   const launches = (k: number) => `${k} launch${k === 1 ? "" : "es"}`;
   const end = v.clear ? awayFromZero : signed;
@@ -47,15 +50,17 @@ export function versusWords(v: Versus): { head: string; tone: "good" | "bad" | "
     const better = v.gap > 0;
     return {
       head: `Clearly ${better ? "better" : "worse"}: about ${n} ${better ? "more" : "fewer"} finishes per 100 launches`,
+      short: `${better ? "Better" : "Worse"}: ${n} ${better ? "more" : "fewer"} finishes in 100`,
       tone: better ? "good" : "bad",
       detail,
     };
   }
   // Not clear: we can't tell them apart, which isn't the same as equal (Ravi). "About
   // the same" only when the gap itself is small too.
-  if (n < 3) return { head: "About the same as our kayak on these launches", tone: "", detail };
+  if (n < 3) return { head: "About the same as our kayak on these launches", short: "Same as ours", tone: "", detail };
   return {
     head: `Can't tell apart from our kayak on these launches: about ${n} ${v.gap > 0 ? "more" : "fewer"} per 100, which could be luck`,
+    short: `Maybe ${v.gap > 0 ? "better" : "worse"} (could be luck)`,
     tone: "",
     detail,
   };
@@ -67,4 +72,42 @@ export function sharedKayakBadges(rows: { design: string; badges: string[] }[]):
   if (kayaks.length < 2) return [];
   const others = rows.filter((r) => !r.design.startsWith("k-"));
   return kayaks[0].badges.filter((b) => kayaks.every((r) => r.badges.includes(b)) && !others.some((r) => r.badges.includes(b)));
+}
+
+/** The leaderboard's headline (Leo, audit item 9): who's best, in a sentence.
+ *  top: the top group's names in board order, with their finish rates. */
+export function bestHeadline(top: { label: string; finish_rate: number }[], groups: number): string {
+  if (!top.length) return "";
+  const rates = top.map((r) => r.finish_rate).sort((a, b) => a - b);
+  const mid = rates[Math.floor((rates.length - 1) / 2)];
+  const pct = `${Math.round(mid * 100)}%`;
+  if (groups <= 1) return `Too close to call: every build finishes about ${pct} of the time.`;
+  const first = top[0].label; // as the rows write it, capital O and all (Ines)
+  if (top.length === 1) return `Best: ${first}, about ${pct} finish.`;
+  const n = top.length - 1;
+  return `Best: ${first} and ${n} other${n === 1 ? "" : "s"}, about ${pct} finish.`;
+}
+
+/** A group's tier in words (Milo M7, Elena approved): the first group is "Best", the
+ *  last "Long shot", any between "Good". Never "Poor": Randolph's team reads this board. */
+export function tierName(tier: number, groups: number): string {
+  if (tier <= 1) return "Best";
+  return tier >= groups ? "Long shot" : "Good";
+}
+
+/** A collapsed group's one row (Milo M6). The Best group: "Our kayak and 4 builds just
+ *  as good". Any other group never says "just as good" (a 15% boat, and Randolph's team
+ *  reads this): two or three builds are named ("Randolph Rev C5 and Rev B"), more are
+ *  "{first} and N more". names: lead first (the reference build when it's in the group). */
+export function groupSummary(names: string[], best: boolean): string {
+  const short = names.map((n) => n.replace(/, as built$/, ""));
+  const n = short.length - 1;
+  if (n <= 0) return names[0] ?? "";
+  if (best) return `${short[0]} and ${n} build${n === 1 ? "" : "s"} just as good`;
+  if (short.length > 3) return `${short[0]} and ${n} more`;
+  // "Randolph Rev C5 and Rev B": say the team's name once.
+  const team = /^(Randolph )/.exec(short[0])?.[1];
+  const rest = short.slice(1).map((x) => (team && x.startsWith(team) ? x.slice(team.length) : x));
+  const all = [short[0], ...rest];
+  return all.length === 2 ? `${all[0]} and ${all[1]}` : `${all[0]}, ${all[1]} and ${all[2]}`;
 }
