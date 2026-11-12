@@ -1,0 +1,29 @@
+# Checks the deployed site against John's locked decisions (see tools/john_decisions_live_check.mjs).
+# Read-only: it only visits the public site, in a fresh Chromium profile.
+name: John's decisions live check
+on:
+  push:
+    branches: [claude/project-thread-slmp06]
+    paths: [tools/john_decisions_live_check.mjs, .github/workflows/john-decisions-live.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: |
+          npm install --no-save playwright@1.49.1
+          timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
+      - run: node tools/john_decisions_live_check.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: john-decisions-live
+          path: jd-*.png
+          if-no-files-found: ignore
