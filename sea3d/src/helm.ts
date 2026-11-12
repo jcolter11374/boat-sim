@@ -1810,7 +1810,10 @@ async function finish(): Promise<void> {
   if (c.margin_days !== null) bits.push(c.margin_days > 0 ? `You finished ${c.margin_days.toFixed(1)} days ahead.` : `The ghost finished ${(-c.margin_days).toFixed(1)} days ahead.`);
   if (c.breakdowns_differ) bits.push("Note: different things broke on the two boats, so luck played a part.");
   const air = me.airtime;
-  if (air) bits.push(`Satellite bill on the ${air.plan} plan, for ${air.months} month${air.months === 1 ? "" : "s"} with the $${air.usd.activation.toFixed(2)} activation; the backup beacon pinged ${air.beacon_pings} times on its own yearly fee.`);
+  if (air)
+    bits.push(
+      `Satellite link: ${air.up.messages} reports sent and ${air.down.messages} orders received, ${(air.up.bytes + air.down.bytes).toLocaleString("en-US")} bytes in all. The backup beacon sent ${air.beacon_pings} positions on its own.`,
+    );
   const ch = challenges.find((x) => x.id === page.challenge);
   bits.push(`${c.orders.length} orders given. ${ch ? `Challenge: ${ch.title}, launched` : "Launch"} ${c.launch.slice(0, 10)}; things ${c.breakdowns_on ? "could" : "couldn't"} break.`);
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).

@@ -117,11 +117,11 @@ export interface Airtime {
   beacon_pings: number;
 }
 
-/** Plain words for the airtime counter: messages each way, bytes, and the bill. */
+/** Plain words for the airtime counter: messages each way and bytes (no money in the game, John 12 Nov). */
 export function airtimeText(a: Airtime | null | undefined): string {
   if (!a) return "not counted";
   const bytes = a.up.bytes + a.down.bytes;
-  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes: $${a.usd.total.toFixed(2)}`;
+  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes`;
 }
 
 export interface Card {
