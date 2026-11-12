@@ -2001,7 +2001,8 @@ const CHASE_SOC = 0.25;
 
 /** Look for a better line; true if the clock was stopped to look. */
 function maybeRouteCheck(st: Status): boolean {
-  if (mode !== "hands_on" || st.over || shared) return false;
+  // No link, no orders (#404): no route looks, chases or navigator's notes to act on either.
+  if (mode !== "hands_on" || st.over || shared || st.no_link || linkCut) return false;
   const h = st.day * 24;
   const quiet = h - Math.max(lastCallH, 0) >= quietGapH() && h - routeLookedH >= 24;
   const early = !chaseAsked && h >= CHASE_FROM_H && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
