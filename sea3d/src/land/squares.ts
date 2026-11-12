@@ -11,6 +11,7 @@ import { reflectable } from "../mirror";
 import { Island } from "./island";
 import type { Place } from "./place";
 import { metresPerDegree } from "./shader";
+import { Trees, type TreeOptions } from "./trees";
 
 /** Load the squares within this of the boat (km)... */
 export const SQUARE_KM = 9;
@@ -18,6 +19,16 @@ export const SQUARE_KM = 9;
 export const SQUARE_DROP_KM = 13;
 /** At most this many loading at once, so a first look doesn't stall the page. */
 const AT_ONCE = 2;
+
+/**
+ * Trees on a square: evenly over the whole square (its frame is centred on the
+ * square, not the boat, so no thinning with distance), and fewer than a place
+ * draws, as several squares are in at once.
+ */
+export const SQUARE_TREES: Record<Quality, Partial<TreeOptions>> = {
+  high: { radius: 4000, near: 4000, max: 14000 },
+  low: { radius: 4000, near: 4000, max: 4500 },
+};
 
 export const SQUARE_CREDIT = "Land: NOAA CUDEM; contains modified Copernicus Sentinel data 2023-24";
 
@@ -83,7 +94,7 @@ export class CoastSquares {
   private all: Square[] = [];
   /** One latitude for every square's layout (the middle of them all). */
   private mid = 0;
-  private loaded = new Map<string, { sq: Square; island: Island }>();
+  private loaded = new Map<string, { sq: Square; island: Island; trees: Trees | null }>();
   private loading = new Set<string>();
   private hole: Hole | null = null;
   private gone = false;
@@ -127,7 +138,7 @@ export class CoastSquares {
    * Each frame: load and drop squares around the boat, keep them in place, run
    * their light and surf. hole: the box of a finer place now loaded, or null.
    */
-  update(lat: number, lon: number, hole: Hole | null, t: number, a: { haze: THREE.Color; light: number; hs: number; storm: number }): void {
+  update(lat: number, lon: number, hole: Hole | null, t: number, a: { haze: THREE.Color; light: number; hs: number; storm: number; wu: number; wv: number }): void {
     if (!this.all.length || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
     if (!sameHole(hole, this.hole)) {
       // A finer place came or went: lay the squares out again around it.
@@ -141,10 +152,12 @@ export class CoastSquares {
       void this.load(sq);
     }
     const { mx, my } = metresPerDegree(this.mid);
-    for (const { sq, island } of this.loaded.values()) {
+    const wind = Math.hypot(a.wu, a.wv);
+    for (const { sq, island, trees } of this.loaded.values()) {
       const pl = squarePlace(sq);
       island.group.position.set((pl.lon - lon) * mx, 0, -(pl.lat - lat) * my);
       island.update(t, a.haze, a.light, a.hs, a.storm);
+      trees?.update(t, wind, a.haze, a.storm);
     }
   }
 
@@ -152,17 +165,30 @@ export class CoastSquares {
     this.loading.add(sq.key);
     const h = this.hole;
     const skip = h ? (lo: number, la: number) => lo >= h.lon0 && lo <= h.lon1 && la >= h.lat0 && la <= h.lat1 : undefined;
-    const island = await Island.load(squarePlace(sq), this.quality, this.base, { mid: this.mid, skip }).catch(() => null);
+    const place = squarePlace(sq);
+    const island = await Island.load(place, this.quality, this.base, { mid: this.mid, skip }).catch(() => null);
+    // Trees where the square has a cover mask (land squares), none where the finer place grows its own.
+    const { mx, my } = metresPerDegree(this.mid);
+    const blocked = skip ? (x: number, z: number) => skip(place.lon + x / mx, place.lat - z / my) : undefined;
+    const trees =
+      island?.grid && !this.gone
+        ? await Trees.load(place, this.quality, island.grid, blocked, this.base, { mid: this.mid, options: SQUARE_TREES[this.quality] }).catch(() => null)
+        : null;
     this.loading.delete(sq.key);
     if (this.gone || !island || !sameHole(h, this.hole)) {
       if (island) release(island.group);
+      if (trees) release(trees.group);
       if (!island) this.all = this.all.filter((s) => s !== sq); // its files aren't there: stop asking
       return;
     }
     this.root.add(island.group);
     const ground = island.group.getObjectByName("island");
     if (ground) reflectable(ground);
-    this.loaded.set(sq.key, { sq, island });
+    if (trees) {
+      island.group.add(trees.group); // moves with its square
+      reflectable(trees.group);
+    }
+    this.loaded.set(sq.key, { sq, island, trees });
   }
 
   private drop(key: string): void {
@@ -188,5 +214,6 @@ function release(o: THREE.Object3D): void {
       for (const v of Object.values(mat)) if (v instanceof THREE.Texture) v.dispose();
       mat.dispose();
     }
+    if (x instanceof THREE.InstancedMesh) x.dispose();
   });
 }

@@ -684,7 +684,7 @@ def main(argv: list[str] | None = None) -> None:
         elif place == "baytiles":  # the Bay as coast squares (landtiles.py)
             from boatsim.oceandata import landtiles
 
-            paths = landtiles.bake(Path(a.out), cache=cache)
+            paths = landtiles.bake(Path(a.out), cache=cache, release=a.overture_release)
         else:
             raise SystemExit(f"unknown place {place!r}")
         for p in paths:

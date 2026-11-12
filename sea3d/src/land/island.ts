@@ -30,6 +30,8 @@ export interface LandGrid {
   scale?: number;
   /** True when the heights carry the real sea floor (below 0), not a sea clamped flat. */
   depths?: boolean;
+  /** Trees per tree-cover cell, against the 11 m cells the density was tuned on (the squares' bigger cells: about 3). */
+  tree_cell?: number;
 }
 
 /** How an island is laid out, for the Bay's coast squares (squares.ts). */

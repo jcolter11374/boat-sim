@@ -224,9 +224,17 @@ def kind(hgt: np.ndarray) -> str:
     return "sea" if wet > 0.98 else "land" if wet < 0.02 else "shore"
 
 
-def bake_square(sq: Square, out: Path, heights, colour) -> dict:
+# The trees the page grows per tree cell are tuned on annapolisbay's 11 m cells;
+# a square's cells are bigger, so it asks for more per cell (meta "tree_cell").
+TREE_CELL_M2 = 121.0
+
+
+def bake_square(sq: Square, out: Path, heights, colour, cover=None) -> dict:
     """Write one square's files; heights(lons, lats) and colour(lon_g, lat_g) give
-    metres (nan for none) and uint8 RGB. Returns its index entry."""
+    metres (nan for none) and uint8 RGB. cover(sq, lons, lats, hgt), when given,
+    gives the land-cover classes on the height grid and the mapped trees (as
+    landviews.land_cover); open-water squares skip it. Returns its index entry,
+    with the files written under "files"."""
     from PIL import Image
 
     lons, lats, w, h = square_grid(sq)
@@ -253,14 +261,37 @@ def bake_square(sq: Square, out: Path, heights, colour) -> dict:
         "colour": f"{name}_colour.jpg: {COLOUR_PX} x {COLOUR_PX}, the same box, row 0 north",
         "attribution": [CREDITS["cudem"], CREDITS["terrain"], CREDITS["sentinel"]],
     }
+    files = ["meta.json", "height.bin", "colour.jpg"]
     out.mkdir(parents=True, exist_ok=True)
+    k = kind(hgt)
+    if cover is not None and k != "sea":
+        cls, trees = cover(sq, lons, lats, hgt)
+        meta["cover"] = {
+            "file": f"{name}_cover.png: 8-bit classes on the height grid, row 0 north",
+            "classes": lv.COVER_NAMES,
+            "trees": f"{name}_trees.json: OpenStreetMap single trees (points: lon, lat, "
+            "height in m or null) and tree rows (rows: lists of lon, lat)",
+            "license": "ODbL-1.0 (cover and trees)",
+        }
+        meta["tree_cell"] = round((w / (len(lons) - 1)) * (h / (len(lats) - 1)) / TREE_CELL_M2, 3)
+        meta["attribution"].append(lv.CREDITS["cover"])
+        Image.fromarray(np.asarray(cls, np.uint8)).save(out / f"{name}_cover.png", optimize=True)
+        doc = {"license": "ODbL-1.0", "attribution": [lv.CREDITS["cover"]], **trees}
+        (out / f"{name}_trees.json").write_text(json.dumps(doc, separators=(",", ":")))
+        files += ["cover.png", "trees.json"]
     (out / f"{name}_meta.json").write_text(json.dumps(meta, indent=1))
     np.clip(np.round(hgt * 10), -32768, 32767).astype("<i2").tofile(out / f"{name}_height.bin")
     Image.fromarray(np.asarray(col, np.uint8)).save(out / f"{name}_colour.jpg", quality=85)
-    return {"key": sq.key, "box": [lon0, lon1, lat0, lat1], "kind": kind(hgt)}
+    return {"key": sq.key, "box": [lon0, lon1, lat0, lat1], "kind": k, "files": files}
 
 
-def bake(out: Path, box=FIRST_BOX, cache: Path | None = None, log=print) -> list[Path]:
+def bake(
+    out: Path,
+    box=FIRST_BOX,
+    cache: Path | None = None,
+    log=print,
+    release: str = lv.OVERTURE_RELEASE,
+) -> list[Path]:
     """Bake every square of box and bay_index.json into out."""
     out = Path(out)
     files = list_cudem()
@@ -279,19 +310,29 @@ def bake(out: Path, box=FIRST_BOX, cache: Path | None = None, log=print) -> list
     def colour(lon_g, lat_g):
         return lv.sentinel_median(lon_g, lat_g, lv.ANNAPOLISBAY_SCENES, 32618, log, step=1)
 
+    def cover(sq, lons, lats, hgt):
+        lon_g, lat_g = np.meshgrid(lons, lats)
+        ndvi = lv.sentinel_ndvi(lon_g, lat_g, lv.ANNAPOLISBAY_SCENES, 32618, log)
+        return lv.land_cover(sq.box, lons, lats, hgt, ndvi, release, log)
+
     entries = []
     for sq in squares(box):
-        e = bake_square(sq, out, heights, colour)
+        e = bake_square(sq, out, heights, colour, cover)
         log(f"bay_{sq.key}: {e['kind']}")
         entries.append(e)
     index = {
         "tile_deg": TILE_DEG,
         "tiles": entries,
-        "files": "bay_<key>_meta.json, bay_<key>_height.bin, bay_<key>_colour.jpg",
-        "attribution": [CREDITS["cudem"], CREDITS["terrain"], CREDITS["sentinel"]],
+        "files": "bay_<key>_meta.json, _height.bin, _colour.jpg; on land, _cover.png and "
+        "_trees.json (ODbL)",
+        "overture_release": release,
+        "attribution": [
+            CREDITS["cudem"],
+            CREDITS["terrain"],
+            CREDITS["sentinel"],
+            lv.CREDITS["cover"],
+        ],
     }
-    (out / "bay_index.json").write_text(json.dumps(index, indent=1))
-    names = ["bay_index.json"] + [
-        f"bay_{e['key']}_{f}" for e in entries for f in ("meta.json", "height.bin", "colour.jpg")
-    ]
+    names = ["bay_index.json"] + [f"bay_{e['key']}_{f}" for e in entries for f in e.pop("files")]
+    (out / "bay_index.json").write_text(json.dumps(index, indent=1))  # entries without "files"
     return [out / n for n in names]

@@ -95,7 +95,12 @@ def test_bake_square_writes_decimetres_depths_and_meta(tmp_path):
         return np.full(lon_g.shape + (3,), (40, 90, 60), np.uint8)
 
     e = lt.bake_square(sq, tmp_path, heights, colour)
-    assert e == {"key": "3895n7650w", "box": [-76.5, -76.45, 38.95, 39.0], "kind": "shore"}
+    assert e == {
+        "key": "3895n7650w",
+        "box": [-76.5, -76.45, 38.95, 39.0],
+        "kind": "shore",
+        "files": ["meta.json", "height.bin", "colour.jpg"],
+    }
     meta = json.loads((tmp_path / "bay_3895n7650w_meta.json").read_text())
     assert meta["nx"] == meta["ny"] == lt.TILE_NX and meta["scale"] == 0.1 and meta["depths"]
     h = np.fromfile(tmp_path / "bay_3895n7650w_height.bin", "<i2").reshape(meta["ny"], meta["nx"])
@@ -116,3 +121,50 @@ def test_bake_square_refuses_missing_heights(tmp_path):
 
     with pytest.raises(ValueError):
         lt.bake_square(lt.Square(3895, -7650), tmp_path, heights, lambda a, b: None)
+
+
+def _flat(value):
+    return lambda lons, lats: np.full((len(lats), len(lons)), value)
+
+
+def _green(lon_g, lat_g):
+    return np.full(lon_g.shape + (3,), (40, 90, 60), np.uint8)
+
+
+def test_bake_square_writes_cover_and_trees_on_land(tmp_path):
+    pytest.importorskip("PIL")
+    pytest.importorskip("scipy")
+    from PIL import Image
+
+    sq = lt.Square(3895, -7650)
+    seen = []
+
+    def cover(s, lons, lats, hgt):
+        seen.append(s.key)
+        cls = np.where(hgt > 0, 1, 0).astype(np.uint8)
+        return cls, {"points": [[-76.47, 38.97, 12.0]], "rows": []}
+
+    def heights(lons, lats):
+        lon_g, _ = np.meshgrid(lons, lats)
+        return np.where(lon_g < -76.475, 6.0, -3.0)
+
+    e = lt.bake_square(sq, tmp_path, heights, _green, cover)
+    assert seen == ["3895n7650w"] and e["files"][-2:] == ["cover.png", "trees.json"]
+    meta = json.loads((tmp_path / "bay_3895n7650w_meta.json").read_text())
+    assert meta["cover"]["license"].startswith("ODbL")
+    # Cells of about 17 x 22 m against annapolisbay's 11 m: about three times the trees per cell.
+    assert 2.5 < meta["tree_cell"] < 3.5
+    im = Image.open(tmp_path / "bay_3895n7650w_cover.png")
+    assert im.size == (meta["nx"], meta["ny"]) and np.asarray(im)[0, 0] == 1
+    trees = json.loads((tmp_path / "bay_3895n7650w_trees.json").read_text())
+    assert trees["points"] == [[-76.47, 38.97, 12.0]] and trees["license"] == "ODbL-1.0"
+
+
+def test_open_water_squares_skip_the_cover(tmp_path):
+    pytest.importorskip("PIL")
+    pytest.importorskip("scipy")
+    e = lt.bake_square(
+        lt.Square(3890, -7645), tmp_path, _flat(-4.0), _green, lambda *a: pytest.fail("cover")
+    )
+    assert e["kind"] == "sea" and "cover.png" not in e["files"]
+    assert "cover" not in json.loads((tmp_path / "bay_3890n7645w_meta.json").read_text())
