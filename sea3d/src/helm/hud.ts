@@ -12,8 +12,8 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 export const TOAST_MS = { info: 6000, warn: 10000 };
 /** At most this many toasts at once; older ones leave early. */
 export const MAX_TOASTS = 2;
-/** The coach line in the open drawer for the first seconds after Set sail. */
-export const COACH_MS = 10000;
+/** The coach line in the open drawer for the first seconds after Set sail: long enough to read its three sentences (F4). */
+export const COACH_MS = 12000;
 
 export interface HudHooks {
   /** The map changed size: redraw it. */
@@ -241,7 +241,7 @@ export class Hud {
     for (const el of Array.from($("notes").querySelectorAll<HTMLElement>('.note[data-sticky="1"]'))) this.dropToast(el);
   }
 
-  private dropToast(el: HTMLElement): void {
+  dropToast(el: HTMLElement): void {
     clearTimeout(this.toastTimers.get(el));
     this.toastTimers.delete(el);
     if (el.classList.contains("out")) return;
@@ -278,7 +278,18 @@ const arrow = (deg: number): string => ARROWS[Math.round((((deg % 360) + 360) % 
 export function showStrip(d: StripData): void {
   if (d.order !== undefined) $("c-orderv").textContent = d.order;
   if (d.heading !== undefined)
-    $("c-headv").textContent = d.heading == null ? "–" : `${point(d.heading)} ${String(Math.round(((d.heading % 360) + 360) % 360) % 360).padStart(3, "0")}°`;
+    {
+      // "050°" first, the compass letters after in small type, so a narrow cell loses the letters, not the number (Milo).
+      const e = $("c-headv");
+      if (d.heading == null) e.textContent = "–";
+      else {
+        e.textContent = `${String(Math.round(((d.heading % 360) + 360) % 360) % 360).padStart(3, "0")}°`;
+        const sub = document.createElement("span");
+        sub.className = "sub";
+        sub.textContent = point(d.heading);
+        e.append(sub);
+      }
+    }
   if (d.speedKn !== undefined) $("c-speedv").textContent = d.speedKn == null ? "–" : `${d.speedKn.toFixed(1)} kn`;
   const bar = $("c-batbar");
   if (d.heel !== undefined) {

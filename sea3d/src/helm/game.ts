@@ -18,6 +18,8 @@ export interface Report {
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
   accepted: boolean;
+  /** Refused because orders can't reach the boat any more: "main_box" or "comms_silent". */
+  no_link?: string;
   next_allowed?: string;
   arrives?: string | null;
   from_report?: string;
@@ -38,6 +40,8 @@ export interface BoatNow {
 export interface Status {
   day: number;
   over: boolean;
+  /** Why orders can no longer reach the boat ("main_box", "comms_silent"), or null/absent while they can. */
+  no_link?: string | null;
   boat: BoatNow;
   ghost: BoatNow;
   lead_km: number;

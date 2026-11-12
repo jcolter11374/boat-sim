@@ -208,3 +208,10 @@ stored in git. Resampled by us.
   code; any public copy keeps this notice.
   Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
   work, with the OpenStreetMap / Overture credit on the page's credit line.
+
+## Yesteryear (font)
+
+`sea3d/public/fonts/bw-name-script.woff2` ("Bluewater Name Script") is a Latin subset of
+Yesteryear by Astigmatic (from Google Fonts), used for the boat's painted name. As a modified
+version it is renamed, as the SIL Open Font License 1.1 asks for its Reserved Font Name; the
+licence text is `sea3d/public/fonts/OFL-Yesteryear.txt`.
