@@ -376,6 +376,57 @@ const CHECKS = {
       return "no cut-off text at 1400x900, 1280x720 or 1024x700";
     },
   },
+  // #376: Practice off Annapolis (the triangle course at the wheel), the harbour prologue on the
+  // cruiser from Annapolis (skip with Esc, then "Start the crossing"), and the orders drawer opens.
+  "helm-376": {
+    path: "helm.html?practice&quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.locator("#practice-courses").count())) throw new SkipCheck("this build has no practice courses (#376 not deployed)");
+      const out = [];
+      await page.waitForFunction(() => !document.getElementById("practice-courses").hidden, null, { timeout: MIN }).catch(() => {
+        throw new CheckFail("Practice didn't offer its courses");
+      });
+      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 15_000 });
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => {
+        throw new CheckFail("the triangle course didn't put you at the wheel");
+      });
+      await page.keyboard.down("ArrowLeft"); await page.waitForTimeout(800); await page.keyboard.up("ArrowLeft");
+      await page.screenshot({ path: `play-${BROWSER}-practice-triangle.png` }).catch(() => {});
+      out.push("Practice: the triangle put me at the wheel");
+      // The prologue: cruiser from Annapolis.
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
+      await page.locator('input[name="boat"][value="stock_cruiser31"]').check();
+      await page.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN });
+      await page.selectOption("#port", "annapolis");
+      const offered = await page.waitForFunction(() => !document.getElementById("prologuepick").hidden, null, { timeout: 30_000 }).then(() => true).catch(() => false);
+      must(offered, 'the cruiser from Annapolis wasn\'t offered "Sail her out of the harbour yourself first"');
+      await page.click("#go");
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 2 * MIN }).catch(() => {
+        throw new CheckFail("the harbour prologue didn't put you at the wheel");
+      });
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: `play-${BROWSER}-prologue.png` }).catch(() => {});
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.getElementById("prologue-end").hidden, null, { timeout: 30_000 }).catch(() => {
+        throw new CheckFail("Esc in the prologue didn't bring up the 'Start the crossing' card");
+      });
+      const sum = await page.evaluate(() => document.getElementById("prologue-sum").textContent);
+      await page.click("#prologue-go");
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start after the prologue");
+      out.push(`prologue: "${sum}", then the crossing started`);
+      // The orders drawer.
+      await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+      if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 });
+      const open = await page.waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 }).then(() => true).catch(() => false);
+      must(open, "the Orders tab didn't open the orders drawer");
+      out.push("orders drawer opens");
+      return out.join("; ");
+    },
+  },
   // Sam's spot 5: "Sail until something happens" stops within 72 h.
   "helm-until": {
     path: "helm.html?quality=low",
@@ -722,6 +773,49 @@ const CHECKS = {
         await shot(`night-${target}-cinematic`);
         await page.keyboard.press("Escape");
         await page.waitForTimeout(1500);
+      }
+      return `${shots.length} looks: ${shots.join(", ")}`;
+    },
+  },
+  // Manual: Elena's #376 set at 1280x720 and 1920x1080: Practice by day, the default helm screen
+  // (sailing, drawer shut) and the orders drawer open. Printed to the log like "look".
+  "look-376": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        await page.screenshot({ path, type: "jpeg", quality: 85 });
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      for (const [w, h] of [[1280, 720], [1920, 1080]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
+        await page.click('#practice-courses button[data-course="triangle"]', { timeout: 30_000 }).catch(() => {});
+        await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => {});
+        await page.waitForTimeout(8000);
+        await shot(`${w}-practice-day`);
+        await page.goto(SITE + "helm.html", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
+        await page.click("#go").catch(() => {});
+        await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN }).catch(() => {});
+        await page.click("#soundno", { timeout: 3000 }).catch(() => {});
+        // The drawer opens by itself for 10 s at the start; the default screen is after it shuts.
+        await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
+        await page.waitForTimeout(4000);
+        await shot(`${w}-helm-default`);
+        await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+        await page.waitForFunction(() => { const o = document.getElementById("orders"); return o?.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 }).catch(() => {});
+        await page.hover("#orders h2", { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(1500);
+        await shot(`${w}-helm-orders-open`);
       }
       return `${shots.length} looks: ${shots.join(", ")}`;
     },
