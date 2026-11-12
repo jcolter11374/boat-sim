@@ -787,12 +787,18 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
     const big = Object.assign(document.createElement("div"), { className: "odds", textContent: `${Math.round(o.odds * 100)}% finish` });
     const range = Object.assign(document.createElement("div"), {
       className: "muted",
-      textContent: `${o.finished} of ${o.voyages} simulated voyages (likely range ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%)` +
+      textContent: `${o.finished} of ${o.voyages} launches made it, likely range ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%` +
         (o.median_days ? `, typically ${Math.round(o.median_days)} days` : ""),
     });
     box.append(big, range);
   }
   box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: r.note }));
+  if (r.detail) {
+    const d = document.createElement("details");
+    d.className = "muted result-detail";
+    d.append(Object.assign(document.createElement("summary"), { textContent: r.detail.summary }), Object.assign(document.createElement("p"), { textContent: r.detail.text }));
+    box.append(d);
+  }
   if (r.credits) {
     const p = Object.assign(document.createElement("p"), { className: "muted credits", textContent: `${r.credits.text} ` });
     const a = Object.assign(document.createElement("a"), { href: r.credits.url, target: "_blank", rel: "noopener", textContent: "Sources" });
