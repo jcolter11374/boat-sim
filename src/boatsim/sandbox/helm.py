@@ -416,6 +416,18 @@ class Game:
         if (sails is not None or engine is not None) and not self.sailboat:
             raise ValueError("this boat has no sails or engine to order")
         share = self._check_trim(trim)
+        cut = self.link_lost()
+        if cut is not None:
+            # The boat is unmanned: "hands on" is a perfect link, not a person aboard,
+            # so a dead link means no orders in any mode (Maya, 12 Nov).
+            return {
+                "t": _iso(t),
+                "min": round((t - self.start).total_seconds() / 60),
+                "heading": heading,
+                "power": power,
+                "accepted": False,
+                "no_link": cut,
+            }
         if heading == AUTO:
             return self._set_trim(self._order_auto(t, sails, engine), share, t)
         check = HelmAutopilot(self.finish, sail_plans=self.sail_plans, has_engine=self.has_engine)
@@ -442,6 +454,19 @@ class Game:
         o.update(self._send(heading, power, sails, engine))
         self.orders.append(o)
         return o
+
+    def link_lost(self) -> str | None:
+        """Why orders can no longer reach the boat, or None while they can. The
+        Iridium modem lives in the main electronics box (vessel/kayak.py
+        iridium_ok), so once that box has died, or Iridium has gone silent for
+        good, nothing from base gets through. A flat battery is not a lost
+        link: the boat hears its mailbox again once the sun recharges it."""
+        damage = getattr(self.mine.state, "damage", None) or {}
+        if damage.get("electronics_main"):
+            return "main_box"
+        if damage.get("comms_silent"):
+            return "comms_silent"
+        return None
 
     def preview(
         self,
@@ -955,6 +980,8 @@ class Game:
             "ghost": self._boat(self.ghost),
             "lead_km": self.lead_km(),
             "last_pass": self.pass_note,
+            # None while orders can reach the boat; else why not ("main_box", "comms_silent").
+            "no_link": self.link_lost(),
             "mode": self.mode,
             "show_true_position": True,
             "order": (

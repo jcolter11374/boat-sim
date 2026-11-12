@@ -18,6 +18,8 @@ export interface Report {
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
   accepted: boolean;
+  /** Refused because orders can't reach the boat any more: "main_box" or "comms_silent". */
+  no_link?: string;
   next_allowed?: string;
   arrives?: string | null;
   from_report?: string;
@@ -38,6 +40,8 @@ export interface BoatNow {
 export interface Status {
   day: number;
   over: boolean;
+  /** Why orders can no longer reach the boat ("main_box", "comms_silent"), or null/absent while they can. */
+  no_link?: string | null;
   boat: BoatNow;
   ghost: BoatNow;
   lead_km: number;
@@ -140,11 +144,11 @@ export interface Airtime {
   beacon_pings: number;
 }
 
-/** Plain words for the airtime counter: messages each way, bytes, and the bill. */
+/** Plain words for the airtime counter: messages each way and bytes (no money in the game, John 12 Nov). */
 export function airtimeText(a: Airtime | null | undefined): string {
   if (!a) return "not counted";
   const bytes = a.up.bytes + a.down.bytes;
-  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes: $${a.usd.total.toFixed(2)}`;
+  return `${a.up.messages} sent, ${a.down.messages} from base, ${bytes.toLocaleString("en-US")} bytes`;
 }
 
 export interface Card {

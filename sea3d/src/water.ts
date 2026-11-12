@@ -19,6 +19,7 @@ import { PLACE } from "./land/place";
 import { foamStreaks, whitecaps } from "./storm";
 import { writeSeaUniforms } from "./seaSurface";
 
+const SEA_OPACITY = 1;
 const MAX_WAVES = MAX_GPU_WAVES; // wave trains the shader can carry
 
 export const SEA_SIZE = 400; // m, side of the patch of moving sea
@@ -336,7 +337,10 @@ export class Sea {
       specularIntensity: 1,
       envMapIntensity: 0.7,
       transparent: true,
-      opacity: 0.95,
+      // Opaque: at 0.95 the dark keel, rudder and pods showed through a calm sea as
+      // "stilts" under the hull (Elena, Sam). Anything under the surface is hidden by the
+      // water; "See under the water" (setSeeThrough) still opens it up.
+      opacity: SEA_OPACITY,
       side: THREE.DoubleSide,
     });
     material.onBeforeCompile = (sh) => {
@@ -444,7 +448,7 @@ export class Sea {
   }
 
   setSeeThrough(on: boolean): void {
-    this.mesh.material.opacity = on ? 0.45 : 0.95;
+    this.mesh.material.opacity = on ? 0.45 : SEA_OPACITY;
   }
 
   /** Mirror the land and boats (mirror.ts): its texture, world-to-texture matrix and strength (0 off). */
