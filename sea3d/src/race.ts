@@ -293,7 +293,9 @@ function drawSeason(progress?: { done: number; of: number; rows: { a: LaunchResu
 
 // ---------------------------------------------------------------- 3D views
 // Each boat on its own patch of sea, in its own weather, side by side.
-const quality = params.get("quality") === "low" ? "low" : "high";
+// ?quality=low|high forces it; otherwise each view picks (High on a graphics card, Low on software graphics).
+const askedQuality = params.get("quality");
+const quality = askedQuality === "low" || askedQuality === "high" ? askedQuality : "auto";
 let views: [BoatView, BoatView] | null = null;
 let viewsOn = true; // false while the views are scrolled out of sight
 function draw3d(): void {

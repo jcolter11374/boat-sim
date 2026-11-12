@@ -68,9 +68,14 @@ export class BoatView {
   /** For the smoke test: frames drawn, and what the boat shows. */
   readonly shown = { frames: 0, boat: "kayak", heading: 0, hs: 0 };
 
+  /** The picture's quality: as asked, or for "auto" High on a graphics card and Low on
+   *  software graphics, as the helm and Boatyard do (High there drew under one frame a
+   *  second, so a click or screenshot in CI could wait 30 s). */
+  private readonly quality: "high" | "low";
+
   constructor(
     private readonly box: HTMLElement,
-    private readonly quality: "high" | "low",
+    asked: "high" | "low" | "auto",
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -84,6 +89,7 @@ export class BoatView {
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.enableZoom = true;
     this.atmos = new Atmosphere(this.renderer, this.scene, this.camera);
+    const quality = (this.quality = asked === "auto" ? (this.atmos.software ? "low" : "high") : asked);
     const ratio = quality === "high" ? Math.min(window.devicePixelRatio, 2) : this.atmos.software ? 0.5 : 1;
     this.renderer.setPixelRatio(ratio);
     this.atmos.setPixelRatio(ratio);
