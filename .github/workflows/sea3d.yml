@@ -37,7 +37,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Blender boats (about 6 min when sea3d/blender changes) + smoke test (about
+    # 18 min) went past 25 min, and a timed-out job never saves the boats cache,
+    # so every deploy after #304 rebuilt them and timed out (11-12 Nov).
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: sea3d
