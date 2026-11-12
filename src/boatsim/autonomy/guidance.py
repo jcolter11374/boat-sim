@@ -75,7 +75,9 @@ class WaypointAutopilot:
         max_fix_gap_s: float = 3_600.0,  # GUESS: older fixes say little about the current now
         steer: str = "pursuit",  # "pursuit" far from land (see above) or "track" (Rover)
         pursuit_crab_deg: float = 20.0,  # GUESS: largest crab angle in pursuit mode
-        track_near_land_km: float = 150.0,  # GUESS: hold the track line this close to a coast
+        # GUESS: hold the track line this close to a coast. 75 km was tried and rejected
+        # (more groundings for the drone and Rev C): docs/qa/near75-coastal-stall-2026-11.md
+        track_near_land_km: float = 150.0,
     ):
         if steer not in ("track", "pursuit"):
             raise ValueError(f"steer must be 'track' or 'pursuit', not {steer!r}")

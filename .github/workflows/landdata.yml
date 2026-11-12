@@ -1,6 +1,7 @@
 # Land for the 3D views (src/boatsim/oceandata/landviews.py): coasts (Pico and
 # Faial, the Chesapeake Bay mouth, Lisbon, Annapolis and around it) and the
-# Annapolis waterfront. Heights from AWS Terrain Tiles, colour from a Sentinel-2
+# Annapolis waterfront, and the Bay as coast squares (landtiles.py, "baytiles";
+# heights and depths from NOAA CUDEM). Heights from AWS Terrain Tiles, colour from a Sentinel-2
 # median, buildings, piers, land cover and trees from Overture Maps (ODbL). Display only: nothing in the simulator reads them.
 # Run it by hand: Actions tab -> "Land data" -> Run workflow. Tick "publish" to
 # put the files on the land-data release; the 3D page's build (sea3d.yml) copies
@@ -12,7 +13,7 @@ on:
     inputs:
       places:
         description: "Places (space separated)"
-        default: "pico baymouth lisbon annapolisbay annapolis"
+        default: "pico baymouth lisbon annapolisbay annapolis baytiles"
       overture_release:
         description: "Overture Maps release"
         default: "2026-10-21.0"
@@ -61,11 +62,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > NOTES.md <<EOF
-          Land for the 3D views: Pico and Faial (Azores) and the Annapolis waterfront. Display only.
+          Land for the 3D views: Pico and Faial (Azores), the Bay mouth, Lisbon, Annapolis and the Chesapeake Bay coast squares. Display only.
           Rebuilt by the Land data workflow; formats in src/boatsim/oceandata/landviews.py.
 
           Data sources (resampled by us):
           - Terrain: AWS Terrain Tiles (Mapzen/Tilezen; SRTM, GMTED2010, ETOPO1, USGS 3DEP and others, https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
+          - Heights and depths of the Bay squares (bay_*): NOAA NCEI Continuously Updated Digital Elevation Model (CUDEM), 1/9 arc-second topobathy, Chesapeake Bay (public domain, via the NOAA Open Data Dissemination program).
           - Colour (*_colour.jpg): contains modified Copernicus Sentinel data 2023-2024 (Sentinel-2 L2A, via the Registry of Open Data on AWS).
           - Buildings and piers (annapolis.json): contains information from OpenStreetMap and Overture Maps Foundation (release $OVERTURE), available under the Open Database License (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/). annapolis.json is a derived database under the ODbL: anyone may use, share and adapt it, provided they credit the sources, keep it under the ODbL, and keep it open.
           EOF
