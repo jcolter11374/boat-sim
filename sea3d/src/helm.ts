@@ -12,7 +12,7 @@ import { HORIZON, Sea } from "./water";
 import { Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
-import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon } from "./helm/course";
+import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_FINISH_WORDS, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon, type XY } from "./helm/course";
 import { Buoys } from "./helm/buoys";
 import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
@@ -202,12 +202,24 @@ deckLight.name = "deck_light";
 /** Candela at full night, and the foam's floor of light: tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
 const FOAM_AT_NIGHT = 0.3;
+/** A lantern higher than this (m) is a masthead light, not a deck lantern. */
+const MASTHEAD_LAMP_M = 5;
+/** The deck light is a low cockpit lamp (a yacht with a masthead lantern). */
+let deckYacht = false;
 function placeDeckLight(): void {
   if (!model) return;
   deckLight.removeFromParent();
   const nav = model.root.getObjectByName("nav_lights");
   const lamp = nav?.children[0];
-  if (nav && lamp) {
+  // On a yacht the lantern is at the masthead, 12 m+ up: there it floodlit the sail like a searchlight
+  // (Ines, 12 Nov), and a quarter of the way up it lit the sail from inside. Keep it low, a cockpit
+  // lamp just over the deck, short-ranged, so the sails stay a faint shape at night.
+  const up = lamp ? model.root.worldToLocal(lamp.getWorldPosition(new THREE.Vector3())).y : 0;
+  deckYacht = !!(nav && lamp && up > MASTHEAD_LAMP_M);
+  if (deckYacht) {
+    deckLight.position.set(0, up * 0.1, 0);
+    model.root.add(deckLight);
+  } else if (nav && lamp) {
     deckLight.position.copy(lamp.position);
     nav.add(deckLight);
   } else {
@@ -215,7 +227,7 @@ function placeDeckLight(): void {
     deckLight.position.set(0, box.max.y + 0.1, 0);
     model.root.add(deckLight);
   }
-  deckLight.distance = 6 * Math.max(1, spec.length / KAYAK.length);
+  deckLight.distance = deckYacht ? 5 : 6 * Math.max(1, spec.length / KAYAK.length);
 }
 /** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
@@ -343,7 +355,7 @@ const page = {
   /** Points of interest: how many loaded, and the ids the track has reached (in order). */
   pois: { loaded: 0, shown: [] as string[] },
   /** Real land in view: the place, how far off its box (km), buildings and trees; and the view's reach (m). */
-  land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0 } as NearbyLand["shown"],
+  land: { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0 } as NearbyLand["shown"],
   /** Practice sailing: true once the Bay's depths are known to be on this copy of the site (Annapolis courses offered). */
   practiceBay: false,
   /** The time-trial ghost: shown, and how far off (m). */
@@ -1356,7 +1368,9 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
   practiceAt = practiceHere = c.start;
   depths.prefetch(c.start.lat, c.start.lon, 3000);
   const o = c.start;
-  buoys.set(c.kind === "triangle" ? c.marks.slice(0, 2).map((m) => toXY(o, m)).concat([{ x: 0, y: 0 }]) : []);
+  const gate = c.marks[c.marks.length - 1].gate;
+  if (c.kind === "triangle") buoys.set(c.marks.slice(0, 2).map((m) => toXY(o, m)).concat([{ x: 0, y: 0 }]));
+  else buoys.set(gate ? gate.map((g) => toXY(o, g)) : [], !!gate);
   const ok = await wheel.start({
     boatKey: "stock_cruiser31",
     heading: c.heading,
@@ -1364,7 +1378,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
     windU: practiceWind.u,
     windV: practiceWind.v,
     plan: practiceBreeze === "fresh" ? "reef1" : "full",
-    course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name })), radiusM: c.radiusM },
+    course: { marks: c.marks.map((m) => ({ ...toXY(o, m), name: m.name, gate: m.gate && ([toXY(o, m.gate[0]), toXY(o, m.gate[1])] as [XY, XY]) })), radiusM: c.radiusM },
     trial: kind === "triangle" || kind === "light" ? { best: ghostTrack } : undefined,
     depthAt: (x, y) => {
       const p = toLatLon(o, { x, y });
@@ -1377,7 +1391,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
   });
   if (ok) {
     const point = (d: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(d / 45) % 8];
-    banner(c.kind === "triangle" ? `The triangle · ${br.kn} knots from the ${point(from)}` : `To Thomas Point Light · ${br.kn} knots from the ${point(from)} · keep off its shoal`);
+    banner(c.kind === "triangle" ? `The triangle · ${br.kn} knots from the ${point(from)}` : `To Thomas Point Light · ${br.kn} knots from the ${point(from)} · ${LIGHT_FINISH_WORDS}`);
   } else practiceAt = null;
 }
 function practiceEnded(r: WheelResult): void {
@@ -1566,11 +1580,28 @@ controls.addEventListener("start", () => chase.drag(true));
 controls.addEventListener("end", () => chase.drag(false));
 const chaseLook = new THREE.Vector3();
 let wheelFov = false;
+/** Thomas Point Light from the boat, on the run to it (the camera's second subject); null otherwise. */
+function lightAhead(): { bearing: number; distM: number; spanDeg?: number; leanDeg?: number } | null {
+  const w = wheel.wheel;
+  if (!w || !wheelNow || practiceCourse?.kind !== "light" || w.s.mark < practiceCourse.marks.length - 1) return null;
+  const m = w.markXY();
+  const here = wheelNow;
+  const bearingOf = (p: XY) => ((Math.atan2(p.x - here.x, p.y - here.y) * 180) / Math.PI + 360) % 360;
+  const distM = Math.hypot(m.x - here.x, m.y - here.y);
+  const light = bearingOf(m);
+  // Near the end, frame the light and its finish gate together: aim at the middle of the group, wide enough for all of it.
+  const ends = practiceAt && distM < GATE_TAG_M ? practiceCourse.marks[practiceCourse.marks.length - 1].gate?.map((p) => bearingOf(toXY(practiceAt!, p))) : undefined;
+  if (!ends) return { bearing: light, distM };
+  const rel = [light, ...ends].map((b) => ((((b - light) % 360) + 540) % 360) - 180);
+  const lo = Math.min(...rel);
+  const hi = Math.max(...rel);
+  return { bearing: (light + (lo + hi) / 2 + 360) % 360, distM, spanDeg: hi - lo, leanDeg: -(lo + hi) / 2 };
+}
 function wheelCamera(dt: number, t: number): void {
   if (cine.on) return; // the cinematic owns the lens
   const ours = !!wheelNow && chase.on;
   // Ease the lens in and out (45 is the page's own).
-  const fov = ours ? CHASE_FOV : 45;
+  const fov = ours ? chase.fov : 45;
   if (ours || wheelFov) {
     camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt / 0.6));
     if (Math.abs(camera.fov - fov) < 0.05) camera.fov = fov;
@@ -1585,7 +1616,7 @@ function wheelCamera(dt: number, t: number): void {
   const strip = document.getElementById("wheel")?.getBoundingClientRect();
   const goal = document.getElementById("wheel-goal")?.getBoundingClientRect();
   const frame = { w: innerWidth, h: innerHeight, top: goal && goal.height ? goal.bottom + 6 : 50, bottom: strip && strip.height ? strip.top - 6 : innerHeight - 70, fovDeg: CHASE_FOV };
-  const s = chase.update(dt, wheelNow.heading, wheel.wheel.twa(), spec.length, rigTop(), frame, stillCamera);
+  const s = chase.update(dt, wheelNow.heading, wheel.wheel.twa(), spec.length, rigTop(), frame, stillCamera, lightAhead());
   if (!s) return;
   // A hand on the camera: a chase boat's slow bob (none with reduced motion).
   const bob = stillCamera ? 0 : Math.sin(t * 0.6) * 0.25 + Math.sin(t * 1.7 + 1) * 0.08;
@@ -1626,6 +1657,15 @@ const MARK_TAG_GONE_M = 70;
 /** Beyond this (m) the in-view tag stays orange: the buoy is too small to see there. GUESS (Leo) */
 const MARK_TAG_FAR_M = 300;
 const markV = new THREE.Vector3();
+/** Within this of Thomas Point Light (m), the mark tag points at the finish gate instead. GUESS */
+const GATE_TAG_M = 2500;
+/** The middle of the light run's finish gate, metres east and north of the course start; null on other courses. */
+function gateMid(): XY | null {
+  const gate = practiceCourse?.kind === "light" && practiceAt ? practiceCourse.marks[practiceCourse.marks.length - 1].gate : undefined;
+  if (!gate || !practiceAt) return null;
+  const [g0, g1] = gate.map((p) => toXY(practiceAt!, p));
+  return { x: (g0.x + g1.x) / 2, y: (g0.y + g1.y) / 2 };
+}
 function markPointer(): void {
   const el = $("markptr");
   const w = wheel.wheel;
@@ -1633,9 +1673,19 @@ function markPointer(): void {
     el.hidden = true;
     return;
   }
-  const m = w.markXY();
+  let m = w.markXY();
   camera.updateMatrixWorld();
-  markV.set(m.x - wheelNow.x, 3, -(m.y - wheelNow.y)).project(camera);
+  // Over a buoy's top; over the lighthouse's lantern (it's 13 m up), so the tag never hides the light itself.
+  let atLight = practiceCourse?.kind === "light" && w.s.mark >= practiceCourse.marks.length - 1;
+  // Near the light the tag moves to the finish gate between the two yellow marks east of it,
+  // so the way to finish is plain (the camera keeps the light itself in the frame).
+  const g = atLight ? gateMid() : null;
+  const toGate = !!g && w.distToMark() < GATE_TAG_M;
+  if (g && toGate) {
+    m = g;
+    atLight = false;
+  }
+  markV.set(m.x - wheelNow.x, atLight ? 24 : 3, -(m.y - wheelNow.y)).project(camera);
   const behind = markV.z > 1;
   let x = behind ? -markV.x : markV.x;
   let y = behind ? -markV.y : markV.y;
@@ -1647,13 +1697,14 @@ function markPointer(): void {
   }
   el.hidden = false;
   el.dataset.edge = inView ? "" : x < -0.85 ? "left" : x > 0.85 ? "right" : y < 0 ? "down" : "up";
-  const d = w.distToMark();
+  const d = toGate ? Math.hypot(m.x - wheelNow.x, m.y - wheelNow.y) : w.distToMark();
   // Over the buoy it's a quiet tag that fades once the buoy is plain to see (Elena, 12 Nov);
   // at the edge it stays a bold orange arrow, as that's the only way to find the mark.
   // Far off the buoy is a speck: keep the mark's orange so it reads as the mark (Leo); quiet once the buoy shows.
   el.toggleAttribute("data-far", inView && d > MARK_TAG_FAR_M);
   el.style.opacity = inView ? String(THREE.MathUtils.clamp((d - MARK_TAG_GONE_M) / (MARK_TAG_FADE_M - MARK_TAG_GONE_M), 0, 1)) : "1";
-  el.textContent = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
+  const dist = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
+  el.textContent = toGate ? `Finish ${dist}` : dist;
   el.style.left = `${((x + 1) / 2) * innerWidth}px`;
   el.style.top = `${((1 - y) / 2) * innerHeight}px`;
 }
@@ -3046,7 +3097,7 @@ renderer.setAnimationLoop(() => {
   if (model) {
     model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
+    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 2 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);

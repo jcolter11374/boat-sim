@@ -25,7 +25,7 @@ export function robotSail(w: Wheel, limitS = 4 * 3600, dt = 0.25): number {
   let tack = wrap180(w.wind.fromDeg - w.s.heading) >= 0 ? 1 : -1; // +1: wind on the starboard side
   while (!w.s.done && w.s.t < limitS) {
     const from = w.wind.fromDeg;
-    const mb = w.markBearing();
+    const mb = w.aimBearing(); // through the light run's finish gate, as a player must
     let want = mb;
     const off = wrap180(mb - from); // the mark's bearing off the wind
     if (Math.abs(off) < up) {

@@ -54,6 +54,7 @@ jobs:
             sea3d/public/models/randolph.glb
             sea3d/public/models/shape_*.glb
             sea3d/public/models/stock_*.glb
+            sea3d/public/models/landmark_*.glb
           key: boats-glb-${{ hashFiles('sea3d/blender/**') }}
       - uses: actions/setup-python@v5
         if: steps.boats-cache.outputs.cache-hit != 'true'
