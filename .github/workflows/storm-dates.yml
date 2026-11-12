@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/storm-dates.yml"
       - "src/boatsim/oceandata/storm_dates.py"
+      - "src/boatsim/oceandata/challenges.py"  # the typed Sandy track (Sandy's shadow)
 permissions:
   contents: read
 jobs:

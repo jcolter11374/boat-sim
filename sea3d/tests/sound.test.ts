@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beaufort, mixFor, nearGain, rigFor, seeded, type SeaWeather } from "../src/sound.ts";
+import { OceanSound, beaufort, mixFor, nearGain, rigFor, seeded, type SeaWeather } from "../src/sound.ts";
 
 /** Typical open-sea weather at a Beaufort force (mid-band wind, a matching sea). */
 function at(force: number, extra: Partial<SeaWeather> = {}): SeaWeather {
@@ -100,4 +100,16 @@ test("rain adds hiss and drops on deck", () => {
 test("the review render's random numbers repeat for a seed", () => {
   const a = seeded(7), b = seeded(7);
   for (let i = 0; i < 5; i++) assert.equal(a(), b());
+});
+
+test("a missing reading falls back to calm values instead of NaN", () => {
+  const m = mixFor({ wind: 0, hs: 0.3, tp: 6, rain: 0, near: 8 }, "shrouds");
+  for (const [k, v] of Object.entries(m)) assert.ok(Number.isFinite(v), k);
+});
+
+test("the played log is empty until a moment plays (nothing plays without a context)", () => {
+  const o = new OceanSound();
+  o.crash();
+  o.bell(3);
+  assert.equal(o.played.length, 0);
 });

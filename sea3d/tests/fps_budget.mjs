@@ -1,14 +1,14 @@
 // Frame-time budget: median frame time per quality and scene, for comparing
 // builds (QA, 12 Nov). Based on Kai's sky/tools/fps.mjs.
-//   node tests/fps_budget.mjs <site-url> [runs=3] [label]
+//   node tests/fps_budget.mjs <site-url> [runs=3] [label] [qualities=low,high]
 // Scenes: a clear hour (30) and a rainy hour (431) of the 1 April voyage.
 // SwiftShader single runs swing about 15%, so each cell is the median of `runs`.
 import { chromium } from "playwright";
 
-const [site, runsArg = "3", label = site] = process.argv.slice(2);
+const [site, runsArg = "3", label = site, qArg = "low,high"] = process.argv.slice(2);
 const RUNS = Number(runsArg);
 const SCENES = { clear: 30, rain: 431 };
-const QUALITIES = ["low", "high"];
+const QUALITIES = qArg.split(",").filter((q) => q === "low" || q === "high");
 
 async function once(quality, hour) {
   const b = await chromium.launch({ args: ["--use-gl=angle", "--ignore-gpu-blocklist"] });
