@@ -70,6 +70,10 @@ const BODY = /* glsl */ `
     // White along the contact line: a thin broken line in a calm; in a gale a continuous,
     // broken, bright band a few cm high, higher where a wave is climbing (Ines r10).
     float lineH = 0.012 + 0.012 * n + uSeaRough * 0.01 * n; // a thin wet sheen; the foam itself is on the water (Ines r11)
+    // A thin dark wet line right at the water, broken a little: it carries against a
+    // bright, backlit sea where a shade on the water can't (Ines, title hero).
+    float darkLine = (1.0 - smoothstep(0.012, 0.035 + 0.02 * n, h)) * (0.75 + 0.25 * n);
+    gl_FragColor.rgb *= 1.0 - 0.6 * darkLine;
     float line = 1.0 - smoothstep(0.0, lineH, h);
     float bits = smoothstep(0.42 - 0.2 * uSeaRough, 0.7 - 0.2 * uSeaRough, iwNoise(vec2(dot(vSeaW.xz, vec2(13.0, 13.0)), vSeaW.y * 40.0) + uSeaTime * 2.3) * 0.6 + iwNoise(vSeaW.xz * 31.0 - uSeaTime) * 0.4);
     // More at the bow, thin and broken aft as lace (none read where no hull is known).
