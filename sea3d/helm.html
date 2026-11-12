@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>boat-sim 3D: Take the helm</title>
+<title>Bluewater: Set sail</title>
 <style>
   :root { --ui: clamp(12px, 1.667vh, 18px); }
   :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
@@ -105,7 +105,7 @@
   #wheel .w-needle { position: absolute; top: -0.333em; bottom: -0.333em; width: 0.25em; margin-left: -0.0833em; background: #fff; border-radius: 0.167em; }
   #wheel .w-tell { font-weight: 600; }
   #wheel .w-tell[data-state="good"] { color: #3ddc97; }
-  #wheel .w-tell[data-state="flapping"], #wheel .w-tell[data-state="stalled"] { color: #ff8a2a; }
+  #wheel .w-tell[data-state="flapping"], #wheel .w-tell[data-state="stalled"], #wheel .w-tell[data-state="irons"] { color: #ff8a2a; }
   #wheel .w-tell[data-state="in"], #wheel .w-tell[data-state="ease"] { color: #ffc857; }
   #wheel .w-heelt { color: #ffc857; }
   #wheel .w-guide { margin: 0 0 0.5em; padding: 0.5em 0.833em; border-radius: 0.667em; background: rgba(61,220,151,.16); border-left: 0.25em solid #3ddc97; font-size: 1.08em; font-weight: 600; }
@@ -239,6 +239,16 @@
   #ss-why { margin: 6px 0 0; font-size: 12.5px; }
   .ss-after { font-size: 12px; margin: 6px 0 2px; }
   #ss-card #go { margin-top: 6px; }
+  /* A challenge's result inside #406's card (Elena, 12 Nov): the stars, why, the ghost and what really
+     happened take the story's place; Try again replays the same challenge. */
+  #r-stars .s-row { margin: 2px 0 6px; display: flex; align-items: baseline; gap: 10px; }
+  #r-stars .s-stars { font-size: 26px; letter-spacing: 4px; color: #ffd75e; }
+  #r-stars .s-none { font-size: 14px; color: var(--dim); }
+  #r-stars .s-why { font-size: 15px; color: var(--ink); margin: 4px 0; }
+  #r-stars .s-ghost, #r-stars .s-real { font-size: 14px; margin: 4px 0; }
+  #r-stars .s-ghost:empty { display: none; }
+  /* A challenge has its own day, so no other launch day to try. */
+  #result.mission #r-day { display: none; }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
   .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .card select { max-width: 100%; }
@@ -336,6 +346,7 @@
   #strip .v { font: 650 1.42em/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .1px; }
   #strip .v .sub { font-size: .7em; font-weight: 500; color: var(--dim); }
   #strip .l { font-size: .875em; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  #strip .l .u { text-transform: none; }
   #strip button.cell { cursor: pointer; border: 0; border-left: 1px solid var(--hud-line); border-radius: 0; background: none; padding: 0 .83em; }
   #strip button.cell:hover .v, #strip button.cell[aria-expanded="true"] .v { color: #ffb070; }
   #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: .76em; }
@@ -344,6 +355,16 @@
   #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
   #strip .meter[hidden] { display: none; }
   #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
+  #goalchip .g-km { font-weight: 650; }
+  #goalchip[hidden], #c-date[hidden] { display: none; }
+  #goalchip .g-km[data-state="clear"] { color: #cfe3f5; }
+  #goalchip .g-km[data-state="near"] { color: #ffb347; }
+  #goalchip .g-km[data-state="danger"] { color: #ff6b5a; }
+  #chbrief ul { margin: .3em 0 .2em; padding-left: 0; list-style: none; }
+  #chbrief li { margin: .15em 0; }
+  #chbrief[hidden] { display: none; }
+  #r-stars { margin: .2em 0 .6em; }
+  #r-stars[hidden], #r-stars .s-real[hidden] { display: none; }
   #timebar { display: flex; gap: 2px; margin-top: 3px; }
   #timebar[hidden] { display: none; }
   #timebar button { padding: .1em .5em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
@@ -354,6 +375,9 @@
   #keysbtn { width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
   #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 8px); z-index: 9; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
   #keylist[hidden] { display: none; }
+  #keylist:not([hidden]) { flex-wrap: wrap; }
+  #keylist .picq { flex-basis: 100%; display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hud-line); color: var(--dim); }
+  #keylist .picq select { font: inherit; color: var(--ink); background: rgba(27,51,82,.7); border: 1px solid var(--hud-line); border-radius: 6px; padding: 2px 6px; }
   #keylist .kh { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 2px 0 4px; }
   #keylist:not([hidden]) { display: flex; gap: 22px; }
   #keylist .kg { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
@@ -501,7 +525,7 @@
 <!-- The instrument strip (Leo's plan, approved by Elena 12 Nov): six cells, bottom centre. -->
 <section id="strip" class="hud" aria-label="Instruments">
   <div class="cell c-time">
-    <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span></div>
+    <div class="v"><span id="day">Day 0.0</span> <span id="c-date" class="sub"></span><span id="goalchip" class="sub" hidden>storm centre <span class="g-km"></span></span></div>
     <div id="timebar" role="group" aria-label="How fast time runs" hidden>
       <button id="t-pause" title="Pause or carry on (Space)" aria-pressed="false">&#10074;&#10074;</button>
       <button class="rate" data-rate="rt" aria-pressed="false" title="Real time: a second of the voyage every second (key 1)">Real time</button>
@@ -530,6 +554,7 @@
     <div class="kg"><kbd>&larr; &rarr;</kbd><span>steer</span><kbd>&uarr; &darr;</kbd><span>sail in, sail out</span>
     <kbd>R</kbd><span>reef (Shift+R shakes out)</span><kbd>T</kbd><span>auto-trim</span><kbd>V</kbd><span>chase or deck camera</span>
     <kbd>N</kbd><span>sound</span><kbd>H</kbd><span>hide everything</span><kbd>Esc</kbd><span>hand back</span></div></div>
+  <label class="picq" title="Lower draws faster on an older computer. Your pick is remembered.">Picture <select id="picq"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
 </div>
 
 <button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>
@@ -614,7 +639,7 @@
       <button data-course="drill">Drills<small>short spells: a reach, a beat, a run</small></button></p>
     <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. <button class="info" aria-expanded="false" title="About the depths">i</button><span class="info-more" hidden> The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</span></p>
   </div>
-  <p><button id="practice-again" class="go">Sail another</button> <a class="crossing" href="helm.html">Take the helm: a whole crossing</a></p>
+  <p><button id="practice-again" class="go">Sail another</button> <a class="crossing" href="helm.html">Set sail: a whole crossing</a></p>
 </div></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
   <h1>Four days later: the Bay mouth</h1>
@@ -650,6 +675,7 @@
       <label id="chpick" hidden>Or a weather challenge <select id="challenge"><option value="">None: sail a 2020 launch</option></select></label>
       <p id="chover" class="muted" hidden>A challenge brings its own date and weather, so it replaces the launch day.</p>
       <p id="chstory" hidden></p>
+      <div id="chbrief" hidden><ul></ul><p class="honest muted"></p></div>
       <p id="chnote" class="muted" hidden></p>
       <fieldset id="modes"><legend>How you steer</legend>
         <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
@@ -679,11 +705,12 @@
     <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
     <p id="r-caveat" class="muted" hidden></p>
     <p id="r-story"></p>
+    <div id="r-stars" hidden><p class="s-row"><span class="s-stars"></span> <span class="s-none"></span></p><p class="s-why"></p><p class="s-ghost"></p><p class="s-real"><b>What really happened.</b> <span class="s-text"></span> <a target="_blank" rel="noopener">Source</a></p></div>
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
     <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a></div>
-    <div class="rc-links" id="r-links"><a href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a href="./voyage.html">Voyage replays</a></div>
+    <div class="rc-links" id="r-links"><a href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a href="./voyage.html">Watch a voyage</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>

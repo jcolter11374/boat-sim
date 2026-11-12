@@ -50,9 +50,12 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
+import { forcedSea, seaTestFrom } from "./seaTest";
 import { moonEquatorial, moonPhase, toHorizon } from "./sky";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
-import { HORIZON, Sea } from "./water";
+import { HORIZON, Sea, inChesapeake } from "./water";
+import { seaUniforms } from "./seaSurface";
+import { detailFor } from "./seaDetail";
 import { PLACE, PLACES, fetchSea } from "./land/place";
 import { Island } from "./land/island";
 import { Mirror, reflectable } from "./mirror";
@@ -249,6 +252,7 @@ let wet: Wetness | null = null;
 let drain: Drain | null = null;
 /** How much bigger than our 3 m kayak the shown boat is (cameras stand back by this much). */
 let viewScale = 1;
+let photoBoat = false; // the "low" test view (status.view)
 function buildBoat(q: Quality): void {
   setForecastLook(false); // materials can be shared with the next model: put them back first
   if (model) {
@@ -296,6 +300,7 @@ function setQuality(l: Look): void {
   const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
+  sea.setDetail(detailFor(l));
   mirror.scale = q === "high" ? 0.5 : 0.35;
   buildBoat(q);
   live = new LiveSea(undefined, { n: N_COMP[q], smoothing: 0.4 });
@@ -325,7 +330,13 @@ const seaFeed = new SeaStateFeed();
 void seaFeed.init();
 let seaNow: Systems | null = null; // what the Waves card describes
 /** The logged wind (m/s towards east, north), or its speed forced for pictures and tests (status.force.wind). */
+/** Pictures of the sea only (seaTest.ts, ?seatest= and ?sun=): a fixed sea, wind and sun. */
+const SEATEST = seaTestFrom(location.search);
 function windAt(rep: Replay, hour: number): [number, number] {
+  if (SEATEST.sea) {
+    const to = THREE.MathUtils.degToRad(SEATEST.sea.ws.dirFrom + 180);
+    return [SEATEST.sea.wind * Math.sin(to), SEATEST.sea.wind * Math.cos(to)];
+  }
   const wu = valueAt(rep, rep.wind_u, hour) ?? 0;
   const wv = valueAt(rep, rep.wind_v, hour) ?? 0;
   const f = status.force.wind;
@@ -334,6 +345,18 @@ function windAt(rep: Replay, hour: number): [number, number] {
   return w > 0.01 ? [(wu * f) / w, (wv * f) / w] : [f, 0];
 }
 function seaTarget(rep: Replay, hour: number): number {
+  if (SEATEST.sea) {
+    seaNow = null;
+    live.setSystems(SEATEST.sea.ws, SEATEST.sea.s1, null);
+    return Math.hypot(SEATEST.sea.ws.hs, SEATEST.sea.s1?.hs ?? 0);
+  }
+  if (status.force.hs >= 0) {
+    // Forced for pictures and tests (Iris's storm sequence): one wind sea of that height, downwind.
+    seaNow = null;
+    const [wu, wv] = windAt(rep, hour);
+    live.setSystems(forcedSea(status.force.hs, wu, wv), null, null);
+    return Math.max(status.force.hs, 0.05);
+  }
   if (PLACE?.fetch) {
     // A sheltered harbour: only the local wind's chop, running downwind.
     seaNow = null;
@@ -384,10 +407,10 @@ let rep: Replay | null = null; // lanes[focus].rep
 let hour = 0;
 let playing = false;
 let warp = 1 / 3600; // voyage hours per real second: real time (the game and the live tracker start here)
-/** A replay opens already playing at this speed: real time (John, 10 Nov, kept on
- * 11 Nov when Leo asked for faster). One constant, so it's a one-line change. */
-/** Replays open at 1 h/s: at under a knot, real time looks frozen (Leo's delta; Elena, 12 Nov). */
-const WATCH_WARP = 1;
+/** A replay opens already playing at this speed: real time. John's call (T2 in
+ * john-decisions.md: 10 Nov, kept 11 Nov, restored 12 Nov after #401 changed it).
+ * Don't change it without John's own OK. */
+const WATCH_WARP = 1 / 3600;
 /** Visitors who ask for less motion get the replay paused at the start instead. */
 const REDUCED_MOTION = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 let ended = false;
@@ -476,7 +499,8 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[], heel: [] as number[], reef: false },
+  force: { cloud: -1, fog: -1, wind: -1, hs: -1, sea: [] as number[], heel: [] as number[], reef: false },
+  // force.hs: a forced wind sea (m), for pictures and tests (-1 = as logged).
   // force.reef (proof pictures, Sam): true reefs a yacht's sails for the forced wind
   // (forcedPlan); false keeps the replay's sail plan.
   // force.heel (proof pictures, Sam): [beat, reach, run] degrees for a sailing yacht in the
@@ -507,6 +531,33 @@ const status = {
   live: { on: LIVE, lastFix: 0, now: 0, simulated: false, forecast: false, banner: false, fixes: 0 },
   /** Jump to the latest report (the Now button). */
   goNow: () => tracked && seek(tracked.nowHour),
+  /**
+   * Pictures of the sea (with ?seatest=): "chase" (the page's own view), "long"
+   * (20 degree lens, 2.5 m up, 140 m off with the sun behind the boat) or "over"
+   * (45 m up, looking down at the boat) or "low" (from a boat 40 m off, the
+   * lens 1.5 m above the water there (seated in a small boat), riding its own waves: the troughs hide the boat).
+   */
+  view: (kind: "chase" | "long" | "over" | "low"): void => {
+    photoBoat = kind === "low";
+    const az = THREE.MathUtils.degToRad(SEATEST.sun?.az ?? sunAz);
+    const toSun = new THREE.Vector3(Math.sin(az), 0, -Math.cos(az)); // x east, z south
+    const t = controls.target;
+    controls.maxDistance = Math.max(controls.maxDistance, 160); // test views reach past the player's zoom limit
+    if (kind === "low") {
+      camera.fov = 35;
+      camera.position.set(t.x - 40 * toSun.x, 2, t.z - 40 * toSun.z);
+    } else if (kind === "long") {
+      camera.fov = 20;
+      camera.position.set(t.x - 140 * toSun.x, 2.5, t.z - 140 * toSun.z);
+    } else if (kind === "over") {
+      camera.fov = 45;
+      camera.position.set(t.x - 14 * toSun.x, 45, t.z - 14 * toSun.z);
+    } else {
+      camera.fov = 45;
+    }
+    camera.updateProjectionMatrix();
+    controls.update();
+  },
 };
 (window as unknown as { __replay: typeof status }).__replay = status;
 
@@ -718,11 +769,12 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
     status.maxHour = endHour();
     status.outcome = r.outcome;
     status.shown = [];
-    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: tracked.simulated, fixes: tracked.fixes.length };
+    status.live = { on: true, lastFix: tracked.lastFixHour, now: tracked.nowHour, simulated: tracked.simulated, forecast: false, banner: false, fixes: tracked.fixes.length };
     $<HTMLInputElement>("scrub").max = String(endHour());
     $("boat").hidden = $("voyage").hidden = true;
     $("now").hidden = $("c-report").hidden = $("c-eta").hidden = false;
-    $("h1").textContent = tracked.simulated ? "Live tracker (simulated voyage)" : "Live tracker";
+    // No "simulated" label, even on the demo feed: John's call S2 (11 Nov), the demo is obvious.
+    $("h1").textContent = "Live tracker";
     $("sub").textContent =
       "Where the kayak last reported (the main box's daily satellite report and the backup beacon's pings), then the simulator's forecast from that report: the dashed line on the chart, with the shaded band showing where most forecast runs end up. Wind and waves aren't reported, so the sea here is a stand-in.";
     $("lg-ours").textContent = "reported track";
@@ -839,10 +891,11 @@ function setWarp(w: number): void {
   // The buttons carry rounded values (0.000277778 for 1/3600): light the nearest.
   const bs = Array.from(document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button"));
   const near = bs.reduce((m, b) => (Math.abs(Math.log(Number(b.dataset.warp) / w)) < Math.abs(Math.log(Number(m.dataset.warp) / w)) ? b : m), bs[0]);
-  bs.forEach((x) => x.setAttribute("aria-pressed", String(x === near)));
+  // Real time is on both the strip and the drawer: light every button with the nearest value.
+  bs.forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.warp === near.dataset.warp)));
 }
 document.querySelectorAll<HTMLButtonElement>("#warp button, #warp2 button").forEach((b) => b.addEventListener("click", () => setWarp(Number(b.dataset.warp))));
-/** With reduced motion a replay opens paused: say so once (the speed bar's hint went with the 1 h/s default). */
+/** With reduced motion a replay opens paused: say so once (replays open in real time, John T2). */
 function warpHint(): void {
   if (REDUCED_MOTION) toast("Paused at the start: press play (Space) when you're ready.", "Replay", "#8ab4ff");
 }
@@ -1285,6 +1338,15 @@ renderer.setAnimationLoop(() => {
       showOutcome();
     }
     const hs = seaTarget(rep, hour);
+    // The boat sails through the water at its speed: the water flows past it
+    // (the boat stays at the scene origin), at real speed whatever the warp.
+    if (smoothYaw !== null) {
+      const run = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0) * dt;
+      const fx = run * Math.cos(smoothYaw);
+      const fz = -run * Math.sin(smoothYaw);
+      live.flow(fx, fz);
+      sea.flow(fx, fz);
+    }
     const comps = live.advance(t);
     {
       const [wu, wv] = windAt(rep, hour);
@@ -1376,7 +1438,7 @@ renderer.setAnimationLoop(() => {
     storm += (target - storm) * Math.min(1, dt * 1.5);
     // Off real land the sky is the place's own (the replay still brings the weather).
     const [lat, lon] = PLACE ? [PLACE.lat, PLACE.lon] : positionAt(rep, hour);
-    const sp = sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
+    const sp = SEATEST.sun ?? sunPosition(utc(rep.start) + hour * 3600e3, lat, lon);
     // Moon, its phase and the stars where they really were from this spot at this time.
     if (Number.isFinite(lat)) atmos.setCelestial(utc(rep.start) + hour * 3600e3, lat, lon);
     sunEl = sp.el;
@@ -1385,6 +1447,7 @@ renderer.setAnimationLoop(() => {
     atmos.cloud = clouds.cover; // last frame's, which is close enough
     atmos.set(sp.el, sp.az, storm);
     showWreck(lat, lon);
+    if (Number.isFinite(lat)) sea.setBay(SEATEST.sea?.bay ?? inChesapeake(lat, lon));
     status.stars = atmos.starCount;
     const when = utc(rep.start) / 86400e3 + hour / 24; // calendar day, so a given day is foggy in every replay
     clouds.update(
@@ -1401,6 +1464,9 @@ renderer.setAnimationLoop(() => {
       atmos.ambient,
     );
     clouds.closeIn(atmos.fog);
+    // The sea mirrors the cloud deck, so sea and sky meet without a line (Kai's Clouds.seaSky, sky PR).
+    (clouds as { seaSky?: (out: THREE.Vector4) => void }).seaSky?.(seaUniforms.uSeaSky.value);
+    (clouds as { seaBreak?: (out: THREE.Vector4) => void }).seaBreak?.(seaUniforms.uSeaBreak.value);
     status.cloud = clouds.cover;
     status.fog = clouds.fog;
     // Scene x is east, -z is north.
@@ -1452,7 +1518,8 @@ renderer.setAnimationLoop(() => {
     });
   }
   if (focusing && !focusing.update(dt)) focusing = null;
-  if (!focusing && !cine.update(dt)) {
+  if (photoBoat) camera.lookAt(controls.target); // the orbit controls would lift it above the boat
+  else if (!focusing && !cine.update(dt)) {
     if (status.cam) placeCam(status.cam);
     else controls.update();
   }
@@ -1460,6 +1527,11 @@ renderer.setAnimationLoop(() => {
   if (rep) {
     const floor = heightAt(live.advance(t), camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < floor) camera.position.y = floor;
+    // Test view "low": the lens rides the water where it is, not the boat's heave.
+    if (photoBoat) {
+      camera.position.y = floor - 0.35 + 1.5 + 0.5 * sea.detailHeightAt(camera.position.x, camera.position.z);
+      camera.lookAt(controls.target);
+    }
   }
   // Ultra: focus on the boat, shadows round it; back to High if this computer can't keep up.
   if (atmos.ultra) {
@@ -1611,7 +1683,9 @@ let sunAz = 180;
 let lastGuide = 0;
 const guideBox = $<HTMLInputElement>("skyguide");
 const showGuide = () => {
+  $("compass").hidden = !guideBox.checked;
   $("skylabels").hidden = !guideBox.checked;
+  $("lookup").hidden = !guideBox.checked;
 };
 // Look up: the camera orbits the boat, so it can't tilt far above the horizon on its own.
 // Raising the point it looks at tips the view up about 20 degrees: horizon near the bottom, about 50 degrees up at the top.
@@ -1642,6 +1716,8 @@ function setLookUp(on: boolean): void {
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
 guideBox.addEventListener("change", showGuide);
 showGuide();
+const CARD: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
+const RANGE = 75; // degrees either side of the view shown on the strip
 const viewDir = new THREE.Vector3();
 const proj = new THREE.Vector3();
 function bearingOf(v: THREE.Vector3): number {
@@ -1662,8 +1738,36 @@ function skyGuide(): void {
   lastGuide = now;
   viewDir.copy(controls.target).sub(camera.position);
   const view = bearingOf(viewDir);
+  // The compass strip (John's call L4): ticks every 5 degrees, and what's out there along it.
+  const W = $("compass").clientWidth || 420;
+  const px = W / (2 * RANGE);
+  const rel = (b: number) => ((b - view + 540) % 360) - 180;
+  const xOf = (b: number) => W / 2 + rel(b) * px;
+  const out: HTMLSpanElement[] = [];
+  for (let b = 0; b < 360; b += 5) {
+    if (Math.abs(rel(b)) > RANGE) continue;
+    const x = xOf(b);
+    out.push(span(b % 15 === 0 ? "tick big" : "tick", "", x));
+    if (b % 15 === 0) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
+  }
   const night = sunEl < -6;
   const polaris = atmos.starDirs.get("North Star (Polaris)");
+  const marks: [number, string, string][] = [];
+  if (model) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw ?? 0) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
+  if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
+  if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
+  if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
+  // Marks that would touch go up a row, so "bow" and "sun" never run together (Ines).
+  const shown = marks.filter(([b]) => Math.abs(rel(b)) <= RANGE).map(([b, text, colour]) => ({ x: xOf(b), half: text.length * 3.4 + 6, text, colour }));
+  shown.sort((a, c) => a.x - c.x);
+  const rowEnd = [-Infinity, -Infinity];
+  for (const m of shown) {
+    const row = m.x - m.half >= rowEnd[0] ? 0 : m.x - m.half >= rowEnd[1] ? 1 : 0;
+    rowEnd[row] = m.x + m.half;
+    const e = span(row ? "mk up" : "mk", m.text, m.x, m.colour);
+    out.push(e);
+  }
+  $("tape").replaceChildren(...out);
 
   // Labels in the sky itself.
   const labels: HTMLSpanElement[] = [];
