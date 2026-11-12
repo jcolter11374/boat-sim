@@ -19,6 +19,11 @@ async function fresh(browser, path, viewport = { width: 1280, height: 720 }) {
   return { ctx, page };
 }
 const visibleText = (page) => page.evaluate(() => document.body.innerText);
+// B7 on every page a player sees, not just the Boatyard (Nina): any "$" amount.
+async function noMoney(page, where) {
+  const m = (await visibleText(page)).match(/[^\n]{0,30}\$\s?\d[^\n]{0,20}/);
+  note(`B7-${where}`, !m, `No money shown on ${where}`, m ? JSON.stringify(m[0]) : "none");
+}
 
 async function voyage(browser) {
   const { ctx, page } = await fresh(browser, "voyage.html");
@@ -36,6 +41,11 @@ async function voyage(browser) {
     const sky = s.sky ?? {};
     note("L4-voyage", ["sunAz", "moonAz", "polarisAz"].every((k) => k in sky), "Sun, moon and North Star bearings available (sky guide)", JSON.stringify(Object.keys(sky)));
     note("C1-voyage", (await page.locator("#cinebtn").count()) > 0, "Cinematic button on Watch a voyage", "");
+    // L4 as the player sees it: the compass strip marks the bow and a sky body, and "Look up at the sky" is there.
+    const vt = await visibleText(page);
+    const shown = { bow: /\u25B2\s*bow/.test(vt), sky: /\u2600\s*sun|\u263E\s*moon|North Star/.test(vt), lookup: /Look up at the sky/.test(vt) };
+    note("L4-voyage-seen", shown.bow && shown.sky && shown.lookup, "Compass strip shows the bow and the sun, moon or North Star; 'Look up at the sky' offered", JSON.stringify(shown));
+    await noMoney(page, "voyage");
     await page.screenshot({ path: "jd-voyage.png" });
   } finally {
     await ctx.close();
@@ -70,7 +80,44 @@ async function helm(browser) {
       return tb ? !tb.hidden && tb.offsetParent !== null : false;
     });
     note("T3", !firstThing, "Time speed is not shown before Set sail", `time bar visible on arrival=${firstThing}`);
+    await noMoney(page, "helm-start");
     await page.screenshot({ path: "jd-helm.png" });
+    // T4: the crossing keeps its fast start (an hour a second), with Real time first in the bar.
+    await page.click("#go", { timeout: 30_000 });
+    await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 480_000 });
+    const bar = await page.evaluate(() => {
+      const r = [...document.querySelectorAll("#timebar .rate")];
+      return { first: r[0]?.dataset.rate, pressed: r.find((b) => b.getAttribute("aria-pressed") === "true")?.dataset.rate ?? null, clock: window.__helm.clock };
+    });
+    note("T4-crossing", bar.first === "rt" && (bar.pressed === "1" || bar.clock === 1), "Crossing starts at an hour a second, Real time first on its speed bar", JSON.stringify(bar));
+  } finally {
+    await ctx.close();
+  }
+}
+
+async function practice(browser) {
+  const { ctx, page } = await fresh(browser, "helm.html?practice");
+  try {
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 120_000 });
+    await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 180_000 }).catch(() => {});
+    const sel = '#practice-courses button[data-course="triangle"]';
+    await page.waitForFunction((s) => { const b = document.querySelector(s); return b && !b.disabled && b.offsetParent !== null; }, sel, { timeout: 60_000 }).catch(() => {});
+    await page.click(sel, { timeout: 30_000 }).catch(() => page.evaluate((s) => document.querySelector(s)?.click(), sel));
+    await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 60_000 }).catch(() => {});
+    const x = await page.evaluate(() => document.querySelector('button[data-x][aria-pressed="true"]')?.dataset.x ?? null);
+    note("T4-practice", x === "1", "Practice opens in real time (1x)", `pressed speed: ${x}`);
+  } finally {
+    await ctx.close();
+  }
+}
+
+async function title(browser) {
+  const { ctx, page } = await fresh(browser, "");
+  try {
+    await page.waitForTimeout(5000);
+    const t = await page.evaluate(() => document.title + " " + document.body.innerText);
+    note("S4", /bluewater/i.test(t), "The game is called Bluewater on the title page", document.title);
+    await noMoney(page, "title");
   } finally {
     await ctx.close();
   }
@@ -91,7 +138,7 @@ async function boatyard(browser) {
 }
 
 const browser = await pw.chromium.launch();
-for (const f of [voyage, tracker, helm, boatyard]) {
+for (const f of [title, voyage, tracker, helm, practice, boatyard]) {
   try {
     await f(browser);
   } catch (e) {
