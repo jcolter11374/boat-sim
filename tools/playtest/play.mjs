@@ -939,13 +939,14 @@ const CHECKS = {
       must(SIDE.test(a), `couldn't read which side the wind is on ("${a}")`);
       // Tack: turn toward the wind (left when it's on the left) until it comes over to the other side (up to 25 s).
       // On a runner's software graphics the boat's clock runs far slower than ours (a tack is ~12 s
-      // of boat time), so turn at 10x and wait for the wheel's own tack count, then back to 1x.
+      // of boat time), so turn at 10x until the wheel counts a tack and the wind line reads the other side, then back to 1x.
       const key = left(a) ? "ArrowLeft" : "ArrowRight";
       const tacks0 = await page.evaluate(() => window.__wheel?.wheel?.s?.tacks ?? 0);
       await page.click('.w-rate button[data-x="10"], button[data-x="10"]', { timeout: 5000 }).catch(() => page.keyboard.press("4"));
       await page.keyboard.down(key);
       await page.waitForFunction(([src, wasLeft, t0]) => {
-        if ((window.__wheel?.wheel?.s?.tacks ?? 0) > t0) return true;
+        // Past the tack itself, keep turning until she's sailing on the new side (out of "too close").
+        if ((window.__wheel?.wheel?.s?.tacks ?? 0) <= t0) return false;
         const m = document.body.innerText.match(new RegExp(src));
         return m && /left|port/.test(m[0]) !== wasLeft;
       }, [SIDE.source, left(a), tacks0], { timeout: 90_000 }).catch(() => {});
