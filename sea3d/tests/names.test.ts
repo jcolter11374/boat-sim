@@ -46,3 +46,10 @@ test("the headline answers who's best", () => {
   assert.equal(bestHeadline(top, 1), "Too close to call: every build finishes about 83% of the time.");
   assert.equal(bestHeadline([], 2), "");
 });
+
+test("the Boatyard's sentences keep Randolph's builds marked as our model (Maya, #380)", async () => {
+  const { gridName } = await import("../src/yard/launch");
+  assert.equal(gridName({ label: "Randolph Rev C5, as built", note: "Our model of the Randolph team's Rev C5, from their published design." }), "Randolph Rev C5, as built (our model)");
+  assert.equal(gridName({ label: "Our kayak, bare-bones build", note: "Every cheaper part at once" }), "Our kayak, bare-bones build");
+  assert.equal(gridName({ label: "Our kayak" }), "Our kayak");
+});

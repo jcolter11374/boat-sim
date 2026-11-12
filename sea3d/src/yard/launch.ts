@@ -48,6 +48,8 @@ export interface GridBuild {
   id: string;
   boat: string;
   label: string;
+  /** The longer note behind a name; Randolph's builds start "Our model of" (catalog.CHANGE_NAMES). */
+  note?: string;
   options: Record<string, string | number>; // catalog slot -> option id, plus cruise_w
   current?: boolean;
   odds: LaunchOdds | null;
@@ -59,6 +61,10 @@ interface GridIndex {
   /** Which launches the odds come from (boatsim.mc.boatyard). */
   odds_source?: { years?: [number, number]; months?: number[] };
 }
+
+/** A grid build's name as read in a sentence: Randolph's builds keep "(our model)" in words (Maya, #380). */
+export const gridName = (b: Pick<GridBuild, "label" | "note">): string =>
+  /^our model of /i.test(b.note ?? "") ? `${b.label} (our model)` : b.label;
 
 /** How far a grid build is from a design: [modelled slots that differ, cruise watts apart] (as boatsim.sandbox.catalog.nearest). */
 export function gridDistance(b: GridBuild, cat: Catalog, d: Design): [number, number] {
@@ -129,7 +135,7 @@ export class GridLauncher implements Launcher {
     if (!n) return null;
     return {
       exact: n.exact,
-      note: n.exact ? `Simulated: ${n.build.label}.` : `Closest build we've simulated: ${n.build.label}.`,
+      note: n.exact ? `Simulated: ${gridName(n.build)}.` : `Closest build we've simulated: ${gridName(n.build)}.`,
       odds: n.build.odds,
       replays: n.build.replays.map((r) => ({ url: `${this.base}/${r.file}`, start: r.start, outcome: r.outcome, days: r.days })),
     };
@@ -329,7 +335,7 @@ export class SandboxLauncher implements Launcher {
       note:
         `Sandbox (${meta.note}): ${finished} of ${runs.length} voyages finished, run here in your browser. ` +
         "Browser runs can end differently from the same build run on our servers; the odds shown come from the server grid" +
-        (grid?.odds ? (meta.exact ? " (this exact build)." : ` (the closest build we've run: ${grid.label}).`) : ", which hasn't run this build yet."),
+        (grid?.odds ? (meta.exact ? " (this exact build)." : ` (the closest build we've run: ${gridName(grid)}).`) : ", which hasn't run this build yet."),
       credits: SANDBOX_CREDITS,
       odds: grid?.odds ?? null,
       replays,
