@@ -51,6 +51,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # for blender -P
 
 from common import (
+    HullFinish,
     HullForm,
     HullPaint,
     attach,
@@ -93,11 +94,16 @@ def sail(name, tack, head, clew, depth, mat, n=24, m=14, parent=None):
             u = j / m
             bulge = math.sin(math.pi * u**0.8) * depth * chord * (1 - 0.55 * t)
             verts.append(tuple(luff + (leech - luff) * u + nrm * bulge))
+    uvs = []
     for i in range(n):
         for j in range(m):
             k = i * (m + 1) + j
             faces.append((k, k + 1, k + m + 2, k + m + 1))
-    return mesh_object(name, verts, faces, mat=mat, parent=parent)
+            # u: luff (0) to leech (1); v: foot (0) to head (1). The page's sail
+            # cloth draws its seams and tapes and ripples the luff from these.
+            u0, u1, v0, v1 = j / m, (j + 1) / m, i / n, (i + 1) / n
+            uvs.append([(u0, v0), (u1, v0), (u1, v1), (u0, v1)])
+    return mesh_object(name, verts, faces, uvs=uvs, mat=mat, parent=parent)
 
 
 def battens(name, tack, head, clew, depth, k, mat, parent=None):
@@ -160,7 +166,7 @@ def mats():
         "alu": material("alu", base=hexcol(0xB9BEC4), rough=0.35, metal=0.8),
         "wire": material("wire", base=hexcol(0x9AA0A6), rough=0.3, metal=0.9),
         "black": material("black", base=hexcol(0x1E2124), rough=0.5),
-        "sail": material("sail", base=hexcol(0xF3F1EA), rough=0.75),
+        "sail": material("sail", base=hexcol(0xE8E3D6), rough=0.8),  # Dacron: warm off-white
         "teak": material("teak", base=hexcol(0x9C7A55), rough=0.7),
         "glass": material("glass", base=hexcol(0x1A2530), rough=0.08, metal=0.2),
         "lamp": material("lamp", base=hexcol(0xFFFFFF), rough=0.2, emit=(1.0, 0.95, 0.77)),
@@ -176,6 +182,8 @@ CRUISER = {"L": 9.45, "B": 1.6, "wl": 0.55, "mast_x": 3.35, "mast_h": 12.4}
 CRUISER_PAINT = HullPaint(
     top=0xF4F3EF, deck=0xE8E5DC, boot=0x1D2F4D, bottom=0x23344F, lettering=None
 )
+# A modern boat: bright, straight, glossy gelcoat.
+CRUISER_FINISH = HullFinish(top_rough=0.12, top_coat=1.0)
 
 
 def build_cruiser() -> list:
@@ -194,7 +202,9 @@ def build_cruiser() -> list:
         return 1.5 - 0.28 * s + 0.12 * max(1 - s / 0.15, 0) ** 2
 
     f = HullForm(L=L, n=2.3, crown=0.05, wl=CRUISER["wl"], hb=hb, kz=kz, dz=dz)
-    ob, img, rgb = hull(f, CRUISER_PAINT, rough=0.22, coat=0.6, nx=200, nt=34, nd=20)
+    ob, img, rgb = hull(
+        f, CRUISER_PAINT, rough=0.22, coat=0.6, nx=200, nt=34, nd=20, finish=CRUISER_FINISH
+    )
     rub = material("rubrail", base=hexcol(0x2A2E33), rough=0.5)
     tube(
         "toerail_s",
@@ -1045,8 +1055,11 @@ def build_rower() -> list:
 PEARSON = {"L": 9.39, "B": 1.645, "wl": 0.55, "draft": 1.71, "mast_above_wl": 14.11}
 PEARSON["mast_x"] = 0.16 + 3.90  # J back from the stem head
 PEARSON_PAINT = HullPaint(
-    top=0xF6F5F0, deck=0xE9E6DD, boot=0x1A2A4A, bottom=0x2B3A55, lettering=None
+    top=0xF3F0E6, deck=0xE9E5DA, boot=0x1A2A4A, bottom=0x2B3A55, lettering=None
 )
+# A 1970s hull, kept up: gelcoat a touch ivory and a little softer in its
+# reflections than a new boat's (never dirty).
+PEARSON_FINISH = HullFinish(top_rough=0.2, top_coat=0.85, deck_rough=0.5)
 
 
 def pearson_hb(s: float) -> float:
@@ -1073,9 +1086,11 @@ def build_pearson() -> list:
     M = mats()
     hb = pearson_hb
     f = HullForm(L=L, n=2.1, crown=0.06, wl=wl, hb=hb, kz=pearson_kz, dz=pearson_dz)
-    ob, img, rgb = hull(f, PEARSON_PAINT, rough=0.22, coat=0.6, nx=200, nt=34, nd=20)
+    ob, img, rgb = hull(
+        f, PEARSON_PAINT, rough=0.22, coat=0.6, nx=200, nt=34, nd=20, finish=PEARSON_FINISH
+    )
     y_deck = lambda x: f.deck_y(x, 0)
-    navy = material("cove_stripe", base=hexcol(0x1A2A4A), rough=0.35)
+    navy = material("cove_stripe", base=hexcol(0x1A2A4A), rough=0.2, coat=0.8)
     rub = material("rubrail", base=hexcol(0xD9D6CC), rough=0.45)
     for side, tag in ((1, "p"), (-1, "s")):
         # A teak toerail on the sheer, and the classic navy cove stripe just below it.
@@ -1109,7 +1124,7 @@ def build_pearson() -> list:
 
     # The deep elliptical fin keel (no bulb; 3,800 lb of lead) and a spade rudder.
     # Keel and rudder in the hull's bottom paint, as on a boat kept in the water.
-    antifoul = material("antifoul", base=hexcol(PEARSON_PAINT.bottom), rough=0.6)
+    antifoul = material("antifoul", base=hexcol(PEARSON_PAINT.bottom), rough=0.86)
     tip = wl - PEARSON["draft"]
     foil("keel", 1.65, 0.85, 3.55, 4.05, 0.2, tip + 0.06, 0.12, antifoul, n_span=12)
     lathe(

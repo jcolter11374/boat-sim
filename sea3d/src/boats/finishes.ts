@@ -157,6 +157,105 @@ const RANDOLPH_FINISHES: Record<string, Finish> = {
   dark: (m) => FINISHES.black(m),
 };
 
+let fairing: THREE.DataTexture | null = null;
+/**
+ * A hull's fairing: a real hull is never a perfect mirror. Long, shallow
+ * undulations (about a metre apart along the hull, a few tenths of a millimetre
+ * deep) bend the reflections of the horizon a little. A normal map for the clear
+ * coat; one tile is about 4 m along the hull by 1.5 m around it.
+ */
+function fairingTexture(): THREE.DataTexture {
+  if (fairing) return fairing;
+  const w = 256;
+  const h = 64;
+  let s = 7771;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  // A few smooth sine bumps with random phases, periodic over the tile.
+  const terms = Array.from({ length: 9 }, (_, i) => ({ kx: 2 + (i % 4) + Math.floor(rnd() * 3), ky: Math.floor(rnd() * 3), p: rnd() * 6.283, a: 1 / (1 + i * 0.4) }));
+  const hgt = (x: number, y: number) => terms.reduce((acc, t) => acc + t.a * Math.sin(6.283 * (t.kx * x + t.ky * y) + t.p), 0);
+  const data = new Uint8Array(w * h * 4);
+  const e = 1 / w;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const u = x / w;
+      const v = y / h;
+      const nx = (hgt(u - e, v) - hgt(u + e, v)) * 0.6;
+      const ny = (hgt(u, v - e) - hgt(u, v + e)) * 0.6 * (h / w);
+      const l = Math.hypot(nx, ny, 1);
+      data.set([128 + 127 * (nx / l), 128 + 127 * (ny / l), 128 + 127 * (1 / l), 255], (y * w + x) * 4);
+    }
+  fairing = new THREE.DataTexture(data, w, h);
+  fairing.wrapS = fairing.wrapT = THREE.RepeatWrapping;
+  fairing.needsUpdate = true;
+  return fairing;
+}
+
+/** Stock boats' own looks, by key: the Pearson is a kept-up 1970s hull, the cruiser a new one. */
+const STOCK_LOOK: Record<string, { fairing: number; coatRough: number }> = {
+  stock_pearson31_2: { fairing: 0.35, coatRough: 0.06 },
+  stock_cruiser31: { fairing: 0.12, coatRough: 0.03 },
+};
+
+/**
+ * Finishes for the stock boats' Blender models (blender/build_stock.py names the
+ * materials). The hull's gloss already varies by zone from its finish map
+ * (glossy gelcoat, matte bottom paint, non-skid deck); this adds what glTF can't
+ * carry: fairing in the reflections, satin teak, brushed steel. Each material once.
+ */
+export function applyStockFinishes(root: THREE.Object3D, key = ""): void {
+  const look = STOCK_LOOK[key] ?? { fairing: 0.15, coatRough: 0.04 };
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!(m instanceof THREE.MeshStandardMaterial) || m.userData.finished) continue;
+      m.userData.finished = true;
+      const p = m instanceof THREE.MeshPhysicalMaterial ? m : null;
+      switch (m.name) {
+        case "hull":
+        case "transom":
+        case "cabin":
+        case "cove_stripe":
+          if (p) {
+            p.clearcoatRoughness = look.coatRough;
+            if (look.fairing > 0) {
+              const t = fairingTexture().clone();
+              t.repeat.set(m.name === "hull" ? 2.4 : 1, m.name === "hull" ? 4 : 1);
+              t.needsUpdate = true;
+              p.clearcoatNormalMap = t;
+              p.clearcoatNormalScale.setScalar(look.fairing);
+            }
+          }
+          break;
+        case "teak":
+          m.roughness = 0.72;
+          if (p) {
+            p.clearcoat = 0;
+            p.sheen = 0.2;
+            p.sheenRoughness = 0.7;
+            p.sheenColor.set(0xd9b48a);
+          }
+          break;
+        case "steel":
+          m.metalness = 1;
+          m.roughness = 0.36;
+          if (p) p.anisotropy = 0.5;
+          break;
+        case "wire":
+          // Rigging wire is far thinner than a pixel at most distances: keep it dull,
+          // or every strand sparkles.
+          m.metalness = 0.5;
+          m.roughness = 0.5;
+          break;
+        case "antifoul":
+          m.roughness = 0.86;
+          if (p) p.clearcoat = 0;
+          break;
+      }
+      m.needsUpdate = true;
+    }
+  });
+}
+
 export type Boat = "kayak" | "randolph";
 
 /** Give a detailed model's materials their real-world finish (each material once; they're shared). */
