@@ -738,7 +738,7 @@ const CHECKS = {
       // #404: 1 May 2020, both boats lose the main box on day 3.9: the orders lock with "no link".
       if (BROWSER !== "chromium" && process.env.NOLINK) throw new SkipCheck("one browser is enough for the lock");
       if (BROWSER === "chromium" && process.env.NOLINK) {
-        await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        // nolink-404 opens helm.html?quality=low itself: a second goto here aborted its model fetches.
         await helmStart(page, async (p) => p.selectOption("#launch", "2"));
         let st = null;
         for (let i = 0; i < 30; i++) {
