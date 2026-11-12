@@ -258,7 +258,6 @@ function buildBoat(q: Quality): void {
   }
   const spec = SPEC[boatKey];
   model = BUILDERS[boatKey](q);
-  model.gear.showSigns = false; // the red icon and the toast carry a breakdown here (Ines)
   // A bigger boat: stand the camera back so it all fits (a 31 ft yacht's mast is 14 m up).
   const k = THREE.MathUtils.clamp(spec.length / KAYAK.length, 1, 3.4);
   if (k !== viewScale) {

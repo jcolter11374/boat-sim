@@ -151,8 +151,8 @@ export class Gear {
   private readonly lamp: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly glow: THREE.Sprite;
   private readonly signs = new Map<Part, THREE.Sprite>();
-  /** The floating warning signs over broken parts; a page whose strip shows the breakdown can turn them off. */
-  showSigns = true;
+  /** The floating ⚠ over a broken part: off everywhere (Elena, 12 Nov); the strip's red icons and the toast carry the news. Broken parts still smoke and are listed in shown.signs. */
+  showSigns = false;
   private readonly smoke = new Map<Part, THREE.Sprite[]>();
   private spin: number[];
   private rudderAngle = 0;
