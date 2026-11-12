@@ -199,6 +199,7 @@ export class Sea {
   private readonly psi: number[]; // running phase of each component
   private readonly comps: WaveComponent[];
   private tLast: number | null = null;
+  private drift = { x: 0, z: 0 }; // water gone by since the last advance (m)
   /** Where a change of period or direction pivots (world x, z, m). Put it at
    *  the boats: near it the sea changes smoothly; far away the crests sweep
    *  round faster, like a fan opening. */
@@ -231,6 +232,16 @@ export class Sea {
   /** Same, with a preset (direction already in radians of travel). */
   setPreset(sea: SeaState): void {
     this.setTarget(sea.hs, sea.tp, sea.meanDirection);
+  }
+
+  /**
+   * The boat has moved (dx, dz) metres through the water since the last frame:
+   * the sea flows past by that much. Each train's running phase takes it at the
+   * train's own wavenumber, so later changes of period never jump.
+   */
+  flow(dx: number, dz: number): void {
+    this.drift.x += dx;
+    this.drift.z += dz;
   }
 
   /** Ease the height to nothing, keeping the period and direction. */
@@ -275,6 +286,7 @@ export class Sea {
       // starts it where components() would be at time t
       if (first) this.psi[i] = this.L.phase[i] - omega * t + kAnchor;
       else this.psi[i] -= omega * dt;
+      if (this.drift.x || this.drift.z) this.psi[i] += k * (Math.cos(dir) * this.drift.x + Math.sin(dir) * this.drift.z);
       const c = this.comps[i];
       c.amplitude = a;
       c.wavelength = wavelengthFromPeriod(T);
@@ -283,6 +295,8 @@ export class Sea {
       // measured from the anchor so stretching and turning pivot there
       c.phase = this.psi[i] + omega * t - kAnchor;
     }
+    this.drift.x = 0;
+    this.drift.z = 0;
     return this.comps;
   }
 }
@@ -453,6 +467,11 @@ export class MixedSea {
 
   snap(): void {
     for (const p of this.parts) p.snap();
+  }
+
+  /** The boat moved (dx, dz) m through the water: every system flows past (Sea.flow). */
+  flow(dx: number, dz: number): void {
+    for (const p of this.parts) p.flow(dx, dz);
   }
 
   /** Every train of all three systems at time t (s). Call with non-decreasing t. */

@@ -155,6 +155,14 @@ export class BoatView {
     const wu = w?.wind_u ?? 3;
     const wv = w?.wind_v ?? 0;
     this.live.setSeaState(hs, tp, w?.wave_dir ?? 270);
+    // The water flows past the boat at its speed (last frame's heading), in real time.
+    const run = s && s.outcome === "at_sea" ? Math.max(s.stw, 0) * dt : 0;
+    if (this.yaw !== null && run > 0) {
+      const fx = run * Math.cos(this.yaw);
+      const fz = -run * Math.sin(this.yaw);
+      this.live.flow(fx, fz);
+      this.sea.flow(fx, fz);
+    }
     const comps = this.live.advance(t);
     this.sea.setSea(hs, Math.hypot(wu, wv), new THREE.Vector2(wu, -wv));
     this.sea.update(comps, t);
