@@ -84,7 +84,7 @@ try {
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
     if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
-    // No boat saved yet: you sail Our kayak, so the chip says so; "build one" is only for the Boatyard (audit A3).
+    // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
