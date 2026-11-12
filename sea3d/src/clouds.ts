@@ -445,6 +445,11 @@ export class Clouds {
     this.layer.material.uniforms.uQ.value = q === "low" ? 0 : q === "ultra" ? 2 : 1;
   }
 
+  /** How much the rain hides the sun, 0..1 (for the atmosphere's light): from 0.5 mm/h, all by 4. */
+  get rainShade(): number {
+    return SM(this.rain, 0.5, 4);
+  }
+
   /** Jump straight to the weather at the next update (after a seek), rather than easing into it. */
   snap(): void {
     this.snapped = true;

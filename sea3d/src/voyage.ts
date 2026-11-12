@@ -19,6 +19,7 @@ import { Wetness } from "./boats/wet";
 import { Drain } from "./drain";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import * as THREE from "three";
+import { setRainOnSea } from "./rainRings";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -1192,6 +1193,7 @@ renderer.setAnimationLoop(() => {
     sunAz = sp.az;
     atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
     atmos.cloud = clouds.cover; // last frame's, which is close enough
+    atmos.rain = clouds.rainShade;
     atmos.set(sp.el, sp.az, storm);
     showWreck(lat, lon);
     status.stars = atmos.starCount;
@@ -1219,6 +1221,7 @@ renderer.setAnimationLoop(() => {
     // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
     bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
     rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+    setRainOnSea(rate != null ? rainFromRate(rate) : rainFromStorm(storm), bands.local, quality === "low"); // rings on the sea (rainRings.ts)
     status.bands = bands.shown;
     status.bandNear = bands.nearest;
     traffic?.update(lat, lon, (utc(rep.start) + hour * 3600e3) / 1000, atmos.fog.far, sea.waveHeight);

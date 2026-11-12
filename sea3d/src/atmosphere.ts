@@ -206,6 +206,8 @@ export class Atmosphere {
   exposure = 0.55;
   /** Cloud cover 0..1 (the clouds' own reading, from the logged sunlight): dims the day under it. */
   cloud = 0;
+  /** How hard it is raining, 0..1 (Clouds.rainShade): steady rain hides the sun. */
+  rain = 0;
   /** How far you can see through flying spray (m); Infinity in anything less than a severe gale. */
   sprayFar = Infinity;
   /** Overall light level for unlit things like foam particles, 0..1. */
@@ -349,7 +351,8 @@ export class Atmosphere {
     // third or so of a clear day's); a gale's own murk counts the same way, whichever is darker.
     // Broken cloud leaves the sun out most of the time; only a closing sky shades the day.
     const overcast = smooth(this.cloud, 0.35, 0.95);
-    const shade = Math.max(0.6 * storm, 0.75 * overcast);
+    // In steady rain the deck is thick and low: the sun is all but gone, and so is its glitter on the sea.
+    const shade = Math.max(0.6 * storm, 0.75 * overcast, 0.93 * this.rain);
     this.sunLight = day * (1 - shade);
     this.sun.color.copy(NOON_SUN).lerp(LOW_SUN, 1 - smooth(elDeg, 0, 25));
     this.sun.intensity = 2.4 * this.sunLight;

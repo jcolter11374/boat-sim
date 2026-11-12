@@ -5,6 +5,7 @@
 // the results card. Display only: the physics is all in the simulator.
 
 import * as THREE from "three";
+import { setRainOnSea } from "./rainRings";
 import { NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere, sunPosition } from "./atmosphere";
@@ -2109,6 +2110,7 @@ renderer.setAnimationLoop(() => {
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
   atmos.cloud = clouds.cover; // last frame's, which is close enough
+  atmos.rain = clouds.rainShade;
   atmos.set(sp.el, sp.az, storm);
   showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient, r?.rain ? valueAt(r, r.rain, h) : null);
@@ -2117,6 +2119,7 @@ renderer.setAnimationLoop(() => {
   // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
   bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
   rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+  setRainOnSea(rate != null ? rainFromRate(rate) : rainFromStorm(storm), bands.local, quality === "low"); // rings on the sea (rainRings.ts)
   page.bands = bands.shown;
   traffic?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight);
   if (traffic) page.ships = traffic.shown;
