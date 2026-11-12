@@ -9,7 +9,7 @@ import type { HullForm, Quality } from "./boats/parts";
 import type { BoatSpec } from "./boats/specs";
 import { toWorld, type Placement } from "./standin";
 import { heightAt, type WaveComponent } from "./waves";
-import { WashSlot } from "./boatWash";
+import { WashSlot, bowWaveHeight } from "./boatWash";
 import { putInWater } from "./boats/inWater";
 
 const N_SIDE = 40; // outline points per side
@@ -66,7 +66,7 @@ const sprayVert = /* glsl */ `
     vAlpha = aAlpha;
     vW = (modelMatrix * vec4(position, 1.0)).xyz;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = aSize * (320.0 / -mv.z);
+    gl_PointSize = max(aSize * (320.0 / -mv.z), 1.5);
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -79,12 +79,14 @@ const sprayFrag = /* glsl */ `
     vec2 d = gl_PointCoord - 0.5;
     float r = dot(d, d) * 4.0;
     if (r > 1.0) discard;
-    gl_FragColor = vec4(vec3(0.93, 0.96, 1.0) * (uLight + foamLamp(vW)), vAlpha * (1.0 - r));
+    gl_FragColor = vec4(vec3(0.9, 0.94, 0.97) * (uLight + foamLamp(vW)), vAlpha * exp(-3.0 * r) * (1.0 - r));
   }
 `;
 
-const SPRAY: Record<Quality, number> = { low: 0, high: 220 };
+const SPRAY: Record<Quality, number> = { low: 0, high: 600 };
 const SPRAY_LIFE = 1.3; // s
+/** Water rising at the bow faster than this (m/s) meets it as a steep face (GUESS, by eye). */
+const CREST_RISE = 0.8;
 
 /** What the boat is doing this frame. */
 export interface ContactState {
@@ -106,6 +108,12 @@ export class Contact {
   private flow = 0;
   private lastT = -1;
   private lastClear = 0;
+  private lastBowSea = 0;
+  /** Per drop: 1 for a soft puff of mist, 0 for a drop. */
+  private readonly mist: Uint8Array;
+  private risePeak = 0;
+  /** Bigger boats throw bigger sheets of spray (GUESS: by length^0.7 against the kayak's 3.05 m). */
+  private readonly sprayScale: number;
   // spray pool, boat frame x/z with world y
   private readonly n: number;
   private readonly sp: Float32Array; // x, y, z
@@ -113,7 +121,7 @@ export class Contact {
   private readonly born: Float32Array;
   private next = 0;
   /** For the test hook: how much is showing. */
-  readonly shown = { collar: 0, spray: 0 };
+  readonly shown = { collar: 0, spray: 0, bursts: 0, lastBurst: 0 };
 
   /** This hull's bow wave and wash in the sea (boatWash.ts), and its wet line (boats/inWater.ts). */
   private readonly wash: WashSlot | null;
@@ -203,6 +211,7 @@ export class Contact {
     this.sp = new Float32Array(this.n * 3);
     this.sv = new Float32Array(this.n * 3);
     this.born = new Float32Array(this.n).fill(-99);
+    this.mist = new Uint8Array(this.n);
     const sg = new THREE.BufferGeometry();
     sg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.n * 3), 3));
     sg.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(this.n), 1));
@@ -216,6 +225,7 @@ export class Contact {
     this.spray.name = "bow_spray";
     this.bowX = this.ring[0][0];
     this.beam = Math.max(...this.ring.map((p) => Math.abs(p[1]))) * 2;
+    this.sprayScale = Math.min(2.5, Math.max(1, spec.length / 3.05)) ** 0.7;
     this.spec = spec;
   }
 
@@ -274,8 +284,26 @@ export class Contact {
       const sink = dt > 0 ? (this.lastClear - s.bowClearance) / dt : 0; // m/s the bow is going down into the water
       this.lastClear = s.bowClearance;
       let burst = 0;
-      if (s.bowClearance < 0.04 && sink > 0.35) burst = Math.min(40, Math.round((sink - 0.35) * 45 * (0.5 + speedK)));
-      this.splash = burst / 40; // for the sound of the slap (sound.ts), in step with the spray
+      // A slam throws a sheet of spray, big from force 6 (Hs ~3 m) up, a few drops below that.
+      const slamK = 0.25 + 0.75 * THREE.MathUtils.smoothstep(hs, 1.5, 3.5);
+      if (s.bowClearance < 0.04 && sink > 0.35) burst = Math.min(90, Math.round((sink - 0.35) * 45 * (0.5 + speedK) * slamK));
+      // The bow driving into a steep face: the motion rides the long waves too smoothly to
+      // slam on its own, so meet each fast-rising face with a sheet (GUESS, display only):
+      // when the water at the bow is rising faster than CREST_RISE m/s, throw it at the peak.
+      const [bwx, bwz] = toWorld(this.bow[0], this.bow[1], place);
+      const bowSea = heightAt(comps, bwx, bwz, t);
+      const rise = dt > 0 && dt < 0.2 ? (bowSea - this.lastBowSea) / dt : 0;
+      this.lastBowSea = bowSea;
+      if (rise < CREST_RISE) this.risePeak = 0;
+      else if (this.risePeak >= 0) {
+        if (rise >= this.risePeak) this.risePeak = rise;
+        else {
+          // just past the steepest part of the face: throw the sheet once for this face
+          burst += Math.min(220, Math.round((this.risePeak - CREST_RISE) * 150 * (0.4 + speedK) * slamK * slamK));
+          this.risePeak = -1;
+        }
+      }
+      if (burst >= 10) { this.shown.bursts++; this.shown.lastBurst = burst; }
       const steady = speedK * seaK * 25 * dt; // drops per frame
       const emit = burst + (Math.random() < steady % 1 ? Math.ceil(steady) : Math.floor(steady));
       const [bx, bz] = this.bow;
@@ -287,12 +315,13 @@ export class Contact {
         this.sp[i * 3] = bx - back;
         this.sp[i * 3 + 2] = bz + sideSign * (this.beam * 0.3 * Math.min(1, back * 4 + 0.2));
         const [wx, wz] = toWorld(this.sp[i * 3], this.sp[i * 3 + 2], place);
-        this.sp[i * 3 + 1] = heightAt(comps, wx, wz, t) + 0.02;
-        const power = 0.6 + Math.min(sink, 2.5) * 0.8 + 0.6 * speedK;
+        this.sp[i * 3 + 1] = heightAt(comps, wx, wz, t) + 0.02 + bowWaveHeight(s.speed); // on the bow wave
+        const power = (0.6 + Math.min(sink, 2.5) * 0.8 + 0.6 * speedK) * (0.8 + 0.4 * slamK);
         this.sv[i * 3] = -s.speed * 0.4 + (Math.random() - 0.5) * 0.4; // drops fall behind as the boat moves on
-        this.sv[i * 3 + 1] = power * (0.8 + 0.6 * Math.random());
+        this.sv[i * 3 + 1] = power * (0.8 + 0.6 * Math.random()) + Math.max(rise, 0); // thrown off water that is itself rising
         this.sv[i * 3 + 2] = sideSign * power * (0.6 + 0.8 * Math.random());
         this.born[i] = t;
+        this.mist[i] = Math.random() < 0.35 ? 1 : 0;
       }
       const ppos = this.spray.geometry.attributes.position.array as Float32Array;
       const alpha = this.spray.geometry.attributes.aAlpha.array as Float32Array;
@@ -313,8 +342,11 @@ export class Contact {
         ppos[i * 3 + 1] = this.sp[i * 3 + 1];
         ppos[i * 3 + 2] = wz;
         const k = age / SPRAY_LIFE;
-        alpha[i] = 0.8 * (1 - k) * Math.min(1, age * 10);
-        size[i] = 0.035 + 0.09 * k;
+        // Drops spread into a mist as they fly: bigger, softer and fainter with age.
+        // A sheet is many small drops and a few soft puffs of mist that hang a little longer.
+        const m = this.mist[i];
+        alpha[i] = (m ? 0.3 * (1 - k) : 0.85 * (1 - k) ** 1.5) * Math.min(1, age * 10);
+        size[i] = (m ? 0.25 + 0.9 * k : 0.04 + 0.08 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
         live++;
       }
       this.spray.geometry.attributes.position.needsUpdate = true;

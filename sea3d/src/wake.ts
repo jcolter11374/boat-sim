@@ -54,43 +54,45 @@ const frag = /* glsl */ `
       }
     return vec2(d1, d2);
   }
-  // Sea foam is a lace: thin white walls between bubbles, with dark holes
-  // that open up as it ages. Two scales of cells, the walls where the nearest
-  // two points are almost the same distance away.
-  float lace(vec2 q, float age) {
-    // Warped, so the bubbles are irregular, not a honeycomb.
-    // Two octaves: a broad swirl, then a finer wobble that bends each bubble wall.
-    q += (vec2(vnoise(q * 0.9), vnoise(q * 0.9 + 9.2)) - 0.5) * 1.6;
-    q += (vec2(vnoise(q * 3.1 + 4.4), vnoise(q * 3.1 + 1.7)) - 0.5) * 0.55;
-    vec2 c1 = cells(q * 3.6);
-    vec2 c2 = cells(q * 8.5 + 3.1 + (vec2(vnoise(q * 6.0), vnoise(q * 6.0 + 2.3)) - 0.5) * 0.8);
-    float w = mix(0.35, 0.07, age); // fresh foam is nearly solid; old foam is thin threads
-    float l1 = 1.0 - smoothstep(0.0, w, c1.y - c1.x);
-    float l2 = 1.0 - smoothstep(0.0, w * 0.8, c2.y - c2.x);
-    float speck = 0.55 + 0.45 * vnoise(q * 14.0); // threads break and thin out
-    return max(l1, 0.6 * l2) * speck;
+  // Churned foam: soft white blobs with ragged dark holes that open up as it ages (Elena:
+  // a broad pale band that breaks up, not fine white hairs). Warped fractal noise, cut at a
+  // level that rises with age.
+  float fbm(vec2 q) {
+    float f = 0.0, amp = 0.5;
+    for (int i = 0; i < 4; i++) { f += amp * vnoise(q); q = q * 2.03 + 1.7; amp *= 0.5; }
+    return f / 0.9375;
+  }
+  float lumps(vec2 q, float age) {
+    q += (vec2(vnoise(q * 0.8), vnoise(q * 0.8 + 9.2)) - 0.5) * 1.4;
+    float f = fbm(q * 2.2);
+    float cut = mix(0.38, 0.62, age);
+    return smoothstep(cut, cut + mix(0.2, 0.1, age), f);
   }
   void main() {
     // Pattern fixed to the water: a parcel d metres aft left the stern (odo - d) metres ago.
     float d = vUV.x * uLen;
     vec2 q = vec2(uOdo - d, vUV.y * (0.6 + d * ${SPREAD.toFixed(2)}));
     float age = vUV.x;                                   // 0 fresh .. 1 old
-    // Big patches, so the foam breaks up into islands as it spreads.
-    float n = vnoise(q * vec2(1.6, 3.0)) * 0.6 + vnoise(q * vec2(4.5, 7.0) + uTime * 0.1) * 0.4;
-    float centre = (1.0 - smoothstep(0.1, 0.8, abs(vUV.y))) * (1.0 - smoothstep(0.0, 0.6, age));
-    float edges = smoothstep(0.55, 0.85, abs(vUV.y)) * (1.0 - smoothstep(0.92, 1.0, abs(vUV.y))) * (1.0 - smoothstep(0.1, 1.0, age));
-    float body = max(centre, 0.75 * edges);
-    float patches = smoothstep(0.75 - 0.55 * body, 0.95 - 0.3 * body, n + 0.25 * body);
-    float foam = lace(q + vec2(0.0, uTime * 0.02), age) * patches * body;
+    // Ragged edges: the band's width wanders with the water, so it has no straight sides.
+    float across = abs(vUV.y) + (vnoise(q * vec2(0.45, 0.9) + 11.0) * 0.7 + vnoise(q * vec2(1.4, 2.6) + 4.0) * 0.3 - 0.5) * 0.75;
+    // A broad band of churned water, and the two fainter arms of the waves the hull pushes out.
+    float band = (1.0 - smoothstep(0.2, 0.62, across)) * (1.0 - smoothstep(0.1, 1.0, age));
+    float arms = smoothstep(0.55, 0.75, across) * (1.0 - smoothstep(0.8, 0.95, across)) * (1.0 - smoothstep(0.05, 0.7, age)) * 0.55;
+    float body = max(band, arms) * (1.0 - smoothstep(0.75, 1.0, abs(vUV.y))); // never up to the strip's own edge
+    // It breaks into islands as it spreads: big soft blobs, the gaps between them widening with age.
+    float isl = vnoise(q * vec2(0.6, 1.3) + 2.0) * 0.65 + vnoise(q * vec2(2.0, 3.2) + uTime * 0.05) * 0.35;
+    float keep = smoothstep(0.22 + 0.4 * age, 0.42 + 0.4 * age, isl + 0.18 * (1.0 - age));
+    float churn = body * keep;
+    float foam = churn * lumps(q + vec2(0.0, uTime * 0.02), age) * (1.0 - 0.5 * age);
     // Fresh foam under the stern is a churned white mass.
-    float fresh = (1.0 - smoothstep(0.0, 0.22, age)) * (1.0 - smoothstep(0.25, 0.75, abs(vUV.y)));
-    foam = max(foam, fresh * smoothstep(0.25, 0.6, lace(q * 1.3 + 5.7, 0.0) + 0.3 * n));
-    float a = foam * uI;
-    a *= smoothstep(0.0, 0.04, age);                     // soft start under the stern
-    // Bubbles just under the surface turn the water a pale turquoise around the foam.
-    float bub = centre * (0.4 + 0.6 * patches) * uI * 0.22;
-    vec3 col = mix(vec3(0.35, 0.75, 0.78), vec3(0.95, 0.97, 1.0), clamp(a / max(a + bub, 1e-3), 0.0, 1.0));
-    gl_FragColor = vec4(col * (uLight + foamLamp(vW)), clamp(max(a, bub), 0.0, 0.9));
+    float fresh = (1.0 - smoothstep(0.0, 0.2, age)) * (1.0 - smoothstep(0.3, 0.8, across));
+    foam = max(foam, fresh * lumps(q * 1.3 + 5.7, 0.0));
+    float a = foam * uI * smoothstep(0.0, 0.04, age);   // soft start under the stern
+    // Bubbles just under the surface make the whole band a pale, milky turquoise.
+    float milk = churn * uI * 0.22 * (1.0 - 0.6 * age) * (0.6 + 0.4 * isl);
+    vec3 col = mix(vec3(0.55, 0.78, 0.8), vec3(0.86, 0.9, 0.91), clamp(a / max(a + milk, 1e-3), 0.0, 1.0));
+    float alpha = clamp(max(0.85 * a, milk), 0.0, 0.85);
+    gl_FragColor = vec4(col * (uLight + foamLamp(vW)), alpha);
   }
 `;
 
@@ -165,7 +167,7 @@ export class Wake {
     for (let i = 0; i <= this.nAlong; i++) {
       const u = uv[i * ACROSS * 2];
       const d = u * len;
-      const hw = this.beam * 0.42 + d * SPREAD;
+      const hw = 1.25 * (this.beam * 0.42 + d * SPREAD); // a margin past the band, so its ragged edge never meets the strip's
       for (let j = 0; j < ACROSS; j++) {
         const k = i * ACROSS + j;
         const [x, z] = toWorld(this.sternX - d, uv[k * 2 + 1] * hw, place);
