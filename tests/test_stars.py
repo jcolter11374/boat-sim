@@ -6,7 +6,7 @@ import pytest
 
 from boatsim.sandbox.stars import SANDY, centre_at, closest_km, judge, storm_track
 
-T0 = datetime(2012, 10, 22, 12)  # noqa: DTZ001 (the simulator runs on naive UTC)
+T0 = datetime(2012, 10, 22, 12)  # naive UTC, like the simulator
 # A storm heading due north along 74W, 1 degree of latitude every 6 hours.
 STORM = [(T0 + timedelta(hours=6 * i), 30.0 + i, -74.0) for i in range(12)]
 
