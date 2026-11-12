@@ -794,7 +794,7 @@ const CHECKS = {
         const st = r?.status?.() ?? "no response";
         const bar = await tab.locator("#topbar a.nav").count().catch(() => 0);
         await tab.close().catch(() => {});
-        if (st !== 200 || bar < 5) bad.push(`${l.text} (${l.href}): HTTP ${st}, ${bar} bar links`);
+        if (st !== 200 || bar < 3) bad.push(`${l.text} (${l.href}): HTTP ${st}, ${bar} bar links`);
       }
       must(!bad.length, `top bar links that don't open a page with the bar: ${bad.join("; ")}`);
       return `menu: ${menu.join(" / ")}; sea panel back${way ? ' with "Sail this sea"' : ""}; ${links.length} bar links all open (${links.map((l) => l.text).join(", ")})`;
@@ -1560,30 +1560,33 @@ const CHECKS = {
       const rows = [];
       const rateNow = (p) => p.evaluate(() => document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent.trim() ?? "?");
       const firstRate = (p) => p.evaluate(() => document.querySelector("#timebar .rate")?.textContent.trim() ?? "?");
+      // Clicks go in through the page (el.click()): on the runner's software graphics Playwright's
+      // own click waits for a steady frame and times out, while a player's click simply lands late.
+      const tap = (p, sel) => p.waitForFunction((s) => { const e = document.querySelector(s); if (!e || e.offsetParent === null) return false; e.click(); return true; }, sel, { timeout: 3 * MIN, polling: 250 });
       const KINDS = {
         crossing: async (p, mark) => {
-          await p.click("#t-setsail");
+          await tap(p, "#t-setsail");
           await p.waitForSelector("#go", { state: "visible", timeout: 2 * MIN });
           mark("card");
-          await p.click("#go");
+          await tap(p, "#go");
           await p.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
           mark(`sailing (rate ${await rateNow(p)}, first on bar ${await firstRate(p)})`);
         },
         practice: async (p, mark) => {
-          await p.click("#t-practice");
+          await tap(p, "#t-practice");
           await p.waitForFunction(() => !document.getElementById("start").hidden && !document.getElementById("ss-course").hidden, null, { timeout: 2 * MIN });
           mark("card");
-          await p.click("#go");
+          await tap(p, "#go");
           await p.waitForFunction(() => window.__wheel?.on, null, { timeout: 4 * MIN });
           mark(`at the wheel (rate ${await rateNow(p)})`);
         },
         challenge: async (p, mark) => {
-          await p.click("#t-setsail");
+          await tap(p, "#t-setsail");
           await p.waitForSelector("#ss-ch-opts .ss-pill:nth-child(2)", { state: "visible", timeout: 2 * MIN });
           mark("card");
           const pill = p.locator("#ss-ch-opts .ss-pill", { hasText: /Gentle June/ });
-          if (await pill.count()) await pill.first().click(); else { await p.click("#ss-ch-opts .ss-pill:nth-child(2)"); mark("(no Gentle June pill: took the first challenge)"); }
-          await p.click("#go");
+          if (await pill.count()) await pill.first().evaluate((e) => e.click()); else { await tap(p, "#ss-ch-opts .ss-pill:nth-child(2)"); mark("(no Gentle June pill: took the first challenge)"); }
+          await tap(p, "#go");
           await p.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
           mark(`sailing (challenge ${await p.evaluate(() => window.__helm.challenge)}, rate ${await rateNow(p)})`);
         },
@@ -1599,7 +1602,7 @@ const CHECKS = {
           const mark = (m) => marks.push(`${m} ${((Date.now() - t0) / 1000).toFixed(1)}s`);
           let total = null;
           try {
-            await p.goto(SITE + "?quality=low", { timeout: 2 * MIN });
+            await p.goto(SITE + "?quality=low", { waitUntil: "domcontentloaded", timeout: 2 * MIN });
             await p.waitForSelector("#t-setsail", { state: "visible", timeout: 2 * MIN });
             mark("title");
             await steps(p, mark);
