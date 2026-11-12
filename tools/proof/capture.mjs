@@ -264,6 +264,15 @@ async function renderUnit(browser, u) {
 
 mkdirSync(OUT, { recursive: true });
 console.log(`set ${SET_NAME}, shard ${SHARD}/${SHARDS}: ${mine.length} units, ${W}x${H} ${QUALITY}, site ${SITE}`);
+// Which boat models the site has (written by the workflow's build; Elena: stale models must show).
+let MODELS = { commit: "", from: "unknown: no models/stamp.json on this site" };
+try {
+  const r = await fetch(`${SITE}models/stamp.json`);
+  if (r.ok) MODELS = await r.json();
+} catch {
+  /* keep unknown */
+}
+console.log(`boat models: ${MODELS.commit || "?"} ${MODELS.date ?? ""} (${MODELS.from})`);
 const browser = await chromium.launch({ args: ARGS });
 const done = [];
 let failed = 0;
@@ -281,7 +290,7 @@ for (const u of mine) {
 await browser.close();
 writeFileSync(
   join(OUT, `manifest-${SHARD}-of-${SHARDS}.json`),
-  JSON.stringify({ set: SET_NAME, size: `${W}x${H}`, quality: QUALITY, fps: FPS, shard: SHARD, shards: SHARDS, units: done }, null, 1),
+  JSON.stringify({ set: SET_NAME, models: MODELS, size: `${W}x${H}`, quality: QUALITY, fps: FPS, shard: SHARD, shards: SHARDS, units: done }, null, 1),
 );
 if (failed) {
   console.log(`${failed} unit(s) failed`);

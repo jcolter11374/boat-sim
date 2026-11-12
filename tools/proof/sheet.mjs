@@ -20,6 +20,7 @@ const manifests = readdirSync(DIR).filter((f) => /^manifest-.*\.json$/.test(f)).
 if (!manifests.length) throw new Error(`no manifest-*.json in ${DIR}`);
 const units = manifests.flatMap((m) => m.units).sort((a, b) => a.id.localeCompare(b.id));
 const m0 = manifests[0];
+const MODELS = m0.models ?? { commit: "", from: "unknown (made before model stamps)" };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const label = (u) => `${SHOTS.boats[u.boat]?.label ?? u.boat} · ${SHOTS.seas[u.sea]?.label ?? u.sea} · ${SHOTS.times[u.time]?.label ?? u.time}`;
 const failed = units.filter((u) => !u.files.length);
@@ -42,8 +43,11 @@ h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 22px 0 8p
 .meta { color: #8b949e; margin-bottom: 12px; } .warn { color: #f0b429; }
 .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(${thumbs ? 290 : 420}px, 1fr)); gap: 10px; }
 figure { margin: 0; } img, video { width: 100%; display: block; border-radius: 4px; background: #000; aspect-ratio: 16 / 9; object-fit: cover; }
+.stamp { position: absolute; top: 18px; right: 24px; text-align: right; font: 600 13px ui-monospace, monospace; color: #ffd166; background: #1c2128; border: 1px solid #ffd16655; border-radius: 6px; padding: 6px 10px; }
+body { position: relative; }
 figcaption { color: #9fb3c8; font-size: 12px; padding: 3px 0; } a { color: #79c0ff; }
 </style>
+<div class="stamp">boat models: ${esc(MODELS.commit || "?")} ${esc(MODELS.date ?? "")}<br><span style="font-weight:400">${esc(MODELS.from)}${MODELS.branch ? " · " + esc(MODELS.branch) : ""}</span>${COMMIT ? `<br><span style="font-weight:400">site: ${esc(COMMIT.slice(0, 7))}</span>` : ""}</div>
 <h1>Proofs: ${esc(TITLE)}</h1>
 <div class="meta">Set <b>${esc(m0.set)}</b> · ${esc(m0.size)} · ${esc(m0.quality)} quality on software graphics (SwiftShader) · ${units.reduce((n, u) => n + u.files.length, 0)} files${COMMIT ? ` · commit ${esc(COMMIT.slice(0, 7))}` : ""} · made by tools/proof</div>
 ${failed.length ? `<div class="warn">Failed: ${failed.map((u) => esc(u.id) + " (" + esc(u.errors[0] ?? "") + ")").join("; ")}</div>` : ""}

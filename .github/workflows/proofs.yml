@@ -134,6 +134,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Build the boats with Blender
+        id: blender
         if: steps.boats.outputs.cache-hit != 'true'
         continue-on-error: true
         run: tools/build_boats.sh
@@ -146,6 +147,22 @@ jobs:
         run: |
           pip install -q numpy pyyaml
           tools/build_site.sh
+      # Which boat models this site has, for the contact sheet's corner (Elena: a stale
+      # kayak must be obvious). The models are rebuilt whenever sea3d/blender changes
+      # (the cache key is those scripts' hash), so they match this branch's scripts.
+      - name: Stamp the boat models
+        env:
+          FROM: ${{ steps.boats.outputs.cache-hit == 'true' && 'cache' || 'built now' }}
+          BLENDER_OK: ${{ steps.blender.outcome }}
+        run: |
+          mkdir -p sea3d/dist/models
+          n=$(ls sea3d/dist/models/*.glb 2>/dev/null | wc -l)
+          [ "$n" -gt 0 ] || FROM="none: drawn-in-code boats"
+          [ "$BLENDER_OK" = "failure" ] && FROM="Blender build failed: drawn-in-code boats"
+          python3 -c "import json,sys; print(json.dumps({'commit': sys.argv[1], 'date': sys.argv[2], 'branch': sys.argv[3], 'from': sys.argv[4], 'files': int(sys.argv[5])}))" \
+            "$(git log -1 --format=%h -- sea3d/blender)" "$(git log -1 --format=%cs -- sea3d/blender)" "${{ needs.plan.outputs.branch }}" "$FROM" "$n" \
+            > sea3d/dist/models/stamp.json
+          cat sea3d/dist/models/stamp.json
       - uses: actions/upload-artifact@v4
         with:
           name: proof-site
