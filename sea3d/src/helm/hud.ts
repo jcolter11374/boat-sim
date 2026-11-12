@@ -81,7 +81,9 @@ export class Hud {
 
   /** Once you set sail: the bar slides away and the drawer shows itself with the coach line. */
   sailing(coach: string | null): void {
-    document.body.classList.add("immersive");
+    // The bar goes at once, so the drawer and the map never start under it (Leo).
+    document.body.classList.add("no-bar-anim", "immersive");
+    requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove("no-bar-anim")));
     if (coach) {
       $("coach").textContent = coach;
       $("coach").hidden = false;

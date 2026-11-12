@@ -731,7 +731,14 @@ function showStatus(): void {
   showStrip(
     est
       ? { lead, guess: true, heading: last?.hdg ?? null, speedKn: null, ...(s.sailing ? { heel: null } : { battery: socNow == null ? null : soc }) }
-      : { lead, guess: false },
+      : {
+          lead,
+          guess: false,
+          heading: Number.isFinite(b.heading) ? b.heading : null,
+          speedKn: b.stw * KN,
+          ...(s.sailing ? { heel: s.sailing.heel_deg ?? null } : { battery: socNow == null ? null : soc }),
+          ...(w ? { windKn: kn, windTo, waves: w.hs } : {}),
+        },
   );
   $("m-togo").textContent = `${est ? "about " : ""}${Math.round(toGo).toLocaleString()} km to go`;
   $("c-wind").title = `${$("weather").textContent}. Click for the 5-day forecast (F)`;
@@ -2613,7 +2620,13 @@ renderer.setAnimationLoop(() => {
   // The strip's instruments read the picture too, a few times a second (not in base mode: base only knows its reports).
   if (r && page.ready && t - stripAt > 0.25) {
     stripAt = t;
-    const live: Parameters<typeof showStrip>[0] = { windKn: Math.hypot(wu, wv) * KN, windTo: (Math.atan2(wu, wv) * 180) / Math.PI, waves: hs };
+    // Only what the track has logged: before its first hour the first status's numbers stay (Leo).
+    const live: Parameters<typeof showStrip>[0] = {};
+    if (valueAt(r, r.wind_u, h) != null && valueAt(r, r.wind_v, h) != null) {
+      live.windKn = Math.hypot(wu, wv) * KN;
+      live.windTo = (Math.atan2(wu, wv) * 180) / Math.PI;
+    }
+    if (valueAt(r, r.hs, h) != null) live.waves = hs;
     if (!hidden()) {
       live.heading = wheelNow ? wheelNow.heading : hdg;
       live.speedKn = stw * KN;

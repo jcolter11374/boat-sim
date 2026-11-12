@@ -223,13 +223,13 @@ export class Chart {
     // the chart's edge is left out rather than cut.
     g.font = "10px system-ui, sans-serif";
     g.fillStyle = "rgba(160,190,230,0.55)";
-    for (let lon = -70; lon <= 0; lon += 10) {
+    for (let lon = -70; !this.small && lon <= 0; lon += 10) {
       const [x1, y1] = this.xy(VIEW.latMax, lon);
       const label = `${-lon}°W`;
       const lx = x1 + 3;
       if (lx >= 2 && lx + g.measureText(label).width <= this.w - 2) g.fillText(label, lx, Math.max(y1, 0) + 11);
     }
-    for (let lat = 30; lat <= 50; lat += 10) {
+    for (let lat = 30; !this.small && lat <= 50; lat += 10) {
       const [x0, y0] = this.xy(lat, VIEW.lonMin);
       if (y0 - 3 >= 10 && y0 - 3 <= this.h - 2) g.fillText(`${lat}°N`, Math.max(x0, 0) + 3, y0 - 3);
     }

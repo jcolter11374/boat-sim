@@ -205,6 +205,7 @@
   body.sailing.immersive #topbar { height: 40px; transform: translateY(-100%); transition: transform .35s ease; }
   body.sailing.immersive.peek #topbar { transform: none; }
   body.sailing #topbar { transition: transform .35s ease; }
+  body.no-bar-anim #topbar { transition: none !important; }
 
   /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
