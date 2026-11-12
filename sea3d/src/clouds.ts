@@ -92,7 +92,7 @@ export function skyColours(haze: THREE.Color, sunEl: number, storm: number, cove
   const deck = Math.max(SM(storm, 0.15, 0.7), SM(cover, 0.55, 0.95));
   const brk_amount = deck * SM(sunEl, -6, -0.5) * (1 - 0.6 * SM(sunEl, 14, 35));
   const brk = GOLD.clone().lerp(COPPER, 1 - SM(sunEl, 2, 16)).lerp(EMBER, 1 - SM(sunEl, -4, 0.5));
-  brk.multiplyScalar(lum * 2.8 * (0.3 + 0.7 * SM(sunEl, -5, 1.5)));
+  brk.multiplyScalar(lum * 4.6 * (0.3 + 0.7 * SM(sunEl, -5, 1.5)));
   return { steel, belly, brk, brk_amount };
 }
 
@@ -368,12 +368,12 @@ void main() {
     float on = smoothstep(mix(0.82, 0.35, uWall), 1.0, dot(normalize(dir.xz + 1e-5), uWallDir));
     // A lumpy top: towering heaps along the wall, slowly changing.
     // Rounded towers along its top (big heaps with smaller knobs), lower at its ends.
-    float towers = 0.45 + 0.6 * cells(vec2(az * 7.0 + uTime * 0.001, 0.3) + uSeed) + 0.25 * fbmL(vec2(az * 26.0, 2.3) + uSeed, 0.0, 3);
+    float towers = 0.45 + 0.6 * cells(vec2(az * 7.0 + uTime * 0.001, 0.3) + uSeed) + 0.12 * fbmL(vec2(az * 12.0, 2.3) + uSeed, 0.0, 3);
     float top = mix(0.012, 0.14, uWall * uWall) * towers * (0.35 + 0.65 * on);
     float h01 = clamp(el / max(top, 1e-4), 0.0, 1.0);
     float wall = on * (1.0 - smoothstep(0.6, 1.0, h01)) * smoothstep(-0.01, 0.004, el);
     // Dark and rain-grey at its foot, hazier far off, its towering tops paler where the sun catches them.
-    vec3 wc = mix(uHaze * 0.85, uBelly * 0.95, smoothstep(0.1, 0.9, uWall) * (1.0 - 0.5 * h01));
+    vec3 wc = mix(uHaze * 0.7, uBelly * 0.7, smoothstep(0.05, 0.7, uWall) * (1.0 - 0.4 * h01));
     wc = mix(wc, uLit * 0.8, smoothstep(0.45, 1.0, h01) * 0.45 * sunUp);
     float wa = wall * mix(0.5, 0.92, uWall);
     col += (1.0 - alpha) * wa * wc; alpha += (1.0 - alpha) * wa;
@@ -576,7 +576,8 @@ export class Clouds {
     if (Math.hypot(windX, windZ) > 0.1) u.uWind.value.set(windX, windZ);
     u.uCam.value.copy(cam);
     u.uSunDir.value.copy(sunDir);
-    const lit = 0.25 + 0.75 * light;
+    // Sunlit white by day, near black by night (the moon's glow is added in the shader).
+    const lit = 0.03 + 0.97 * light * light;
     u.uLit.value.setRGB(lit, lit, lit * 1.02);
     u.uShade.value.copy(haze).multiplyScalar(0.42 + 0.2 * light);
     u.uHaze.value.copy(haze);
