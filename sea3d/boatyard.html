@@ -15,7 +15,7 @@
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
   a { color: #8ab4ff; }
   .muted { color: var(--dim); font-size: 12px; }
-  #parts { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; bottom: 12px; width: 390px; display: flex; flex-direction: column; }
+  #parts { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; max-height: calc(100vh - var(--bar, 0px) - 24px); width: 390px; /* as tall as its sections, so the folded panel leaves the sea clear */ display: flex; flex-direction: column; }
   #parts header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
   #parts h1 { margin: 0 0 2px; font-size: 18px; }
   #parts header p { margin: 0; color: var(--dim); font-size: 12.5px; }
