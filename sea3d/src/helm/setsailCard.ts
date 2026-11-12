@@ -83,6 +83,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
   let course: string = at.course || SET_SAIL.course[0].key;
   let breeze: string = at.breeze;
   let allChallenges = false;
+  let allDays = false;
   const launch = $<HTMLSelectElement>("launch");
   const challenge = $<HTMLSelectElement>("challenge");
   const more = $<HTMLDetailsElement>("more");
@@ -119,23 +120,28 @@ export function mountSetSailCard(hooks: CardHooks): void {
     // Launch day: Calm, Rough, or another day from the full list.
     $("ss-when").hidden = !show.whenShown;
     const lv = launch.value;
-    const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : "other";
-    const otherLabel = named === "other" ? (launch.selectedOptions[0]?.textContent ?? "Another day").replace(/:.*$/, "") : "Pick a day…";
+    const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : lv;
+    // "Pick a day…" opens the other launch days as pills of their own, like the challenges' "More…"
+    // (M1 piece 5: the card is the one place to pick; the old list stays hidden as the card's source).
+    const others = Array.from(launch.options)
+      .filter((o) => o.value !== "2020-04-23" && o.value !== "0")
+      .map((o) => ({ key: o.value, label: (o.textContent ?? "").replace(/:.*$/, "").replace(/ 2020$/, "").replace(/(\d+) (\w{3})\w*/, "$1 $2") }));
+    const showDays = allDays || (named !== "calm" && named !== "rough");
     pills(
       $("ss-when-opts"),
       [
         { key: "calm", label: CARD_WORDS.when.calm[0], sub: CARD_WORDS.when.calm[1] },
         { key: "rough", label: CARD_WORDS.when.rough[0], sub: CARD_WORDS.when.rough[1] },
-        { key: "other", label: otherLabel },
+        ...(showDays ? others : [{ key: "\u2026", label: "Pick a day\u2026" }]),
       ],
       named,
       (k) => {
-        if (k === "other") {
-          more.open = true;
-          launch.focus();
+        if (k === "\u2026") {
+          allDays = true;
+          draw();
           return;
         }
-        launch.value = k === "calm" ? "2020-04-23" : "0";
+        launch.value = k === "calm" ? "2020-04-23" : k === "rough" ? "0" : k;
         launch.dispatchEvent(new Event("change", { bubbles: true }));
         draw();
       },

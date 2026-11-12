@@ -1486,9 +1486,8 @@ function practiceEnded(r: WheelResult): void {
   }
   $("practice-sum").textContent = text;
   if (c) practiceCard();
-  // The course and breeze are picked on the Set sail card now (M1 piece 3), so the end card only
-  // offers the same course again or the card ("Another course"); a drill offers "Another course" too.
-  $("practice-courses").hidden = true;
+  // The course and wind are picked on the Set sail card (M1 piece 3), so the end card only
+  // offers the same course again or the card ("Another course"), a drill included.
   const retry = !card.classList.contains("trial") && (c?.kind === "triangle" || c?.kind === "light");
   if (retry) {
     $("practice-ghost").textContent = "Try again";
@@ -1518,17 +1517,9 @@ function showResult(kind: "triangle" | "light", secs: number, before: number | n
   $("practice-end").classList.add("trial");
   $("practice-end").querySelector("h1")!.textContent = `${kind === "triangle" ? "The triangle" : "Thomas Point Light"} · ${BREEZES[practiceBreeze].kn} knots`;
 }
-/** The course card: pick a course and a breeze. */
+/** The end card's heading for a run that isn't a time trial (the course itself is picked on the Set sail card). */
 function practiceCard(): void {
   if (!$("practice-end").classList.contains("trial")) $("practice-end").querySelector("h1")!.textContent = "Practice sailing";
-  const annapolis = !!depths?.known;
-  $("practice-courses").hidden = !annapolis;
-  $("practice-again").hidden = annapolis;
-  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button"))) b.setAttribute("aria-pressed", String(b.dataset.b === practiceBreeze));
-  for (const b of Array.from(document.querySelectorAll<HTMLElement>("#practice-courses [data-best]"))) {
-    const t = readBest(bestKey(b.dataset.best as CourseKind, practiceBreeze));
-    b.textContent = t == null ? "" : `your best ${runTime(t)}`;
-  }
 }
 /** Back to the Set sail card, Annapolis still picked with the course and breeze you last sailed (M1 piece 3). */
 function practiceToCard(): void {
@@ -1547,12 +1538,6 @@ if (PRACTICE) {
   $("practice-again").addEventListener("click", practiceToCard);
   $("practice-ghost").addEventListener("click", () => void (lastTrial && practiceSpell(lastTrial)));
   $("practice-other").addEventListener("click", practiceToCard);
-  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-courses [data-course]"))) b.addEventListener("click", () => void practiceSpell(b.dataset.course as CourseKind | "drill"));
-  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#practice-breeze button")))
-    b.addEventListener("click", () => {
-      practiceBreeze = b.dataset.b as Breeze;
-      practiceCard();
-    });
   void depthsReady.then((d) => {
     page.practiceBay = d.known;
     if (d.known) {

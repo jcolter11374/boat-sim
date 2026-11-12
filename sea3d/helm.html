@@ -151,7 +151,7 @@
   #credtext a { color: inherit; }
   body.at-wheel #credits { bottom: auto; top: calc(var(--bar, 0px) + 8px); }
   #practice-what[hidden], #practice-end[hidden] { display: none; }
-  #practice-courses[hidden], #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
+  #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
   #prologuepick { display: block; margin: 6px 0; }
   #practice-courses .courses { display: flex; flex-direction: column; gap: 6px; }
   #practice-courses .courses button { width: 100%; margin: 0; text-align: left; padding: 7px 12px; }
@@ -634,13 +634,6 @@
     <p class="result-next"></p>
     <p class="result-go"><button id="practice-ghost" class="go">Race your best run</button> <button id="practice-other">Another course</button></p>
   </div>
-  <div id="practice-courses" hidden>
-    <p id="practice-breeze" role="group" aria-label="Breeze">Breeze: <button data-b="light">Light (8 kn)</button> <button data-b="good">Good (12 kn)</button> <button data-b="fresh">Fresh (18 kn)</button></p>
-    <p class="courses"><button class="go" data-course="triangle">The triangle<small>three marks 800 m apart: upwind, across, back (about 15 min; try 5&times;)</small><small data-best="triangle"></small></button>
-      <button data-course="light">Sail to Thomas Point Light<small>about 7 km down the Bay (about 40 min; try 10&times;)</small><small data-best="light"></small></button>
-      <button data-course="drill">Drills<small>short spells: a reach, a beat, a run</small></button></p>
-    <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. <button class="info" aria-expanded="false" title="About the depths">i</button><span class="info-more" hidden> The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</span></p>
-  </div>
   <p><button id="practice-again" class="go">Another course</button> <a class="crossing" href="helm.html">Sail across the Atlantic</a></p>
 </div></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
@@ -666,10 +659,9 @@
     <button id="go" class="go big">Set sail</button>
     <span id="startmsg" class="muted"></span>
     <p class="muted ss-after">You can change speed, pause, and take the wheel once you're at sea.</p>
-    <details id="more">
-      <summary>More options</summary>
-    <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
-    <span id="porthint" class="muted"></span>
+    <!-- The card's sources (M1 piece 5): the launch day and challenge pills write these, and begin() reads them.
+         Never shown: the card is the one place to pick (Elena, one-game plan). -->
+    <div id="ss-sources" hidden>
       <label>Launch day <select id="launch">
         <option value="2020-04-23" selected>23 April 2020: a good day, light seas</option>
         <option value="0">Rough start: 1 April 2020, the tail of a gale, about 4 m waves</option><option value="1">15 April 2020</option><option value="2">1 May 2020</option>
@@ -679,6 +671,11 @@
       <p id="chstory" hidden></p>
       <div id="chbrief" hidden><ul></ul><p class="honest muted"></p></div>
       <p id="chnote" class="muted" hidden></p>
+    </div>
+    <details id="more">
+      <summary>More options</summary>
+    <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
+    <span id="porthint" class="muted"></span>
       <fieldset id="modes"><legend>How you steer</legend>
         <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
         <label><input type="radio" name="mode" value="base"> <b>From home, by satellite</b>: what steering a real drone is like. You send one order a day; it reaches the boat at its next daily check-in, about a day later, and you only see where the boat was at its last report.</label>

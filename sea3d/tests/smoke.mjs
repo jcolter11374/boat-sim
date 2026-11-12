@@ -10,6 +10,15 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFixture, writeRaceFixture } from "./fixture-voyage.mjs";
 import { chromium } from "playwright";
 
+/** Set one of the Set sail card's hidden source selects (#launch, #challenge), as its pills do. */
+async function pickSource(page, id, value) {
+  await page.evaluate(([i, v]) => {
+    const s = document.getElementById(i);
+    s.value = v;
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [id, value]);
+}
+
 const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
@@ -638,8 +647,7 @@ try {
     log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);
     // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
     // so a whole game fits in the smoke test.
-    await page.evaluate(() => (document.getElementById("more").open = true)); // More options
-    await page.selectOption("#launch", "2");
+    await pickSource(page, "launch", "2"); // the card's own select (its pills write it; M1 piece 5)
     await page.click("#go");
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
@@ -773,8 +781,7 @@ try {
       log.push(`helm challenges: files there but no simulator (${hm.err})`);
     } else {
       if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
-      await page.evaluate(() => (document.getElementById("more").open = true));
-      await page.selectOption("#challenge", chFile.id);
+      await pickSource(page, "challenge", chFile.id);
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       let ch = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, msg: document.querySelector("#startmsg").textContent }));

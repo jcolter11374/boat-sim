@@ -156,7 +156,10 @@ async function jpeg(page, path) {
  * resolve before they take clicks (still loading or sliding in; look-heel 12 Nov), so wait for
  * the page to be idle and the button to be visible and enabled, retry, then click in-page. */
 async function practiceTriangle(page) {
-  const sel = '#practice-courses button[data-course="triangle"]';
+  // The Set sail card opens on Annapolis on a practice page (M1): pick the triangle, then Set sail.
+  const sel = "#go";
+  await page.waitForFunction(() => document.querySelector("#ss-course-opts .ss-pill"), null, { timeout: 3 * MIN }).catch(() => {});
+  await page.evaluate(() => document.querySelector("#ss-course-opts .ss-pill")?.click()); // the first course: the triangle
   await page.waitForFunction(() => !window.__helm?.busy, null, { timeout: 3 * MIN }).catch(() => {});
   for (let i = 0; i < 3 && !(await page.evaluate(() => !!window.__wheel?.on)); i++) {
     await page.waitForFunction((s) => { const b = document.querySelector(s); return b && !b.disabled && b.offsetParent !== null; }, sel, { timeout: MIN }).catch(() => {});
@@ -487,10 +490,10 @@ const CHECKS = {
     path: "helm.html?practice&quality=low",
     run: async (page) => {
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
-      if (!(await page.locator("#practice-courses").count())) throw new SkipCheck("this build has no practice courses (#376 not deployed)");
+      if (!(await page.locator("#ss-course-opts").count())) throw new SkipCheck("this build has no practice courses on the Set sail card (M1 piece 3 not deployed)");
       const out = [];
-      await page.waitForFunction(() => !document.getElementById("practice-courses").hidden, null, { timeout: MIN }).catch(() => {
-        throw new CheckFail("Practice didn't offer its courses");
+      await page.waitForFunction(() => !document.getElementById("start").hidden && !document.getElementById("ss-course").hidden, null, { timeout: MIN }).catch(() => {
+        throw new CheckFail("Practice didn't open the Set sail card on its courses");
       });
       // On software graphics Practice's first frames can hold the page for over 15 s, so a click
       // waits there (Owen, 12 Nov); the helper waits for it to be idle and retries.
@@ -914,7 +917,8 @@ const CHECKS = {
         await page.setViewportSize({ width: w, height: h });
         await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
         await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
-        await page.click('#practice-courses button[data-course="triangle"]', { timeout: 30_000 }).catch(() => {});
+        await page.evaluate(() => document.querySelector("#ss-course-opts .ss-pill")?.click()); // the triangle, on the Set sail card
+        await page.click("#go", { timeout: 30_000 }).catch(() => {});
         await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => {});
         await page.waitForTimeout(8000);
         await shot(`${w}-practice-day`);
