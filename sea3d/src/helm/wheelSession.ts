@@ -108,6 +108,10 @@ export class WheelSession {
   private speed = 1;
   private paused = false;
   private root: HTMLElement;
+  private top: HTMLElement;
+  private help = false;
+  /** H: the strip and banner hidden (the keys still work). */
+  private bare = false;
   private startedAt = 0;
   /** The guided first spell (Leo), until the player has done it or skipped it once. */
   guide: Guide | null = null;
@@ -132,21 +136,31 @@ export class WheelSession {
     this.root.setAttribute("aria-label", "At the wheel");
     // Constant markup only; every value below goes in by textContent.
     this.root.innerHTML = `
-      <div class="w-top"><b>At the wheel</b> <span class="w-goal"></span> <span class="w-depth" hidden></span>
-        <span class="w-speeds" role="group" aria-label="How fast time runs">
-          <button data-x="0" title="Pause (space bar)">❚❚</button><button data-x="1" title="Real time (key 1)">1×</button><button data-x="2" title="Twice as fast (key 2)">2×</button><button data-x="5" title="Five times (key 3)">5×</button><button data-x="10" title="Ten times (key 4)">10×</button>
-        </span>
-        <button class="w-back" title="Give the boat back to your orders (Esc)">Hand back</button></div>
       <div class="w-guide" hidden><span class="w-gtext"></span> <button class="w-gskip" title="Skip the guide">Skip</button></div>
-      <div class="w-grid">
-        <div><div class="w-lbl">Speed</div><div class="w-big w-speed"></div><div class="w-bar"><i class="w-best"></i><i class="w-now"></i></div><div class="w-sub w-bestt"></div></div>
-        <div><div class="w-lbl">Sail <span class="w-plan"></span></div><div class="w-tell"></div>
-          <div class="w-gauge" title="How far the sail is let out. Green: the sweet spot."><i class="w-band"></i><i class="w-needle"></i></div><div class="w-sub"><span>pulled in</span><span>let out</span></div></div>
-        <div><div class="w-lbl">Leaning</div><div class="w-big w-heel"></div><div class="w-bar w-heelbar"><i class="w-now"></i><i class="w-max"></i></div><div class="w-sub w-heelt"></div></div>
-        <div><div class="w-lbl">Wind</div><div class="w-big w-wind"></div><div class="w-sub w-twa"></div></div>
+      <div class="w-strip">
+        <div class="w-cell" title="Speed through the water; the tick is the best she can do on this heading"><span class="w-lbl">speed</span> <b class="w-speed"></b><div class="w-bar"><i class="w-best"></i><i class="w-now"></i></div><span class="w-sub w-bestt"></span></div>
+        <div class="w-cell" title="How far the sail is let out. Green: the sweet spot."><span class="w-lbl">sail</span> <span class="w-tell"></span> <span class="w-sub w-plan"></span><div class="w-gauge"><i class="w-band"></i><i class="w-needle"></i></div></div>
+        <div class="w-cell" title="How far she leans; the red tick is too far"><span class="w-lbl">heel</span> <b class="w-heel"></b> <span class="w-sub w-heelt"></span><div class="w-bar w-heelbar"><i class="w-now"></i><i class="w-max"></i></div></div>
+        <div class="w-cell" title="The true wind"><span class="w-lbl">wind</span> <b class="w-wind"></b> <span class="w-sub w-twa"></span></div>
+        <div class="w-cell w-ctl">
+          <span class="w-speeds" role="group" aria-label="How fast time runs">
+            <button data-x="0" title="Pause (space bar)">❚❚</button><button data-x="1" title="Real time (key 1)">1×</button><button data-x="2" title="Twice as fast (key 2)">2×</button><button data-x="5" title="Five times (key 3)">5×</button><button data-x="10" title="Ten times (key 4)">10×</button>
+          </span>
+          <button class="w-back" title="Give the boat back (Esc)">Hand back</button>
+          <button class="w-help" aria-expanded="false" title="Keys and buttons (?)">?</button>
+        </div>
       </div>
-      <div class="w-keys">←→ steer · ↑ pull the sail in · ↓ let it out · R reef · Shift+R shake out · T auto-trim (<span class="w-auto"></span>) · Esc hand back</div>
-      <div class="w-btns"><button class="w-reef">Reef</button><button class="w-shake">Shake out</button><button class="w-autob" aria-pressed="false">Auto-trim</button></div>`;
+      <div class="w-more" hidden>
+        <span class="w-keys" title="↑ pulls the sail in, ↓ lets it out · Shift+R shakes out a reef · V switches camera · H hides the panels · Space pauses · 1-4 time speed">←→ steer · ↑↓ sail · R reef · T auto-trim (<span class="w-auto"></span>) · Esc hand back</span>
+        <span class="w-btns"><button class="w-reef">Reef</button><button class="w-shake">Shake out</button><button class="w-autob" aria-pressed="false">Auto-trim</button></span>
+      </div>`;
+    // The goal (and the depth, off Annapolis) go in a slim banner at the top (Elena).
+    this.top = document.createElement("div");
+    this.top.id = "wheel-goal";
+    this.top.className = "glass";
+    this.top.hidden = true;
+    this.top.innerHTML = `<span class="w-goal"><span class="w-gname"></span><span class="w-num"></span><span class="w-gwhere"></span></span> <span class="w-depth" hidden></span>`;
+    document.body.append(this.top);
     document.body.append(this.root);
     for (const b of Array.from(this.root.querySelectorAll<HTMLButtonElement>(".w-speeds button"))) b.addEventListener("click", () => this.setSpeed(Number(b.dataset.x)));
     el(this.root, ".w-back").addEventListener("click", () => this.stop(false));
@@ -154,6 +168,7 @@ export class WheelSession {
     el(this.root, ".w-shake").addEventListener("click", () => this.reef(-1));
     el(this.root, ".w-autob").addEventListener("click", () => this.toggleAuto());
     el(this.root, ".w-gskip").addEventListener("click", () => this.endGuide());
+    el(this.root, ".w-help").addEventListener("click", () => this.toggleHelp());
   }
 
   /** Start a spell: about 800 m on the course the boat was already sailing. */
@@ -203,7 +218,8 @@ export class WheelSession {
       taught = false;
     }
     this.guide = taught ? null : new Guide();
-    this.root.hidden = false;
+    this.root.hidden = this.bare;
+    this.top.hidden = this.bare;
     document.body.classList.add("at-wheel");
     this.draw();
     return true;
@@ -223,6 +239,7 @@ export class WheelSession {
     }
     this.on = false;
     this.root.hidden = true;
+    this.top.hidden = true;
     document.body.classList.remove("at-wheel");
     this.host.ended({
       metres: Math.hypot(w.s.x, w.s.y),
@@ -267,6 +284,12 @@ export class WheelSession {
     this.draw();
   }
 
+  private toggleHelp(): void {
+    this.help = !this.help;
+    this.lastDraw = 0;
+    this.draw();
+  }
+
   private toggleAuto(): void {
     if (!this.wheel) return;
     this.wheel.s.autoTrim = !this.wheel.s.autoTrim;
@@ -286,11 +309,17 @@ export class WheelSession {
       this.keys[arrows[k]] = down;
       return true;
     }
-    if (!down) return k === "KeyR" || k === "KeyT" || k === "Escape" || k === "Space";
+    if (!down) return k === "KeyR" || k === "KeyT" || k === "Escape" || k === "Space" || k === "KeyH" || k === "Slash";
     if (e.repeat) return true;
     if (k === "Escape") this.stop(false);
     else if (k === "KeyR") this.reef(e.shiftKey ? -1 : 1);
     else if (k === "KeyT") this.toggleAuto();
+    else if (k === "Slash" || k === "KeyK") this.toggleHelp();
+    else if (k === "KeyH") {
+      this.bare = !this.bare;
+      this.root.hidden = this.bare;
+      this.top.hidden = this.bare;
+    }
     else if (k === "Space") this.setSpeed(0);
     else if (/^(Digit|Numpad)[1-4]$/.test(k)) this.setSpeed(SPEEDS[Number(k.slice(-1)) - 1]);
     else return false;
@@ -316,8 +345,7 @@ export class WheelSession {
       }
       if (this.guide?.done) this.endGuide();
       if (this.depthAt) {
-        const h = this.depthAt(w.s.x, w.s.y);
-        this.depth = { state: depthState(h, this.draftM), m: h == null ? null : -h };
+        this.sound(w);
         if (this.depth.state === "aground" && !w.s.done) w.ground();
       }
       if (w.s.done) {
@@ -326,8 +354,22 @@ export class WheelSession {
         return null;
       }
     }
+    if (this.depthAt && this.paused) this.sound(w); // the reading still catches up while paused
     this.draw();
     return { heading: w.s.heading, heelDeg: w.heelSigned(), speedMs: w.s.speedKn / KNOTS_PER_MS, plan: w.s.plan, sheet: w.s.sheet, x: w.s.x, y: w.s.y };
+  }
+
+  /** The goal banner: white words, the distance in green (Elena). */
+  private goal(name: string, num: string, where: string): void {
+    el(this.top, ".w-gname").textContent = name;
+    el(this.top, ".w-num").textContent = num;
+    el(this.top, ".w-gwhere").textContent = where;
+  }
+
+  /** Read the depth under her (a sounding). */
+  private sound(w: Wheel): void {
+    const h = this.depthAt!(w.s.x, w.s.y);
+    this.depth = { state: depthState(h, this.draftM), m: h == null ? null : -h };
   }
 
   private lastDraw = 0;
@@ -341,15 +383,18 @@ export class WheelSession {
     const b = w.best();
     const st = w.sailState();
     const toGo = w.distToMark();
+    const more = el(r, ".w-more");
+    more.hidden = !(this.help || this.guide);
+    el(r, ".w-help").setAttribute("aria-expanded", String(!more.hidden));
     const g = el(r, ".w-guide");
     g.hidden = !this.guide;
     if (this.guide) el(r, ".w-gtext").textContent = this.guide.text;
     const dist = toGo >= 1000 ? `${(toGo / 1000).toFixed(1)} km` : `${Math.round(toGo / 10) * 10} m`;
     if (this.course) {
       const k = this.course.marks[Math.min(w.s.mark, this.course.marks.length - 1)];
-      el(r, ".w-goal").textContent = `${k.name[0].toUpperCase()}${k.name.slice(1)}: ${dist}, ${aside(w.markBearing() - w.s.heading)}`;
-    } else el(r, ".w-goal").textContent = `${dist} to the mark`;
-    const dep = el(r, ".w-depth");
+      this.goal(`${k.name[0].toUpperCase()}${k.name.slice(1)}: `, dist, `, ${aside(w.markBearing() - w.s.heading)}`);
+    } else this.goal("", dist, " to the mark");
+    const dep = el(this.top, ".w-depth");
     dep.hidden = !this.depthAt;
     if (this.depthAt) {
       const d = this.depth;
@@ -362,11 +407,11 @@ export class WheelSession {
       btn.setAttribute("aria-pressed", String(x === 0 ? this.paused : !this.paused && x === this.speed));
     }
     el(r, ".w-speed").textContent = `${w.s.speedKn.toFixed(1)} kn`;
-    el(r, ".w-bestt").textContent = b.speedKn > 0.2 ? `best on this heading ${b.speedKn.toFixed(1)} kn` : "no sailing this close to the wind";
+    el(r, ".w-bestt").textContent = b.speedKn > 0.2 ? `best ${b.speedKn.toFixed(1)}` : "too close to the wind";
     const top = Math.max(b.speedKn, w.s.speedKn, 1) * 1.15;
     el(r, ".w-bar .w-now").style.width = `${(w.s.speedKn / top) * 100}%`;
     el(r, ".w-bar .w-best").style.left = `${(b.speedKn / top) * 100}%`;
-    el(r, ".w-plan").textContent = `(${PLAN_WORDS[w.s.plan] ?? w.s.plan}${w.s.reefing > 0 ? ", changing..." : ""})`;
+    el(r, ".w-plan").textContent = w.s.plan === w.plans[0] && !w.s.reefing ? "" : `${PLAN_WORDS[w.s.plan] ?? w.s.plan}${w.s.reefing > 0 ? ", changing..." : ""}`;
     const tell = el(r, ".w-tell");
     tell.textContent = w.s.autoTrim ? "Auto-trim is setting the sail" : SAIL_WORDS[st];
     tell.dataset.state = w.s.autoTrim ? "good" : st;
@@ -383,14 +428,15 @@ export class WheelSession {
     el(r, ".w-heel").textContent = `${Math.round(heel)}°`;
     el(r, ".w-heelbar .w-now").style.width = `${Math.min(heel / (hmax + 15), 1) * 100}%`;
     el(r, ".w-heelbar .w-max").style.left = `${(hmax / (hmax + 15)) * 100}%`;
-    el(r, ".w-heelt").textContent = w.s.overNow ? "Too much sail: she's rounding up. Ease out or reef (R)" : heel > hmax * 0.8 ? "Leaning hard: think about a reef" : "";
+    el(r, ".w-heelt").textContent = w.s.overNow ? "too much sail: ease out or reef (R)" : heel > hmax * 0.8 ? "leaning hard: reef?" : "";
     r.classList.toggle("over", w.s.overNow);
     el(r, ".w-wind").textContent = `${Math.round(w.wind.twsKn)} kn`;
     const twa = w.twa();
-    const side = twa >= 0 ? "starboard (right)" : "port (left)";
+    const side = twa >= 0 ? "right" : "left";
     const a = Math.abs(twa);
-    const sailing = a < 40 ? "too close to the wind: turn away" : a < 70 ? "close-hauled (sailing toward the wind)" : a < 120 ? "a reach (wind from the side)" : a < 160 ? "a broad reach (wind from behind)" : "running (wind dead behind)";
-    el(r, ".w-twa").textContent = `${Math.round(a)}° off the bow on the ${side}: ${sailing}`;
+    const sailing = a < 40 ? "too close: turn away" : a < 70 ? `upwind, ${side}` : a < 120 ? `reach, ${side}` : a < 160 ? `behind, ${side}` : "dead behind";
+    el(r, ".w-twa").textContent = sailing;
+    el(r, ".w-twa").title = `${Math.round(a)}° off the bow`;
     el(r, ".w-auto").textContent = w.s.autoTrim ? "on" : "off";
     el(r, ".w-autob").setAttribute("aria-pressed", String(w.s.autoTrim));
     el<HTMLButtonElement>(r, ".w-shake").disabled = w.plans.indexOf(w.s.plan) === 0 || w.s.reefing > 0;

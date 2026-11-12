@@ -34,8 +34,12 @@ export class Buoys {
   }
 
   /** Keep them in place as the boat (at the origin) sails: x east, z south. */
-  update(boat: { x: number; y: number }, t: number): void {
+  update(boat: { x: number; y: number }, t: number, next = 0): void {
     for (const [i, m] of this.marks.entries()) {
+      // Rounded marks go; the finish (where she starts) shows once the first mark is rounded,
+      // so it doesn't sit against her hull at the start.
+      const last = i === this.marks.length - 1 && this.marks.length > 1;
+      m.mesh.visible = i >= next && (!last || next >= 1);
       m.mesh.position.set(m.x - boat.x, Math.sin(t * 1.3 + i) * 0.15 - 0.3, -(m.y - boat.y));
       m.mesh.rotation.z = Math.sin(t * 0.9 + i * 2) * 0.06;
       // A real mark is a speck at 800 m; drawn bigger with distance so you can steer for it (game feel).

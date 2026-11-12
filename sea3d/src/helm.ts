@@ -14,6 +14,7 @@ import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
 import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon } from "./helm/course";
 import { Buoys } from "./helm/buoys";
+import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
@@ -1091,6 +1092,8 @@ async function wheelEnded(r: WheelResult): Promise<void> {
 // the old drills: a spell to a mark in a steady wind, a new one each time.
 // Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
 const PRACTICE = params.has("practice");
+/** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
+const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
 let practiceWind: { u: number; v: number } | null = null;
 let practiceN = 0;
 /** Where the practice spell began (the boat is there plus the wheel's x, y), or null. */
@@ -1133,8 +1136,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
     practiceAt = practiceHere = null;
     const ok = await wheel.start({ boatKey: "stock_cruiser31", heading, speedMs: 0, windU: practiceWind.u, windV: practiceWind.v, plan: "full", markBearing: mark });
     if (ok) {
-      $("practice-what").textContent = `Practice ${practiceN}: ${k.kn} knots, ${k.name}.`;
-      $("practice-what").hidden = false;
+      banner(`Practice ${practiceN}: ${k.kn} knots, ${k.name}.`);
     }
     return;
   }
@@ -1166,11 +1168,7 @@ async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
   });
   if (ok) {
     const point = (d: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(d / 45) % 8];
-    $("practice-what").textContent =
-      c.kind === "triangle"
-        ? `Off Annapolis: the triangle, ${br.kn} knots from the ${point(from)}. Round the windward mark, the wing mark, then back to the finish.`
-        : `Off Annapolis: sail to Thomas Point Light, ${br.kn} knots from the ${point(from)}. The light stands on the end of a shoal: keep to deep water.`;
-    $("practice-what").hidden = false;
+    banner(c.kind === "triangle" ? `The triangle · ${br.kn} knots from the ${point(from)}` : `To Thomas Point Light · ${br.kn} knots from the ${point(from)} · keep off its shoal`);
   } else practiceAt = null;
 }
 function practiceEnded(r: WheelResult): void {
@@ -1282,13 +1280,12 @@ async function runPrologue(boatKey: string): Promise<void> {
     buoys.set([]);
     return;
   }
-  $("practice-what").textContent = "Sail her out of Annapolis harbour: follow the marks down the channel to the open Bay. Keep an eye on the depth. Esc skips to the Bay mouth.";
-  $("practice-what").hidden = false;
+  banner("Out of Annapolis harbour · follow the marks to the open Bay · Esc skips");
   const r = await ended;
   const how = r.aground
     ? "She touched the bottom on the way out (no harm done: the harbour spell doesn't count)."
     : r.reached
-      ? `Out in the open Bay in ${runTime(r.seconds)} of boat time.`
+      ? `You're out of the harbour: ${Math.max(1, Math.round(r.seconds / 60))} minutes at the wheel.`
       : "You skipped the rest of the way out.";
   $("prologue-sum").textContent = how;
   $("prologue-end").hidden = false;
@@ -1303,6 +1300,109 @@ function prologueEnded(r: WheelResult): void {
   buoys.set([]);
   $("practice-what").hidden = true;
   done?.(r);
+}
+
+/** How high the boat's rig stands above the water (m), from the model once it's loaded. */
+const rigBox = new THREE.Box3();
+let rigFor: unknown = null;
+let rigTopM = 0;
+function rigTop(): number {
+  if (model && rigFor !== model.root) {
+    rigBox.setFromObject(model.root);
+    if (Number.isFinite(rigBox.max.y) && rigBox.max.y > 0.5) {
+      rigTopM = rigBox.max.y - model.root.position.y;
+      rigFor = model.root;
+    }
+  }
+  return rigTopM || spec.length * 1.5; // GUESS until the model is in
+}
+// The sailing camera at the wheel (src/helm/chaseCam.ts; Elena approved the plan). V switches to
+// the old orbit view and back; dragging the view takes it over until 4 s after you let go.
+const chase = new ChaseCam();
+controls.addEventListener("start", () => chase.drag(true));
+controls.addEventListener("end", () => chase.drag(false));
+const chaseLook = new THREE.Vector3();
+let wheelFov = false;
+function wheelCamera(dt: number, t: number): void {
+  if (cine.on) return; // the cinematic owns the lens
+  const ours = !!wheelNow && chase.on;
+  // Ease the lens in and out (45 is the page's own).
+  const fov = ours ? CHASE_FOV : 45;
+  if (ours || wheelFov) {
+    camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt / 0.6));
+    if (Math.abs(camera.fov - fov) < 0.05) camera.fov = fov;
+    camera.updateProjectionMatrix();
+    wheelFov = camera.fov !== 45;
+  }
+  if (!wheelNow || !wheel.wheel) {
+    chase.reset();
+    return;
+  }
+  // Compose in the screen above the wheel strip and below the top bar and goal banner.
+  const strip = document.getElementById("wheel")?.getBoundingClientRect();
+  const goal = document.getElementById("wheel-goal")?.getBoundingClientRect();
+  const frame = { w: innerWidth, h: innerHeight, top: goal && goal.height ? goal.bottom + 6 : 50, bottom: strip && strip.height ? strip.top - 6 : innerHeight - 70, fovDeg: CHASE_FOV };
+  const s = chase.update(dt, wheelNow.heading, wheel.wheel.twa(), spec.length, rigTop(), frame, stillCamera);
+  if (!s) return;
+  // A hand on the camera: a chase boat's slow bob (none with reduced motion).
+  const bob = stillCamera ? 0 : Math.sin(t * 0.6) * 0.25 + Math.sin(t * 1.7 + 1) * 0.08;
+  camera.position.lerp(chaseLook.set(s.pos[0], s.pos[1] + bob, s.pos[2]), s.blend);
+  controls.target.lerp(chaseLook.set(s.look[0], s.look[1], s.look[2]), s.blend);
+}
+
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>(".practice-note .info")))
+  b.addEventListener("click", () => {
+    const more = b.nextElementSibling as HTMLElement;
+    more.hidden = !more.hidden;
+    b.setAttribute("aria-expanded", String(!more.hidden));
+  });
+// One "Credits" link in place of the long line (Elena); the full text opens on a click.
+$("credbtn").addEventListener("click", () => {
+  const t = $("credtext");
+  t.hidden = !t.hidden;
+  $("credbtn").setAttribute("aria-expanded", String(!t.hidden));
+});
+/** The run's one-line banner under the goal: says what this is, then gets out of the way. */
+let flashTimer = 0;
+function banner(text: string): void {
+  const el = $("practice-what");
+  el.textContent = text;
+  el.hidden = false;
+  el.style.opacity = "1";
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => {
+    el.style.opacity = "0";
+    flashTimer = window.setTimeout(() => (el.hidden = true), 900);
+  }, 6000);
+}
+
+// A small pointer to the next mark (Leo): over it when it's in view, at the screen's edge when it isn't.
+const markV = new THREE.Vector3();
+function markPointer(): void {
+  const el = $("markptr");
+  const w = wheel.wheel;
+  if (!wheelNow || !w || $("wheel-goal").hidden) {
+    el.hidden = true;
+    return;
+  }
+  const m = w.markXY();
+  camera.updateMatrixWorld();
+  markV.set(m.x - wheelNow.x, 3, -(m.y - wheelNow.y)).project(camera);
+  const behind = markV.z > 1;
+  let x = behind ? -markV.x : markV.x;
+  let y = behind ? -markV.y : markV.y;
+  const inView = !behind && Math.abs(x) < 0.95 && Math.abs(y) < 0.9;
+  if (!inView) {
+    const k = 0.9 / Math.max(Math.abs(x), Math.abs(y), 1e-6);
+    x *= k;
+    y = Math.max(-0.7, Math.min(0.75, y * k)); // keep clear of the strip and the banner
+  }
+  el.hidden = false;
+  el.dataset.edge = inView ? "" : x < -0.85 ? "left" : x > 0.85 ? "right" : y < 0 ? "down" : "up";
+  const d = w.distToMark();
+  el.textContent = d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`;
+  el.style.left = `${((x + 1) / 2) * innerWidth}px`;
+  el.style.top = `${((1 - y) / 2) * innerHeight}px`;
 }
 
 /** Hand-trimmed watches this game, as hours from the start, for the chart. */
@@ -1363,6 +1463,12 @@ addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
   // At the wheel (Rosa, src/helm/wheelSession.ts) the keys are the wheel's (practice has no game).
   if (wheel.on && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest?.("input, select, textarea")) {
+    if (e.code === "KeyV" && !e.repeat) {
+      chase.on = !chase.on;
+      note(chase.on ? "The chase camera." : "The deck view: drag to look around. V for the chase camera.", "At the wheel", TONE_COLOUR.info);
+      e.preventDefault();
+      return;
+    }
     if (wheel.key(e, true)) e.preventDefault();
     return;
   }
@@ -2170,6 +2276,7 @@ function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: numb
     camera.far = far;
     camera.updateProjectionMatrix();
   }
+  $("osm").hidden = !/OpenStreetMap|Overture/.test(land.credit);
   const credit = $("landcredit");
   const text = land.credit;
   if (credit.dataset.text !== text) {
@@ -2299,8 +2406,8 @@ renderer.setAnimationLoop(() => {
   // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
   const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
-  if (practiceAt && wheelNow) buoys.update(wheelNow, t);
-  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14);
+  if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0);
+  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
@@ -2323,6 +2430,8 @@ renderer.setAnimationLoop(() => {
   wake?.setLight(atmos.ambient);
   updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
   sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target) });
+  wheelCamera(dt, t);
+  markPointer();
   if (!cine.update(dt)) controls.update();
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;

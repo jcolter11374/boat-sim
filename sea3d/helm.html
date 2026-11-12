@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boat-sim 3D: Take the helm</title>
 <style>
+  :root { --ui: clamp(12px, 1.667vh, 18px); }
   :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
@@ -92,56 +93,79 @@
   @media (max-width: 700px) { #timebar .t { display: none; } #timebar button { padding: 5px 8px; } }
   /* Take the wheel (Rosa): the sailing panel, bottom centre. */
   #b-wheel { background: rgba(61,220,151,.18); border-color: #3ddc97; font-weight: 600; }
-  #wheel { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 8; width: min(760px, calc(100vw - 24px)); padding: 10px 14px; font-size: 12.5px; }
-  #wheel[hidden] { display: none; }
-  #wheel.over { box-shadow: 0 0 0 2px #ff5a4f inset; }
-  #wheel .w-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-  #wheel .w-goal { color: #3ddc97; font-weight: 600; }
-  #wheel .w-speeds { margin-left: auto; display: flex; gap: 3px; }
-  #wheel button { padding: 3px 8px; font-size: 12px; }
-  #wheel .w-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  #wheel .w-lbl { color: var(--dim); font-size: 11px; }
-  #wheel .w-big { font: 700 20px system-ui, sans-serif; }
-  #wheel .w-sub { color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; min-height: 1.2em; }
-  #wheel .w-bar, #wheel .w-gauge { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); margin: 4px 0 2px; }
-  #wheel .w-bar .w-now { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #8ab4ff; }
+  /* At the wheel (Rosa): one slim strip at the bottom edge, the goal in a banner at the top (Elena: the world gets the screen). */
+  #wheel { position: fixed; left: 50%; bottom: .67em; transform: translateX(-50%); z-index: 8; width: min(81.7em, calc(100vw - 16px)); padding: .5em 1em; font-size: var(--ui); background: rgba(10,18,28,.62); }
+  #wheel[hidden], #wheel-goal[hidden] { display: none; }
+  #wheel.over { box-shadow: 0 0 0 0.167em #ff5a4f inset; }
+  #wheel .w-strip { display: grid; grid-template-columns: 1fr 1.25fr 1fr 1.1fr auto; gap: 1.17em; align-items: center; }
+  #wheel .w-cell { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #wheel .w-cell b { font: 700 1.33em system-ui, sans-serif; }
+  #wheel .w-ctl { display: flex; gap: 0.333em; align-items: center; }
+  #wheel .w-speeds { display: flex; gap: 0.167em; }
+  #wheel button { padding: 0.167em 0.583em; font-size: 0.958em; }
+  #wheel .w-sub { color: var(--dim); font-size: 0.917em; }
+  #wheel .w-lbl { color: var(--dim); font-size: 0.875em; text-transform: lowercase; }
+  #wheel .w-bar, #wheel .w-gauge { position: relative; height: 0.5em; border-radius: 0.25em; background: rgba(255,255,255,.14); margin: 0.333em 0 0.0833em; }
+  #wheel .w-bar .w-now { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0.25em; background: #8ab4ff; }
   #wheel .w-bar .w-best { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #3ddc97; }
   #wheel .w-heelbar .w-now { background: #ffc857; }
   #wheel .w-heelbar .w-max { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #ff5a4f; }
-  #wheel .w-band { position: absolute; top: 0; bottom: 0; background: rgba(61,220,151,.55); border-radius: 4px; }
+  #wheel .w-band { position: absolute; top: 0; bottom: 0; background: rgba(61,220,151,.6); border-radius: 0.25em; }
   #wheel .w-band[hidden] { display: none; }
-  #wheel .w-needle { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: #fff; border-radius: 2px; }
-  #wheel .w-tell { font-weight: 600; min-height: 1.3em; }
+  #wheel .w-needle { position: absolute; top: -0.333em; bottom: -0.333em; width: 0.25em; margin-left: -0.0833em; background: #fff; border-radius: 0.167em; }
+  #wheel .w-tell { font-weight: 600; }
   #wheel .w-tell[data-state="good"] { color: #3ddc97; }
   #wheel .w-tell[data-state="flapping"], #wheel .w-tell[data-state="stalled"] { color: #ff8a2a; }
   #wheel .w-tell[data-state="in"], #wheel .w-tell[data-state="ease"] { color: #ffc857; }
-  #wheel .w-guide { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; background: rgba(61,220,151,.14); border-left: 3px solid #3ddc97; font-size: 13.5px; font-weight: 600; }
-  #wheel .w-guide[hidden] { display: none; }
-  #wheel .w-gskip { float: right; margin-left: 8px; }
+  #wheel .w-heelt { color: #ffc857; }
+  #wheel .w-guide { margin: 0 0 0.5em; padding: 0.5em 0.833em; border-radius: 0.667em; background: rgba(61,220,151,.16); border-left: 0.25em solid #3ddc97; font-size: 1.08em; font-weight: 600; }
+  #wheel .w-guide[hidden], #wheel .w-more[hidden] { display: none; }
+  #wheel .w-gskip { float: right; margin-left: 0.667em; }
+  #wheel .w-more { display: flex; gap: 0.833em; align-items: center; flex-wrap: wrap; margin-top: 0.5em; }
+  #wheel .w-keys { color: var(--dim); font-size: 0.917em; }
+  #wheel .w-btns { display: flex; gap: 0.417em; }
+  #wheel-goal { position: fixed; top: calc(var(--bar, 0px) + 10px); left: 50%; transform: translateX(-50%); z-index: 8; padding: .4em 1.1em; font-size: calc(var(--ui) * 1.08); background: rgba(10,18,28,.62); color: #fff; white-space: nowrap; }
+  #wheel-goal .w-goal { color: #fff; font-weight: 600; }
+  #wheel-goal .w-num { color: #3ddc97; }
+  #wheel-goal .w-depth { margin-left: 0.833em; font-weight: 600; }
+  #wheel-goal .w-depth[hidden] { display: none; }
+  #wheel-goal .w-depth[data-state="shallow"] { color: #ff8a2a; }
+  #wheel-goal .w-depth[data-state="unknown"] { opacity: .7; font-weight: 400; }
+  @media (max-width: 760px) { #wheel .w-strip { grid-template-columns: 1fr 1fr; } }
   #r-trim:empty { display: none; }
-  #practice-what { position: fixed; top: calc(var(--bar, 0px) + 14px); left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
+  #practice-what { position: fixed; top: calc(var(--bar, 0px) + 52px); transition: opacity .8s; left: 50%; transform: translateX(-50%); padding: 7px 14px; z-index: 6; font-weight: 600; }
+  #markptr { position: fixed; z-index: 7; transform: translate(-50%, -130%); pointer-events: none; padding: .1em .6em; border-radius: 999px; font: 600 calc(var(--ui) * .92) system-ui, sans-serif;
+    color: #fff; background: rgba(255,106,26,.85); white-space: nowrap; }
+  #markptr::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: rgba(255,106,26,.85); }
+  #markptr[data-edge="left"]::before { content: "◀ "; } #markptr[data-edge="right"]::before { content: "▶ "; }
+  #markptr[data-edge="up"]::before { content: "▲ "; } #markptr[data-edge="down"]::before { content: "▼ "; }
+  #markptr[data-edge="left"]::after, #markptr[data-edge="right"]::after, #markptr[data-edge="up"]::after, #markptr[data-edge="down"]::after { display: none; }
+  #markptr[hidden] { display: none; }
+  .practice-note .info { padding: 0 6px; border-radius: 999px; font-size: 11px; }
+  .practice-note .info-more[hidden] { display: none; }
+  #osm[hidden] { display: none; }
+  #credits { position: fixed; right: 8px; bottom: 4px; z-index: 5; font: 10px/13px system-ui, sans-serif; color: rgba(255,255,255,.8); text-shadow: 0 0 3px #000; text-align: right; }
+  #credbtn { background: none; border: 0; padding: 0 2px; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+  #credtext { position: absolute; right: 0; bottom: 16px; width: min(520px, 90vw); padding: 6px 9px; border-radius: 8px; background: rgba(12,22,34,.85); text-shadow: none; text-align: left; }
+  #credtext[hidden] { display: none; }
+  #credtext a { color: inherit; }
+  body.at-wheel #credits { bottom: auto; top: calc(var(--bar, 0px) + 8px); }
   #practice-what[hidden], #practice-end[hidden] { display: none; }
   #practice-courses[hidden], #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
   #prologuepick { display: block; margin: 6px 0; }
-  #practice-courses button { margin: 3px 4px 3px 0; }
+  #practice-courses .courses { display: flex; flex-direction: column; gap: 6px; }
+  #practice-courses .courses button { width: 100%; margin: 0; text-align: left; padding: 7px 12px; }
   #practice-courses button small { display: block; font-weight: 400; font-size: 12px; opacity: .85; }
   #practice-courses small[data-best]:empty { display: none; }
   #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
   .practice-note { font-size: 12px; opacity: .75; }
-  #wheel .w-depth { font-size: 12.5px; font-weight: 600; margin-left: 8px; }
-  #wheel .w-depth[hidden] { display: none; }
-  #wheel .w-depth[data-state="shallow"] { color: #ff8a2a; }
-  #wheel .w-depth[data-state="unknown"] { opacity: .7; font-weight: 400; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
     font: 600 12px system-ui, sans-serif; background: rgba(61,220,151,.2); border: 1px solid #3ddc97; color: #dff8ec; pointer-events: none; }
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
   #trimchip[hidden] { display: none; }
-  #wheel .w-keys { color: var(--dim); font-size: 11px; margin-top: 6px; }
-  #wheel .w-btns { display: flex; gap: 5px; margin-top: 5px; }
   /* While at the wheel the voyage controls wait. */
   body.at-wheel #timebar, body.at-wheel #timestate, body.at-wheel #keyhint { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox { visibility: hidden; }
-  @media (max-width: 700px) { #wheel .w-grid { grid-template-columns: 1fr 1fr; } }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
   #go.big { display: block; width: 100%; padding: 13px; font-size: 17px; margin: 14px 0 6px; border-radius: 11px; }
   /* Before you set sail only the start card shows (Nina's review, item 1): the game's
@@ -303,10 +327,10 @@
   <p id="practice-sum"></p>
   <div id="practice-courses" hidden>
     <p id="practice-breeze" role="group" aria-label="Breeze">Breeze: <button data-b="light">Light (8 kn)</button> <button data-b="good">Good (12 kn)</button> <button data-b="fresh">Fresh (18 kn)</button></p>
-    <p><button class="go" data-course="triangle">The triangle<small>three marks 800 m apart: upwind, across, back (about 15 min; try 5&times;)</small><small data-best="triangle"></small></button>
-      <button class="go" data-course="light">Sail to Thomas Point Light<small>about 7 km down the Bay (about 40 min; try 10&times;)</small><small data-best="light"></small></button>
+    <p class="courses"><button class="go" data-course="triangle">The triangle<small>three marks 800 m apart: upwind, across, back (about 15 min; try 5&times;)</small><small data-best="triangle"></small></button>
+      <button data-course="light">Sail to Thomas Point Light<small>about 7 km down the Bay (about 40 min; try 10&times;)</small><small data-best="light"></small></button>
       <button data-course="drill">Drills<small>short spells: a reach, a beat, a run</small></button></p>
-    <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</p>
+    <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. <button class="info" aria-expanded="false" title="About the depths">i</button><span class="info-more" hidden> The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</span></p>
   </div>
   <p><button id="practice-again" class="go">Sail another</button> <a href="helm.html">Take the helm: a whole crossing</a></p>
 </div></div>
@@ -371,7 +395,8 @@
   </div>
 </div>
 
-<div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto"><span id="landcredit"></span>Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · Simulator in the browser: Pyodide · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<div id="markptr" hidden></div>
+<div id="credits"><span id="osm" hidden>© OpenStreetMap contributors · </span><button id="credbtn" aria-expanded="false" title="Where the data comes from">Credits</button><div id="credtext" hidden><span id="landcredit"></span>Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · Simulator in the browser: Pyodide · <a href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">All notices</a></div></div>
 <script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/helm.ts"></script>
 </body>
