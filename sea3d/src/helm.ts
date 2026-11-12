@@ -266,7 +266,11 @@ function useBoat(base: string): void {
   if (k && !hasDetailedStock(k)) void loadStockModel(k).then((ok) => ok && spec.key === k && buildBoat());
 }
 buildBoat();
-void loadDetailedModels().then((ok) => ok && buildBoat());
+let modelsIn = false; // the detailed boats have loaded (or failed to): the shader warm-up waits for them
+void loadDetailedModels().then((ok) => {
+  if (ok) buildBoat();
+  modelsIn = true;
+});
 const live = new LiveSea(undefined, { n: quality === "high" ? 24 : 16, smoothing: 0.4 });
 // The real mix of wind sea and swells where they're deployed (Priya's sea-state
 // files): crossed seas, as the open Atlantic usually has (Elena).
@@ -3211,7 +3215,27 @@ function aimAt(bearing: number): void {
   camera.position.copy(controls.target).add(off);
 }
 
+// Build the sailing view's shaders while the Set sail card is up (M1 start-up profile):
+// the first sailing frames otherwise build about a dozen at once (the boat again for the
+// calm-water reflection, which draws into its own picture), and the page waits for each.
+// Built here, once the card shows and the detailed boats are in, the graphics driver does that work while
+// the player reads the card. Once per page; nothing on screen changes.
+let warmed = false;
+function warmShaders(): void {
+  warmed = true;
+  const prev = renderer.getRenderTarget();
+  try {
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(mirror.target);
+    renderer.compile(scene, camera);
+  } catch {
+    /* only a head start: the first sailing frame builds whatever is missing */
+  } finally {
+    renderer.setRenderTarget(prev);
+  }
+}
 renderer.setAnimationLoop(() => {
+  if (!warmed && modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden) warmShaders();
   const t = clock.getElapsedTime();
   // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
   if (judging && !document.hidden && !page.busy) {
