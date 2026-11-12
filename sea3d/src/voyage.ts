@@ -1296,7 +1296,8 @@ renderer.setAnimationLoop(() => {
       bowW.set(contact.bow[0], SPEC[boatKey].cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
       const clear = bowW.y - heightAt(comps, bowW.x, bowW.z, t);
-      contact.update(comps, t, place, hs, { speed: stw, bowClearance: clear, light: atmos.foamLight });
+      const [cwu, cwv] = windAt(rep, hour);
+      contact.update(comps, t, place, hs, { speed: stw, bowClearance: clear, light: atmos.foamLight, wind: [cwu, -cwv] });
       status.contact = { ...contact.shown };
     }
     if (model && drain) {

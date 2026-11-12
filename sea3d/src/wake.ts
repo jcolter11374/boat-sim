@@ -155,6 +155,13 @@ export class Wake {
    *  (Sea.surfaceAt); otherwise the big waves' height near enough. */
   surface: ((comps: WaveComponent[], x: number, z: number, t: number) => number) | null = null;
 
+  /** Wake strength 0..1.3 by the hull's Froude number (speed / sqrt(g L)): a thin trail at a
+   *  kayak's 2 kt (Fn 0.16), a broad foamy one near hull speed (Sam's checklist 5). */
+  private strength(speed: number): number {
+    const fn = speed / Math.sqrt(9.81 * Math.max(2 * Math.abs(this.sternX), 0.5));
+    return Math.min(1.3, Math.max(0, (fn - 0.05) / 0.3));
+  }
+
   reset(): void {
     this.odo = 0;
     this.lastT = -1;
@@ -166,12 +173,13 @@ export class Wake {
     this.lastT = t;
     // The strip is as long as the water runs in the foam's lifetime (at least a boat's width).
     const len = Math.max(speed * LIFE, this.beam * 1.5);
+    const k = this.strength(speed);
     const pos = this.points.geometry.attributes.position.array as Float32Array;
     const uv = this.points.geometry.attributes.aUV.array as Float32Array;
     for (let i = 0; i <= this.nAlong; i++) {
       const u = uv[i * ACROSS * 2];
       const d = u * len;
-      const hw = 1.25 * (this.beam * 0.42 + d * SPREAD); // a margin past the band, so its ragged edge never meets the strip's
+      const hw = 1.25 * (this.beam * 0.42 + d * SPREAD) * (0.45 + 0.55 * Math.min(1, k)); // a margin past the band, so its ragged edge never meets the strip's
       for (let j = 0; j < ACROSS; j++) {
         const k = i * ACROSS + j;
         const [x, z] = toWorld(this.sternX - d, uv[k * 2 + 1] * hw, place);
@@ -188,7 +196,7 @@ export class Wake {
     un.uOdo.value = this.odo;
     un.uLen.value = len;
     un.uTime.value = t;
-    un.uI.value = THREE.MathUtils.clamp(speed / Math.max(this.speed, 0.3), 0, 1.3);
+    un.uI.value = this.strength(speed);
   }
 
   dispose(): void {

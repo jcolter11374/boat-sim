@@ -94,6 +94,8 @@ export interface ContactState {
   /** Bow height above the water surface under it, m (from the motion model's pose). */
   bowClearance: number;
   light: number; // 0..1 for unlit foam
+  /** True wind in the scene, m/s blowing towards (x, z); spray drifts downwind with it. */
+  wind?: [number, number];
 }
 
 export class Contact {
@@ -245,7 +247,11 @@ export class Contact {
     const dt = this.lastT < 0 ? 0 : THREE.MathUtils.clamp(t - this.lastT, 0, 0.1);
     this.lastT = t;
     this.flow += s.speed * dt;
-    const speedK = THREE.MathUtils.clamp(s.speed / Math.max(this.spec.cruiseSpeed, 0.3), 0, 1.6);
+    // How hard the hull is pushing water about: by its Froude number (speed / sqrt(g L)), so
+    // a 3 m kayak at 2 kt (Fn 0.16) makes a ripple and a 31 ft yacht at 6 kt (Fn 0.35) a
+    // clear bow and quarter wave (Sam's checklist 5). 1 at Fn 0.36, near hull speed.
+    const fn = s.speed / Math.sqrt(9.81 * Math.max(this.wlLength, 0.5));
+    const speedK = THREE.MathUtils.clamp((fn - 0.08) / 0.28, 0, 1.6);
     const seaK = THREE.MathUtils.clamp(hs / 4, 0, 1);
 
     // Collar: inner edge just inside the hull, outer edge pushed out more at the
@@ -322,12 +328,22 @@ export class Contact {
         const [wx, wz] = toWorld(this.sp[i * 3], this.sp[i * 3 + 2], place);
         this.sp[i * 3 + 1] = this.surface(comps, wx, wz, t) + 0.02 + bowWaveHeight(s.speed); // on the bow wave
         const power = (0.6 + Math.min(Math.max(sink, 1.3 * crest), 3) * 0.8 + 0.6 * speedK) * (0.8 + 0.4 * slamK) * Math.sqrt(this.sprayScale);
+        // A slam's drops leave together, close to one speed, so they fly as a sheet that
+        // fans out from the flare: highest at the stem, lower further aft (Elena: a visible
+        // sheet from force 6). The steady drops at speed scatter more.
+        const sheet = burst > 0 ? 1 : 0;
+        const jit = sheet ? 0.25 : 0.7;
+        const aftK = 1 - 0.5 * Math.min(1, back / (0.25 * this.spec.length));
         this.sv[i * 3] = -s.speed * 0.4 + (Math.random() - 0.5) * 0.4; // drops fall behind as the boat moves on
-        this.sv[i * 3 + 1] = power * (0.8 + 0.6 * Math.random()) + Math.max(rise, 0); // thrown off water that is itself rising
-        this.sv[i * 3 + 2] = sideSign * power * (0.6 + 0.8 * Math.random());
+        this.sv[i * 3 + 1] = power * (1.0 + jit * Math.random()) * (sheet ? aftK * 1.25 : 1) + Math.max(rise, 0); // thrown off water that is itself rising
+        this.sv[i * 3 + 2] = sideSign * power * (0.7 + jit * Math.random());
         this.born[i] = t;
         this.mist[i] = Math.random() < 0.2 ? 1 : 0;
       }
+      // The wind in the boat's frame (x forward, z to starboard as toWorld has it), relative to the water.
+      const [wwx, wwz] = s.wind ?? [0, 0];
+      const cy = Math.cos(place.yaw), sy = Math.sin(place.yaw);
+      const windB: [number, number] = [wwx * cy - wwz * sy, wwx * sy + wwz * cy];
       const ppos = this.spray.geometry.attributes.position.array as Float32Array;
       const alpha = this.spray.geometry.attributes.aAlpha.array as Float32Array;
       const size = this.spray.geometry.attributes.aSize.array as Float32Array;
@@ -339,6 +355,11 @@ export class Contact {
           continue;
         }
         this.sv[i * 3 + 1] -= 9.81 * dt;
+        // Air drag pulls each drop towards the wind's speed: drops in about a second, mist
+        // at once (GUESS), so the cloud falls within a boat length and drifts downwind (Sam 7).
+        const drag = Math.min(1, (this.mist[i] ? 3.5 : 1.0) * dt);
+        this.sv[i * 3] += (windB[0] - this.sv[i * 3]) * drag;
+        this.sv[i * 3 + 2] += (windB[1] - this.sv[i * 3 + 2]) * drag;
         this.sp[i * 3] += this.sv[i * 3] * dt - s.speed * dt; // the water (and drops) slide aft past the boat
         this.sp[i * 3 + 1] += this.sv[i * 3 + 1] * dt;
         this.sp[i * 3 + 2] += this.sv[i * 3 + 2] * dt;
@@ -351,7 +372,7 @@ export class Contact {
         // A sheet is many small drops and a few soft puffs of mist that hang a little longer.
         const m = this.mist[i];
         alpha[i] = (m ? 0.3 * (1 - k) : 0.95 * (1 - k) ** 1.2) * Math.min(1, age * 10);
-        size[i] = (m ? 0.25 + 0.9 * k : 0.05 + 0.1 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
+        size[i] = (m ? 0.25 + 0.9 * k : 0.07 + 0.14 * k) * (0.6 + 0.6 * slamK) * this.sprayScale;
         live++;
       }
       this.spray.geometry.attributes.position.needsUpdate = true;

@@ -86,6 +86,7 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
+    if (/^(sail|batten)/.test(o.name)) return; // sails are Yuki's (their own shader); never in the water
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const m of mats) {
       const std = m as THREE.MeshStandardMaterial;
@@ -105,8 +106,6 @@ export function putInWater(root: THREE.Object3D): { update(look: InWaterLook): v
       };
       const key = m.customProgramCacheKey.bind(m);
       m.customProgramCacheKey = () => key() + "|in-water-v1";
-      // Gelcoat sheen on painted hulls: a soft sky reflection, not plastic (GUESS by eye).
-      if (std.isMeshStandardMaterial && std.metalness < 0.1 && std.roughness > 0.45 && !std.transparent) std.roughness = 0.42;
       m.needsUpdate = true;
     }
   });
