@@ -270,24 +270,51 @@ function drawSlots(): void {
     for (const id of ids) {
       const slot = cat.slots.find((s) => s.id === id)!;
       used.add(id);
-      const name = document.createElement("div");
-      name.className = "muted";
-      name.style.margin = "6px 2px 4px";
-      name.textContent = slot.name;
-      g.append(name);
       const shown = shownOptions(slot);
-      if (!shown.length) {
-        name.remove();
-        continue;
-      }
-      for (const o of shown) g.append(optionButton(slot, o));
+      if (!shown.length) continue;
+      // Each slot is one line until opened, "Thrusters: Two T200 ▸", so the boat gets the middle of
+      // the screen (Milo, M5); the open one stays open, so its options can be compared (Leo).
+      const sl = document.createElement("div");
+      sl.className = "sl";
+      sl.dataset.slot = slot.id;
+      const head = document.createElement("button");
+      head.className = "sl-head";
+      head.dataset.slot = slot.id;
+      head.setAttribute("aria-expanded", String(openSlot === slot.id));
+      head.setAttribute("aria-controls", `sl-body-${slot.id}`);
+      const nm = document.createElement("span");
+      nm.className = "sl-name";
+      nm.textContent = slot.name;
+      const pick = document.createElement("span");
+      pick.className = "sl-pick";
+      pick.id = `sl-pick-${slot.id}`;
+      head.append(nm, pick);
+      head.addEventListener("click", () => {
+        openSlot = openSlot === slot.id ? null : slot.id;
+        showOpenSlot();
+      });
+      const body = document.createElement("div");
+      body.className = "sl-body";
+      body.id = `sl-body-${slot.id}`;
+      for (const o of shown) body.append(optionButton(slot, o));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;
-      g.append(hints);
+      sl.append(head, body, hints);
+      g.append(sl);
     }
     box.append(g);
   }
+}
+
+/** The slot whose options are showing; the rest are one line each. */
+let openSlot: string | null = null;
+function showOpenSlot(): void {
+  document.querySelectorAll<HTMLElement>(".sl").forEach((el) => {
+    const on = el.dataset.slot === openSlot;
+    el.classList.toggle("open", on);
+    el.querySelector(".sl-head")?.setAttribute("aria-expanded", String(on));
+  });
 }
 
 function cruiseControl(): HTMLElement {
@@ -367,6 +394,11 @@ function redraw(): void {
   document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) =>
     b.setAttribute("aria-pressed", String(design.picks[b.dataset.slot!] === b.dataset.opt)),
   );
+  for (const slot of cat.slots) {
+    const pick = document.getElementById(`sl-pick-${slot.id}`);
+    if (pick) pick.textContent = optionOf(cat, slot.id, design)?.n ?? "";
+  }
+  showOpenSlot();
   for (const slot of cat.slots) {
     const ul = document.getElementById(`hints-${slot.id}`);
     if (!ul) continue;
@@ -540,7 +572,11 @@ function drawMine(): void {
   const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
   const input = $<HTMLInputElement>("mb-name");
   if (!nameTyped) input.value = here ? mine.name : defaultName();
-  $("mb-save").textContent = here ? (input.value.trim() === mine.name ? "Saved" : "Rename my boat") : mine ? "Make this my boat" : "Save as my boat";
+  const saved = here && input.value.trim() === mine.name;
+  $("mb-save").textContent = saved ? "Saved" : here ? "Rename my boat" : mine ? "Make this my boat" : "Save as my boat";
+  // "Saved" is a status, not a button (Milo, M3): a dim tick.
+  $("mb-save").classList.toggle("saved", saved);
+  $<HTMLButtonElement>("mb-save").disabled = saved;
   // The name is the player's own text: textContent only, never innerHTML.
   const line = $("mb-line");
   line.replaceChildren();
