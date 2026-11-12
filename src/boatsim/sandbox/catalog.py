@@ -500,6 +500,7 @@ STOCK_BASES = {
     name: f"configs/{name}.yaml"
     for name in (
         "stock_cruiser31",
+        "stock_pearson31_2",  # Randolph and Becky's own boat (our model)
         "stock_dinghy14",
         "stock_beachcat16",
         "stock_sail_drone7",

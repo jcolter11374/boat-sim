@@ -333,6 +333,35 @@ export const CRUISER31: HullParams = {
   source: "configs/stock_cruiser31.yaml (GZ, mass); inertia and damping GUESS",
 };
 
+// Pearson 31-2 (our model of Randolph's boat), deep keel: configs/stock_pearson31_2.yaml.
+// GM about 1.0 m (GUESS, see the yaml). An elliptical lead fin, no bulb: ballast centre
+// about 1.2 m down (GUESS), the rest of the boat about 0.42 m up (as the cruiser), so
+// the CG sits about 0.20 m below the waterline. Roll period about 3.8 s (GUESS).
+export const PEARSON31_2: HullParams = {
+  name: "Pearson 31-2 (our model of Randolph's boat)",
+  mass: 4536,
+  waterlineLength: 7.74,
+  waterlineBeam: 2.95, // GUESS: 3.29 m beam, a little less at the waterline
+  waterplaneCoeff: 0.7, // GUESS
+  gzTable: deg(
+    [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 180],
+    [0, 0.165, 0.31, 0.43, 0.51, 0.55, 0.55, 0.51, 0.43, 0.33, 0.21, 0.09, -0.03, -0.15, 0],
+  ),
+  rollInertia: 14700, // GUESS: 4536 kg x (1.8 m)^2
+  pitchInertia: 4536 * (0.25 * 9.39) ** 2, // GUESS
+  cgBelowWaterline: 0.2, // GUESS: (1724 kg x 1.2 m - 2812 kg x 0.42 m) / 4536 kg
+  cgX: 4.45, // GUESS: over the keel
+  addedHeave: 0.8, // GUESS
+  addedPitch: 0.5, // GUESS
+  addedRoll: 0.15, // GUESS
+  zetaHeave: 0.2, // GUESS
+  zetaPitch: 0.2, // GUESS
+  zetaRoll: 0.1, // GUESS: fin keel yachts ~0.1
+  // keel about 1.1 m mean chord, from the canoe body (0.35 m below the CG) to its tip (1.51 m)
+  rollQuadDamping: 0.5 * RHO * 1.2 * finR3(1.1, 0.35, 1.51),
+  source: "configs/stock_pearson31_2.yaml (GZ, mass); inertia and damping GUESS",
+};
+
 // 14 ft dinghy, nobody aboard: form stability only, and it turtles past ~75 deg.
 export const DINGHY14: HullParams = {
   name: "14 ft dinghy",

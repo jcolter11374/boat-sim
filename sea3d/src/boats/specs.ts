@@ -7,10 +7,10 @@
 // This matches Theo's wave-motion model (src/motion.ts), which turns the boat
 // about its CG.
 
-import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, OCEAN_ROWER45, RANDOLPH_REVB, SAIL_DRONE7, type HullParams } from "../motion";
+import { CRUISER31, DINGHY14, BEACHCAT16, KAYAK_V4, OCEAN_ROWER45, PEARSON31_2, RANDOLPH_REVB, SAIL_DRONE7, type HullParams } from "../motion";
 
 /** Theo's stock vessels (configs/stock_*.yaml), by their config names. */
-export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45";
+export type StockKey = "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45" | "stock_pearson31_2";
 
 export interface BoatSpec {
   key: "kayak" | "randolph" | StockKey;
@@ -143,12 +143,32 @@ export const OCEAN_ROWER: BoatSpec = {
   source: "configs/stock_ocean_rower45.yaml (published specs of an 8.64 m ocean rowing boat for four)",
 };
 
+/** Randolph's own boat (their team's, not a generic one): a Pearson 31-2 with the deep keel.
+ * Pearson Yachts' published numbers (Theo, configs/stock_pearson31_2.yaml); the shape between
+ * them, and the colours, are ours (blender/build_stock.py "pearson"). */
+export const PEARSON: BoatSpec = {
+  key: "stock_pearson31_2",
+  name: "Pearson 31-2 (our model of Randolph's boat)",
+  length: 9.39,
+  beam: 3.29,
+  waterline: 0.55, // the canoe body's draft; the keel goes on to 1.71 m
+  massKg: 4536, // 10,000 lb
+  ballastKg: 1724, // 3,800 lb
+  ballastDepth: 1.2, // GUESS (Theo): the lead centre in a fin with no bulb
+  cgX: PEARSON31_2.cgX,
+  cgBelowWaterline: PEARSON31_2.cgBelowWaterline,
+  cruiseSpeed: 2.8, // about 5.5 kt
+  colour: 0x1a2a4a,
+  source: "configs/stock_pearson31_2.yaml (Pearson Yachts' published specs of the Pearson 31-2, deep keel)",
+};
+
 export const STOCK: Record<StockKey, BoatSpec> = {
   stock_cruiser31: CRUISER,
   stock_dinghy14: DINGHY,
   stock_beachcat16: BEACHCAT,
   stock_sail_drone7: SAIL_DRONE,
   stock_ocean_rower45: OCEAN_ROWER,
+  stock_pearson31_2: PEARSON,
 };
 /** Each stock boat's motion model (motion.ts), so every page moves it the same way. */
 export const STOCK_HULL: Record<StockKey, HullParams> = {
@@ -157,14 +177,17 @@ export const STOCK_HULL: Record<StockKey, HullParams> = {
   stock_beachcat16: BEACHCAT16,
   stock_sail_drone7: SAIL_DRONE7,
   stock_ocean_rower45: OCEAN_ROWER45,
+  stock_pearson31_2: PEARSON31_2,
 };
-/** Only the cruiser can be sailed in the games for now (Maya, 11 Nov: the dinghy and
+/** Only the keelboats can be sailed in the games for now (Maya, 11 Nov: the dinghy and
  * cat capsize in squalls, and the sandbox has no rain yet). */
-export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31"];
+export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31", "stock_pearson31_2"];
 export const isStock = (k: string): k is StockKey => k in STOCK;
 /** The stock boat a replay's boat name is ("31 ft cruiser"), or null. */
 export function stockKeyOf(boat: string | undefined): StockKey | null {
   const b = boat ?? "";
+  // Randolph's Pearson first: its name must never fall through to the generic cruiser.
+  if (/pearson/i.test(b)) return "stock_pearson31_2";
   if (/cruiser/i.test(b)) return "stock_cruiser31";
   if (/dinghy/i.test(b)) return "stock_dinghy14";
   if (/beach\s*cat|catamaran/i.test(b)) return "stock_beachcat16";
