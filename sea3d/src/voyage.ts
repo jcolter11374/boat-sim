@@ -461,7 +461,9 @@ const status = {
   pour: (): void => drain?.pour(),
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
-  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[] },
+  force: { cloud: -1, fog: -1, wind: -1, sea: [] as number[], heel: [] as number[] },
+  // force.heel (proof pictures, Sam): [beat, reach, run] degrees for a sailing yacht in the
+  // forced wind, to leeward of it; [] keeps the replay's heel.
   // force.sea (proof pictures, tools/proof): [Hs m, Tp s, from degrees or -1 = from the wind]
   // replaces the logged sea; [] follows the log.
   /** Proof camera: held relative to the bow every frame while set; null gives the
@@ -1068,6 +1070,20 @@ const sound = new OceanSound();
 filmButtons(cine, sound);
 (status as unknown as { cine: Cinema }).cine = cine;
 
+/** A yacht's heel for the forced wind (status.force.heel), by its angle to the wind:
+ * beat at 45 degrees off the wind or closer, reach at 90, run from 160; to leeward. */
+function forcedHeel(rep: Replay, hour: number, hdg: number): number | null {
+  const fh = status.force.heel;
+  if (fh.length < 3) return null;
+  const [wu, wv] = windAt(rep, hour);
+  const from = THREE.MathUtils.radToDeg(Math.atan2(-wu, -wv));
+  const rel = ((((from - hdg) % 360) + 540) % 360) - 180; // wind's side: + from starboard
+  const a = Math.abs(rel);
+  const [beat, reach, run] = fh;
+  const deg = a <= 45 ? beat : a <= 90 ? beat + ((reach - beat) * (a - 45)) / 45 : a <= 160 ? reach + ((run - reach) * (a - 90)) / 70 : run;
+  return rel > 0 ? -deg : deg; // roll + is to starboard: wind from starboard heels her to port
+}
+
 /** The proof camera (status.cam): placed from the bow each frame, so it rides with the boat. */
 function placeCam(r: NonNullable<typeof status.cam>): void {
   const yaw = smoothYaw ?? 0;
@@ -1159,7 +1175,7 @@ renderer.setAnimationLoop(() => {
     // (The log's last row can come a little before the final event.)
     const atEnd = hour >= rep.h[rep.h.length - 1] - 1e-6;
     const over = rep.events.some((e) => (e.h <= hour || atEnd) && e.kind === "lost" && /capsiz|stayed over/i.test(e.detail));
-    motion.heel = rep.heel && !over ? THREE.MathUtils.degToRad(valueAt(rep, rep.heel, hour) ?? 0) : 0;
+    motion.heel = rep.heel && !over ? THREE.MathUtils.degToRad(forcedHeel(rep, hour, hdg) ?? valueAt(rep, rep.heel, hour) ?? 0) : 0;
     // Turned over for good (a dinghy or cat with nobody to right it): over it goes, the
     // way it was leaning, and it floats upside down.
     if (over && !motion.capsized) motion.capsized = motion.roll < 0 ? -1 : 1;

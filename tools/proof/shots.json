@@ -1,83 +1,307 @@
 {
-  "about": "Named proof shots for tools/proof/capture.mjs. Edit here, not in the script. Views place the camera from the boat's bow: az degrees clockwise from the bow (180 = astern, 90 = starboard beam), dist and h in metres for our 3 m kayak (bigger boats scale up), fov in degrees (small = long lens), look = aim this many metres above the boat. Sea numbers are open-Atlantic targets from creative/sailor-realism-checklist.md (WMO Beaufort table); cloud and wind are looks, not physics.",
+  "about": "Named proof shots for tools/proof/capture.mjs. Edit here, not in the script. Views place the camera from the boat's bow: az degrees clockwise from the bow (180 = astern, 90 = starboard beam), dist and h in metres for our 3 m kayak (bigger boats scale up), fov in degrees (small = long lens), look = aim this many metres above the boat. Sea numbers are open-Atlantic targets from creative/sailor-realism-checklist.md (WMO Beaufort table); cloud and wind are looks, not physics. heel = [beat, reach, run] degrees for sailing yachts in that wind (Sam's targets; the replay's sail plan is not changed).",
   "boats": {
-    "kayak": { "voyage": "voyage_2020-04-15.json", "label": "Our kayak (v4)" },
-    "pearson": { "voyage": "voyage_31-ft-cruiser_2020-04-15.json", "drawas": "stock_pearson31_2", "label": "Pearson 31-2 (drawn on a 31 ft cruiser replay: it has no replays of its own yet)" },
-    "cruiser": { "voyage": "voyage_31-ft-cruiser_2020-04-15.json", "label": "31 ft cruiser" },
-    "randolph": { "voyage": "voyage_randolph-rev-b_2020-04-15.json", "label": "Randolph Rev B (our model)" }
+    "kayak": {
+      "voyage": "voyage_2020-04-15.json",
+      "label": "Our kayak (v4)"
+    },
+    "pearson": {
+      "voyage": "voyage_31-ft-cruiser_2020-04-15.json",
+      "drawas": "stock_pearson31_2",
+      "label": "Pearson 31-2 (drawn on a 31 ft cruiser replay: it has no replays of its own yet)"
+    },
+    "cruiser": {
+      "voyage": "voyage_31-ft-cruiser_2020-04-15.json",
+      "label": "31 ft cruiser"
+    },
+    "randolph": {
+      "voyage": "voyage_randolph-rev-b_2020-04-15.json",
+      "label": "Randolph Rev B (our model)"
+    }
   },
   "seas": {
-    "logged": { "label": "As logged (the replay's own wind and sea)" },
-    "calm": { "label": "Calm, force 2, old swell", "wind": 2.5, "hs": 1.0, "tp": 10, "cloud": 0.15 },
-    "f5": { "label": "Force 5, 19 kt", "wind": 9.8, "hs": 2.0, "tp": 7, "cloud": 0.45 },
-    "f8": { "label": "Force 8 gale, 37 kt", "wind": 19.0, "hs": 5.5, "tp": 10, "cloud": 0.9 }
+    "logged": {
+      "label": "As logged (the replay's own wind and sea)"
+    },
+    "calm": {
+      "label": "Calm, force 2, old swell",
+      "wind": 2.5,
+      "hs": 1.0,
+      "tp": 10,
+      "cloud": 0.15,
+      "heel": [
+        3,
+        2,
+        0
+      ]
+    },
+    "f5": {
+      "label": "Force 5, 19 kt",
+      "wind": 9.8,
+      "hs": 2.0,
+      "tp": 7,
+      "cloud": 0.45,
+      "heel": [
+        20,
+        15,
+        3
+      ]
+    },
+    "f8": {
+      "label": "Force 8 gale, 37 kt",
+      "wind": 19.0,
+      "hs": 5.5,
+      "tp": 10,
+      "cloud": 0.9,
+      "heel": [
+        25,
+        20,
+        5
+      ]
+    }
   },
   "times": {
-    "noon": { "label": "Midday (sun highest)", "pick": "max" },
-    "golden": { "label": "Golden hour (sun 6 degrees up, setting)", "sun": 6, "falling": true },
-    "dusk": { "label": "Dusk (sun 3 degrees below, setting)", "sun": -3, "falling": true },
-    "night": { "label": "Night (darkest)", "pick": "min" },
-    "dawn": { "label": "Dawn (sun 1 degree up, rising)", "sun": 1, "falling": false }
+    "noon": {
+      "label": "Midday (sun highest)",
+      "pick": "max"
+    },
+    "golden": {
+      "label": "Golden hour (sun 6 degrees up, setting)",
+      "sun": 6,
+      "falling": true
+    },
+    "dusk": {
+      "label": "Dusk (sun 3 degrees below, setting)",
+      "sun": -3,
+      "falling": true
+    },
+    "night": {
+      "label": "Night (darkest)",
+      "pick": "min"
+    },
+    "dawn": {
+      "label": "Dawn (sun 1 degree up, rising)",
+      "sun": 1,
+      "falling": false
+    }
   },
   "views": {
-    "close": { "label": "Close quarter", "az": 140, "dist": 5, "h": 1.2, "fov": 40 },
-    "chase": { "label": "Chase, astern", "az": 180, "dist": 9, "h": 2.2, "fov": 45, "look": 0.3 },
-    "beam": { "label": "Beam, low", "az": 90, "dist": 8, "h": 1.0, "fov": 40 },
-    "bow": { "label": "Bow on, low", "az": 25, "dist": 6, "h": 0.8, "fov": 45 },
-    "low": { "label": "Low, waves between us and the boat", "az": 150, "dist": 7, "h": 0.4, "fov": 35, "look": 0.3 },
-    "long": { "label": "Long lens", "az": 200, "dist": 40, "h": 2.0, "fov": 12 },
-    "over": { "label": "Overhead", "az": 180, "dist": 2, "h": 18, "fov": 45 }
+    "close": {
+      "label": "Close quarter",
+      "az": 140,
+      "dist": 5,
+      "h": 1.2,
+      "fov": 40
+    },
+    "chase": {
+      "label": "Chase, astern",
+      "az": 180,
+      "dist": 9,
+      "h": 2.2,
+      "fov": 45,
+      "look": 0.3
+    },
+    "beam": {
+      "label": "Beam, low",
+      "az": 90,
+      "dist": 8,
+      "h": 1.0,
+      "fov": 40
+    },
+    "bow": {
+      "label": "Bow on, low",
+      "az": 25,
+      "dist": 6,
+      "h": 0.8,
+      "fov": 45
+    },
+    "low": {
+      "label": "Low, waves between us and the boat",
+      "az": 150,
+      "dist": 7,
+      "h": 0.4,
+      "fov": 35,
+      "look": 0.3
+    },
+    "long": {
+      "label": "Long lens",
+      "az": 200,
+      "dist": 40,
+      "h": 2.0,
+      "fov": 12
+    },
+    "over": {
+      "label": "Overhead",
+      "az": 180,
+      "dist": 2,
+      "h": 18,
+      "fov": 45
+    }
   },
   "clips": {
-    "orbit": { "label": "Slow orbit, close", "view": "close", "azRate": 9, "seconds": 8 },
-    "run": { "label": "Low run alongside", "view": "low", "seconds": 6 },
-    "chase-run": { "label": "Chase, astern", "view": "chase", "seconds": 6 },
-    "cine-skim": { "label": "Cinematic: skim shot", "cinema": "skim", "seconds": 6 },
-    "cine-drone": { "label": "Cinematic: drone pull-back", "cinema": "drone", "seconds": 6 },
-    "cine-sunset": { "label": "Cinematic: against the low sun", "cinema": "sunset", "seconds": 6 }
+    "orbit": {
+      "label": "Slow orbit, close",
+      "view": "close",
+      "azRate": 9,
+      "seconds": 8
+    },
+    "run": {
+      "label": "Low run alongside",
+      "view": "low",
+      "seconds": 6
+    },
+    "chase-run": {
+      "label": "Chase, astern",
+      "view": "chase",
+      "seconds": 6
+    },
+    "cine-skim": {
+      "label": "Cinematic: skim shot",
+      "cinema": "skim",
+      "seconds": 6
+    },
+    "cine-drone": {
+      "label": "Cinematic: drone pull-back",
+      "cinema": "drone",
+      "seconds": 6
+    },
+    "cine-sunset": {
+      "label": "Cinematic: against the low sun",
+      "cinema": "sunset",
+      "seconds": 6
+    }
   },
   "sets": {
     "standard": {
       "about": "Elena's proof grid: both boats, calm / force 5 / force 8, midday / golden hour / night, every view; plus two clips per boat.",
       "size": "1280x720",
       "quality": "high",
-      "boats": ["kayak", "pearson"],
-      "seas": ["calm", "f5", "f8"],
-      "times": ["noon", "golden", "night"],
-      "views": ["close", "chase", "beam", "bow", "low", "long", "over"],
+      "boats": [
+        "kayak",
+        "pearson"
+      ],
+      "seas": [
+        "calm",
+        "f5",
+        "f8"
+      ],
+      "times": [
+        "noon",
+        "golden",
+        "night"
+      ],
+      "views": [
+        "close",
+        "chase",
+        "beam",
+        "bow",
+        "low",
+        "long",
+        "over"
+      ],
       "clips": [
-        { "boats": ["kayak", "pearson"], "seas": ["calm"], "times": ["golden"], "clips": ["orbit"] },
-        { "boats": ["kayak", "pearson"], "seas": ["f8"], "times": ["noon"], "clips": ["run"] }
+        {
+          "boats": [
+            "kayak",
+            "pearson"
+          ],
+          "seas": [
+            "calm"
+          ],
+          "times": [
+            "golden"
+          ],
+          "clips": [
+            "orbit"
+          ]
+        },
+        {
+          "boats": [
+            "kayak",
+            "pearson"
+          ],
+          "seas": [
+            "f8"
+          ],
+          "times": [
+            "noon"
+          ],
+          "clips": [
+            "run"
+          ]
+        }
       ]
     },
     "sea": {
       "about": "The sea alone: kayak, every sea at noon and dusk, chase / low / long.",
       "size": "1280x720",
       "quality": "high",
-      "boats": ["kayak"],
-      "seas": ["calm", "f5", "f8"],
-      "times": ["noon", "dusk"],
-      "views": ["chase", "low", "long"],
+      "boats": [
+        "kayak"
+      ],
+      "seas": [
+        "calm",
+        "f5",
+        "f8"
+      ],
+      "times": [
+        "noon",
+        "dusk"
+      ],
+      "views": [
+        "chase",
+        "low",
+        "long"
+      ],
       "clips": []
     },
     "sky": {
       "about": "Sky and light: kayak in a calm through the day, wide views.",
       "size": "1280x720",
       "quality": "high",
-      "boats": ["kayak"],
-      "seas": ["calm"],
-      "times": ["dawn", "noon", "golden", "dusk", "night"],
-      "views": ["chase", "long", "beam"],
+      "boats": [
+        "kayak"
+      ],
+      "seas": [
+        "calm"
+      ],
+      "times": [
+        "dawn",
+        "noon",
+        "golden",
+        "dusk",
+        "night"
+      ],
+      "views": [
+        "chase",
+        "long",
+        "beam"
+      ],
       "clips": []
     },
     "boats": {
       "about": "Boat in the water: every boat, force 5, golden hour, close views.",
       "size": "1280x720",
       "quality": "high",
-      "boats": ["kayak", "pearson", "cruiser", "randolph"],
-      "seas": ["f5"],
-      "times": ["golden"],
-      "views": ["close", "beam", "bow", "low", "over"],
+      "boats": [
+        "kayak",
+        "pearson",
+        "cruiser",
+        "randolph"
+      ],
+      "seas": [
+        "f5"
+      ],
+      "times": [
+        "golden"
+      ],
+      "views": [
+        "close",
+        "beam",
+        "bow",
+        "low",
+        "over"
+      ],
       "clips": []
     },
     "cinematic": {
@@ -89,18 +313,59 @@
       "times": [],
       "views": [],
       "clips": [
-        { "boats": ["kayak", "pearson"], "seas": ["calm"], "times": ["golden"], "clips": ["cine-skim", "cine-drone", "cine-sunset"] },
-        { "boats": ["kayak", "pearson"], "seas": ["f8"], "times": ["noon"], "clips": ["cine-skim", "cine-drone"] }
+        {
+          "boats": [
+            "kayak",
+            "pearson"
+          ],
+          "seas": [
+            "calm"
+          ],
+          "times": [
+            "golden"
+          ],
+          "clips": [
+            "cine-skim",
+            "cine-drone",
+            "cine-sunset"
+          ]
+        },
+        {
+          "boats": [
+            "kayak",
+            "pearson"
+          ],
+          "seas": [
+            "f8"
+          ],
+          "times": [
+            "noon"
+          ],
+          "clips": [
+            "cine-skim",
+            "cine-drone"
+          ]
+        }
       ]
     },
     "quick": {
       "about": "A fast check: kayak, force 5, golden hour, three views, no clips.",
       "size": "1280x720",
       "quality": "high",
-      "boats": ["kayak"],
-      "seas": ["f5"],
-      "times": ["golden"],
-      "views": ["close", "chase", "low"],
+      "boats": [
+        "kayak"
+      ],
+      "seas": [
+        "f5"
+      ],
+      "times": [
+        "golden"
+      ],
+      "views": [
+        "close",
+        "chase",
+        "low"
+      ],
       "clips": []
     }
   }
