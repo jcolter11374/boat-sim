@@ -48,6 +48,7 @@ import {
 } from "./replay/data";
 import type { Placement } from "./standin";
 import { Wake } from "./wake";
+import { ShortWaveRide } from "./boats/ride";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
 import { forcedSea, seaTestFrom } from "./seaTest";
@@ -236,6 +237,7 @@ const place: Placement = { x: 0, z: 0, yaw: 0 };
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
+let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
 let motion = new BoatMotion(HULL[laneRev], place);
 let wet: Wetness | null = null;
 let drain: Drain | null = null;
@@ -272,6 +274,7 @@ function buildBoat(q: Quality): void {
     viewScale = k;
   }
   contact = new Contact(model.form, spec, q, model.root);
+  ride = new ShortWaveRide(spec.length, spec.beam, contact.bow[0], model.stern.x);
   contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(contact.collar, contact.spray);
   // Two hulls: the collar and spray follow one centred hull, so leave them off.
@@ -1286,8 +1289,9 @@ renderer.setAnimationLoop(() => {
     if (!over) motion.capsized = 0;
     motion.advance(comps, t);
     if (model) {
-      model.root.position.set(0, motion.heave - SPEC[boatKey].cgBelowWaterline, 0);
-      model.root.rotation.set(motion.roll, smoothYaw, motion.pitch, "YZX");
+      ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt);
+      model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - SPEC[boatKey].cgBelowWaterline, 0);
+      model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);
     if (model && contact) {

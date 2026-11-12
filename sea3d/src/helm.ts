@@ -31,6 +31,7 @@ import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { Wake } from "./wake";
+import { ShortWaveRide } from "./boats/ride";
 import { Contact } from "./contact";
 import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
@@ -128,6 +129,7 @@ let motion = new BoatMotion(hull, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let contact: Contact | null = null;
+let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
 const ratio = quality === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
 renderer.setPixelRatio(ratio);
 atmos.setPixelRatio(ratio);
@@ -148,6 +150,7 @@ function buildBoat(): void {
   model = BUILDERS[spec.key](quality);
   reflectable(model.root);
   contact = new Contact(model.form, spec, quality, model.root);
+  ride = new ShortWaveRide(spec.length, spec.beam, contact.bow[0], model.stern.x);
   contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   // The foam line fits single hulls the size of ours or bigger; not the twin hulls or the little Randolph boat.
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec !== RANDOLPH;
@@ -2733,8 +2736,9 @@ renderer.setAnimationLoop(() => {
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
   if (model) {
-    model.root.position.set(0, motion.heave - spec.cgBelowWaterline, 0);
-    model.root.rotation.set(motion.roll + kickRoll(t), smoothYaw, motion.pitch, "YZX");
+    ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt);
+    model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - spec.cgBelowWaterline, 0);
+    model.root.rotation.set(motion.roll + (ride?.roll ?? 0) + kickRoll(t), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     deckLight.intensity = DECK_CD * NAV_NIGHT.value * Math.max(1, spec.length / KAYAK.length) ** 2;
     model.root.updateMatrixWorld();
     if (contact) {

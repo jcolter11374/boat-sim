@@ -111,6 +111,8 @@ export class Contact {
   private lastT = -1;
   private lastClear = 0;
   private lastBowSea = 0;
+  /** This frame's splash for the sound, 0..1 (a slam's sheet or the bow meeting a steep face); 0 otherwise. */
+  splash = 0;
   /** The drawn water's height under a point: the big waves unless the page hands over the
    *  sea's own (Sea.surfaceAt, with the short waves), so the collar and spray sit on what's drawn. */
   surface: (comps: WaveComponent[], x: number, z: number, t: number) => number = heightAt;
@@ -315,6 +317,7 @@ export class Contact {
         }
       }
       if (burst >= 10) { this.shown.bursts++; this.shown.lastBurst = burst; }
+      this.splash = Math.min(1, burst / 40);
       const steady = speedK * seaK * 25 * dt; // drops per frame
       const emit = burst + (Math.random() < steady % 1 ? Math.ceil(steady) : Math.floor(steady));
       const [bx, bz] = this.bow;
