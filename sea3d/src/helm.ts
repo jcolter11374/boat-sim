@@ -284,7 +284,7 @@ const page = {
   /** The last live order preview shown (#330), for tests. */
   preview: null as Preview | null,
   /** Decisions the game stopped for (#328): which, and on what day (for tests). */
-  decisions: [] as { kind: string; day: number }[],
+  decisions: [] as { kind: string; day: number; asked?: boolean }[],
   /** The open call's forecast lines and stakes (Game.outlook), for its map; null when none. */
   outlook: null as Outlook | null,
   /** Each route check (#10): when it looked, the best heading and its forecast gain (km), asked or not. */
@@ -1884,11 +1884,38 @@ function maybeRouteCheck(st: Status): boolean {
   return true;
 }
 
+/** Whether a call is worth a card (Elena's rule): some option beats the autopilot by a quarter
+ * of a day or more over the look, and pays for it (rougher seas or a lower battery). A free win
+ * or a tie is a note, not a question. Returns the note's words when it isn't worth asking. */
+function notWorthAsking(d: Decision, o: Outlook, has: boolean[]): string | null {
+  const auto = d.choices.findIndex((c) => c.order?.heading === "auto");
+  if (auto < 0 || !has[auto]) return null;
+  const pace = o.hours > 0 ? (o.ghost.km / o.hours) * 24 : 0;
+  if (pace <= 1) return null;
+  const base = o.orders[auto];
+  let free: { i: number; days: number } | null = null;
+  for (const [i, p] of o.orders.entries()) {
+    if (i === auto || !has[i]) continue;
+    const days = (p.lead_km - base.lead_km) / pace;
+    if (days < 0.25) continue;
+    const priced = (p.hs_max ?? 0) - (base.hs_max ?? 0) >= 0.5 || (base.soc_min ?? 1) - (p.soc_min ?? 1) >= 0.08;
+    if (priced) return null; // a real trade: ask
+    if (!free || days > free.days) free = { i, days };
+  }
+  const days = Math.round(o.hours / 24);
+  if (free) {
+    const p = o.orders[free.i];
+    return `${d.text} The forecast for the next ${days} days favours ${d.choices[free.i].plain ?? d.choices[free.i].label.split(":")[0].toLowerCase()} (${timeChange(p.lead_km - base.lead_km, pace)}), in no worse seas. Change it in Orders.`;
+  }
+  return `${d.text} The forecast for the next ${days} days has every way through come out about the same as the autopilot's, so she carries on.`;
+}
+
 function maybeDecide(): boolean {
   const st = game.status;
   if (!st || rate === 0) return false;
   const d = decisionDue(st, lastForecast);
   if (!d) return maybeRouteCheck(st);
+  const callBefore = lastCallH;
   lastCallH = st.day * 24;
   callCount++;
   setRate(0, true);
@@ -1905,9 +1932,21 @@ function maybeDecide(): boolean {
   const stakes: Promise<Outlook | null> = orders.some(Boolean)
     ? game.outlook(orders.map((o) => o ?? { heading: "auto" }), LOOK_H).catch(() => null)
     : Promise.resolve(null);
+  const has = orders.map((x) => !!x);
   whenAt(st.day * 24, async () => {
     const o = await stakes;
-    if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, o, orders.map((x) => !!x));
+    if (seq !== decisionSeq || rate !== 0 || game.status?.over) return;
+    // The Stream asks only when there's something to weigh (Elena, 12 Nov); otherwise a note
+    // and the clock runs on. Storm cards always ask: the knockdown risk is the price.
+    const quiet = d.kind === "stream" && o ? notWorthAsking(d, o, has) : null;
+    if (quiet) {
+      lastCallH = callBefore; // no call was made: the cadence guard doesn't count it
+      page.decisions.at(-1)!.asked = false;
+      note(quiet, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info);
+      setRate(lastRate);
+      return;
+    }
+    showDecision(d, o, has);
   });
   return true;
 }
