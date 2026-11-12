@@ -450,6 +450,8 @@ const status = {
   /** Hold the cloud cover or fog at a level (0..1) for tests and pictures; -1 follows the log. */
   /** Test hooks: cloud and fog 0..1, and the wind's speed for the looks (m/s, its logged direction); -1 = as logged. */
   force: { cloud: -1, fog: -1, wind: -1 },
+  /** Test hook: a storm's wall on the horizon (compass bearing, km to its centre), or null. */
+  stormWall: null as { bearing: number; km: number } | null,
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */
@@ -1212,6 +1214,9 @@ renderer.setAnimationLoop(() => {
       atmos.ambient,
       rep.rain ? valueAt(rep, rep.rain, hour) : null,
     );
+    clouds.seed(utc(rep.start) / 86400e3); // each voyage its own sky
+    clouds.setMoon(atmos.moonDir, atmos.moonlight);
+    clouds.setStorm(status.stormWall);
     clouds.closeIn(atmos.fog);
     status.cloud = clouds.cover;
     status.fog = clouds.fog;

@@ -2114,6 +2114,7 @@ renderer.setAnimationLoop(() => {
   atmos.set(sp.el, sp.az, storm);
   showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient, r?.rain ? valueAt(r, r.rain, h) : null);
+  clouds.setMoon(atmos.moonDir, atmos.moonlight);
   clouds.closeIn(atmos.fog);
   const rate = r?.rain ? valueAt(r, r.rain, h) : null;
   // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.

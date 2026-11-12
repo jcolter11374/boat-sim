@@ -380,7 +380,9 @@ export class Atmosphere {
     this.ambient = dark + (1 - dark) * day * (1 - Math.max(0.4 * storm, 0.35 * overcast));
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
-    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), storm);
+    // A blow or a full overcast turns the haze cold grey quickly (Hana): at force 8 the dusk's
+    // orange is gone from the murk and stays only in the break under the deck, towards the sun.
+    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), Math.max(smooth(storm, 0, 0.6), 0.85 * overcast));
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = this.horizon * (0.9 - 0.77 * storm);
     // Spindrift in a severe gale closes the view in further (storm.ts sprayVisibility).
