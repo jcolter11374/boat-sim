@@ -142,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     reply = json.loads(a.src.read_text()) if a.src else fetch()
     if a.raw:
+        a.raw.parent.mkdir(parents=True, exist_ok=True)  # the bake step has no runs/seamarks yet
         a.raw.write_text(json.dumps(reply))
     marks = marks_from_overpass(reply)
     if not marks:
