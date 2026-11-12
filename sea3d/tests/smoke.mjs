@@ -91,7 +91,7 @@ try {
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
     if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
-    // No boat saved yet: you sail Our kayak, so the chip says so; "build one" is only for the Boatyard (audit A3).
+    // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
@@ -411,11 +411,15 @@ try {
       return same;
     });
     if (looks.length) fail(`boatyard: choices that look the same on the boat: ${looks.join("; ")}`);
+    // No money in the game (John, 12 Nov): no price, cost or $ anywhere on the page, and
+    // the choices that only ever changed the price are gone.
     const greyed = await page.evaluate(() => ({
       noeff: document.querySelectorAll(".opt.noeff").length,
       shape: !!document.querySelector('.opt[data-slot="shape"]'),
+      money: (document.getElementById("parts").innerText + " " + document.getElementById("sum").innerText).match(/\$\d|\bprices?\b|\bcosts?\b|\bcheaper\b|price TBD|PRICE ONLY|\bROUGH\b/i)?.[0] ?? "",
+      dead: document.querySelectorAll('.opt[data-slot="spares"], .opt[data-opt="lead-50-scrap"], .opt[data-slot="radar"]').length,
     }));
-    if (!greyed.shape || greyed.noeff < 3) fail(`boatyard: the simulator's new slots or "no effect yet" options are missing: ${JSON.stringify(greyed)}`);
+    if (!greyed.shape || greyed.noeff || greyed.money || greyed.dead) fail(`boatyard: money on screen, or price-only choices still shown: ${JSON.stringify(greyed)}`);
     // The other hull shapes show their own models (when the build has them), in place of the kayak.
     const shapes = await page.evaluate(async () => {
       const out = {};
@@ -436,7 +440,7 @@ try {
     await page.waitForFunction(() => window.__yard.backend && !document.querySelector("#launch").disabled, null, { timeout: 30000 });
     const how = await page.evaluate(() => ({ backend: window.__yard.backend, text: document.querySelector("#result").textContent }));
     if (!how.text || /failed/.test(how.text)) fail(`boatyard launch: ${JSON.stringify(how)}`);
-    log.push(`boatyard ${y1.share}, ${greyed.noeff} greyed options, launch via ${how.backend}`);
+    log.push(`boatyard ${y1.share}, no money on screen, launch via ${how.backend}`);
     // Start from the Randolph boat: its own slots and totals, the model dressing to the picks, a share link with the base.
     await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
     await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });

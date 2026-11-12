@@ -8,6 +8,7 @@
 // with Theo's precomputed grid now and the simulator in the browser later.
 
 import * as THREE from "three";
+import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -48,7 +49,6 @@ import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type Lau
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
 // ---------- 3D: the kayak on a calm sea ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -217,23 +217,18 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   top.className = "top";
   const name = document.createElement("span");
   name.textContent = o.n;
-  // Tags in a player's words (#315 item 14): what we'd fit, rough figures, and parts
-  // that change only the price and weight on the list (the simulator doesn't sail them yet).
-  if (o.def) name.append(badge("plan", base === "kayak" ? "OUR PICK" : "AS BUILT", base === "kayak" ? "The part on our kayak" : "The part on their boat as built"));
-  if (o.est) name.append(badge("est", "ROUGH", "A rough figure: nobody has measured or quoted it yet"));
-  if (o.effect === "no effect yet") {
-    name.append(badge("noeff", "PRICE ONLY"));
-    b.classList.add("noeff");
-    b.title = `Changes the price and parts list only: the simulator doesn't sail this part yet${o.basis ? ` (${o.basis})` : ""}, so a test sails the boat without it.`;
-  }
+  // Tags in a player's words (Leo, audit item 10): the planned part, quietly. No prices
+  // (John: no money in the game); estimates show as "~" before the part's figure.
+  if (o.def) name.append(badge("plan", base === "kayak" ? "Planned" : "As built", base === "kayak" ? "The part on our kayak" : "The part on their boat"));
   // What this part would do to the odds, filled in by drawChance (Leo: see which swap is worth trying).
   const delta = document.createElement("span");
   delta.className = "delta";
   name.append(delta);
-  const price = document.createElement("span");
-  price.className = "price";
-  price.textContent = o.priceTbd ? "price TBD" : o.cost ? usd(o.cost) : "$0";
-  top.append(name, price);
+  const fig = document.createElement("span");
+  fig.className = "price figure";
+  fig.textContent = partFigure(slot, o);
+  if (o.est && fig.textContent) fig.title = "Our estimate: nobody has measured this yet.";
+  top.append(name, fig);
   const d = document.createElement("div");
   d.className = "d";
   d.textContent = o.d;
@@ -272,7 +267,12 @@ function drawSlots(): void {
       name.style.margin = "6px 2px 4px";
       name.textContent = slot.name;
       g.append(name);
-      for (const o of slot.opts) g.append(optionButton(slot, o));
+      const shown = shownOptions(slot);
+      if (!shown.length) {
+        name.remove();
+        continue;
+      }
+      for (const o of shown) g.append(optionButton(slot, o));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;
@@ -387,14 +387,11 @@ function redraw(): void {
     b.title = sail ? "Doesn't apply: the wing sail only build has no motors" : "";
   });
   // Totals.
-  $("s-cost").textContent = usd(s.partsCost);
-  $("s-prog").textContent = usd(s.programCost);
-  $("s-total").textContent = usd(s.partsCost + s.programCost);
   $("s-kg").textContent = `${s.massKg.toFixed(1)} kg`;
   $("s-sol").textContent = `${s.solarW} W`;
   $("s-bat").textContent = `${s.batteryWh.toLocaleString("en-US")} Wh`;
   $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
-  $("s-est").textContent = s.estimates.length ? `Includes rough figures: ${s.estimates.join(", ")}.` : "";
+  $("s-est").textContent = s.estimates.length ? `~ Includes our estimates for: ${s.estimates.join(", ")}.` : "";
   void drawChance();
   // The model.
   if (outfit && base === "kayak") {
@@ -563,12 +560,15 @@ window.addEventListener("hashchange", () => {
 
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
-  kayak:
-    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ROUGH marks figures nobody has measured or quoted yet.",
-  revc:
-    "Our model of the Randolph team's Rev C5 (11 Nov 2026): a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ROUGH marks our guesses.",
-  revb:
-    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ROUGH marks our guesses.",
+  kayak: "Build your own version of our kayak. Swap a part and watch the boat and its odds of finishing change.",
+  revc: "Our model of the Randolph team's Rev C5: a 1.5 m self-righting boat with a rigid wing sail and two rudders. Swap a part and watch its odds change.",
+  revb: "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder and an 8.2 kg keel.",
+};
+/** Behind the intro's "i" (Leo): where the parts come from. No prices (John: no money in the game). */
+const INTRO_NOTE: Record<BaseKey, string> = {
+  kayak: "The parts are real ones you can buy. A ~ before a number means it's our estimate: nobody has weighed or measured it yet.",
+  revc: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
+  revb: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
 };
 /** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
 function useBase(hash: string): void {
@@ -576,8 +576,14 @@ function useBase(hash: string): void {
   if (!c) return;
   cat = c;
   design = decodeDesign(c, hash);
+  design.picks = livePicks(c.slots, design.picks); // hidden parts sail like the planned one
   status.base = base;
-  $("intro").textContent = INTRO[base];
+  const intro = $("intro");
+  intro.textContent = `${INTRO[base]} `;
+  const i = Object.assign(document.createElement("span"), { className: "info", textContent: "i", tabIndex: 0, title: INTRO_NOTE[base] });
+  i.setAttribute("role", "note");
+  i.setAttribute("aria-label", INTRO_NOTE[base]);
+  intro.append(i);
   const credit = $("credit");
   credit.replaceChildren();
   if (c.credit) {
