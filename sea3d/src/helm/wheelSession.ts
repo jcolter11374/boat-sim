@@ -407,7 +407,7 @@ export class WheelSession {
       btn.setAttribute("aria-pressed", String(x === 0 ? this.paused : !this.paused && x === this.speed));
     }
     el(r, ".w-speed").textContent = `${w.s.speedKn.toFixed(1)} kn`;
-    el(r, ".w-bestt").textContent = b.speedKn > 0.2 ? `best ${b.speedKn.toFixed(1)}` : "too close to the wind";
+    el(r, ".w-bestt").textContent = b.speedKn > 0.2 ? `best ${b.speedKn.toFixed(1)}` : "no speed here";
     const top = Math.max(b.speedKn, w.s.speedKn, 1) * 1.15;
     el(r, ".w-bar .w-now").style.width = `${(w.s.speedKn / top) * 100}%`;
     el(r, ".w-bar .w-best").style.left = `${(b.speedKn / top) * 100}%`;
@@ -434,7 +434,7 @@ export class WheelSession {
     const twa = w.twa();
     const side = twa >= 0 ? "right" : "left";
     const a = Math.abs(twa);
-    const sailing = a < 40 ? "too close: turn away" : a < 70 ? `upwind, ${side}` : a < 120 ? `reach, ${side}` : a < 160 ? `behind, ${side}` : "dead behind";
+    const sailing = a < 40 ? "into the wind" : a < 70 ? `upwind, ${side}` : a < 120 ? `reach, ${side}` : a < 160 ? `behind, ${side}` : "dead behind";
     el(r, ".w-twa").textContent = sailing;
     el(r, ".w-twa").title = `${Math.round(a)}° off the bow`;
     el(r, ".w-auto").textContent = w.s.autoTrim ? "on" : "off";

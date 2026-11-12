@@ -163,13 +163,14 @@ export function bestSheet(t: TrimTable, plan: string, twsKn: number, twaDeg: num
 }
 
 /** The sails as the telltales show them, in words a non-sailor can act on. */
-export type SailState = "flapping" | "ease" | "good" | "in" | "stalled";
+export type SailState = "flapping" | "ease" | "good" | "in" | "stalled" | "irons";
 export const SAIL_WORDS: Record<SailState, string> = {
   flapping: "Flapping: pull the sail in (Up)",
   in: "Drawing, a little loose: pull in (Up)",
   good: "Drawing well",
   ease: "Drawing, a little tight: ease out (Down)",
   stalled: "Stalled: ease the sail out (Down)",
+  irons: "Too close to the wind",
 };
 
 export interface Inputs {
@@ -291,11 +292,13 @@ export class Wheel {
   }
 
   sailState(): SailState {
+    // Pointing too close to the wind no trim fills the sail: say so, not "Drawing well" (Ines, 12 Nov).
+    const b = this.best();
+    if (b.speedKn <= 0.2) return "irons";
     const alpha = this.awa() - this.s.sheet;
     if (alpha < 2) return "flapping";
     // Judged against the sweet spot, not the raw angle: running before the wind the best
     // trim is a stalled sail (it pushes by drag), so "stalled" means too tight for here.
-    const b = this.best();
     if (this.s.sheet >= b.lo - 0.5 && this.s.sheet <= b.hi + 0.5) return "good";
     if (this.s.sheet > b.hi) return "in";
     return alpha > this.table.alpha_stall_deg + 4 ? "stalled" : "ease";

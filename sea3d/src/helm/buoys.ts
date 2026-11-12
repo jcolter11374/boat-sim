@@ -17,6 +17,10 @@ import { heightAt, type WaveComponent } from "../waves";
 
 const MARK = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.65 });
 const FINISH = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.65 });
+/** A finish gate's marks: a saturated yellow that holds its colour through the haze (Ines: the gate must read). */
+const GATE = new THREE.MeshStandardMaterial({ color: 0xffc400, emissive: 0x6a4a00, roughness: 0.6, fog: false });
+/** A gate mark is never smaller than real size seen from this far (m): about 8 px or more on screen at any range (Ines). GUESS */
+const GATE_SEEN_M = 170;
 const WET = new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.35, transparent: true, opacity: 0.55 });
 
 /** How deep the mark floats (m): the bottom of the body is this far under the surface. GUESS */
@@ -65,7 +69,7 @@ export class Buoys {
     for (const m of this.marks) this.group.remove(m.mesh);
     this.gate = gate; // a finish gate: every mark is yellow and shows from the start
     this.marks = xy.map((p, i) => {
-      const mat = gate || (i === xy.length - 1 && xy.length > 1) ? FINISH : MARK;
+      const mat = gate ? GATE : i === xy.length - 1 && xy.length > 1 ? FINISH : MARK;
       const mesh = new THREE.Group();
       mesh.add(new THREE.Mesh(BODY, mat), new THREE.Mesh(TOP, mat), new THREE.Mesh(BAND, WET));
       this.group.add(mesh);
@@ -117,7 +121,10 @@ export class Buoys {
       m.h = m.h == null ? h : m.h + (h - m.h) * kH;
       m.tx += (wantX - m.tx) * kT;
       m.tz += (wantZ - m.tz) * kT;
-      m.mesh.position.set(x, m.h - DRAFT_M, z);
+      // A gate mark grows with distance past GATE_SEEN_M (bigger than real, on purpose) so it never shrinks to a speck.
+      const k = this.gate ? Math.max(1, Math.hypot(x, z) / GATE_SEEN_M) : 1;
+      m.mesh.scale.setScalar(k);
+      m.mesh.position.set(x, m.h - DRAFT_M * k, z);
       m.mesh.rotation.set(m.tx, 0, m.tz);
     }
   }

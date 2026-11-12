@@ -260,7 +260,7 @@ export class Landmarks {
       const mat = new THREE.SpriteMaterial({ map: glow(), color: WHITE, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false, opacity: 0 });
       sprite = new THREE.Sprite(mat);
       sprite.position.set(0, lm.light.focal, 0);
-      sprite.scale.setScalar(0.05); // a point with a little bloom: at 0.09 the halo swamped the house and its tag (Rosa, night check)
+      sprite.scale.setScalar(0.07); // bigger than a yacht's masthead light (0.034), but at 0.09 the halo swamped the house and its tag
       sprite.renderOrder = 30;
       sprite.visible = false;
       group.add(sprite);

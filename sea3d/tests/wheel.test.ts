@@ -166,3 +166,8 @@ test("she leans away from the wind: wind from port rolls her to starboard, and t
   sail(stbd, 20);
   assert.ok(rollFromWheel(stbd.heelSigned()) < 0, "wind from starboard: roll to port");
 });
+
+test("pointing straight into the wind the sail says so, never 'Drawing well'", () => {
+  const w = new Wheel(T, CRUISER_HANDLING, { twsKn: 12, fromDeg: 0 }, { heading: 5 }, SPELL);
+  assert.equal(w.sailState(), "irons");
+});
