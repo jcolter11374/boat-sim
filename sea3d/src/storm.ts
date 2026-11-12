@@ -24,9 +24,21 @@ export function whitecaps(windMs: number): number {
   return THREE.MathUtils.clamp(3.84e-6 * Math.max(windMs, 0) ** 3.41, 0, 0.3);
 }
 
-/** Share of the sea under streaks of blown foam: none below force 7, most of it by force 12. */
+/** Share of the sea under streaks of blown foam: none below force 7, well marked by force 8
+ *  (the WMO's words), most of it by force 10. GUESS: the steepness is display tuning (Elena). */
 export function foamStreaks(windMs: number): number {
-  return 0.6 * smooth(beaufort(windMs), 7, 11.5);
+  return 0.6 * smooth(beaufort(windMs), 7, 10);
+}
+
+/**
+ * Share of the sea that looks white from crests, for drawing: Monahan's fit (whitecaps())
+ * counts only the crests breaking now; the foam they leave behind covers a few times more
+ * (Monahan and Woolf 1989), and from force 6 up the WMO's descriptions put white crests over
+ * a good share of the sea (Elena: "the HUD says 37 kn, the sea has to look it").
+ * GUESS: the factor, 1 up to force 5, about 3.3 at force 8, 3.5 from 8.5 up.
+ */
+export function whiteCrests(windMs: number): number {
+  return Math.min(whitecaps(windMs) * (1 + 2.5 * smooth(beaufort(windMs), 5.5, 8.5)), 0.6);
 }
 
 /** All the white on the sea, crests and streaks: about half at force 10, nearly all at 12. */

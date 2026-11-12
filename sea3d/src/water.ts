@@ -19,7 +19,7 @@ import * as THREE from "three";
 import type { Quality } from "./boats/parts";
 import { MAX_GPU_WAVES, gpuWaves, heightAt, type WaveComponent } from "./waves";
 import { PLACE } from "./land/place";
-import { foamStreaks, whitecaps } from "./storm";
+import { foamStreaks, whiteCrests } from "./storm";
 import { SEA_SURFACE_PARS, seaUniforms, writeSeaUniforms } from "./seaSurface";
 import { RAIN_RINGS, rainUniforms } from "./rainRings";
 import { ShortWaveLayer, windSeaFrom, type Detail } from "./seaDetail";
@@ -361,11 +361,32 @@ vec2 q = vec2(dot(pf, wd), dot(pf, vec2(-wd.y, wd.x)));
 float fpF = max(length(fwidth(vWPos.xz)), 1e-4);
 float o2 = smoothstep(0.08, 0.3, fpF);
 float o3 = smoothstep(0.02, 0.1, fpF);
+#ifdef SEA_LITE
+// Low has no separate streak lanes (their straight lines read as seams, Elena): in a gale its
+// caps are drawn out along the wind instead, into broken, uneven streaks, for free.
+float stx = 1.0 - 0.5 * min(uStreak * 4.0, 1.0);
+float fn = vnoise(vec2(q.x * 0.5 * stx, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
+         + mix(vnoise(vec2(q.x * 1.6 * stx, q.y * 4.0) - uTime * 0.08), 0.5, smoothstep(0.03, 0.12, fpF)) * 0.3 // fades sooner: far off it drew fine regular dashes
+#else
 float fn = vnoise(vec2(q.x * 0.5, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
          + mix(vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08), 0.5, o2) * 0.3
+#endif
          + mix(vnoise(vWPos.xz * 7.0 + uTime * 0.2), 0.5, o3) * 0.2;
+#ifdef SEA_LITE
+// Low has only this noise mask for its caps, tuned for Monahan's few per cent: past that it
+// turned the whole sea white at force 8 (whiteCrests() is ~0.3 there). Medium and up get their
+// extra white from the short waves' foam instead.
+float thr = 0.8 - 1.4 * min(uCover, 0.15) - 0.35 * vFoam * (1.0 - smoothstep(0.04, 0.15, fpF)); // far crests' foam drew rows of fine dashes
+#else
 float thr = 0.8 - 1.4 * uCover - 0.35 * vFoam;
+#endif
+#ifdef SEA_LITE
+// Thin and see-through at the edge, whiter inside: not a flat paper cut-out (Elena).
+float foamMask = smoothstep(thr, thr + 0.05, fn) * (0.45 + 0.55 * smoothstep(thr + 0.05, thr + 0.22, fn)) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+#else
 float foamMask = smoothstep(thr, thr + 0.1, fn) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+#endif
+float foamSunk = 0.0; // bubbles just under the surface round a fresh cap (Medium and up)
 if (SEA_DET_N > 0) {
   // Whitecaps where the FFT's crests fold over, fading over seconds; as a patch
   // fades it breaks up into flecks instead of shrinking as a blob (Elena). The big
@@ -385,26 +406,23 @@ if (SEA_DET_N > 0) {
   // Thick and opaque where it's piled up, thin and see-through elsewhere; the
   // edge softens with the pixel's footprint so it never cuts out sharp from afar.
   // A breaking crest has a crisp edge; old foam goes to lace (holes through it) (Ines, Elena).
-  float edge = mix(0.2, 0.04, smoothstep(0.3, 0.9, fresh)) + 1.5 * fpF;
+  float edge = mix(0.25, 0.1, smoothstep(0.3, 0.9, fresh)) + 1.5 * fpF; // soft even when fresh: no paper cut-outs (Ines, round 5)
   float lace = mix(smoothstep(0.35, 0.6, mix(vnoise(r2 * 13.0 + 5.0), 0.5, o3)), 1.0, 0.4 * smoothstep(0.25, 0.9, fresh)); // even a fresh cap is torn
   float young = smoothstep(th, th + edge, tex) * mix(0.35, 1.0, smoothstep(th + 0.08, th + 0.35, tex))
               * mix(0.6, 0.95, smoothstep(0.6, 1.0, fresh)) * lace;
   float near = young + 0.35 * vFoam * smoothstep(0.66, 0.78, tex + 0.3 * fresh) * step(0.002, uCover);
-  foamMask = mix(clamp(near, 0.0, 1.0), 0.7 * uCover, detFar) * (1.0 - 0.5 * farMix);
+  // Where the patch's texels are finer than the pixel (far off, and on wave backs seen edge on),
+  // the wind's own scattered caps (the noise mask above, broken up by the foam texture), not an even white sheen: a sheen there
+  // drew smooth white smears along every wave back (Ines, round 6).
+  foamMask = mix(clamp(near, 0.0, 1.0), max(foamMask * mix(smoothstep(0.35, 0.65, tex), 0.6, o2), 0.25 * uCover), detFar) * (1.0 - 0.5 * farMix);
+  // Round a fresh cap the water is milky with bubbles just under the surface, so the foam
+  // reads as sunk into the sea with soft edges, not laid on top of it (Ines, round 5).
+  foamSunk = smoothstep(0.02, 0.4, fresh) * (1.0 - clamp(near, 0.0, 1.0)) * (1.0 - detFar);
 }
 // Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
 // downwind; where they're finer than a pixel, their average whiteness instead.
 #ifdef SEA_LITE
-// Low keeps main's cheaper lanes (four noises instead of six), for its frame budget.
-if (uStreak > 0.001) {
-  vec2 qs = q - vec2(uTime * 1.2, 0.0);
-  qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
-  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 0.9)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 2.3) + 17.0), 0.5, smoothstep(0.1, 0.4, fpF)) * 0.4;
-  float thrS = 0.5 + 0.51 * (0.5 - uStreak);
-  float lanes = smoothstep(thrS - 0.03, thrS + 0.07, ns) * (0.7 + 0.3 * fn);
-  float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
-  foamMask = max(foamMask, 0.9 * streak);
-}
+// Low draws no lanes: its caps stretch along the wind instead (above).
 #else
 if (uStreak > 0.001) {
   vec2 qs = q - vec2(uTime * 1.2, 0.0);
@@ -416,17 +434,23 @@ if (uStreak > 0.001) {
   float r = vnoise(vec2(qs.x * 0.05, qs.y * 0.35));
   float ridge = 1.0 - abs(2.0 * r - 1.0);
   float fwR = fwidth(ridge);
-  float line = smoothstep(0.86 - 1.5 * fwR, 0.97, ridge) * mix(1.0, 0.35, clamp(fwR * 4.0, 0.0, 1.0));
+  float line = smoothstep(0.91 - 1.5 * fwR, 0.985, ridge) * mix(1.0, 0.35, clamp(fwR * 4.0, 0.0, 1.0)); // thin: wide soft lanes read as glossy smears (Ines, round 6)
   float brk = vnoise(vec2(qs.x * 0.8, qs.y * 1.5) + 31.0) * 0.6
             + mix(vnoise(vec2(qs.x * 0.9, qs.y * 5.0) + 7.0), 0.5, smoothstep(0.05, 0.25, fpF)) * 0.4;
   // Lanes come and go every few tens of metres along the wind, and break into
   // dashes within that, so none reads as one long straight stick (Ines, Iris).
   float present = smoothstep(0.62 - uStreak, 0.8 - uStreak, vnoise(vec2(qs.x * 0.035, qs.y * 0.12) + 3.0));
   float lanes = line * smoothstep(0.45, 0.75, brk) * present;
+  // Lumpy and frothy along their length, like the foam they are, not smooth ribbons.
+  lanes *= mix(smoothstep(0.3, 0.7, vnoise(vec2(qs.x * 2.5, qs.y * 9.0) + 11.0)), 0.5, smoothstep(0.05, 0.25, fpF));
   // Lanes clearer near the lens, fainter where many crowd into a pixel (Ines).
   float streak = mix(mix(0.6, 0.35, smoothstep(10.0, 60.0, length(vWPos - cameraPosition))) * lanes, 0.4 * (uStreak + uCover), smoothstep(0.4, 1.5, fpF));
   foamMask = max(foamMask, streak);
 }
+#endif
+#ifndef SEA_LITE
+diffuseColor.rgb *= 1.0 - 0.2 * smoothstep(0.15, 0.6, uSeaSky.w) * smoothstep(0.1, 0.4, uSunDir.y); // the water body darker under a daytime deck; the foam keeps its white (Ines, round 6)
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.8 + vec3(0.02, 0.05, 0.05), 0.4 * foamSunk); // GUESS tint
 #endif
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), foamMask * (SEA_DET_N > 0 ? 0.88 : 1.0)); // off-white, a little see-through
 /* boat wash (boatWash.ts) */
@@ -497,15 +521,30 @@ const FRAG_SKY = /* glsl */ `
 float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
 #ifdef SEA_LITE
 // Low: the deck's colour and no sun glitter under it, without branches (Maya's frame budget).
-radiance = mix(radiance, uSeaSky.rgb, deckS);
+// By day the mirrored deck comes back darker, so the far sea goes slate, not a pale band (Elena).
+radiance = mix(radiance, uSeaSky.rgb * (1.0 - 0.35 * smoothstep(0.1, 0.4, uSunDir.y)), deckS);
+// The body lit grey by the deck, not by the clear sky's blue (Elena: Low read bright blue under a grey deck).
+iblIrradiance = mix(iblIrradiance, vec3(dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722))), deckS);
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
 #else
-radiance = mix(seaColdSky(radiance), uSeaSky.rgb, deckS);
+// An overcast deck is not one flat grey: it is brighter overhead than at the horizon (the
+// CIE overcast sky, L ~ (1 + 2 sin h) / 3), and a face tipped to mirror the water beyond
+// sees darker sea. Mirrored as one flat colour, every ripple vanished and the near water read
+// as a smooth slab (Ines, round 5); a gentle gradient lets the chop show. Flat at the horizon,
+// so the far sea still meets the sky.
+vec3 Vd = normalize(cameraPosition - vWPos);
+vec3 Rd = reflect(-Vd, inverseTransformDirection(normal, viewMatrix));
+float deckG = (1.0 + 0.25 * clamp(Rd.y, 0.0, 1.0)) * mix(0.7, 1.0, smoothstep(-0.3, 0.05, Rd.y)); // GUESS strengths
+radiance = mix(seaColdSky(radiance), uSeaSky.rgb * deckG, deckS);
 // The sea's body is lit by the deck too, not the clear sky's blue: same brightness, the deck's hue.
 iblIrradiance = mix(iblIrradiance, uSeaSky.rgb * (dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722)) / max(dot(uSeaSky.rgb, vec3(0.2126, 0.7152, 0.0722)), 1e-3)), deckS);
 // Rain or a closed deck hides the sun: no bright spot of it left in the sky map's
 // reflection (a capped, cloud-lit sky instead).
 radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(uRain.x, deckS));
+// Under a daytime deck a gale's sea is dark slate with the foam the brightest thing in it:
+// the mirrored deck comes back well under the sky's own grey, so no wave face shines like
+// cling film (Ines, round 6). Dusk and night are dark already. GUESS strength.
+radiance *= 1.0 - 0.35 * deckS * smoothstep(0.1, 0.4, uSunDir.y);
 // Even a moonless night sky glows a little (starlight, airglow): enough for the
 // wave faces to read faintly instead of a black void (Leo). Nothing by day.
 // The Bay's silty water: the sky it mirrors comes back greyer and a little green,
@@ -569,17 +608,19 @@ if (uMirror > 0.001) {
 `;
 
 // Under a deck the far sea converges on the sky's own horizon colour (seaSky().rgb, Hana), over the last
-// ~1 degree below it (15-35 px at 720p, by lens), in the same space the fog and the sky's
+// ~1.7 degrees below it (about 20 rows at 720p), after the fog, in the space the sky's
 // haze are mixed in, so sea and sky meet without a knife edge (Ines, Hana).
 const FRAG_HAZE = /* glsl */ `
 #ifndef SEA_LITE
 if (uSeaSky.w > 0.2) { // uniform branch: only under a deck
   vec3 Vh = normalize(vWPos - cameraPosition);
-  float hz = 1.0 - smoothstep(0.0, 0.015, -Vh.y); // the last degree or so
+  // The last ~1.7 degrees (about 20 rows at 720p), and after the scene fog: the fog colour is
+  // a little paler than the sky's own horizon, which drew a thin pale line (Ines, round 5).
+  float hz = 1.0 - smoothstep(0.0, 0.03, -Vh.y);
   // Toward a break the sky's horizon is the break's light, not the haze: leave the sea be there.
   hz *= 1.0 - uSeaBreak.w * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)) * smoothstep(0.35, 0.97, dot(normalize(Vh.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
   // gl_FragColor is already in the output space here, so the haze goes there too.
-  gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * hz * smoothstep(0.2, 0.8, uSeaSky.w));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * smoothstep(0.2, 0.8, uSeaSky.w));
 }
 #endif
 `;
@@ -661,7 +702,7 @@ export class Sea {
         .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW)
         .replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n" + FRAG_SKY)
         .replace("#include <opaque_fragment>", FRAG_MIRROR + "\n#include <opaque_fragment>")
-        .replace("#include <fog_fragment>", FRAG_HAZE + "\n#include <fog_fragment>")
+        .replace("#include <fog_fragment>", "#include <fog_fragment>\n" + FRAG_HAZE)
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
     material.customProgramCacheKey = () => "boatsim-sea-v14";
@@ -816,7 +857,7 @@ export class Sea {
     this.uniforms.uRough.value = THREE.MathUtils.clamp(0.6 + hs / 5, 0.6, 1.4); // GUESS display tuning
     const u = windMs ?? Math.sqrt(hs / 0.0246);
     // Share of the sea white with breaking crests, and under blown foam (storm.ts, Beaufort).
-    this.uniforms.uCover.value = whitecaps(u);
+    this.uniforms.uCover.value = whiteCrests(u);
     this.uniforms.uStreak.value = foamStreaks(u);
     if (towards && towards.lengthSq() > 0) {
       this.uniforms.uWind.value.copy(towards).normalize();
