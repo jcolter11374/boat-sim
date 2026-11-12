@@ -466,10 +466,9 @@ const CHECKS = {
       await page.waitForFunction(() => !document.getElementById("practice-courses").hidden, null, { timeout: MIN }).catch(() => {
         throw new CheckFail("Practice didn't offer its courses");
       });
-      await page.click('#practice-courses button[data-course="triangle"]', { timeout: 15_000 });
-      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => {
-        throw new CheckFail("the triangle course didn't put you at the wheel");
-      });
+      // On software graphics Practice's first frames can hold the page for over 15 s, so a click
+      // waits there (Owen, 12 Nov); the helper waits for it to be idle and retries.
+      await practiceTriangle(page);
       await page.keyboard.down("ArrowLeft"); await page.waitForTimeout(800); await page.keyboard.up("ArrowLeft");
       await page.screenshot({ path: `play-${BROWSER}-practice-triangle.png` }).catch(() => {});
       out.push("Practice: the triangle put me at the wheel");
