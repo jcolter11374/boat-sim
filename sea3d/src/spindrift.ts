@@ -15,6 +15,7 @@ uniform vec3 uCam;
 uniform vec2 uWind;     // m/s the spray flies (x, z)
 attribute vec4 aSeed;   // x, z in 0..1, the phase, the size
 varying float vAlpha;
+varying float vSeed;
 float h1(float n) { return fract(sin(n) * 43758.5453); }
 void main() {
   float c = uTime / uLife + aSeed.z;
@@ -32,15 +33,27 @@ void main() {
   float near = smoothstep(1.5, 6.0, d);
   float far = 1.0 - smoothstep(0.3 * uBox, 0.5 * uBox, length(xz - uCam.xz));
   vAlpha = sin(3.14159 * age) * near * far;
+  vSeed = aSeed.w * 37.0 + k * 1.618;
 }`;
 const frag = /* glsl */ `
 uniform float uAmount;
 uniform vec3 uColor;
 varying float vAlpha;
+varying float vSeed;
+float h2(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 q) {
+  vec2 i = floor(q), f = fract(q);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y);
+}
 void main() {
+  // A torn, flat wisp of spray, not a round disc (round soft discs read as lens bokeh):
+  // squashed into a low sheet and broken up by its own noise.
   vec2 p = gl_PointCoord * 2.0 - 1.0;
+  p.y *= 2.4;
   float r = dot(p, p);
-  float a = uAmount * vAlpha * (1.0 - smoothstep(0.2, 1.0, r)) * 0.55;
+  float torn = vn(p * 2.5 + vSeed) * 0.65 + vn(p * 6.0 - vSeed) * 0.35;
+  float a = uAmount * vAlpha * (1.0 - smoothstep(0.1, 1.0, r)) * smoothstep(0.35, 0.75, torn) * 0.6;
   if (a < 0.004) discard;
   gl_FragColor = vec4(uColor, a);
 }`;

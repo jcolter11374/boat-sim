@@ -288,6 +288,7 @@ function setQuality(l: Look): void {
   atmos.setBloom(q === "high");
   atmos.setUltra(l === "ultra");
   atmos.setPixelRatio(ratio);
+  clouds.setQuality(l);
   status.look = l;
 }
 
@@ -1207,6 +1208,7 @@ renderer.setAnimationLoop(() => {
       atmos.sunDir,
       atmos.fog.color,
       atmos.ambient,
+      rep.rain ? valueAt(rep, rep.rain, hour) : null,
     );
     clouds.closeIn(atmos.fog);
     status.cloud = clouds.cover;

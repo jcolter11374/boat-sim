@@ -69,8 +69,9 @@ float fbm(vec2 p) {
 }`;
 
 const ROSE = new THREE.Color(0.75, 0.38, 0.45); // cloud undersides after the sun has set
-const CLOUD_Y = 600; // m, the cloud base
-const CLOUD_R = 9000; // m, how far the layer reaches (it fades out well before)
+const DOME_R = 9000; // m, the sphere the sky's cloud is painted on (inside the camera's far plane)
+/** Quality steps: Low draws one cheaper layer, High the deck and scud with shading, Ultra adds detail. */
+export type CloudQuality = "low" | "high" | "ultra";
 
 const cloudVert = /* glsl */ `
 varying vec3 vWorld;
@@ -79,54 +80,157 @@ void main() {
   vWorld = w.xyz;
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
-// The layer is drawn as fair-weather cumulus: rounded heaps with knobbly,
-// cauliflower edges (a warped noise field for the heaps, a "billow" noise for
-// the knobs). Each point looks a little way towards the sun: if there is more
-// cloud that way, it is in its own shade. Overhead you see the grey, flat
-// bases with bright thin edges; towards the horizon you see their sunlit
-// sides, white with the sun behind you and dark with silver edges against it.
-// Round sunset they glow orange underneath, then rose, then fade.
+// The sky's cloud, painted on a dome round the camera. Each pixel follows its view ray up
+// to three heights, so the cloud has real perspective all the way down to the horizon
+// (the old flat sheet at 600 m stopped short of it, leaving a bare band, and its noise
+// stretched into swirls at low angles). Detail fades with distance into the haze, and the
+// last few degrees above the horizon are the haze itself, the same colour as the sea's
+// far fade (the scene fog), so sky and sea meet without a line.
+//
+//  - Cumulus (fair weather), 1200 m: rounded heaps, lit on the side facing the sun (a
+//    surface direction from the heap's own shape), grey flat bases, silver edges against
+//    the sun, orange then rose at sunset.
+//  - Deck (overcast and storm), 1600 m: broad soft lumps, darker where thick; where it
+//    thins near the sun the light comes through as a brighter, warmer patch.
+//  - Scud (a blow), 350 m: ragged low cloud torn into streaks along the wind, moving fast.
+//  - Rain: grey curtains hanging from the deck in the distance, where it is raining.
+//
+// Driven by the voyage: cover (from the logged sunlight), storm (wind), rain (logged mm/h),
+// wind (drift and the scud's direction). uQ: 0 Low, 1 High, 2 Ultra.
 const cloudFrag = /* glsl */ `
-uniform float uCover, uDark, uWarm;
-uniform vec2 uDrift;
+uniform float uCover, uStorm, uRain, uWarm, uQ, uTime, uLight;
+uniform vec2 uDrift, uScud, uWind;
 uniform vec3 uCam, uSunDir, uLit, uShade, uHaze, uGlow;
 varying vec3 vWorld;
 ${noise}
-float billow(vec2 p) {
-  float v = 0.0, a = 0.5;
-  for (int k = 0; k < 4; k++) { v += a * abs(vnoise(p) * 2.0 - 1.0); p = p * 2.07 + vec2(5.3, 11.9); a *= 0.5; }
-  return v;
+// fbm whose finer octaves fade out as the ground they cover grows (lod 0 sharp .. 1 soft):
+// that is what stops distant cloud turning to swirls and shimmer.
+float fbmL(vec2 p, float lod, int oct) {
+  float v = 0.0, a = 0.5, w = 0.0;
+  for (int k = 0; k < 6; k++) {
+    if (k >= oct) break;
+    float keep = 1.0 - smoothstep(float(k) - 1.5, float(k) - 0.5, lod * 5.0);
+    v += a * keep * vnoise(p); w += a * keep;
+    p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5;
+  }
+  return v / max(w, 1e-3);
 }
-float dens(vec2 p) {
-  vec2 w = p + 0.45 * vec2(vnoise(p * 0.8 + 3.1), vnoise(p * 0.8 + 8.3));
-  return 0.9 * fbm(w) + 0.26 * (1.0 - billow(w * 3.0 + 1.7)) - 0.15;
+vec2 onLayer(vec3 dir, float h) { return uCam.xz + dir.xz * (h - uCam.y) / max(dir.y, 0.02); }
+// How blurred a layer is here, 0 sharp .. 1 gone to its average: a pixel near the horizon
+// covers a long strip of cloud (distance, and foreshortening at a grazing angle), so its
+// detail is filtered away instead of aliasing into swirls. scale: the layer's feature size.
+float footprint(float dist, float el, float scale) {
+  float px = dist * 0.0012 / max(el, 0.01); // ~ metres of cloud along the view per pixel
+  return smoothstep(0.08, 0.8, px / scale);
 }
 void main() {
-  vec2 p = (vWorld.xz + uDrift) / 900.0;
-  float n = dens(p);
-  float edge = 1.0 - uCover;
-  float d = smoothstep(edge - 0.015, edge + 0.07, n);
-  if (d < 0.004) discard;
-  float thick = smoothstep(edge, edge + 0.3, n);
-  // Self-shade: more cloud towards the sun means this bit is in shadow.
-  vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
-  float toward = dens(p + sunH * 0.09) - n;
-  float shade = clamp(0.55 * thick + 2.6 * toward, 0.0, 1.0);
-  vec3 view = normalize(vWorld - uCam);
-  float dist = length(vWorld.xz - uCam.xz);
-  float side = smoothstep(700.0, 3500.0, dist);           // far off you see the sides, not the base
-  float facing = dot(view, uSunDir);                        // +1 looking at the sun
-  float baseShade = mix(0.35 + 0.65 * shade, shade * (0.4 + 0.6 * smoothstep(-0.3, 0.6, facing)), side);
-  vec3 col = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uDark));
-  // Silver lining: thin edges light up looking towards the sun.
-  float rim = pow(max(facing, 0.0), 5.0) * (1.0 - thick);
-  col += uLit * rim * 0.9;
-  // Sunset: the undersides catch the low sun, strongest on the sun's side.
-  col += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
-  float far = smoothstep(2500.0, 8000.0, dist);
-  col = mix(col, uHaze, far);
-  float a = d * (1.0 - smoothstep(5000.0, 8500.0, dist)) * 0.96;
-  gl_FragColor = vec4(col, a);
+  vec3 dir = normalize(vWorld - uCam);
+  if (dir.y < -0.02) discard;
+  float el = max(dir.y, 0.0);
+  int oct = uQ < 0.5 ? 3 : uQ < 1.5 ? 5 : 6;
+  float facing = dot(dir, uSunDir);
+  float sunUp = smoothstep(-0.06, 0.12, uSunDir.y);
+  vec3 col = vec3(0.0);
+  float alpha = 0.0;
+  // Composite front to back: scud (nearest), then cumulus, then the deck.
+  // ---- scud ----
+  float scudAmt = smoothstep(0.35, 0.9, uStorm) * (0.6 + 0.4 * smoothstep(0.5, 4.0, uRain));
+  if (scudAmt > 0.01) {
+    vec2 q = onLayer(dir, 350.0);
+    float dist = length(q - uCam.xz);
+    float lod = footprint(dist, el, 900.0);
+    vec2 wd = length(uWind) > 0.1 ? normalize(uWind) : vec2(1.0, 0.0);
+    // Wind-aligned coordinates, stretched along the wind: torn streaks, not blobs.
+    vec2 r = vec2(dot(q + uScud, wd), dot(q + uScud, vec2(-wd.y, wd.x)));
+    float n = fbmL(r / vec2(4200.0, 1300.0), lod, oct);
+    n += 0.3 * (fbmL(r / vec2(900.0, 260.0) + 4.7, min(1.0, lod * 1.8), oct) - 0.5) * (1.0 - lod);
+    n = mix(n, 0.5, lod);
+    // Soft, wide edges: scud is wet vapour, not cut-out shapes.
+    float d = smoothstep(0.5 - 0.12 * scudAmt, 0.88, n) * scudAmt * 0.6;
+    // Ragged scud: paler grey wisps against the dark deck, a touch darker in their cores.
+    vec3 c = uHaze * mix(0.68, 0.84, smoothstep(0.85, 0.55, n)) * (0.85 + 0.15 * uLight);
+    c = mix(c, uHaze, smoothstep(1500.0, 9000.0, dist));
+    col += (1.0 - alpha) * d * c; alpha += (1.0 - alpha) * d;
+  }
+  // ---- cumulus ----
+  // Under a closing deck the heaps lose their sun and merge into it.
+  float deckAmt = max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm));
+  float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
+  if (cuAmt > 0.01 && alpha < 0.99) {
+    vec2 q = onLayer(dir, 1200.0) + uDrift;
+    float dist = length(q - uDrift - uCam.xz);
+    float lod = footprint(dist, el, 1100.0);
+    vec2 p = q / 1100.0;
+    vec2 w = p + 0.45 * vec2(vnoise(p * 0.8 + 3.1), vnoise(p * 0.8 + 8.3));
+    float n = mix(fbmL(w, lod, oct), 0.45, lod);
+    float edge = 1.0 - (0.42 + 0.5 * uCover);
+    float d = smoothstep(edge - 0.01, edge + 0.08 + 0.15 * lod, n);
+    if (d > 0.003) {
+      float thick = smoothstep(edge, edge + 0.28, n);
+      // The heap's surface direction from its own shape: up its slope towards the middle.
+      float shade = 0.5;
+      if (uQ > 0.5) {
+        vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+        float toward = fbmL(w + sunH * 0.08, lod, oct) - n;
+        shade = clamp(0.5 * thick + 2.4 * toward, 0.0, 1.0);
+      } else shade = 0.3 + 0.4 * thick;
+      float side = smoothstep(2500.0, 12000.0, dist); // far off you see the sunlit sides, not the base
+      float baseShade = mix(0.3 + 0.6 * shade, shade * (0.35 + 0.65 * smoothstep(-0.3, 0.6, facing)), side);
+      vec3 c = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0));
+      c += uLit * pow(max(facing, 0.0), 6.0) * (1.0 - thick) * 0.9 * sunUp; // silver lining
+      c += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
+      c = mix(c, uHaze, smoothstep(4000.0, 26000.0, dist));
+      d *= cuAmt;
+      col += (1.0 - alpha) * d * c; alpha += (1.0 - alpha) * d;
+    }
+  }
+  // ---- deck ----
+  if (deckAmt > 0.01 && alpha < 0.99) {
+    float h = 1600.0 - 500.0 * smoothstep(0.5, 6.0, uRain); // rain brings the deck down
+    vec2 q = onLayer(dir, h) + uDrift * 0.6;
+    float dist = length(q - uDrift * 0.6 - uCam.xz);
+    float lod = footprint(dist, el, 2500.0);
+    vec2 p = q / 5200.0;
+    float n = fbmL(p + 0.7 * vec2(vnoise(p * 0.4 + 1.3), vnoise(p * 0.4 + 6.1)), lod, oct);
+    n = mix(n, 0.5, lod);
+    // Mostly thick and dark; here and there thinner and paler. Few thin spots in a full gale with rain.
+    float wet = smoothstep(0.5, 5.0, uRain);
+    float thin = smoothstep(0.55, 0.88, n) * (1.0 - 0.5 * smoothstep(0.75, 1.0, uStorm)) * (1.0 - 0.4 * wet);
+    // Big slow bands of darker and lighter cloud (tens of km) under the lumps.
+    float band = vnoise(q / 22000.0 + 2.3);
+    // A heavy deck is darker than the horizon: darkest overhead, lightening as you look
+    // further off through miles of thinner cloud and haze. Its lumps are soft, low contrast.
+    float overhead = smoothstep(0.03, 0.5, el);
+    float dark = 0.72 - (0.2 + 0.1 * uStorm + 0.08 * wet) * overhead - 0.1 * band + 0.16 * (n - 0.5);
+    vec3 c = uHaze * mix(dark, 0.9, thin);
+    // Light through the deck: a brighter, warmer patch towards the sun where it is thin.
+    float toSun = pow(max(facing, 0.0), 3.0) * (0.35 + 0.65 * thin) * sunUp;
+    c += vec3(1.0, 0.84, 0.62) * uLight * toSun * 0.6;
+    c += uGlow * uWarm * 0.35 * smoothstep(-0.2, 0.9, facing) * thin * (1.0 - 0.6 * uStorm);
+    // Rain: grey curtains under the deck in the distance, by bearing, drifting with the wind.
+    if (uRain > 0.05) {
+      float az = atan(dir.z, dir.x);
+      float curtain = smoothstep(0.55, 0.8, fbmL(vec2(az * 6.0 + uTime * 0.004, 0.0) + uDrift.x * 0.0001, 0.2, 3));
+      float low = 1.0 - smoothstep(0.02, 0.16, el);
+      float streak = 0.8 + 0.2 * vnoise(vec2(az * 400.0, el * 12.0 + uTime * 0.3));
+      c = mix(c, uShade * 0.62, curtain * low * streak * smoothstep(0.05, 2.0, uRain) * 0.85);
+    }
+    c = mix(c, uHaze, smoothstep(6000.0, 45000.0, dist) * 0.85);
+    col += (1.0 - alpha) * deckAmt * c; alpha += (1.0 - alpha) * deckAmt;
+  }
+  // The horizon: everything goes to the haze over the last few degrees, as the sea does.
+  float hz = 1.0 - smoothstep(0.0, 0.16, el);
+  col = mix(col, uHaze * alpha, hz * hz * (3.0 - 2.0 * hz));
+  // A low sun behind a deck: the far edge of the cloud lights up warm along the horizon
+  // towards it, the light coming in under the deck from clear sky beyond.
+  float lowSun = smoothstep(-0.07, 0.0, uSunDir.y) * (1.0 - smoothstep(0.1, 0.35, uSunDir.y));
+  float under = pow(max(dot(normalize(dir.xz), normalize(uSunDir.xz + 1e-4)), 0.0), 6.0) * (1.0 - smoothstep(0.0, 0.12, el));
+  col += alpha * vec3(1.0, 0.62, 0.36) * under * lowSun * uLight * (0.25 + 0.35 * smoothstep(0.3, 0.9, uStorm + uCover));
+  // Behind the cloud, the bottom of the sky itself fades into the same haze.
+  float hb = 1.0 - smoothstep(-0.01, 0.09, el);
+  col += (1.0 - alpha) * uHaze * hb; alpha += (1.0 - alpha) * hb;
+  if (alpha < 0.004) discard;
+  gl_FragColor = vec4(col / max(alpha, 1e-3), alpha);
 }`;
 
 const BANK_H = 70; // m, how tall a fog bank stands
@@ -164,19 +268,27 @@ export class Clouds {
   cover = 0;
   fog = 0;
   private dayCover = 0.3; // last daytime reading, held through the night
-  private layer: THREE.Mesh<THREE.CircleGeometry, THREE.ShaderMaterial>;
+  private layer: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  private scud = new THREE.Vector2();
+  private rain = 0;
   private banks: THREE.Mesh<THREE.CylinderGeometry, THREE.ShaderMaterial>[] = [];
   private drift = new THREE.Vector2();
   private snapped = false;
 
-  constructor() {
+  constructor(quality: CloudQuality = "high") {
     const layer = new THREE.ShaderMaterial({
       vertexShader: cloudVert,
       fragmentShader: cloudFrag,
       uniforms: {
         uCover: { value: 0 },
-        uDark: { value: 0 },
+        uStorm: { value: 0 },
+        uRain: { value: 0 },
+        uQ: { value: quality === "low" ? 0 : quality === "ultra" ? 2 : 1 },
+        uTime: { value: 0 },
+        uLight: { value: 1 },
         uDrift: { value: new THREE.Vector2() },
+        uScud: { value: new THREE.Vector2() },
+        uWind: { value: new THREE.Vector2(1, 0) },
         uCam: { value: new THREE.Vector3() },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uLit: { value: new THREE.Color() },
@@ -190,7 +302,8 @@ export class Clouds {
       side: THREE.DoubleSide,
       fog: false,
     });
-    this.layer = new THREE.Mesh(new THREE.CircleGeometry(CLOUD_R, 48).rotateX(Math.PI / 2), layer);
+    this.layer = new THREE.Mesh(new THREE.SphereGeometry(DOME_R, 48, 24), layer);
+    layer.side = THREE.BackSide;
     this.layer.renderOrder = 1; // over the sky and its grey lid, under the sea
     this.layer.frustumCulled = false;
     this.group.add(this.layer);
@@ -240,26 +353,35 @@ export class Clouds {
     sunDir: THREE.Vector3,
     haze: THREE.Color,
     light: number,
+    rainMmH: number | null = null,
   ): void {
     if (cover != null) this.dayCover = cover;
+    // Rain, mm/h: the logged rate, or (older replays) what the storm suggests.
+    const rainWant = rainMmH ?? 6 * SM(storm, 0.4, 1);
     const want = Math.max(this.dayCover, SM(storm, 0.1, 0.7));
     const k = this.snapped ? 1 : Math.min(1, dt * 0.8);
     this.snapped = false;
     this.cover += (want - this.cover) * k;
     this.fog += (fog - this.fog) * k;
+    this.rain += (rainWant - this.rain) * k;
 
-    // Cloud drifts with the wind up there (stronger than at the sea).
+    // Cloud drifts with the wind up there (stronger than at the sea); the low scud races.
     this.drift.x -= windX * 1.6 * dt;
     this.drift.y -= windZ * 1.6 * dt;
+    this.scud.x -= windX * 2.2 * dt;
+    this.scud.y -= windZ * 2.2 * dt;
     const cam = camera.position;
-    this.layer.position.set(cam.x, CLOUD_Y, cam.z);
+    this.layer.position.copy(cam);
     const u = this.layer.material.uniforms;
-    // Above ~0.92 the sky's own grey lid already does the job; the layer adds the broken edges.
-    // Even a "clear" reading keeps a few small fair-weather cumulus (they hardly dim the sun):
-    // looks only.
-    u.uCover.value = 0.42 + 0.5 * this.cover;
-    u.uDark.value = storm;
+    // Even a "clear" reading keeps a few small fair-weather cumulus (they hardly dim the sun): looks only.
+    u.uCover.value = this.cover;
+    u.uStorm.value = storm;
+    u.uRain.value = this.rain;
+    u.uTime.value = t;
+    u.uLight.value = light;
     u.uDrift.value.copy(this.drift);
+    u.uScud.value.copy(this.scud);
+    if (Math.hypot(windX, windZ) > 0.1) u.uWind.value.set(windX, windZ);
     u.uCam.value.copy(cam);
     u.uSunDir.value.copy(sunDir);
     const lit = 0.25 + 0.75 * light;
@@ -282,6 +404,11 @@ export class Clouds {
       bu.uCam.value.copy(cam);
       bu.uColor.value.copy(haze).lerp(new THREE.Color(1, 1, 1), 0.25 * light).multiplyScalar(0.85 + 0.15 * light);
     }
+  }
+
+  /** Low draws one cheaper layer; High the deck and scud with shading; Ultra more detail. */
+  setQuality(q: CloudQuality): void {
+    this.layer.material.uniforms.uQ.value = q === "low" ? 0 : q === "ultra" ? 2 : 1;
   }
 
   /** Jump straight to the weather at the next update (after a seek), rather than easing into it. */

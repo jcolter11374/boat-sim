@@ -70,7 +70,7 @@ controls.target.set(0, 0.3, 0);
 const atmos = new Atmosphere(renderer, scene, camera);
 const sea = new Sea(quality);
 scene.add(sea.mesh);
-const clouds = new Clouds();
+const clouds = new Clouds(quality);
 scene.add(clouds.group);
 const rain = new Rain();
 scene.add(rain.mesh);
@@ -2111,7 +2111,7 @@ renderer.setAnimationLoop(() => {
   atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.set(sp.el, sp.az, storm);
   showWreck(lat, lon);
-  clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient);
+  clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient, r?.rain ? valueAt(r, r.rain, h) : null);
   clouds.closeIn(atmos.fog);
   const rate = r?.rain ? valueAt(r, r.rain, h) : null;
   // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
