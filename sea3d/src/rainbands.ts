@@ -46,9 +46,9 @@ void main() {
   s = 0.45 + 0.55 * s + 0.25 * vn(vec2(vUv.x * 23.0 + vUv.y * uSlant * 3.0, vShaft.x * 9.0));
   float near = smoothstep(30.0, 150.0, vDist);
   float far = 1.0 - smoothstep(0.7 * uFar, 1.05 * uFar, vDist); // lost in the haze
-  float a = uAmount * vShaft.y * edge * up * s * near * far * 0.75;
+  float a = uAmount * vShaft.y * edge * up * s * near * far * 0.9;
   if (a < 0.003) discard;
-  gl_FragColor = vec4(mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.6), a);
+  gl_FragColor = vec4(mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.45), a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -155,13 +155,13 @@ export class RainBands {
     this.mesh.visible = amount > 0.02;
     if (!this.mesh.visible) return;
     const u = this.mesh.material.uniforms;
-    u.uAmount.value = THREE.MathUtils.smoothstep(amount, 0.02, 0.5);
+    u.uAmount.value = THREE.MathUtils.smoothstep(amount, 0.02, 0.25); // a passing shower shows even when it only drizzles here
     // A dark curtain shows through haze that hides the paler sea under it, so they reach a little past the fog.
     u.uFar.value = Math.max(fog.far * 1.6, 2000);
     u.uTime.value = t;
     u.uSlant.value = THREE.MathUtils.clamp(Math.hypot(windX, windZ) / 15, 0, 1.5);
     const l = 0.2 + 0.8 * light;
-    u.uColor.value.copy(fog.color).multiplyScalar(0.55 * l + 0.1);
+    u.uColor.value.copy(fog.color).multiplyScalar(0.42 * l + 0.06); // darker than the haze, so a curtain reads against it
     u.uHaze.value.copy(fog.color);
   }
 
