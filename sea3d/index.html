@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>boat-sim 3D: both boats on a live sea</title>
+<title>Bluewater: design a boat, then sail it across the Atlantic</title>
 <style>
   :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc3dc;
@@ -38,8 +38,8 @@
     padding: 22px 22px 18px; border-radius: 14px; color: #e9f1fb; background: rgba(8,18,32,.78);
     backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(160,200,255,.2); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
   #title[hidden], body.title #panel, body.title #shots { display: none; }
-  #title h1 { margin: 0; font-size: 30px; letter-spacing: .3px; }
-  #title h1 i { display: inline-block; width: 20px; height: 20px; border-radius: 4px 4px 10px 10px; background: #ff8a2a; margin-right: 9px; vertical-align: -1px; }
+  #title h1 { margin: 0 0 6px; font-size: 46px; font-weight: normal; color: #f4f8fd; }
+  #title h1 .bw-mark { margin-right: .7em; } /* room for the sun past "water" */
   #title .tag { position: static; display: block; background: none; box-shadow: none; border: 0; padding: 0; white-space: normal;
     color: #b7c8dc; font-size: 14px; margin: 6px 0 16px; }
   #title nav { display: flex; flex-direction: column; gap: 7px; }
@@ -53,7 +53,7 @@
   #title nav .quiet { background: transparent; font-weight: 600; font-size: 13.5px; color: #b7c8dc; }
   #title .mine { display: flex; gap: 7px; } #title .mine[hidden] { display: none; } #title .mine a:first-child { flex: 1; }
   #title .fine { color: #8197ad; font-size: 11.5px; margin: 14px 0 0; }
-  @media (max-height: 560px) { #title { padding: 14px 16px 12px; } #title h1 { font-size: 22px; } #title .tag { margin-bottom: 10px; } #title nav small { display: none; } }
+  @media (max-height: 560px) { #title { padding: 14px 16px 12px; } #title h1 { font-size: 32px; } #title .tag { margin-bottom: 10px; } #title nav small { display: none; } }
   /* The way into the game (src/sailLink.ts): sail this sea at the helm, or build a boat first. */
   #ways { display: flex; gap: 8px; align-items: stretch; margin: 8px 0 6px; }
   #ways a { text-decoration: none; border-radius: 9px; padding: 8px 11px; font-weight: 650; }
@@ -68,7 +68,7 @@
 <div id="app"></div>
 <div id="tags"></div>
 <section id="title" hidden aria-labelledby="title-h">
-  <h1 id="title-h"><i></i>boat-sim</h1>
+  <h1 id="title-h"><span class="bw-mark bw-on-photo" aria-label="Bluewater"><span class="bw-a">Blue</span><span class="bw-b">water</span><span class="bw-h"></span><span class="bw-sun"></span></span></h1>
   <p class="tag">Design a small robot boat, then try to sail it across the Atlantic: from the Chesapeake Bay to a finish line off Portugal, on real weather.</p>
   <nav>
     <div class="mine" id="t-mine" hidden>
