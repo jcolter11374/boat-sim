@@ -1605,7 +1605,14 @@ function untilOptions(): Record<string, number | boolean> {
 // per spell (a gale is not asked again for 2 days, a night for a day, the Stream until you
 // leave it). Hands on only: from base, orders go by satellite and the forecast is the same.
 /** `order`: what the choice would steer, so the card can show its forecast stake against the ghost. */
-type Choice = { label: string; title: string; act: () => Promise<void> | void; order?: { heading: Heading; power?: number } };
+type Choice = {
+  label: string;
+  title: string;
+  act: () => Promise<void> | void;
+  order?: { heading: Heading; power?: number };
+  /** The label once the forecast tag is beside it: no claims ("safer", "fastest") the forecast may contradict. */
+  plain?: string;
+};
 /** look: the compass bearing of the problem (the gale, the Stream), for the camera to turn to as the call nears. */
 type Decision = { kind: string; text: string; choices: Choice[]; look?: number };
 /** Compass bearing (deg) of a vector given as east and north parts. */
@@ -1693,11 +1700,14 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       };
       const choices: Choice[] = [
         // Stakes from the same 4-day look; "waves to X m" beside each is the risk side (Maya).
-        { label: "Hold course: fastest, but a knockdown is likelier", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
-        { label: `Dodge south-east (${south}°): safer, but a longer way round`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
+        // With the forecast beside them the labels carry no claims: on 23 Apr the 120° "dodge"
+        // forecast 214 km gained AND 0.6 m bigger waves, so "safer, a longer way round" was
+        // wrong on both counts (Sam, 12 Nov). The tag says which is faster and which rougher.
+        { label: "Hold course: fastest, but a knockdown is likelier", plain: "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
+        { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
       ];
       if (motors && power > 0.1)
-        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)), order: { heading: order === "auto" ? "route" : order, power: 0.1 } });
+        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)), order: { heading: order === "auto" ? "route" : order, power: 0.1 } });
       return {
         kind,
         look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
@@ -1900,10 +1910,11 @@ function timeChange(km: number, kmPerDay: number): string {
   return d > 0 ? `about ${n} gained on the ghost` : `about ${n} lost to the ghost`;
 }
 /** Its cost beside it, where the options differ: the roughest sea, the lowest battery. */
-function costWords(p: Preview, all: Preview[]): string {
+function costWords(p: Preview, all: Preview[], waves = false): string {
   const out: string[] = [];
   const hs = all.map((x) => x.hs_max ?? 0);
-  if (p.hs_max != null && Math.max(...hs) - Math.min(...hs) >= 0.5) out.push(`waves to ${p.hs_max.toFixed(1)} m`);
+  // On a storm card the waves are the risk being weighed, so they always show (Sam).
+  if (p.hs_max != null && (waves || Math.max(...hs) - Math.min(...hs) >= 0.5)) out.push(`waves to ${p.hs_max.toFixed(1)} m`);
   const soc = all.map((x) => x.soc_min ?? 1);
   if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08) out.push(`battery down to ${Math.round(p.soc_min * 100)}%`);
   return out.length ? ` · ${out.join(" · ")}` : "";
@@ -1937,7 +1948,8 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     b.title = c.title;
     const key = document.createElement("kbd");
     key.textContent = String(i + 1);
-    b.append(key, c.label);
+    // Beside its forecast tag a label carries no claims (c.plain); without one, the full label.
+    b.append(key, o && has[i] && c.plain ? c.plain : c.label);
     if (withMap && lines[i]) b.style.setProperty("--opt", OPTION_COLOURS[i % OPTION_COLOURS.length]);
     const p = o && has[i] ? o.orders[i] : null;
     if (p) {
@@ -1947,7 +1959,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       const shown = o!.orders.filter((_, j) => has[j]);
       // One tag in race terms, worded as a forecast so it can honestly be wrong (Maya, Leo).
       const pace = o!.hours > 0 ? (o!.ghost.km / o!.hours) * 24 : 0;
-      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves")}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
     const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
