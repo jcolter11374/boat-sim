@@ -62,7 +62,8 @@ const CARRY = /* glsl */ `
 #else
 #define SEA_DET_N uSeaDetN
 #endif
-float seaCarry(float k, float cell) { return 1.0 - smoothstep(0.2, 0.33, k * cell * 0.15915494); }
+// A train is carried by the grid only with 5+ cells per wavelength: fewer alias into curved moire arcs (Ines).
+float seaCarry(float k, float cell) { return 1.0 - smoothstep(0.12, 0.2, k * cell * 0.15915494); }
 `;
 
 const VERT_HEAD = SEA_SURFACE_PARS + CARRY + /* glsl */ `
@@ -370,12 +371,12 @@ if (SEA_DET_N > 0) {
   vec2 r2 = mat2(0.96, -0.28, 0.28, 0.96) * vec2(pf.x * 0.6, pf.y); // wind-aligned too, so caps tear along the wind
   float tex = vnoise(qf * 1.1) * 0.25 + vnoise(r1 * 2.9 + 7.0) * 0.3
             + mix(vnoise(r2 * 7.7 + 3.0), 0.5, o3) * 0.25 + mix(vnoise(pf * 19.0 + 1.0), 0.5, o3) * 0.2;
-  float th = mix(0.7, 0.26, smoothstep(0.02, 0.7, fresh));
+  float th = mix(0.7, 0.38, smoothstep(0.02, 0.7, fresh)); // even fresh foam leaves holes: no solid clumps (Ines)
   // Thick and opaque where it's piled up, thin and see-through elsewhere; the
   // edge softens with the pixel's footprint so it never cuts out sharp from afar.
   // A breaking crest has a crisp edge; old foam goes to lace (holes through it) (Ines, Elena).
   float edge = mix(0.2, 0.04, smoothstep(0.3, 0.9, fresh)) + 1.5 * fpF;
-  float lace = mix(smoothstep(0.35, 0.6, mix(vnoise(r2 * 13.0 + 5.0), 0.5, o3)), 1.0, 0.6 * smoothstep(0.25, 0.9, fresh)); // even a fresh cap is torn
+  float lace = mix(smoothstep(0.35, 0.6, mix(vnoise(r2 * 13.0 + 5.0), 0.5, o3)), 1.0, 0.4 * smoothstep(0.25, 0.9, fresh)); // even a fresh cap is torn
   float young = smoothstep(th, th + edge, tex) * mix(0.35, 1.0, smoothstep(th + 0.08, th + 0.35, tex))
               * mix(0.6, 0.95, smoothstep(0.6, 1.0, fresh)) * lace;
   float near = young + 0.35 * vFoam * smoothstep(0.66, 0.78, tex + 0.3 * fresh) * step(0.002, uCover);
@@ -383,6 +384,18 @@ if (SEA_DET_N > 0) {
 }
 // Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
 // downwind; where they're finer than a pixel, their average whiteness instead.
+#ifdef SEA_LITE
+// Low keeps main's cheaper lanes (four noises instead of six), for its frame budget.
+if (uStreak > 0.001) {
+  vec2 qs = q - vec2(uTime * 1.2, 0.0);
+  qs.y += 2.5 * vnoise(qs * vec2(0.015, 0.08)) + 0.8 * vnoise(qs * vec2(0.06, 0.4));
+  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 0.9)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 2.3) + 17.0), 0.5, smoothstep(0.1, 0.4, fpF)) * 0.4;
+  float thrS = 0.5 + 0.51 * (0.5 - uStreak);
+  float lanes = smoothstep(thrS - 0.03, thrS + 0.07, ns) * (0.7 + 0.3 * fn);
+  float streak = mix(lanes, uStreak + uCover, smoothstep(0.4, 1.5, fpF));
+  foamMask = max(foamMask, 0.9 * streak);
+}
+#else
 if (uStreak > 0.001) {
   vec2 qs = q - vec2(uTime * 1.2, 0.0);
   // Wander the lanes sideways a little, so they meander and split instead of running as ruled bars.
@@ -403,6 +416,7 @@ if (uStreak > 0.001) {
   float streak = mix(0.35 * lanes, 0.4 * (uStreak + uCover), smoothstep(0.4, 1.5, fpF));
   foamMask = max(foamMask, streak);
 }
+#endif
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.91), foamMask * (SEA_DET_N > 0 ? 0.88 : 1.0)); // off-white, a little see-through
 /* boat wash (boatWash.ts) */
 `;
@@ -454,9 +468,13 @@ const FRAG_SKY = /* glsl */ `
 // A mostly closed deck already hides the clear sky map: swap it out early, so no
 // warm slot or blue patch of it shows as squiggles on the wave facets (Elena, F8 dusk).
 float deckS = smoothstep(0.15, 0.6, uSeaSky.w);
+#ifdef SEA_LITE
+radiance = mix(radiance, uSeaSky.rgb, deckS); // Low: the deck swap only (frame budget)
+#else
 radiance = mix(seaColdSky(radiance), uSeaSky.rgb, deckS);
 // The sea's body is lit by the deck too, not the clear sky's blue: same brightness, the deck's hue.
 iblIrradiance = mix(iblIrradiance, uSeaSky.rgb * (dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722)) / max(dot(uSeaSky.rgb, vec3(0.2126, 0.7152, 0.0722)), 1e-3)), deckS);
+#endif
 // Rain or a closed deck hides the sun: no bright spot of it left in the sky map's
 // reflection (a capped, cloud-lit sky instead).
 radiance = mix(radiance, min(radiance, max(uSeaSky.rgb * 1.5, vec3(0.08))), max(uRain.x, deckS));
@@ -471,6 +489,7 @@ radiance = max(radiance, vec3(0.014, 0.019, 0.032));
 reflectedLight.directSpecular *= 1.0 - max(uRain.x, uSeaSky.w);
 // Through a break in the deck, the one glitter left: a column in the break's warm light,
 // from rays reflected low toward the sun's bearing, weighted as the sky draws it (Hana, Sam).
+#ifndef SEA_LITE
 if (uSeaBreak.w > 0.001) {
   vec3 Vb = normalize(cameraPosition - vWPos);
   // From the big waves' faces only (not the ripples), so it reads as a dull sheen on the
@@ -481,8 +500,9 @@ if (uSeaBreak.w > 0.001) {
   float onB = smoothstep(0.35, 0.97, dot(normalize(Rb.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
   onB = pow(onB, 8.0);
   float lowB = (1.0 - smoothstep(0.0, 0.12, Rb.y)) * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)); // a low sun's break only
-  radiance += 0.35 * uSeaBreak.rgb * uSeaBreak.w * onB * lowB * step(0.0, Rb.y);
+  radiance += 0.35 * uSeaBreak.rgb * uSeaBreak.w * (1.0 - uRain.x) * onB * lowB * step(0.0, Rb.y); // none through a downpour (Kai)
 }
+#endif
 `;
 
 const FRAG_MIRROR = /* glsl */ `
@@ -516,7 +536,7 @@ const FRAG_HAZE = /* glsl */ `
   vec3 Vh = normalize(vWPos - cameraPosition);
   float hz = 1.0 - smoothstep(0.0, 0.015, -Vh.y); // the last degree or so
   // Toward a break the sky's horizon is the break's light, not the haze: leave the sea be there.
-  hz *= 1.0 - uSeaBreak.w * smoothstep(0.35, 0.97, dot(normalize(Vh.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
+  hz *= 1.0 - uSeaBreak.w * (1.0 - smoothstep(0.12, 0.35, uSunDir.y)) * smoothstep(0.35, 0.97, dot(normalize(Vh.xz + 1e-5), normalize(uSunDir.xz + 1e-5)));
   // gl_FragColor is already in the output space here, so the haze goes there too.
   gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * hz * smoothstep(0.2, 0.8, uSeaSky.w));
 }

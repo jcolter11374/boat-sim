@@ -474,7 +474,7 @@ const status = {
    * Pictures of the sea (with ?seatest=): "chase" (the page's own view), "long"
    * (20 degree lens, 2.5 m up, 140 m off with the sun behind the boat) or "over"
    * (45 m up, looking down at the boat) or "low" (from a boat 40 m off, the
-   * lens 2 m above the water there, riding its own waves: the troughs hide the boat).
+   * lens 1.5 m above the water there (seated in a small boat), riding its own waves: the troughs hide the boat).
    */
   view: (kind: "chase" | "long" | "over" | "low"): void => {
     photoBoat = kind === "low";
@@ -1357,7 +1357,7 @@ renderer.setAnimationLoop(() => {
     if (camera.position.y < floor) camera.position.y = floor;
     // Test view "low": the lens rides the water where it is, not the boat's heave.
     if (photoBoat) {
-      camera.position.y = floor - 0.35 + 2 + 0.5 * sea.detailHeightAt(camera.position.x, camera.position.z);
+      camera.position.y = floor - 0.35 + 1.5 + 0.5 * sea.detailHeightAt(camera.position.x, camera.position.z);
       camera.lookAt(controls.target);
     }
   }
