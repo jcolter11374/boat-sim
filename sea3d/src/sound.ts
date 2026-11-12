@@ -517,8 +517,8 @@ export class OceanSound {
   alarm(delay = 0): void {
     if (!this.live) return;
     // The boat's own piezo alert heard from outside: small and a little muffled (Elena), not a UI ping.
-    this.tone([2350], "square", 0.012, delay, 0.06, 1100, 0.01);
-    this.tone([2350], "square", 0.012, delay + 0.14, 0.06, 1100, 0.01);
+    this.tone([2350], "square", 0.03, delay, 0.06, 1100, 0.01);
+    this.tone([2350], "square", 0.03, delay + 0.14, 0.06, 1100, 0.01);
   }
 
   /**
