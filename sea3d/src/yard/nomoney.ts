@@ -32,7 +32,7 @@ export function partFigure(slot: CatalogSlot, o: CatalogOption): string {
   if (o.wp !== undefined && plan.wp !== undefined && o.wp !== plan.wp) bits.push(signed(o.wp - plan.wp, "W"));
   if (o.bat !== undefined && plan.bat !== undefined && o.bat !== plan.bat) bits.push(signed(o.bat - plan.bat, "Wh"));
   if (!bits.length) return "";
-  return (o.est ? "~" : "") + bits.join(", ");
+  return (o.est ? "~ " : "") + bits.join(", "); // a space: "~−" read as "~~" (Milo)
 }
 
 const MONEY = /\$|\bprices?\b|\bcosts?\b|\bcheaper\b|\bbill\b|\bUSD\b|price TBD/i;
@@ -40,4 +40,18 @@ const MONEY = /\$|\bprices?\b|\bcosts?\b|\bcheaper\b|\bbill\b|\bUSD\b|price TBD/
 export function moneyWords(text: string): string[] {
   const m = MONEY.exec(text);
   return m ? [m[0]] : [];
+}
+
+/** A share link or saved design may pick an option that is now hidden. The simulator
+ *  sails a hidden option exactly like the slot's planned part, so swap in the planned
+ *  part: the slot then shows a selected button, and the odds don't change. */
+export function livePicks(slots: CatalogSlot[], picks: Record<string, string>): Record<string, string> {
+  const out = { ...picks };
+  for (const slot of slots) {
+    const o = slot.opts.find((x) => x.id === out[slot.id]);
+    if (!o || !deadChoice(o)) continue;
+    const plan = slot.opts.find((x) => x.def) ?? slot.opts[0];
+    out[slot.id] = plan.id;
+  }
+  return out;
 }

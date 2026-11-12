@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { designYaml, hintsFor, plannedDesign, withSim, type Catalog, type SimSlots } from "../src/yard/design";
 import { randolphCatalog } from "../src/yard/bases";
-import { deadChoice, moneyWords, partFigure, shownOptions } from "../src/yard/nomoney";
+import { deadChoice, livePicks, moneyWords, partFigure, shownOptions } from "../src/yard/nomoney";
 
 // No money in the game (John, 12 Nov): what a player sees in the Boatyard.
 const sim = JSON.parse(readFileSync("public/sim-slots.json", "utf8")) as SimSlots;
@@ -23,8 +23,8 @@ test("choices that only ever changed the price are gone", () => {
 
 test("each part shows what it changes, not what it costs", () => {
   assert.equal(partFigure(slot("thr"), opt("thr", "one-t200")), "−0.45 kg");
-  assert.equal(partFigure(slot("bat"), opt("bat", "two-100ah")), "~+10 kg, +1,280 Wh");
-  assert.equal(partFigure(slot("sol"), opt("sol", "solar-300")), "~+1.2 kg, +50 W");
+  assert.equal(partFigure(slot("bat"), opt("bat", "two-100ah")), "~ +10 kg, +1,280 Wh");
+  assert.equal(partFigure(slot("sol"), opt("sol", "solar-300")), "~ +1.2 kg, +50 W");
   assert.equal(partFigure(slot("bat"), opt("bat", "two-50ah")), "");
 });
 
@@ -39,4 +39,10 @@ test("no money in any word a player reads in the Boatyard", () => {
   assert.doesNotMatch(designYaml(cat, plannedDesign(cat)), /cost|usd/i);
   assert.deepEqual(moneyWords("$379"), ["$"]);
   assert.deepEqual(moneyWords("price TBD"), ["price"]);
+});
+
+test("a share link that picks a hidden part opens on the planned part", () => {
+  const picks = livePicks(cat.slots, { lead: "lead-50-scrap", bat: "two-100ah" });
+  assert.equal(picks.lead, "lead-50-new");
+  assert.equal(picks.bat, "two-100ah"); // real choices are kept
 });

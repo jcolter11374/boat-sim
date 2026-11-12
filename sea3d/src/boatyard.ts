@@ -8,7 +8,7 @@
 // with Theo's precomputed grid now and the simulator in the browser later.
 
 import * as THREE from "three";
-import { partFigure, shownOptions } from "./yard/nomoney";
+import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -574,6 +574,7 @@ function useBase(hash: string): void {
   if (!c) return;
   cat = c;
   design = decodeDesign(c, hash);
+  design.picks = livePicks(c.slots, design.picks); // hidden parts sail like the planned one
   status.base = base;
   const intro = $("intro");
   intro.textContent = `${INTRO[base]} `;
