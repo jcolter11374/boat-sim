@@ -1594,7 +1594,16 @@ function skyGuide(): void {
   if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
   if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
   if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
-  for (const [b, text, colour] of marks) if (Math.abs(rel(b)) <= RANGE) out.push(span("mk", text, xOf(b), colour));
+  // Marks that would touch go up a row, so "bow" and "sun" never run together (Ines).
+  const shown = marks.filter(([b]) => Math.abs(rel(b)) <= RANGE).map(([b, text, colour]) => ({ x: xOf(b), half: text.length * 3.4 + 6, text, colour }));
+  shown.sort((a, c) => a.x - c.x);
+  const rowEnd = [-Infinity, -Infinity];
+  for (const m of shown) {
+    const row = m.x - m.half >= rowEnd[0] ? 0 : m.x - m.half >= rowEnd[1] ? 1 : 0;
+    rowEnd[row] = m.x + m.half;
+    const e = span(row ? "mk up" : "mk", m.text, m.x, m.colour);
+    out.push(e);
+  }
   $("tape").replaceChildren(...out);
 
   // Labels in the sky itself.
