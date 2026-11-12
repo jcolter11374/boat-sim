@@ -270,6 +270,8 @@ const page = {
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
+  /** Whether each boat crossed the race's start line, for the results card. */
+  started: { me: true, ghost: true },
   /** Where the finished build stands on Results: "board", "odds" or "none" ("" until shown; for tests). */
   standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
@@ -1781,6 +1783,11 @@ async function refreshForecast(): Promise<void> {
 
 async function finish(): Promise<void> {
   const c = await game.result();
+  // The sound ask doesn't land on the results.
+  clearTimeout(soundAskTimer);
+  soundAsked = true;
+  $("soundask").hidden = true;
+  document.body.classList.remove("asking-sound");
   chartDirty = true;
   hud.orders(false);
   // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
@@ -1790,8 +1797,11 @@ async function finish(): Promise<void> {
   page.card = c;
   const me = c.boat;
   const gh = c.ghost;
-  $("r-head").textContent = headline(c);
-  $("r-story").textContent = story(c);
+  // Under the race rules a voyage starts at the western line, about 500 km out (Sam).
+  const started = { me: !!game.boat?.t_start_line || me.outcome === "arrived", ghost: !!game.ghost?.t_start_line || gh.outcome === "arrived" };
+  page.started = started;
+  $("r-head").textContent = headline(c, started);
+  $("r-story").textContent = story(c, started);
   // The three big numbers: days at sea, km of the way covered, and against the ghost.
   const st = game.status;
   const rep = game.boat;
@@ -1913,20 +1923,22 @@ async function showStanding(build: string): Promise<void> {
   const name = !mine || !mine.base || mine.base === "kayak" ? "Our kayak" : "This build";
   const p = document.createElement("p");
   p.className = "standing";
-  p.textContent = leaves(page.card, rate, name);
+  p.textContent = leaves(page.card, rate, name, page.started.me);
   box.append(p);
   const t = standingText(s);
   $("r-standing").textContent = `${t.head} ${t.detail}`;
   page.standing = s.kind;
 }
 
-/** F3: the goal, on screen from second one (Leo's first five minutes, Elena). Eight seconds over
+/** F3: the goal, on screen from second one (Leo's first five minutes, Elena). The ghost has no hull of
+ * its own on the sea (it's a tag on the horizon once apart), so the words say "from the same start" (Leo). Eight seconds over
  * the opening view, in the clear sky at the top left; a click or a key lets it go early. */
 const GOAL_MS = 8000;
 function goalCard(km: number): Promise<void> {
   const card = $("goalcard");
   $("goalkm").textContent = `${Math.round(km).toLocaleString("en-US")} km.`;
   card.hidden = false;
+  document.body.classList.add("goal");
   requestAnimationFrame(() => card.classList.add("in"));
   page.scene = "goal";
   return new Promise((done) => {
@@ -1938,6 +1950,7 @@ function goalCard(km: number): Promise<void> {
       removeEventListener("keydown", end);
       removeEventListener("pointerdown", end);
       card.classList.remove("in");
+      document.body.classList.remove("goal");
       page.scene = "";
       setTimeout(() => (card.hidden = true), 800);
       done();

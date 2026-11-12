@@ -161,6 +161,7 @@
   body.oneclick #loading { top: auto; bottom: 16vh; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 16px; min-width: 0; border-radius: 999px; }
   body.oneclick #loading .spin { width: 14px; height: 14px; margin: 0; border-width: 2px; }
   body.oneclick #loading .muted { display: none; }
+  body.oneclick #loading[hidden] { display: none; }
   body.oneclick:not(.sailing) #orders, body.oneclick:not(.sailing) #orders-tab, body.oneclick:not(.sailing) #strip, body.oneclick:not(.sailing) #mapbox { visibility: hidden; }
   #loading .spin { width: 22px; height: 22px; margin: 0 auto 8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: var(--orange); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -203,7 +204,10 @@
     color: #fff; text-shadow: 0 2px 18px rgba(0,10,25,.55), 0 1px 3px rgba(0,10,25,.5); opacity: 0; transform: translateY(8px); transition: opacity .8s ease, transform .8s ease; }
   #goalcard.in { opacity: 1; transform: none; }
   #goalcard { isolation: isolate; }
-  #goalcard::before { content: ""; position: absolute; inset: -48px -72px; z-index: -1; background: radial-gradient(closest-side at 50% 50%, rgba(4,14,28,.42), rgba(4,14,28,.16) 60%, transparent); }
+  #goalcard::before { content: ""; position: absolute; inset: -90px -160px; z-index: -1; background: radial-gradient(closest-side at 50% 50%, rgba(4,14,28,.4), rgba(4,14,28,.24) 35%, rgba(4,14,28,.1) 65%, rgba(4,14,28,0)); }
+  /* While the goal card is up, the instruments wait (Leo): the sea and the goal, nothing else. */
+  body.goal #strip, body.goal #mapbox, body.goal #orders-tab, body.goal #orders, body.goal #poidock { opacity: 0; pointer-events: none; }
+  #strip, #mapbox, #orders-tab { transition: opacity .8s; }
   #goalcard[hidden] { display: none; }
   #goalcard h2 { margin: 0 0 10px; font-size: clamp(28px, 3.6vw, 52px); font-weight: 650; line-height: 1.08; letter-spacing: -.01em; text-wrap: balance; }
   #goalcard p { margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.4; color: rgba(255,255,255,.92); text-wrap: balance; }
@@ -599,7 +603,7 @@
 </div>
 <div id="goalcard" role="status" aria-live="polite" hidden>
   <h2>Beat the autopilot to Portugal.</h2>
-  <p><b id="goalkm">5,256 km.</b> It&rsquo;s sailing the same boat, right beside you.</p>
+  <p><b id="goalkm">5,256 km.</b> It&rsquo;s sailing the same boat, from the same start.</p>
 </div>
 <div id="result" class="overlay" hidden>
   <div class="card glass rc" role="dialog" aria-labelledby="r-head">

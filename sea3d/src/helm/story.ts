@@ -24,14 +24,25 @@ const FATE: Record<string, string> = {
   sunk: "Sunk",
 };
 
+/** Whether each boat crossed the race's start line (the western line, about 500 km out). Under the
+ * Microtransat rules the race only begins there: a voyage that ends before it never started (Sam). */
+export interface Started {
+  me: boolean;
+  ghost: boolean;
+}
+const BOTH: Started = { me: true, ghost: true };
+const NO_START = "The race begins at a line about 500 km out, and she didn't get there.";
+
 /** One line, who won. */
-export function headline(c: Card): string {
+export function headline(c: Card, started: Started = BOTH): string {
   const me = c.boat;
   const gh = c.ghost;
   const m = c.margin_days;
   if (c.verdict === "draw") return "Level with the autopilot: within a day.";
   if (c.verdict === "won") return m !== null ? `You beat the autopilot by ${days(m)}.` : `You made it to Portugal, and the autopilot didn't.`;
-  if (c.verdict === "lost") return m !== null ? `The autopilot beat you by ${days(-m)}.` : `The autopilot made it to Portugal, and you didn't.`;
+  if (c.verdict === "lost")
+    return m !== null ? `The autopilot beat you by ${days(-m)}.` : started.me ? `The autopilot made it to Portugal, and you didn't.` : "The autopilot made it to Portugal. You never reached the start line.";
+  if (!started.me) return started.ghost ? `Never reached the start line, on day ${d1(endDay(me))}.` : `Neither boat reached the start line.`;
   // Neither finished.
   const mine = FATE[me.outcome] ?? "Out of the race";
   if (me.outcome === gh.outcome && Math.abs(endDay(me) - endDay(gh)) < 0.05) return `${mine} on day ${d1(endDay(me))}, and so was the ghost.`;
@@ -84,24 +95,25 @@ export function plainEnding(e: Ending, outcome: string, when = ""): string {
 }
 
 /** One or two sentences of what happened, said once when both boats ended the same way; the day is left to the headline when it has it. */
-export function story(c: Card): string {
+export function story(c: Card, started: Started = BOTH): string {
   const me = c.boat;
   const gh = c.ghost;
+  const tail = started.me ? "" : ` ${NO_START}`;
   if (me.outcome === "arrived" && gh.outcome === "arrived")
     return `Both boats crossed the line west of Lisbon: you after ${days(me.days)}, the ghost after ${days(gh.days)}.`;
   const same = me.ending && gh.ending && me.outcome === gh.outcome && me.ending.words === gh.ending.words && me.ending.where === gh.ending.where;
   if (same) {
     const luck = !c.breakdowns_differ ? " The ghost had the same bad luck: breakdowns roll the same dice for both boats." : " The ghost ended the same way.";
-    return `${plainEnding(me.ending!, me.outcome)}${luck}`;
+    return `${plainEnding(me.ending!, me.outcome)}${tail}${luck}`;
   }
-  const dated = c.verdict !== "neither_finished";
+  const dated = c.verdict !== "neither_finished" || !started.me;
   const say = (x: Side, who: string) => {
     if (!x.ending) return "";
     if (x.outcome === "arrived") return `${who} crossed the finish line west of Lisbon after ${days(x.days)}.`;
     const t = plainEnding(x.ending, x.outcome, dated || who === "The ghost" ? `on day ${d1(endDay(x))}` : "");
     return who === "You" ? t : `The ghost: ${t.charAt(0).toLowerCase()}${t.slice(1)}`;
   };
-  return [say(me, "You"), say(gh, "The ghost")].filter(Boolean).join(" ");
+  return [say(me, "You") + tail, say(gh, "The ghost")].filter(Boolean).join(" ").trim();
 }
 
 export interface Big {
@@ -155,7 +167,8 @@ export function callName(label: string): string {
 }
 
 /** Where this leaves you: one line that turns the result into a reason to go again. `rate` is the build's finish rate, 0-1, if known. */
-export function leaves(c: Card, rate: number | null, boatName = "This build"): string {
+export function leaves(c: Card, rate: number | null, boatName = "This build", started = true): string {
+  if (!started) return rate === null ? "A voyage that ends before the start line isn't a race result. Play again." : `${boatName} finishes ${Math.round(rate * 100)}% of launches. This one never got to the start: not a race result.`;
   if (rate === null) return c.boat.outcome === "arrived" ? "One voyage is one roll of the dice. Try another launch day to see more." : "One voyage is one roll of the dice. Play again, or try another launch day.";
   const pct = `${Math.round(rate * 100)}%`;
   const base = `${boatName} finishes ${pct} of launches.`;

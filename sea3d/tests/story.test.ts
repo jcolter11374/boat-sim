@@ -73,3 +73,12 @@ test("where this leaves you turns a loss into a reason to go again", () => {
   assert.match(leaves(card({}), 0.83), /This was one of them\./);
   assert.match(leaves(lost, null), /roll of the dice/);
 });
+
+test("a voyage that ends before the start line never started (Microtransat rules, Sam)", () => {
+  const both = card({ verdict: "neither_finished", margin_days: null, boat: side("lost", 3.9, silent), ghost: side("lost", 3.9, silent) });
+  const none = { me: false, ghost: false };
+  assert.equal(headline(both, none), "Neither boat reached the start line.");
+  assert.match(story(both, none), /about 500 km out, and she didn't get there\./);
+  assert.match(leaves(both, 0.83, "Our kayak", false), /never got to the start: not a race result/);
+  assert.equal(headline(both), "Lost on day 3.9, and so was the ghost.");
+});
