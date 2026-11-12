@@ -35,8 +35,9 @@
   .card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
   .card .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 1px; white-space: nowrap; }
   .card .v small { font-size: 12px; font-weight: 500; color: var(--dim); margin-left: 2px; }
-  .card .s { font-size: 11px; color: var(--dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #h-tp { white-space: normal; } /* the swell line wraps rather than hiding */
+  /* Small lines wrap rather than end in "…" (Leo's audit A5: the date, local time and
+     "reporting home · daylight" were cut off). A no-break space keeps a number with its unit. */
+  .card .s { font-size: 11px; color: var(--dim); margin-top: 1px; overflow-wrap: break-word; }
   .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); margin-top: 5px; overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--good); border-radius: 3px; transition: width .2s; }
   .card.wide { grid-column: 1 / -1; }
@@ -148,9 +149,19 @@
   #forecasttag { position: fixed; top: 46%; left: 50%; transform: translate(-50%, -120px); padding: 4px 12px; border-radius: 999px;
     background: rgba(200,220,255,.18); border: 1px dashed rgba(220,232,255,.8); color: #e8f0ff; font: 700 12px system-ui, sans-serif; letter-spacing: 1px; pointer-events: none; }
   body.live #c-wind, body.live #c-waves, body.live #playlink, body.live #livelink, body.game #livelink, body.live #top a[href="./index.html"] { display: none !important; }
-  #lookup { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; padding: 5px 12px;
+  /* Under the compass strip (46 px tall at the bar + 12), not on top of its labels (audit A5). */
+  #lookup { position: fixed; top: calc(var(--bar, 0px) + 66px); left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; padding: 5px 12px;
     border-radius: 8px; border: 1px solid var(--line); background: var(--glass); color: var(--ink); cursor: pointer; }
   #lookup[hidden] { display: none; }
+  /* Narrower windows: the compass shrinks to the gap between the replay panel and the
+     dials instead of lying across both (audit A5); with no room at all it and its sky
+     button step aside (the Sky guide box still works). The full narrow layout is
+     Elena's panel rework. */
+  @media (max-width: 1279px) {
+    #compass { width: calc(100vw - 852px); left: 392px; transform: none; }
+    #lookup { left: calc(392px + (100vw - 852px) / 2); }
+  }
+  @media (max-width: 1099px) { #compass, #lookup { display: none !important; } }
   #lookup[aria-pressed="true"] { background: #1b3352; border-color: #8ab4ff; }
 </style>
 </head>

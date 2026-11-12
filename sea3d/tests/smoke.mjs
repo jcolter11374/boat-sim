@@ -65,8 +65,11 @@ try {
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
       build: document.getElementById("t-build").classList.contains("main"),
+      chip: document.getElementById("topbar-boat")?.textContent,
     }));
     if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
+    // No boat saved yet: you sail Our kayak, so the chip says so; "build one" is only for the Boatyard (audit A3).
+    if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
     if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
@@ -591,6 +594,9 @@ try {
       await page.waitForTimeout(4000);
       if ((await page.evaluate(() => window.__helm.status.day)) !== held) fail("helm: the clock kept running after pause");
       log.push(`helm clock: 1 day a second ran day ${run0.toFixed(2)} to ${ran.day.toFixed(2)}${ran.clock ? "" : ` (paused itself: ${ran.stop})`}, pause held`);
+      // Paused, the panel's day and the 3D day label both show the hour the picture is at (audit A2, #372).
+      const labels = await page.evaluate(() => [document.getElementById("day").textContent, document.getElementById("clock").textContent]);
+      if (labels[0] !== labels[1]) fail(`helm paused: the panel says ${labels[0]} but the picture's label says ${labels[1]}`);
       const local = await page.evaluate(() => document.getElementById("local").textContent);
       if (!/ local \(UTC/.test(local)) fail(`helm: no local time (${local})`);
       // Ravi's gates in the page: the ghost never ahead of the player's clock, every

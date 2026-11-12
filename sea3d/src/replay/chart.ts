@@ -179,7 +179,6 @@ export class Chart {
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      if (lon > -80) g.fillText(`${-lon}°W`, x1 + 3, y1 + 11);
     }
     for (let lat = 30; lat <= 50; lat += 10) {
       const [x0, y0] = this.xy(lat, VIEW.lonMin);
@@ -188,7 +187,6 @@ export class Chart {
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      g.fillText(`${lat}°N`, x0 + 3, y0 - 3);
     }
 
     // Land, tinted.
@@ -214,6 +212,22 @@ export class Chart {
     g.shadowBlur = 6;
     g.drawImage(tint, lx0, ly0, lx1 - lx0, ly1 - ly0);
     g.shadowBlur = 0;
+
+    // Grid labels over the land, so the coast never hides half of one (audit A5: the helm's
+    // chart showed "W" alone where Nova Scotia covered "60°"). A label that would hang off
+    // the chart's edge is left out rather than cut.
+    g.font = "10px system-ui, sans-serif";
+    g.fillStyle = "rgba(160,190,230,0.55)";
+    for (let lon = -70; lon <= 0; lon += 10) {
+      const [x1, y1] = this.xy(VIEW.latMax, lon);
+      const label = `${-lon}°W`;
+      const lx = x1 + 3;
+      if (lx >= 2 && lx + g.measureText(label).width <= this.w - 2) g.fillText(label, lx, Math.max(y1, 0) + 11);
+    }
+    for (let lat = 30; lat <= 50; lat += 10) {
+      const [x0, y0] = this.xy(lat, VIEW.lonMin);
+      if (y0 - 3 >= 10 && y0 - 3 <= this.h - 2) g.fillText(`${lat}°N`, Math.max(x0, 0) + 3, y0 - 3);
+    }
 
     // Shipwrecks: a small version of the sea chart's wreck sign (a hull line with masts).
     g.strokeStyle = WRECK_COLOUR;
