@@ -37,6 +37,11 @@ export interface SeaWeather {
    * follow it; the sea (whitecaps, breakers) follows the true wind. Unknown: the true wind.
    */
   apparent?: number;
+  /**
+   * How much the sail is flapping at the wheel, 0 drawing well .. 1 flogging head to wind
+   * (Rosa's WheelFrame.luff). Missing (replays): 0. The loudest sound on a boat (Sam).
+   */
+  luff?: number;
 }
 
 /** What the boat has aloft: shrouds and a mast that sing, or only a small antenna or wing. */
@@ -252,6 +257,7 @@ export class OceanSound {
   private nextDrop = 0;
   private nextTap = 0;
   private nextSlat = 0;
+  private nextFlog = 0;
   private lastSplash = -99;
   private lastMix: Mix | null = null;
   private armed = false;
@@ -466,10 +472,19 @@ export class OceanSound {
   crash(): void {
     if (!this.live) return;
     const r = this.rnd;
-    this.duck(3, 0.63);
+    // Make room first (Milo): the sea drops about 6 dB in the 0.3 s before the hit, so the thump
+    // lands in a gap, then sits 4 dB down while the water pours off, then comes back.
+    if (this.ctx && this.duckGain) {
+      const t = this.ctx.currentTime;
+      const g = this.duckGain.gain;
+      g.cancelScheduledValues(t);
+      g.setTargetAtTime(0.5, t, 0.07);
+      g.setTargetAtTime(0.63, t + 0.8, 0.4);
+      g.setTargetAtTime(1, t + 3, 0.8);
+    }
     this.burst("white", "bandpass", 900, 0.25, 0.35, 0.7, 0, 0.5);
     this.burst("brown", "lowpass", 110, 0.6, 0.012, 0.55, 0.35);
-    this.burst("pink", "lowpass", 1500, 0.12, 0.3, 2.6, 0.5);
+    this.burst("pink", "lowpass", 1500, 0.2, 0.3, 2.8, 0.5);
     for (let i = 0; i < 6; i++) this.burst("white", "bandpass", 1600 + r() * 600, 0.025 * (1 - i / 7), 0.006, 0.06, 0.4 + i * (0.1 + r() * 0.06), 3);
   }
 
@@ -574,8 +589,8 @@ export class OceanSound {
     f.frequency.value = 95;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.17, t + 2.2);
-    g.gain.setTargetAtTime(0, t + 2.6, 1);
+    g.gain.linearRampToValueAtTime(0.09, t + 3.5); // builds slowly: background colour, not a jump (Milo)
+    g.gain.setTargetAtTime(0, t + 3.8, 1.1);
     // The engine's beat: a big slow diesel turns about 1.5 times a second (real, so it may pulse).
     const throb = ctx.createOscillator();
     throb.frequency.value = 1.6;
@@ -587,9 +602,9 @@ export class OceanSound {
     src.connect(f).connect(g).connect(am).connect(this.master!);
     src.start(t, this.rnd() * 5);
     throb.start(t);
-    src.stop(t + 7);
-    throb.stop(t + 7);
-    for (const at of [3.6, 4.3, 4.9, 5.6]) this.slapAt(at, 0.5);
+    src.stop(t + 9);
+    throb.stop(t + 9);
+    for (const at of [4.8, 5.5, 6.1, 6.8]) this.slapAt(at, 0.14);
   }
 
   /** The finish (#329): a ship's horn far off, echoing over the water. A moment, not a blast. */
@@ -776,6 +791,20 @@ export class OceanSound {
       this.burst("white", "bandpass", 1300 + r() * 400, k * near, 0.007, 0.06, 0, 5);
       if (r() < 0.4) this.burst("white", "bandpass", 1300 + r() * 400, k * 0.6 * near, 0.007, 0.05, 0.12 + r() * 0.1, 5);
       this.nextTap = t + (-Math.log(1 - r() * 0.98) / m.tapsPerSec);
+    }
+    // A sail flogging: the cloth cracking and banging as it shakes in the wind, faster and
+    // harder the more it luffs and the stronger the wind it shakes in. Masted boats only.
+    const luff = clamp(w.luff ?? 0);
+    if (this.rig === "shrouds" && luff > 0.1) {
+      if (this.nextFlog < t) this.nextFlog = t;
+      const wk = clamp(beaufort(w.apparent ?? w.wind) / 6, 0.25, 1.3);
+      while (this.nextFlog < t + dt) {
+        const d = this.nextFlog - t;
+        const k = luff * wk * (0.6 + 0.4 * r());
+        this.burst("brown", "lowpass", 220 + r() * 160, 0.45 * k, 0.008, 0.14, d);
+        this.burst("white", "bandpass", 800 + r() * 500, 0.14 * k, 0.006, 0.07, d + 0.005, 1.2);
+        this.nextFlog += 1 / (2.5 + 5 * luff * wk) * (0.7 + 0.6 * r());
+      }
     }
     // Slatting: no wind to fill the sails, the boat rolls and the boom bangs across, blocks clunk.
     if (m.slat > 0 && t >= this.nextSlat) {
