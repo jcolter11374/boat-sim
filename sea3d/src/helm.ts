@@ -22,13 +22,14 @@ import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedKayak, loadDetailedModels, type BoatModel } from "./boats/model";
 import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
+import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { heightAt, Sea as LiveSea } from "./waves";
@@ -2863,7 +2864,21 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
 const third = { x: 0, y: 0 };
 const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
+/** Behind the Set sail card, never a stand-in (Elena): the drawn-in-code boat stays hidden, an empty
+ *  sea, until her real model has loaded (useBoat and loadDetailedModels rebuild her then). At sea she
+ *  always shows. */
+function hideStandIn(): void {
+  if (!model) return;
+  const card = !page.ready && !$("start").hidden;
+  const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : true;
+  const show = !card || real;
+  if (model.root.visible === show) return;
+  model.root.visible = show;
+  if (wake) wake.points.visible = show;
+  if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
+}
 function frameBoat(dt: number): void {
+  hideStandIn();
   const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
   // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
   // the horizon lower, never dead centre (Ines).
@@ -2891,6 +2906,14 @@ function frameBoat(dt: number): void {
     here0.set(0, 0, 0).project(camera);
     tx = THREE.MathUtils.clamp((here0.x + 1) / 2 + third.x - 0.82, -0.4, 0.4);
     ty = -0.04;
+  }
+  // Behind the Set sail card (Elena, Ines): her boat in the right two thirds beside the card, clear
+  // of its glass; on a phone, where the card fills the width at the bottom, in the band under the bar.
+  if (!page.ready && !$("start").hidden) {
+    here0.set(0, 0, 0).project(camera); // includes the lens's current slide, so this settles on the target
+    const phone = window.innerWidth < 700;
+    tx = THREE.MathUtils.clamp(third.x + (here0.x * 0.5 + 0.5 - (phone ? 0.5 : 0.68)), -0.4, 0.4);
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - (phone ? 0.2 : 0.5)), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
@@ -3187,5 +3210,7 @@ async function startVoyage(s: SetSail): Promise<void> {
   await begin();
 }
 (window as unknown as { __setsail: unknown }).__setsail = { options: SET_SAIL, implied, current: currentSetSail, start: startVoyage };
+// The Set sail card draws its pills over the controls above (Jonas; Elena's approved wireframe).
+if (!shared && !PRACTICE) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady });
 // ?go=1: the card (or a link) already chose; set sail at once.
 if (!shared && !PRACTICE && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));
