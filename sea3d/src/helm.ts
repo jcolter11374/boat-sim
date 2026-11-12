@@ -25,12 +25,14 @@ import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedKayak, loadDetailedModels, type BoatModel } from "./boats/model";
 import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
+import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
+import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
 import { ShortWaveRide } from "./boats/ride";
 import { Contact } from "./contact";
@@ -64,6 +66,10 @@ import { callLines, callName, headline, leaves, numbers, story, type Call } from
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** The Set sail card's choices this page opened with (the URL, old ?practice and ?challenge links included). */
+const SS: SetSail = fromUrl(location.search);
+// ?go=1 sets sail once: a reload (or Play again) comes back to the filled-in card.
+if (params.get("go") === "1") history.replaceState(null, "", `${location.pathname}${withChoices(location.search, SS)}${location.hash}`);
 const KN = 1.94384;
 const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : iso + "Z");
 
@@ -1353,7 +1359,7 @@ async function wheelEnded(r: WheelResult): Promise<void> {
 // depths end the run in shallow water. Where this copy of the site has no Bay squares, it's
 // the old drills: a spell to a mark in a steady wind, a new one each time.
 // Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
-const PRACTICE = params.has("practice");
+const PRACTICE = SS.where === "annapolis"; // ?where=annapolis, or the old ?practice
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
 let practiceWind: { u: number; v: number } | null = null;
@@ -1363,7 +1369,7 @@ let practiceAt: LatLon | null = null;
 /** The last place the boat was, so the view stays put between runs. */
 let practiceHere: LatLon | null = null;
 let practiceCourse: Course | null = null;
-let practiceBreeze: Breeze = "good";
+let practiceBreeze: Breeze = SS.breeze;
 let depths: BayDepths | null = null;
 const depthsReady = BayDepths.create().then((d) => {
   depths = d;
@@ -1540,6 +1546,7 @@ if (PRACTICE) {
       practiceCard();
       $("practice-end").hidden = false;
       aimAt(290); // toward the town and the Naval Academy
+      if (params.get("go") === "1" && SS.course) void practiceSpell(SS.course);
     } else void practiceSpell("drill");
   });
 }
@@ -2744,7 +2751,7 @@ const MINE = "mine";
 const startMine = shared ? null : loadMyBoat();
 const isPlannedKayak = (b: MyBoat) => b.kind === "yard" && b.base === "kayak" && b.hash === "";
 const rowFor = (b: MyBoat) => (isPlannedKayak(b) ? "" : b.kind === "stock" ? b.base : MINE);
-const boatRow = (v: string) => document.querySelector<HTMLInputElement>(`input[name="boat"][value="${v}"]`);
+const boatRow = (v: string) => document.querySelector<HTMLInputElement>(`input[name="boat"][value="${CSS.escape(v)}"]`);
 if (startMine) {
   // A stock boat this page doesn't list gets its own row too.
   const v = boatRow(rowFor(startMine)) ? rowFor(startMine) : MINE;
@@ -3123,7 +3130,21 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
 const third = { x: 0, y: 0 };
 const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
+/** Behind the Set sail card, never a stand-in (Elena): the drawn-in-code boat stays hidden, an empty
+ *  sea, until her real model has loaded (useBoat and loadDetailedModels rebuild her then). At sea she
+ *  always shows. */
+function hideStandIn(): void {
+  if (!model) return;
+  const card = !page.ready && !$("start").hidden;
+  const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : true;
+  const show = !card || real;
+  if (model.root.visible === show) return;
+  model.root.visible = show;
+  if (wake) wake.points.visible = show;
+  if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
+}
 function frameBoat(dt: number): void {
+  hideStandIn();
   const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
   // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
   // the horizon lower, never dead centre (Ines).
@@ -3151,6 +3172,15 @@ function frameBoat(dt: number): void {
     here0.set(0, 0, 0).project(camera);
     tx = THREE.MathUtils.clamp((here0.x + 1) / 2 + third.x - 0.82, -0.4, 0.4);
     ty = -0.04;
+  }
+  // Behind the Set sail card (Elena, Ines): her boat in the right two thirds beside the card, clear
+  // of its glass; on a phone, where the card fills the width at the bottom, in the band under the bar.
+  if (!page.ready && !$("start").hidden) {
+    here0.set(0, 0, 0).project(camera); // includes the lens's current slide, so this settles on the target
+    const phone = window.innerWidth < 700;
+    tx = THREE.MathUtils.clamp(third.x + (here0.x * 0.5 + 0.5 - (phone ? 0.5 : 0.68)), -0.4, 0.4);
+    // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - (phone ? (spec.length > 5 ? 0.36 : 0.2) : 0.5)), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
@@ -3471,3 +3501,68 @@ renderer.setAnimationLoop(() => {
   page.hour = hour;
   page.simHour = shownTo;
 });
+
+// ---------- Set sail (the one-game plan, step 1; Rosa) ----------
+// One entry for every way to start: the ocean crossing, Annapolis practice, a weather
+// challenge. Jonas's Set sail card calls window.__setsail.start(choices); the URL carries
+// the same choices, so a link (the title, the Boatyard's "Test it", Play again) opens the
+// card filled in, and ?go=1 sets sail at once.
+if (!shared && !PRACTICE && SS.when !== "calm") $<HTMLSelectElement>("launch").value = LAUNCH[SS.when];
+if (!shared && !PRACTICE && SS.boat && boatRow(SS.boat)) {
+  boatRow(SS.boat)!.checked = true;
+  powerFor(SS.boat);
+}
+
+/** The choices the start card shows now. */
+function currentSetSail(): SetSail {
+  if (PRACTICE) return { ...SS, where: "annapolis", breeze: practiceBreeze, course: lastTrial ?? SS.course };
+  const lv = $<HTMLSelectElement>("launch").value;
+  return { ...SS, where: "ocean", boat: chosenBoat(), when: lv === LAUNCH.rough ? "rough" : "calm", challenge: $<HTMLSelectElement>("challenge").value, course: "" };
+}
+
+/** Set sail with these choices: the same page and screen for every mode; switching between the ocean and Annapolis reloads into the other. */
+async function startVoyage(s: SetSail): Promise<void> {
+  if ((s.where === "annapolis") !== PRACTICE) {
+    location.assign(`helm.html${withChoices(location.search, s, true)}`);
+    return;
+  }
+  history.replaceState(null, "", `helm.html${withChoices(location.search, s)}`);
+  if (PRACTICE) {
+    practiceBreeze = s.breeze;
+    practiceCard();
+    await depthsReady;
+    await practiceSpell(s.course || "triangle");
+    return;
+  }
+  if (boatRow(s.boat)) {
+    boatRow(s.boat)!.checked = true;
+    powerFor(s.boat);
+  }
+  $<HTMLSelectElement>("launch").value = LAUNCH[s.when];
+  await challengesReady;
+  const sel = $<HTMLSelectElement>("challenge");
+  sel.value = challenges.some((c) => c.id === s.challenge) ? s.challenge : "";
+  showChallenge();
+  await begin();
+}
+(window as unknown as { __setsail: unknown }).__setsail = { options: SET_SAIL, implied, current: currentSetSail, start: startVoyage };
+// The Set sail card draws its pills over the controls above (Jonas; Elena's approved wireframe).
+// The boat on the water is always the one you'll sail: the cruiser for Annapolis, else the picked boat (Elena).
+let previewed = "";
+const previewBoat = (where: SetSail["where"]) => {
+  const pick = chosenBoat();
+  const key = where === "annapolis" ? "stock_cruiser31" : pick === MINE ? String(startMine?.base ?? "kayak") : pick || "kayak";
+  if (key === previewed) return; // only on a change, so a player's own zoom is left alone
+  const first = !previewed;
+  previewed = key;
+  useBoat(key);
+  if (first) return; // the page's own opening view
+  // Far enough back to see all of her, mast and sails included, beside the card.
+  const off = camera.position.clone().sub(controls.target);
+  // On a phone she sits in the band under the bar: further back again, so her masthead clears it.
+  const back = spec.length > 5 ? (window.innerWidth < 700 ? 6.5 : 4.5) : 2.8;
+  camera.position.copy(controls.target).add(off.setLength(spec.length * back));
+};
+if (!shared && !PRACTICE) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat });
+// ?go=1: the card (or a link) already chose; set sail at once.
+if (!shared && !PRACTICE && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));

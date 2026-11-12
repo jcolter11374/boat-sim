@@ -50,6 +50,17 @@ async function visibleNotices(page) {
     .filter((l) => l && NOTICE.test(l));
 }
 
+
+/** Pick a boat row. The Set sail card keeps the radios hidden and picks through the top bar's
+ * My boat picker, which ticks the row and fires change: do the same when the row can't be seen. */
+async function tickBoat(r) {
+  if (await r.isVisible()) return r.check();
+  await r.evaluate((el) => {
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
 async function helmStart(page, setup = async () => {}) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
@@ -332,7 +343,7 @@ const CHECKS = {
       await helmStart(page, async (p) => {
         const r = p.locator('input[name="boat"][value="stock_cruiser31"]');
         if ((await r.count()) !== 1) throw new SkipCheck("the cruiser isn't offered in the helm's boat picker");
-        await r.check();
+        await tickBoat(r);
       });
       if (!(await page.locator("#b-wheel").count())) throw new SkipCheck("this build has no Take the wheel (#348 not deployed)");
       const out = [];
@@ -575,7 +586,7 @@ const CHECKS = {
             const r = p.locator(`input[name="boat"][value="${b}"]`);
             // Only boats in PLAYABLE_STOCK (sea3d/src/boats/specs.ts) are offered; others skip.
             if ((await r.count()) !== 1) throw new SkipCheck(`${b} isn't offered in the helm's boat picker`);
-            await r.check();
+            await tickBoat(r);
           });
           const st = await hop(page, "#sday");
           return `${b} to day ${st.day.toFixed(2)} (stop ${st.stop}, ${st.secs} s)`;
