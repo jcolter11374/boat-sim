@@ -11,7 +11,7 @@
 // Each check prints one PASS/FAIL line with evidence, and saves
 // play-<browser>-<check>.png. Exit code 1 if anything failed.
 import * as pw from "playwright";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const BROWSER = process.env.BROWSER ?? "chromium";
@@ -124,6 +124,16 @@ async function cinematic(page, framesOf) {
     throw new CheckFail("a key press didn't leave cinematic mode");
   });
   return `cinematic ran ${f1 - f0} frames in 8 s and a key press left it`;
+}
+
+/** A JPEG for people whose sandboxes can't open github.io or fetch run artifacts: saved, and printed
+ *  to the log in base64 between LOOK-BEGIN/LOOK-END lines (decode it back from the job log). */
+async function lookShot(page, path) {
+  await page.screenshot({ path, type: "jpeg", quality: 82 });
+  const b64 = readFileSync(path).toString("base64");
+  console.log(`LOOK-BEGIN ${path}`);
+  for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+  console.log(`LOOK-END ${path}`);
 }
 
 const CHECKS = {
@@ -596,6 +606,219 @@ const CHECKS = {
       must(!rep.err, `the voyage page didn't load my boat's replay: ${rep.err}`);
       seen.push("voyage: a replay loaded");
       return seen.join("; ");
+    },
+  },
+  // ---------- Omar's manual live checks (run by name: playtest dispatch, checks="...") ----------
+  // #401 (Jonas, Leo, Ines, Elena): Watch a voyage on the helm system, at three sizes in Chrome
+  // and Firefox. Frames printed to the log; the state around each key is printed on a STATE line.
+  "look-401": {
+    manual: true,
+    path: "voyage.html",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__replay && (window.__replay.frames ?? 0) > 20, null, { timeout: 3 * MIN });
+      const ui = () => page.evaluate(() => {
+        const r = (id) => { const e = document.getElementById(id); if (!e) return null; const b = e.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), vis: !!e.offsetParent || getComputedStyle(e).position === "fixed" }; };
+        const sel = document.getElementById("voyage");
+        return {
+          drawer: document.getElementById("top")?.classList.contains("open") ?? null,
+          replay: sel?.selectedOptions?.[0]?.textContent ?? "",
+          strip: (document.getElementById("strip")?.innerText ?? "").replace(/\s+/g, " ").slice(0, 300),
+          eq: [...document.querySelectorAll("#eq .part")].map((p) => (p.classList.contains("bad") ? "RED:" : "") + (p.getAttribute("title") ?? p.textContent ?? "").slice(0, 30)),
+          eqWarn: /⚠/.test(document.getElementById("eq")?.textContent ?? ""),
+          kt: /\b\d+(\.\d+)?\s*kt\b/.test(document.body.innerText),
+          card: (document.querySelector(".poi-card:not(.poi-out)")?.innerText ?? "").replace(/\s+/g, " ").slice(0, 120),
+          sound: `${document.getElementById("soundbtn")?.getAttribute("aria-pressed")}|${document.getElementById("soundbtn")?.textContent?.trim()}`,
+          body: document.body.className,
+          film: r("film"), mapbox: r("mapbox"), top: r("top"), strip_r: r("strip"),
+        };
+      });
+      const overlap = (a, b) => a && b && a.w && b.w && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+      const out = [];
+      for (const [w, h] of [[1400, 900], [1280, 720], [1024, 700]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(2000);
+        const u = await ui();
+        console.log(`STATE ${w} ${JSON.stringify(u)}`);
+        await lookShot(page, `look-401-${BROWSER}-${w}.jpg`);
+        must(!u.kt, `at ${w}: "kt" still on the page`);
+        must(!u.eqWarn, `at ${w}: a warning sign in the equipment icons`);
+        must(!overlap(u.film, u.top) || !u.drawer, `at ${w}: the map icon row overlaps the open drawer`);
+        out.push(`${w}: drawer ${u.drawer}, ${u.eq.length} icons`);
+      }
+      const u0 = await ui();
+      must(/1 Jun/.test(u0.replay), `default replay isn't 1 Jun: "${u0.replay}"`);
+      // R: the drawer toggles.
+      await page.mouse.click(5, 300).catch(() => {}); // focus the page, away from the strip
+      await page.keyboard.press("r");
+      await page.waitForTimeout(1500);
+      const u1 = await ui();
+      await lookShot(page, `look-401-${BROWSER}-1024-R.jpg`);
+      must(u1.drawer !== u0.drawer, `R didn't toggle the drawer (${u0.drawer} -> ${u1.drawer})`);
+      // N: sound; C: cinematic (and C again to leave).
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      const u2 = await ui();
+      await page.keyboard.press("n");
+      await page.keyboard.press("c");
+      await page.waitForTimeout(2500);
+      const u3 = await ui();
+      await lookShot(page, `look-401-${BROWSER}-1024-C.jpg`);
+      await page.keyboard.press("c");
+      await page.waitForTimeout(1500);
+      console.log(`STATE keys ${JSON.stringify({ n: [u1.sound, u2.sound], c: [u1.body, u3.body] })}`);
+      must(u2.sound !== u1.sound, `N didn't change the sound button (${u1.sound})`);
+      must(u3.body !== u1.body || u3.strip !== u1.strip, "C didn't change anything on the page");
+      // Late in the voyage: equipment icons that broke are red; history card shows "N of M".
+      await page.evaluate(() => window.__replay.setHour?.(24 * 60));
+      await page.waitForTimeout(3000);
+      const u4 = await ui();
+      await lookShot(page, `look-401-${BROWSER}-1024-late.jpg`);
+      console.log(`STATE late ${JSON.stringify({ eq: u4.eq, card: u4.card })}`);
+      out.push(`R ok, N ok, C ok; late day 60: ${u4.eq.filter((x) => x.startsWith("RED")).length} red icons`);
+      return out.join("; ");
+    },
+  },
+  // #396 (Ravi, Milo's words): the helm results card on the 1 May 2020 launch (both boats lose a part on day 3.9).
+  "card-396": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("one browser is enough for the words");
+      await helmStart(page, async (p) => p.selectOption("#launch", "2"));
+      for (let i = 0; i < 40 && !(await page.evaluate(() => window.__helm.card)); i++) {
+        await openOrders(page);
+        await page.click("#sevent");
+        await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 4 * MIN });
+        if ((await page.evaluate(() => window.__helm.lastStop)) === "over") await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN });
+      }
+      must(await page.evaluate(() => !!window.__helm.card), "no results card");
+      await page.waitForTimeout(4000);
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForTimeout(1500);
+      const t = await page.evaluate(() => ({ card: document.getElementById("result")?.innerText ?? "", preview: document.getElementById("preview")?.textContent ?? "", bar: (document.querySelector("#hud, .hud, #strip")?.innerText ?? "").replace(/\s+/g, " ") }));
+      console.log(`CARD-396 ${JSON.stringify(t)}`);
+      await lookShot(page, `look-396-${BROWSER}-card.jpg`);
+      must(!/\$|\bbill\b|\bcost\b/i.test(t.card), "money words on the card");
+      must(!/\b1 orders\b/.test(t.card), '"1 orders" on the card');
+      return t.card.split("\n").filter((l) => /board|order|Launch/i.test(l)).join(" | ").slice(0, 400);
+    },
+  },
+  // #380 (audit item 9, Leo's copy): player names on the leaderboard and in the Boatyard.
+  "names-380": {
+    manual: true,
+    path: "leaderboard.html",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__leaderboard?.ready || window.__leaderboard?.error, null, { timeout: 2 * MIN });
+      const lb = await page.evaluate(() => ({
+        err: window.__leaderboard.error,
+        head: document.querySelector("#you, .you")?.innerText ?? document.body.innerText.split("\n").find((l) => /^Best:/.test(l)) ?? "",
+        names: [...document.querySelectorAll("#rows .name")].map((c) => c.firstChild?.textContent ?? ""),
+        randolph: [...document.querySelectorAll("#rows .name")].filter((c) => /Randolph/.test(c.textContent)).map((c) => !!c.querySelector(".modeltag")),
+        best: (document.body.innerText.match(/Best:[^\n]*/) ?? [""])[0],
+      }));
+      console.log(`NAMES-380 ${JSON.stringify(lb)}`);
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await lookShot(page, `look-380-${BROWSER}-leaderboard.jpg`);
+      must(!lb.err, `the board didn't load: ${lb.err}`);
+      must(/^Best: /.test(lb.best.trim()) && /% finish/.test(lb.best), `headline: "${lb.best}"`);
+      const leaked = lb.names.filter((n) => /Drive:|solar-\d|two-100ah|one-box|\b[a-z]+-[a-z0-9]+\b|\(our model\)|GUESS|ROUGH|OUR PICK|as modelled|as published/.test(n));
+      must(!leaked.length, `internal words in names: ${JSON.stringify(leaked)}`);
+      must(lb.randolph.length && lb.randolph.every(Boolean), `Randolph rows without the "our model" tag: ${JSON.stringify(lb.randolph)}`);
+      // The Boatyard: Rev C5 as built, "Test it" -> the note names the grid build.
+      await page.goto(SITE + "boatyard.html?quality=low#base=revc", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__yard?.ready, null, { timeout: 2 * MIN });
+      await page.click("#launch");
+      const note = await page
+        .waitForFunction(() => (document.body.innerText.match(/(Simulated|Closest build we've simulated): [^\n]*/) ?? [null])[0], null, { timeout: 4 * MIN })
+        .then((h) => h.jsonValue())
+        .catch(() => "");
+      await lookShot(page, `look-380-${BROWSER}-boatyard-revc.jpg`);
+      must(note === "Simulated: Randolph Rev C5, as built (our model).", `Boatyard note: "${note}"`);
+      return `"${lb.best.trim()}"; ${lb.names.length} names clean; ${lb.randolph.length} Randolph rows tagged; Boatyard: "${note}"`;
+    },
+  },
+  // #385 (Felix): the sea sound. Taps what reaches the speakers with an analyser: silent before the
+  // first click, starts after it, louder in a gale than on a light day, N mutes and brings it back,
+  // and nothing clips. (No volume control on the page: on or off only.)
+  "sound-385": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      await page.addInitScript(() => {
+        const taps = (window.__taps = []);
+        const orig = AudioNode.prototype.connect;
+        AudioNode.prototype.connect = function (dest, ...rest) {
+          if (dest instanceof AudioDestinationNode) {
+            const a = this.context.createAnalyser();
+            a.fftSize = 4096;
+            orig.call(this, a);
+            taps.push(a);
+          }
+          return orig.call(this, dest, ...rest);
+        };
+        window.__level = () => {
+          let sum = 0, n = 0, peak = 0;
+          const st = window.__taps[0]?.context.state ?? "none";
+          for (const a of window.__taps) {
+            const b = new Float32Array(a.fftSize);
+            a.getFloatTimeDomainData(b);
+            for (const v of b) { sum += v * v; n++; peak = Math.max(peak, Math.abs(v)); }
+          }
+          const rms = n ? Math.sqrt(sum / n) : 0;
+          return { st, db: rms > 0 ? Math.round(20 * Math.log10(rms) * 10) / 10 : -999, peak: Math.round(peak * 1000) / 1000 };
+        };
+      });
+      const listen = async (secs) => {
+        const xs = [];
+        for (let i = 0; i < secs * 4; i++) { xs.push(await page.evaluate(() => window.__level())); await page.waitForTimeout(250); }
+        const dbs = xs.map((x) => x.db).filter((d) => d > -999).sort((a, b) => a - b);
+        return { st: xs.at(-1).st, med: dbs.length ? dbs[Math.floor(dbs.length / 2)] : -999, peak: Math.max(...xs.map((x) => x.peak)) };
+      };
+      const out = [];
+      const play = async (label, setup) => {
+        await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+        const before = await listen(2);
+        must(before.med === -999 || before.med < -80, `${label}: sound before any click (${JSON.stringify(before)})`);
+        await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
+        await setup();
+        await page.click("#go");
+        await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+        const ask = await page.waitForSelector("#soundyes", { state: "visible", timeout: 30_000 }).then(() => true).catch(() => false);
+        if (ask) await page.click("#soundyes");
+        else {
+          // Turned on last visit: it comes back by itself at the first click (#go). Only press N if it didn't.
+          await page.waitForTimeout(2000);
+          if ((await listen(1)).med < -80) await page.keyboard.press("n");
+        }
+        await page.waitForTimeout(3000);
+        const on = await listen(8);
+        const w = await page.evaluate(() => ({ wind: window.__helm.status?.wind_ms ?? window.__helm.status?.wind ?? null, hs: window.__helm.status?.hs ?? null }));
+        out.push(`${label}: ${on.med} dBFS median, peak ${on.peak}, ctx ${on.st}, asked ${ask}, weather ${JSON.stringify(w)}`);
+        must(on.st === "running", `${label}: the audio never started (${on.st})`);
+        must(on.med > -70, `${label}: sound on but silent (${on.med} dBFS)`);
+        must(on.peak < 0.99, `${label}: clipping (peak ${on.peak})`);
+        must(on.med < -10, `${label}: too loud (${on.med} dBFS median)`);
+        return on;
+      };
+      const calm = await play("23 Apr light day", async () => {});
+      await page.keyboard.press("n");
+      await page.waitForTimeout(1500);
+      const off = await listen(3);
+      must(off.med < calm.med - 30 || off.med === -999, `N didn't mute (${off.med} dBFS vs ${calm.med})`);
+      await page.keyboard.press("n");
+      await page.waitForTimeout(2000);
+      const back = await listen(3);
+      must(back.med > calm.med - 10, `N didn't bring it back (${back.med} dBFS)`);
+      out.push(`N: ${off.med} dBFS muted, ${back.med} back`);
+      const gale = await play("Dorian challenge", async () => {
+        await page.waitForFunction(() => !document.querySelector("#chpick").hidden, null, { timeout: MIN });
+        const id = await page.evaluate(() => [...document.querySelectorAll("#challenge option")].map((o) => o.value).find((v) => /dorian/i.test(v)));
+        must(id, "no Dorian challenge offered");
+        await page.selectOption("#challenge", id);
+      });
+      must(gale.med > calm.med + 6, `the gale isn't louder than the light day (${gale.med} vs ${calm.med} dBFS)`);
+      return out.join("; ");
     },
   },
   leaderboard: {

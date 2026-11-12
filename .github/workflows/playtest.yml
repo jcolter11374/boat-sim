@@ -12,6 +12,9 @@ on:
       site:
         description: "Site to play"
         default: "https://jcolter11374.github.io/boat-sim/"
+      checks:
+        description: "Checks to run, space-separated (empty: all). 'look' takes screenshots for the Creative Director."
+        default: ""
   # No pull_request trigger: the pre-release playtest (prerelease-playtest.yml)
   # plays a PR's own tools/playtest/play.mjs against the PR's own build.
 permissions:
@@ -56,7 +59,9 @@ jobs:
         run: sleep 90
       # One job per browser, every check in turn (2 runners per deploy, not 26); each
       # check prints its own PASS/FAIL line and its row in the run summary.
-      - run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs
+      - run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs $CHECKS
+        env:
+          CHECKS: ${{ inputs.checks }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
