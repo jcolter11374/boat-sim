@@ -115,8 +115,8 @@ async function title(browser) {
   const { ctx, page } = await fresh(browser, "");
   try {
     await page.waitForTimeout(5000);
-    const t = await page.evaluate(() => document.title + " " + document.body.innerText);
-    note("S4", /bluewater/i.test(t), "The game is called Bluewater on the title page", document.title);
+    const [docTitle, body] = await page.evaluate(() => [document.title, document.body.innerText]);
+    note("S4", /bluewater/i.test(docTitle + " " + body), "The game is called Bluewater on the title page", docTitle);
     await noMoney(page, "title");
   } finally {
     await ctx.close();
