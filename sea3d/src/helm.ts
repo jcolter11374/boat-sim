@@ -380,9 +380,15 @@ function lockOrders(why: string, announce: boolean): void {
   linkCut = why;
   document.body.classList.add("no-link");
   $("orders").classList.add("locked");
+  // Out of reach for the keyboard too, not only the mouse (Lena). The clock and share link stay.
+  for (const id of ["coach", "dialrow", "powerrow", "power", "sailrow", "preview", "powerhint", "sendrow"]) {
+    const el = document.getElementById(id);
+    if (el) el.inert = true;
+  }
   $("nolink").hidden = false;
   $("nolinktext").textContent = NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.";
-  $("orders-tab").dataset.badge = "No link";
+  $("orders-tab").classList.add("nolink");
+  $("orders-tab").querySelector("span")!.textContent = "Orders: no link";
   if (announce) note(NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.", `Day ${(shown ?? page.status)!.day.toFixed(1)}`, TONE_COLOUR.bad);
 }
 

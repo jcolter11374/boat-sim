@@ -61,8 +61,9 @@
   /* No link (Maya, 12 Nov): the drawer locks with its reason; the clock and camera still work. */
   #nolink { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid #ff6b5a; border-radius: 8px; background: rgba(255,107,90,.12); font-size: 12.5px; line-height: 1.35; }
   #nolink b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #ff8a7a; margin-bottom: 2px; }
-  #orders.locked > :not(h2):not(#nolink) { opacity: .35; pointer-events: none; filter: grayscale(1); }
-  #orders-tab[data-badge]::after { content: attr(data-badge); display: block; margin-top: 4px; font-size: 9.5px; color: #ff8a7a; letter-spacing: .05em; }
+  /* Only the steering locks: the clock (Jump ahead) and the share link keep working (Maya). */
+  #orders.locked > :is(#coach, #dialrow, #powerrow, #power, #sailrow, #preview, #powerhint, #sendrow) { opacity: .35; pointer-events: none; filter: grayscale(1); }
+  #orders-tab.nolink span { color: #ff8a7a; }
   #soundask { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 6; font-size: 13px; width: min(500px, calc(100vw - 24px)); }
   #soundask button { white-space: nowrap; }
   #soundask[hidden] { display: none; }
