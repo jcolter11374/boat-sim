@@ -361,18 +361,31 @@ vec2 q = vec2(dot(pf, wd), dot(pf, vec2(-wd.y, wd.x)));
 float fpF = max(length(fwidth(vWPos.xz)), 1e-4);
 float o2 = smoothstep(0.08, 0.3, fpF);
 float o3 = smoothstep(0.02, 0.1, fpF);
+#ifdef SEA_LITE
+// Low has no separate streak lanes (their straight lines read as seams, Elena): in a gale its
+// caps are drawn out along the wind instead, into broken, uneven streaks, for free.
+float stx = 1.0 - 0.5 * min(uStreak * 4.0, 1.0);
+float fn = vnoise(vec2(q.x * 0.5 * stx, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
+         + mix(vnoise(vec2(q.x * 1.6 * stx, q.y * 4.0) - uTime * 0.08), 0.5, smoothstep(0.03, 0.12, fpF)) * 0.3 // fades sooner: far off it drew fine regular dashes
+#else
 float fn = vnoise(vec2(q.x * 0.5, q.y * 1.4) + vec2(uTime * 0.05, 0.0)) * 0.5
          + mix(vnoise(vec2(q.x * 1.6, q.y * 4.0) - uTime * 0.08), 0.5, o2) * 0.3
+#endif
          + mix(vnoise(vWPos.xz * 7.0 + uTime * 0.2), 0.5, o3) * 0.2;
 #ifdef SEA_LITE
 // Low has only this noise mask for its caps, tuned for Monahan's few per cent: past that it
 // turned the whole sea white at force 8 (whiteCrests() is ~0.3 there). Medium and up get their
 // extra white from the short waves' foam instead.
-float thr = 0.8 - 1.4 * min(uCover, 0.12) - 0.35 * vFoam;
+float thr = 0.8 - 1.4 * min(uCover, 0.15) - 0.35 * vFoam * (1.0 - smoothstep(0.04, 0.15, fpF)); // far crests' foam drew rows of fine dashes
 #else
 float thr = 0.8 - 1.4 * uCover - 0.35 * vFoam;
 #endif
+#ifdef SEA_LITE
+// Thin and see-through at the edge, whiter inside: not a flat paper cut-out (Elena).
+float foamMask = smoothstep(thr, thr + 0.05, fn) * (0.45 + 0.55 * smoothstep(thr + 0.05, thr + 0.22, fn)) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+#else
 float foamMask = smoothstep(thr, thr + 0.1, fn) * step(0.002, uCover + vFoam) * (1.0 - 0.6 * farMix);
+#endif
 float foamSunk = 0.0; // bubbles just under the surface round a fresh cap (Medium and up)
 if (SEA_DET_N > 0) {
   // Whitecaps where the FFT's crests fold over, fading over seconds; as a patch
@@ -409,24 +422,7 @@ if (SEA_DET_N > 0) {
 // Blown foam (force 7 and up, storm.ts): long narrow lanes along the wind, drifting
 // downwind; where they're finer than a pixel, their average whiteness instead.
 #ifdef SEA_LITE
-// Low keeps main's cheaper lanes (four noises instead of six), for its frame budget.
-if (uStreak > 0.001) {
-  vec2 qs = q - vec2(uTime * 1.2, 0.0);
-  float w1 = vnoise(qs * vec2(0.015, 0.08));
-  float w2 = vnoise(qs * vec2(0.06, 0.4));
-  qs.y += 2.5 * w1 + 0.8 * w2;
-  // Lanes a few tens of cm wide, not metres: main's drew as white slabs past a low camera
-  // (Ada's film, force 7-8). Same work, finer across the wind and a narrower edge.
-  float ns = vnoise(vec2(qs.x * 0.03, qs.y * 4.0)) * 0.6 + mix(vnoise(vec2(qs.x * 0.11, qs.y * 9.0) + 17.0), 0.5, smoothstep(0.05, 0.25, fpF)) * 0.4;
-  // Lanes come and go across the wind, and break into dashes of uneven length, from the
-  // wander noises already drawn (no extra noise on Low): not evenly spaced road markings (Elena).
-  float thrS = 0.58 + 0.4 * (0.5 - uStreak) + 0.16 * (w2 - 0.5);
-  float lanes = smoothstep(thrS, thrS + 0.04, ns) * smoothstep(0.2 + 0.3 * w1, 0.65, fn);
-  // Give way to their average well before the dashes go finer than a few pixels: far off
-  // they drew as fine regular dashes (Elena).
-  float streak = mix(lanes, 0.5 * (uStreak + uCover), smoothstep(0.12, 0.6, fpF));
-  foamMask = max(foamMask, 0.9 * streak);
-}
+// Low draws no lanes: its caps stretch along the wind instead (above).
 #else
 if (uStreak > 0.001) {
   vec2 qs = q - vec2(uTime * 1.2, 0.0);
