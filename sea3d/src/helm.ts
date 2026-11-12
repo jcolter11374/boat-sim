@@ -2315,26 +2315,32 @@ function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: numb
 // ---------- your order on the water, and the boat on a third (Leo's plan, items 1 and 4) ----------
 /** A faint orange line ahead of the boat along your order, lying on the waves, so you see where
  * you're steering with the drawer shut. */
-const ORDER_PTS = 32;
+const DASHES = 6;
 const orderGeo = new THREE.BufferGeometry();
-orderGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(ORDER_PTS * 2 * 3), 3));
+orderGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((DASHES * 4 + 3) * 3), 3));
 {
-  // A ribbon that fades out along its length: alpha in the vertex colours.
-  const col = new Float32Array(ORDER_PTS * 2 * 4);
-  for (let i = 0; i < ORDER_PTS; i++) {
-    const a = Math.min(1, i / 3) * (1 - i / (ORDER_PTS - 1)) ** 1.3;
-    for (const k of [0, 1]) col.set([1, 0.54, 0.16, a], (i * 2 + k) * 4);
-  }
-  orderGeo.setAttribute("color", new THREE.BufferAttribute(col, 4));
+  // Dashes that fade out along the way, then a small arrowhead: alpha in the vertex colours.
+  const n = DASHES * 4 + 3;
+  const col = new Float32Array(n * 4);
   const idx: number[] = [];
-  for (let i = 0; i < ORDER_PTS - 1; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  for (let d = 0; d < DASHES; d++) {
+    const a = 1 - (0.75 * d) / DASHES;
+    for (let k = 0; k < 4; k++) col.set([1, 0.5, 0.15, a], (d * 4 + k) * 4);
+    const o = d * 4;
+    idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2);
+  }
+  for (let k = 0; k < 3; k++) col.set([1, 0.5, 0.15, 0.3], (DASHES * 4 + k) * 4);
+  idx.push(DASHES * 4, DASHES * 4 + 1, DASHES * 4 + 2);
+  orderGeo.setAttribute("color", new THREE.BufferAttribute(col, 4));
   orderGeo.setIndex(idx);
 }
-const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+const orderLine = new THREE.Mesh(orderGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 orderLine.frustumCulled = false;
 orderLine.visible = false;
 orderLine.renderOrder = 11; // over the sea, like the wake
 scene.add(orderLine);
+/** Your order on the water (Elena, 12 Nov): a short, faint dashed arrow 30 to 60 m ahead of the
+ * bow that fades out, dimmer at night. Not a beam to the horizon. */
 function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: number): void {
   const s = page.status;
   const on = page.ready && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare");
@@ -2349,21 +2355,30 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
   const a = THREE.MathUtils.degToRad(to);
   const dx = Math.sin(a);
   const dz = -Math.cos(a);
-  const half = Math.max(0.07, spec.length * 0.012);
-  const from = spec.length * 0.7;
-  const len = Math.max(24, spec.length * 7);
+  const half = Math.max(0.09, spec.length * 0.012);
+  const from = spec.length * 0.8;
+  const len = THREE.MathUtils.clamp(spec.length * 5, 30, 60);
+  const step = len / (DASHES + 0.5);
+  const dash = step * 0.55;
   const pos = orderGeo.getAttribute("position") as THREE.BufferAttribute;
-  for (let i = 0; i < ORDER_PTS; i++) {
-    const d = from + (len * i) / (ORDER_PTS - 1);
-    const x = dx * d;
-    const z = dz * d;
-    const y = heightAt(comps, x, z, t) + 0.08;
-    pos.setXYZ(i * 2, x - dz * half, y, z + dx * half);
-    pos.setXYZ(i * 2 + 1, x + dz * half, y, z - dx * half);
+  const put = (i: number, d: number, side: number) => {
+    const x = dx * d + dz * side;
+    const z = dz * d - dx * side;
+    pos.setXYZ(i, x, heightAt(comps, x, z, t) + 0.08, z);
+  };
+  for (let k = 0; k < DASHES; k++) {
+    const d0 = from + k * step;
+    put(k * 4, d0, -half);
+    put(k * 4 + 1, d0, half);
+    put(k * 4 + 2, d0 + dash, -half);
+    put(k * 4 + 3, d0 + dash, half);
   }
+  const tip = from + DASHES * step + step * 0.6;
+  put(DASHES * 4, tip - step * 0.5, -half * 4);
+  put(DASHES * 4 + 1, tip - step * 0.5, half * 4);
+  put(DASHES * 4 + 2, tip, 0);
   pos.needsUpdate = true;
-  // Faint: a hint on the water, not a beam. Fainter still at night.
-  (orderLine.material as THREE.MeshBasicMaterial).opacity = 0.18 + 0.32 * Math.min(1, atmos.ambient * 2);
+  (orderLine.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.4 * THREE.MathUtils.smoothstep(atmos.ambient, 0.2, 0.8);
 }
 
 /** The default view keeps the boat on the lower third, with room ahead of the bow and clear
@@ -2381,9 +2396,10 @@ function frameBoat(dt: number): void {
     const side = ahead.x - here0.x; // + when the bow points right on screen
     // A boat that already fills much of the frame (zoomed in, or a big yacht) stays nearer the
     // middle, so the strip never covers its hull.
-    const fill = spec.length / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
-    const room = THREE.MathUtils.clamp((0.5 - fill) / 0.3, 0, 1);
-    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.1 * room : 0;
+    // How much of the frame's height the boat takes (a hull stands about a third of its length tall, mast aside).
+    const fill = (spec.length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
+    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
     ty = -0.1 * room;
   }
   const k = Math.min(1, dt * 1.2);

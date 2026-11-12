@@ -195,7 +195,7 @@
      The world gets the screen: one instrument strip at the bottom, the orders in a drawer on the left,
      a corner map top right, toasts top centre. Everything else is one key or one click away. */
   :root { --hud: rgba(8,16,28,.46); --hud-solid: rgba(8,16,28,.82); --hud-line: rgba(200,220,245,.14);
-    --strip-w: min(960px, calc(100vw - 16px)); --strip-h: 58px; --edge: 10px; }
+    --strip-w: min(960px, calc(100vw - 16px)); --strip-h: 58px; --edge: 10px; --strip-bg: rgba(8,16,28,.62); }
   .hud { background: var(--hud); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); border-radius: 10px; }
   .num, #strip .v, #wheel .w-cell b, #wheel-goal { font-variant-numeric: tabular-nums; }
   button.x { background: none; border: 0; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--dim); }
@@ -208,7 +208,8 @@
 
   /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 26px; align-items: center; gap: 0; padding: 0 8px 0 14px; z-index: 6; }
+    display: grid; grid-template-columns: 1.9fr 1.15fr .8fr .8fr .95fr 1fr .9fr 26px; align-items: center; gap: 0; padding: 0 8px 0 14px; z-index: 6;
+    background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; height: 42px; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
   #strip .cell:first-child { border-left: 0; padding-left: 0; }
@@ -243,7 +244,7 @@
   #clock { display: none !important; }
 
   /* The orders drawer: left, from under the top edge to above the strip. */
-  #orders { position: fixed; left: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); bottom: calc(var(--edge) + var(--strip-h) + 8px); width: 318px; box-sizing: border-box;
+  #orders { position: fixed; left: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); max-height: calc(100vh - var(--bar, 0px) - 2 * var(--edge) - var(--strip-h) - 8px); width: 318px; box-sizing: border-box; /* as tall as what's in it (Elena) */
     padding: 12px 14px; overflow-y: auto; overscroll-behavior: contain; z-index: 7; background: var(--hud-solid); border-color: var(--hud-line);
     transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; }
   body.sailing #orders:not(.open) { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
@@ -323,8 +324,23 @@
   :root { --poi-right: var(--edge); --poi-bottom: calc(var(--edge) + var(--strip-h) + 120px); }
 
   /* Rosa's wheel strip, in the same slot and the same style as the instrument strip. */
-  #wheel { bottom: var(--edge); width: var(--strip-w); background: var(--hud); border: 0; box-shadow: none; }
-  #wheel-goal { background: var(--hud); border: 0; box-shadow: none; }
+  /* One strip design for both modes (Elena): same slot, glass, height, cells and type. */
+  #wheel { bottom: var(--edge); width: var(--strip-w); background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); padding: 0 8px 0 14px; box-sizing: border-box; }
+  #wheel .w-guide { margin: 8px 0 0; }
+  #wheel .w-strip { height: var(--strip-h); grid-template-columns: 1.05fr 1.5fr .85fr 1.15fr auto; gap: 0; }
+  #wheel .w-cell:not(.w-ctl) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; align-items: baseline; height: 42px; align-content: center;
+    padding: 0 10px; border-left: 1px solid var(--hud-line); }
+  #wheel .w-cell:first-child { border-left: 0; padding-left: 0; }
+  #wheel .w-cell .w-lbl { grid-row: 2; grid-column: 1 / 3; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; margin-top: 2px; order: 2; }
+  #wheel .w-cell b, #wheel .w-cell .w-tell { grid-row: 1; grid-column: 1; font: 650 17px/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #wheel .w-cell .w-tell { font-size: 14px; }
+  #wheel .w-cell .w-sub { grid-row: 1; grid-column: 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #wheel .w-cell .w-bar, #wheel .w-cell .w-gauge { grid-row: 3; grid-column: 1 / 3; height: 3px; margin: 3px 0 0; }
+  #wheel .w-ctl { justify-content: flex-end; padding-left: 10px; border-left: 1px solid var(--hud-line); height: 42px; }
+  #wheel .w-speeds button, #wheel .w-ctl > button { padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 16px; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
+  #wheel .w-speeds button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
+  #wheel .w-help { width: 22px; height: 22px; padding: 0 !important; border-radius: 50% !important; }
+  #wheel-goal { background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: none; }
 
   /* Narrow windows: the strip wraps to two rows, the drawer takes the width, the map is a button. */
   @media (max-width: 1100px) {
