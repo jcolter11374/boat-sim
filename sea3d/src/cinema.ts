@@ -28,8 +28,10 @@ export interface CinemaHost {
   landmark?(): number | null;
   /** Cloud cover now, 0..1: no night-sky shot under a thick overcast. */
   cloud?(): number;
-  /** The sound toggle, for the M key. */
+  /** The sound toggle, for the N key. */
   toggleSound?(): void;
+  /** A fade to black is starting (seconds long): the sound dips with it (sound.ts duck). */
+  fade?(seconds: number): void;
   /** How much bigger than our 3 m kayak the boat is: the close shots stand back by this much. */
   scale?(): number;
 }
@@ -215,6 +217,7 @@ export class Cinema {
     if (this.t > s.len - 0.35 && this.dipAt < 0) {
       this.dipAt = this.t;
       this.dip.classList.add("on");
+      this.host.fade?.(0.7);
     }
     if (this.t >= s.len) {
       this.next();
