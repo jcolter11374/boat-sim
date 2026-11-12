@@ -923,7 +923,13 @@ const CHECKS = {
       const ships = await page.evaluate(() => JSON.stringify(window.__helm.ships));
       console.log(`M0-415 ${ships}`);
       await lookShot(page, `s415-${BROWSER}-1.jpg`);
-      for (let i = 2; i <= 4; i++) { await page.keyboard.press("c"); await page.waitForTimeout(5000); await lookShot(page, `s415-${BROWSER}-${i}.jpg`); }
+      // The ship sits off-camera; drag the view round in quarter turns to find it.
+      for (let i = 2; i <= 5; i++) {
+        await page.mouse.move(640, 400); await page.mouse.down();
+        for (let k = 1; k <= 10; k++) await page.mouse.move(640 - k * 30, 400);
+        await page.mouse.up(); await page.waitForTimeout(3000);
+        await lookShot(page, `s415-${BROWSER}-${i}.jpg`);
+      }
       return `ships ${ships}`;
     },
   },
