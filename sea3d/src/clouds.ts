@@ -211,7 +211,7 @@ void main() {
     vec3 c = uHaze * mix(dark, 0.9, thin);
     // Light through the deck: a brighter, warmer patch towards the sun where it is thin.
     float toSun = pow(max(facing, 0.0), 3.0) * (0.35 + 0.65 * thin) * sunUp;
-    c += vec3(1.0, 0.84, 0.62) * uLight * toSun * 0.6;
+    c += vec3(1.0, 0.84, 0.62) * uLight * toSun * 0.6 * (1.0 - 0.85 * wet); // a downpour hides it
     c += uGlow * uWarm * 0.35 * smoothstep(-0.2, 0.9, facing) * thin * (1.0 - 0.6 * uStorm);
     c = mix(c, uHaze, smoothstep(6000.0, 45000.0, dist) * 0.85);
     col += (1.0 - alpha) * deckAmt * c; alpha += (1.0 - alpha) * deckAmt;
@@ -228,7 +228,8 @@ void main() {
   // towards it, the light coming in under the deck from clear sky beyond.
   float lowSun = smoothstep(-0.07, 0.0, uSunDir.y) * (1.0 - smoothstep(0.1, 0.35, uSunDir.y));
   float under = pow(max(dot(normalize(dir.xz), normalize(uSunDir.xz + 1e-4)), 0.0), 6.0) * (1.0 - smoothstep(0.0, 0.12, el));
-  col += alpha * vec3(1.0, 0.62, 0.36) * under * lowSun * uLight * (0.25 + 0.35 * smoothstep(0.3, 0.9, uStorm + uCover));
+  // Not through a downpour: the rain hides the clear sky beyond, and the horizon stays haze-grey.
+  col += alpha * vec3(1.0, 0.62, 0.36) * under * lowSun * uLight * (0.25 + 0.35 * smoothstep(0.3, 0.9, uStorm + uCover)) * (1.0 - smoothstep(0.5, 4.0, uRain));
   // Behind the cloud, the bottom of the sky itself fades into the same haze.
   // Rain: grey curtains hanging from the deck to the sea in the distance, on the bearings
   // where it is raining, drifting with the wind; darker at the foot, streaked.
