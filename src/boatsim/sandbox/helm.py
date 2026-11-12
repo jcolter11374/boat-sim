@@ -500,13 +500,25 @@ class Game:
         # The line it sails, a point every TRACK_EVERY_H, for a call's map (Rosa's cards).
         track = [[round(w.state.lat, 3), round(w.state.lon, 3)]]
         next_pt = t0 + timedelta(hours=TRACK_EVERY_H)
+        # What the line costs, at the same points in the same forecast: the roughest sea
+        # and strongest wind on it, and the lowest battery (Elena: a call needs a trade-off).
+        sea = {"hs_max": 0.0, "wind_max": 0.0, "soc_min": float(w.state.soc)}
+
+        def cost() -> None:
+            e = w.c.env.sample(w.state.t, w.state.lat, w.state.lon)
+            sea["hs_max"] = max(sea["hs_max"], float(e.hs))
+            sea["wind_max"] = max(sea["wind_max"], float(math.hypot(e.wind_u, e.wind_v)))
+
         try:
+            cost()
             while not w.done and w.state.t < end:
                 w.step()
                 stw += w.state.speed_through_water
                 n += 1
+                sea["soc_min"] = min(sea["soc_min"], float(w.state.soc))
                 if w.state.t >= next_pt:
                     track.append([round(w.state.lat, 3), round(w.state.lon, 3)])
+                    cost()
                     next_pt += timedelta(hours=TRACK_EVERY_H)
         except OutsideCoverage:  # the forecast ran past the end of the weather: a shorter preview
             pass
@@ -518,6 +530,7 @@ class Game:
             "km": km0 - self._km_to_finish(w),
             "outcome": self._outcome(w) if w.done else "at_sea",
             "track": track if track[-1] == last else [*track, last],
+            **sea,
         }
 
     def outlook(self, orders: list[dict], hours: float = OUTLOOK_HOURS) -> dict:

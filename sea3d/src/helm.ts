@@ -1632,6 +1632,10 @@ function inWords(hours: number): string {
 }
 /** The storm being sailed through after a "Your call", to say how it went once it's past (Leo). */
 let spell: { kind: string; h: number; chose: string; km: number } | null = null;
+/** The last blow you answered, so a second like it isn't asked again (Leo). */
+let lastStorm: { kind: string; peakH: number; chose: string } | null = null;
+/** At most one "Your call" per 2 voyage days (Leo's cadence guard), bar a clearly worse threat. */
+const MIN_CALL_GAP_H = 48;
 
 /** The decision due now, if any. */
 function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
@@ -1665,12 +1669,25 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       const peakW = Math.max(...rows.map((r) => Math.hypot(r.wind_u, r.wind_v)));
       const peakH = Math.max(...rows.map((r) => r.hs));
       const kind = peakW >= GALE_MS ? "gale" : "waves";
+      // At most one call per 2 voyage days, and the same kind of blow isn't asked twice: the
+      // last answer stands, and a toast says so (Leo). Only a clearly worse threat asks again:
+      // a gale after big waves, or a peak a metre or more higher than the one last answered.
+      const worse = !lastStorm || (kind === "gale" && lastStorm.kind === "waves") || peakH >= lastStorm.peakH + 1;
+      if (!worse) {
+        if (lastStorm) {
+          const still = lastStorm.chose === "slow" && power <= 0.1 ? "still slowing down, as you chose" : lastStorm.chose === "dodge" && typeof order === "number" ? "still dodging, as you chose" : "your order stands";
+          const text = `More ${kind === "gale" ? "gale" : "big waves"} ahead ${inWords(bad.ah)} (waves up to ${peakH.toFixed(1)} m): ${still}. Change it in Orders.`;
+          whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.warn));
+        }
+        return null;
+      }
       const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
       const south = Math.round(((toFinish + 50) % 360) / 5) * 5;
       const what = kind === "gale" ? "the gale" : "the waves";
       const did: Record<string, string> = { hold: `held course through ${what}`, dodge: `dodged ${what}`, slow: `slowed for ${what}` };
       const call = (chose: string, act: () => Promise<void> | void) => () => {
         spell = { kind, h, chose, km: st.boat.km_to_finish };
+        lastStorm = { kind, peakH, chose };
         alsoCalled(did[chose]);
         return act();
       };
@@ -1689,7 +1706,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     }
   }
   // A night that could run the battery flat.
-  if (fc && motors && st.boat.soc < 0.35 && power > 0.15 && order !== "auto" && h - asked.night >= 24) {
+  if (fc && motors && st.boat.soc < 0.35 && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= MIN_CALL_GAP_H) {
     if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
       asked.night = h;
       return {
@@ -1721,7 +1738,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   // asked once a voyage, the first time the boat is in it, whatever the order. Both answers
   // are ordinary orders the simulator sails in the real current; the ghost stays on auto.
   const cur = w ? Math.hypot(w.current_u, w.current_v) : 0;
-  if (w && cur >= 1 && !asked.stream) {
+  if (w && cur >= 1 && !asked.stream && h - lastCallH >= MIN_CALL_GAP_H) {
     asked.stream = true;
     const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
     // Wind against the current heaps the sea up into short steep waves: the Stream's real danger.
@@ -1769,7 +1786,7 @@ let decisionSeq = 0;
 // ahead of what you're doing now; otherwise the clock never stops and it looks again in a day.
 const ROUTE_GAIN_KM = 5;
 const ROUTE_MIN_TURN = 10; // degrees: smaller is not a different line
-let lastCallH = 0;
+let lastCallH = -Infinity; // the first call of a voyage is never held back
 let routeLookedH = -Infinity;
 let callCount = 0;
 /** Hours of quiet before the next route check: 72 to 120, fixed by the voyage and the call count. */
@@ -1786,7 +1803,7 @@ function orderWords(o: Heading): string {
 function maybeRouteCheck(st: Status): boolean {
   if (mode !== "hands_on" || st.over || shared) return false;
   const h = st.day * 24;
-  if (h - lastCallH < quietGapH() || h - routeLookedH < 24) return false;
+  if (h - Math.max(lastCallH, 0) < quietGapH() || h - routeLookedH < 24) return false;
   routeLookedH = h;
   setRate(0, true);
   const seq = ++decisionSeq;
@@ -1799,29 +1816,39 @@ function maybeRouteCheck(st: Status): boolean {
     const mine: { heading: Heading; power: number } = { heading: order, power };
     const o = await game.outlook([{ heading: b.best, power }, mine, { heading: "auto" }]).catch(() => null);
     if (!o || seq !== decisionSeq) return resume();
-    const [best, now] = o.orders;
+    const [best, now, auto] = o.orders;
     const turn = Math.abs(((b.best - b.heading + 540) % 360) - 180);
-    const ask = best.lead_km - now.lead_km >= ROUTE_GAIN_KM && turn >= ROUTE_MIN_TURN;
-    page.routeChecks.push({ day: st.day, best: b.best, gain: best.lead_km - now.lead_km, turn, asked: ask });
+    const gainKm = best.lead_km - now.lead_km;
+    // A real decision needs a price on the better line (Elena): rougher seas, or a lower battery.
+    const rougher = (best.hs_max ?? 0) - (now.hs_max ?? 0) >= 0.75;
+    const drains = (now.soc_min ?? 1) - (best.soc_min ?? 1) >= 0.08;
+    const better = gainKm >= ROUTE_GAIN_KM && turn >= ROUTE_MIN_TURN;
+    const ask = better && (rougher || drains);
+    page.routeChecks.push({ day: st.day, best: b.best, gain: gainKm, turn, asked: ask });
+    if (better && !ask) {
+      // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
+      const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} for the next 2 days, ${gapChange(gainKm)} against ${orderWords(order)}, in no worse seas. Change it in Orders.`;
+      whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
+    }
     if (!ask) return resume();
     lastCallH = h;
     callCount++;
     page.decisions.push({ kind: "route", day: st.day });
-    const gain = Math.round(best.lead_km - now.lead_km);
+    const price = [rougher ? `rougher seas (waves to ${best.hs_max!.toFixed(1)} m, not ${now.hs_max!.toFixed(1)})` : "", drains ? `a lower battery (down to ${Math.round(best.soc_min! * 100)}%)` : ""].filter(Boolean).join(" and ");
+    // The autopilot and the forecast's line agree (within 3 km): one option, not two (Elena).
+    const same = Math.abs(auto.lead_km - best.lead_km) < 3;
     const d: Decision = {
       kind: "route",
-      text: `Navigator's check: the forecast likes ${fmtDeg(b.best)} for the next 2 days, about ${gain} km better than ${orderWords(order)}.`,
+      text: `Navigator's check: ${fmtDeg(b.best)} gains about ${Math.round(gainKm)} km in the next 2 days, but through ${price}.`,
       choices: [
-        { label: `Take the forecast's line (${fmtDeg(b.best)})`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
-        { label: `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
+        { label: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
         { label: "Let the autopilot decide (what the ghost does)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
-    // Already on the autopilot: "keep" and "autopilot" are one choice.
-    const picks = order === "auto" ? [0, 2] : [0, 1, 2];
-    d.choices = picks.map((i) => d.choices[i]);
-    if (order === "auto") d.choices[1] = { ...d.choices[1], label: "Stay on the autopilot (what the ghost does)", title: "Carry on as you are" };
-    const view: Outlook = { ...o, orders: picks.map((i) => o.orders[i]) };
+    const picks = order === "auto" || same ? [0, 1] : [0, 1, 2];
+    d.choices = picks.map((k) => d.choices[k]);
+    const view: Outlook = { ...o, orders: picks.map((k) => o.orders[k]) };
     whenAt(h, () => {
       if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, view, picks.map(() => true));
     });
@@ -1857,10 +1884,19 @@ function maybeDecide(): boolean {
   return true;
 }
 
-/** "about 40 km ahead of the ghost": rounded, because it's a forecast. */
-function againstGhost(km: number): string {
+/** What an option does to the gap, rounded because it's a forecast (Leo, Elena: a change, not a total; the strip has the total). */
+function gapChange(km: number): string {
   const r = Math.abs(km) < 10 ? Math.round(km) : Math.round(km / 5) * 5;
-  return Math.abs(r) < 1 ? "level with the ghost" : `about ${Math.abs(r).toLocaleString()} km ${r > 0 ? "ahead of" : "behind"} the ghost`;
+  return Math.abs(r) < 3 ? "about the same on the ghost" : r > 0 ? `+${r} km on the ghost` : `${r} km to the ghost`;
+}
+/** Its cost beside it, where the options differ: the roughest sea, the lowest battery. */
+function costWords(p: Preview, all: Preview[]): string {
+  const out: string[] = [];
+  const hs = all.map((x) => x.hs_max ?? 0);
+  if (p.hs_max != null && Math.max(...hs) - Math.min(...hs) >= 0.5) out.push(`waves to ${p.hs_max.toFixed(1)} m`);
+  const soc = all.map((x) => x.soc_min ?? 1);
+  if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08) out.push(`battery down to ${Math.round(p.soc_min * 100)}%`);
+  return out.length ? ` · ${out.join(" · ")}` : "";
 }
 
 /** The open call's map, redrawn when an option is hovered or focused (-1: none). */
@@ -1897,7 +1933,9 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     if (p) {
       const k = document.createElement("span");
       k.className = "stake";
-      k.textContent = `Forecast, ${Math.round(o!.hours / 24) === 2 ? "2 days" : `${Math.round(o!.hours)} h`} on: ${againstGhost(p.lead_km)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      const when = Math.round(o!.hours / 24) === 2 ? "2 days" : `${Math.round(o!.hours)} h`;
+      const shown = o!.orders.filter((_, j) => has[j]);
+      k.textContent = `Forecast, ${when}: ${gapChange(p.lead_km - o!.lead_now_km)}${costWords(p, shown)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
     const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
@@ -2202,7 +2240,7 @@ async function begin(): Promise<void> {
     sailedAt = performance.now();
     shownTo = shared ? lastHour(game.boat!) : 0;
     hour = shownTo;
-    lastCallH = hour; // a shared game's quiet spell starts where it was left
+    lastCallH = shared ? hour : -Infinity; // a shared game's quiet spell starts where it was left
     resetPois();
     present();
     newEvents();

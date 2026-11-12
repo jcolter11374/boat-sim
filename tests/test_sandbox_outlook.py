@@ -18,6 +18,9 @@ def test_outlook_on_auto_matches_the_ghost_and_leaves_the_game_alone(env):  # no
     # Each line starts at the boat and has a point every 3 h, for the call's map.
     for t in (auto["track"], drift["track"], o["ghost"]["track"]):
         assert t[0] == [round(g.mine.state.lat, 3), round(g.mine.state.lon, 3)] and len(t) == 3
+    # And what each line costs: the roughest sea and wind on it, the lowest battery.
+    for p in (auto, drift, o["ghost"]):
+        assert p["hs_max"] > 0 and p["wind_max"] > 0 and 0 <= p["soc_min"] <= 1
     assert (g.mine.state.t, g.mine.state.lat, g.ghost.state.lat, len(g.orders)) == before
 
 

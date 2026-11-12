@@ -89,6 +89,10 @@ export interface Preview {
   outcome: string;
   /** The line it sails, [lat, lon] every 3 h (newer simulators). */
   track?: [number, number][];
+  /** What the line costs in the same forecast: roughest sea (m), strongest wind (m/s), lowest battery (0-1). */
+  hs_max?: number;
+  wind_max?: number;
+  soc_min?: number;
 }
 /** Each order's stake against the ghost, from the forecast as issued (sandbox/helm.py Game.outlook). */
 import type { CurrentGrid } from "./callmap";
