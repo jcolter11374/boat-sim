@@ -151,7 +151,17 @@ async function openUnit(browser, u) {
         const hs = [];
         for (let h = 24; h <= 72; h += 0.05) hs.push([h, r.sunAt(h)]);
         const day = hs.filter(([h]) => h < 48);
-        if (time.pick === "max") hour = day.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
+        const end = typeof r.endHour === "function" ? r.endHour() : 72;
+        if (time.pick === "moon" && typeof r.moonAt === "function") {
+          // A dark sky (sun 12 degrees down or more) under the brightest high moon in the voyage.
+          let best = -1;
+          for (let h = 24; h <= end - 1; h += 0.25) {
+            if (r.sunAt(h) > -12) continue;
+            const m = r.moonAt(h);
+            const score = m.el < 20 ? -1 : m.lit * Math.sin((m.el * Math.PI) / 180) + (m.lit >= 0.5 ? 1 : 0);
+            if (score > best) [best, hour] = [score, h];
+          }
+        } else if (time.pick === "max") hour = day.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
         else if (time.pick === "min") hour = day.reduce((a, b) => (b[1] < a[1] ? b : a))[0];
         else {
           for (let i = 1; i < hs.length; i++) {
@@ -171,7 +181,8 @@ async function openUnit(browser, u) {
       if (Array.isArray(r.force?.heel) && sea.heel) r.force.heel = sea.heel;
       if (r.force && "reef" in r.force && sea.wind !== undefined) r.force.reef = true;
       r.setHour(hour);
-      return { hooks, hour, sunEl: typeof r.sunAt === "function" ? r.sunAt(hour) : null, boats: r.boats, models: r.models };
+      const moon = typeof r.moonAt === "function" ? r.moonAt(hour) : null;
+      return { hooks, hour, sunEl: typeof r.sunAt === "function" ? r.sunAt(hour) : null, moon, boats: r.boats, models: r.models };
     },
     { sea, time },
   );
@@ -248,7 +259,7 @@ async function renderUnit(browser, u) {
   } finally {
     await ctx.close();
   }
-  return { ...u, files, hour: info.hour, sunEl: info.sunEl, models: info.models, errors, seconds: Math.round((Date.now() - t0) / 1000) };
+  return { ...u, files, hour: info.hour, sunEl: info.sunEl, moon: info.moon, models: info.models, errors, seconds: Math.round((Date.now() - t0) / 1000) };
 }
 
 mkdirSync(OUT, { recursive: true });

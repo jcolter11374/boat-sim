@@ -123,14 +123,18 @@
       "sun": -3,
       "falling": true
     },
-    "night": {
-      "label": "Night (darkest)",
-      "pick": "min"
-    },
     "dawn": {
       "label": "Dawn (sun 1 degree up, rising)",
       "sun": 1,
       "falling": false
+    },
+    "night-dark": {
+      "label": "Night, darkest hour (worst case: horizon and waves must still read)",
+      "pick": "min"
+    },
+    "night-moon": {
+      "label": "Night under a high moon, half full or more (moon glitter)",
+      "pick": "moon"
     }
   },
   "views": {
@@ -221,7 +225,7 @@
   },
   "sets": {
     "standard": {
-      "about": "Elena's proof grid: both boats, calm / force 5 / force 8, midday / golden hour / night, every view; plus two clips per boat.",
+      "about": "Elena's proof grid: both boats, calm / force 5 / force 8, midday / golden hour / darkest night / moonlit night, every view; plus two clips per boat.",
       "size": "1280x720",
       "quality": "high",
       "boats": [
@@ -236,7 +240,8 @@
       "times": [
         "noon",
         "golden",
-        "night"
+        "night-dark",
+        "night-moon"
       ],
       "views": [
         "close",
@@ -318,7 +323,8 @@
         "noon",
         "golden",
         "dusk",
-        "night"
+        "night-dark",
+        "night-moon"
       ],
       "views": [
         "chase",

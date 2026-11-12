@@ -50,6 +50,7 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { Atmosphere, sunPosition } from "./atmosphere";
+import { moonEquatorial, moonPhase, toHorizon } from "./sky";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { HORIZON, Sea } from "./water";
 import { PLACE, PLACES, fetchSea } from "./land/place";
@@ -474,6 +475,16 @@ const status = {
   cam: null as null | { az: number; dist: number; h: number; fov?: number; look?: number },
   /** Sun elevation (degrees) at the boat at a voyage hour (proof pictures pick times of day by it). */
   sunAt: (h: number): number => sunElAt(h),
+  /** The moon at the boat at a voyage hour: elevation (degrees) and how much is lit (0..1). */
+  moonAt: (h: number): { el: number; lit: number } => {
+    if (!rep) return { el: NaN, lit: 0 };
+    const [la, lo] = positionAt(rep, h);
+    const ms = utc(rep.start) + h * 3600e3;
+    const m = moonEquatorial(ms);
+    return { el: toHorizon(m.ra, m.dec, ms, la, lo).el, lit: moonPhase(ms).lit };
+  },
+  /** The last hour of the voyage(s) on screen. */
+  endHour: (): number => endHour(),
   /** How strongly the sea mirrors the land and boats now (0 off .. 1 calm). */
   mirror: 0,
   /** Live tracker: hours to the latest report and to now, simulated feed or not, forecast showing. */

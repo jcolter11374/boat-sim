@@ -28,10 +28,10 @@ Use `quick` while working.
 
 | Set | What | Pictures |
 |---|---|---|
-| `standard` | Kayak and Pearson; calm, force 5, force 8; midday, golden hour, night; 7 views; an orbit at golden hour and a low run in the gale per boat | 126 stills, 4 clips |
+| `standard` | Kayak and Pearson; calm, force 5, force 8; midday, golden hour, darkest night, moonlit night; 7 views; an orbit at golden hour and a low run in the gale per boat | 168 stills, 4 clips |
 | `quick` | Kayak, force 5, golden hour, 3 views | 3 stills |
 | `sea` | Kayak; every sea at midday and dusk; chase, low, long lens | 18 stills |
-| `sky` | Kayak in a calm, dawn to night; wide views | 15 stills |
+| `sky` | Kayak in a calm, dawn to night (dark and moonlit); wide views | 18 stills |
 | `boats` | Every boat at force 5, golden hour, close views | 20 stills |
 | `cinematic` | The page's cinematic shots (skim, drone, sunset) on both boats | 10 clips |
 
