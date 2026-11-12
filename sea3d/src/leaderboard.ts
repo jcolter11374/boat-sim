@@ -1,4 +1,5 @@
-import { launchSetWords, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
+import { bestHeadline, launchSetWords, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
+import { type BuildName, loadNames, nameOf } from "./names";
 import { standing, standingText } from "./results";
 // Design leaderboard page: draws the board JSON the "Design leaderboard"
 // workflow publishes (boatsim.mc.leaderboard). All statistics are worked out in
@@ -19,6 +20,7 @@ interface Row {
   tier: number;
   design: string;
   label: string;
+  note?: string;
   class: string;
   finish_rate: number;
   ci95: Interval;
@@ -77,6 +79,18 @@ function chip(text: string): HTMLElement {
   return el("span", `chip ${kind}`.trim(), text);
 }
 
+/** A small "i": the model and evidence notes behind a name (Leo: never in the name itself). */
+function info(text: string): HTMLElement {
+  const i = el("span", "info", "i");
+  i.title = text;
+  i.tabIndex = 0;
+  i.setAttribute("role", "note");
+  i.setAttribute("aria-label", text);
+  return i;
+}
+
+const isModelBadge = (t: string) => /^our model of /.test(t);
+
 function verdictCell(r: Row, s: Summary): HTMLElement {
   const td = el("td", "verdict");
   if (r.design === s.reference) {
@@ -107,7 +121,14 @@ function holdoutCell(r: Row): HTMLElement {
   return td;
 }
 
-function draw(b: Board): void {
+function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
+  // Player names from the Boatyard grid (names.ts): older boards carry the old labels.
+  if (b.summary)
+    for (const r of b.summary.rows) {
+      const n = nameOf(names, r.design, r.label, r.note);
+      r.label = n.label;
+      r.note = n.note;
+    }
   const s = b.summary;
   const facts = document.getElementById("facts")!;
   const banner = document.getElementById("banner")!;
@@ -142,7 +163,11 @@ function draw(b: Board): void {
   const shared = sharedKayakBadges(s.rows);
   const note = document.getElementById("shared")!;
   note.replaceChildren();
-  if (shared.length) note.append(el("span", undefined, `Every build of our kayak: ${shared.join("; ")}. That's on purpose; every other race rule applies.`));
+  // The length rule in a sentence (Milo, M10); any other shared note as it is.
+  const lengthRule = (t: string) => /2\.4 m/.test(t);
+  if (shared.some(lengthRule)) note.append(el("span", undefined, "Our kayak is 3.05 m, longer than the race's 2.4 m limit. We break that one rule on purpose."));
+  const rest = shared.filter((t) => !lengthRule(t));
+  if (rest.length) note.append(el("span", undefined, ` Every build of our kayak: ${rest.join("; ")}.`));
 
   const tbody = document.getElementById("rows")!;
   // leaderboard.html#<design> (from a Results card) marks that build's row.
@@ -163,9 +188,13 @@ function draw(b: Board): void {
     lastTier = r.tier;
 
     const name = el("td");
-    name.append(el("div", "name", r.label));
+    const nm = el("div", "name", r.label);
+    // Randolph's boats say so on screen, not only behind the "i" (Maya): a quiet tag.
+    if (r.badges.some(isModelBadge)) nm.append(" ", el("span", "modeltag", "our model"));
+    if (r.note) nm.append(" ", info(r.note));
+    name.append(nm);
     const chips = el("div");
-    for (const t of r.badges) if (!shared.includes(t)) chips.append(chip(t));
+    for (const t of r.badges) if (!shared.includes(t) && !isModelBadge(t)) chips.append(chip(t));
     name.append(chips);
     tr.append(name);
 
@@ -193,14 +222,16 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     head.textContent = `Your build: ${t.head.slice(t.head.indexOf(": ") + 2)}`; // drop "On the board of ...: "
     sub.textContent = t.detail;
   } else {
-    const top = s.rows.filter((r) => r.tier === 1);
+    // Our kayak leads the sentence when it's in the top group ("Best: Our kayak and 4 others").
+    const top = s.rows.filter((r) => r.tier === 1).sort((x, y) => Number(y.design === s.reference) - Number(x.design === s.reference));
     const groups = Math.max(0, ...s.rows.map((r) => r.tier));
-    head.textContent = s.fair
-      ? `${groups > 1 ? `The top of ${groups} groups` : "All builds are in one group"}: ${top.length > 3 ? `${top.slice(0, 2).map((r) => r.label).join("; ")} and ${top.length - 2} more` : top.map((r) => r.label).join("; ")}.`
-      : "Not ranked yet: this leaderboard didn't pass its fairness check.";
-    sub.textContent = mine
-      ? "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others."
-      : "A group is builds the leaderboard can't tell apart on its launches. Sail a build and its results link back here with it marked.";
+    head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
+    if (mine) sub.textContent = "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others.";
+    else {
+      sub.textContent = "Builds in the same group can't be told apart with this many launches. ";
+      const n = s.rows[0]?.launches ?? 0;
+      sub.append(info(`Each build sailed the same ${n} launches, ${launchSetWords(b.board.launch_set).replace(/ launches every \d+ days,/, ",")}. The groups are the builds whose odds overlap.`));
+    }
   }
   box.replaceChildren(head, sub);
   box.hidden = false;
@@ -224,10 +255,10 @@ async function main(): Promise<void> {
   window.__leaderboard = { ready: false, rows: 0, error: null, sample: false };
   const url = boardUrl();
   try {
-    const r = await fetch(url);
+    const [r, names] = await Promise.all([fetch(url), loadNames()]);
     if (!r.ok || /text\/html/.test(r.headers.get("content-type") ?? "")) throw new Error("NO_BOARD");
     const b = (await r.json()) as Board;
-    draw(b);
+    draw(b, names);
     window.__leaderboard = { ready: true, rows: b.summary?.rows.length ?? 0, error: null, sample: !!b.board.sample };
   } catch (e) {
     const banner = document.getElementById("banner")!;

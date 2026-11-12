@@ -68,3 +68,17 @@ export function sharedKayakBadges(rows: { design: string; badges: string[] }[]):
   const others = rows.filter((r) => !r.design.startsWith("k-"));
   return kayaks[0].badges.filter((b) => kayaks.every((r) => r.badges.includes(b)) && !others.some((r) => r.badges.includes(b)));
 }
+
+/** The leaderboard's headline (Leo, audit item 9): who's best, in a sentence.
+ *  top: the top group's names in board order, with their finish rates. */
+export function bestHeadline(top: { label: string; finish_rate: number }[], groups: number): string {
+  if (!top.length) return "";
+  const rates = top.map((r) => r.finish_rate).sort((a, b) => a - b);
+  const mid = rates[Math.floor((rates.length - 1) / 2)];
+  const pct = `${Math.round(mid * 100)}%`;
+  if (groups <= 1) return `Too close to call: every build finishes about ${pct} of the time.`;
+  const first = top[0].label; // as the rows write it, capital O and all (Ines)
+  if (top.length === 1) return `Best: ${first}, about ${pct} finish.`;
+  const n = top.length - 1;
+  return `Best: ${first} and ${n} other${n === 1 ? "" : "s"}, about ${pct} finish.`;
+}
