@@ -657,7 +657,9 @@ def test_preview_shows_an_order_without_changing_the_game(env):
     fast, slow = a.preview("finish", 1.0, hours=12), a.preview("finish", 0.05, hours=12)
     assert fast["hours"] > 0 and slow["hours"] > 0
     assert fast["soc"] < slow["soc"]  # more power, more battery spent
-    assert a.preview(270, 0.25, hours=12)["km"] < a.preview("finish", 0.25, hours=12)["km"]  # sailing west makes less progress
+    assert (
+        a.preview(270, 0.25, hours=12)["km"] < a.preview("finish", 0.25, hours=12)["km"]
+    )  # sailing west makes less progress
     a.preview("auto", 0)
     assert a.forecast() == fc  # previews don't disturb the forecasts
     for g in (a, b):
@@ -672,7 +674,10 @@ def test_preview_shows_an_order_without_changing_the_game(env):
 
 
 def _rngs(g):
-    return [r.bit_generator.state for r in (g.mine.hull_rng, g.mine.sense_rng, g.mine.link_rng, g.mine.ping_rng)]
+    return [
+        r.bit_generator.state
+        for r in (g.mine.hull_rng, g.mine.sense_rng, g.mine.link_rng, g.mine.ping_rng)
+    ]
 
 
 def test_preview_while_on_autopilot(env):
