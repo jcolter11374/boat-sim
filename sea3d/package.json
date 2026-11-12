@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "test": "node tests/smoke.mjs",
-    "test:unit": "node tests/run-unit.mjs"
+    "test:unit": "node tests/run-unit.mjs",
+    "test:quick": "node tests/quick.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"

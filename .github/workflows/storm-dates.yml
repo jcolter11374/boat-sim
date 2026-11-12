@@ -11,6 +11,10 @@ on:
       - "src/boatsim/oceandata/challenges.py"  # the typed Sandy track (Sandy's shadow)
 permissions:
   contents: read
+# A new push to a pull request cancels that branch's older run; runs on main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   dates:
     runs-on: ubuntu-latest
