@@ -681,6 +681,7 @@ try {
       // got ahead of its simulator): the packed simulator must take the port.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ports >= 20, null, { timeout: 60000 });
+      await page.evaluate(() => (document.getElementById("more").open = true)); // the port is under More options on the Set sail card
       await page.selectOption("#port", "baltimore");
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
@@ -706,7 +707,12 @@ try {
       // Picking another boat on the start card makes it my boat, for the other pages.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
-      await page.check('input[name="boat"][value="stock_cruiser31"]');
+      // The Set sail card keeps the boat radios hidden and picks through the top bar's My boat picker,
+      // which ticks the row and fires change: do the same.
+      await page.locator('input[name="boat"][value="stock_cruiser31"]').evaluate((el) => {
+        el.checked = true;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"));
