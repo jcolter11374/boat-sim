@@ -225,6 +225,20 @@ export class Atmosphere {
   private dusk = 0;
   private pmrem: THREE.PMREMGenerator;
   private envScene = new THREE.Scene();
+  /** Reflections' sea: deep water straight down, the haze at the horizon. */
+  private readonly envSeaU = { uDeep: { value: new THREE.Color(0x041d33) }, uHaze: { value: new THREE.Color(0xabc3d7) } };
+  private readonly envSea = new THREE.Mesh(
+    new THREE.SphereGeometry(HORIZON * 2, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    new THREE.ShaderMaterial({
+      uniforms: this.envSeaU,
+      side: THREE.BackSide,
+      depthWrite: false,
+      vertexShader: "varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      // Fresnel on water: near the horizon the sea mirrors the sky, looking down it shows its own deep colour.
+      fragmentShader:
+        "uniform vec3 uDeep; uniform vec3 uHaze; varying vec3 vD; void main() { float d = clamp(-vD.y, 0.0, 1.0); float f = pow(1.0 - d, 5.0); gl_FragColor = vec4(mix(uDeep, uHaze, 0.08 + 0.92 * f), 1.0); }",
+    }),
+  );
   private envRT: THREE.WebGLRenderTarget | null = null;
   private envKey = [NaN, NaN, NaN];
   private envAt = -1e9;
@@ -248,6 +262,10 @@ export class Atmosphere {
     su.mieCoefficient.value = 0.004;
     su.mieDirectionalG.value = 0.85;
     this.envScene.add(this.sky.clone()); // shares the sky's material, so it follows it
+    // The sea below the horizon, for reflections only (Yuki): without it a hull's
+    // clear coat mirrors the sky's underside, so white topsides read flat and pale.
+    // Real topsides mirror the dark water below and the bright haze at the horizon.
+    this.envScene.add(this.envSea);
     this.pmrem = new THREE.PMREMGenerator(renderer);
 
     // Stars, placed on the sky's own sphere (equator and pole): setCelestial()
@@ -389,6 +407,8 @@ export class Atmosphere {
     this.exposure = (0.55 - 0.17 * storm) * (1 + (1 - day) * (0.15 + 0.35 * moonlight));
     this.renderer.toneMappingExposure = this.exposure;
     this.overcast.material.color.copy(this.fog.color);
+    this.envSeaU.uHaze.value.copy(this.fog.color);
+    this.envSeaU.uDeep.value.set(0x0a2a44).multiplyScalar(0.15 + 0.85 * day).lerp(this.fog.color, 0.25 * storm);
 
     // The moon makes the glints at night.
     if (day > 0.15 || this.moonEl < 0) {
