@@ -45,6 +45,8 @@ void main() {
   float a = uAmount * vFade * taper * vBright;
   if (a < 0.003) discard;
   gl_FragColor = vec4(uColor, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 /** How hard it rains, 0..1, from a logged rain rate in mm per hour (heavy at 4 mm/h and over). */

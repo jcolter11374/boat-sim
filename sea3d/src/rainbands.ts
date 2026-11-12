@@ -49,6 +49,8 @@ void main() {
   float a = uAmount * vShaft.y * edge * up * s * near * far * 0.75;
   if (a < 0.003) discard;
   gl_FragColor = vec4(mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.6), a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 interface Shaft {

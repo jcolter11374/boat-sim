@@ -56,6 +56,8 @@ void main() {
   float a = uAmount * vAlpha * (1.0 - smoothstep(0.1, 1.0, r)) * smoothstep(0.35, 0.75, torn) * 0.6;
   if (a < 0.004) discard;
   gl_FragColor = vec4(uColor, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 export class Spindrift {
