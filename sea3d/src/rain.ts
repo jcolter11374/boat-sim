@@ -28,14 +28,15 @@ void main() {
   // The streak: the drop's path over a short exposure.
   // Shorter close to the lens, so the nearest drops are flecks, not lines across the frame.
   float dh = length(p - uCam);
-  p -= normalize(vel) * uLen * clamp(dh / 7.0, 0.15, 1.0) * aEnd;
+  float lucky = step(0.94, fract(aSeed.w * 13.7 + aSeed.z * 5.1)); // one drop in ~17 catches the light: a long bright streak
+  p -= normalize(vel) * uLen * (1.0 + 3.0 * lucky) * clamp(dh / 7.0, 0.15, 1.0) * aEnd;
   vEnd = aEnd;
   vec3 d = p - uCam;
   // Close drops are the streaks you see; a few metres off they thin into a grey texture.
   float dl = length(d);
   vFade = (1.0 - smoothstep(1.5, 0.45 * uBox, dl)) * (1.0 - smoothstep(0.35 * uBox, 0.5 * uBox, dl)) * smoothstep(1.2, 3.0, dl);
   float b = fract(aSeed.w * 7.31 + aSeed.x * 3.7);
-  vBright = 0.12 + 0.88 * b * b; // drops catch the light unevenly: most dim, a few bright
+  vBright = (0.45 + 0.35 * b) * (1.0 - lucky) + lucky; // a fine grain of drops, a few bright streaks on top
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }`;
 const frag = /* glsl */ `
@@ -70,7 +71,7 @@ export class Rain {
   private mat: THREE.ShaderMaterial;
   amount = 0;
 
-  constructor(drops = 40000) {
+  constructor(drops = 70000) {
     const seed = new Float32Array(drops * 2 * 4);
     const end = new Float32Array(drops * 2);
     let s = 12345;
@@ -125,7 +126,7 @@ export class Rain {
     const k = 0.4 + 0.3 * THREE.MathUtils.smoothstep(Math.hypot(windX, windZ), 8, 20);
     u.uWind.value.set(windX * k, windZ * k);
     u.uAmount.value = 0.9 * Math.sqrt(amount) * (1 + 0.7 * THREE.MathUtils.smoothstep(amount, 0.6, 1)); // drizzle faint, a downpour a dense texture, never a wall
-    u.uLen.value = 0.16 + 0.24 * amount; // short streaks; heavier drops a little longer
+    u.uLen.value = 0.07 + 0.09 * amount; // short flecks; heavier drops a little longer
     // A little darker than the pale storm sky, so the streaks read against it as well as against the sea.
     u.uColor.value.setRGB(0.3 + 0.32 * light, 0.33 + 0.34 * light, 0.38 + 0.36 * light);
     // Show only a share of the drops in light rain.

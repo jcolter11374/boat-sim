@@ -42,15 +42,19 @@ void main() {
   // Sheets lean downwind and their edges are ragged, not ruled.
   float x = vUv.x + uSlant * 0.2 * (0.5 - vUv.y); // leans about the middle, so it stays on its quad
   float rag = vn(vec2(vUv.y * 4.0 + vShaft.x * 30.0, uTime * 0.03)) - 0.5;
-  float edge = (1.0 - smoothstep(0.2, 0.85, abs(x) + 0.3 * rag)) * (1.0 - smoothstep(0.8, 1.0, abs(vUv.x)));
+  // Hangs from the cloud base and fans out a little towards the sea, with a ragged edge.
+  float w = 0.7 + 0.25 * (1.0 - vUv.y);
+  float edge = (1.0 - smoothstep(0.15 * w, w, abs(x) + 0.35 * rag)) * (1.0 - smoothstep(0.85, 1.0, abs(vUv.x)));
   // Thick under the cloud, ragged where it meets the sea, lost in the cloud at the top.
   // Down to the waterline (a shower reaches the sea), lost into its cloud at the top.
   float up = smoothstep(0.0, 0.015, vUv.y) * (1.0 - smoothstep(0.75, 1.0, vUv.y));
   float foot = 1.0 - smoothstep(0.0, 0.1, vUv.y); // the misty foot where the rain lands
   // Streaks of heavier rain, leaning with the wind, slowly shifting.
   // Soft sheets of heavier and lighter rain (broad noise, no fine vertical comb).
-  float s = vn(vec2(x * 2.2 + vShaft.x * 50.0, vUv.y * 1.3 - uTime * 0.05));
-  s = 0.65 + 0.45 * s + 0.2 * vn(vec2(x * 5.0 + vShaft.x * 9.0, vUv.y * 3.0 - uTime * 0.08));
+  // Several veils of different density with lighter gaps between them.
+  float v1 = smoothstep(0.25, 0.75, vn(vec2(x * 4.0 + vShaft.x * 50.0, vUv.y * 0.8 - uTime * 0.04)));
+  float v2 = smoothstep(0.3, 0.8, vn(vec2(x * 9.0 + vShaft.x * 17.0, vUv.y * 1.6 - uTime * 0.07)));
+  float s = 0.25 + 0.75 * v1 + 0.35 * v2;
   float near = smoothstep(30.0, 150.0, vDist);
   float far = 1.0 - smoothstep(0.7 * uFar, 1.05 * uFar, vDist); // lost in the haze
   float a = uAmount * vShaft.y * edge * up * s * near * far * (1.5 + 0.2 * foot);
@@ -84,7 +88,7 @@ export class RainBands {
   constructor() {
     let s = 777;
     const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < SHAFTS; i++) this.shafts.push({ x: rnd() * FIELD, z: rnd() * FIELD, width: 350 + 1300 * rnd() ** 2, dense: 0.5 + 0.5 * rnd(), seed: rnd() });
+    for (let i = 0; i < SHAFTS; i++) this.shafts.push({ x: rnd() * FIELD, z: rnd() * FIELD, width: 900 + 1800 * rnd() ** 2, dense: 0.5 + 0.5 * rnd(), seed: rnd() });
     const n = SHAFTS * 4;
     this.pos = new Float32Array(n * 3);
     const uv = new Float32Array(n * 2);

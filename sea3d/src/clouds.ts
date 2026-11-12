@@ -477,7 +477,7 @@ export class Clouds {
     // Rain is a mist of its own, on the same haze colour as the sea's far fade: drizzle
     // softens the horizon, and a downpour shuts the world in to a few hundred metres
     // (about 400 m by 6 mm/h). Eased in log distance so the close-in is even, not sudden.
-    const mist = 0.5 * SM(this.rain, 0.1, 1) + 0.5 * SM(this.rain, 1, 6);
+    const mist = 0.55 * SM(this.rain, 0.05, 0.7) + 0.45 * SM(this.rain, 1, 6);
     if (mist > 0) {
       const far = Math.exp(THREE.MathUtils.lerp(Math.log(fog.far), Math.log(400), mist));
       fog.far = Math.min(fog.far, far);

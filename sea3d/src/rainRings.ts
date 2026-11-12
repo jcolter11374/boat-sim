@@ -51,13 +51,13 @@ vec2 rainLayer(vec2 p, float cell, float t, float dens, float seed) {
   // The splash: a sharp little spike as the drop lands.
   float sx = dl / 0.03;
   g += -2.0 * sx * exp(-sx * sx) * 0.4 * size * (1.0 - smoothstep(0.0, 0.12, age)) / 0.03;
-  return (d / dl) * g * 0.014 / cell;
+  return (d / dl) * g * 0.02 / cell;
 }
 vec2 rainSlope(vec2 p, float t, float fp) {
   if (uRain.x < 0.01) return vec2(0.0);
   float near = 1.0 - smoothstep(0.02, 0.07, fp);  // gone before a ring is smaller than a pixel
   if (near <= 0.0) return vec2(0.0);
-  float dens = 0.12 + 0.75 * uRain.x;
+  float dens = 0.3 + 0.6 * uRain.x;
   vec2 s = rainLayer(p, 0.9, t, dens, 0.0);
   if (uRain.y < 0.5) {
     // A second, smaller layer, turned and shifted, so no grid shows.
