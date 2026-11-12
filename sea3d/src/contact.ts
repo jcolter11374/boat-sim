@@ -329,7 +329,8 @@ export class Contact {
       const sAlong = this.along[i];
       const bowK = 1 - THREE.MathUtils.smoothstep(sAlong, 0, 0.35);
       // In a gale a broken white ring 0.2-0.5 m wide hugs the hull (Ines r11), wider at the bow.
-      const w = 0.06 + 0.1 * speedK + 0.12 * bowK * speedK + seaK * seaK * (0.45 + 0.3 * bowK);
+      // A bigger hull pushes a wider band of white (Yuki: a 31 footer's collar vanished at 30 m).
+      const w = (0.06 + 0.1 * speedK + 0.12 * bowK * speedK + seaK * seaK * (0.45 + 0.3 * bowK)) * this.sprayScale ** 1.4;
       for (const [k, off] of [[0, -0.015], [1, w]] as const) {
         const [wx, wz] = toWorld(x + nx * off, z + nz * off, place);
         const o = (i * 2 + k) * 3;

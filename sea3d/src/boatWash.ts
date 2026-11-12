@@ -191,15 +191,15 @@ float boatFoam(vec2 xz, float t) {
     if (dim.w <= 0.001) continue;
     // Cheap reject first (most of the screen is far from any hull): skip the noise there.
     vec2 dd = xz - uWashPos[i].xy;
-    float rr = dim.x + dim.y + 1.25 * (0.06 + 0.3 * dim.w + 2.0 * dim.z) + 0.2;
+    float rr = dim.x + dim.y + 1.25 * (0.06 + 0.3 * dim.w + 2.0 * dim.z) * pow(max(1.0, dim.x / 1.5), 0.6) + 0.2;
     if (dot(dd, dd) > rr * rr) continue;
     vec4 l = washLocal(i, xz);
     float hl = dim.x;
     float s = l.x / hl;
-    if (l.w > 1.25 * (0.06 + 0.3 * dim.w + 2.0 * dim.z)) continue;
+    if (l.w > 1.25 * (0.06 + 0.3 * dim.w + 2.0 * dim.z) * pow(max(1.0, hl / 1.5), 0.6)) continue;
     // Thick where the bow wave breaks, thinning aft, with gaps along the sides (Elena, WIP 2).
     float bowK = smoothstep(-0.6, 0.85, s);
-    float reach = (0.06 + 0.3 * dim.w + 2.0 * dim.z) * mix(0.4, 1.25, bowK); // m out from the hull
+    float reach = (0.06 + 0.3 * dim.w + 2.0 * dim.z) * mix(0.4, 1.25, bowK) * pow(max(1.0, hl / 1.5), 0.6); // m out from the hull, wider on a bigger one
     float band = 1.0 - smoothstep(0.0, reach, max(l.w, 0.0));
     float along = smoothstep(-1.2, 0.9, s) * (1.0 - smoothstep(1.0, 1.15, s));
     // Foam streams aft past the hull: noise in the hull frame, slid aft with time.
