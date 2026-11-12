@@ -30,6 +30,13 @@ async function openOrders(page) {
     if (await page.locator("#orders.open").count()) return;
   }
 }
+/** Watch a voyage's replay drawer (it slides shut after 10 s of play): open it and wait until it's in place. Old builds: nothing. */
+async function openReplay(page) {
+  if (!(await page.locator("#replay-tab").count())) return;
+  if (!(await page.locator("#top.open").count())) await page.click("#replay-tab");
+  await page.waitForFunction(() => { const o = document.getElementById("top"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20000 });
+  await page.hover("#top h2").catch(() => {});
+}
 const HS = { calm: 0.5, moderate: 1.5, gale: 5.0 };
 
 try {
@@ -251,6 +258,7 @@ try {
     }
     const maxHour = await page.evaluate(() => window.__replay.maxHour);
     if (maxHour !== maxEnd) fail(`race clock should run to the longer voyage (${maxEnd} h), runs to ${maxHour} h`);
+    await openReplay(page); // the close-up buttons live in the replay drawer
     await page.click('#focus button[data-lane="1"]');
     await page.waitForTimeout(800);
     if ((await page.evaluate(() => window.__replay.focus)) !== 1) fail("close-up didn't switch to the Randolph boat");
