@@ -33,6 +33,10 @@ const SCENES = [
   ...[1, 3, 4, 5, 6, 7, 8].map((f) => ({ name: `force${f}-pearson`, rig: "shrouds", w: at(f, { stw: f < 2 ? 1 : 2.6 }), hello: f === 1 })),
   { name: "force6-kayak", rig: "small", w: at(6, { stw: 1.4 }) },
   { name: "force8-kayak", rig: "small", w: at(8, { stw: 1.2 }) },
+  // Same force 5 at 3 m/s: close-hauled (apparent wind about 13 m/s) vs running (about 6).
+  { name: "force5-beating", rig: "shrouds", w: at(5, { stw: 3, apparent: 13.2 }) },
+  { name: "force5-running", rig: "shrouds", w: at(5, { stw: 3, apparent: 6.2 }) },
+  { name: "force2-drifting-swell", rig: "shrouds", w: at(2, { stw: 0.2, hs: 1.2, tp: 9 }) },
   { name: "force5-rain", rig: "shrouds", w: at(5, { stw: 2.4, rain: 0.8 }) },
   // Cinematic: the camera cuts between close (5 m) and far (80 m) every 8 s, a fade on every second cut.
   { name: "force5-cinematic-cuts", rig: "shrouds", w: at(5, { stw: 2.4 }), cuts: true },
@@ -50,7 +54,7 @@ for (const s of SCENES) {
       const ctx = new OfflineAudioContext(1, SECONDS * RATE, RATE);
       const snd = new window.Sea.OceanSound();
       snd.rig = s.rig;
-      snd.attach(ctx, 12345);
+      snd.attach(ctx, s.seed);
       const dt = 1 / 30;
       for (let i = 1; i * dt < SECONDS - 0.05; i++) {
         const t = i * dt;
@@ -75,7 +79,7 @@ for (const s of SCENES) {
       for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
       return btoa(bin);
     },
-    { s, SECONDS, RATE },
+    { s: { ...s, seed: Number(process.env.SEED ?? 12345) }, SECONDS, RATE },
   );
   const pcm = Buffer.from(b64, "base64");
   const head = Buffer.alloc(44);
@@ -107,7 +111,8 @@ for (const s of SCENES) {
     rms.push(+(10 * Math.log10(e / win + 1e-12)).toFixed(2));
   }
   levels[s.name] = { rms, peakDb: +(20 * Math.log10(peak + 1e-12)).toFixed(2) };
-  const mean = 10 * Math.log10(rms.reduce((a, v) => a + 10 ** (v / 10), 0) / rms.length);
+  const steady = rms.slice(4); // skip the first 2 s (the beds fading in, the hello lap), as the chart does
+  const mean = 10 * Math.log10(steady.reduce((a, v) => a + 10 ** (v / 10), 0) / steady.length);
   console.log(`${s.name.padEnd(24)} mean ${mean.toFixed(1)} dBFS  peak ${levels[s.name].peakDb} dBFS`);
 }
 writeFileSync(join(out, "levels.json"), JSON.stringify(levels));

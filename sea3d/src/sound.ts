@@ -31,6 +31,12 @@ export interface SeaWeather {
   near: number;
   /** Boat speed through the water, m/s (the hull's wash follows it). Unknown: treated as 0. */
   stw?: number;
+  /**
+   * Apparent wind, m/s: the wind the boat feels, its own speed added (Sam: beating to
+   * windward is loud and wet, running before the same wind is quiet). The wind and rig
+   * follow it; the sea (whitecaps, breakers) follows the true wind. Unknown: the true wind.
+   */
+  apparent?: number;
 }
 
 /** What the boat has aloft: shrouds and a mast that sing, or only a small antenna or wing. */
@@ -89,6 +95,11 @@ const WIND_HI: [number, number][] = [[3, -99], [3.5, -62], [4, -50], [5, -40], [
 const SHROUDS: [number, number][] = [[4.5, -99], [5, -46], [6, -35], [7, -29], [8, -25], [10, -23]];
 const SMALL_RIG: [number, number][] = [[5.5, -99], [6, -54], [7, -44], [8, -38], [10, -35]];
 const SIZZLE: [number, number][] = [[3, -99], [3.5, -60], [4, -46], [5, -38], [6, -32], [7, -27], [8, -23], [10, -20]];
+/**
+ * Lift for the quiet end (Milo, 12 Nov): a true calm at -47 dBFS sounds broken on laptop
+ * speakers, so the beds come up at light winds and meet the unlifted mix at force 6.
+ */
+const LIFT: [number, number][] = [[0, 11], [1, 11], [2, 8.8], [3, 6], [4, 3.6], [5, 1.5], [6, 0]];
 /** The sea's wash by wave height (m): a lap at a calm, a heavy rush in a big sea. */
 const WASH: [number, number][] = [[0, -44], [0.3, -40], [1, -33], [2, -27], [4, -21], [7, -16]];
 
@@ -117,6 +128,8 @@ export interface Mix {
   dropsPerSec: number;
   /** Halyard taps per second (masted boats, light airs). */
   tapsPerSec: number;
+  /** Chance per wave of the boom and sails slatting across as she rolls (masted, light airs). */
+  slat: number;
 }
 
 /**
@@ -124,7 +137,8 @@ export interface Mix {
  * set: 0..1, where the swell is in its sets (1 the biggest waves of a set).
  */
 export function mixFor(w: SeaWeather, rig: Rig, gust = 0, set = 0.5): Mix {
-  const f = beaufort(w.wind);
+  const f = beaufort(w.wind); // the sea's force
+  const fa = beaufort(w.apparent ?? w.wind); // the wind the boat feels
   const g = 1 + gust;
   const hs = Math.max(w.hs, 0);
   const kn = Math.max(w.stw ?? 0, 0) * 1.943844;
@@ -132,18 +146,22 @@ export function mixFor(w: SeaWeather, rig: Rig, gust = 0, set = 0.5): Mix {
   const wc = clamp((f - 3) / 5); // whitecaps: first at force 3-4, everywhere by force 8
   const setK = 0.7 + 0.6 * set;
   const shrouds = rig === "shrouds";
+  const lift = db(table(LIFT, Math.min(f, fa)));
+  // Stopped is never silent at sea: waves chuckle against the hull, more in a swell (Sam).
+  const lap = 0.1 + 0.15 * clamp(hs / 2);
+  const hullK = Math.max(sp, lap);
   return {
     force: f,
-    windLo: db(table(WIND_LO, f)) * g,
-    windLoHz: 170 + 85 * Math.min(f, 10) + 120 * gust,
-    windHi: db(table(WIND_HI, f)) * Math.max(g, 0) ** 1.5,
-    windHiHz: Math.min(800 + 130 * f + 250 * gust, 2200),
+    windLo: db(table(WIND_LO, fa)) * g * lift,
+    windLoHz: 170 + 85 * Math.min(fa, 10) + 120 * gust,
+    windHi: db(table(WIND_HI, fa)) * Math.max(g, 0) ** 1.5 * lift,
+    windHiHz: Math.min(800 + 130 * fa + 250 * gust, 2200),
     // The rig sings in the gusts, not between them; soft even at force 8 (Elena).
-    rig: db(table(shrouds ? SHROUDS : SMALL_RIG, f)) * clamp(0.35 + 0.9 * gust + 0.35, 0, 1.6),
-    rigHz: shrouds ? clamp(380 + 45 * (f - 5) + 60 * gust, 330, 700) : clamp(950 + 70 * (f - 6) + 90 * gust, 900, 1400),
-    hull: sp > 0.01 ? db(-44 + 24 * sp) * Math.sqrt(sp) * (0.8 + 0.4 * set) : 0,
-    hullHz: 320 + 650 * sp + 80 * clamp(hs / 4),
-    wash: db(table(WASH, hs)) * setK,
+    rig: db(table(shrouds ? SHROUDS : SMALL_RIG, fa)) * clamp(0.35 + 0.9 * gust + 0.35, 0, 1.6),
+    rigHz: shrouds ? clamp(380 + 45 * (fa - 5) + 60 * gust, 330, 700) : clamp(950 + 70 * (fa - 6) + 90 * gust, 900, 1400),
+    hull: db(-44 + 24 * hullK) * Math.sqrt(hullK) * (0.8 + 0.4 * set) * lift,
+    hullHz: 320 + 650 * hullK + 80 * clamp(hs / 4),
+    wash: db(table(WASH, hs)) * setK * lift,
     washHz: Math.min(220 + 70 * hs, 650),
     sizzle: db(table(SIZZLE, f)) * (0.75 + 0.5 * set) * Math.max(0.6, g),
     rain: w.rain > 0.01 ? db(-38 + 24 * clamp(w.rain)) : 0,
@@ -151,7 +169,9 @@ export function mixFor(w: SeaWeather, rig: Rig, gust = 0, set = 0.5): Mix {
     slap: clamp(0.15 + hs / 4.5, 0, 1),
     slam: f >= 5.5 ? clamp((hs - 2) / 5) * 0.35 * setK : 0,
     dropsPerSec: w.rain > 0.02 ? 2 + 26 * clamp(w.rain) : 0,
-    tapsPerSec: shrouds && f > 1 && f < 5 ? 0.18 * (1 - Math.abs(f - 3) / 2.2) + 0.05 : 0,
+    // Light airs, rolling: a loose halyard taps the mast; once the sails fill (force 4 up) it stops.
+    tapsPerSec: shrouds && fa > 0.8 && fa < 3.6 ? 0.2 * clamp(1 - Math.abs(fa - 2) / 1.8) + 0.05 : 0,
+    slat: shrouds && fa < 3.5 && hs > 0.2 ? 0.45 * clamp((3.5 - fa) / 2) * clamp(hs / 0.8) : 0,
   };
 }
 
@@ -229,6 +249,7 @@ export class OceanSound {
   private nextSlap = 0;
   private nextDrop = 0;
   private nextTap = 0;
+  private nextSlat = 0;
   private lastSplash = -99;
   private lastMix: Mix | null = null;
   private armed = false;
@@ -423,6 +444,9 @@ export class OceanSound {
     if (!this.live) return;
     const s = clamp(strength);
     this.burst("white", "lowpass", 1500 + 1500 * s, 0.05 + 0.13 * s, 0.03, 0.35 + 0.5 * s, 0.05);
+    // Then the drops landing on deck and sails, a patter like rain (Sam).
+    const n = 4 + Math.round(14 * s);
+    for (let i = 0; i < n; i++) this.burst("white", "bandpass", 1600 + this.rnd() * 1600, (0.01 + 0.025 * s) * this.rnd(), 0.002, 0.03, 0.35 + this.rnd() * 0.6, 3);
   }
 
   /**
@@ -572,6 +596,14 @@ export class OceanSound {
       this.burst("white", "bandpass", 1300 + r() * 400, k * near, 0.002, 0.05, 0, 5);
       if (r() < 0.4) this.burst("white", "bandpass", 1300 + r() * 400, k * 0.6 * near, 0.002, 0.04, 0.12 + r() * 0.1, 5);
       this.nextTap = t + (-Math.log(1 - r() * 0.98) / m.tapsPerSec);
+    }
+    // Slatting: no wind to fill the sails, the boat rolls and the boom bangs across, blocks clunk.
+    if (m.slat > 0 && t >= this.nextSlat) {
+      if (r() < m.slat) {
+        this.burst("brown", "lowpass", 260 + r() * 120, 0.07 * near * (0.6 + 0.4 * r()), 0.02, 0.28);
+        this.burst("white", "bandpass", 800 + r() * 300, 0.035 * near, 0.003, 0.07, 0.04, 3);
+      }
+      this.nextSlat = t + tp * (0.45 + r() * 0.5);
     }
   }
 }

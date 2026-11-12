@@ -1281,6 +1281,7 @@ renderer.setAnimationLoop(() => {
     }
     status.hour = hour;
     sound.rig = rigFor(boatKey);
+    const feel = smoothYaw != null ? apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)) : null;
     if (contact?.splash) sound.splash(contact.splash);
     sound.update(dt, {
       wind: Math.hypot(wu, wv),
@@ -1289,6 +1290,7 @@ renderer.setAnimationLoop(() => {
       rain: rain.amount,
       near: camera.position.distanceTo(controls.target),
       stw,
+      apparent: feel ? Math.hypot(feel.x, feel.z) : undefined,
     });
   }
   if (!cine.update(dt)) controls.update();

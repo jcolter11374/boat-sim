@@ -26,7 +26,7 @@ test("the mix climbs with every step of force, from near silence to a roar", () 
   }
   const calm = loud(mixFor(at(1), "shrouds"));
   const gale = loud(mixFor(at(8), "shrouds"));
-  assert.ok(20 * Math.log10(gale / calm) > 20, "a gale is at least 20 dB above a calm");
+  assert.ok(20 * Math.log10(gale / calm) > 16, "a gale is well above a calm (about 20 dB in the render; Milo lifted the calm end)");
 });
 
 test("a calm has no wind hiss, no singing rig and no whitecaps", () => {
@@ -54,8 +54,10 @@ test("nothing tonal above about 2 kHz, even in a gust at force 10", () => {
   }
 });
 
-test("water along the hull follows the boat's speed: silent when stopped", () => {
-  assert.equal(mixFor(at(3, { stw: 0 }), "small").hull, 0);
+test("water along the hull follows the boat's speed, but stopped is never silent (Sam)", () => {
+  const stopped = mixFor(at(3, { stw: 0 }), "small").hull;
+  assert.ok(stopped > 0);
+  assert.ok(mixFor(at(3, { stw: 3.5 }), "small").hull > stopped * 3);
   const slow = mixFor(at(3, { stw: 1 }), "small").hull;
   const fast = mixFor(at(3, { stw: 3.5 }), "small").hull;
   assert.ok(slow > 0 && fast > slow * 2);
@@ -71,6 +73,22 @@ test("gusts and lulls move the wind, sets move the sea", () => {
   const w = at(6);
   assert.ok(mixFor(w, "shrouds", 0.6).windLo > mixFor(w, "shrouds", -0.4).windLo * 1.5);
   assert.ok(mixFor(w, "shrouds", 0, 1).wash > mixFor(w, "shrouds", 0, 0).wash * 1.5);
+});
+
+test("the wind follows the wind the boat feels: beating is louder than running (Sam)", () => {
+  const beat = mixFor(at(5, { apparent: 13 }), "shrouds");
+  const run = mixFor(at(5, { apparent: 6 }), "shrouds");
+  assert.ok(beat.windLo > run.windLo * 2 && beat.rig > run.rig);
+  assert.equal(beat.breaksPerSec, run.breaksPerSec, "the sea doesn't care which way the boat sails");
+});
+
+test("light airs: the halyard taps and the boom slats; once the sails fill, both stop", () => {
+  const light = mixFor(at(2, { hs: 0.5 }), "shrouds");
+  assert.ok(light.tapsPerSec > 0 && light.slat > 0);
+  const breeze = mixFor(at(5), "shrouds");
+  assert.equal(breeze.tapsPerSec, 0);
+  assert.equal(breeze.slat, 0);
+  assert.equal(mixFor(at(2, { hs: 0.5 }), "small").slat, 0, "no boom on the kayak");
 });
 
 test("rain adds hiss and drops on deck", () => {
