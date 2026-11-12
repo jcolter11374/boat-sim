@@ -82,11 +82,14 @@ export function standingText(s: Standing): { head: string; detail: string } {
         detail: range,
       };
     const others = s.inTier - 1;
-    const group = `${s.tier === 1 ? "the top" : `the ${ordinal(s.tier)}`} of ${s.tiers} groups`;
-    const with_ = others === 0 ? "on its own there" : `with ${others} other build${others === 1 ? "" : "s"} it can't be told apart from`;
+    // The leaderboard's tier names (Milo, 12 Nov): Best, Good, Long shot. No place: builds in
+    // one group can't be told apart, so "2nd of 8" would contradict it.
+    const tier = s.tier === 1 ? "Best" : s.tier === s.tiers ? "Long shot" : "Good";
+    const builds = `${others} build${others === 1 ? "" : "s"}`;
+    const with_ = others === 0 ? "" : s.tier === 1 ? ` (with ${builds} just as good)` : ` (with ${builds} like it)`;
     return {
-      head: `${on}: in ${group}, ${with_}. ${rate}`,
-      detail: `${ordinal(s.rank)} of ${s.of} by finish rate. ${range}`,
+      head: `${on}: ${tier} group, about ${pct(r.finish_rate)} finish${with_}.`,
+      detail: `Tested on ${r.launches} launches. ${range}`,
     };
   }
   if (s.kind === "odds") {
