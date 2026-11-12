@@ -316,7 +316,7 @@ const page = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
-  ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, fishing: 0 } } as Traffic["shown"],
+  ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, bulk: 0, fishing: 0 } } as Traffic["shown"],
   /** The wreck showing through the water below, if any (its id). */
   wreck: "",
   /** The boat the game sails: the simulator's base ("" our kayak, "revc", a stock id) and the 3D model's key (for tests). */
@@ -933,6 +933,14 @@ async function sail(kind: "6h" | "day" | "event"): Promise<void> {
 const DEFAULT_RATE = 6;
 let rate = 0;
 let lastRate = DEFAULT_RATE;
+/**
+ * A new voyage's first hours play at an hour a second, then the clock steps up to
+ * DEFAULT_RATE by itself (Elena, 12 Nov): at six hours a second, the morning of the drop
+ * was gone in two seconds and a new player's first look was a night sea. The voyage hour
+ * to step up at, or null once the player picks a speed or pauses.
+ */
+let easeUpAt: number | null = null;
+const FIRST_HOURS = 6;
 /** The stop conditions armed when the clock started (so "a big battery drop" is measured from then). */
 let armed: Record<string, number | boolean> | null = null;
 let inFlight: Promise<void> | null = null;
@@ -972,6 +980,7 @@ function applyPending(all = false): void {
 }
 
 function setRate(r: number, drain = false): void {
+  easeUpAt = null;
   drainRate = drain && rate > 0 ? rate : 0;
   if (r > 0) {
     $("decide").hidden = true;
@@ -1055,6 +1064,7 @@ const UNTIL_H = 72;
 /** This frame's share of the clock: move the picture on, and keep the simulator ahead of it. */
 function tickClock(dt: number): boolean {
   if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
+  if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   // Ease off as the simulator's lead runs down, so a slow computer sees slower, smooth time rather than stop-start.
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
@@ -2446,7 +2456,13 @@ async function begin(): Promise<void> {
     document.body.classList.add("sailing");
     hud.sailing(shared ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "Steer here, or with ← →. O opens and closes this.");
     $("loading").hidden = true;
-    setRate(shared || params.get("clock") === "paused" || page.status?.over ? 0 : DEFAULT_RATE);
+    if (shared || params.get("clock") === "paused" || page.status?.over) setRate(0);
+    else {
+      // The first hours at an hour a second, so the first thing a player sees is the morning of the drop.
+      setRate(1);
+      lastRate = DEFAULT_RATE; // a pause then carries on at the usual speed
+      easeUpAt = hour + FIRST_HOURS;
+    }
     $("keyhint").hidden = false;
     setTimeout(hideKeyHint, 60_000);
     askSound();
