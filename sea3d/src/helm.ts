@@ -46,7 +46,7 @@ import { askedChallenge } from "./sailLink";
 import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
-import { CALLS, HONEST, briefing, callToast, goalChip, starsText, type Stars } from "./helm/mission";
+import { CALLS, HONEST, briefing, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
@@ -2024,7 +2024,9 @@ async function finish(): Promise<void> {
   // Under the race rules a voyage starts at the western line, about 500 km out (Sam).
   const started = { me: !!game.boat?.t_start_line || me.outcome === "arrived", ghost: !!game.ghost?.t_start_line || gh.outcome === "arrived" };
   page.started = started;
-  $("r-head").textContent = headline(c, started);
+  const mi = mission();
+  // A challenge has its own goal: the headline says whether she met it (Sandy: still sailing or not).
+  $("r-head").textContent = mi ? missionHead(me.outcome === "goal" || me.outcome === "arrived", mi.goal) : headline(c, started);
   $("r-story").textContent = story(c, started);
   // The three big numbers: days at sea, km of the way covered, and against the ghost.
   const st = game.status;

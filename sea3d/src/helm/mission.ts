@@ -95,6 +95,13 @@ export function callToast(key: string, leadKm: number): string {
   return `${verb[key] ?? "Your call"}: ${Math.abs(km).toLocaleString("en-US")} km ${km > 0 ? "ahead of" : "behind"} the autopilot so far.`;
 }
 
+/** The result card's headline for a challenge: whether she was still sailing at the deadline, plainly (not who won). */
+export function missionHead(sailing: boolean, goal: Goal): string {
+  const s = goal.storm?.name;
+  if (sailing) return s ? `Still sailing after ${s}.` : "Still sailing at the deadline.";
+  return s ? `She didn't come through ${s}.` : "She didn't make it to the deadline.";
+}
+
 /** The judge's stars on the result card (Ravi's judge(), through the simulator's result). */
 export interface Stars {
   stars: number;

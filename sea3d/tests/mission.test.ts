@@ -51,3 +51,11 @@ test("the debrief says plainly how the autopilot fared", () => {
   const s = starsText({ stars: 3, closest_km: 640, end_lon: -66.6, battery_low: 0.23, sailing: true }, SANDY, { stars: 0, closest_km: 16.2, end_lon: -70.5, battery_low: 0.14, sailing: true });
   assert.equal(s.why.at(-1), "The autopilot kept to its usual route, which crossed Sandy's path: the ghost passed 16 km from the eye.");
 });
+
+test("the result card's challenge headline says whether she was still sailing, not who won", async () => {
+  const { missionHead } = await import("../src/helm/mission.ts");
+  const goal = { until: "2012-10-31T00:00:00Z", storm: { name: "Sandy", track: [], clear_km: 150, well_km: 300 } };
+  assert.equal(missionHead(true, goal), "Still sailing after Sandy.");
+  assert.equal(missionHead(false, goal), "She didn't come through Sandy.");
+  assert.equal(missionHead(true, { until: goal.until }), "Still sailing at the deadline.");
+});
