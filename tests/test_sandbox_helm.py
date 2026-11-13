@@ -385,6 +385,8 @@ def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     r = g.result()
     assert r["build"] == base
     assert r["boat"]["ending"]["boat"] == g.design.stock["label"]
+    # None of these takes a power order: wind only, or a crew rowing at its own pace.
+    assert g.status()["drives"] is False
 
 
 # ------------------------------------------------------------- start from a port
@@ -477,6 +479,7 @@ CRUISER = {"base": "stock_cruiser31"}
 
 
 def test_sail_and_engine_orders_on_the_cruiser(env):
+    assert Game(env, choices=CRUISER, launch_index=MAY1, max_days=0.5).status()["drives"] is True
     g = Game(env, CRUISER, launch_index=MAY1, max_days=0.9)
     assert g.status()["sailboat"] and g.status()["sailing"]["plan"] is not None
     g.order("finish", 0.0, sails="reef2", engine=False)
