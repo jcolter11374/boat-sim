@@ -3021,6 +3021,121 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // M3 on live (Maya, after #503): practice, a watched voyage, a race and a weather challenge, each to its results
+  // card. At 1280x720, 390x844 and 360x740 the headline, the award and the first button are on screen and not
+  // covered; the buttons are the ways on in the agreed order (helm/ending.ts); the challenge's try shows on the
+  // leaderboard's Weather challenges tab. Phones here are the window resized with the card up.
+  "m3-ends": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      const out = [];
+      const verdict = {};
+      const SIZES = [[1280, 720], [390, 844], [360, 740]];
+      const EXPECT = {
+        practice: [/^(Try again|Race your best run)$/, /^Another course$/],
+        watch: [/^Watch again$/, /^Sail it yourself$/, /^Race it$/, /^Leaderboard$/],
+        race: [/^Race again$/, /^Follow .* to the end$/, /^Change the boats$/, /^Leaderboard$/],
+        challenge: [/^Try again$/, /^Change the boat$/, /^Leaderboard$/],
+      };
+      const AWARD = { practice: "#r-medal", watch: "#r-nums .n", race: "#r-nums .n", challenge: "#r-stars" };
+      const look = (award) => page.evaluate((award) => {
+        const vis = (e) => !!e && !e.hidden && e.offsetParent !== null;
+        const where = (e) => {
+          if (!vis(e)) return "not shown";
+          const r = e.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return "empty";
+          if (r.top < -1 || r.left < -1 || r.bottom > innerHeight + 1 || r.right > innerWidth + 1) return `off screen [${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}] of ${innerWidth}x${innerHeight}`;
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 12));
+          if (!(top === e || e.contains(top) || top?.contains(e))) return `covered by ${top?.id || top?.className || top?.tagName}`;
+          return "on screen";
+        };
+        const btns = [...document.querySelectorAll("#r-btns > *")].filter(vis);
+        const aw = document.querySelector(award);
+        return {
+          up: vis(document.getElementById("result")),
+          head: document.getElementById("r-head")?.textContent.trim() ?? "",
+          headAt: where(document.getElementById("r-head")),
+          award: aw ? (aw.innerText || aw.textContent || "").trim().replace(/\s+/g, " ").slice(0, 90) : "",
+          awardAt: where(aw),
+          btns: btns.map((b) => b.textContent.trim().replace(/\s+/g, " ")),
+          firstAt: where(btns[0]),
+          links: [...document.querySelectorAll("#r-links > *")].filter(vis).map((b) => b.textContent.trim()),
+          what: (() => { const t = (document.getElementById("r-calls")?.innerText ?? "").replace(/\s+/g, " ").trim(); return vis(document.getElementById("r-calls")) ? t.slice(0, 200) : ""; })(),
+        };
+      }, award);
+      const judge = async (mode) => {
+        const bad = [];
+        for (const [w, h] of SIZES) {
+          await page.setViewportSize({ width: w, height: h });
+          await page.waitForTimeout(2500);
+          const c = await look(AWARD[mode]);
+          if (BROWSER === "chromium") {
+            const path = `look-m3-${mode}-${w}.jpg`;
+            if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+          }
+          if (!c.up) { bad.push(`${w}: card not up`); continue; }
+          if (c.headAt !== "on screen") bad.push(`${w}: headline ${c.headAt}`);
+          if (mode !== "practice" || c.awardAt !== "not shown") if (c.awardAt !== "on screen") bad.push(`${w}: award (${AWARD[mode]}) ${c.awardAt}`);
+          if (c.firstAt !== "on screen") bad.push(`${w}: first button "${c.btns[0]}" ${c.firstAt}`);
+          // The ways on in order: each shown button matches the next expected one (optional ones may be left out).
+          let k = 0;
+          for (const b of c.btns) { while (k < EXPECT[mode].length && !EXPECT[mode][k].test(b)) k++; if (k >= EXPECT[mode].length) { bad.push(`${w}: buttons out of order or unexpected: ${c.btns.join(" / ")}`); break; } k++; }
+          out.push(`${mode} ${w}x${h}: "${c.head}" [${c.headAt}]; award "${c.award}" [${c.awardAt}]; buttons ${c.btns.join(" / ")} [first ${c.firstAt}]; links ${c.links.join(" / ")}${c.what ? `; "${c.what}"` : ""}`);
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
+        verdict[mode] = bad.length ? `FAIL (${bad.join("; ")})` : "PASS";
+      };
+      const toEnd = async (mode, limitMin) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < limitMin * MIN) {
+          if (await page.evaluate(() => { const r = document.getElementById("result"); return !!r && !r.hidden && r.offsetParent !== null; })) { await page.waitForTimeout(3000); return true; }
+          if (await page.evaluate(() => !document.getElementById("decide")?.hidden && document.querySelectorAll("#decidebtns button").length)) await page.evaluate(() => document.querySelector("#decidebtns button")?.click());
+          await page.evaluate(() => { if (window.__helm?.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
+          await page.waitForTimeout(2500);
+        }
+        verdict[mode] = `FAIL (no results card after ${limitMin} min at 4 days a second)`;
+        return false;
+      };
+      // 1. Practice: the triangle, then hand the wheel back (Esc).
+      await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await practiceTriangle(page);
+      await page.waitForTimeout(4000);
+      await page.keyboard.press("Escape");
+      if (await page.waitForFunction(() => { const r = document.getElementById("result"); return r && !r.hidden && r.offsetParent !== null; }, null, { timeout: MIN }).then(() => true, () => false)) await judge("practice");
+      else verdict.practice = "FAIL (no card after handing back)";
+      // 2. A watched voyage to her finish.
+      await page.goto(SITE + "helm.html?watch=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error), null, { timeout: 5 * MIN }).catch(() => {});
+      if (await toEnd("watch", 15)) await judge("watch");
+      // 3. A race to the finish (our kayak against Rev C, 1 Apr).
+      await page.goto(SITE + "helm.html?race=kayak,revc&launch=0&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN }).catch(() => {});
+      if (await toEnd("race", 20)) await judge("race");
+      // 4. A weather challenge (Sandy's shadow, nine days), then its row on the Weather challenges tab.
+      await page.goto(SITE + "helm.html?quality=low&challenge=sandys-shadow", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN }).catch(() => {});
+      if (await toEnd("challenge", 15)) {
+        await judge("challenge");
+        const href = await page.evaluate(() => [...document.querySelectorAll("#r-btns a, #r-links a")].find((a) => /Leaderboard/.test(a.textContent))?.getAttribute("href") ?? null);
+        await page.goto(new URL(href ?? "./leaderboard.html#challenges", SITE + "helm.html").href, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => document.querySelectorAll("#crows tr").length, null, { timeout: MIN }).catch(() => {});
+        const b = await page.evaluate(() => ({ tab: document.getElementById("tab-challenges")?.getAttribute("aria-selected"), rows: [...document.querySelectorAll("#crows tr")].map((r) => ({ tried: r.classList.contains("tried"), name: r.querySelector(".name")?.textContent.trim(), yours: r.querySelector(".yours")?.textContent.trim().replace(/\s+/g, " "), auto: r.querySelector(".auto")?.textContent.trim() })) }));
+        const row = b.rows.find((r) => /sandy/i.test(r.name ?? ""));
+        if (BROWSER === "chromium") { const path = "look-m3-board.jpg"; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } }
+        const ok = b.tab === "true" && row?.tried;
+        verdict.board = ok ? "PASS" : `FAIL (tab selected ${b.tab}; Sandy row ${JSON.stringify(row)})`;
+        out.push(`board: from "${href}", Weather challenges tab ${b.tab === "true" ? "open" : "NOT open"}; Sandy's row ${JSON.stringify(row)}`);
+      } else verdict.board = "not reached";
+      const sum = Object.entries(verdict).map(([k, v]) => `${k} ${v}`).join(" | ");
+      console.log(`M3 ${BROWSER}: ${sum} || ${out.join(" || ")}`);
+      must(!/FAIL|not reached/.test(sum), `${sum} [[ ${out.join(" || ")} ]]`);
+      return `${sum}; ${out.join("; ")}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
