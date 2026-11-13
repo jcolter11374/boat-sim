@@ -3302,15 +3302,27 @@ function drawResultMap(): void {
     const W = cv.width / dpr;
     const H = cv.height / dpr;
     const [ex, ey] = m.xy(...(lastFix(game.boat!) ?? pts[0]));
+    const [fx, fy] = m.xy(target[0], target[1]);
+    const finishOff = !(fx >= 0 && fx <= W && fy >= 0 && fy <= H);
+    const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
+    g.font = "600 11px system-ui, sans-serif";
+    // Where the "km to the finish" words sit in the top-right corner, so the end's own label keeps clear of them (Elena: text on text).
+    const finishBox = finishOff ? { x0: W - 22 - g.measureText(`${left} km to the finish`).width, x1: W, y0: 4, y1: 24 } : null;
     // Where it ended, named (Ines): "Went silent", "Caught in fishing gear"...
     const end = page.card?.boat;
     if (end && end.outcome !== "arrived" && end.ending?.headline) {
       g.font = "600 11px system-ui, sans-serif";
       g.textAlign = ex > W * 0.6 ? "right" : "left";
+      g.textBaseline = "alphabetic"; // the finish words below set "middle" on this same canvas
       g.fillStyle = "rgba(255,200,150,.95)";
       // A challenge met reads "Still sailing", as the headline does (Ines: one story, not "Made it").
       const word = mission() && end.outcome === "goal" ? "Still sailing" : end.ending.headline;
-      const [lx, ly] = [ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10];
+      const lx = ex + (ex > W * 0.6 ? -10 : 10);
+      const tw = g.measureText(word).width;
+      const [x0, x1] = ex > W * 0.6 ? [lx - tw, lx] : [lx, lx + tw];
+      const hits = (y: number) => !!finishBox && x1 > finishBox.x0 && x0 < finishBox.x1 && y > finishBox.y0 && y - 11 < finishBox.y1;
+      // Above the end marker, or below it when there's no room above or the finish's words are there.
+      const ly = ey < 24 || hits(ey - 10) ? ey + 18 : ey - 10;
       // A dark halo, so a track line under the label never runs through the words (Ines).
       g.strokeStyle = "rgba(8,18,32,.9)";
       g.lineWidth = 3;
@@ -3318,8 +3330,7 @@ function drawResultMap(): void {
       g.strokeText(word, lx, ly);
       g.fillText(word, lx, ly);
     }
-    const [fx, fy] = m.xy(target[0], target[1]);
-    if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
+    if (!finishOff) return;
     // The finish, off the frame: in the top-right corner, "4,728 km to the finish ▶", the arrow
     // pointing its way, clear of the end marker (Ines, Leo).
     const ang = Math.atan2(fy - ey, fx - ex);
@@ -3340,7 +3351,6 @@ function drawResultMap(): void {
     g.textAlign = "right";
     g.textBaseline = "middle";
     g.fillStyle = "rgba(235,242,250,.92)";
-    const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
     g.fillText(`${left} km to the finish`, ax - 10, ay);
     // The race's start line runs through the frame without its words on a small map: name it.
     const west = game.boat!.course.west_line as [number, number][];
