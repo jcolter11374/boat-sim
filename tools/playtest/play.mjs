@@ -2118,6 +2118,68 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #473 (Rosa's link): a race where your own boat is lost. The race stops and says so, offers
+  // "Follow <the other boat> to the end" beside "Race again"; a lost boat isn't drawn sailing; after
+  // Follow the strip shows the other boat and the lead cell goes; the second card has no Follow.
+  "race-lost": {
+    path: "helm.html?race=kayak,revb&launch=2&quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), `the race didn't load: ${await page.evaluate(() => window.__helm.error)}`);
+      const out = [];
+      const start = await page.evaluate(() => ({ clock: window.__helm.clock, first: document.querySelector("#timebar .rate")?.textContent.trim() }));
+      must(start.clock === 0, `the race didn't open paused (clock ${start.clock} h/s)`);
+      must(start.first === "Real time", `Real time isn't first on the bar (${start.first})`);
+      const card = () => page.evaluate(() => { const r = document.getElementById("result"); const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; return { up: vis(r), head: document.getElementById("r-head")?.textContent.trim() ?? "", story: document.getElementById("r-story")?.textContent.trim().replace(/\s+/g, " ") ?? "", btns: [...document.querySelectorAll("#result .rc-btns > *")].filter(vis).map((b) => b.textContent.trim()), day: window.__helm.status?.day, bat: document.getElementById("c-batv")?.textContent.trim() ?? "" }; });
+      const run = async (label, mins) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < mins * MIN) {
+          if ((await card()).up) return;
+          await page.evaluate(() => { if (window.__helm.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
+          await page.waitForTimeout(2000);
+        }
+        throw new CheckFail(`${label}: no results card after ${mins} min at 4 days a second (day ${(await card()).day?.toFixed(1)})`);
+      };
+      const frame = async (name) => {
+        const path = `look-${name}.jpg`;
+        if (BROWSER !== "chromium" || !(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+      };
+      await run("the race", 10);
+      await page.waitForTimeout(3000);
+      const c1 = await card();
+      await frame("race-lost-1-card");
+      console.log(`RACELOST ${BROWSER} card 1: ${JSON.stringify(c1)}`);
+      must(/lost/i.test(c1.head), `the first card doesn't say your boat was lost: "${c1.head}"`);
+      must(/still sailing/i.test(c1.story), `the first card doesn't say the other boat is still sailing: "${c1.story}"`);
+      const follow = c1.btns.find((b) => /^Follow .* to the end$/.test(b));
+      must(follow, `no "Follow … to the end" beside Race again: ${c1.btns.join(" / ")}`);
+      must(c1.btns.some((b) => /Race again/.test(b)), `no "Race again" on the card: ${c1.btns.join(" / ")}`);
+      out.push(`card 1 at day ${c1.day?.toFixed(1)}: "${c1.head}" "${c1.story}" [${c1.btns.join(" / ")}], strip battery ${c1.bat}`);
+      await page.evaluate(() => document.getElementById("r-follow").click());
+      await page.waitForFunction(() => document.getElementById("result").hidden, null, { timeout: 20_000 }).catch(() => {
+        throw new CheckFail(`"${follow}" didn't close the card`);
+      });
+      await page.waitForTimeout(4000);
+      const f = await page.evaluate(() => { const vis = (e) => { if (!e) return false; const cs = getComputedStyle(e); return cs.display !== "none" && cs.visibility !== "hidden" && e.offsetParent !== null; }; return { followed: !!window.__helm.followed, lead: vis(document.getElementById("c-lead")), bat: document.getElementById("c-batv")?.textContent.trim() ?? "", clock: window.__helm.clock, day: window.__helm.status?.day }; });
+      await frame("race-lost-2-following");
+      must(f.followed, "after Follow the page doesn't say it is following the other boat");
+      must(!f.lead, `after Follow the strip still shows the "vs" lead cell`);
+      out.push(`following: lead cell gone, strip battery ${f.bat} (was ${c1.bat} for the lost kayak), clock ${f.clock} h/s`);
+      await run("following the other boat", 12);
+      await page.waitForTimeout(3000);
+      const c2 = await card();
+      await frame("race-lost-3-end");
+      console.log(`RACELOST ${BROWSER} card 2: ${JSON.stringify(c2)}`);
+      must(/lost/i.test(c2.head + " " + c2.story), `the second card no longer says your boat was lost: "${c2.head}" "${c2.story}"`);
+      must(!c2.btns.some((b) => /^Follow/.test(b)), `the second card still offers Follow: ${c2.btns.join(" / ")}`);
+      out.push(`card 2 at day ${c2.day?.toFixed(1)}: "${c2.head}" "${c2.story}" [${c2.btns.join(" / ")}]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
