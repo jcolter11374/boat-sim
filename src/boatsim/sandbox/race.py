@@ -222,7 +222,10 @@ class Race:
 
     def _boat(self, i: int) -> dict:
         v = self.boats[i]
-        s, e = v.state, v.env
+        s = v.state
+        # Before the first step no weather has been felt yet: look it up where she lies, so the page
+        # has a wind to show at day 0 (as the helm game does for its own first look).
+        e = v.env if v.env is not None else v.c.env.sample(s.t, s.lat, s.lon)
         out = {
             "name": self.names[i],
             "build": self.builds[i],
