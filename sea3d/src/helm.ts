@@ -27,7 +27,7 @@ import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, hasDetailedKayak, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
+import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
@@ -41,7 +41,7 @@ import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
-import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
+import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
@@ -3702,7 +3702,7 @@ for (const k of PLAYABLE_STOCK) {
   input.name = "boat";
   input.value = k;
   const b = document.createElement("b");
-  b.textContent = STOCK[k].name.replace(/^\w/, (c) => c.toUpperCase());
+  b.textContent = playerName(k);
   label.append(input, " ", b, `: ${BOAT_BLURB[k] ?? "a ready-made boat, sailed as it comes."}`);
   $("boats").append(label);
 }
@@ -3738,7 +3738,7 @@ function powerFor(pick: string): void {
 /** The boat a new game sails becomes "my boat" (unless it already is), so the other pages carry it on. */
 function rememberBoat(pick: string, mine: MyBoat | null): void {
   if (pick === MINE || (mine && rowFor(mine) === pick)) return;
-  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: STOCK[pick].name.replace(/^\w/, (c) => c.toUpperCase()), choices: { base: pick } });
+  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: playerName(pick), choices: { base: pick } });
   else saveMyBoat({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {} });
 }
 powerFor(chosenBoat());
@@ -4407,7 +4407,12 @@ renderer.setAnimationLoop(() => {
   }
   camera.position.copy(controls.target).add(off);
   // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
-  motion.heel = wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  // Turned over for good (a dinghy or cat with nobody to right it): over she goes, the way she was
+  // leaning, and floats upside down, as on the voyage page (not upright beside the ending card).
+  const over = !wheelNow && !!r && stayedOver(r, h);
+  motion.heel = over ? 0 : wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  if (over && !motion.capsized) motion.capsized = motion.roll < 0 ? -1 : 1;
+  if (!over) motion.capsized = 0;
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;

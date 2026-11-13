@@ -41,6 +41,7 @@ import {
   loadReplay,
   planAt,
   positionAt,
+  stayedOver,
   toneOf,
   valueAt,
   type IndexEntry,
@@ -1401,8 +1402,7 @@ renderer.setAnimationLoop(() => {
     // A sailing yacht leans on its sails: the replay's heel, which the waves rock about.
     // Once it has turned over (lost), nothing holds it on its side.
     // (The log's last row can come a little before the final event.)
-    const atEnd = hour >= rep.h[rep.h.length - 1] - 1e-6;
-    const over = rep.events.some((e) => (e.h <= hour || atEnd) && e.kind === "lost" && /capsiz|stayed over/i.test(e.detail));
+    const over = stayedOver(rep, hour);
     motion.heel = rep.heel && !over ? THREE.MathUtils.degToRad(forcedHeel(rep, hour, hdg) ?? valueAt(rep, rep.heel, hour) ?? 0) : 0;
     // Turned over for good (a dinghy or cat with nobody to right it): over it goes, the
     // way it was leaning, and it floats upside down.
