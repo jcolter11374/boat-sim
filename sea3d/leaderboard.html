@@ -107,10 +107,10 @@
   <header class="glass">
     <h1>Leaderboard</h1>
     <div id="tabs" role="tablist" aria-label="Which leaderboard">
-      <button role="tab" id="tab-designs" aria-controls="p-designs" aria-selected="true">Designs</button>
+      <button role="tab" id="tab-designs" aria-controls="p-designs" aria-selected="true">Boats</button>
       <button role="tab" id="tab-challenges" aria-controls="p-challenges" aria-selected="false" tabindex="-1">Weather challenges</button>
     </div>
-    <div class="muted" id="sub">Which builds reach the finish most often, on the same launches with the same luck.</div>
+    <div class="muted" id="sub">Which boats reach the finish most often, on the same launch days with the same dice for breakdowns.</div>
     <details id="about"><summary>About this leaderboard</summary><div id="facts" class="muted"></div></details>
   </header>
   <div id="p-designs" class="panel" role="tabpanel" aria-labelledby="tab-designs">
@@ -120,16 +120,16 @@
     <div id="statsbar"><label><input type="checkbox" id="showstats"> Show the statistics</label></div>
     <div id="shared" class="muted"></div>
     <table>
-      <thead><tr><th>Group</th><th>Build</th><th>Finished</th><th>Against our kayak</th><th class="stat">Hidden year</th></tr></thead>
+      <thead><tr><th>Group</th><th>Boat</th><th>Finished</th><th>Against our kayak</th><th class="stat">Hidden year</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </section>
   <section id="explain" class="glass">
     <h2>How to read this</h2>
-    <p><b>Finished</b> means reaching the finish (a 25 km circle on the race's finish line, about 330 km west of Lisbon) under the race rules. The thin bar is the likely range: where the true share probably sits. With about 65 launches it is wide.</p>
-    <p><b>Groups.</b> Best, Good and Long shot are groups. Every build sails the same launches with the same weather and the same breakdowns (parts failing at random), so differences are the build, not luck of the draw. A build drops to a new group only when it is clearly worse than every build above it. Builds in one group can't be told apart.</p>
-    <p><b>Against our kayak</b> (the 3 m solar-electric kayak as we plan to build it) counts the launches where one boat finished and the other didn't. "Same as ours" and "Maybe worse (could be luck)" mean the gap is too small to be sure of.</p>
-    <p><b>Show the statistics</b> adds the likely ranges and the <b>hidden year</b>: a separate year nobody tunes against. A build that does much worse there than on the main launches gets a warning: it may be tuned to the test.</p>
+    <p><b>Finished</b> means reaching the finish (a 25 km circle on the race's finish line, about 330 km west of Lisbon) under the race rules. The thin bar is the likely range: where the true share probably sits. With about 65 launch days it is wide.</p>
+    <p><b>Groups.</b> Best, Good and Long shot are groups. Every boat sails the same launch days with the same weather and the same breakdowns (parts failing at random), so differences are the boat, not luck of the draw. A boat drops to a new group only when it is clearly worse than every boat above it. Boats in one group can't be told apart.</p>
+    <p><b>Against our kayak</b> (the 3 m solar-electric kayak as we plan to build it) counts the launch days where one boat finished and the other didn't. "Same as ours" and "Maybe worse (could be luck)" mean the gap is too small to be sure of.</p>
+    <p><b>Show the statistics</b> adds the likely ranges and the <b>hidden year</b>: a separate year nobody tunes against. A boat that does much worse there than on the main launch days gets a warning: it may be tuned to the test.</p>
     <p><b>Randolph's boats</b> (Rev B, Rev C5) are our model of their team's designs, not their own results: the quiet "our model" tag by a name says so, and its <b>i</b> says more.</p>
   </section>
   </div>
