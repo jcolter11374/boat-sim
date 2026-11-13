@@ -66,6 +66,18 @@
   /* 720 tall (a laptop): the whole menu fits, no row cut off at the card's edge (Ines). */
   @media (max-height: 820px) { #title { padding: 16px 20px 14px; } #title h1 { font-size: 38px; margin-bottom: 2px; } #title .tag { font-size: 13.5px; margin: 4px 0 12px; }
     #title nav { gap: 5px; } #title nav a, #title nav button { padding: 8px 13px; } #title nav small { font-size: 11.5px; margin-top: 1px; } #title .fine { margin-top: 10px; } }
+  /* A phone's title (M1): the menu runs across the bottom like the Set sail card, so the shot of your boat
+     has the upper half; the hero camera sees this and frames for it (titleHero.ts cardBelowOf). */
+  @media (max-width: 699px) {
+    #title { left: 12px; right: 12px; width: auto; top: auto; bottom: 18px; transform: none; padding: 16px 18px 12px;
+      max-height: calc(100dvh - var(--bar, 0px) - 34vh); }
+    #title h1 { font-size: 34px; margin-bottom: 2px; }
+    #title .tag { font-size: 13px; margin: 4px 0 10px; }
+    #title nav { gap: 6px; } #title nav a, #title nav button { padding: 9px 13px; }
+    #title .fine { margin-top: 8px; }
+  }
+  /* A short phone: the fine print goes, so the menu stays in the lower 60% and the boat keeps her half. */
+  @media (max-width: 699px) and (max-height: 780px) { #title .fine { display: none; } #title nav small { font-size: 11.5px; } #title h1 { font-size: 30px; } }
   /* A phone's title: the credits shrink to the one "Credits" link (the full list is behind it), so they don't print over the menu (Elena). */
   @media (max-width: 600px) { body.title #credits .long { display: none; } }
   @media (max-height: 560px) { #title { padding: 14px 16px 12px; } #title h1 { font-size: 32px; } #title .tag { margin-bottom: 10px; } #title nav small { display: none; } }
