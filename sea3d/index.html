@@ -63,6 +63,12 @@
   #title .myboat button { all: unset; cursor: pointer; color: #dbe6f5; text-decoration: underline; text-underline-offset: 3px; }
   #title .myboat button:focus-visible { outline: 2px solid #ff8a2a; outline-offset: 2px; }
   #title .fine { color: #8197ad; font-size: 11.5px; margin: 14px 0 0; }
+  /* The title's sound switch (titleSound.ts): a small pill in the card's top corner; lit when on. */
+  #t-sound { position: absolute; top: 12px; right: 12px; cursor: pointer; font: 600 11.5px system-ui, sans-serif; color: #b7c8dc; background: rgba(27,51,82,.6);
+    border: 1px solid rgba(160,200,255,.25); border-radius: 999px; padding: 4px 10px; }
+  #t-sound:hover { border-color: #8ab4ff; color: #fff; }
+  #t-sound[aria-pressed="true"] { color: #ffd0a6; border-color: rgba(255,138,42,.7); }
+  #t-sound:focus-visible { outline: 2px solid #ff8a2a; outline-offset: 2px; }
   /* 720 tall (a laptop): the whole menu fits, no row cut off at the card's edge (Ines). */
   @media (max-height: 820px) { #title { padding: 16px 20px 14px; } #title h1 { font-size: 38px; margin-bottom: 2px; } #title .tag { font-size: 13.5px; margin: 4px 0 12px; }
     #title nav { gap: 5px; } #title nav a, #title nav button { padding: 8px 13px; } #title nav small { font-size: 11.5px; margin-top: 1px; } #title .fine { margin-top: 10px; } }
@@ -107,6 +113,7 @@
     <p class="myboat">My boat: <b id="t-boatname">Our kayak</b> &middot; <button type="button" id="t-change">Change</button></p>
   </nav>
   <p class="fine">Free and open source. Our own simulator; the weather is real past weather.</p>
+  <button type="button" id="t-sound" aria-pressed="false" title="The sea, a bell buoy and gulls, all made in code. Starts at your first click; N turns it off and on.">Sound off</button>
 </section>
 <div id="panel">
   <h1>Both boats on a live sea</h1>
