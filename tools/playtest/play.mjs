@@ -2518,6 +2518,45 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #479: the film at night (Watch a voyage, darkest hour of day 2): six frames through the sequence,
+  // for the astern shot and the others.
+  "look-night-film": {
+    manual: true,
+    path: "voyage.html?voyage=2020-04-15",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 3 * MIN });
+      must(!(await page.evaluate(() => window.__replay.error)), "the replay didn't load");
+      const at = await page.evaluate(() => {
+        const r = window.__replay;
+        r.pause?.();
+        let best = 30, el = 90;
+        for (let h = 24; h < 48; h += 0.25) { const e = r.sunAt?.(h) ?? 90; if (e < el) [best, el] = [h, e]; }
+        r.setHour(best);
+        return { hour: best, sun: el };
+      });
+      await page.waitForTimeout(5000);
+      await page.keyboard.press("c");
+      await page.waitForFunction(() => document.body.classList.contains("cinema"), null, { timeout: 15_000 }).catch(() => {
+        throw new CheckFail("C didn't start the film");
+      });
+      const shots = [];
+      for (let i = 1; i <= 6; i++) {
+        await page.waitForTimeout(i === 1 ? 4000 : 7000);
+        const path = `look-night-film-${i}.jpg`;
+        if (!(await jpeg(page, path))) continue;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let j = 0; j < b64.length; j += 4000) console.log(b64.slice(j, j + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(i);
+      }
+      const h1 = await page.evaluate(() => window.__replay.hour);
+      await page.keyboard.press("Escape");
+      return `night film at hour ${at.hour} (sun ${at.sun.toFixed(0)}°): ${shots.length} frames over about 40 s; the clock moved ${((h1 - at.hour) * 60).toFixed(1)} min`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
