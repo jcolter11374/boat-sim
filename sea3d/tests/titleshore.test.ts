@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as THREE from "three";
 import { HERO_SEA, HERO_SUN } from "../src/titleHero";
-import { SHORE, SHORE_REACH, readSkyline, shoreClear, shoreStrip } from "../src/titleShore";
+import { CROWN, SHORE, SHORE_EYE, SHORE_REACH, SHORE_TALLER, readSkyline, shoreClear, shoreStrip } from "../src/titleShore";
 
 const light = { sunDir: new THREE.Vector3(Math.sin((255 * Math.PI) / 180), 0.09, -Math.cos((255 * Math.PI) / 180)).normalize(), sun: new THREE.Color(1, 0.7, 0.4), haze: new THREE.Color(0.8, 0.6, 0.5) };
 /** A made-up skyline: n bearings, land where `at` says (distance m, height m). */
@@ -105,4 +105,23 @@ test("our skyline, as the title's two shots see it: a shore 1.5 to 4 km off, the
 test("the title's sea is a calm evening in the harbour", () => {
   assert.ok(HERO_SEA.hs >= 0.2 && HERO_SEA.hs <= 0.3);
   assert.ok(HERO_SEA.tp < 4);
+});
+
+test("the strip carries what the shore's texture needs: the land's own colour, the haze's share, the distance along it and the top", () => {
+  const s = shoreStrip(made(720, (deg) => (deg >= 290 && deg <= 310 ? [2000, 12] : null)), HERO_SUN.az, light);
+  const verts = s.position.length / 3;
+  assert.equal(s.land.length, 3 * verts);
+  assert.equal(s.keep.length, verts);
+  assert.equal(s.along.length, 3 * verts);
+  for (let i = 0; i < verts; i++) {
+    assert.ok(s.keep[i] > 0 && s.keep[i] <= 1);
+    const lit = s.along[3 * i + 1];
+    assert.ok(lit >= 0 && lit <= 1);
+    // Both vertices of a bearing know the skyline's top, so the crowns cut the same edge all the way up.
+    assert.equal(s.along[3 * i + 2], s.position[3 * (i | 1) + 1]);
+  }
+  // Metres along the shore: 0.5 degrees at 2 km is about 17.5 m.
+  assert.ok(Math.abs(s.along[3 * 2] - s.along[0] - 17.45) < 0.1);
+  // The crowns cut a few metres into a 12 m skyline, not the whole of it.
+  assert.ok(CROWN * SHORE_TALLER < 0.5 * (12 - SHORE_EYE) * SHORE_TALLER);
 });
