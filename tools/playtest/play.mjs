@@ -1753,6 +1753,18 @@ const CHECKS = {
       must(!(await page.evaluate(() => window.__helm.error)), `Sandy's shadow didn't start: ${await page.evaluate(() => window.__helm.error)}`);
       must((await page.evaluate(() => window.__helm.challenge)) === "sandys-shadow", "the game isn't sailing Sandy's shadow");
       const asked = [];
+      // Fact 1 (Maya): is the goal showing? "Day 4 of 9" in the strip's time cell and the storm chip mean the challenge's goal is set.
+      const goalNow = () => page.evaluate(() => ({ day: document.getElementById("day")?.textContent.trim() ?? "", chip: (() => { const c = document.getElementById("goalchip"); return c && !c.hidden ? c.textContent.trim().replace(/\s+/g, " ") : ""; })() }));
+      const goals = [await goalNow()];
+      let streamShot = false;
+      const frame = async (name) => {
+        const path = `look-${name}.jpg`;
+        if (BROWSER !== "chromium" || !(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+      };
       for (let i = 0; i < 80; i++) {
         if (await page.evaluate(() => window.__helm.status?.over)) break;
         // A call is asked once the picture reaches its moment: give it time to show before carrying on
@@ -1760,6 +1772,8 @@ const CHECKS = {
         if (await page.evaluate(() => window.__helm.clock === 0)) await page.waitForFunction(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length, null, { timeout: 12_000 }).catch(() => {});
         if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) {
           asked.push(await page.evaluate(() => (document.getElementById("decide").innerText || "").split("\n")[0].slice(0, 110)));
+          goals.push(await goalNow());
+          if (!streamShot && /Gulf Stream/.test(asked.at(-1)) && !/Sandy/.test(asked.at(-1))) { streamShot = true; await frame("sandy-stream-call"); }
           await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
           await page.waitForTimeout(1000);
         }
@@ -1769,12 +1783,16 @@ const CHECKS = {
       }
       const end = await page.evaluate(() => `${window.__helm.status?.over ? `voyage over (${window.__helm.status?.outcome ?? "?"})` : "still sailing"} at day ${window.__helm.status?.day?.toFixed(1)}, last stop ${JSON.stringify(window.__helm.lastStop)}`);
       const r = await page.evaluate(() => ({ d: window.__helm.decisions.map((x) => ({ kind: x.kind, day: +x.day.toFixed(1) })), gulf: window.__gulf, over: !!window.__helm.status?.over, day: window.__helm.status?.day }));
+      goals.push(await goalNow());
+      const goalSeen = goals.find((g) => / of \d/.test(g.day) || g.chip);
+      const facts = `goal ${goalSeen ? `shown ("${goalSeen.day}"${goalSeen.chip ? `, chip "${goalSeen.chip}"` : ""})` : `NOT shown (time cell "${goals[0].day}")`}; big call ${r.d.some((x) => x.kind === "mission") ? "asked" : "NOT asked"}; Gulf Stream ${r.d.some((x) => /stream|gulf/i.test(x.kind)) || r.gulf.length ? "SHOWN" : "not shown"}`;
+      console.log(`SANDY ${BROWSER}: ${facts}; decisions ${JSON.stringify(r.d)}; asked ${JSON.stringify(asked)}; notes ${JSON.stringify(r.gulf)}; ${end}`);
       const mission = r.d.filter((x) => x.kind === "mission");
       const stream = r.d.filter((x) => /stream|gulf/i.test(x.kind));
       must(mission.length === 1, `Sandy's big call was asked ${mission.length} times (decisions: ${JSON.stringify(r.d)}; asked: ${JSON.stringify(asked)}; ${end})`);
       must(!stream.length, `Sandy's shadow asked a Gulf Stream call: ${JSON.stringify(stream)}`);
       must(!r.gulf.length, `Sandy's shadow showed a Gulf Stream note: ${JSON.stringify(r.gulf.slice(0, 2))}`);
-      return `one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
+      return `${facts}; one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
     },
   },
   // #462 (M3): "Continue your voyage". A crossing is saved in the browser and offered on the title and
