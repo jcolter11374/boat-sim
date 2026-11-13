@@ -1083,6 +1083,8 @@ const CHECKS = {
         const a = document.getElementById("soundask");
         if (a) new MutationObserver(() => { if (!a.hidden) window.__askedSound = true; }).observe(a, { attributes: true });
       });
+      /** Whether "Sound on?" shows within `ms` of now (it resolves as soon as it does). */
+      const askedWithin = (ms) => page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: ms }).then(() => true).catch(() => false);
       // 1. First visit: nothing on load; "Set sail" asks once; "No thanks" is remembered.
       await loaded();
       let s = await soundState(page);
@@ -1094,7 +1096,7 @@ const CHECKS = {
       s = await soundState(page);
       must(s.contexts === 0, `clicking "Set sail" started sound without being asked (${s.contexts} AudioContext)`);
       // The question waits: it comes a minute in, or after the first call, whichever is first (#406, Leo).
-      const asked = await page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: 90_000 }).then(() => true).catch(() => false);
+      const asked = await askedWithin(90_000);
       must(asked, `"Sound on?" was never asked in the first 90 s after Set sail`);
       const clicked = await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true, () => false);
       await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 });
@@ -1107,12 +1109,12 @@ const CHECKS = {
       await watchAsk();
       await pressSetSail(page, { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await sailed();
-      await page.waitForTimeout(2000);
-      const again = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
+      // The question would come up to a minute in (or after the first call): watch as long as step 1 allows before saying it didn't.
+      const again = await askedWithin(90_000);
       if (clicked) must(!again, `"Sound on?" was asked again after "No thanks"`);
       s = await soundState(page);
       must(s.contexts === 0, `sound started after "No thanks" without N or the button (${s.contexts} AudioContext)`);
-      out.push(`reload after "No thanks": not asked again, still silent`);
+      out.push(`reload after "No thanks": not asked again in 90 s, still silent`);
       // 3. N while sailing: on, then off; the speaker button follows.
       await page.keyboard.press("n");
       await page.waitForTimeout(800);
@@ -1144,9 +1146,8 @@ const CHECKS = {
       s = await soundState(page);
       must(s.contexts === 1 && s.pressed, `a remembered "on" didn't come back at the first click (${s.contexts} AudioContext, button ${s.pressed})`);
       await sailed();
-      await page.waitForTimeout(2000);
-      must(!(await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound)), `"Sound on?" was asked although sound was on`);
-      out.push(`reload after "on": silent on load, on at the first click (${s.state}), not asked`);
+      must(!(await askedWithin(90_000)), `"Sound on?" was asked although sound was on`);
+      out.push(`reload after "on": silent on load, on at the first click (${s.state}), not asked in 90 s`);
       return out.join("; ");
     },
   },
