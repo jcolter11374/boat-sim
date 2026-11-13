@@ -508,7 +508,7 @@ renderer.setAnimationLoop(() => {
     });
     // The shot: titleShot's 20 s loop, the boat right of the menu, looking into the low sun.
     const card = document.getElementById("title");
-    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight), heroL.sunOff);
+    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight), heroL.sunOff, heroL.camH);
     camera.position.copy(shot.pos);
     camera.quaternion.copy(shot.quat);
     if (camera.fov !== shot.fov) {
