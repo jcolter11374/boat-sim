@@ -278,9 +278,9 @@ export interface StripData {
 
 const POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 export const point = (deg: number): string => POINTS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-/** Arrows for where the wind blows TO, as on the forecast. */
-const ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
-const arrow = (deg: number): string => ARROWS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+
+/** The wind cell's last values: speed (kn), where it blows to (degrees), wave height (m). */
+const wind: { kn: number | null; to: number | null; hs: number | null; shown: string } = { kn: null, to: null, hs: null, shown: "" };
 
 export function showStrip(d: StripData): void {
   if (d.order !== undefined) $("c-orderv").textContent = d.order;
@@ -311,12 +311,25 @@ export function showStrip(d: StripData): void {
     bar.style.width = `${b}%`;
     bar.style.background = b < 15 ? "var(--bad)" : b < 35 ? "var(--warn)" : "var(--good)";
   }
-  if (d.windKn !== undefined) $("c-windv").textContent = d.windKn == null ? "–" : `${d.windKn.toFixed(0)} kn ${d.windTo == null ? "" : arrow(d.windTo)}`;
-  // The label is uppercased by CSS; the unit sits in its own span so it stays "m", not "M" (Milo).
-  if (d.waves !== undefined) {
-    const l = $("c-wavel");
-    if (d.waves == null) l.textContent = "wind";
-    else l.replaceChildren(`waves ${d.waves.toFixed(1)} `, Object.assign(document.createElement("span"), { className: "u", textContent: "m" }));
+  // Wind and waves in one value, as on Watch a voyage: "35 kn NW · 10.5 m" over "wind · waves", the
+  // wind named by where it comes from (one format in every mode, Elena). The two arrive separately
+  // (the forecast row, then the live frame), so the cell is drawn from the last of each.
+  if (d.windKn !== undefined) wind.kn = d.windKn;
+  if (d.windTo !== undefined) wind.to = d.windTo;
+  if (d.waves !== undefined) wind.hs = d.waves;
+  if (d.windKn !== undefined || d.windTo !== undefined || d.waves !== undefined) {
+    const key = `${wind.kn?.toFixed(0)}|${wind.to == null ? "" : point(wind.to + 180)}|${wind.hs?.toFixed(1)}`;
+    if (key !== wind.shown) {
+      wind.shown = key;
+      const sub = (t: string) => Object.assign(document.createElement("span"), { className: "sub", textContent: t });
+      const v = $("c-windv");
+      if (wind.kn == null) v.textContent = "–";
+      else {
+        v.replaceChildren(wind.kn.toFixed(0), sub(` kn${wind.to == null ? "" : ` ${point(wind.to + 180)}`}`));
+        if (wind.hs != null) v.append(` · ${wind.hs.toFixed(1)}`, sub(" m"));
+      }
+      $("c-wavel").textContent = wind.hs == null ? "wind" : "wind · waves";
+    }
   }
   if (d.lead !== undefined) {
     const lead = $("c-lead");
