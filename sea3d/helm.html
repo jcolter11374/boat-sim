@@ -52,12 +52,20 @@
   @keyframes arrive-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
-  #decide[hidden] { display: none; } /* display:flex above would otherwise beat [hidden] */
+  #decide[hidden] { display: none; }
+  /* With a map, the card stands on the right third, under the chart, so the boat shows on the left third (Elena). */
+  #decide.withmap { left: auto; right: 56px; transform: none; top: calc(var(--bar, 0px) + 196px); width: min(440px, calc(100vw - 80px)); }
   #decide .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb84d; }
   #fcbox.lit { outline: 2px solid #ffb84d; }
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
   #decidebtns button { text-align: left; white-space: normal; }
   #decidebtns button:first-child { font-weight: 600; }
+  #decidemap { width: 100%; height: 120px; border-radius: 6px; display: block; }
+  #decidemap[hidden] { display: none; }
+  #decidebtns button { border-left: 4px solid var(--opt, transparent); }
+  #decidebtns button[style*="--opt"]:hover, #decidebtns button[style*="--opt"]:focus-visible { border-color: var(--opt); box-shadow: 0 0 0 1px var(--opt); }
+  #decidebtns kbd { display: inline-block; min-width: 1.3em; margin-right: .5em; padding: 0 .3em; border-radius: 4px; font: 600 11px/1.5 system-ui, sans-serif; text-align: center; background: rgba(255,255,255,.1); color: #c9d7e8; }
+  #decidebtns .stake { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 400; color: #b9d3f0; }
   /* No link (Maya, 12 Nov): the drawer locks with its reason; the clock and camera still work. */
   #nolink { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid #ff6b5a; border-radius: 8px; background: rgba(255,107,90,.12); font-size: 12.5px; line-height: 1.35; }
   #nolink b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #ff8a7a; margin-bottom: 2px; }
@@ -178,6 +186,9 @@
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
   #trimchip[hidden] { display: none; }
   /* While at the wheel the voyage controls wait. */
+  /* Watching a recorded voyage (M2, R1): nothing to steer and no ghost, so the orders and the lead cell go; Jonas's S1 dresses the rest. */
+  body.watching #orders, body.watching #orders-tab, body.watching #c-lead, body.watching #c-order { display: none; }
+  #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -472,6 +483,7 @@
   .note { padding: 6px 12px; border-left: 3px solid #8ab4ff; font-size: 13.5px; background: var(--hud-solid); border-radius: 9px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     animation: toast-in .35s cubic-bezier(.2,.8,.2,1); transition: opacity .6s, transform .6s; }
   .note .when { font-size: 10.5px; color: var(--dim); letter-spacing: .3px; }
+  .note .txt { color: #f4f8fc; }
   .note.out { opacity: 0; transform: translateY(-6px); }
   @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
   #ghosttag { position: fixed; transform: translate(-50%, -120%); font: 600 11.5px system-ui, sans-serif; color: #dbe6f5; background: var(--hud); border-radius: 8px; padding: 2px 8px;
@@ -534,9 +546,10 @@
 <div id="clock" hidden></div>
 <div id="decide" class="glass" role="dialog" aria-live="polite" aria-labelledby="decidetext" hidden>
   <div class="t">Your call</div>
+  <canvas id="decidemap" aria-hidden="true" hidden></canvas>
   <div id="decidetext"></div>
   <div id="decidebtns"></div>
-  <div class="muted" style="font-size:11px">Time is paused until you choose. The forecast is open below.</div>
+  <div id="decidefoot" class="muted" style="font-size:11px">Time is paused until you choose. Keys 1-3, or Esc for the autopilot.</div>
 </div>
 <div id="flash" aria-hidden="true"></div>
 <div id="soundask" class="glass" role="dialog" aria-label="Sound" hidden>
