@@ -3097,6 +3097,10 @@ const CHECKS = {
           await page.waitForTimeout(2500);
         }
         const st = await page.evaluate(() => { const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; const h = window.__helm ?? {}; return { url: location.search, ready: h.ready, busy: h.busy, error: h.error, hour: h.hour, day: h.status?.day, over: h.status?.over, clock: h.clock, view: h.view, frames: h.frames, rate: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, strip: document.getElementById("day")?.textContent.trim(), shown: [...document.querySelectorAll(".overlay, [role=dialog], #decide, #start, #arrive, #nl, #busy")].filter(vis).map((e) => e.id || e.className), msg: (document.getElementById("busytext") ?? document.getElementById("msg"))?.textContent?.trim() ?? null }; }).catch((e) => ({ err: String(e) }));
+        // Which way the clock is going: the picture's hour now and 10 s later.
+        await page.waitForTimeout(10_000);
+        st.hour10 = await page.evaluate(() => window.__helm?.hour).catch(() => null);
+        st.clockWay = st.hour10 == null || st.hour == null ? "unknown" : st.hour10 > st.hour + 1e-6 ? `running (${(st.hour10 - st.hour).toFixed(2)} voyage hours in 10 s)` : st.over ? "stopped at the end" : st.clock ? "set to run but not moving" : "paused";
         const path = `look-m3-${BROWSER}-${mode}-stuck.jpg`;
         if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
         console.log(`STUCK ${BROWSER} ${mode}: ${JSON.stringify(st)}`);
