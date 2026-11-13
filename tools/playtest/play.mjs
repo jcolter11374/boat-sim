@@ -1957,6 +1957,95 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #460 (the cinematic plays planned sequences; C on the helm and on Watch a voyage), against John's
+  // locked items: instruments hide (C2), N still toggles sound (C3), the clock doesn't jump (C4). On
+  // voyage.html at 4d a second, leaving the film returns to 4d with the bar unchanged.
+  "cinema-460": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      const out = [];
+      // How visible an instrument is: 0 when not drawn, hidden or faded out.
+      const shown = () => page.evaluate(() => Object.fromEntries(["strip", "timebar", "mapbox", "compass", "orders-tab", "topbar"].map((id) => {
+        const e = document.getElementById(id);
+        if (!e) return [id, null];
+        let o = 1;
+        for (let n = e; n && n.nodeType === 1; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === "none" || cs.visibility === "hidden") { o = 0; break; } o *= Number(cs.opacity); }
+        const r = e.getBoundingClientRect();
+        return [id, r.width < 2 || r.height < 2 ? 0 : +o.toFixed(2)];
+      })));
+      const film = async (name, hourOf, soundOf, maxHours) => {
+        const before = await shown();
+        const h0 = await page.evaluate(hourOf);
+        await page.keyboard.press("c");
+        await page.waitForFunction(() => document.body.classList.contains("cinema"), null, { timeout: 15_000 }).catch(() => {
+          throw new CheckFail(`${name}: C didn't start the cinematic`);
+        });
+        await page.waitForTimeout(4000); // the panels fade
+        const inside = await shown();
+        const still = Object.entries(inside).filter(([id, o]) => id !== "topbar" && o != null && o > 0.05 && before[id] > 0.05).map(([id, o]) => `#${id} (${o})`);
+        must(!still.length, `${name}: instruments still show while filming (C2): ${still.join(", ")}`);
+        // N toggles the sound and doesn't end the film (C3).
+        const s0 = await page.evaluate(soundOf);
+        await page.keyboard.press("n");
+        await page.waitForTimeout(800);
+        const s1 = await page.evaluate(soundOf);
+        must(s0 !== s1, `${name}: N didn't toggle the sound while filming (C3): ${s0} then ${s1}`);
+        must(await page.evaluate(() => document.body.classList.contains("cinema")), `${name}: N ended the film`);
+        await page.keyboard.press("n");
+        await page.waitForTimeout(800);
+        must((await page.evaluate(soundOf)) === s0, `${name}: a second N didn't put the sound back`);
+        await page.waitForTimeout(6000);
+        const h1 = await page.evaluate(hourOf);
+        must(h1 - h0 >= -1e-6 && h1 - h0 <= maxHours, `${name}: the clock went from hour ${h0.toFixed(3)} to ${h1.toFixed(3)} in about 12 s of film (C4)`);
+        await jpegLog(page, `cinema-${name}`);
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(() => !document.body.classList.contains("cinema"), null, { timeout: 15_000 }).catch(() => {
+          throw new CheckFail(`${name}: Esc didn't leave the cinematic`);
+        });
+        await page.waitForTimeout(2500);
+        const after = await shown();
+        const lost = Object.entries(before).filter(([id, o]) => o > 0.05 && !(after[id] > 0.05)).map(([id]) => `#${id}`);
+        must(!lost.length, `${name}: after leaving the film these didn't come back: ${lost.join(", ")}`);
+        return `${name}: hidden while filming (${Object.entries(before).filter(([, o]) => o > 0.05).map(([id]) => id).join(", ")}), N toggles sound, clock moved ${((h1 - h0) * 60).toFixed(1)} min in ~12 s, Esc leaves and they come back`;
+      };
+      const jpegLog = async (p, name) => {
+        const path = `look-${name}.jpg`;
+        if (BROWSER !== "chromium" || !(await jpeg(p, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+      };
+      // The helm, sailing.
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start");
+      await page.waitForTimeout(5000);
+      const rate0 = await page.evaluate(() => document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent.trim() ?? "paused");
+      out.push(await film("helm", () => window.__helm.hour, () => !!window.__sound?.on, 0.25));
+      const rate1 = await page.evaluate(() => document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent.trim() ?? "paused");
+      out.push(`helm speed ${rate0} before, ${rate1} after`);
+      // Watch a voyage at 4 days a second.
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.goto(SITE + "voyage.html?voyage=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 3 * MIN });
+      must(!(await page.evaluate(() => window.__replay.error)), "the replay didn't load");
+      const bar = () => page.evaluate(() => ({ warp: window.__replay.warp, playing: window.__replay.playing, pressed: [...document.querySelectorAll("#strip [aria-pressed=true], #timebar [aria-pressed=true]")].map((b) => b.textContent.trim()).join("|"), all: [...document.querySelectorAll("#strip button, #timebar button")].map((b) => `${b.textContent.trim()}${b.getAttribute("aria-pressed") === "true" ? "*" : ""}`).join(" ") }));
+      await page.evaluate(() => document.querySelector('#strip button[data-warp="96"]')?.click()); // 4 days a second
+      await page.waitForTimeout(1500);
+      const b0 = await bar();
+      must(b0.warp >= 90, `the 4d button didn't set 4 days a second on Watch a voyage (warp ${b0.warp}; bar ${b0.all})`);
+      // While filming a fast replay runs at a minute a second (Leo), so 12 s is well under an hour.
+      out.push(await film("voyage", () => window.__replay.hour, () => !!window.__sound?.on, 1));
+      await page.waitForTimeout(1000);
+      const b1 = await bar();
+      must(b1.warp === b0.warp, `leaving the film left the replay at ${b1.warp} hours a second, not the ${b0.warp} it had`);
+      must(b1.all === b0.all, `the speed bar changed across the film: "${b0.all}" then "${b1.all}"`);
+      out.push(`voyage back at 4d (${b1.warp} h/s), bar unchanged: ${b1.all}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
