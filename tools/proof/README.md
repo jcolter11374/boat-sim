@@ -33,6 +33,7 @@ Use `quick` while working.
 | `sea` | Kayak; every sea at midday and dusk; chase, low, long lens | 18 stills |
 | `sky` | Kayak in a calm, dawn to night (dark and moonlit); wide views | 18 stills |
 | `boats` | Every boat at force 5, golden hour, close views | 20 stills |
+| `fleet` | Every boat Set sail offers (stock boats with no replays of their own drawn on another's), force 5, golden hour, beam, close and low | 27 stills |
 | `cinematic` | The page's cinematic shots (skim, drone, sunset) on both boats | 10 clips |
 
 Views, seas, times and clips are named in `shots.json`; add or tune them there (the

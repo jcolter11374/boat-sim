@@ -18,7 +18,7 @@ import { CRUISER_HANDLING, Guide, PEARSON31_2_HANDLING, SAIL_WORDS, Wheel, trimG
 /** Boats that can be sailed by hand, their trim tables (written by vpp.py --trim) and their drafts (from their configs). */
 const TABLES: Record<string, { url: URL; handling: Handling; name: string; draftM: number }> = {
   // configs/stock_cruiser31.yaml (deep-keel First 31.7)
-  stock_cruiser31: { url: new URL("../../../configs/polars/cruiser31_trim.json", import.meta.url), handling: CRUISER_HANDLING, name: "31 ft cruiser", draftM: 1.9 },
+  stock_cruiser31: { url: new URL("../../../configs/polars/cruiser31_trim.json", import.meta.url), handling: CRUISER_HANDLING, name: "Beneteau First 31.7", draftM: 1.9 },
   stock_pearson31_2: {
     url: new URL("../../../configs/polars/pearson31_2_trim.json", import.meta.url),
     handling: PEARSON31_2_HANDLING,

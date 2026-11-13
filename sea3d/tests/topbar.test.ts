@@ -49,8 +49,8 @@ test("the boat chip: Our kayak by default on every page, my boat named safely", 
     assert.equal(d.href, "./boatyard.html");
   }
   assert.equal(boatChip(null).name, "Our kayak");
-  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Cruiser 31");
-  assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Cruiser 31");
+  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Beneteau First 31.7");
+  assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Beneteau First 31.7");
   const c = boatChip({ name: 'Rev C <b>"x"</b> & co', href: "./boatyard.html#base=revc" });
   assert.equal(c.href, "./boatyard.html#base=revc");
   // the name is passed through untouched; mountTopbar only ever sets it as textContent
@@ -84,8 +84,8 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   const names = none.map((e) => e.name);
   assert.ok(names.includes("Pearson 31-2 (our model)"));
   assert.ok(names.includes("Randolph Rev C5 (our model) →"));
-  assert.ok(names.includes("Cruiser 31"), "metric names (Leo's glossary)");
-  assert.ok(!none.some((e) => /drone|\bft\b/.test(e.name + e.fact)), "player words: robot boat, metric");
+  assert.ok(names.includes("Beneteau First 31.7"), "stock boats by their real make and model (John, B4)");
+  assert.ok(!none.some((e) => /\bdrone\b|\bft\b/.test(e.name + e.fact)), "player words: robot boat, metric");
   assert.ok(!none.some((e) => e.id === "mine"));
   assert.equal(none.at(-1)!.href, "./boatyard.html");
   // Every Randolph boat says "(our model)" (B2).
