@@ -68,7 +68,7 @@ import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 import { localTime, shortLocal } from "./replay/localtime";
-import { Cinema, filmButtons } from "./cinema";
+import { Cinema, filmButtons, heightOf } from "./cinema";
 import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { loadMyBoat } from "./myboat";
@@ -1170,7 +1170,24 @@ const cine = new Cinema({
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
   scale: () => viewScale,
+  length: () => SPEC[boatKey].length,
+  height: () => (model ? heightOf(model.root, model.root.position.y + SPEC[boatKey].cgBelowWaterline) : 0),
+  speed: () => filmStw * 1.94384,
+  moment: () => ({
+    storm,
+    knockdownAgo: Infinity,
+    recentKnockdown: !!rep && rep.events.some((e) => e.kind === "capsize" && e.h <= hour + 1e-6 && hour - e.h < 6),
+    land: null, // the place's own bearing comes through landmark()
+    ship: null,
+  }),
+  caption: () => {
+    const l = lanes[focus];
+    const name = l ? LABEL[l.key].replace(/\s*\(.*\)\s*$/, "") : "";
+    return rep ? [name, `Day ${Math.floor(hour / 24) + 1}`].filter(Boolean).join(" · ") : name;
+  },
 });
+/** The boat's speed through the water the loop last drew (m/s), for the film's pace. */
+let filmStw = 0;
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
@@ -1311,7 +1328,8 @@ renderer.setAnimationLoop(() => {
   // The live tracker's "now" moves on with the clock between feed reloads.
   if (tracked) advanceNow(tracked, liveClock.hour + (Date.now() - liveClock.at) / 3600e3);
   if (rep && playing) {
-    hour = Math.min(hour + dt * warp, endHour());
+    // Filming slows a fast replay to a minute a second, so the low sun holds through a shot (Leo).
+    hour = Math.min(hour + dt * (cine.on ? Math.min(warp, 1 / 60) : warp), endHour());
     if (hour >= endHour()) setPlaying(false);
   }
   if (rep) {
@@ -1400,6 +1418,7 @@ renderer.setAnimationLoop(() => {
       model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);
+    filmStw = stw;
     if (model && contact) {
       // Foam where the hull meets the water, spray when the bow drops into a wave.
       model.root.updateMatrixWorld();

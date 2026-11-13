@@ -19,6 +19,7 @@ import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT
 import { Buoys } from "./helm/buoys";
 import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
+import { metresPerDegree } from "./land/shader";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
@@ -63,7 +64,7 @@ import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons } from "./cinema";
+import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
@@ -384,7 +385,7 @@ const page = {
   /** A watched voyage, whole (its length, boat and ending), once its file is in; the rows so far are game.boat. */
   watch: null as WatchInfo | null,
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
-  force: { wind: -1, hs: -1 },
+  force: { wind: -1, hs: -1, skyHours: 0 },
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
@@ -453,6 +454,21 @@ const page = {
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
   },
+};
+/** For pictures and reviews: the boat's on-screen box now, in pixels of the canvas (hull, mast and all). */
+(page as unknown as { boatBox: () => { w: number; h: number; x: number; y: number } | null }).boatBox = () => {
+  if (!model) return null;
+  const b = new THREE.Box3().setFromObject(model.root);
+  const lo = new THREE.Vector2(Infinity, Infinity);
+  const hi = new THREE.Vector2(-Infinity, -Infinity);
+  for (let i = 0; i < 8; i++) {
+    const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(camera);
+    lo.min(new THREE.Vector2(p.x, p.y));
+    hi.max(new THREE.Vector2(p.x, p.y));
+  }
+  const W = renderer.domElement.width;
+  const H = renderer.domElement.height;
+  return { w: Math.round(((hi.x - lo.x) / 2) * W), h: Math.round(((hi.y - lo.y) / 2) * H), x: Math.round(((lo.x + hi.x) / 4 + 0.5) * W), y: Math.round((0.5 - (lo.y + hi.y) / 4) * H) };
 };
 (window as unknown as { __helm: typeof page }).__helm = page;
 
@@ -3444,12 +3460,20 @@ const cine = new Cinema({
     if (!r) return 0;
     const h = Math.min(hour, lastHour(r));
     const [la, lo] = positionAt(r, h);
-    return sunPosition(utc(r.start) + h * 3600e3, la, lo).el;
+    return sunPosition(utc(r.start) + (h + page.force.skyHours) * 3600e3, la, lo).el;
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
+  length: () => spec.length,
+  height: () => (model ? heightOf(model.root, model.root.position.y + spec.cgBelowWaterline) : 0),
+  speed: () => film.stw * KN,
+  moment: () => filmMoment(),
+  caption: () => {
+    const name = spec === KAYAK ? (loadMyBoat()?.name ?? "My kayak") : spec.name.replace(/\s*\(.*\)\s*$/, "");
+    return game.boat ? `${name} · Day ${Math.floor(hour / 24) + 1}` : name;
+  },
 });
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
@@ -3461,6 +3485,31 @@ Object.assign(page, {
   heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
   knockdown: () => ride?.knockdown ?? null,
 });
+/** What the frame loop last saw, for the film: speed through the water (m/s) and where. */
+const film = { stw: 0, lat: NaN, lon: NaN };
+
+/** What's happening now, for picking the film's sequence (cinema.ts). */
+function filmMoment(): Moment {
+  const r = game.boat;
+  // The clock stops while filming, so a knockdown in the last six hours still counts.
+  const recentKnockdown = !!r && r.events.some((e) => e.kind === "capsize" && e.h <= hour + 1e-6 && hour - e.h < 6);
+  const p = page.land.place ? PLACES[page.land.place] : undefined;
+  let land: Moment["land"] = null;
+  if (p && Number.isFinite(film.lat)) {
+    const { mx, my } = metresPerDegree(film.lat);
+    const x = (p.lon - film.lon) * mx;
+    const z = -(p.lat - film.lat) * my;
+    if (Math.hypot(x, z) < 40000) land = { bearing: (THREE.MathUtils.radToDeg(Math.atan2(x, -z)) + 360) % 360, name: p.name };
+  }
+  const sh = page.ships;
+  return {
+    storm,
+    knockdownAgo: clock.getElapsedTime() - kick.t,
+    recentKnockdown,
+    land,
+    ship: sh.nearest < 6000 ? { bearing: sh.bearing, km: sh.nearest / 1000 } : null,
+  };
+}
 
 // ---------- frame ----------
 const clock = new THREE.Clock();
@@ -3886,6 +3935,7 @@ renderer.setAnimationLoop(() => {
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
+  film.stw = stw;
   if (model) {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
@@ -3953,8 +4003,10 @@ renderer.setAnimationLoop(() => {
     ghost.hide();
     page.ghost.shown = false;
   }
-  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
+  const ms = (r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3) + page.force.skyHours * 3600e3;
   const sp = sunPosition(ms, lat, lon);
+  film.lat = lat;
+  film.lon = lon;
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
   if (Number.isFinite(lat)) sea.setBay(inChesapeake(lat, lon));
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
