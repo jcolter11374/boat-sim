@@ -6,6 +6,7 @@
 // The simple surface follower (standin.ts) is kept as a fallback.
 
 import * as THREE from "three";
+import { ownWetMaterials } from "./boats/inWater";
 import { detailFor } from "./seaDetail";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -27,7 +28,7 @@ import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec } from "./titleHero";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
@@ -202,12 +203,16 @@ titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
 let hero: Boat | null = null;
 const heroOn = () => document.body.classList.contains("title");
 const heroPlace: Placement = { x: 0, z: 0, yaw: 0 };
+let heroSink = 0; // m: the title's boat sits this much deeper (heroWaterlineFor)
+let heroMats: THREE.Material[] = []; // her own copies of the materials at the water (ownWetMaterials)
 function buildHero(q: Quality): void {
   if (hero) {
     scene.remove(hero.model.root, hero.wake.points, hero.contact.collar, hero.contact.spray);
     hero.model.dispose();
     hero.wake.dispose();
     hero.contact.dispose();
+    for (const m of heroMats) m.dispose();
+    heroMats = [];
     hero = null;
   }
   if (!heroOn()) return;
@@ -215,6 +220,13 @@ function buildHero(q: Quality): void {
   const model = BUILDERS[spec.key](q);
   const contact = new Contact(model.form, spec, q);
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec.key !== "randolph";
+  // A white hull's wet line at the sea, hers alone (Elena; Lena: not the shared in-water hook).
+  const wl = heroWaterlineFor(spec.key);
+  heroSink = wl.sink;
+  if (wl.wet > 0) {
+    heroMats = ownWetMaterials(model.root, spec.cgBelowWaterline + heroSink);
+    contact.wetTitle(model.root, heroMats, wl.wet);
+  }
   const wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
@@ -504,7 +516,7 @@ const frame = (): void => {
     const b = hero;
     b.motion.advance(comps, t);
     const root = b.model.root;
-    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline, b.place.z);
+    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline - heroSink, b.place.z);
     root.rotation.set(b.motion.roll, b.place.yaw, b.motion.pitch, "YZX");
     b.model.animate(t);
     b.wake.update(comps, t, b.place);

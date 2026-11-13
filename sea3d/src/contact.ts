@@ -189,6 +189,7 @@ export class Contact {
   /** This hull's bow wave and wash in the sea (boatWash.ts), and its wet line (boats/inWater.ts). */
   private readonly wash: WashSlot | null;
   private readonly water: ReturnType<typeof putInWater> | null;
+  private titleWet: { look: ReturnType<typeof putInWater>; strength: number } | null = null;
   private wlMid = 0;
   private wlLength = 0;
   private wlHalfBeam = 0;
@@ -304,6 +305,15 @@ export class Contact {
   private readonly beam: number;
   private readonly spec: BoatSpec;
 
+  /**
+   * The title's boat (Elena, 13 Nov): the light in-water look (inWater.ts lite) on just the
+   * materials given (her own copies, ownWetMaterials), the sea under her taken as a plane.
+   * strength 0..1: how dark the wet band and line go.
+   */
+  wetTitle(root: THREE.Object3D, materials: readonly THREE.Material[], strength: number): void {
+    this.titleWet = { look: putInWater(root, true, new Set(materials)), strength };
+  }
+
   /** Bow point in the boat frame (x ahead, z starboard), for the bow clearance. */
   get bow(): [number, number] {
     return [this.bowX, 0];
@@ -383,6 +393,7 @@ export class Contact {
     }
     this.wash?.set(cx, cz, place.yaw, this.wlLength, 2 * this.wlHalfBeam, s.speed, this.low ? 0 : THREE.MathUtils.clamp(0.2 * seaK + 0.7 * Math.min(speedK, 1.2), 0, 1));
     this.water?.update({ wetH: 0.05 + 0.03 * Math.min(speedK, 1.2) + 0.12 * seaK + this.wetBoost, foam: THREE.MathUtils.clamp(0.3 + 0.4 * speedK + 0.3 * seaK, 0, 1), light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5), plane: this.low ? this.seaPlane(comps, t, place, cx, cz) : undefined });
+    this.titleWet?.look.update({ wetH: 0.06 + 0.1 * seaK, foam: 0, light: s.light, rough: THREE.MathUtils.smoothstep(hs, 1.5, 4.5), plane: this.seaPlane(comps, t, place, cx, cz), strength: this.titleWet.strength });
 
     // Spray: when the bow drops into the water fast, throw a sheet of drops out
     // to both sides; a little steady spray at speed in a rough sea.
