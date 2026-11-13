@@ -80,3 +80,11 @@ test("a boat whose track ended early stays at its last row, and one that arrived
   assert.equal(home.boat.km_to_finish, 0);
   assert.equal(home.boat.outcome, "arrived");
 });
+
+test("a status without weather still gets the picture's weather from the rows", () => {
+  const { weather: _none, ...bare } = status;
+  const s = statusAtPicture(bare as Status, boat, ghost, 12);
+  assert.ok(Math.abs(s.weather!.wind_u - 6.2) < 1e-9);
+  assert.ok(Math.abs(s.weather!.hs - 1.12) < 1e-9);
+  assert.ok(Math.abs(s.weather!.current_u - 0.1) < 1e-9);
+});

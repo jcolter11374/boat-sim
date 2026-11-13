@@ -101,7 +101,7 @@ export function drawPostcard(view: HTMLCanvasElement, map: HTMLCanvasElement | n
   g.fillText(t.guess, px + 8, px + ph + 170);
   g.font = "400 20px system-ui, 'Segoe UI', sans-serif";
   g.fillStyle = "#7a8794";
-  g.fillText("A simulated voyage in the real weather of 2020 · boat-sim", px + 8, H - px - 6);
+  g.fillText("A voyage in the real weather of 2020 · Bluewater", px + 8, H - px - 6);
   return c;
 }
 

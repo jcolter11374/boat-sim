@@ -1066,6 +1066,93 @@ const CHECKS = {
       return `${shots.length} looks: ${shots.join(", ")}`;
     },
   },
+  // Manual: looks at "Continue your voyage" (#462, #465) and at Race it on the sailing screen
+  // (#456, #469) on the live site, printed to the log like "look". Both need the simulator.
+  "look-continue-race": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const out = [];
+      const shot = async (name) => {
+        const path = `lcr-${BROWSER}-${name}.jpg`;
+        if (!(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+      };
+      const ready = () => page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      // 1. Sail a crossing for a day or so, then leave: the title and the Set sail card offer it back.
+      await helmStart(page);
+      await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="6"]')?.click());
+      await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 1.5, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForTimeout(3000);
+      const savedDay = () => page.evaluate(() => { try { return JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null")?.day ?? null; } catch { return null; } });
+      const left = { day: await page.evaluate(() => window.__helm.status?.day), savedAtPause: await savedDay() };
+      // The save runs on a 15 s timer (voyageKeeper.ts), so at speed it trails the boat. Paused,
+      // the next save catches up: wait for that, so "where she was left" is one known day.
+      await page.waitForFunction((d) => { try { return Math.abs((JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null")?.day ?? -9) - d) < 0.05; } catch { return false; } }, left.day, { timeout: 40_000 }).catch(() => {});
+      left.saved = await savedDay();
+      must(left.saved !== null, `no crossing was saved in the browser after sailing to day ${left.day}`);
+      must(Math.abs(left.saved - left.day) < 0.05, `paused at day ${left.day?.toFixed(2)} for 40 s, but the save still says day ${left.saved?.toFixed(2)}`);
+      out.push(`paused at day ${left.day?.toFixed(2)}; the save said day ${left.savedAtPause === null ? "nothing" : left.savedAtPause.toFixed(2)} at that moment, and day ${left.saved.toFixed(2)} within 40 s`);
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      for (const [w, h, tag] of [[1280, 720, "1280"], [375, 667, "375"]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 20, null, { timeout: 2 * MIN }).catch(() => {});
+        await page.waitForTimeout(4000);
+        const t = await page.evaluate(() => { const a = document.getElementById("t-continue"); const c = document.getElementById("title"); return { shown: !!a && !a.hidden && a.offsetParent !== null, text: (a?.innerText ?? "").replace(/\s+/g, " "), scrolls: c.scrollHeight > c.clientHeight + 1 }; });
+        await shot(`title-${tag}`);
+        must(t.shown, `the title doesn't offer "Continue your voyage" at ${tag} after a crossing was left at day ${left.day}`);
+        out.push(`title ${tag}: "${t.text}"${t.scrolls ? " (the menu scrolls inside itself)" : ""}`);
+        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.waitForTimeout(3000);
+      const card = await page.evaluate(() => { const c = document.getElementById("ss-continue"); return { shown: !!c && !c.hidden, text: (c?.innerText ?? "").replace(/\s+/g, " ") }; });
+      await shot("card");
+      must(card.shown, "the Set sail card doesn't offer the saved crossing");
+      await page.click("#go", { noWaitAfter: true, timeout: 30_000 });
+      await page.waitForTimeout(1000);
+      const ask = await page.evaluate(() => { const a = document.getElementById("ss-ask"); return { shown: !!a && !a.hidden, text: (a?.innerText ?? "").replace(/\s+/g, " ") }; });
+      await shot("ask");
+      must(ask.shown, "Set sail didn't ask before a new crossing ends the saved one");
+      out.push(`card: "${card.text}"; ask: "${ask.text}"`);
+      await page.click("#ss-ask-keep", { noWaitAfter: true, timeout: 15_000 });
+      await page.waitForFunction(() => /continue=1/.test(location.search) && window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await ready();
+      await page.waitForTimeout(5000);
+      const back = await page.evaluate(() => ({ day: window.__helm.status?.day, err: window.__helm.error, clock: window.__helm.clock, rt: document.querySelector("#timebar .rate")?.dataset.rate }));
+      await shot("continued");
+      must(!back.err && Math.abs((back.day ?? 0) - left.day) < 0.1, `"Keep sailing" didn't come back where she was left: left day ${left.day}, back ${JSON.stringify(back)}`);
+      must(back.rt === "rt", `Real time isn't first on the speed bar after continuing (${back.rt})`);
+      out.push(`continued at day ${back.day?.toFixed(2)} (left at ${left.day?.toFixed(2)})`);
+      // 2. Race it on the sailing screen: our kayak against our model of the Rev C5, 1 May 2020.
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await page.goto(SITE + "helm.html?race=kayak,revc&launch=2&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await ready();
+      await page.waitForTimeout(5000);
+      const bar = () => page.evaluate(() => ({ view: window.__helm.view, day: window.__helm.status?.day, over: !!window.__helm.status?.over, err: window.__helm.error, shown: !document.getElementById("timebar").hidden, rates: [...document.querySelectorAll("#timebar .rate")].filter((e) => e.offsetParent).map((e) => e.dataset.rate + (e.getAttribute("aria-pressed") === "true" ? "*" : "")), strip: document.getElementById("strip").innerText.replace(/\s+/g, " ") }));
+      const r0 = await bar();
+      await shot("race-start");
+      must(!r0.err && r0.view === "race", `the race didn't open on the sailing screen: ${JSON.stringify(r0)}`);
+      must(r0.shown && r0.rates[0]?.startsWith("rt"), `Real time isn't first on the race's speed bar: ${JSON.stringify(r0.rates)}`);
+      await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="24"]')?.click());
+      await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 3 || window.__helm.status?.over, null, { timeout: 4 * MIN }).catch(() => {});
+      await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForTimeout(4000);
+      const r1 = await bar();
+      await shot("race-day3");
+      out.push(`race: opens (${r0.rates.join(" ")}), strip "${r0.strip.slice(0, 160)}"; later day ${r1.day?.toFixed(1)}, over ${r1.over}, strip "${r1.strip.slice(0, 160)}"`);
+      return out.join("; ");
+    },
+  },
   // #385 (Felix): sound waits for a click, "No thanks" is remembered, N and the speaker button
   // agree, cinematic with sound on is clean, and a remembered "on" returns at the first click,
   // never on load. Nobody can hear on a runner: this checks state and errors, not the sound.
@@ -1101,11 +1188,14 @@ const CHECKS = {
       // The question waits: it comes a minute in, or after the first call, whichever is first (#406, Leo).
       const asked = await askedWithin(90_000);
       must(asked, `"Sound on?" was never asked in the first 90 s after Set sail`);
-      const clicked = await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true, () => false);
+      // Pressed in the page: on a runner Playwright's own click could wait out the question's 20 s, and
+      // the "asked again" assertions below were then skipped. Now it lands, or the check fails saying so.
+      const clicked = await page.evaluate(() => { if (document.getElementById("soundask").hidden) return false; document.getElementById("soundno").click(); return true; });
+      must(clicked, `"Sound on?" showed but had closed again before "No thanks" could be pressed`);
       await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 });
       s = await soundState(page);
-      if (clicked) must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
-      out.push(`load: no AudioContext, button off; "Sound on?" asked within 90 s of Set sail, ${clicked ? '"No thanks" stored "off"' : "closed by itself"}`);
+      must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
+      out.push(`load: no AudioContext, button off; "Sound on?" asked within 90 s of Set sail, "No thanks" stored "off"`);
       // 2. Second visit after "No thanks": no question.
       await calmReload(page);
       await loaded();
@@ -1114,7 +1204,7 @@ const CHECKS = {
       await sailed();
       // The question would come up to a minute in (or after the first call): watch as long as step 1 allows before saying it didn't.
       const again = await askedWithin(90_000);
-      if (clicked) must(!again, `"Sound on?" was asked again after "No thanks"`);
+      must(!again, `"Sound on?" was asked again after "No thanks"`);
       s = await soundState(page);
       must(s.contexts === 0, `sound started after "No thanks" without N or the button (${s.contexts} AudioContext)`);
       out.push(`reload after "No thanks": not asked again in 90 s, still silent`);

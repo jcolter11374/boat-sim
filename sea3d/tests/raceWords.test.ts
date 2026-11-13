@@ -1,7 +1,7 @@
 // A race's names on the strip, the chart and the far boat's tag (src/helm/raceWords.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { farBoatTag, raceLead, raceLine, shortRacer } from "../src/helm/raceWords.ts";
+import { bareRacer, farBoatTag, raceLead, raceLine, shortRacer } from "../src/helm/raceWords.ts";
 import { raceName } from "../src/helm/raceSource.ts";
 
 const NAMES: [string, string] = ["Our kayak", raceName("Randolph Rev C")];
@@ -28,8 +28,13 @@ test("the far boat's tag carries its name, never \"Ghost\" or \"You\"", () => {
   assert.equal(farBoatTag(NAMES[0], 0.3), "Our kayak · alongside");
 });
 
-test("the big map's line says which boat is ahead of which, by full name", () => {
-  assert.equal(raceLine(59.4, NAMES), "Our kayak is 59 km ahead of Randolph Rev C5 (our model)");
-  assert.equal(raceLine(-12, NAMES), "Randolph Rev C5 (our model) is 12 km ahead of Our kayak");
-  assert.equal(raceLine(0.2, NAMES), "Our kayak and Randolph Rev C5 (our model) are level");
+test("the big map's line says which boat is ahead of which, in the panel's short names", () => {
+  assert.equal(raceLine(59.4, NAMES), "Our kayak is 59 km ahead of Rev C5");
+  assert.equal(raceLine(-12, NAMES), "Rev C5 is 12 km ahead of Our kayak");
+  assert.equal(raceLine(0.2, NAMES), "Our kayak and Rev C5 are level");
+  // Only the panel drops it: the names that stand alone keep "(our model)" (B2).
+  assert.equal(bareRacer(NAMES[1]), "Rev C5");
+  assert.match(shortRacer(NAMES[1]), /\(our model\)$/);
+  assert.match(farBoatTag(NAMES[1], 3), /\(our model\)/);
+  assert.match(raceLead(-5, NAMES).label, /\(our model\)$/);
 });

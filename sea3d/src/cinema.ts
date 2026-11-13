@@ -77,6 +77,7 @@ export interface CinemaHost {
 export type ShotKind =
   | "establish"
   | "alongside"
+  | "sternlight"
   | "bowon"
   | "stern"
   | "skim"
@@ -120,7 +121,8 @@ export const SHOTS: Record<ShotKind, ShotDef> = {
   // third or more, details fill it. Never under 6% of the width, not even the drone's release:
   // no sequence ends on a pull-away to a dot (Elena, Leo, 12 Nov; John's complaint).
   establish: { ref: "bow", from: C(122, 0.13, 0.33, 3, 15), to: C(116, 0.16, 0.33, 3, 15), len: [4.5, 6] },
-  alongside: { ref: "bow", from: C(96, 0.42, 0.33, 2, 26), to: C(68, 0.45, 0.33, 2, 26), len: [6, 9] },
+  // A tenth further back than round 3 (Elena, 13 Nov): in a gale the kayak's stern lamp touched the frame's edge.
+  alongside: { ref: "bow", from: C(96, 0.38, 0.33, 2, 26), to: C(68, 0.4, 0.33, 2, 26), len: [6, 9] },
   bowon: { ref: "bow", from: C(18, 0.3, 0.3, 1.5, 34), to: C(24, 0.34, 0.3, 1.5, 34), len: [6, 8], low: true },
   stern: { ref: "bow", from: C(150, 0.36, 0.33, 1.6, 34), to: C(156, 0.38, 0.33, 1.6, 34), len: [6, 8] },
   // Horizon high: a big sky over a low camera read as a fog ceiling (Leo, 12 Nov).
@@ -129,6 +131,8 @@ export const SHOTS: Record<ShotKind, ShotDef> = {
   sterndetail: { ref: "bow", from: L(150, 1.4, 0.3, 0.05, 42, [-0.5, 0.1]), to: L(146, 1.5, 0.3, 0.05, 42, [-0.5, 0.1]), len: [4, 6], low: true },
   bowdetail: { ref: "bow", from: L(38, 1.4, 0.3, 0.05, 42, [0.45, 0.2]), to: L(44, 1.5, 0.3, 0.05, 42, [0.45, 0.2]), len: [4, 6], low: true },
   light: { ref: "bow", from: C(120, 0.55, 0.3, 1.5, 36, [-0.1, 0.3]), to: C(110, 0.6, 0.3, 1.5, 36, [-0.1, 0.3]), len: [6, 8], low: true },
+  // Night's third shot (Elena, 13 Nov): from astern, low, her stern lamp and her shape against the horizon's glow.
+  sternlight: { ref: "bow", from: C(160, 0.4, 0.4, 1.2, 34, [-0.3, 0.3]), to: C(168, 0.44, 0.4, 1.2, 34, [-0.3, 0.3]), len: [6, 8], low: true },
   drone: { ref: "bow", from: L(128, 0.4, 0.45, -0.05, 40), to: L(150, 0.12, 0.9, -0.3, 46), len: [8, 10] },
   stormlow: { ref: "bow", from: C(42, 0.4, 0.33, 2, 32), to: C(48, 0.44, 0.33, 2, 32), len: [4, 6], low: true, roll: true },
   heel: { ref: "bow", from: C(90, 0.5, 0.33, 2.2, 30), to: C(90, 0.6, 0.33, 2.2, 30), len: [6, 7], locked: true },
@@ -146,8 +150,9 @@ export const SEQUENCES: Record<SequenceKind, (ShotKind | ShotKind[])[]> = {
   storm: ["establish", "stormlow", "stern", "stormlow", "alongside"],
   knockdown: ["heel", "sterndetail", "drone"],
   golden: ["sunset", "alongside", "sunset"],
-  // Night is short and close: the boat's own light carries it (Elena, 12 Nov).
-  night: ["light", "alongside"],
+  // Night is short and close: the boat's own light carries it (Elena, 12 Nov). Three shots, and each
+  // night sequence films from the other side to the last, so a minute of night isn't one side view.
+  night: ["light", "alongside", "sternlight"],
 };
 
 /** How long shots run in each sequence: storms quicker, calm and night slower. */
@@ -322,6 +327,8 @@ export class Cinema {
   /** Sequence names so far. */
   readonly sequences: SequenceKind[] = [];
   private seq: { kind: SequenceKind; shots: ShotKind[]; i: number; side: number } | null = null;
+  /** The side the last night sequence was filmed from (0 = none yet): the next takes the other. */
+  private nightSide = 0;
   private shot: Shot | null = null;
   private t = 0;
   private saved: { pos: THREE.Vector3; target: THREE.Vector3; fov: number; enabled: boolean } | null = null;
@@ -382,6 +389,7 @@ export class Cinema {
     this.log.length = 0;
     this.sequences.length = 0;
     this.seq = null;
+    this.nightSide = 0;
     this.anchor = null;
     this.camY = null;
     this.lastShot = null;
@@ -453,12 +461,17 @@ export class Cinema {
   /**
    * Which side of the boat to film from: the one that puts the sun behind the boat, so
    * it's rim-lit with the glitter on the water, not flat and front-lit (Elena). At night
-   * either side will do.
+   * either side will do, so night sequences alternate.
    */
   private sideFor(first: ShotKind): number {
     const def = SHOTS[first];
     const sd = this.host.sunDir();
-    if (this.host.sunEl() < -6 || def.ref === "sun" || Math.hypot(sd.x, sd.z) < 1e-6) return Math.random() < 0.5 ? -1 : 1;
+    if (this.host.sunEl() < -6) {
+      // Night: either side will do for the light, so take turns (Elena, 13 Nov).
+      this.nightSide = this.nightSide ? -this.nightSide : Math.random() < 0.5 ? -1 : 1;
+      return this.nightSide;
+    }
+    if (def.ref === "sun" || Math.hypot(sd.x, sd.z) < 1e-6) return Math.random() < 0.5 ? -1 : 1;
     const yaw = this.host.yaw();
     const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
     const into = (side: number) => {
