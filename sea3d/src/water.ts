@@ -636,7 +636,15 @@ outgoingLight *= 1.0 - 0.6 * washShade(vWPos.xz) * (1.0 - foamMask);
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec4 pc = uMirrorM * vec4(vWPos.x, uMirrorY, vWPos.z, 1.0);
-  vec2 uv = pc.xy / pc.w + nWm.xz * (0.1 + 0.25 * (1.0 - uMirror)); // the ripples break it up
+  // The ripples break it up: the image shifts on screen the way the surface tilts there
+  // (the normal against flat water's, in the camera's frame), not along the world's axes,
+  // which slid the whole reflection sideways with the boat's heading (Elena).
+  vec2 tilt = normal.xy - (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xy;
+  float pin = 1.0;
+#ifndef SEA_LITE
+  pin = washPin(vWPos.xz); // joined to a hull's waterline, freer further out
+#endif
+  vec2 uv = pc.xy / pc.w + tilt * (0.1 + 0.25 * (1.0 - uMirror)) * pin;
   // Three taps smeared up and down, as ripples stretch a reflection (Ines r5: not
   // mirror-crisp, no stair-stepped edge). The mirror clears to transparent black, so
   // un-premultiply or the edges go dark.
@@ -768,7 +776,7 @@ export class Sea {
         .replace("#include <fog_fragment>", "#include <fog_fragment>\n" + FRAG_HAZE)
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v15-washlite";
+    material.customProgramCacheKey = () => "boatsim-sea-v16-pin";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls (and "See under the water" lets them show through)
     this.mesh.frustumCulled = false;
