@@ -1464,7 +1464,7 @@ renderer.setAnimationLoop(() => {
       }
       eqQuiet = false;
     }
-    wake?.update(comps, t, place, stw);
+    wake?.update(comps, t, place, stw, hs);
     // Camera rides the swell.
     const dy = motion.heave - rigHeave;
     rigHeave = motion.heave;
