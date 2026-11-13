@@ -53,7 +53,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
-import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage } from "./helm/voyageSave";
+import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, welcomeBack } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
@@ -1658,11 +1658,15 @@ const PRACTICE = SS.where === "annapolis" && !SPECTATE; // ?where=annapolis, or 
 /** The boat's name on the offer: the Set sail card's (the player's own words for their design);
  * for a voyage that came back, the name it was saved with. */
 let keptBoat: string | null = null;
+/** The day that was on the screen when a voyage that came back was left (null if its save doesn't say). */
+let keptLeft: number | null = null;
 if (!SPECTATE && !PRACTICE && !THEIRS)
   new VoyageKeeper(
     () => {
       const st = page.ready ? page.status : null;
-      return st ? { day: st.day, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge } : null;
+      if (!st) return null;
+      // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
+      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]) };
     },
     () => game.save(),
   ).start();
@@ -3481,6 +3485,7 @@ async function begin(): Promise<void> {
         const was = loadVoyage();
         const r = was?.code === shared ? (was.rate === SAVED_REAL_TIME ? REAL_TIME : was.rate) : 0;
         keptBoat = was?.code === shared ? was.boat : "";
+        keptLeft = was?.code === shared ? was.left : null;
         if ([REAL_TIME, 1, 6, 24, 96].includes(r)) lastRate = r;
         // A challenge's one big call was asked before you left: it isn't asked twice.
         const callDay = mission()?.goal.call_day;
@@ -3513,7 +3518,12 @@ async function begin(): Promise<void> {
     page.ready = true;
     sailedAt = performance.now();
     shownTo = shared ? lastHour(game.boat!) : 0;
+    // Your own voyage comes back on the day that was on the screen when you left, not where the
+    // simulator had run ahead to (half a day at 6 h a second): the picture plays on from there.
+    if (RESUMED && keptLeft !== null) shownTo = Math.min(shownTo, keptLeft * 24);
     hour = shownTo;
+    // What happened before you left was told then: it isn't told again over the welcome.
+    if (RESUMED) for (const who of ["boat", "ghost"] as const) shownEvents[who] = rep(who)?.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6).length ?? 0;
     lastCallH = shared ? hour : -Infinity; // a shared game's quiet spell starts where it was left
     resetPois();
     present();
@@ -3525,7 +3535,7 @@ async function begin(): Promise<void> {
     if (WATCH) watchLook();
     document.body.classList.toggle("racing", RACE);
     const d = `Day ${page.status!.day.toFixed(1)}`;
-    if (RESUMED) note(`Welcome back. It's day ${page.status!.day.toFixed(1)}, right where you left off. Press play to carry on.`, d, TONE_COLOUR.info);
+    if (RESUMED) note(welcomeBack(hour / 24, keptLeft), `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.info);
     else if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
@@ -4189,7 +4199,9 @@ function frameBoat(dt: number): void {
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
     // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
     const band = phoneBand();
-    const at = !phone ? 0.5 : spec.length > 5 ? (band.bottom - 0.3 * (band.bottom - band.top)) / window.innerHeight : 0.2;
+    // The kayak sits a fifth of the way down, or higher when a taller card (Who steers, Race against) leaves
+    // less sea: her waterline 95 px above the card's top, so the whole hull is clear of it (Elena).
+    const at = !phone ? 0.5 : spec.length > 5 ? (band.bottom - 0.3 * (band.bottom - band.top)) / window.innerHeight : Math.min(0.2, (band.bottom - 95) / window.innerHeight);
     ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);
