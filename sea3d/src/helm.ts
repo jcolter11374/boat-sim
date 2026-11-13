@@ -4397,7 +4397,7 @@ renderer.setAnimationLoop(() => {
       rudder: model.gear.shown.rudder,
     });
   }
-  wake?.update(comps, t, place, stw);
+  wake?.update(comps, t, place, stw, hs);
   const dy = motion.heave - rigHeave;
   rigHeave = motion.heave;
   camera.position.y += dy;
