@@ -7,10 +7,10 @@
 // radios, #launch, #challenge), so begin() reads them as before. Annapolis goes through Rosa's
 // startVoyage (window.__setsail.start), which reloads into practice with the choices.
 import { implied, SET_SAIL, type SetSail } from "./setsail";
-import { onMyBoatChange, type MyBoat } from "../myboat";
+import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { continueLink, loadVoyage, offerWords } from "./voyageSave";
-import { WHO_WORDS, watchDay, watchDays, type Who } from "./whoSteers";
+import { RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -67,9 +67,11 @@ export interface CardHooks {
   /** Your best time on a course in a wind ("14:32"), or null before a first finish. */
   best?: (course: string, breeze: string) => string | null;
   /** Who steers (M2, R2): the pick the page opens on, the voyages the autopilot has sailed, and how to go and watch one. */
-  who?: { who: Who; day: string };
+  who?: { who: Who; day: string; against?: string };
   voyages?: Promise<IndexEntry[]>;
   watch?: (file: string) => void;
+  /** Race against (M2, R4): go and race boat a against boat b, launched that day. */
+  race?: (a: RaceId, b: RaceId, day: string) => void;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -107,6 +109,15 @@ export function mountSetSailCard(hooks: CardHooks): void {
   let sailed: IndexEntry[] = [];
   /** The voyage Set sail opens with the autopilot steering; null with you steering, or when she hasn't sailed that day. */
   let voyage: string | null = null;
+  // Race against: nobody, or another boat (only with the autopilot steering).
+  let rival: "nobody" | "boat" = hooks.who?.against ? "boat" : "nobody";
+  let other: RaceId | null = (hooks.who?.against as RaceId | undefined) || null;
+  /** The race Set sail starts: [your boat, the other boat, the day]; null when it isn't a race, or she'd race herself. */
+  let race: [RaceId, RaceId, string] | null = null;
+  const mineName = () => {
+    const m = loadMyBoat();
+    return m && m.kind === "yard" && !(m.base === "kayak" && m.hash === "") ? m.name : null;
+  };
   const launch = $<HTMLSelectElement>("launch");
   const challenge = $<HTMLSelectElement>("challenge");
   const more = $<HTMLDetailsElement>("more");
@@ -145,8 +156,25 @@ export function mountSetSailCard(hooks: CardHooks): void {
       who = k as Who;
       draw();
     });
-    $("ss-who-line").textContent = WHO_WORDS[auto ? "autopilot" : "you"].line;
-    $("ss-after").textContent = WHO_WORDS[auto ? "autopilot" : "you"].after;
+    // Race against: with you, a plain line naming the rival (the ghost); with the autopilot, nobody or another boat.
+    const mine = raceId(checkedBoat()?.value ?? "");
+    const racing = auto && !!hooks.race && !!mine && rival === "boat";
+    // The other boat is never your own (Elena: an identical boat on the same autopilot is a dead heat).
+    const against = racing ? (other && other !== mine ? other : defaultRival(mine!)) : null;
+    // With a race picked the race line says it all, so the autopilot's own line makes room (Elena; the card must fit a phone).
+    $("ss-who-line").textContent = racing ? "" : WHO_WORDS[auto ? "autopilot" : "you"].line;
+    $("ss-who-line").hidden = racing;
+    $("ss-rival").hidden = !whoShown || !hooks.race || (auto && !mine);
+    $("ss-rival-opts").hidden = !auto;
+    if (auto)
+      pills($("ss-rival-opts"), (["nobody", "boat"] as const).map((k) => ({ key: k, label: RIVAL_WORDS[k].pill })), racing ? "boat" : "nobody", (k) => {
+        rival = k as typeof rival;
+        draw();
+      });
+    $("ss-rival-line").textContent = !auto ? RIVAL_WORDS.you : against && against === mine ? RIVAL_WORDS.same : RIVAL_WORDS[racing ? "boat" : "nobody"].line;
+    $("ss-against").hidden = !racing;
+    $("ss-against-name").textContent = against ? rivalName(against, mineName()) : ""; // a player's own name for a design: text only
+    $("ss-after").textContent = racing ? RIVAL_WORDS.boat.after : WHO_WORDS[auto ? "autopilot" : "you"].after;
     // Annapolis: the course and the breeze instead of the boat, the day and the challenge.
     $("ss-course").hidden = !show.courseShown;
     // The crossing's options (how you steer, breakdowns, the battery) don't apply to practice, or to a voyage the autopilot steers.
@@ -164,12 +192,14 @@ export function mountSetSailCard(hooks: CardHooks): void {
     // Launch day: Calm, Rough, or another day from the full list.
     $("ss-when").hidden = !show.whenShown;
     // With the autopilot: the days she has sailed, as plain dates (no hint of how each ends: finding out is the point).
-    const days = auto ? watchDays(sailed, checkedBoat()?.value ?? "") : [];
+    // A race can start on any of the six launches, whether or not she has sailed that day before.
+    const days = racing ? RACE_DAYS.map((d) => ({ day: d, label: dayLabel(d), year: d.slice(0, 4), file: "" })) : auto ? watchDays(sailed, checkedBoat()?.value ?? "") : [];
     const on = auto ? watchDay(days, day) : null;
-    voyage = on?.file ?? null;
+    voyage = racing ? null : (on?.file ?? null);
+    race = racing && on && against !== mine ? [mine!, against!, on.day] : null;
     $("ss-when-line").hidden = !auto || !!on;
     $("ss-when-line").textContent = auto && !on ? WHO_WORDS.none : "";
-    $("go").toggleAttribute("aria-disabled", auto && !on);
+    $("go").setAttribute("aria-disabled", String(auto && !voyage && !race));
     const lv = launch.value;
     const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : lv;
     // "Pick a day…" opens the other launch days as pills of their own, like the challenges' "More…"
@@ -258,7 +288,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
       // With the autopilot steering, Set sail opens her voyage of that day on this same screen.
       if (where === "ocean" && who === "autopilot" && hooks.watch && sailed.length > 0) {
         e.stopImmediatePropagation();
-        if (voyage) hooks.watch(voyage);
+        if (race) hooks.race?.(...race);
+        else if (voyage) hooks.watch(voyage);
         return;
       }
       if (where !== "annapolis") return;
@@ -270,6 +301,29 @@ export function mountSetSailCard(hooks: CardHooks): void {
   // Change: the same as the top bar's "My boat" chip (it opens the boat picker); a new "my boat"
   // ticks its row here, and a design with no row reloads the page into it.
   $("ss-change").addEventListener("click", () => document.getElementById("topbar-boat")?.click());
+  // The other boat: the same picker, with its own title and button. It picks the rival only; "my boat" is untouched.
+  $("ss-against-change").addEventListener("click", () => {
+    const mine = raceId(checkedBoat()?.value ?? "");
+    if (!mine) return;
+    const name = mineName();
+    void import("../ui/boatPicker").then((m) =>
+      m.openBoatPicker(document, {
+        title: RIVAL_WORDS.picker,
+        button: RIVAL_WORDS.pick,
+        picked: other && other !== mine ? other : defaultRival(mine),
+        entries: [
+          { id: "kayak", group: "Ours" as const, name: rivalName("kayak", null), fact: "a 3 m solar robot boat: two small electric motors, no sail" },
+          { id: "revc", group: "The Randolph team's boats" as const, name: rivalName("revc", null), fact: "the Randolph team's wing-sail robot boat" },
+          { id: "revb", group: "The Randolph team's boats" as const, name: rivalName("revb", null), fact: "the Randolph team's Rev B design of the same boat" },
+          ...(name ? [{ id: "mine", group: "Your designs" as const, name, fact: "your boat from the Boatyard" }] : []),
+        ].filter((e) => e.id !== mine),
+        choose: (id) => {
+          other = id as RaceId;
+          draw();
+        },
+      }),
+    );
+  });
   onMyBoatChange((b: MyBoat | null) => {
     const v = !b || (b.kind === "yard" && b.base === "kayak" && b.hash === "") ? "" : b.kind === "stock" ? b.base : "mine";
     const row = document.querySelector<HTMLInputElement>(`input[name="boat"][value="${v}"]`);
