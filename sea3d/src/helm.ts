@@ -72,7 +72,7 @@ import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
 import { Hud, setRacers, showStrip } from "./helm/hud";
 import { bareRacer, farBoatTag, raceLine } from "./helm/raceWords";
-import { slideRoom } from "./framing";
+import { bandLine, slideRoom } from "./framing";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
 import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
@@ -105,6 +105,9 @@ controls.maxDistance = 60;
 controls.maxPolarAngle = Math.PI * 0.495;
 camera.position.set(-6.5, 2.2, -3.5); // from her port side, so she heads right-to-left before the start (Ines)
 controls.target.set(0, 0.3, 0);
+// A phone held upright: stand a little further back. From the wide window's distance she filled the band of sea above
+// the Set sail card with no air under her, and at sea she spanned most of the screen's width.
+if (window.innerWidth < 700 && window.innerHeight > window.innerWidth) camera.position.sub(controls.target).multiplyScalar(1.3).add(controls.target);
 const atmos = new Atmosphere(renderer, scene, camera);
 // The picture's quality (src/helm/autoQuality.ts): ?quality= for tests, else the player's pick, else
 // Low on software graphics, else Medium, stepping down to Low once under the goal card if too slow.
@@ -4199,9 +4202,9 @@ function frameBoat(dt: number): void {
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
     // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
     const band = phoneBand();
-    // The kayak sits a fifth of the way down, or higher when a taller card (Who steers, Race against) leaves
-    // less sea: her waterline 95 px above the card's top, so the whole hull is clear of it (Elena).
-    const at = !phone ? 0.5 : spec.length > 5 ? (band.bottom - 0.3 * (band.bottom - band.top)) / window.innerHeight : Math.min(0.2, (band.bottom - 95) / window.innerHeight);
+    // One rule for every boat and every card height (a saved voyage's line, a race row, practice's course line make the
+    // card taller): her waterline sits a set way down the band, so she is whole inside it with air between her and the card.
+    const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
     ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);
