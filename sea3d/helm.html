@@ -190,8 +190,16 @@
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
   #trimchip[hidden] { display: none; }
   /* While at the wheel the voyage controls wait. */
-  /* Watching a recorded voyage (M2, R1): nothing to steer and no ghost, so the orders and the lead cell go; Jonas's S1 dresses the rest. */
-  body.watching #orders, body.watching #orders-tab, body.watching #c-lead, body.watching #c-order { display: none; }
+  /* Watching a recorded voyage (M2, R1 and S1): nothing to steer and no ghost. The order controls and the lead
+     cell go; the compass stays, to read and not to turn, in the same drawer, and the strip's steering cell opens it. */
+  body.watching #c-lead, body.watching #orders > :not(h2):not(#dialrow), body.watching #dialrow .side button,
+  body.watching #mside .mleg, body.watching #watch { display: none; }
+  body.watching #dial { pointer-events: none; cursor: default; }
+  body.watching #dialrow .side { font-size: 13px; }
+  #dialkey { color: var(--dim); font-size: 11.5px; line-height: 1.45; }
+  #dialkey i { display: inline-block; width: 9px; height: 3px; margin-right: 5px; vertical-align: middle; }
+  @media (min-width: 1101px) { body.watching #strip { grid-template-columns: 2.05fr 1.25fr .9fr .75fr .95fr 1.35fr max-content 2.2em; } }
+  @media (max-width: 760px) { body.watching #strip #c-wind { grid-column: span 7; } }
   /* A race (M2, R3): nobody steers either, but the lead cell stays: it's boat A against boat B. */
   body.racing #orders, body.racing #orders-tab, body.racing #c-order { display: none; }
   #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
