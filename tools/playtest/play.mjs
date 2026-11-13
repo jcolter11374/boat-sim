@@ -2557,6 +2557,32 @@ const CHECKS = {
       return `night film at hour ${at.hour} (sun ${at.sun.toFixed(0)}°): ${shots.length} frames over about 40 s; the clock moved ${((h1 - at.hour) * 60).toFixed(1)} min`;
     },
   },
+  // #486: the Set sail card on phones: the boat whole in the band above the card, the card whole on the screen.
+  "look-setsail-phone": {
+    manual: true,
+    path: "helm.html",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      const browser = page.context().browser();
+      const out = [];
+      const shots = [];
+      for (const [w, h] of [[390, 844], [360, 740]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        await p.goto(SITE + "helm.html", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+        await p.waitForLoadState("networkidle").catch(() => {});
+        await p.waitForTimeout(6000);
+        const m = await p.evaluate(() => { const c = document.getElementById("ss-card").getBoundingClientRect(); const g = document.getElementById("go").getBoundingClientRect(); const b = window.__helm.boatBox?.() ?? null; const k = (window.devicePixelRatio || 1); return { card: [c.left, c.top, c.right, c.bottom].map(Math.round), go: [Math.round(g.top), Math.round(g.bottom)], goOn: g.top >= 0 && g.bottom <= innerHeight, cardOn: c.left >= 0 && c.right <= innerWidth && c.bottom <= innerHeight + 1, boat: b ? { x: Math.round(b.x / k), y: Math.round(b.y / k), w: Math.round(b.w / k), h: Math.round(b.h / k) } : null, win: [innerWidth, innerHeight] }; });
+        const path = `look-setsail-phone-${w}x${h}.jpg`;
+        if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); shots.push(`${w}x${h}`); }
+        const boatAbove = m.boat ? m.boat.y + m.boat.h / 2 <= m.card[1] + 2 && m.boat.x - m.boat.w / 2 >= -2 && m.boat.x + m.boat.w / 2 <= m.win[0] + 2 : null;
+        out.push(`${w}x${h}: card ${JSON.stringify(m.card)} ${m.cardOn ? "on screen" : "RUNS OFF the screen"}, Set sail ${m.goOn ? "on screen" : "off screen (scroll)"}, boat ${m.boat ? `${JSON.stringify(m.boat)} ${boatAbove ? "whole above the card" : "NOT whole above the card"}` : "box not reported"}`);
+        await ctx.close().catch(() => {});
+      }
+      return `${out.join("; ")}; frames ${shots.join(", ")}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
