@@ -7,7 +7,8 @@
  * there instead. Names a player typed are only ever set as text.
  */
 import { clearMyBoat, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
-import { PLAYABLE_STOCK, STOCK, type StockKey } from "../boats/specs";
+import { PLAYABLE_STOCK, STOCK, isStock, type StockKey } from "../boats/specs";
+import { ABOUT } from "../boats/about";
 
 export interface PickerEntry {
   /** "kayak", a stock id, "mine" (the saved design) or "yard:<base>" (a Boatyard link). */
@@ -78,6 +79,14 @@ const CSS = `
 #boatpick input { margin: 0 8px 0 0; accent-color: #ff8a2a; }
 #boatpick small { display: block; color: #9fb3c8; font-size: 12px; margin: 1px 0 0 22px; }
 #boatpick a.row small { margin-left: 0; }
+#boatpick details.about { margin: -1px 0 6px 32px; font-size: 12px; color: #c9d6e4; }
+#boatpick details.about summary { cursor: pointer; color: #8ab4ff; font-weight: 600; }
+#boatpick details.about[open] { padding: 4px 0 2px; }
+#boatpick details.about dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 6px 0; }
+#boatpick details.about dt { color: #9fb3c8; }
+#boatpick details.about dd { margin: 0; }
+#boatpick details.about p { margin: 6px 0; }
+#boatpick details.about .src, #boatpick details.about .src a { color: #9fb3c8; font-size: 11px; }
 #boatpick .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
 #boatpick .go { font: 700 15px system-ui, sans-serif; padding: 9px 20px; border-radius: 10px; border: 1px solid #ff8a2a; background: #ff8a2a; color: #1a0d02; cursor: pointer; }
 #boatpick .x { background: none; border: 0; color: #9fb3c8; font: 600 13px system-ui, sans-serif; cursor: pointer; }
@@ -140,6 +149,7 @@ export function openBoatPicker(doc: Document = document, use?: PickerUse): void 
     label.append(input, Object.assign(doc.createElement("b"), { textContent: e.name }));
     if (fact) label.append(fact);
     card.append(label);
+    if (isStock(e.id)) card.append(aboutBox(doc, e.id));
   }
   const foot = doc.createElement("div");
   foot.className = "foot";
@@ -157,6 +167,26 @@ export function openBoatPicker(doc: Document = document, use?: PickerUse): void 
   root.hidden = false;
   card.querySelector<HTMLInputElement>("input:checked")?.focus();
   (window as unknown as { __boatpick?: unknown }).__boatpick = { open: true };
+}
+
+/** "Specs and history" under a stock boat's row (John, 13 Nov): folded until asked for. Text only. */
+export function aboutBox(doc: Document, key: StockKey): HTMLDetailsElement {
+  const a = ABOUT[key];
+  const box = Object.assign(doc.createElement("details"), { className: "about" });
+  box.dataset.boat = key;
+  box.append(Object.assign(doc.createElement("summary"), { textContent: "Specs and history" }));
+  const dl = doc.createElement("dl");
+  for (const [k, v] of a.specs) dl.append(Object.assign(doc.createElement("dt"), { textContent: k }), Object.assign(doc.createElement("dd"), { textContent: v }));
+  const p = (t: string) => Object.assign(doc.createElement("p"), { textContent: t });
+  box.append(p(`Based on ${a.basedOn}. Our own model: not the maker's boat, and no connection to them.`), dl, p(a.history));
+  if (a.ours) box.append(p(a.ours));
+  const src = Object.assign(doc.createElement("p"), { className: "src", textContent: "Sources: " });
+  a.sources.forEach((s, i) => {
+    if (i) src.append("; ");
+    src.append(Object.assign(doc.createElement("a"), { href: s.url, textContent: s.name, target: "_blank", rel: "noopener" }));
+  });
+  box.append(src);
+  return box;
 }
 
 function close(): void {

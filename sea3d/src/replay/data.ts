@@ -155,6 +155,13 @@ export function lastHour(rep: Replay): number {
   return rep.h.length ? rep.h[rep.h.length - 1] : 0;
 }
 
+/** Turned over for good by `hour` (a dinghy or cat with nobody to right it): the voyage ended "capsized
+ * ... stayed over". The log's last row can come a little before the final event, so at the last row it counts. */
+export function stayedOver(rep: Replay, hour: number): boolean {
+  const atEnd = hour >= lastHour(rep) - 1e-6;
+  return rep.events.some((e) => (e.h <= hour || atEnd) && e.kind === "lost" && /capsiz|stayed over/i.test(e.detail));
+}
+
 /** Great-circle distance, km. */
 export function distanceKm(a: [number, number], b: [number, number]): number {
   const R = 6371;
