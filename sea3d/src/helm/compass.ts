@@ -52,6 +52,7 @@ export class Compass {
     const c = this.canvas;
     const dpr = window.devicePixelRatio || 1;
     const w = c.clientWidth;
+    if (w < 10) return; // not on screen (a watched voyage has no orders drawer): nothing to draw, and a negative radius throws
     if (c.width !== w * dpr) {
       c.width = w * dpr;
       c.height = w * dpr;
