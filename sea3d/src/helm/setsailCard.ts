@@ -119,7 +119,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
     // Practice always sails the club's yacht: say so, so nobody wonders where their boat went (Ines).
     $("ss-boat").hidden = !show.boatShown;
     // A new crossing takes the saved one's place; practice doesn't touch it.
-    $("ss-continue-new").hidden = where !== "ocean";
+    $("ss-continue-new").hidden = where !== "ocean" || !!$("ss-continue").dataset.lost;
     $("ss-practiceboat").hidden = show.boatShown;
     pills($("ss-where-opts"), SET_SAIL.where.filter((o) => o.key === "ocean" || ANNAPOLIS_ON_CARD).map((o) => ({ key: o.key, label: CARD_WORDS.where[o.key][0], sub: CARD_WORDS.where[o.key][1] || undefined })), where, (k) => {
       where = k as SetSail["where"];
