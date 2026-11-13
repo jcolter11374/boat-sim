@@ -2762,6 +2762,8 @@ const CHECKS = {
           await p.waitForTimeout(600);
           const b = await state(p);
           const u2 = await usable(p);
+          await p.evaluate(() => scrollTo(0, 0));
+          await shot(p, `autopilot-${w}x${h}`);
           const other = b.rival ? await pick(p, "#ss-rival-opts", "another") : null;
           await p.waitForTimeout(600);
           const c = await state(p);
