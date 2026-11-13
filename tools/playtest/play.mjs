@@ -3335,6 +3335,50 @@ const CHECKS = {
     path: "helm.html?quality=low",
     run: async (page) => { globalThis.__M3_ONLY = ["practice", "challenge"]; try { return await CHECKS["m3-ends"].run(page); } finally { globalThis.__M3_ONLY = undefined; } },
   },
+  // #511: the title never freezes. For 35 s the sea keeps drawing (frames climb, no gap of 3 s) and the
+  // picture changes; the boat's heave keeps moving. Frames at the start and end, for the waterline by eye.
+  "title-moving": {
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const bad = [];
+      for (const [w, h, tag] of [[1280, 720, "1280"], [390, 844, "390"]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+          await p.waitForLoadState("networkidle").catch(() => {});
+          await p.waitForTimeout(5000);
+          const shots = [];
+          const shot = async (when) => { const path = `look-moving-${BROWSER}-${tag}-${when}.jpg`; if (await jpeg(p, path)) { const buf = readFileSync(path); shots.push(buf); const b64 = buf.toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } };
+          await shot("start");
+          const samples = [];
+          const t0 = Date.now();
+          while (Date.now() - t0 < 35_000) {
+            samples.push(await p.evaluate(() => ({ t: Math.round(performance.now()), f: window.__sea3d?.frames ?? 0, hero: window.__sea3d?.hero ?? "", heave: (window.__sea3d?.boats ?? []).map((b) => +b.heave.toFixed(3)), surf: (window.__sea3d?.boats ?? []).map((b) => +b.surface.toFixed(3)) })));
+            await p.waitForTimeout(1000);
+          }
+          await shot("end");
+          let gap = 0;
+          for (let k = 1; k < samples.length; k++) {
+            if (samples[k].f === samples[k - 1].f) { let j = k; while (j < samples.length && samples[j].f === samples[k - 1].f) j++; gap = Math.max(gap, samples[Math.min(j, samples.length - 1)].t - samples[k - 1].t); }
+          }
+          const df = samples.at(-1).f - samples[0].f;
+          const heaves = new Set(samples.map((x) => JSON.stringify(x.heave))).size;
+          const same = shots.length === 2 && shots[0].equals(shots[1]);
+          if (df < 30) bad.push(`${tag}: only ${df} frames drawn in 35 s`);
+          if (gap >= 3000) bad.push(`${tag}: the sea stopped drawing for ${(gap / 1000).toFixed(1)} s`);
+          if (same) bad.push(`${tag}: the picture at the end is the same as at the start`);
+          out.push(`${tag}: ${df} frames in 35 s (${(df / 35).toFixed(1)}/s), longest stall ${(gap / 1000).toFixed(1)} s, ${heaves} different heave readings, hero "${samples[0].hero}", picture ${same ? "UNCHANGED" : "changed"}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`MOVING ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
