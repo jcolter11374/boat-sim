@@ -63,7 +63,7 @@ export const FORM: { bars: number; tune: boolean; pad: boolean }[] = [
 export const CYCLE_BARS = FORM.reduce((a, s) => a + s.bars, 0);
 
 /** Peak level of one note of each voice (linear, before the master): together, under the sea. */
-export const MUSIC_LEVELS: Record<Voice, number> = { pluck: 0.0085, pad: 0.0016 };
+export const MUSIC_LEVELS: Record<Voice, number> = { pluck: 0.012, pad: 0.0016 };
 
 export const hzOf = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
 
