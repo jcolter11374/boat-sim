@@ -27,6 +27,7 @@ const STOCK_FACT: Partial<Record<StockKey, string>> = {
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small engine",
   stock_sail_drone7: "a 7 m robot boat with a rigid wing sail: wind only, no motor",
   stock_ocean_rower45: "an 8.6 m boat rowed across oceans: four rowers in shifts, two cabins",
+  stock_dinghy14: "a 4.2 m one-sail dinghy, here with nobody aboard: a squall can tip it over for good",
 };
 
 const nameOf = playerName;
