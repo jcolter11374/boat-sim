@@ -341,17 +341,17 @@ export class SandboxLauncher implements Launcher {
       ...(grid?.odds
         ? {
             note: meta.exact
-              ? "Tested on our computers, this exact build."
-              : `Tested on our computers, the closest build we've tested: ${gridName(grid)}.`,
+              ? "Tested on our computers, this exact boat."
+              : `Tested on our computers, the closest boat we've tested: ${gridName(grid)}.`,
             detail: {
-              summary: `Your quick test (${runs.length} launches)`,
-              text: `${finished} of ${runs.length} made it, in 2020's weather. Six launches are too few to judge by, so go by the figure above.`,
+              summary: `Your quick test (${runs.length} launch days)`,
+              text: `${finished} of ${runs.length} made it, in 2020's weather. Six launch days are too few to judge by, so go by the figure above.`,
             },
           }
         : {
             note:
-              `Your quick test: ${finished} of ${runs.length} launches made it, in 2020's weather. ` +
-              "We haven't tested this build on our computers yet, so treat it as a rough guide.",
+              `Your quick test: ${finished} of ${runs.length} launch days made it, in 2020's weather. ` +
+              "We haven't tested this boat on our computers yet, so treat it as a rough guide.",
           }),
       credits: SANDBOX_CREDITS,
       odds: grid?.odds ?? null,

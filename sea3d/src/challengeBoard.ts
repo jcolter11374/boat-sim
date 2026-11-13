@@ -13,23 +13,25 @@ export function boardTab(hash: string): BoardTab {
 }
 
 export const CHALLENGE_BOARD_WORDS = {
-  tabs: { designs: "Designs", challenges: "Weather challenges" },
+  tabs: { designs: "Boats", challenges: "Weather challenges" },
   sub: {
-    designs: "Which builds reach the finish most often, on the same launches with the same luck.",
-    challenges: "Your best try at each weather challenge, beside the autopilot's on the same weather.",
+    designs: "Which boats reach the finish most often, on the same launch days with the same dice for breakdowns.",
+    challenges: "Your best try at each weather challenge, beside the autopilot's on the same weather. Three stars is the best.",
   },
   kept: "Your results are kept in this browser only. Nobody else sees them, and clearing the browser's data clears them.",
   none: "Not sailed yet",
-  noAutopilot: "",
+  /** The autopilot's result is only known once you have sailed the challenge beside it. */
+  noAutopilot: "\u2014",
+  launches: "Launches",
   sail: "Sail it",
   again: "Try again",
-  missing: "The weather challenges aren't on this copy of the game.",
+  missing: "The weather challenges aren't available right now.",
 } as const;
 
 export interface ChallengeRow {
   id: string;
   title: string;
-  /** "22 Oct 2012": the real weather it sails. */
+  /** "Launches 22 Oct 2012": the real weather it sails, in the Set sail card's form. */
   when: string;
   /** Has it been sailed in this browser? */
   tried: boolean;
@@ -46,12 +48,10 @@ export interface ChallengeRow {
   link: string;
 }
 
-/** The tab's rows, in the challenges' own order (their number). */
+/** The tab's rows, in the list's own order, the order the Set sail card offers them: Gentle June first (Leo). */
 export function challengeRows(list: Challenge[], bests: Record<string, ChallengeBest>): ChallengeRow[] {
   const W = CHALLENGE_BOARD_WORDS;
-  return [...list]
-    .sort((a, b) => a.n - b.n)
-    .map((c) => {
+  return list.map((c) => {
       const b = bests[c.id];
       const tries = b ? `${b.tries} ${b.tries === 1 ? "try" : "tries"}` : "";
       const a = b?.autopilot ?? null;
@@ -59,7 +59,7 @@ export function challengeRows(list: Challenge[], bests: Record<string, Challenge
       return {
         id: c.id,
         title: c.title,
-        when: startLabel(c),
+        when: `${W.launches} ${startLabel(c)}`,
         tried: !!b,
         yours: b ? runWords(b.best) : W.none,
         detail: b ? [b.boat, tries].filter(Boolean).join(" · ") : "",
