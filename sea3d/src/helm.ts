@@ -43,6 +43,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { watchLink, whoFromUrl } from "./helm/whoSteers";
+import { runOutStep, voyageDone } from "./helm/timebar";
 import { outcomeLine } from "./replay/story";
 import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
@@ -340,6 +341,8 @@ const game = new HelmGame(
 let startMs = 0;
 let hour = 0; // shown voyage hour
 let shownTo = 0; // hour the animation is heading for
+/** Over for the person at the screen: when only watching, not until the picture reaches the last row (helm/timebar.ts). */
+const done = (): boolean => voyageDone(!!page.status?.over, SPECTATE, hour, shownTo);
 let watch: "boat" | "ghost" = "boat";
 let busy = false;
 let order: Heading = "auto"; // every game starts on the ghost's own autopilot (#327)
@@ -495,7 +498,7 @@ const hud = new Hud({
   forecastOpened: () => {
     if (lastForecast) drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
   },
-  keysOff: () => !page.ready || !!page.status?.over,
+  keysOff: () => !page.ready || done(),
 });
 
 function rep(which = watch): Replay | null {
@@ -662,12 +665,35 @@ async function shareLink(): Promise<void> {
   }
 }
 
+/** Watching a recorded voyage: the drawer is the compass alone, to read and not to turn, and the strip's cell says who steers. */
+function watchLook(): void {
+  const orders = $("orders");
+  orders.setAttribute("aria-label", "The compass");
+  orders.querySelector("h2")!.firstChild!.textContent = "The compass ";
+  for (const id of ["c-order", "orders-tab"]) $(id).title = "The compass (O)";
+  $("orders-tab").querySelector("span")!.textContent = "Compass";
+  $("c-order").querySelector(".l")!.textContent = "steering";
+  $("dial").title = "Orange: where the bow points · green: the finish · blue: the wind";
+  $("ordertext").textContent = "The autopilot is steering.";
+  if (!document.getElementById("dialkey")) {
+    const key = Object.assign(document.createElement("div"), { id: "dialkey" });
+    for (const [colour, words] of [["#ff8a2a", "where the bow points"], ["#3ddc97", "the finish"], ["#8ab4ff", "the wind"]] as const) {
+      const row = document.createElement("div");
+      const dash = document.createElement("i");
+      dash.style.background = colour;
+      row.append(dash, words);
+      key.append(row);
+    }
+    $("ordertext").after(key);
+  }
+}
+
 function showOrder(): void {
   compass.set({ order });
   $("b-wheel").hidden = !wheelOffered() || wheel.on;
   $("ordertext").textContent =
     order === "auto"
-      ? "Autopilot steering, like the ghost"
+      ? WATCH ? "The autopilot is steering." : "Autopilot steering, like the ghost"
       : order === "finish"
         ? "Straight at the finish"
         : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
@@ -1272,7 +1298,7 @@ function setRate(r: number, drain = false): void {
 }
 
 function showClock(): void {
-  const off = !page.ready || !!page.status?.over;
+  const off = !page.ready || done();
   $("timebar").hidden = off;
   $("timestate").hidden = off;
   if (off) $("keyhint").hidden = true;
@@ -1301,7 +1327,7 @@ async function clockRun(): Promise<void> {
       armed = untilOptions(); // only the reserve stops it now; big drops are batteryNote's
       const d = `Day ${game.status!.day.toFixed(1)}`;
       whenAt(game.status!.day * 24, () => note(stopText(stopped, game.status), d, TONE_COLOUR.info));
-    } else if (stopped !== "time") {
+    } else if (stopped !== "time" && !(SPECTATE && stopped === "over")) {
       setRate(0, true);
       const d = `Day ${game.status!.day.toFixed(1)}`;
       if (stopped === "breakdown") {
@@ -1320,8 +1346,11 @@ async function clockRun(): Promise<void> {
     if (stopped === "time" || stopped === "battery") maybeDecide();
     if (game.status?.over) {
       // The picture plays on to the end, slowing for the last hours; then the results (#329).
-      setRate(0, true);
-      drainRate = Math.max(drainRate, 6);
+      // Watching, nothing stops: the bar and the chosen speed stay until the picture gets there (tickClock).
+      if (!SPECTATE) {
+        setRate(0, true);
+        drainRate = Math.max(drainRate, 6);
+      }
       finishing = true;
     }
   } catch (e) {
@@ -1341,7 +1370,13 @@ const UNTIL_H = 72;
 
 /** This frame's share of the clock: move the picture on, and keep the simulator ahead of it. */
 function tickClock(dt: number): boolean {
-  if (!(rate > 0) || busy || !page.ready || page.status?.over || cine.on) return false;
+  if (!(rate > 0) || busy || !page.ready || done() || cine.on) return false;
+  if (page.status?.over) {
+    // A watched voyage with all its rows in: play them out at the chosen speed, nothing more to fetch.
+    if (inFlight) return false;
+    hour = runOutStep(clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate, dt, hour, shownTo);
+    return true;
+  }
   // Ease off as the simulator's lead runs down, so a slow computer sees slower, smooth time rather than stop-start.
   if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   const ahead = shownTo - hour;
@@ -1945,7 +1980,7 @@ addEventListener("keydown", (e) => {
     if (wheel.key(e, true)) e.preventDefault();
     return;
   }
-  if (!page.ready || page.status?.over || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
+  if (!page.ready || done() || busy || e.ctrlKey || e.metaKey || e.altKey || t?.closest?.("input, select, textarea, summary")) return;
   // Enter takes the wheel, unless a keyboard user has a button or link focused (then Enter presses it).
   if (e.code === "Enter" && !t?.closest?.("button:focus-visible, a:focus-visible") && wheelOffered()) {
     e.preventDefault();
@@ -3217,6 +3252,7 @@ async function begin(): Promise<void> {
     chart?.setLanes(game.ghost ? [{ rep: game.boat!, colours: TRACK.kayak }, { rep: game.ghost, colours: GHOST }] : [{ rep: game.boat!, colours: TRACK.kayak }]);
     chartDirty = true;
     document.body.classList.toggle("watching", WATCH);
+    if (WATCH) watchLook();
     document.body.classList.toggle("racing", RACE);
     const d = `Day ${page.status!.day.toFixed(1)}`;
     if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
@@ -3894,6 +3930,7 @@ renderer.setAnimationLoop(() => {
   runDue();
   if (finishing && hour >= shownTo - 1e-6 && !inFlight) {
     finishing = false;
+    if (SPECTATE) setRate(0); // the picture is at the last row: now the bar goes
     applyPending(true);
     newEvents();
     void finish().catch(fail);
