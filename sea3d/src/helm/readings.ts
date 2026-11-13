@@ -45,6 +45,8 @@ export function statusAtPicture(s: Status, boat: Replay | null, ghost: Replay | 
   const h = Math.min(hour, lastHour(boat));
   const at = (col: Replay["hs"]) => valueAt(boat, col, h);
   const [wu, wv, hs, cu, cv] = [at(boat.wind_u), at(boat.wind_v), at(boat.hs), at(boat.current_u), at(boat.current_v)];
-  const weather = s.weather && wu != null && wv != null ? { ...s.weather, wind_u: wu, wind_v: wv, hs: hs ?? s.weather.hs, current_u: cu ?? s.weather.current_u, current_v: cv ?? s.weather.current_v } : s.weather;
+  // A status can come without weather (a race's first one): the rows have it, so the panel's weather line still shows.
+  const base = s.weather ?? { wind_u: 0, wind_v: 0, hs: 0, tp: at(boat.tp) ?? 0, wave_dir: at(boat.wave_dir) ?? 0, current_u: 0, current_v: 0, ghi: at(boat.ghi) ?? 0, rain: boat.rain ? (at(boat.rain) ?? 0) : 0 };
+  const weather = wu != null && wv != null ? { ...base, wind_u: wu, wind_v: wv, hs: hs ?? base.hs, current_u: cu ?? base.current_u, current_v: cv ?? base.current_v } : s.weather;
   return { ...s, boat: b, ghost: g, lead_km: g.km_to_finish - b.km_to_finish, weather };
 }

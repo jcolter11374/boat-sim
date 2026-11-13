@@ -47,6 +47,7 @@ import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/w
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { outcomeLine } from "./replay/story";
+import { drawPostcard, savePng } from "./replay/postcard";
 import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
@@ -70,7 +71,8 @@ import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
 import { Hud, setRacers, showStrip } from "./helm/hud";
-import { farBoatTag, raceLine, shortRacer } from "./helm/raceWords";
+import { bareRacer, farBoatTag, raceLine } from "./helm/raceWords";
+import { slideRoom } from "./framing";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
 import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
@@ -786,8 +788,9 @@ function raceLook(names: [string, string]): void {
     const dash = (colour: string) => Object.assign(document.createElement("i"), { style: `background:${colour}` });
     key.replaceChildren(dash("#ff8a2a"), names[0], document.createElement("br"), dash("#c8d4e6"), names[1]);
   }
-  $("w-boat").textContent = shortRacer(names[0]);
-  $("w-ghost").textContent = shortRacer(names[1]);
+  // The key above them carries the full names ("(our model)" on a Randolph boat, B2); after it the panel uses the short ones.
+  $("w-boat").textContent = bareRacer(names[0]);
+  $("w-ghost").textContent = bareRacer(names[1]);
   $("r-map").setAttribute("aria-label", `The tracks of ${names[0]} and ${names[1]}`);
 }
 
@@ -1152,7 +1155,8 @@ function showReadings(raw: Status): void {
     windTo = (Math.atan2(w.wind_u, w.wind_v) * 180) / Math.PI;
     const from = compassWord(windTo + 180);
     const cur = Math.hypot(w.current_u, w.current_v) * KN;
-    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
+    // No current to speak of has no direction: leave it out rather than say "0.0 kn southward".
+    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m${cur < 0.05 ? "" : ` · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`}`;
   }
   compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
   // The race with the ghost; in base mode, also what base knows (the picture's numbers would be the truth).
@@ -1177,7 +1181,7 @@ function showReadings(raw: Status): void {
   } else $("baseline").textContent = "";
   $("sailline").hidden = !s.sailing;
   if (s.sailing) $("sailline").textContent = sailText(s);
-  $("ghostline").textContent = WATCH ? "" : `${other ?? "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
+  $("ghostline").textContent = WATCH ? "" : `${other ? bareRacer(other) : "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
 }
 
 // ---------- notes ----------
@@ -2869,6 +2873,27 @@ function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
 }
 
 /** A watched voyage's ending: what became of her, the days and the distance, and her track. No race, so no verdict. */
+// "Look around" (R5: the old Watch a voyage had it): the ending card steps aside so she can be seen where she ended, with one way back to it.
+function lookAround(on: boolean): void {
+  if (!WATCH || !page.card) return;
+  $("result").hidden = on;
+  document.body.classList.toggle("results", !on);
+  $("r-back").hidden = !on;
+  (on ? $("r-back") : $("r-look")).focus();
+}
+$("r-look").addEventListener("click", () => lookAround(true));
+$("r-back").addEventListener("click", () => lookAround(false));
+
+// The watched voyage's postcard (R5: the old Watch a voyage had it): the view now, the ending's map, and how it ended. Saved on the player's own device.
+$("r-postcard").addEventListener("click", () => {
+  const r = game.boat;
+  if (!WATCH || !r) return;
+  const launched = new Date(utc(r.start)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const map = $<HTMLCanvasElement>("r-map");
+  const card = drawPostcard(renderer.domElement, map.hidden ? null : map, { boat: page.watch?.name ?? "The boat", launched, outcome: outcomeLine(r), guess: "", finished: r.outcome === "arrived" });
+  savePng(card, `postcard_${(page.watch?.name ?? "boat").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}_${r.start.slice(0, 10)}.png`);
+});
+
 async function watchFinish(): Promise<void> {
   const c = await game.result(); // the whole voyage is game.boat now
   clearTimeout(soundAskTimer);
@@ -2906,6 +2931,8 @@ async function watchFinish(): Promise<void> {
   const sail = $<HTMLAnchorElement>("r-sail");
   sail.href = sailLink(location.search, r.start);
   sail.hidden = false;
+  $("r-look").hidden = false;
+  $("r-postcard").hidden = false; // as the old Watch a voyage ended: the picture on screen, the map and what happened
   hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
   document.body.classList.add("results");
@@ -4143,7 +4170,11 @@ function frameBoat(dt: number): void {
     // How much of the frame's height the boat takes (a hull stands about a third of its length tall, mast aside).
     const fill = (spec.length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
     const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
-    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
+    // On a narrow window (a phone held upright) the boat already spans much of the width: sliding her aside
+    // pushed her off the edge and under the "History nearby" tab. There she stays whole, near the middle.
+    const across = spec.length / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+    const roomX = slideRoom(across);
+    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room * roomX : 0;
     // A call's card on the right third: the boat goes to the left third, the sea she's choosing about beyond her.
     if (!$("decide").hidden && $("decide").classList.contains("withmap")) tx = 0.17 * room;
     ty = -0.1 * room;
@@ -4168,7 +4199,9 @@ function frameBoat(dt: number): void {
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
     // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
     const band = phoneBand();
-    const at = !phone ? 0.5 : spec.length > 5 ? (band.bottom - 0.3 * (band.bottom - band.top)) / window.innerHeight : 0.2;
+    // The kayak sits a fifth of the way down, or higher when a taller card (Who steers, Race against) leaves
+    // less sea: her waterline 95 px above the card's top, so the whole hull is clear of it (Elena).
+    const at = !phone ? 0.5 : spec.length > 5 ? (band.bottom - 0.3 * (band.bottom - band.top)) / window.innerHeight : Math.min(0.2, (band.bottom - 95) / window.innerHeight);
     ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
   }
   const k = Math.min(1, dt * 1.2);

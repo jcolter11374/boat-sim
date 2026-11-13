@@ -119,7 +119,7 @@ test("the sequence fits the moment: five for launch", () => {
   assert.ok(fitting(calm, 4).includes("golden"));
   assert.deepEqual(fitting(calm, -30), ["night"]);
   // Night is short and close, carried by the boat's own light.
-  assert.deepEqual(shotsFor("night", null, () => 0), ["light", "alongside"]);
+  assert.deepEqual(shotsFor("night", null, () => 0), ["light", "alongside", "sternlight"]);
   // The helm's clock stops while filming: a knockdown in the last hours still gets its sequence.
   assert.equal(fitting({ ...calm, recentKnockdown: true }, 40)[0], "knockdown");
   // Not the same sequence over and over: the best one not played in the last two.
@@ -223,7 +223,7 @@ test("the results card's still: the boat in a corner outside the card (x 25-75%)
 });
 
 test("whichever way the boat heads against the shot's reference (the sun), its near end stays in frame", () => {
-  for (const kind of ["sunset", "bowon", "stern", "light", "alongside"] as ShotKind[]) {
+  for (const kind of ["sunset", "bowon", "stern", "light", "alongside", "sternlight"] as ShotKind[]) {
     for (const len of [3.05, 9.39]) {
       for (const refDeg of [0, 60, 120, 180, 240, 300]) {
         const bow = new THREE.Vector2(1, 0);
