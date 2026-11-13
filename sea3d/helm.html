@@ -573,6 +573,9 @@
     #strip .v { font-size: 1.1em; }
     #strip .l { font-size: .78em; letter-spacing: .3px; }
   }
+  /* Narrow windows (as above): the corner chart folds to a map button. These four rules lost their
+     @media when the phone strip went in (#453), which hid the corner chart at every width. */
+  @media (max-width: 1100px) {
     #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
     #mapbox:not(.big) { width: auto; padding: 4px; }
     #mapbox:not(.big) #film { margin-top: 0; }
