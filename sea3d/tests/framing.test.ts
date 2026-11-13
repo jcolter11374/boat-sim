@@ -125,3 +125,16 @@ test("the title hero on a phone held upright, menu across the bottom: the boat i
     }
   }
 });
+
+test("the sailing view slides the boat to a third on a wide window and keeps her near the middle on a phone", async () => {
+  const { slideRoom } = await import("../src/framing");
+  // The share of the frame's width the hull spans: our 3 m kayak from the default camera.
+  const across = (aspect: number, dist = 10.5) => 3.05 / (2 * dist * Math.tan((45 * Math.PI) / 360) * aspect);
+  assert.equal(slideRoom(across(1280 / 720)), 1, "a desktop window: the full slide");
+  assert.equal(slideRoom(across(1920 / 1080)), 1);
+  assert.equal(slideRoom(across(390 / 844)), 0, "a phone held upright: none");
+  assert.equal(slideRoom(across(360 / 740)), 0);
+  const mid = slideRoom(0.4);
+  assert.ok(mid > 0 && mid < 1, "in between it eases, never jumps");
+  assert.equal(slideRoom(NaN), 0);
+});
