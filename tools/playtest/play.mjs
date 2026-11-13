@@ -1436,10 +1436,14 @@ const CHECKS = {
       const browser = page.context().browser();
       const shots = [];
       const out = [];
+      const cutAny = [];
       const SIZES = [
-        { name: "1920-dpr2", viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 },
         { name: "1280-dpr2", viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 },
         { name: "phone-390-dpr3", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+        // Short phones (#457, #459): the boat above the menu; at 320x568 no intro line, so the choices and More fit.
+        { name: "phone-375x667-dpr2", viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+        { name: "phone-360x640-dpr3", viewport: { width: 360, height: 640 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+        { name: "phone-320x568-dpr2", viewport: { width: 320, height: 568 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
       ];
       for (const s of SIZES) {
         const { name, ...opts } = s;
@@ -1453,6 +1457,8 @@ const CHECKS = {
         const info = await p.evaluate(() => ({
           title: !document.getElementById("title")?.hidden,
           heroClass: document.body.classList.contains("title"),
+          cut: ["#t-setsail", "#t-build", "#t-practice", "#t-more > summary"].filter((q) => { const r = document.querySelector(q)?.getBoundingClientRect(); return !r || r.height === 0 || r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth; }),
+          tag: (() => { const e = document.querySelector("#title .tag"); return !!e && e.offsetParent !== null; })(),
           menu: (() => { const r = document.querySelector("#title nav")?.getBoundingClientRect(); return r ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null; })(),
         }));
         const path = `look-title-${name}.jpg`;
@@ -1463,10 +1469,30 @@ const CHECKS = {
           console.log(`LOOK-END ${path}`);
           shots.push(name);
         }
-        out.push(`${name}: menu ${info.title ? "shown" : "NOT shown"} at ${JSON.stringify(info.menu)}${errs.length ? `, page errors: ${errs.slice(0, 2).join(" | ")}` : ""}`);
+        if (info.cut.length) cutAny.push(`${name}: ${info.cut.join(", ")}`);
+        out.push(`${name}: menu ${info.title ? "shown" : "NOT shown"} at ${JSON.stringify(info.menu)}, intro line ${info.tag ? "shown" : "hidden"}${info.cut.length ? `, OFF SCREEN: ${info.cut.join(", ")}` : ", all choices and More on screen"}${errs.length ? `, page errors: ${errs.slice(0, 2).join(" | ")}` : ""}`);
         await ctx.close().catch(() => {});
       }
+      must(!cutAny.length, `title choices off the screen: ${cutAny.join("; ")} (${out.join("; ")})`);
       return `${out.join("; ")}; frames ${shots.join(", ")}`;
+    },
+  },
+  // #458 (locked item S1): the helm strip shows the boat's time zone beside the local time, and it
+  // agrees with the map panel's line, at the crossing's start (expect "UTC−5" and "(UTC−5, sea zone)").
+  "helm-zone": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start");
+      await page.waitForFunction(() => document.getElementById("c-date")?.textContent.trim() && document.getElementById("local")?.textContent.trim(), null, { timeout: MIN }).catch(() => {});
+      const t = await page.evaluate(() => ({ strip: document.getElementById("c-date")?.textContent.trim() ?? "", panel: document.getElementById("local")?.textContent.trim() ?? "", wind: document.getElementById("c-windv")?.textContent.trim() ?? "", windl: document.getElementById("c-wavel")?.textContent.trim() ?? "" }));
+      const zone = t.strip.match(/(UTC(?:[−+-]\d+(?::\d+)?)?|[A-Z]{3,4})$/)?.[1];
+      if (!zone) throw new SkipCheck(`the strip shows no time zone yet (#458 not deployed): "${t.strip}"; panel "${t.panel}"`);
+      must(t.panel.includes(zone), `the strip says ${zone} ("${t.strip}") but the map panel says "${t.panel}"`);
+      const exp = zone === "UTC−5" && /\(UTC−5, sea zone\)/.test(t.panel);
+      return `strip "${t.strip}", panel "${t.panel}"${exp ? "" : " (NOT the expected UTC−5 / (UTC−5, sea zone))"}; wind cell "${t.wind}" over "${t.windl}"`;
     },
   },
   // #443 (M1 piece 5): the Set sail card is the one place to pick. Pick a day…, a challenge,
@@ -1484,6 +1510,11 @@ const CHECKS = {
       // The old start lists must not show anywhere.
       const old = await page.evaluate(() => ["#launch", "#challenge", "#modes", "#breakdowns", "#safe"].filter((s) => { const e = document.querySelector(s); return e && e.offsetParent !== null; }));
       must(!old.length, `the old pickers still show: ${old.join(", ")}`);
+      // #461: "Who steers" shows only with ?who= in the address; the plain card has no such row.
+      const who = await page.evaluate(() => { const e = document.getElementById("ss-who"); return !!e && e.offsetParent !== null; });
+      must(!who, 'the plain Set sail card shows the "Who steers" row (it should need ?who=)');
+      const rows = await page.evaluate(() => [...document.querySelectorAll("#ss-card .ss-row")].filter((e) => e.offsetParent !== null).map((e) => e.querySelector(".ss-l")?.textContent.trim()));
+      out.push(`rows ${rows.join(" / ")}`);
       // Pick a day…
       let days = await pillTexts("#ss-when-opts");
       const pick = days.findIndex((d) => /Pick a day/.test(d.t));
