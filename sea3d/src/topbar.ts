@@ -65,25 +65,25 @@ const CSS = `
 #topbar .more .menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 190px; padding: 6px; border-radius: 10px; display: flex; flex-direction: column; gap: 2px;
   background: rgba(8,18,32,.94); border: 1px solid rgba(160,200,255,.2); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
 #topbar .more .menu a { padding: 8px 10px; border-radius: 7px; color: #dbe6f5; }
+#topbar .more .menu a.ph { display: none; }
 #topbar .more .menu a:hover { background: rgba(138,180,255,.14); }
 #topbar .more .menu a[aria-current="page"] { color: #fff; background: rgba(255,138,42,.2); }
 /* The title screen: just the mark and the chip, so the shot breathes (Elena). */
 body.title #topbar .nav, body.title #topbar .more { display: none; }
-#topbar .boat { margin-left: auto; cursor: pointer; font-family: inherit; background: none; white-space: nowrap; padding: 5px 10px; border: 1px solid rgba(160,200,255,.25); border-radius: 999px;
+#topbar #topbar-chip { margin-left: auto; display: flex; min-width: 0; }
+#topbar .boat { cursor: pointer; font-family: inherit; background: none; white-space: nowrap; padding: 5px 10px; border: 1px solid rgba(160,200,255,.25); border-radius: 999px;
   font-weight: 600; font-size: 12.5px; color: #dbe6f5; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 #topbar .boat:hover { border-color: #8ab4ff; }
 #topbar .boat b { color: #ffb072; font-weight: 650; }
 @media (max-width: 760px) {
-  #topbar .nav .l { display: none; } #topbar .nav .s { display: inline; }
   #topbar .nav, #topbar .more summary { padding: 7px 6px; }
   #topbar .more .menu { position: fixed; left: auto; right: 6px; top: calc(var(--bar, 40px) + 4px); } /* the bar is the containing block (backdrop-filter): its right edge */ #topbar .brand .bw-mark { font-size: 20px; } #topbar .boat .p { display: none; } #topbar .boat { max-width: 130px; }
 }
 @media (max-width: 480px) {
   #topbar { padding: 0 6px; font-size: 12.5px; } #topbar .brand { margin-right: 4px; } #topbar .brand .bw-mark { font-size: 17px; }
-  #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 78px; padding: 5px 8px; }
-  /* Phones: the chip is a boat and nothing cut off; its name is in the tooltip and on the picker (Ines). */
-  #topbar .boat { max-width: none; padding: 4px 9px; } #topbar .boat b { display: none; } #topbar .boat::before { content: "\\26F5"; font-size: 15px; }
-  body.title #topbar .boat b { display: inline; } body.title #topbar .boat::before { content: none; } /* the title's bar is bare: room for the name */
+  #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 40vw; padding: 5px 8px; }
+  /* Phones: the same words as on a desktop, so Practice moves into More; the chip shows the boat's name (Elena). */
+  #topbar .nav.ph-more { display: none; } #topbar .more .menu a.ph { display: block; }
 }
 `;
 
@@ -99,10 +99,14 @@ export function pageName(pathname: string): string {
  *  where a new player first meets the chip, and "build one" there read as broken). */
 export function boatChip(boat: { name: string; href: string } | null, page = ""): { prefix: string; name: string; href: string; title: string } {
   // Practice sailing always sails the club's cruiser, whatever boat is yours (Elena: no nag there).
-  if (page === "practice") return { prefix: "Practice: ", name: "Cruiser 31", href: "./boatyard.html", title: "Practice sails Cruiser 31, a 9.5 m yacht; your own boat sails the voyages" };
+  if (page === "practice") return { prefix: "Practice boat: ", name: "Cruiser 31", href: "./boatyard.html", title: "Practice sails Cruiser 31, a 9.5 m yacht; your own boat sails the voyages" };
   if (!boat) return { prefix: "My boat: ", name: "Our kayak", href: "./boatyard.html", title: "Our kayak, until you build your own in the Boatyard" };
   return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }
+
+/** Sent on the document by a page that changes which boat you'll sail (the Set sail card:
+ *  Annapolis sails the practice boat): detail { practice: boolean }. */
+export const CHIP_EVENT = "bluewater:chip";
 
 export function mountTopbar(doc: Document = document): HTMLElement | null {
   if (new URLSearchParams(doc.location.search).get("bar") === "0") {
@@ -128,24 +132,44 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   bar.innerHTML =
     `<a class="brand" href="./" title="Bluewater: design a boat, then sail it across the Atlantic">${MARK_SMALL}</a>` +
     top
-      .map((l) => `<a class="nav" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
+      .map((l) => `<a class="nav${l.search === "practice" ? " ph-more" : ""}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
       .join("") +
     `<details class="more${moreHere ? " cur" : ""}"><summary>More</summary><div class="menu">` +
+    top
+      .filter((l) => l.search === "practice")
+      .map((l) => `<a class="ph" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`)
+      .join("") +
     more.map((l) => `<a href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`).join("") +
     `<a href="${CREDITS}" target="_blank" rel="noopener">Credits</a></div></details>` +
-    (chipPage === "practice" ? `<a class="boat" id="topbar-boat"></a>` : `<button type="button" class="boat" id="topbar-boat" aria-haspopup="dialog"></button>`);
+    `<span id="topbar-chip"></span>`;
   doc.body.prepend(bar);
 
-  const chip = bar.querySelector<HTMLElement>("#topbar-boat")!;
-  // The chip opens the boat picker (practice always sails the club's cruiser, so there it stays a link).
-  if (chip instanceof HTMLButtonElement) chip.addEventListener("click", () => void import("./ui/boatPicker").then((m) => m.openBoatPicker(doc)));
+  // The chip opens the boat picker. Practice always sails the club's cruiser, so there it is a
+  // link to the Boatyard instead; the Set sail card switches it while Annapolis is picked (M1).
+  let practice = chipPage === "practice";
+  let chip: HTMLElement;
+  const makeChip = () => {
+    const holder = bar.querySelector<HTMLElement>("#topbar-chip")!;
+    if (practice) chip = doc.createElement("a");
+    else {
+      const b = doc.createElement("button");
+      b.type = "button";
+      b.setAttribute("aria-haspopup", "dialog");
+      b.addEventListener("click", () => void import("./ui/boatPicker").then((m) => m.openBoatPicker(doc)));
+      chip = b;
+    }
+    chip.className = "boat";
+    chip.id = "topbar-boat";
+    holder.replaceChildren(chip);
+  };
+  makeChip();
   // Close More when something else is clicked.
   const moreEl = bar.querySelector<HTMLDetailsElement>(".more")!;
   doc.addEventListener("click", (e) => {
     if (moreEl.open && !moreEl.contains(e.target as Node)) moreEl.open = false;
   });
   const draw = () => {
-    const c = boatChip(currentBoat(), chipPage);
+    const c = boatChip(currentBoat(), practice ? "practice" : chipPage);
     const p = doc.createElement("span");
     p.className = "p";
     p.textContent = c.prefix;
@@ -158,6 +182,13 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   };
   draw();
   onBoatChange(draw);
+  doc.addEventListener(CHIP_EVENT, (e) => {
+    const on = !!(e as CustomEvent<{ practice: boolean }>).detail?.practice;
+    if (on === practice) return;
+    practice = on;
+    makeChip();
+    draw();
+  });
   return bar;
 }
 

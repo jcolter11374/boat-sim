@@ -29,6 +29,8 @@ import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
 import { HERO_CLOUD, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
+import { OceanSound, rigFor } from "./sound";
+import { TitleSound, startsAtFirstTouch } from "./titleSound";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -87,8 +89,10 @@ atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
 const clock = new THREE.Clock();
-// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
-let look: Look = startLook(qualitySelect);
+// ?quality=low|high|ultra picks the starting look; without a graphics card it starts Low, as
+// the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
+// the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
+let look: Look = startLook(qualitySelect, atmos.software);
 // The title screen's Take the helm: fetch its simulator at idle so Set sail is quick (F2).
 prefetchHelm(new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href);
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
@@ -143,6 +147,50 @@ function buildBoats(q: Quality): void {
   }
 }
 
+// ---------- the title's sound: the hero's sea, a bell buoy, a rope or the hull's lap, the menu's chime ----------
+// (titleSound.ts.) Nothing plays until the visitor's first click or key (no autoplay); the
+// button on the menu and N turn it off and on, and that choice is remembered (the same one
+// as the helm's). It fades when the title goes: nothing here plays over the plain sea demo.
+const sound = new OceanSound();
+(window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
+const titleSound = new TitleSound(sound);
+titleSound.scene.gulls = new URLSearchParams(location.search).get("gulls") === "1"; // off until someone has heard it (Elena)
+{
+  const btn = document.getElementById("t-sound");
+  sound.onChange = () => {
+    if (!btn) return;
+    btn.setAttribute("aria-pressed", String(sound.on));
+    btn.textContent = sound.on ? "Sound: on" : "Sound: off"; // the state, not an order (Elena)
+  };
+  sound.onChange();
+  btn?.addEventListener("click", () => sound.toggle());
+  const touch = (e: Event) => {
+    if (!document.body.classList.contains("title")) return;
+    const el = e.target as Element | null;
+    if (e instanceof KeyboardEvent) {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+      if (e.code === "KeyN" && !el?.closest?.("input, select, textarea")) return sound.toggle();
+    } else if (el?.closest?.("#t-sound")) return; // the button says what it does itself
+    if (startsAtFirstTouch(sound.on, sound.muted)) sound.enable(false); // on for now; not recorded as their choice
+  };
+  addEventListener("pointerdown", touch, true);
+  addEventListener("keydown", touch, true);
+  // The menu's chime: a soft note as the pointer crosses a choice, a small bell when it's chosen.
+  document.querySelectorAll<HTMLElement>("#title nav > a, #title nav > details > summary, #title nav .links > *, #t-change").forEach((el, i) => {
+    el.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && titleSound.chime(i));
+    el.addEventListener("click", (e) => {
+      titleSound.chime(i, true);
+      // Leaving for another page in this tab: the sea fades as the page goes (and comes back
+      // if the visitor returns with Back).
+      const a = el.closest("a");
+      if (a && !a.target && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && sound.on) {
+        sound.disable(false);
+        addEventListener("pageshow", (p) => p.persisted && !sound.muted && sound.enable(false), { once: true });
+      }
+    });
+  });
+}
+
 // ---------- the title hero: the player's own boat, alone, at golden hour ----------
 let hero: Boat | null = null;
 const heroOn = () => document.body.classList.contains("title");
@@ -164,6 +212,9 @@ function buildHero(q: Quality): void {
   shadowsOn(model.root);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
   hero = { spec, model, motion: newMotion(spec, heroPlace, clock.getElapsedTime()), wake, contact, place: heroPlace, tag: null! };
+  sound.rig = rigFor(spec.key);
+  sound.length = spec.length;
+  titleSound.scene.sails = sound.rig === "shrouds"; // ropes creak only on a boat that has them
   // A stock boat's detailed model loads on demand: swap it in when it arrives.
   if (spec.key.startsWith("stock_") && !hasDetailedStock(spec.key as StockKey)) {
     const k = spec.key as StockKey;
@@ -376,8 +427,13 @@ const bowW = new THREE.Vector3();
 const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
+let soundT = 0;
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
+  // The title's sound runs while the title is up, and fades out when it goes.
+  if (document.body.classList.contains("title")) titleSound.update(t - soundT);
+  else if (sound.on) sound.disable(false);
+  soundT = t;
   sea.update(comps, t);
   status.boats = boats.map((b) => {
     b.motion.advance(comps, t);

@@ -151,7 +151,7 @@
   #credtext a { color: inherit; }
   body.at-wheel #credits { bottom: auto; top: calc(var(--bar, 0px) + 8px); }
   #practice-what[hidden], #practice-end[hidden] { display: none; }
-  #practice-courses[hidden], #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
+  #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
   #prologuepick { display: block; margin: 6px 0; }
   #practice-courses .courses { display: flex; flex-direction: column; gap: 6px; }
   #practice-courses .courses button { width: 100%; margin: 0; text-align: left; padding: 7px 12px; }
@@ -178,6 +178,9 @@
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
   #trimchip[hidden] { display: none; }
   /* While at the wheel the voyage controls wait. */
+  /* Watching a recorded voyage (M2, R1): nothing to steer and no ghost, so the orders and the lead cell go; Jonas's S1 dresses the rest. */
+  body.watching #orders, body.watching #orders-tab, body.watching #c-lead, body.watching #c-order { display: none; }
+  #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -224,15 +227,20 @@
      she is framed in the band under the bar. */
   #start { justify-content: flex-start; align-items: center; padding-left: max(16px, 5vw); }
   #ss-card { width: min(360px, calc(100vw - 32px)); background: rgba(8,18,32,.78); padding: 16px 20px 12px; }
+  /* Tall cards: More options scrolls inside the card, so its top and Set sail stay put (Elena); the
+     height is set by setsailCard.ts to what's left of the window. */
+  #more-body { overflow-y: auto; overscroll-behavior: contain; }
   @media (max-width: 699px) { #start { align-items: flex-end; padding: 0 16px 12px; } #ss-card { max-height: calc(100dvh - var(--bar, 0px) - 200px); } }
   .ss-pill small { display: block; margin: 1px 0 0 !important; font-size: 11.5px; }
   #ss-card h1 { font: 800 28px/1.1 "Fraunces", Georgia, serif; margin: 0 0 6px; }
   .ss-row { margin: 8px 0; }
   .ss-l { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 6px 0 4px; }
+  .ss-line { font-size: 12.5px; margin: 5px 0 2px; }
   .ss-opts { display: flex; flex-wrap: wrap; gap: 6px; }
   .ss-pill { font: 600 13.5px system-ui, sans-serif; color: var(--ink); text-align: left; padding: 6px 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(27,51,82,.55); cursor: pointer; }
   .ss-pill small { font-weight: 400; color: var(--dim); margin-left: 6px; }
   .ss-pill:hover { border-color: #8ab4ff; }
+  .ss-pill:focus { outline: none; } .ss-pill:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; } /* a ring for the keyboard only (Elena) */
   .ss-pill[aria-pressed="true"] { border-color: var(--orange, #ff8a2a); background: rgba(255,138,42,.2); }
   .ss-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .ss-link:focus-visible { outline: 2px solid var(--orange, #ff8a2a); outline-offset: 2px; }
@@ -281,7 +289,7 @@
   #result .rc { width: min(640px, 94vw); padding: 22px 26px 16px; background: var(--hud-solid); max-height: calc(100dvh - var(--bar, 0px) - var(--edge) * 2 - var(--strip-h) * .5 - 16px); }
   .rc-top { display: flex; align-items: flex-start; gap: 10px; }
   .rc-top h1 { flex: 1; font-size: 24px; line-height: 1.2; margin: 0; text-wrap: balance; }
-  .rc .i { width: 22px; height: 22px; padding: 0; border-radius: 50%; font: italic 600 13px Georgia, serif; flex: none; margin-top: 4px; color: var(--dim); background: rgba(255,255,255,.06); border-color: var(--line); }
+  .rc .i { width: 22px; height: 22px; padding: 0; border-radius: 50%; font: 600 13px system-ui, sans-serif; flex: none; margin-top: 4px; color: var(--dim); background: rgba(255,255,255,.06); border-color: var(--line); }
   #r-caveat { font-size: 12.5px; }
   #r-story { font-size: 15px; line-height: 1.45; color: var(--ink); margin: 10px 0 12px; }
   #r-story:empty { display: none; }
@@ -323,7 +331,7 @@
      The world gets the screen: one instrument strip at the bottom, the orders in a drawer on the left,
      a corner map top right, toasts top centre. Everything else is one key or one click away. */
   :root { --hud: rgba(8,16,28,.46); --hud-solid: rgba(8,16,28,.82); --hud-line: rgba(200,220,245,.14);
-    --strip-w: min(calc(var(--ui) * 80), calc(100vw - 16px)); --strip-h: calc(var(--ui) * 4.83); --edge: 10px; --strip-bg: rgba(10,18,28,.62); }
+    --strip-w: min(calc(var(--ui) * 93), calc(100vw - 16px)); --strip-h: calc(var(--ui) * 4.83); --edge: 10px; --strip-bg: rgba(10,18,28,.62); }
   .hud { background: var(--hud); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); border-radius: 10px; }
   .num, #strip .v, #wheel .w-cell b, #wheel-goal { font-variant-numeric: tabular-nums; }
   button.x { background: none; border: 0; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--dim); }
@@ -336,9 +344,11 @@
   body.sailing #topbar { transition: transform .35s ease; }
   body.no-bar-anim #topbar { transition: none !important; }
 
-  /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
+  /* The strip: the instruments, translucent, borderless, numbers that don't jitter. The equipment cell is
+     the one Watch a voyage has (M2, one strip for every mode): the strip is 13 units wider to seat it,
+     so the other cells keep their widths (the time cell must hold "Real time" on one line). */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.8fr 1.1fr .95fr .75fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: 1.9fr 1.1fr .95fr .75fr .95fr 1fr max-content .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -352,6 +362,16 @@
   #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: .76em; }
   #strip .c-order[aria-expanded="true"] .v::after { content: " ◂"; }
   #c-lead.ahead .v { color: var(--good); } #c-lead.behind .v { color: #ff8a7a; }
+  #eq { display: flex; gap: .15em; align-items: center; height: 1.63em; }
+  #eq .part { width: .9em; height: .9em; color: rgba(233,241,251,.55); flex: none; display: inline-flex; }
+  #eq .part svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #eq .part.bad { color: var(--bad); filter: drop-shadow(0 0 3px rgba(255,93,93,.8)); }
+  #eq .part.pulse { animation: eqpulse .9s ease-in-out 1; }
+  @keyframes eqpulse { 50% { transform: scale(1.45); } }
+  @media (prefers-reduced-motion: reduce) { #eq .part.pulse { animation: none; } }
+  /* Broken parts: a red dot with the count on the cell, and it stays (as on Watch a voyage). */
+  #strip #c-eq .l[data-bad]::after { content: attr(data-bad); display: inline-block; vertical-align: 1px; margin-left: .45em; min-width: 1.45em; height: 1.45em; padding: 0 .3em; box-sizing: border-box; letter-spacing: 0;
+    border-radius: 999px; background: var(--bad); color: #fff; font: 700 .8em/1.8em system-ui, sans-serif; text-align: center; }
   #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
   #strip .meter[hidden] { display: none; }
   #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
@@ -493,6 +513,16 @@
     #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; grid-auto-rows: 4em; align-content: center; }
     #strip #c-bat { border-left: 0; padding-left: 0; }
     #keysbtn { justify-self: end; margin-right: 4px; }
+    /* Nine things in two rows of four: the keys button rides in the top row's own narrow column, and
+       the equipment icons wrap to two lines when a phone's column is too narrow for nine in a row. */
+    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr 2.2em; }
+    #strip #keysbtn { grid-column: 5; grid-row: 1; margin-right: 0; }
+  }
+  /* A phone: no room for nine icons, so the strip is as it was before the equipment cell (breakdowns are in the notes). */
+  @media (max-width: 480px) {
+    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
+    #strip #keysbtn { grid-column: auto; grid-row: auto; margin-right: 4px; }
+    #strip #c-eq { display: none; }
     #notes { width: min(420px, calc(100vw - 24px)); top: calc(var(--bar, 0px) + 54px); }
     #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
     #mapbox:not(.big) { width: auto; padding: 4px; }
@@ -540,6 +570,7 @@
   <div class="cell" id="c-speed"><span class="v" id="c-speedv">–</span><span class="l">speed</span></div>
   <div class="cell" id="c-bat"><span class="v" id="c-batv">–</span><span class="l" id="c-batl">battery</span><span class="meter"><i id="c-batbar"></i></span></div>
   <button class="cell" id="c-wind" aria-controls="fcbox" aria-expanded="false" title="The 5-day forecast (F)"><span class="v" id="c-windv">–</span><span class="l" id="c-wavel">wind</span></button>
+  <div class="cell" id="c-eq"><div id="eq"></div><span class="l">equipment</span></div>
   <div class="cell" id="c-lead"><span class="v" id="c-leadv">level</span><span class="l">vs the ghost</span></div>
   <button id="keysbtn" aria-expanded="false" aria-controls="keylist" title="All the keys (?)">?</button>
 </section>
@@ -630,16 +661,9 @@
     <div class="medal" data-medal=""><svg class="medal-disc" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="var(--m3)"/><circle cx="20" cy="20" r="16.5" fill="var(--m2)"/><circle cx="20" cy="20" r="15" fill="none" stroke="var(--m1)" stroke-width="0.8" opacity=".7"/><path d="M20 7 L22.6 17.4 L33 20 L22.6 22.6 L20 33 L17.4 22.6 L7 20 L17.4 17.4 Z" fill="var(--m1)"/><path d="M20 7 L22.6 17.4 L20 20 Z M33 20 L22.6 22.6 L20 20 Z M20 33 L17.4 22.6 L20 20 Z M7 20 L17.4 17.4 L20 20 Z" fill="var(--m3)" opacity=".55"/><circle cx="20" cy="20" r="1.6" fill="var(--m3)"/></svg><span class="medal-name"></span></div>
     <p class="result-time"></p>
     <p class="result-next"></p>
-    <p class="result-go"><button id="practice-ghost" class="go">Race your ghost</button> <button id="practice-other">Another course</button></p>
+    <p class="result-go"><button id="practice-ghost" class="go">Race your best run</button> <button id="practice-other">Another course</button></p>
   </div>
-  <div id="practice-courses" hidden>
-    <p id="practice-breeze" role="group" aria-label="Breeze">Breeze: <button data-b="light">Light (8 kn)</button> <button data-b="good">Good (12 kn)</button> <button data-b="fresh">Fresh (18 kn)</button></p>
-    <p class="courses"><button class="go" data-course="triangle">The triangle<small>three marks 800 m apart: upwind, across, back (about 15 min; try 5&times;)</small><small data-best="triangle"></small></button>
-      <button data-course="light">Sail to Thomas Point Light<small>about 7 km down the Bay (about 40 min; try 10&times;)</small><small data-best="light"></small></button>
-      <button data-course="drill">Drills<small>short spells: a reach, a beat, a run</small></button></p>
-    <p class="practice-note">Practice only: your times stay in this browser and never count toward a voyage or the leaderboard. <button class="info" aria-expanded="false" title="About the depths">i</button><span class="info-more" hidden> The depths come from a survey model of the Bay, not a chart, and the tide isn't in it.</span></p>
-  </div>
-  <p><button id="practice-again" class="go">Sail another</button> <a class="crossing" href="helm.html">Set sail: a whole crossing</a></p>
+  <p><button id="practice-again" class="go">Another course</button> <a class="crossing" href="helm.html">Sail across the Atlantic</a></p>
 </div></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
   <h1>Four days later: the Bay mouth</h1>
@@ -651,9 +675,9 @@
   <div class="card glass" id="ss-card">
     <h1>Set sail</h1>
     <div class="ss-row" id="ss-boat"><div class="ss-l">Your boat</div><b id="ss-boatname">Our kayak</b> &middot; <button type="button" class="ss-link" id="ss-change">Change</button></div>
-    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Boat</div><b>Cruiser 31</b> <span class="muted">(the practice boat: a 9.5 m sailing yacht)</span></div>
+    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
-    <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-l">Breeze</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
+    <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-line muted" id="ss-course-line"></div><div class="ss-l">Wind</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
     <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div></div>
     <div class="ss-row" id="ss-ch" hidden><div class="ss-l">Weather challenge (optional)</div><div class="ss-opts" id="ss-ch-opts"></div><p id="ss-why" class="muted" hidden></p></div>
     <fieldset id="boats" hidden><legend>Your boat</legend>
@@ -664,10 +688,9 @@
     <button id="go" class="go big">Set sail</button>
     <span id="startmsg" class="muted"></span>
     <p class="muted ss-after">You can change speed, pause, and take the wheel once you're at sea.</p>
-    <details id="more">
-      <summary>More options</summary>
-    <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
-    <span id="porthint" class="muted"></span>
+    <!-- The card's sources (M1 piece 5): the launch day and challenge pills write these, and begin() reads them.
+         Never shown: the card is the one place to pick (Elena, one-game plan). -->
+    <div id="ss-sources" hidden>
       <label>Launch day <select id="launch">
         <option value="2020-04-23" selected>23 April 2020: a good day, light seas</option>
         <option value="0">Rough start: 1 April 2020, the tail of a gale, about 4 m waves</option><option value="1">15 April 2020</option><option value="2">1 May 2020</option>
@@ -677,13 +700,26 @@
       <p id="chstory" hidden></p>
       <div id="chbrief" hidden><ul></ul><p class="honest muted"></p></div>
       <p id="chnote" class="muted" hidden></p>
-      <fieldset id="modes"><legend>How you steer</legend>
-        <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
-        <label><input type="radio" name="mode" value="base"> <b>From home, by satellite</b>: what steering a real drone is like. You send one order a day; it reaches the boat at its next daily check-in, about a day later, and you only see where the boat was at its last report.</label>
-      </fieldset>
-      <label><input type="checkbox" id="breakdowns" checked> Breakdowns: parts can fail at sea, with the same luck for you and the autopilot</label>
-      <label><input type="checkbox" id="safe"> Save the battery: the boat slows itself down when the battery runs low, as the autopilot does</label>
+    </div>
+    <details id="more">
+      <summary>More options</summary>
+      <div id="more-body">
+    <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
+    <span id="porthint" class="muted"></span>
+      <!-- How you steer, breakdowns and the battery as pills like the rest of the card (Elena); the
+           radios and boxes stay as their sources (begin() reads them), never shown. -->
+      <div class="ss-l">How you steer</div><div class="ss-opts" id="ss-mode-opts"></div><p class="muted ss-line" id="ss-mode-line"></p>
+      <div class="ss-opts" id="ss-toggles"></div><p class="muted ss-line" id="ss-toggle-line"></p>
+      <div id="ss-more-sources" hidden>
+        <fieldset id="modes"><legend>How you steer</legend>
+          <label><input type="radio" name="mode" value="hands_on" checked> <b>Hands on</b>: as if you were on board. Your orders reach the boat at once.</label>
+          <label><input type="radio" name="mode" value="base"> <b>From home, by satellite</b>: what steering a real drone is like. You send one order a day; it reaches the boat at its next daily check-in, about a day later, and you only see where the boat was at its last report.</label>
+        </fieldset>
+        <label><input type="checkbox" id="breakdowns" checked> Breakdowns: parts can fail at sea, with the same luck for you and the autopilot</label>
+        <label><input type="checkbox" id="safe"> Save the battery: the boat slows itself down when the battery runs low, as the autopilot does</label>
+      </div>
       <p class="muted">The autopilot's ghost sails the same boat through the same weather and the same bad luck. It never shows you what's ahead of your clock. Finish more than a day ahead of it to win; within a day is a draw, because that much is down to the weather's luck.</p>
+      </div>
     </details>
   </div>
 </div>

@@ -454,10 +454,21 @@ if (uStreak > 0.001) {
   // Thin filaments, not bands: the lines where a noise stretched along the wind
   // crosses its middle (a few tens of cm wide, some metres apart), broken into
   // dashes and wisps, and only some lanes carry foam; more as the wind rises.
-  float r = vnoise(vec2(qs.x * 0.05, qs.y * 0.35));
+  // Near the lens a lane is drawn a few cm wide (below), and there the long, slow wander above
+  // left it ruler-straight across the whole view (Elena, after #440): a gentle wobble every few
+  // metres, fading out by the time a pixel spans 20 cm, so far lanes are as before.
+  float nearW = 1.0 - smoothstep(0.05, 0.2, fpF);
+  float qy = qs.y + nearW * (0.35 * vnoise(vec2(qs.x * 0.3, qs.y * 0.5) + 17.0) + 0.12 * vnoise(vec2(qs.x * 1.2, qs.y * 2.0) + 23.0));
+  float r = vnoise(vec2(qs.x * 0.05, qy * 0.35));
   float ridge = 1.0 - abs(2.0 * r - 1.0);
   float fwR = fwidth(ridge);
   float line = smoothstep(0.91 - 1.5 * fwR, 0.985, ridge) * mix(1.0, 0.35, clamp(fwR * 4.0, 0.0, 1.0)); // thin: wide soft lanes read as glossy smears (Ines, round 6)
+  // Close up, a fixed width in metres with a one-pixel edge: the threshold above drew wide,
+  // blurry smears near the lens, worst where the noise flattens out (Elena).
+  float dR = (1.0 - ridge) * fpF / max(fwR, 1e-5); // ~metres to the lane's centre line
+  // ...and swelling and thinning along its length (1 to 4 cm), as torn foam does.
+  float wN = mix(0.008, 0.04, vnoise(vec2(qs.x * 0.5, qy * 0.35) + 41.0));
+  line = mix(1.0 - smoothstep(wN, wN + 0.02 + fpF, dR), line, 1.0 - nearW);
   float brk = vnoise(vec2(qs.x * 0.8, qs.y * 1.5) + 31.0) * 0.6
             + mix(vnoise(vec2(qs.x * 0.9, qs.y * 5.0) + 7.0), 0.5, smoothstep(0.05, 0.25, fpF)) * 0.4;
   // Lanes come and go every few tens of metres along the wind, and break into

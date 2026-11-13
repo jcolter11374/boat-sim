@@ -10,6 +10,15 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFixture, writeRaceFixture } from "./fixture-voyage.mjs";
 import { chromium } from "playwright";
 
+/** Set one of the Set sail card's hidden source selects (#launch, #challenge), as its pills do. */
+async function pickSource(page, id, value) {
+  await page.evaluate(([i, v]) => {
+    const s = document.getElementById(i);
+    s.value = v;
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [id, value]);
+}
+
 const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
@@ -638,8 +647,7 @@ try {
     log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);
     // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
     // so a whole game fits in the smoke test.
-    await page.evaluate(() => (document.getElementById("more").open = true)); // More options
-    await page.selectOption("#launch", "2");
+    await pickSource(page, "launch", "2"); // the card's own select (its pills write it; M1 piece 5)
     await page.click("#go");
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
@@ -773,8 +781,7 @@ try {
       log.push(`helm challenges: files there but no simulator (${hm.err})`);
     } else {
       if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
-      await page.evaluate(() => (document.getElementById("more").open = true));
-      await page.selectOption("#challenge", chFile.id);
+      await pickSource(page, "challenge", chFile.id);
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       let ch = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, msg: document.querySelector("#startmsg").textContent }));
@@ -850,7 +857,32 @@ try {
     await page.goto(`${URL}helm.html?quality=low&where=annapolis&course=triangle&go=1`);
     await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 90000 }).catch(() => fail("an Annapolis Set sail link didn't put you at the wheel"));
     if (new globalThis.URL(page.url()).searchParams.has("go")) fail("go=1 stayed in the URL, so a reload would set sail again");
-    log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once");
+    // Practice's front door is the Set sail card too (M1 piece 3): ?practice opens it with Annapolis picked.
+    await page.goto(`${URL}helm.html?quality=low&practice`);
+    await page.waitForFunction(() => window.__setsail && document.querySelector("#ss-where-opts .ss-pill"), null, { timeout: 60000 });
+    const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("practice-end").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
+    if (!pc.start || !pc.course || pc.old || !/Annapolis/.test(pc.where ?? "")) fail(`?practice didn't open the Set sail card on Annapolis: ${JSON.stringify(pc)}`);
+    log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once; ?practice opens the card on Annapolis");
+    // Watch a voyage on the helm's own sailing screen (M2, R1): a recorded voyage plays with no simulator,
+    // opens in real time (John, T2) with Real time first on the bar (T1), and there is nothing to steer.
+    await page.goto(`${URL}helm.html?quality=low&watch=2020-06-01`);
+    await page.waitForFunction(() => window.__helm?.ready || window.__helm?.error, null, { timeout: 60000 });
+    const wv = await page.evaluate(() => ({
+      err: window.__helm.error,
+      view: window.__helm.view,
+      clock: window.__helm.clock,
+      name: window.__helm.watch?.name,
+      first: document.querySelector("#timebar .rate")?.textContent,
+      pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent,
+      orders: getComputedStyle(document.getElementById("orders-tab")).display,
+      start: !document.getElementById("start").hidden,
+    }));
+    if (wv.err || wv.view !== "watch" || wv.start || wv.name !== "Our kayak") fail(`helm?watch didn't open the recorded voyage: ${JSON.stringify(wv)}`);
+    if (Math.abs(wv.clock - 1 / 3600) > 1e-9 || wv.first !== "Real time" || wv.pressed !== "Real time") fail(`a watched voyage must open in real time, Real time first on the bar: ${JSON.stringify(wv)}`);
+    if (wv.orders !== "none") fail("a watched voyage showed the orders drawer");
+    await page.keyboard.press("Digit4");
+    await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
+    log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);
