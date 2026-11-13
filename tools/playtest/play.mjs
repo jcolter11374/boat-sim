@@ -1566,6 +1566,7 @@ const CHECKS = {
       const KINDS = {
         crossing: async (p, mark) => {
           await tap(p, "#t-setsail");
+          await p.waitForURL(/helm\.html/, { timeout: 2 * MIN });
           await p.waitForSelector("#go", { state: "visible", timeout: 2 * MIN });
           mark("card");
           await tap(p, "#go");
@@ -1574,6 +1575,7 @@ const CHECKS = {
         },
         practice: async (p, mark) => {
           await tap(p, "#t-practice");
+          await p.waitForURL(/helm\.html/, { timeout: 2 * MIN });
           await p.waitForFunction(() => !document.getElementById("start").hidden && !document.getElementById("ss-course").hidden, null, { timeout: 2 * MIN });
           mark("card");
           await tap(p, "#go");
@@ -1582,6 +1584,7 @@ const CHECKS = {
         },
         challenge: async (p, mark) => {
           await tap(p, "#t-setsail");
+          await p.waitForURL(/helm\.html/, { timeout: 2 * MIN });
           await p.waitForSelector("#ss-ch-opts .ss-pill:nth-child(2)", { state: "visible", timeout: 2 * MIN });
           mark("card");
           const pill = p.locator("#ss-ch-opts .ss-pill", { hasText: /Gentle June/ });
@@ -1602,7 +1605,7 @@ const CHECKS = {
           const mark = (m) => marks.push(`${m} ${((Date.now() - t0) / 1000).toFixed(1)}s`);
           let total = null;
           try {
-            await p.goto(SITE + "?quality=low", { waitUntil: "domcontentloaded", timeout: 2 * MIN });
+            await p.goto(SITE, { waitUntil: "domcontentloaded", timeout: 2 * MIN });
             await p.waitForSelector("#t-setsail", { state: "visible", timeout: 2 * MIN });
             mark("title");
             await steps(p, mark);
