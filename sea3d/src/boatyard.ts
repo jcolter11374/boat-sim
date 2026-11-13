@@ -854,7 +854,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
     col.append(
       Object.assign(document.createElement("div"), { className: "muted", textContent: who }),
       Object.assign(document.createElement("div"), { className: "odds", textContent: res.odds ? oddsText(res.odds) : "?" }),
-      Object.assign(document.createElement("div"), { className: "muted", textContent: res.odds ? rangeText(res.odds) : "no odds for this build yet" }),
+      Object.assign(document.createElement("div"), { className: "muted", textContent: res.odds ? rangeText(res.odds) : "No odds for this boat yet." }),
     );
     grid.append(col);
   }
@@ -864,7 +864,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   box.append(
     Object.assign(document.createElement("p"), {
       className: "muted",
-      textContent: `The same ${starts.length} launches, both builds. ${starts.length < 10 ? `${starts.length} voyages is a small sample; the odds line is the better guide.` : ""}`,
+      textContent: `The same ${starts.length} launch days, both boats. ${starts.length < 10 ? `${starts.length} voyages is a small sample; the odds line is the better guide.` : ""}`,
     }),
   );
   const t = document.createElement("table");

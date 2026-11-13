@@ -1,7 +1,8 @@
 /**
  * The title hero (one-game plan, step 1; Elena, 12 Nov): the first frame of the game.
- * The player's own boat on the open sea at golden hour, backlit by a low sun, filmed
- * from a low chase boat on a long lens (cinema.ts titleShot), drifting slowly. No name
+ * The player's own boat on the open sea at golden hour, lit by a low sun off to one side
+ * of her (never straight behind: its glow bleached her, John 13 Nov), filmed from a low
+ * chase boat on a long lens (framing.ts titleShot), drifting slowly. No name
  * tags; the left of the screen is kept clear for the logo and the three choices.
  * These are the hero's choices; index.html (main.ts) draws it while the title shows.
  */
@@ -15,6 +16,35 @@ export const HERO_SUN = { el: 5, az: 255 };
 export const HERO_CLOUD = 0.3;
 /** The sky's pattern for the hero: a fixed day, so the first frame is the same every visit. */
 export const HERO_SKY_DAY = 20190;
+/**
+ * The glow round bright things on the title: under half the usual strength and a tight
+ * radius, so the low sun's light stays by the sun and nothing lies over the boat.
+ */
+export const HERO_GLOW = { scale: 0.45, radius: 0.2 };
+/** How much the far water takes of the sky's warm horizon colour (0..1; gentle). */
+export const HERO_SEA_WARM = 0.55;
+/**
+ * How the title lights a boat. sunOff: how far round from the lens's line the low sun stands
+ * (degrees; framing.ts titleShot). fill, env: how much of the sky dome's light and of the
+ * sky's reflections she keeps. back: the sun's edge light and the glow through sailcloth.
+ *
+ * A boat with sails is filmed towards the sun (30 degrees off it): her sails glow and she
+ * reads as a shape against the sky. A low boat with no sails has nothing to glow, and that
+ * way round her near side was in shadow: the orange kayak read as a dull brown shape on
+ * grey-black water (Elena, 13 Nov). So for those the sun stands over the lens's shoulder, at
+ * about three-quarters: the side we see catches the warm light, the deck reflects the sky.
+ */
+export interface HeroLight {
+  sunOff: number;
+  fill: number;
+  env: number;
+  back: number;
+}
+export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1 };
+export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0 };
+export function heroLightFor(key: string): HeroLight {
+  return key === "kayak" || key === "randolph" || key === "stock_ocean_rower45" ? HERO_LIGHT_LOW : HERO_LIGHT_SAILS;
+}
 /** A gentle sea: low enough that the hull stays clear of the crests from a 1.5 m camera, big enough to move. */
 export const HERO_SEA: SeaState = { name: "Title", hs: 0.8, tp: 6.5, meanDirection: 0.3 };
 

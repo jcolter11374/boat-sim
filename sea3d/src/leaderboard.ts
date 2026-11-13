@@ -1,6 +1,9 @@
 import { bestHeadline, groupSummary, launchSetWords, tierName, launchSetYears, sharedKayakBadges, versusWords } from "./boardwords";
 import { type BuildName, loadNames, nameOf } from "./names";
 import { standing, standingText } from "./results";
+import { CHALLENGE_BOARD_WORDS, boardTab, challengeRows, type BoardTab } from "./challengeBoard";
+import { loadChallengeBests } from "./helm/challengeBest";
+import { loadChallenges } from "./helm/challenges";
 // Design leaderboard page: draws the board JSON the "Design leaderboard"
 // workflow publishes (boatsim.mc.leaderboard). All statistics are worked out in
 // Python (summary()); this page only lays them out. Every piece of data goes in
@@ -154,7 +157,7 @@ function holdoutCell(r: Row): HTMLElement {
   const h = r.holdout;
   const top = el("div", h.flag ? "warn" : "", `${pct(h.finish_rate)} of ${h.launches}`);
   td.append(top);
-  if (h.flag) td.append(el("div", "warn", "Much worse than on the main launches: may be tuned to the test"));
+  if (h.flag) td.append(el("div", "warn", "Much worse than on the main launch days: may be tuned to the test"));
   return td;
 }
 
@@ -173,9 +176,9 @@ function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
   // About the leaderboard, in words, behind "About this leaderboard" (#318: the
   // ids were the first thing a player saw).
   const bits = [
-    `Every build sails the same ${launchSetWords(b.board.launch_set)}.`,
+    `Every boat sails the same launch days. ${launchSetWords(b.board.launch_set)}.`,
     b.board.holdout_set ? `A hidden year (${launchSetYears(b.board.holdout_set)}) checks nobody tuned to the test.` : "No hidden year to check against.",
-    `Simulator version ${(b.board.sha ?? run.commit ?? "?").slice(0, 7)}${b.board.made ? `, run ${b.board.made.slice(0, 10)}` : ""}; every build scored in one run on one machine.`,
+    `Simulator version ${(b.board.sha ?? run.commit ?? "?").slice(0, 7)}${b.board.made ? `, run ${b.board.made.slice(0, 10)}` : ""}; every boat scored in one run on one machine.`,
   ];
   for (const t of bits) facts.append(el("div", undefined, t));
 
@@ -210,7 +213,7 @@ function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
   // leaderboard.html#<design> (from a Results card) marks that build's row.
   let mine = "";
   try {
-    mine = decodeURIComponent(location.hash.slice(1));
+    mine = boardTab(location.hash) === "challenges" ? "" : decodeURIComponent(location.hash.slice(1)); // #challenges is the other tab, not a build
   } catch {
     // a mangled link: mark nothing
   }
@@ -274,13 +277,13 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     const top = s.rows.filter((r) => r.tier === 1).sort((x, y) => Number(y.design === s.reference) - Number(x.design === s.reference));
     const groups = Math.max(0, ...s.rows.map((r) => r.tier));
     head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
-    if (mine) sub.textContent = "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others.";
+    if (mine) sub.textContent = "Your boat isn't on the leaderboard yet. The board tests a fixed list of boats. The Boatyard gives the odds for others.";
     else {
-      sub.textContent = "Builds in the same group can't be told apart with this many launches. ";
+      sub.textContent = "Boats in the same group can't be told apart with this many launch days. ";
       const n = s.rows[0]?.launches ?? 0;
-      const when = launchSetWords(b.board.launch_set).replace(/ launches every \d+ days, /, ", ");
+      const when = launchSetWords(b.board.launch_set).replace(/^A launch day every \d+ days, /, "");
       // One sentence from one source for both pages' "i" (Milo M4).
-      sub.append(info(`Every build sails the same ${n} launches, ${when}, so the weather is identical for all. The Boatyard tests on a wider set of 100 launches, so its odds can differ by a few points.`));
+      sub.append(info(`Every boat sails the same ${n} launch days, ${when}, so the weather is identical for all. The Boatyard tests on a wider set of 100 launch days, so its odds can differ by a few points.`));
     }
   }
   box.replaceChildren(head, sub);
@@ -297,7 +300,7 @@ wireStats();
 
 declare global {
   interface Window {
-    __leaderboard?: { ready: boolean; rows: number; error: string | null; sample: boolean };
+    __leaderboard?: { ready: boolean; rows: number; error: string | null; sample: boolean; sea?: { frames: number; quality: string } | null; tab?: BoardTab; challenges?: number };
   }
 }
 
@@ -319,4 +322,85 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+/** The Weather challenges tab (W5): each challenge with your best try in this browser beside the autopilot's. Every word goes in with textContent. */
+async function drawChallenges(): Promise<number> {
+  const W = CHALLENGE_BOARD_WORDS;
+  document.getElementById("ckept")!.textContent = W.kept;
+  const base = new URL("./challenges/", location.href).href; // this site's own list, nothing else
+  const rows = challengeRows(await loadChallenges(base), loadChallengeBests());
+  const body = document.getElementById("crows")!;
+  body.replaceChildren(
+    ...rows.map((r) => {
+      const tr = el("tr", [r.tried ? "tried" : "", r.ahead ? "ahead" : ""].filter(Boolean).join(" "));
+      const name = el("td");
+      name.append(el("span", "name", r.title), el("span", "when", r.when));
+      const yours = el("td", "yours", r.yours);
+      if (r.detail) yours.append(el("span", "detail", r.detail)); // the boat's name is the player's own text
+      const go = el("td");
+      const a = el("a", "sail", r.link);
+      a.href = r.href;
+      a.setAttribute("aria-label", `${r.link}: ${r.title}`);
+      go.append(a);
+      tr.append(name, yours, el("td", "auto", r.autopilot), go);
+      return tr;
+    }),
+  );
+  const none = document.getElementById("cnone")!;
+  none.hidden = rows.length > 0;
+  none.textContent = rows.length ? "" : W.missing;
+  return rows.length;
+}
+
+/** The two tabs. The address says which is open (#challenges), so a link can open either. */
+function showTab(tab: BoardTab, fromClick = false): void {
+  for (const t of ["designs", "challenges"] as const) {
+    const on = t === tab;
+    const b = document.getElementById(`tab-${t}`)!;
+    b.setAttribute("aria-selected", String(on));
+    b.tabIndex = on ? 0 : -1;
+    document.getElementById(`p-${t}`)!.hidden = !on;
+  }
+  document.getElementById("sub")!.textContent = CHALLENGE_BOARD_WORDS.sub[tab];
+  document.getElementById("about")!.hidden = tab !== "designs";
+  if (fromClick) history.replaceState(null, "", tab === "challenges" ? "#challenges" : location.pathname + location.search);
+  if (window.__leaderboard) window.__leaderboard.tab = tab;
+}
+function wireTabs(): void {
+  const tabs = ["designs", "challenges"] as const;
+  for (const t of tabs) {
+    const b = document.getElementById(`tab-${t}`)!;
+    b.textContent = CHALLENGE_BOARD_WORDS.tabs[t];
+    b.addEventListener("click", () => showTab(t, true));
+    b.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const other = tabs[1 - tabs.indexOf(t)];
+      showTab(other, true);
+      document.getElementById(`tab-${other}`)!.focus();
+    });
+  }
+  addEventListener("hashchange", () => showTab(boardTab(location.hash)));
+}
+
+/** The sea and sky behind the page, once the board is up. ?sea=0 keeps the plain page; so does a computer that can't draw it. */
+async function sea(): Promise<void> {
+  const host = document.getElementById("sea");
+  if (!host || new URLSearchParams(location.search).get("sea") === "0") return;
+  try {
+    const { mountBackdrop } = await import("./backdrop");
+    const b = mountBackdrop(host);
+    document.body.classList.add("sea");
+    if (window.__leaderboard) window.__leaderboard.sea = b;
+  } catch {
+    if (window.__leaderboard) window.__leaderboard.sea = null; // no 3D here: the dark page stays
+  }
+}
+
+wireTabs();
+showTab(boardTab(location.hash)); // the right tab at once, before either board has its rows
+void main()
+  .then(drawChallenges)
+  .then((n) => {
+    if (window.__leaderboard) window.__leaderboard.challenges = n;
+    showTab(boardTab(location.hash));
+  })
+  .then(sea);

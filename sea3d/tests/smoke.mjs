@@ -889,11 +889,12 @@ try {
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
     // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
     // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
-    // Until the parity check (R5) the row shows only with ?who= in the address (Elena).
+    // On for everyone since 13 Nov (John): the plain card shows the row with "You" picked and Set sail unchanged.
     await page.goto(`${URL}helm.html?quality=low`);
     await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 60000 });
-    await page.waitForTimeout(1500);
-    if (await page.evaluate(() => !document.getElementById("ss-who").hidden)) fail("Who steers showed on the plain Set sail card before the parity check");
+    await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the plain Set sail card has no Who steers row"));
+    const plain = await page.evaluate(() => ({ who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent, go: document.getElementById("go").textContent }));
+    if (plain.who !== "You" || plain.go !== "Set sail") fail(`the plain Set sail card must open on You with Set sail: ${JSON.stringify(plain)}`);
     await page.goto(`${URL}helm.html?quality=low&who=autopilot`);
     await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Who steers row"));
     const ws = await page.evaluate(() => ({
@@ -973,6 +974,28 @@ try {
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
+    // Two tabs (M3, W5): the designs board opens first; Weather challenges is its own tab, lists the
+    // challenges from this site with "Not sailed yet" in a fresh browser, and a link can open it.
+    await page.waitForFunction(() => window.__leaderboard.challenges !== undefined, null, { timeout: 30000 }).catch(() => fail("leaderboard: the Weather challenges tab never drew"));
+    const tabs0 = await page.evaluate(() => ({ tab: window.__leaderboard.tab, designs: !document.getElementById("p-designs").hidden, ch: !document.getElementById("p-challenges").hidden }));
+    if (tabs0.tab !== "designs" || !tabs0.designs || tabs0.ch) fail(`leaderboard: it should open on Boats: ${JSON.stringify(tabs0)}`);
+    await page.click("#tab-challenges");
+    const tabs1 = await page.evaluate(() => ({
+      tab: window.__leaderboard.tab,
+      designs: !document.getElementById("p-designs").hidden,
+      hash: location.hash,
+      n: window.__leaderboard.challenges,
+      rows: document.querySelectorAll("#crows tr").length,
+      unsailed: [...document.querySelectorAll("#crows td.yours")].filter((t) => t.textContent === "Not sailed yet").length,
+      none: document.getElementById("cnone").textContent,
+      money: /[$£€]|price|cost/i.test(document.getElementById("p-challenges").innerText),
+    }));
+    if (tabs1.tab !== "challenges" || tabs1.designs || tabs1.hash !== "#challenges" || tabs1.rows !== tabs1.n || tabs1.unsailed !== tabs1.rows || tabs1.money || (tabs1.n === 0 && !/aren't available right now/.test(tabs1.none)))
+      fail(`leaderboard: Weather challenges tab: ${JSON.stringify(tabs1)}`);
+    await page.click("#tab-designs");
+    log.push(`leaderboard tabs: Boats, and Weather challenges with ${tabs1.n} challenges`);
+    // The game's look (M3): the real sea and sky come up behind the board, after its words.
+    await page.waitForFunction(() => window.__leaderboard.sea?.frames > 0 && document.body.classList.contains("sea"), null, { timeout: 60000 }).catch(() => fail("leaderboard: no sea and sky behind the page"));
     await snap({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
     // Race view: with the simulator files it races our kayak against Rev C for a

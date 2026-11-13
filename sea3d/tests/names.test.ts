@@ -43,7 +43,7 @@ test("the headline answers who's best", () => {
   ];
   assert.equal(bestHeadline(top, 3), "Best: Our kayak and 4 others, about 83% finish.");
   assert.equal(bestHeadline(top.slice(0, 1), 3), "Best: Our kayak, about 83% finish.");
-  assert.equal(bestHeadline(top, 1), "Too close to call: every build finishes about 83% of the time.");
+  assert.equal(bestHeadline(top, 1), "Too close to call: every boat finishes about 83% of the time.");
   assert.equal(bestHeadline([], 2), "");
 });
 
