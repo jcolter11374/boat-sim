@@ -3,7 +3,7 @@
 // the North Star). Pure layout, shared by Watch a voyage and the sailing screen; the pages draw the spans.
 
 export interface TapeItem {
-  /** CSS class: "tick", "tick big", "lbl", "lbl card", "lbl card n", "mk" or "mk up". */
+  /** CSS class: "tick", "tick big", "lbl" (a number), "lbl pt" (a compass point; "lbl pt n" for north), "mk" or "mk up". */
   cls: string;
   text: string;
   /** Pixels from the strip's left edge. */
@@ -29,10 +29,15 @@ export function tapeItems(view: number, width: number, marks: TapeMark[]): TapeI
     const x = xOf(b);
     out.push({ cls: b % 15 === 0 ? "tick big" : "tick", text: "", x });
     // A label is drawn only where it fits whole: clear of the left edge, and of "VIEW" at the right.
-    if (b % 15 === 0 && x > 14 && x < width - 40) out.push({ cls: CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", text: CARD[b] ?? String(b), x });
+    if (b % 15 === 0 && x > 14 && x < width - 40) out.push({ cls: CARD[b] ? `lbl pt${b === 0 ? " n" : ""}` : "lbl", text: CARD[b] ?? String(b), x });
   }
   // Marks that would touch go up a row, so "bow" and "sun" never run together.
-  const shown = marks.filter(([b]) => Math.abs(rel(b)) <= TAPE_RANGE).map(([b, text, colour]) => ({ x: xOf(b), half: text.length * 3.4 + 6, text, colour }));
+  // A mark the centre line would cut through sits just to its own side of the line instead.
+  const clear = (x: number, half: number) => (Math.abs(x - width / 2) < half ? width / 2 + (x >= width / 2 ? half : -half) : x);
+  const shown = marks
+    .filter(([b]) => Math.abs(rel(b)) <= TAPE_RANGE)
+    .map(([b, text, colour]) => ({ half: text.length * 3.4 + 6, text, colour, at: xOf(b) }))
+    .map((m) => ({ ...m, x: clear(m.at, m.half) }));
   shown.sort((a, c) => a.x - c.x);
   const rowEnd = [-Infinity, -Infinity];
   for (const m of shown) {
