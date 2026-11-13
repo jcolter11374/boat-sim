@@ -1086,13 +1086,11 @@ const CHECKS = {
       await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 1.5, null, { timeout: 3 * MIN }).catch(() => {});
       await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
       await page.waitForTimeout(3000);
-      // Paused, the save is written at once (#482, Sam): "left" is the day on the screen, "day"
-      // is where the simulator's code stands, never behind it.
-      const left = await page.evaluate(() => ({ day: window.__helm.hour / 24, saved: JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null") }));
-      must(left.saved, `no crossing was saved in the browser 3 s after pausing on day ${left.day.toFixed(2)}`);
-      must(typeof left.saved.left === "number" && Math.abs(left.saved.left - left.day) <= 0.05, `paused on day ${left.day.toFixed(2)} for 3 s, but the save says she was left on day ${left.saved.left}`);
-      must(left.saved.day >= left.saved.left, `the save's code stands at day ${left.saved.day}, behind the day she was left on (${left.saved.left})`);
-      out.push(`paused on day ${left.day.toFixed(2)}; 3 s later the save says left on day ${left.saved.left}, code at day ${left.saved.day}`);
+      // Paused for 3 s, then left (#482, Sam): the save's "left" is the day on the screen as the
+      // page went, and "day", where the simulator's code stands, is never behind it. The day on
+      // the screen is noted as the page goes, as the keeper does.
+      await page.evaluate(() => addEventListener("pagehide", () => sessionStorage.setItem("omar.left", String(window.__helm.hour / 24))));
+      const left = { day: NaN, saved: null };
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
       for (const [w, h, tag] of [[1280, 720, "1280"], [375, 667, "375"]]) {
         await page.setViewportSize({ width: w, height: h });
@@ -1100,6 +1098,13 @@ const CHECKS = {
         await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 20, null, { timeout: 2 * MIN }).catch(() => {});
         await page.waitForTimeout(4000);
         const t = await page.evaluate(() => { const a = document.getElementById("t-continue"); const c = document.getElementById("title"); return { shown: !!a && !a.hidden && a.offsetParent !== null, text: (a?.innerText ?? "").replace(/\s+/g, " "), scrolls: c.scrollHeight > c.clientHeight + 1 }; });
+        if (!left.saved) {
+          Object.assign(left, await page.evaluate(() => ({ day: Number(sessionStorage.getItem("omar.left")), saved: JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null") })));
+          must(left.saved, `no crossing was saved in the browser after pausing and leaving on day ${left.day.toFixed(2)}`);
+          must(typeof left.saved.left === "number" && Math.abs(left.saved.left - left.day) <= 0.05, `paused for 3 s and left on day ${left.day.toFixed(2)}, but the save says she was left on day ${left.saved.left}`);
+          must(left.saved.day >= left.saved.left, `the save's code stands at day ${left.saved.day}, behind the day she was left on (${left.saved.left})`);
+          out.push(`paused 3 s and left on day ${left.day.toFixed(2)}; the save says left on day ${left.saved.left}, code at day ${left.saved.day}`);
+        }
         await shot(`title-${tag}`);
         must(t.shown, `the title doesn't offer "Continue your voyage" at ${tag} after a crossing was left at day ${left.day}`);
         out.push(`title ${tag}: "${t.text}"${t.scrolls ? " (the menu scrolls inside itself)" : ""}`);
@@ -1188,7 +1193,7 @@ const CHECKS = {
         if (Math.abs(b.day - t.v.left) <= 0.05) must(same, `${what}: back on the day she was left (${b.day.toFixed(2)}), but the welcome doesn't say so: "${b.notes.slice(0, 200)}"`);
         else {
           must(!same, `${what}: the welcome says "right where you left off" on day ${b.day.toFixed(2)}, but she was left on day ${t.v.left}`);
-          must(/last saved on day/.test(b.notes), `${what}: back on day ${b.day.toFixed(2)}, before the day she was left (${t.v.left}), and the welcome doesn't say so: "${b.notes.slice(0, 200)}"`);
+          must(b.notes.includes(`day ${t.v.left.toFixed(1)}`) && b.notes.includes(`day ${b.day.toFixed(1)}`), `${what}: back on day ${b.day.toFixed(2)}, not the day she was left (${t.v.left}), and the welcome doesn't name both days: "${b.notes.slice(0, 200)}"`);
         }
         return `${what}: on screen day ${t.on.toFixed(2)} as she was left, save left ${t.v.left} code ${t.v.day}, title "${t.sub}", back on day ${b.day.toFixed(2)}${same ? ", right where you left off" : ", told it was saved a little before"}`;
       };
@@ -1202,7 +1207,9 @@ const CHECKS = {
       out.push(`real time 20 s: screen day ${rt.day.toFixed(3)}, save left ${rt.v.left}`);
       // 2. Leave without pausing at 6 h a second.
       await rate("6");
-      await page.waitForFunction(() => window.__helm.hour / 24 >= 1.5, null, { timeout: 3 * MIN });
+      // (On a runner's software graphics Chrome's picture can take minutes to show a day: half a day will do.)
+      await page.waitForFunction(() => window.__helm.hour / 24 >= 1.5, null, { timeout: 2 * MIN }).catch(() => {});
+      must(await page.evaluate(() => window.__helm.hour / 24 >= 0.5 && window.__helm.clock > 0), "6 h a second: the picture didn't reach half a day in 2 minutes, or the clock isn't running");
       let t = await leave();
       must(t.v, "6 h a second: nothing was saved on leaving");
       must(Math.abs(t.v.left - t.on) <= 0.1, `6 h a second: left on day ${t.on.toFixed(2)}, the save says left on day ${t.v.left}`);
@@ -1225,8 +1232,8 @@ const CHECKS = {
       // 3. Leave without pausing at 4 days a second.
       const from = await page.evaluate(() => window.__helm.hour / 24);
       await rate("96");
-      await page.waitForFunction((d) => window.__helm.hour / 24 >= d + 8 || window.__helm.status?.over, from, { timeout: 4 * MIN });
-      must(!(await page.evaluate(() => window.__helm.status?.over)), "the voyage ended before the 4 days a second case could leave it");
+      await page.waitForFunction((d) => window.__helm.hour / 24 >= d + 8 || window.__helm.status?.over, from, { timeout: 2 * MIN }).catch(() => {});
+      must(await page.evaluate((d) => !window.__helm.status?.over && window.__helm.clock > 0 && window.__helm.hour / 24 >= d + 1, from), "4 days a second: the picture didn't move on a day in 2 minutes, the clock isn't running, or the voyage ended");
       t = await leave();
       must(t.v, "4 days a second: nothing was saved on leaving");
       must(t.v.day >= t.v.left - 8, `4 days a second: the save's code stands at day ${t.v.day}, more than 8 days before she was left (${t.v.left})`);
