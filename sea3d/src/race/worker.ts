@@ -7,6 +7,9 @@
 //               {id, type: "result"}                 sail both to the end, the results card
 //               {id, type: "season_launch", i}       one launch of the season, both boats
 //               {id, type: "season_verdict"}         the paired verdict over the launches run so far
+//               {id, type: "warm"}                   load Python, the simulator and the weather now
+// With `replays: true` on "new", "run" and "result" (the helm's sailing screen, M2 R3), the reply
+// also carries both boats' voyages so far as replays (hourly rows), as the helm's own worker does.
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 
 // Pass the folder too: Firefox can't work it out from a module imported in a worker
@@ -52,6 +55,36 @@ try:
 except ImportError:
     RACE = None  # an older simulator on the site: the page says so
 ENV = open_bundle("forcing.npz")
+try:
+    from boatsim.runner.replay import to_replay, QUIET_EVENTS
+except ImportError:
+    to_replay = None
+
+def hourly(rep):
+    # One row an hour (and the last), every column kept, as in the helm's worker.
+    h = rep["h"]
+    keep, nxt = [], 0.0
+    for i, t in enumerate(h):
+        if t + 1e-6 >= nxt:
+            keep.append(i)
+            nxt = t + 1.0
+    if h and keep[-1] != len(h) - 1:
+        keep.append(len(h) - 1)
+    out = {k: v for k, v in rep.items() if k != "units"}
+    for k, v in rep.items():
+        if isinstance(v, list) and len(v) == len(h) and k != "events":
+            out[k] = [v[i] for i in keep]
+    out["events"] = [e for e in rep["events"] if e["kind"] not in QUIET_EVENTS]
+    return out
+
+def reps(m):
+    # Both boats' voyages so far, when the page asks (the helm's sailing screen).
+    if not m.get("replays"):
+        return None
+    if to_replay is None:
+        raise RuntimeError("NO_RACE")
+    return [hourly(to_replay(v.log, n)) for v, n in zip(R.boats, R.names)]
+
 R = None
 SEASON = []
 A = B = None
@@ -95,6 +128,7 @@ self.onmessage = async (ev: MessageEvent) => {
   const m = ev.data;
   try {
     const py = await start(m.base ?? "");
+    if (m.type === "warm") return postMessage({ id: m.id, ok: true, value: null });
     py.globals.set("msg_json", JSON.stringify(m));
     let code: string;
     if (m.type === "new") {
@@ -106,18 +140,21 @@ if RACE is None:
 A, B, DROP = m["a"], m["b"], m["drop"]
 SEASON = []
 R = RACE.Race(ENV, A, B, launch_index=m["launch"], breakdowns=m["breakdowns"], drop=DROP)
-json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": R.status(), "track": R.track()}, default=_f)
+json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": R.status(), "track": R.track(), "replays": reps(m)}, default=_f)
 `;
     } else if (m.type === "run") {
       say("Racing...");
       code = `
 m = json.loads(msg_json)
 out, tracks = hop(m.get("hours"))
-json.dumps({"stopped": out["stopped"], "status": out["status"], "track": R.track()}, default=_f)
+json.dumps({"stopped": out["stopped"], "status": out["status"], "track": R.track(), "replays": reps(m)}, default=_f)
 `;
     } else if (m.type === "result") {
       say("Sailing both boats to the end...");
-      code = `json.dumps({"card": R.result(), "status": R.status(), "track": R.track()}, default=_f)`;
+      code = `
+m = json.loads(msg_json)
+json.dumps({"card": R.result(), "status": R.status(), "track": R.track(), "replays": reps(m)}, default=_f)
+`;
     } else if (m.type === "season_launch") {
       code = `
 m = json.loads(msg_json)

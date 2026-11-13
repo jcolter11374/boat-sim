@@ -43,6 +43,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { outcomeLine } from "./replay/story";
+import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -317,7 +318,24 @@ async function loadWatched(): Promise<Replay> {
   if (!v) throw new Error("there are no recorded voyages on this copy of the site");
   return loadReplay(base, v.file);
 }
-const game = new HelmGame(sandboxBase, WATCH ? () => watchWorker(loadWatched, (info) => (page.watch = info)) : undefined);
+// "Race it" on this same screen (M2, R3): helm.html?race=<a>,<b>&launch=<0..5>. Two boats, the same
+// launch and weather, run by the race's own simulator worker (src/helm/raceSource.ts); boat A sails
+// where your boat does and boat B where the ghost does. Nobody steers.
+const RACE = !params.get("g") && !WATCH && params.has("race");
+/** Nobody at the helm: a watched voyage or a race. No orders, no wheel, no calls. */
+const SPECTATE = WATCH || RACE;
+const raceMine = (): Record<string, string> | null => {
+  const m = loadMyBoat();
+  return m ? Object.fromEntries(Object.entries(m.choices).map(([k, v]) => [k, String(v)])) : null;
+};
+const game = new HelmGame(
+  sandboxBase,
+  WATCH
+    ? () => watchWorker(loadWatched, (info) => (page.watch = info))
+    : RACE
+      ? () => raceWorker(() => new Worker(new URL("./race/worker.ts", import.meta.url), { type: "module" }), racePick(params.get("race") ?? "", params.get("launch"), raceMine()), (info) => (page.race = info))
+      : undefined,
+);
 let startMs = 0;
 let hour = 0; // shown voyage hour
 let shownTo = 0; // hour the animation is heading for
@@ -329,7 +347,7 @@ let mode: Mode = "hands_on";
 let draft = false;
 const shared = params.get("g");
 /** The title's one-click Set sail (F1): helm.html?sail. */
-const ONE_CLICK = params.has("sail") && !shared && !params.has("practice") && !WATCH;
+const ONE_CLICK = params.has("sail") && !shared && !params.has("practice") && !SPECTATE;
 // Weather challenges (challenge-data release, copied to public/challenges/).
 const challengesBase = new URL(params.get("challenges") ?? "./challenges/", location.href).href;
 let challenges: Challenge[] = [];
@@ -380,7 +398,9 @@ const page = {
   quality: qstat,
   ready: false,
   /** Which mode the one sailing screen is in (M2): you at the helm, a recorded voyage, or a race. */
-  view: (WATCH ? "watch" : "helm") as "helm" | "watch" | "race",
+  view: (WATCH ? "watch" : RACE ? "race" : "helm") as "helm" | "watch" | "race",
+  /** A race's two boats (their names, the helm's keys for their models) and its launch, once it has started. */
+  race: null as RaceInfo | null,
   /** A watched voyage, whole (its length, boat and ending), once its file is in; the rows so far are game.boat. */
   watch: null as WatchInfo | null,
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
@@ -553,7 +573,7 @@ function lockOrders(why: string, announce: boolean): void {
 }
 
 async function setOrder(h: Heading, p = power): Promise<void> {
-  if (WATCH) return; // a recorded voyage sails itself
+  if (SPECTATE) return; // a recorded voyage or a race sails itself
   if (linkCut) {
     note("No link: she can't hear you.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.warn);
     return;
@@ -581,7 +601,7 @@ const dayOf = (iso: string) => (utc(iso) - startMs) / 86400e3;
 
 /** Base mode: send the drafted order. */
 async function sendOrder(): Promise<void> {
-  if (WATCH) return;
+  if (SPECTATE) return;
   if (busy || !page.ready) return;
   try {
     const r = await game.order(order, power, sailOrder, engineOrder);
@@ -947,7 +967,8 @@ function showStatus(): void {
     ? `About ${Math.round(toGo).toLocaleString()} km to go (base's guess, ${Math.round(est.age_h)} h old)`
     : `${Math.round(toGo).toLocaleString()} km to the finish`;
   const about = est ? "About " : "";
-  $("lead").textContent = WATCH ? "" : Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
+  const other = page.race?.names[1];
+  $("lead").textContent = WATCH ? "" : other ? (Math.abs(lead) < 1 ? `Level with ${other}` : lead > 0 ? `${Math.round(lead)} km ahead of ${other}` : `${Math.round(-lead)} km behind ${other}`) : Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
   $("lead").className = lead >= 0 ? "good" : "bad";
   const socNow = est ? last?.soc ?? null : b.soc;
   const soc = socNow == null ? 0 : Math.round(socNow * 100);
@@ -989,7 +1010,7 @@ function showStatus(): void {
   showSailOrders();
   $("sailline").hidden = !s.sailing;
   if (s.sailing) $("sailline").textContent = sailText(s);
-  $("ghostline").textContent = WATCH ? "" : `Ghost: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
+  $("ghostline").textContent = WATCH ? "" : `${other ?? "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
   showOrder();
 }
 
@@ -1014,9 +1035,11 @@ function newEvents(): void {
       if (both && who === "ghost") continue; // told with your boat's note
       const label = both ? "You and the ghost" : who === "boat" ? "You" : "Ghost";
       // A watched voyage has one boat and nobody at the helm: the note names the boat, as Watch a voyage does.
-      if (WATCH) {
-        note(describeEvent(e, game.boat?.boat ?? ""), `Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
-        if (hour - e.h < 3) moment(e);
+      // A race names each boat (the same thing to both is still one note, told with boat A's).
+      if (SPECTATE) {
+        const name = rep(who)?.boat ?? "";
+        note(describeEvent(e, name), `${RACE ? `${both ? "Both boats" : name} · ` : ""}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
+        if (who === "boat" && hour - e.h < 3) moment(e);
         continue;
       }
       const cut = who === "boat" ? linkCutBy(e) : null;
@@ -1439,7 +1462,7 @@ async function wheelEnded(r: WheelResult): Promise<void> {
 // depths end the run in shallow water. Where this copy of the site has no Bay squares, it's
 // the old drills: a spell to a mark in a steady wind, a new one each time.
 // Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
-const PRACTICE = SS.where === "annapolis" && !WATCH; // ?where=annapolis, or the old ?practice
+const PRACTICE = SS.where === "annapolis" && !SPECTATE; // ?where=annapolis, or the old ?practice
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
 let practiceWind: { u: number; v: number } | null = null;
@@ -1867,7 +1890,7 @@ function trimLine(c: Card): string {
   return `Your trimming at the wheel was worth ${amount}${way} over ${n} watch${n > 1 ? "es" : ""}, against the autopilot's own trim.`;
 }
 function wheelOffered(): boolean {
-  return page.ready && !WATCH && !page.status?.over && mode === "hands_on" && canTakeWheel(spec.key) && !cine.on;
+  return page.ready && !SPECTATE && !page.status?.over && mode === "hands_on" && canTakeWheel(spec.key) && !cine.on;
 }
 async function takeWheel(): Promise<void> {
   if (wheel.on || !wheelOffered()) return;
@@ -1947,7 +1970,7 @@ addEventListener("keydown", (e) => {
     hud.keys();
     e.preventDefault();
     return;
-  } else if (ax && WATCH) return; // nothing to steer
+  } else if (ax && SPECTATE) return; // nothing to steer
   else if (ax) {
     // The autopilot sets its own power (#327); steering takes the boat off it.
     if (!(ax.axis === "power" && order === "auto") && !e.repeat) {
@@ -2402,7 +2425,7 @@ function callDue(): boolean {
 /** force: ask even with the clock stopped (a challenge's skip must not jump past its big call). */
 function maybeDecide(force = false): boolean {
   const st = game.status;
-  if (WATCH || !st || (rate === 0 && !force)) return false; // no calls to make in a recorded voyage
+  if (SPECTATE || !st || (rate === 0 && !force)) return false; // no calls to make in a recorded voyage or a race
   const d = decisionDue(st, lastForecast);
   if (!d) return maybeRouteCheck(st);
   const callBefore = lastCallH;
@@ -2659,8 +2682,56 @@ async function watchFinish(): Promise<void> {
   $("again").focus({ preventScroll: true });
 }
 
+/** A race's ending: who finished first, in the boats' own names; each boat's days; both tracks. */
+async function raceFinish(): Promise<void> {
+  const c = (await game.result()) as Card & { race: RaceCard };
+  clearTimeout(soundAskTimer);
+  soundAsked = true;
+  $("soundask").hidden = true;
+  document.body.classList.remove("asking-sound");
+  chartDirty = true;
+  await new Promise((ok) => setTimeout(ok, 2000));
+  page.card = c;
+  const names = page.race?.names ?? [c.race.boats[0].name, c.race.boats[1].name];
+  const win = c.race.winner;
+  // The headline keeps the full names: a Randolph boat is always "(our model)" there (John, B2). The small labels under it are short.
+  const short = (n: string) => n.replace(/\s*\(our model\)$/, "");
+  const lost = (i: number) => OUTCOME[c.race.boats[i].outcome] ?? c.race.boats[i].outcome.replace(/_/g, " ");
+  $("r-head").textContent =
+    c.race.verdict === "draw"
+      ? "A draw: both finished within a day of each other."
+      : win === null
+        ? "Neither boat finished."
+        : c.race.margin_days !== null
+          ? `${names[win]} finished first, ${Math.abs(c.race.margin_days).toFixed(1)} days ahead.`
+          : `${names[win]} finished. ${names[1 - win]} ${lost(1 - win)}.`;
+  const launched = new Date(utc(c.race.launch)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  $("r-story").textContent = `${names[0]} against ${names[1]}, launched ${launched} into the same weather with the same luck. One race is one roll of the dice.`;
+  $("r-nums").replaceChildren(
+    ...c.race.boats.map((x, i) => {
+      const d = document.createElement("div");
+      d.className = "n";
+      const b = document.createElement("b");
+      b.textContent = x.days.toFixed(1);
+      b.append(Object.assign(document.createElement("small"), { textContent: "days" }));
+      d.append(b, Object.assign(document.createElement("span"), { textContent: `${short(names[i])}: ${x.outcome === "arrived" ? "finished" : lost(i)}` }));
+      return d;
+    }),
+  );
+  $("r-calls").hidden = true;
+  $("r-next").replaceChildren();
+  drawResultMap();
+  $("again").textContent = "Race again";
+  $("result").classList.add("watched");
+  document.body.classList.add("results");
+  $("result").hidden = false;
+  sound.settle();
+  $("again").focus({ preventScroll: true });
+}
+
 async function finish(): Promise<void> {
   if (WATCH) return watchFinish();
+  if (RACE) return raceFinish();
   const c = await game.result();
   // The sound ask doesn't land on the results.
   clearTimeout(soundAskTimer);
@@ -3073,10 +3144,13 @@ async function begin(): Promise<void> {
   if (!WATCH && !(await sandboxThere(sandboxBase))) {
     page.error = "no simulator files";
     $("startmsg").textContent = "The simulator files aren't published on this copy of the site yet, so there's nothing to sail. Try the live site.";
+    // A race link went straight to the sea: bring the card back so the message shows.
+    $("loading").hidden = true;
+    $("start").hidden = false;
     return;
   }
   await challengesReady;
-  const ch = WATCH ? undefined : chosenChallenge();
+  const ch = SPECTATE ? undefined : chosenChallenge();
   if (shared && params.get("c") && !ch) {
     page.error = "no challenge files";
     $("startmsg").textContent = "That link is for a weather challenge whose weather isn't on this copy of the site. Try the live site.";
@@ -3085,11 +3159,11 @@ async function begin(): Promise<void> {
   page.challenge = ch?.id ?? "";
   page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
   const hb = handBoat();
-  if (!shared && !WATCH && hb && !$("prologuepick").hidden && $<HTMLInputElement>("prologue").checked) await runPrologue(hb);
+  if (!shared && !SPECTATE && hb && !$("prologuepick").hidden && $<HTMLInputElement>("prologue").checked) await runPrologue(hb);
   $("start").hidden = true;
   $("loading").hidden = false;
-  setBusy(true, WATCH ? "Loading the voyage..." : "Loading the simulator (about 30 MB the first time)...");
-  if (!WATCH && !ONE_CLICK && !/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
+  setBusy(true, WATCH ? "Loading the voyage..." : RACE ? "Getting both boats ready..." : "Loading the simulator (about 30 MB the first time)...");
+  if (!SPECTATE && !ONE_CLICK && !/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
   try {
     if (shared) {
       const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
@@ -3101,11 +3175,18 @@ async function begin(): Promise<void> {
       else order = mode === "base" ? "finish" : "auto";
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
-    } else if (WATCH) {
-      // A recorded voyage: its file is the game. No order goes: the autopilot sailed it.
+    } else if (SPECTATE) {
+      // A recorded voyage (its file is the game) or a race (the source knows its boats and launch).
+      // No order goes: the autopilots sail.
       page.status = await game.start(0, false, false);
       useBoat(game.boatBase);
       mode = "hands_on";
+      if (page.race) {
+        // The lead cell is against boat B, by name (a Randolph boat is "our model", B2).
+        const cell = $("c-lead");
+        cell.title = `${page.race.names[0]} against ${page.race.names[1]}`;
+        cell.querySelector(".l")!.textContent = "lead";
+      }
     } else {
       const pick = chosenBoat();
       const mine = loadMyBoat();
@@ -3135,6 +3216,7 @@ async function begin(): Promise<void> {
     chart?.setLanes(game.ghost ? [{ rep: game.boat!, colours: TRACK.kayak }, { rep: game.ghost, colours: GHOST }] : [{ rep: game.boat!, colours: TRACK.kayak }]);
     chartDirty = true;
     document.body.classList.toggle("watching", WATCH);
+    document.body.classList.toggle("racing", RACE);
     const d = `Day ${page.status!.day.toFixed(1)}`;
     if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
@@ -3145,11 +3227,14 @@ async function begin(): Promise<void> {
     // paused where it was left; ?clock=paused starts paused (for tests).
     forecastAt = page.status!.day * 24;
     document.body.classList.add("sailing");
-    const coach = shared || WATCH ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "The autopilot is steering, just like the ghost's. To get ahead, you'll have to make better calls than it does. The first one is coming.";
+    const coach = shared || SPECTATE ? null : mode === "base" ? "Pick a heading and power, then send it: it reaches the boat at its next check-in." : "The autopilot is steering, just like the ghost's. To get ahead, you'll have to make better calls than it does. The first one is coming.";
     $("loading").hidden = true;
     if (shared || params.get("clock") === "paused" || page.status?.over) setRate(0);
     // A watched voyage opens already playing in real time (John, T2); the speed bar is right there.
     else if (WATCH) setRate(REAL_TIME);
+    // A race opens paused, as the race page does today (Maya, 13 Nov: not on John's list, so unchanged
+    // until he rules); Real time is first on the bar (T1).
+    else if (RACE) setRate(0);
     else {
       // The first hours at an hour a second, so the first thing a player sees is the morning of the drop.
       setRate(1);
@@ -3163,7 +3248,7 @@ async function begin(): Promise<void> {
       $("keyhint").hidden = false;
       setTimeout(hideKeyHint, 60_000);
     };
-    if (!shared && !WATCH && mode === "hands_on" && !chosenChallenge() && finishesOffLisbon() && !page.status?.over) {
+    if (!shared && !SPECTATE && mode === "hands_on" && !chosenChallenge() && finishesOffLisbon() && !page.status?.over) {
       hud.sailing(null); // the bar steps away; the drawer waits for the card
       void goalCard(page.status!.boat.km_to_finish).then(opening);
     } else opening();
@@ -3196,6 +3281,10 @@ async function begin(): Promise<void> {
       setBusy(false);
       $("startmsg").textContent = `That share link didn't open: ${err.replace(/^.*BAD_CODE\s*/, "")}. Start a new game instead.`;
       history.replaceState(null, "", location.pathname);
+    } else if (/NO_RACE/.test(err)) {
+      page.error = "no race in the simulator";
+      setBusy(false);
+      $("startmsg").textContent = "The simulator published on this site can't run a race on this screen yet; it's being updated. You can set sail yourself instead.";
     } else if (WATCH) {
       page.error = "no such voyage";
       setBusy(false);
@@ -3609,7 +3698,7 @@ scene.add(orderLine);
  * bow that fades out, dimmer at night. Not a beam to the horizon. */
 function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: number): void {
   const s = page.status;
-  const on = page.ready && !WATCH && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare") && !document.body.classList.contains("goal");
+  const on = page.ready && !SPECTATE && !!s && !s.over && !wheel.on && !cine.on && !arrival && !document.body.classList.contains("bare") && !document.body.classList.contains("goal");
   orderLine.visible = on; // not under the goal card: the opening frame is the boat and the sea (Ines)
   if (!on || !s) return;
   const to =
@@ -4165,13 +4254,13 @@ if (!shared && PRACTICE)
     true,
   );
 // ?go=1: the card (or a link) already chose; set sail at once.
-if (!shared && !PRACTICE && !WATCH && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));
-// A watch link goes straight to the sea: there's nothing to pick. Any trouble opening the file
+if (!shared && !PRACTICE && !SPECTATE && params.get("go") === "1") void challengesReady.then(() => startVoyage({ ...currentSetSail(), challenge: SS.challenge || currentSetSail().challenge }));
+// A watch or race link goes straight to the sea: there's nothing to pick. Any trouble opening the file
 // brings the Set sail card back with why.
-if (WATCH) {
+if (SPECTATE) {
   $("start").hidden = true;
-  $("loadtext").textContent = "Loading the voyage…";
-  $("loading").querySelector(".muted")!.textContent = "";
+  $("loadtext").textContent = WATCH ? "Loading the voyage…" : "Getting both boats ready…";
+  if (WATCH) $("loading").querySelector(".muted")!.textContent = "";
   $("keyhint").textContent = "Space pause · 1–5 how fast time runs · ? all keys"; // no steering keys here
   $("loading").hidden = false;
   void begin();
