@@ -9,7 +9,7 @@
 import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
-import { continueLink, loadVoyage, offerWords } from "./voyageSave";
+import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
 import { RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
@@ -129,6 +129,18 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $<HTMLAnchorElement>("ss-continue-go").href = `./${continueLink(kept)}`;
     $("ss-continue").hidden = false;
   }
+  // A new crossing ends the saved one, and that can't be undone: Set sail asks once first (Elena).
+  let endIt = !kept;
+  if (kept) {
+    $("ss-ask-keep").addEventListener("click", () => location.assign(`./${continueLink(kept)}`));
+    $("ss-ask-new").addEventListener("click", () => {
+      endIt = true;
+      $("go").classList.remove("asked");
+      clearVoyage();
+      $("ss-continue").hidden = true;
+      $("go").click();
+    });
+  }
 
   const checkedBoat = () => document.querySelector<HTMLInputElement>('input[name="boat"]:checked');
   const draw = () => {
@@ -151,7 +163,9 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const auto = whoShown && who === "autopilot";
     $("ss-who").hidden = !whoShown;
     // A new crossing takes the saved one's place; practice and watching the autopilot don't touch it.
-    $("ss-continue-new").hidden = where !== "ocean" || auto;
+    $("ss-continue-new").hidden = where !== "ocean" || auto || !!$("ss-continue").dataset.lost || !$("ss-ask").hidden;
+    // Set sail is dimmed only while its question is the thing to answer: practice and watching end nothing.
+    $("go").classList.toggle("asked", !$("ss-ask").hidden && where === "ocean" && !auto);
     pills($("ss-who-opts"), (["you", "autopilot"] as const).map((k) => ({ key: k, label: WHO_WORDS[k].pill })), auto ? "autopilot" : "you", (k) => {
       who = k as Who;
       draw();
@@ -290,6 +304,16 @@ export function mountSetSailCard(hooks: CardHooks): void {
         e.stopImmediatePropagation();
         if (race) hooks.race?.(...race);
         else if (voyage) hooks.watch(voyage);
+        return;
+      }
+      if (where === "ocean" && !endIt && kept) {
+        e.stopImmediatePropagation();
+        $("ss-ask-q").textContent = endWords(kept);
+        for (const id of ["ss-continue-words", "ss-continue-go", "ss-continue-new"]) $(id).hidden = true;
+        $("ss-ask").hidden = false;
+        $("go").classList.add("asked"); // already pressed: "Keep sailing" is the one bright button now (Leo)
+        $("ss-continue").scrollIntoView({ block: "nearest" });
+        $("ss-ask-keep").focus();
         return;
       }
       if (where !== "annapolis") return;

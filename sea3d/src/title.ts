@@ -38,6 +38,7 @@ export function mountTitle(): void {
     if (!a) return;
     const v = loadVoyage();
     a.hidden = !v;
+    el.classList.toggle("has-voyage", !!v); // a phone drops the intro line: a returning player has read it (Elena)
     document.getElementById("t-setsail")?.classList.toggle("main", !v);
     if (!v) return;
     a.href = `./${continueLink(v)}`;
