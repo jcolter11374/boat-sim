@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as THREE from "three";
 import { TITLE_LOOP_S, heightOf, titleHeading, titleShot } from "../src/framing";
 
-test("the title hero: backlit, the boat on the right third, bow toward the card with open sea between, loops", () => {
+test("the title hero: the sun off to one side, the boat on the right third, bow toward the card with open sea between, loops", () => {
   for (const len of [3.05, 9.39]) {
     for (const sunAz of [0, 100, 230]) {
       const a = (sunAz * Math.PI) / 180;
@@ -28,9 +28,13 @@ test("the title hero: backlit, the boat on the right third, bow toward the card 
         assert.ok(bow.x >= -0.04 - 1e-6, `${tag}: bow nosing into the card (${bow.x.toFixed(2)})`);
         assert.ok(stern.x < 0.98, `${tag}: stern cropped`);
         assert.ok(sun.z < 1, `${tag}: looking away from the sun`);
-        // Backlit: the sun just above her, the glitter running from it through the boat to the lens.
+        // The sun is off to the right of her, past the frame's edge, on the side away from the
+        // menu: neither its glow nor the bright streak on the water lies over the boat (John, 13 Nov).
         const mid = (bow.x + stern.x) / 2;
-        assert.ok(Math.abs(sun.x - mid) < 0.08 && sun.y > bow.y && sun.y < 0.9, `${tag}: sun at ${sun.x.toFixed(2)},${sun.y.toFixed(2)}, boat at ${mid.toFixed(2)}`);
+        assert.ok(sun.x > 1.3 && sun.x > stern.x + 0.7, `${tag}: sun at ${sun.x.toFixed(2)}, stern at ${stern.x.toFixed(2)}`);
+        const toBoat = new THREE.Vector3(-camera.position.x, 0, -camera.position.z).normalize();
+        const off = (Math.acos(toBoat.dot(new THREE.Vector3(sunDir.x, 0, sunDir.z).normalize())) * 180) / Math.PI;
+        assert.ok(off >= 29 && off <= 41, `${tag}: the sun is ${off.toFixed(0)} degrees off her`);
         // About a fifth of the width, on the two-thirds line (on a wide screen).
         const span = Math.abs(stern.x - bow.x) / 2;
         assert.ok(span > 0.15 && span < 0.25, `${tag}: spans ${(100 * span).toFixed(0)}%`);

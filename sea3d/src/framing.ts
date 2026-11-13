@@ -167,9 +167,13 @@ export function boatAt(host: Pick<FramingHost, "controls" | "water">): THREE.Vec
  * the page); the bow keeps 15% of the width of open sea clear of it (Ines). cardBelow: the card
  * runs across the bottom instead (a phone held upright), so the boat goes above it (TITLE_PHONE).
  */
-// The sun straight behind her, just above (the glitter path runs from the sun through the boat to
-// the lens); she spans about a fifth of the width, on the two-thirds line (Ines, 12 Nov).
-export const TITLE: Look = { az: 180, f: 0.25, H: 0.3, B: 0, fov: 24, h: 1.5, x: 1 / 3 };
+// The sun low and TITLE_SUN_OFF degrees to the right of her as the lens sees it, past the edge
+// of the frame, on the side away from the menu (John and Elena, 13 Nov: with the sun straight
+// behind her its glow and the bright streak on the water lay over the boat and bleached her).
+// The streak falls beside her; she is lit from that side, her near faces darker, and reads
+// against the sky. She spans about a fifth of the width, on the two-thirds line (Ines, 12 Nov).
+export const TITLE_SUN_OFF = 30;
+export const TITLE: Look = { az: 180 - TITLE_SUN_OFF, f: 0.25, H: 0.3, B: 0, fov: 24, h: 1.5, x: 1 / 3 };
 /** The same shot on a phone held upright (menu at the bottom): horizon high, so she sits about a
  *  third down the screen; nearly centred across; a fifth wider lens; half the narrow width. */
 export const TITLE_PHONE: Look = { ...TITLE, fov: 34, f: 0.5, H: 0.42, x: 0.15, keepH: true };
@@ -232,9 +236,12 @@ export function titleShot(host: FramingHost & Required<Pick<FramingHost, "sunDir
   c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5) + 0.06 * Math.sin(w * 3 + 1);
   return { pos: c.pos, quat: c.quat, fov: c.fov };
 }
-/** The boat's yaw for the title: across the sun (about 70 degrees off it), so it shows its side backlit. */
+/**
+ * The boat's yaw for the title: side-on to the lens (which stands TITLE_SUN_OFF round from the
+ * sun's line), bow to the left of the screen, so the sun rakes along her from astern.
+ */
 export function titleHeading(sunDir: THREE.Vector3): number {
-  return Math.atan2(-sunDir.z, sunDir.x) + (70 * Math.PI) / 180;
+  return Math.atan2(-sunDir.z, sunDir.x) + ((70 + TITLE_SUN_OFF + 5) * Math.PI) / 180;
 }
 
 const tallness = new WeakMap<THREE.Object3D, number>();
