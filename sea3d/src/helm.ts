@@ -45,6 +45,7 @@ import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, las
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
+import { statusAtPicture } from "./helm/readings";
 import { outcomeLine } from "./replay/story";
 import { RACE_BOATS, racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
@@ -1098,6 +1099,19 @@ function showStatus(): void {
   // Its toast comes with the failure itself (newEvents): one toast, not two (Leo, Elena).
   if (s.no_link && !linkCut) lockOrders(s.no_link, false);
   showTrimChip(page.status ?? s);
+  showReadings(s);
+  showSailOrders();
+  showOrder();
+}
+
+/** The panel's and the dial's readings, at the moment the picture shows (helm/readings.ts): drawn with each status, and again as the picture plays on. */
+let readAt = -1;
+/** The wave height the strip shows: the sea as drawn at the picture's hour (the sea-state files' wind sea and swells together, where they reach). */
+let seaHs: number | null = null;
+function showReadings(raw: Status): void {
+  readAt = hour;
+  // In base mode the page shows what base knows, not the picture's truth.
+  const s = hidden() ? raw : statusAtPicture(raw, game.boat, game.ghost, hour);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
   const est = hidden() ? s.base?.estimate : undefined;
@@ -1127,7 +1141,8 @@ function showStatus(): void {
   $("batbar").style.width = `${soc}%`;
   $("batbar").style.background = soc < 15 ? "var(--bad)" : soc < 35 ? "var(--warn)" : "var(--good)";
   $("speed").textContent = est ? " · speed unknown" : ` · ${(b.stw * KN).toFixed(1)} kn through the water`;
-  const w = s.weather;
+  // One wave height on the screen: the strip's, when it has one.
+  const w = s.weather && !hidden() && seaHs != null ? { ...s.weather, hs: seaHs } : s.weather;
   let windTo: number | null = null;
   let kn = 0;
   if (w) {
@@ -1158,11 +1173,9 @@ function showStatus(): void {
     const w = s.base.waiting;
     $("baseline").textContent = `Base last heard from the boat on day ${last.toFixed(1)}.${w.length ? ` Order on its way: it reaches the boat on day ${dayOf(w[0].due).toFixed(1)}.` : ""}`;
   } else $("baseline").textContent = "";
-  showSailOrders();
   $("sailline").hidden = !s.sailing;
   if (s.sailing) $("sailline").textContent = sailText(s);
   $("ghostline").textContent = WATCH ? "" : `${other ?? "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
-  showOrder();
 }
 
 // ---------- notes ----------
@@ -3852,6 +3865,7 @@ const bowW = new THREE.Vector3();
 let last = 0;
 let smoothYaw: number | null = null;
 let stripAt = -1;
+let panelAt = 0;
 let storm = 0;
 let rigHeave = 0;
 const ghostTag = $("ghosttag");
@@ -4464,6 +4478,13 @@ renderer.setAnimationLoop(() => {
   }
   if (!(r && page.ready)) $("clock").textContent = "";
   else drawWhen();
+  // The panel and the dial read the picture too, twice a second while it moves (they used to wait for the next status,
+  // up to three days of voyage away after playing fast, and disagreed with the strip).
+  if (r && page.ready && !page.card && !wheel.on && t - panelAt > 0.5 && Math.abs(hour - readAt) > 1e-4) {
+    panelAt = t;
+    const st = shown ?? page.status;
+    if (st) showReadings(st);
+  }
   // The strip's instruments read the picture too, a few times a second (not in base mode: base only knows its reports).
   if (r && page.ready && t - stripAt > 0.25) {
     stripAt = t;
@@ -4473,7 +4494,10 @@ renderer.setAnimationLoop(() => {
       live.windKn = Math.hypot(wu, wv) * KN;
       live.windTo = (Math.atan2(wu, wv) * 180) / Math.PI;
     }
-    if (valueAt(r, r.hs, h) != null) live.waves = hs;
+    if (valueAt(r, r.hs, h) != null) {
+      live.waves = hs;
+      seaHs = hs; // the panel says the same figure (showReadings)
+    }
     if (!hidden()) {
       live.heading = wheelNow ? wheelNow.heading : hdg;
       live.speedKn = stw * KN;
