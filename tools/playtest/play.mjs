@@ -2304,6 +2304,57 @@ const CHECKS = {
       return `one card at day ${c.day?.toFixed(1)} (${Math.round((Date.now() - t0) / 1000)} s): "${c.head}" "${c.story}" [${c.btns.join(" / ")}], links ${c.links.join(" / ")}; strip "${c.when}"`;
     },
   },
+  // Standing check (found 13 Nov on 9736678: the day and date sat under the speed buttons at 1280):
+  // while sailing, every piece of text on the helm strip is inside the strip and not covered.
+  "helm-strip-fit": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start");
+      await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
+      const bad = [];
+      const out = [];
+      for (const [w, h] of [[1280, 720], [1920, 1080], [1400, 900], [1024, 700], [390, 844]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(2000);
+        const r = await page.evaluate(() => {
+          const strip = document.getElementById("strip");
+          const sr = strip.getBoundingClientRect();
+          const out = [];
+          let n = 0;
+          for (const e of strip.querySelectorAll("*")) {
+            const own = [...e.childNodes].filter((c) => c.nodeType === 3 && c.textContent.trim()).map((c) => c.textContent.trim()).join(" ");
+            if (!own || !e.offsetParent) continue;
+            const cs = getComputedStyle(e);
+            if (cs.visibility === "hidden" || Number(cs.opacity) === 0) continue;
+            const b = e.getBoundingClientRect();
+            if (b.width < 1 || b.height < 1) continue;
+            n++;
+            const t = `"${own.slice(0, 28)}"`;
+            if (b.top < sr.top - 2 || b.bottom > sr.bottom + 2 || b.left < sr.left - 2 || b.right > sr.right + 2) { out.push(`${t} runs outside the strip`); continue; }
+            if (b.right > innerWidth + 1 || b.bottom > innerHeight + 1 || b.left < -1) { out.push(`${t} runs off the window`); continue; }
+            // Covered: at the text's middle and near its two ends, something that isn't it, its parent or its child is on top.
+            const pts = [[0.5, 0.5], [0.15, 0.5], [0.85, 0.5]].map(([fx, fy]) => document.elementFromPoint(b.left + b.width * fx, b.top + b.height * fy));
+            const over = pts.filter((p) => p && p !== e && !e.contains(p) && !p.contains(e));
+            if (over.length) out.push(`${t} is covered by ${over[0].id ? "#" + over[0].id : over[0].className ? "." + String(over[0].className).split(" ")[0] : over[0].tagName.toLowerCase()} ("${(over[0].textContent || "").trim().slice(0, 16)}")`);
+            if (cs.textOverflow === "ellipsis" && e.scrollWidth > e.clientWidth + 1) out.push(`${t} is cut off`);
+          }
+          const day = document.getElementById("day");
+          return { n, out: [...new Set(out)].slice(0, 8), day: day?.textContent.trim() ?? "" };
+        });
+        out.push(`${w}x${h}: ${r.n} texts${r.out.length ? `, ${r.out.length} wrong` : " all clear"}`);
+        if (r.out.length) bad.push(`at ${w}x${h}: ${r.out.join("; ")}`);
+        if (w === 1280 && BROWSER === "chromium") {
+          const path = "look-helm-strip-1280.jpg";
+          if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+        }
+      }
+      must(!bad.length, `the helm strip: ${bad.join(" | ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
