@@ -3042,7 +3042,7 @@ const CHECKS = {
       };
       const AWARD = { practice: "#r-medal", watch: "#r-nums .n", race: "#r-nums .n", challenge: "#r-stars" };
       const look = (award) => page.evaluate((award) => {
-        const vis = (e) => !!e && !e.hidden && e.offsetParent !== null;
+        const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0;
         const where = (e) => {
           if (!vis(e)) return "not shown";
           const r = e.getBoundingClientRect();
@@ -3091,12 +3091,12 @@ const CHECKS = {
       const toEnd = async (mode, limitMin) => {
         const t0 = Date.now();
         while (Date.now() - t0 < limitMin * MIN) {
-          if (await page.evaluate(() => { const r = document.getElementById("result"); return !!r && !r.hidden && r.offsetParent !== null; })) { await page.waitForTimeout(3000); return true; }
+          if (await page.evaluate(() => { const r = document.getElementById("result"); return !!r && !r.hidden && r.getClientRects().length > 0; })) { await page.waitForTimeout(3000); return true; }
           if (await page.evaluate(() => !document.getElementById("decide")?.hidden && document.querySelectorAll("#decidebtns button").length)) await page.evaluate(() => document.querySelector("#decidebtns button")?.click());
-          await page.evaluate(() => { if (window.__helm?.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
+          await page.evaluate(() => { if ((window.__helm?.clock ?? 0) < 96 && !window.__helm?.status?.over && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
           await page.waitForTimeout(2500);
         }
-        const st = await page.evaluate(() => { const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; const h = window.__helm ?? {}; return { url: location.search, ready: h.ready, busy: h.busy, error: h.error, hour: h.hour, day: h.status?.day, over: h.status?.over, clock: h.clock, view: h.view, frames: h.frames, rate: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, strip: document.getElementById("day")?.textContent.trim(), shown: [...document.querySelectorAll(".overlay, [role=dialog], #decide, #start, #arrive, #nl, #busy")].filter(vis).map((e) => e.id || e.className), msg: (document.getElementById("busytext") ?? document.getElementById("msg"))?.textContent?.trim() ?? null }; }).catch((e) => ({ err: String(e) }));
+        const st = await page.evaluate(() => { const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0; const h = window.__helm ?? {}; return { url: location.search, ready: h.ready, busy: h.busy, error: h.error, hour: h.hour, day: h.status?.day, over: h.status?.over, clock: h.clock, view: h.view, frames: h.frames, rate: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, strip: document.getElementById("day")?.textContent.trim(), shown: [...document.querySelectorAll(".overlay, [role=dialog], #decide, #start, #arrive, #nl, #busy")].filter(vis).map((e) => e.id || e.className), msg: (document.getElementById("busytext") ?? document.getElementById("msg"))?.textContent?.trim() ?? null }; }).catch((e) => ({ err: String(e) }));
         // Which way the clock is going: the picture's hour now and 10 s later.
         await page.waitForTimeout(10_000);
         st.hour10 = await page.evaluate(() => window.__helm?.hour).catch(() => null);
@@ -3119,7 +3119,7 @@ const CHECKS = {
       for (let k = 0; k < 4 && !handed; k++) {
         await page.evaluate(() => document.activeElement?.blur?.());
         await page.keyboard.press("Escape");
-        handed = await page.waitForFunction(() => { const r = document.getElementById("result"); return r && !r.hidden && r.offsetParent !== null; }, null, { timeout: 30_000 }).then(() => true, () => false);
+        handed = await page.waitForFunction(() => { const r = document.getElementById("result"); return r && !r.hidden && r.getClientRects().length > 0; }, null, { timeout: 30_000 }).then(() => true, () => false);
       }
       if (handed) await judge("practice");
       else verdict.practice = "FAIL (no card after handing back)";
