@@ -1627,6 +1627,108 @@ const CHECKS = {
       return sum.join("; ");
     },
   },
+  // #451: the title is silent until the first click; then the sea starts, the pill says so, N toggles it.
+  "title-silent": {
+    path: "",
+    run: async (page) => {
+      await page.addInitScript(soundSpy);
+      await calmReload(page);
+      await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN });
+      if (!(await page.locator("#t-sound").count())) throw new SkipCheck("this build has no title sound (#451 not deployed)");
+      await page.waitForTimeout(6000);
+      const st = () => page.evaluate(() => ({ contexts: (window.__ac ?? []).length, running: (window.__ac ?? []).filter((c) => c.state === "running").length, on: !!window.__sound?.on, pill: document.getElementById("t-sound")?.textContent.trim(), pressed: document.getElementById("t-sound")?.getAttribute("aria-pressed") }));
+      let s = await st();
+      must(s.running === 0, `sound was running on the title before any click (${s.running} of ${s.contexts} AudioContexts running)`);
+      must(!s.on && s.pill === "Sound: off", `the title says sound is on before any click (pill "${s.pill}", on ${s.on})`);
+      const out = [`before a click: ${s.contexts} AudioContext, none running, pill "${s.pill}"`];
+      // Moving the pointer is not a click.
+      await page.mouse.move(700, 300);
+      await page.mouse.move(300, 450);
+      await page.waitForTimeout(1500);
+      s = await st();
+      must(s.running === 0 && !s.on, `moving the pointer started the title's sound`);
+      // The first click (on the picture, not a choice).
+      await page.mouse.click(1000, 300);
+      await page.waitForTimeout(2500);
+      s = await st();
+      must(s.on && s.pill === "Sound: on", `the first click didn't turn the title's sound on (pill "${s.pill}", on ${s.on})`);
+      out.push(`first click: pill "${s.pill}", ${s.running} context running`);
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      s = await st();
+      must(!s.on && s.pill === "Sound: off", `N didn't turn the title's sound off (pill "${s.pill}")`);
+      await page.keyboard.press("n");
+      await page.waitForTimeout(800);
+      s = await st();
+      must(s.on && s.pill === "Sound: on", `N didn't turn the title's sound back on (pill "${s.pill}")`);
+      await page.click("#t-sound", { timeout: 10_000 });
+      await page.waitForTimeout(800);
+      s = await st();
+      must(!s.on && s.pill === "Sound: off", `the pill didn't turn the sound off (pill "${s.pill}")`);
+      out.push("N off and on; the pill turns it off");
+      return out.join("; ");
+    },
+  },
+  // #452: helm.html?watch= plays a recorded voyage on the helm screen, in Real time, Real time first (T1, T2).
+  "helm-watch": {
+    path: "helm.html?watch=2020-04-15&quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if ((await page.evaluate(() => window.__helm.view)) !== "watch") throw new SkipCheck("this build has no helm.html?watch= (#452 not deployed)");
+      await page.waitForFunction(() => window.__helm.watch || window.__helm.error, null, { timeout: 5 * MIN }).catch(() => {});
+      const a = await page.evaluate(() => ({ err: window.__helm.error, watch: !!window.__helm.watch, card: (() => { const e = document.getElementById("start"); return !!e && !e.hidden && e.offsetParent !== null; })(), pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, first: document.querySelector("#timebar .rate")?.textContent.trim(), rates: [...document.querySelectorAll("#timebar .rate")].filter((b) => b.offsetParent !== null).map((b) => b.textContent.trim()), clock: window.__helm.clock, hour: window.__helm.hour }));
+      must(!a.err, `the watched voyage failed: ${a.err}`);
+      must(a.watch, "the recorded voyage didn't load within 5 min");
+      must(!a.card, "the Set sail card is up on a watch link");
+      must(a.first === "Real time", `Real time isn't first on the bar: ${a.rates.join(" / ")}`);
+      must(a.pressed === "rt", `the watched voyage opened at "${a.pressed}", not Real time (clock ${a.clock})`);
+      await page.waitForTimeout(8000);
+      const b = await page.evaluate(() => ({ hour: window.__helm.hour, pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null }));
+      must(b.pressed === "rt", `it left Real time by itself (now "${b.pressed}")`);
+      must(b.hour > a.hour && b.hour - a.hour < 0.05, `in Real time the voyage hour went ${a.hour.toFixed(4)} to ${b.hour.toFixed(4)} in 8 s`);
+      await page.screenshot({ path: `play-${BROWSER}-helm-watch.png` }).catch(() => {});
+      return `opens in Real time, bar ${a.rates.join(" / ")}; ${((b.hour - a.hour) * 3600).toFixed(0)} s of voyage in 8 s`;
+    },
+  },
+  // Sandy's shadow keeps its one big call, and gets no Gulf Stream call or note (Maya, with #391).
+  "sandy-one-call": {
+    path: "helm.html?quality=low&challenge=sandys-shadow",
+    run: async (page) => {
+      await page.addInitScript(() => {
+        window.__gulf = [];
+        const see = () => { const t = document.body?.innerText ?? ""; for (const m of t.match(/[^\n]*(riding the Gulf Stream|in the Gulf Stream, and|Gulf Stream:)[^\n]*/g) ?? []) if (!window.__gulf.includes(m)) window.__gulf.push(m); };
+        addEventListener("DOMContentLoaded", () => new MutationObserver(see).observe(document.body, { childList: true, subtree: true, characterData: true }));
+      });
+      await calmReload(page);
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.waitForFunction(() => document.getElementById("challenge")?.value === "sandys-shadow", null, { timeout: MIN }).catch(() => {
+        throw new CheckFail("the link didn't pick Sandy's shadow on the card");
+      });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), `Sandy's shadow didn't start: ${await page.evaluate(() => window.__helm.error)}`);
+      must((await page.evaluate(() => window.__helm.challenge)) === "sandys-shadow", "the game isn't sailing Sandy's shadow");
+      const asked = [];
+      for (let i = 0; i < 40; i++) {
+        if (await page.evaluate(() => window.__helm.status?.over)) break;
+        if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) {
+          asked.push(await page.evaluate(() => (document.getElementById("decide").innerText || "").split("\n")[0].slice(0, 110)));
+          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+          await page.waitForTimeout(1000);
+        }
+        if (await page.evaluate(() => window.__helm.clock === 0 && !window.__helm.status?.over)) await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="96"]')?.click());
+        await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.status?.over || window.__helm.error, null, { timeout: 4 * MIN }).catch(() => {});
+        must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");
+      }
+      const r = await page.evaluate(() => ({ d: window.__helm.decisions.map((x) => ({ kind: x.kind, day: +x.day.toFixed(1) })), gulf: window.__gulf, over: !!window.__helm.status?.over, day: window.__helm.status?.day }));
+      const mission = r.d.filter((x) => x.kind === "mission");
+      const stream = r.d.filter((x) => /stream|gulf/i.test(x.kind));
+      must(mission.length === 1, `Sandy's big call was asked ${mission.length} times (decisions: ${JSON.stringify(r.d)})`);
+      must(!stream.length, `Sandy's shadow asked a Gulf Stream call: ${JSON.stringify(stream)}`);
+      must(!r.gulf.length, `Sandy's shadow showed a Gulf Stream note: ${JSON.stringify(r.gulf.slice(0, 2))}`);
+      return `one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
