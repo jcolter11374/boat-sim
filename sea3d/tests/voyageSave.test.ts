@@ -6,6 +6,7 @@ import {
   VOYAGE_VERSION,
   clearVoyage,
   continueLink,
+  endWords,
   loadVoyage,
   madeBy,
   offerWords,
@@ -161,6 +162,11 @@ test("the offer says where the voyage stands, in the helm's own day count", () =
   assert.equal(offerWords(packVoyage(now, WHEN)!), "Day 12 · 4,101 km to go · Kayak");
   assert.equal(offerWords(packVoyage({ ...now, day: 0.4 }, WHEN)!), "The first day · 4,101 km to go · Kayak");
   assert.equal(offerWords(packVoyage({ code: CODE, day: 50.9 }, WHEN)!), "Day 50"); // no words it doesn't have
+});
+
+test("the question before a new crossing ends the saved one names its day", () => {
+  assert.equal(endWords(packVoyage(now, WHEN)!), "End your voyage on day 12 and start a new one?");
+  assert.equal(endWords(packVoyage({ ...now, day: 0.4 }, WHEN)!), "End your voyage on its first day and start a new one?");
 });
 
 test("the continue link carries only the code and the challenge, and says it is your own", () => {
