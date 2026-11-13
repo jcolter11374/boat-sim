@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { HelmGame } from "../src/helm/game.ts";
-import { raceBase, raceCard, raceName, racePick, raceStatus, raceWorker, type RaceCard, type RaceInfo, type RaceStatus } from "../src/helm/raceSource.ts";
+import { raceBase, raceCard, raceGone, raceHeadline, raceLabel, raceName, racePick, raceStatus, raceWorker, swapSides, type RaceCard, type RaceCardBoat, type RaceInfo, type RaceStatus } from "../src/helm/raceSource.ts";
 import { cutAt } from "../src/helm/watchSource.ts";
 import type { Replay } from "../src/replay/data.ts";
 
@@ -99,4 +99,54 @@ test("a Randolph boat is always named as our model (B2), once", () => {
   assert.equal(raceName("Randolph Rev B, custom"), "Randolph Rev B, custom (our model)");
   assert.equal(raceName("Randolph Rev C5 (our model)"), "Randolph Rev C5 (our model)");
   assert.equal(raceName("Our kayak"), "Our kayak");
+});
+
+// ---- the ending's words (Elena's list)
+const cardOf = (a: Partial<RaceCardBoat>, b: Partial<RaceCardBoat>, rest: Partial<RaceCard> = {}): RaceCard => ({
+  launch: "2020-05-01T12:00",
+  boats: [
+    { name: "Our kayak", outcome: "arrived", days: 70, battery_low: 0.3, breakdowns: [], ...a },
+    { name: "Randolph Rev B", outcome: "arrived", days: 60, battery_low: 0.3, breakdowns: [], ...b },
+  ],
+  verdict: "",
+  winner: null,
+  margin_days: null,
+  words: "",
+  breakdowns_differ: false,
+  ...rest,
+});
+const NAMES: [string, string] = ["Our kayak", "Randolph Rev B (our model)"];
+
+test("a race's headline gives the most important fact first, and the time limit is not a result", () => {
+  const lostAndOut = cardOf({ outcome: "lost", days: 3.9 }, { outcome: "timeout", days: 150 });
+  assert.equal(raceHeadline(lostAndOut, NAMES), "Our kayak was lost on day 3.9. Randolph Rev B (our model) was still at sea after 150 days.");
+  assert.equal(raceLabel(lostAndOut.boats[1], "Randolph Rev B"), "Randolph Rev B: still at sea after 150 days");
+  assert.equal(raceLabel(lostAndOut.boats[0], "Our kayak"), "Our kayak: lost on day 3.9");
+  // The lost boat is the news even when she is boat B.
+  assert.equal(raceHeadline(cardOf({ outcome: "timeout", days: 150 }, { outcome: "sunk", days: 12.4 }), NAMES), "Randolph Rev B (our model) sank on day 12.4. Our kayak was still at sea after 150 days.");
+  assert.equal(raceHeadline(cardOf({}, {}, { winner: 1, margin_days: -10 }), NAMES), "Randolph Rev B (our model) finished first, 10.0 days ahead.");
+  assert.equal(raceHeadline(cardOf({}, { outcome: "lost", days: 20.2 }, { winner: 0 }), NAMES), "Our kayak finished in 70.0 days. Randolph Rev B (our model) was lost on day 20.2.");
+  assert.equal(raceHeadline(cardOf({}, {}, { verdict: "draw" }), NAMES), "A draw: both finished within a day of each other.");
+});
+
+test("when your boat is lost and the other sails on, the ending tells only her fate, and she is not drawn sailing", () => {
+  const c = cardOf({ outcome: "lost", days: 3.9 }, { outcome: "timeout", days: 150 });
+  assert.equal(raceHeadline(c, NAMES, 0), "Our kayak was lost on day 3.9.");
+  assert.equal(raceGone(c.boats[0]), true);
+  assert.equal(raceGone(c.boats[1]), false, "still at sea is not gone");
+  assert.equal(raceGone(cardOf({}, {}).boats[0]), false);
+});
+
+test("following the other boat swaps the sides once, even when the page's two statuses are the one object", () => {
+  const mk = () => ({ boat: { soc: 0.1 }, ghost: { soc: 0.9 }, lead_km: -2585 }) as unknown as Parameters<typeof swapSides>[0] & { boat: { soc: number }; ghost: { soc: number }; lead_km: number };
+  const st = mk();
+  swapSides(st, st);
+  assert.equal(st.boat.soc, 0.9);
+  assert.equal(st.ghost.soc, 0.1);
+  assert.equal(st.lead_km, 2585);
+  const a = mk();
+  const b = mk();
+  swapSides(a, b, null);
+  assert.equal(a.boat.soc, 0.9);
+  assert.equal(b.boat.soc, 0.9);
 });
