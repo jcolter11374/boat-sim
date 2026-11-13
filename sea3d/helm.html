@@ -403,7 +403,18 @@
   @media (max-width: 699px) {
     #result { align-items: flex-end; padding: 0 12px 12px; }
     #result .rc { max-height: calc(100dvh - var(--bar, 0px) - 180px); }
-    #result .rc-btns { position: sticky; bottom: -16px; z-index: 1; margin: 0 -26px -16px; padding: 18px 26px 16px; background: linear-gradient(rgba(11,21,35,0), rgb(11,21,35) 14px); }
+    #result .rc-btns { position: sticky; bottom: -16px; z-index: 1; margin: 0 -26px; padding: 18px 26px 16px; background: linear-gradient(rgba(11,21,35,0), rgb(11,21,35) 14px); }
+    /* The big numbers straight under the headline, then the award, then the story (two lines at most) and the
+       map, so a long race headline never pushes them out of sight (Maya, from Nina's live run). The map and the
+       numbers leave their shared row (display: contents) so each can take its own place in the card. */
+    #result .rc { display: flex; flex-direction: column; }
+    #result .rc > *, #result .rc-mid > * { flex-shrink: 0; } /* the card scrolls; its parts never squash (a clamped story went to nothing) */
+    #result .rc-mid:not([hidden]) { display: contents; }
+    #result .rc-top, #result #r-caveat { order: -3; }
+    #result #r-nums { order: -2; margin: 8px 0 8px; }
+    #result #r-medal, #result #r-stars { order: -1; }
+    #result #r-map { margin: 0 0 12px; }
+    #result #r-story { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
   }
   /* Looking around after a watched voyage: the one way back to its ending card. */
   #r-back { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + var(--strip-h, 62px) + 12px); z-index: 6; font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px;
