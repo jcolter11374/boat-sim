@@ -27,7 +27,7 @@ import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
@@ -221,6 +221,7 @@ function buildHero(q: Quality): void {
   sound.rig = rigFor(spec.key);
   sound.length = spec.length;
   titleSound.scene.sails = sound.rig === "shrouds"; // ropes creak only on a boat that has them
+  heroLight();
   // A stock boat's detailed model loads on demand: swap it in when it arrives.
   if (spec.key.startsWith("stock_") && !hasDetailedStock(spec.key as StockKey)) {
     const k = spec.key as StockKey;
@@ -231,6 +232,20 @@ const clouds = new Clouds(quality);
 clouds.group.visible = false;
 scene.add(clouds.group);
 let heroWas = false;
+let heroL = heroLightFor("kayak");
+/** The title's light for the boat it shows now (again whenever the boat changes). */
+function heroLight(): void {
+  if (!heroOn()) return;
+  heroL = heroLightFor(hero?.spec.key ?? "kayak");
+  atmos.set(HERO_SUN.el, HERO_SUN.az, 0, true);
+  // A boat with sails: lit from astern and to one side (Ines, 12 Nov; the sun moved off her
+  // 13 Nov), her near side in her own shadow, her edges and sails lit, little fill from the
+  // sky. A boat without: the sun over the lens's shoulder, on the side we see (heroLightFor).
+  heroPlace.yaw = titleHeading(atmos.sunDir, heroL.sunOff);
+  setBacklight(atmos.sunDir, heroL.back, atmos.sun.color);
+  atmos.hemi.intensity *= heroL.fill;
+  scene.environmentIntensity = heroL.env;
+}
 /** Into or out of the title: the hero's boat, sun, sky and sea; or the two demo boats as before. */
 function heroMode(): void {
   const on = heroOn();
@@ -247,16 +262,9 @@ function heroMode(): void {
   if (on) {
     atmos.cloud = HERO_CLOUD;
     atmos.setGlow(HERO_GLOW.scale, HERO_GLOW.radius); // small and tight: no veil over the boat
-    atmos.set(HERO_SUN.el, HERO_SUN.az, 0, true);
     clouds.seed(HERO_SKY_DAY);
-    heroPlace.yaw = titleHeading(atmos.sunDir);
     setSea("title", HERO_SEA);
-    // Lit from astern and to one side (Ines, 12 Nov; the sun moved off her 13 Nov): the near
-    // side of the boat in her own shadow, her edges and sails lit by the low sun. Less fill
-    // from the sky dome and the sky's reflections.
-    setBacklight(atmos.sunDir, 1, atmos.sun.color);
-    atmos.hemi.intensity *= 0.35;
-    scene.environmentIntensity = 0.25;
+    heroLight();
   } else {
     atmos.cloud = 0;
     atmos.setGlow();
@@ -264,6 +272,7 @@ function heroMode(): void {
     atmos.set(10, 330, 0, true);
     seaUniforms.uSeaSky.value.set(0, 0, 0, 0);
     seaUniforms.uSeaBreak.value.set(0, 0, 0, 0);
+    seaUniforms.uSeaWarm.value.set(0, 0, 0, 0);
     camera.fov = 45;
     camera.updateProjectionMatrix();
     setSea(seaSelect.value);
@@ -488,7 +497,7 @@ renderer.setAnimationLoop(() => {
     });
     // The shot: titleShot's 20 s loop, the boat right of the menu, looking into the low sun.
     const card = document.getElementById("title");
-    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight));
+    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight), heroL.sunOff);
     camera.position.copy(shot.pos);
     camera.quaternion.copy(shot.quat);
     if (camera.fov !== shot.fov) {
@@ -502,6 +511,8 @@ renderer.setAnimationLoop(() => {
     atmos.cloud = clouds.cover;
     clouds.seaSky(seaUniforms.uSeaSky.value);
     clouds.seaBreak(seaUniforms.uSeaBreak.value);
+    // The far water takes some of the sky's warm horizon; the near water stays cool and dark (Elena).
+    seaUniforms.uSeaWarm.value.set(atmos.fog.color.r, atmos.fog.color.g, atmos.fog.color.b, HERO_SEA_WARM);
     sea.setSun(atmos.glintDir, atmos.glintLight);
     atmos.render();
     status.frames++;

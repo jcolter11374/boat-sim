@@ -91,6 +91,36 @@ test("a yacht on the title keeps her masthead inside the frame", () => {
   }
 });
 
+test("a low boat on the title, the sun over the lens's shoulder: bow left, clear of the card, her near side lit", () => {
+  for (const sunAz of [0, 1, 2.5, 4.4]) {
+    const sunDir = new THREE.Vector3(Math.cos(sunAz), 0.08, -Math.sin(sunAz)).normalize();
+    const yaw = titleHeading(sunDir, 120);
+    const camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 1e6);
+    const host = { camera, controls: { target: new THREE.Vector3() } as never, yaw: () => yaw, length: () => 3.05, height: () => 0.9, water: () => 0, sunDir: () => sunDir };
+    for (const t of [0, 5, 10, 15]) {
+      const o = titleShot(host, t, 0.33, false, 120);
+      camera.position.copy(o.pos);
+      camera.quaternion.copy(o.quat);
+      camera.fov = o.fov;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      const bowDir = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const bow = bowDir.clone().multiplyScalar(1.525).project(camera);
+      const stern = bowDir.clone().multiplyScalar(-1.525).project(camera);
+      const tag = `sun ${sunAz} t${t}`;
+      assert.ok(bow.x < stern.x, `${tag}: bow to the left`);
+      assert.ok(bow.x > -0.34 + 0.2 && stern.x < 0.95, `${tag}: bow ${bow.x.toFixed(2)} stern ${stern.x.toFixed(2)}`);
+      // The sun is behind the lens, 110 to 130 degrees round from where it looks.
+      const view = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).setY(0).normalize();
+      const off = THREE.MathUtils.radToDeg(view.angleTo(sunDir.clone().setY(0).normalize()));
+      assert.ok(off > 108 && off < 132, `${tag}: sun ${off.toFixed(0)} degrees off`);
+      // The side of her we see faces the sun's half of the sky.
+      const toCam = camera.position.clone().setY(0).normalize();
+      assert.ok(toCam.dot(sunDir) > 0.3, `${tag}: near side lit`);
+    }
+  }
+});
+
 test("a boat's height above the water is measured once", () => {
   const root = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 1));
   root.position.y = 1;

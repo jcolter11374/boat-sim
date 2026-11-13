@@ -70,6 +70,9 @@ export const seaUniforms = {
   // A break in the deck toward the sun (Hana's Clouds.seaBreak): rgb its warm light
   // (linear), w how strong (0..1). The only glitter left under a deck is its column.
   uSeaBreak: { value: new THREE.Vector4(0, 0, 0, 0) },
+  // The title's far water takes a little of the sky's warm horizon (Elena, 13 Nov): rgb that
+  // colour (linear), w how much (0 everywhere else: no cost, no change).
+  uSeaWarm: { value: new THREE.Vector4(0, 0, 0, 0) },
 };
 
 /** Hand this frame's wave trains to every sea-reading shader. */
@@ -121,6 +124,7 @@ uniform sampler2D uSeaDetA1;
 uniform sampler2D uSeaDetB1;
 uniform vec4 uSeaSky; // the cloud deck the sea mirrors: colour, cover
 uniform vec4 uSeaBreak; // a break in the deck toward the sun: its light, strength
+uniform vec4 uSeaWarm; // the title's far water warmed toward the sky's horizon: colour, how much
 // Texture coordinates of a sea point in each patch (texel centres sit on the grid points).
 vec2 seaDetUv0(vec2 p) { return (p + uSeaDetOff0) / uSeaDetSize.x + 0.5 / uSeaDetRes; }
 vec2 seaDetUv1(vec2 p) { return (p + uSeaDetOff1) / uSeaDetSize.y + 0.5 / uSeaDetRes; }

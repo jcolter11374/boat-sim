@@ -692,6 +692,17 @@ if (uSeaSky.w > 0.2) { // uniform branch: only under a deck
   gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * smoothstep(0.2, 0.8, uSeaSky.w));
 }
 #endif
+if (uSeaWarm.w > 0.0) { // uniform branch: the title only
+  // With the sun off to one side the water in frame mirrors a cooler part of the sky and read
+  // cold and grey-green (Elena, 13 Nov). Over the last few degrees below the horizon it picks
+  // up the sky's peach, keeping its own lights and darks; the foreground stays cool and dark.
+  vec3 Vt = normalize(vWPos - cameraPosition);
+  float farW = 1.0 - smoothstep(0.0, 0.11, -Vt.y);
+  vec3 warm = linearToOutputTexel(vec4(uSeaWarm.rgb, 1.0)).rgb;
+  const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+  vec3 tinted = warm * (dot(gl_FragColor.rgb, LUM) / max(dot(warm, LUM), 1e-3));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, mix(tinted, warm, 0.25), uSeaWarm.w * farW * farW);
+}
 `;
 
 export class Sea {
