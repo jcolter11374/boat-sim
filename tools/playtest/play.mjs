@@ -2899,6 +2899,27 @@ const CHECKS = {
       } finally { await ctx.close().catch(() => {}); }
     },
   },
+  // #494: the default kayak lit on the title, fresh browser, 1280 High (frame live-after2-kayak-1280.jpg).
+  "look-title-kayak2": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      const ctx = await page.context().browser().newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+      const p = await ctx.newPage();
+      try {
+        await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForLoadState("networkidle").catch(() => {});
+        await p.waitForTimeout(10000);
+        const boat = await p.evaluate(() => document.getElementById("t-boatname")?.textContent.trim());
+        const path = "live-after2-kayak-1280.jpg";
+        must(await jpeg(p, path), "the frame wasn't taken");
+        const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`);
+        return `My boat "${boat}"; frame ${path}`;
+      } finally { await ctx.close().catch(() => {}); }
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
