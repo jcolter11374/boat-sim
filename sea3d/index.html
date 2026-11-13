@@ -61,6 +61,9 @@
   #title details .links a:hover, #title details .links button:hover { background: none; color: #fff; }
   #title .myboat { margin: 4px 2px 0; font-size: 13px; color: #b7c8dc; }
   #title .myboat b { color: #ffb072; font-weight: 650; }
+  /* What a renamed design is built on (Elena, B2): small and muted, under the name. */
+  #title .myboat #t-boatnote { display: block; margin-top: 2px; font-size: 12px; color: #8ea3bb; }
+  #title .myboat #t-boatnote[hidden] { display: none; }
   #title .myboat button { all: unset; cursor: pointer; color: #dbe6f5; text-decoration: underline; text-underline-offset: 3px; }
   #title .myboat button:focus-visible { outline: 2px solid #ff8a2a; outline-offset: 2px; }
   #title .fine { color: #8197ad; font-size: 11.5px; margin: 14px 0 0; }
@@ -121,7 +124,7 @@
     <details id="t-more"><summary>More</summary>
       <div class="links"><a href="./voyage.html">Watch a voyage</a><button type="button" id="t-sea">Just watch the sea</button><a href="./race.html">Race it</a><a href="./leaderboard.html">Leaderboard</a><a href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
     </details>
-    <p class="myboat">My boat: <b id="t-boatname">Our kayak</b> &middot; <button type="button" id="t-change">Change</button></p>
+    <p class="myboat">My boat: <b id="t-boatname">Our kayak</b> &middot; <button type="button" id="t-change">Change</button><span id="t-boatnote" hidden></span></p>
   </nav>
   <p class="fine">Free and open source. Our own simulator; the weather is real past weather.</p>
   <button type="button" id="t-sound" aria-pressed="false" title="The sea, a far bell buoy and a slow tune of our own, all made in code. Starts at your first click; N turns it off and on.">Sound: off</button>
