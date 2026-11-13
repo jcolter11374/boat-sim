@@ -84,8 +84,9 @@ test("a watched voyage's ending links to sailing that day yourself: the card, Yo
   assert.deepEqual([back.who, back.day], ["you", "2020-04-15"]);
 });
 
-test("the autopilot's Calm and Rough are days she sails and races, and Calm is the day watching has always opened on", () => {
-  assert.equal(AUTO_DAYS.calm, WATCH_DEFAULT_DAY);
+test("the autopilot's named days are days she sails and races, and Usual is the day watching has always opened on", () => {
+  assert.equal(AUTO_DAYS.usual, WATCH_DEFAULT_DAY);
+  assert.equal(AUTO_DAYS.calm, "2020-05-15");
   assert.equal(AUTO_DAYS.rough, "2020-04-01");
   for (const d of Object.values(AUTO_DAYS)) assert.ok(RACE_DAYS.includes(d), d);
   assert.equal(RIVAL_WORDS.soon, "Racing another boat: watch mode only, for now");

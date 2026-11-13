@@ -4226,9 +4226,9 @@ function frameBoat(dt: number): void {
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
     // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
     const band = phoneBand();
-    // The results card on a phone is tall and leaves a short band: step the camera back until she fits it
-    // (her hull, or a yacht's mast, at most about 60% of the band's height and 80% of the width).
-    if (phoneResults && phone && smoothYaw !== null) {
+    // A card on a phone (Set sail, or the results) is tall and leaves a short band: step the camera back until
+    // she fits it (her hull, or a yacht's mast, at most about 60% of the band's height and 80% of the width).
+    if (phone) {
       const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const tall = spec.length > 5 ? spec.length * 1.3 : spec.length * 0.45;
       const need = Math.max((tall * window.innerHeight) / (0.6 * Math.max(band.bottom - band.top, 60)), spec.length / 0.8 / camera.aspect) / (2 * tan);
