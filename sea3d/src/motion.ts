@@ -32,6 +32,7 @@
 // with the mesh origin at the centre of gravity (cgBelowWaterline below the
 // static waterline).
 
+import { gerstnerSurface, type SeaSurface } from "./seaSurface";
 import { G, type WaveComponent } from "./waves";
 
 export const RHO = 1025; // kg/m^3, sea water
@@ -212,58 +213,65 @@ export const RANDOLPH_REVB: HullParams = {
   source: "drone-boat docs/Simulation_RevB.md (mass, GM), docs/data/revB_gz_curve.csv (GZ, inertias), design.py (masses)",
 };
 
-// --- Randolph team Rev C (drone-boat simulator/drone_sim/design.py, MIT) -----
-// The Randolph team's Rev C (10 Nov 2026): foam-filled hull behind two
-// bulkheads, sealed battery box, twin rudders, D72 bulb, YB3 tracker and light
-// on the stern stub; 25.2 kg all up, waterline 0.098 m above the bottom. The GZ
-// curve is theirs (docs/data/revC_gz_curve.csv, free trim). Point masses are
-// their design.py equipment list plus Rev B's structure items above; they sum
-// to 25.26 kg. Inertias and the centre of gravity are their measured values
-// (designs/revC_geometry.json, 11 Nov 2026), about the CG with x aft, y port,
-// z up: Ixx 2.90, Iyy 5.00, Izz 2.15, Ixz -0.70 kg m^2; CG 0.853 m aft of the
-// bow and 0.034 m below the hull-bottom datum. Our roll-pitch model uses Ixx
-// and Iyy; Izz and Ixz (yaw, and the roll-yaw coupling) wait for a yaw model.
-// Our earlier point-mass estimates were within 3 % (2.86, 5.07, 0.847 m).
+// --- Randolph team Rev C (drone-boat designs/revC_geometry.json, MIT) ----------
+// The Randolph team's Rev C3 (11 Nov 2026): foam-filled hull behind two
+// bulkheads, sealed battery box, twin rudders with servo-savers, hardwood-cored
+// keel fin (C2), D72 bulb, YB3 in a foredeck well, fibreglass stern post and
+// counterweight arm, 30 x 22 mm spar (C3); 26.9 kg all up, waterline 0.102 m
+// above the bottom. The GZ curve is theirs (docs/data/revC_gz_curve.csv, C3,
+// free trim). Point masses are their mass_items list (revC_geometry.json); they
+// sum to 26.93 kg. Inertias and the centre of gravity are their values from the
+// same file, about the CG with x aft, y port, z up: Ixx 3.10, Iyy 5.26,
+// Izz 2.21, Ixz -0.45 kg m^2; CG 0.824 m aft of the bow and 0.028 m below the
+// hull-bottom datum. Our roll-pitch model uses Ixx and Iyy; Izz and Ixz (yaw,
+// and the roll-yaw coupling) wait for a yaw model.
 export const REVC_MASS_ITEMS: MassItem[] = [
-  [9.0, -0.436, "lead bulb, 0.32 m x 72 mm"],
-  [0.9, -0.2, "keel fin and rod"],
-  [0.9, -0.07, "two rudders and stocks"],
-  [2.4, 0.12, "hull and deck laminate, ~1.5 m^2 at 1.6 kg/m^2"],
-  [2.35, 0.65, "wing rig with counterweight, 30 x 26 mm spar"],
-  [2.0, 0.1, "battery"],
-  [1.1, 0.1, "electronics box"],
-  [1.0, 0.235, "solar panels"],
-  [0.45, 0.13, "mast tube and housing"],
-  [0.5, 0.14, "two rudder servos and trunks"],
-  [0.9, 0.42, "stern stub, vane, antenna, reflector"],
-  [0.5, 0.02, "keel box and backing"],
+  [2.316, 0.149, "hull + deck shell"],
+  [1.723, -0.196, "keel fin"],
+  [8.983, -0.424, "lead bulb"],
+  [0.992, -0.043, "rudders"],
+  [0.561, 0.8, "wing"],
+  [0.8, 0.75, "wing spar"],
+  [0.37, 0.35, "tail + servo housing"],
+  [0.066, 0.276, "tail boom"],
+  [0.018, 0.286, "counterweight arm tube"],
+  [0.11, 0.286, "counterweight pod shell"],
+  [0.798, 0.286, "rig counterweight (lead)"],
+  [2, 0.1, "battery"],
+  [1.1, 0.163, "electronics box"],
+  [0.08, 0.115, "electronics shelf"],
+  [1, 0.235, "solar panels"],
+  [0.52, 0.13, "mast tube and housing"],
+  [0.53, 0.14, "rudder servos and trunks"],
+  [1.65, 0.13, "foam fill xps"],
+  [0.2, 0.12, "bulkheads"],
+  [0.35, 0.1, "battery box"],
+  [0.45, 0.225, "yb3 tracker and platform"],
+  [0.06, 0.6, "nav light"],
+  [0.9, 0.42, "stern stub vane antenna reflector"],
+  [0.75, 0.02, "keel box and backing"],
   [0.6, 0.12, "misc fittings"],
-  [1.65, 0.13, "XPS foam fill, ~59 L"],
-  [0.2, 0.12, "two bulkheads"],
-  [0.35, 0.1, "sealed battery box"],
-  [0.4, 0.48, "YB3 tracker and platform"],
-  [0.06, 0.6, "all-round light"],
 ];
-const REVC_X = [0.74, 0.74, 1.4, 0.72, 0.6, 0.87, 1.1, 1.06, 0.6, 1.36, 1.53, 0.745, 0.8, 0.8, 0.78, 0.87, 1.53, 1.53];
-const REVC_WATERLINE = 0.098;
-const REVC_SPREAD = [0.072, 0.43, 0.23, 0.45, 1.0, 0, 0, 0.4, 0, 0, 0, 0, 0, 0.23, 0.2, 0, 0, 0];
+const REVC_X = [0.809, 0.73, 0.723, 1.428, 0.66, 0.6, 1.2, 0.9, 0.45, 0.3, 0.3, 0.87, 1.1, 1.1, 1.06, 0.6, 1.36, 0.8, 0.78, 0.87, 0.18, 1.53, 1.53, 0.745, 0.8];
+const REVC_WATERLINE = 0.102;
+const REVC_SPREAD = [0.45, 0.43, 0.072, 0.23, 1, 1.195, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0, 0, 0.23, 0.2, 0, 0, 0, 0, 0, 0]; // GUESS: item lengths for their own inertia
 const revcMass = massProperties(REVC_MASS_ITEMS, REVC_SPREAD);
-// GM from the curve's first step: 0.0163 m / sin 5 deg.
-export const REVC_GM = 0.187;
+// GM: the Rev C5 curve's first step, 0.0164 m / sin 5 deg = 0.188 (their revC_geometry.json stability.gm_m 0.188).
+export const REVC_GM = 0.188;
 const revcGz: [number, number][] = [
-  [0, 0.0], [5, 0.0163], [10, 0.0325], [15, 0.0486], [20, 0.0644], [25, 0.0798], [30, 0.0948], [35, 0.1092],
-  [40, 0.1231], [45, 0.1352], [50, 0.145], [55, 0.1524], [60, 0.1579], [65, 0.1609], [70, 0.1624], [75, 0.1629],
-  [80, 0.1639], [85, 0.1802], [90, 0.1791], [95, 0.2898], [100, 0.3672], [105, 0.3782], [110, 0.3722], [115, 0.3586],
-  [120, 0.3402], [125, 0.318], [130, 0.2927], [135, 0.2646], [140, 0.2347], [145, 0.2033], [150, 0.171], [155, 0.1383],
-  [160, 0.1061], [165, 0.0753], [170, 0.0471], [175, 0.0225], [180, 0.0],
+  [0, 0.0], [5, 0.0164], [10, 0.0327], [15, 0.0488], [20, 0.0647], [25, 0.0803], [30, 0.0954], [35, 0.11],
+  [40, 0.1239], [45, 0.1358], [50, 0.1453], [55, 0.1527], [60, 0.158], [65, 0.1609], [70, 0.1624], [75, 0.1626],
+  [80, 0.1629], [85, 0.1771], [90, 0.1781], [95, 0.2681], [100, 0.3554], [105, 0.3717], [110, 0.3687], [115, 0.3569],
+  [120, 0.3397], [125, 0.3182], [130, 0.2933], [135, 0.2655], [140, 0.2357], [145, 0.2046], [150, 0.1723],
+  [155, 0.1396], [160, 0.1072], [165, 0.0762], [170, 0.0477], [175, 0.023], [180, 0.0],
 ];
-// Their measured values (designs/revC_geometry.json).
-export const REVC_IXX = 2.9;
-export const REVC_IYY = 5.0;
-export const REVC_IZZ = 2.15; // not used yet (no yaw model)
-export const REVC_IXZ = -0.7; // not used yet (no yaw model)
-const REVC_CG_X = 0.853; // m aft of the bow
-const REVC_CG_BELOW_BOTTOM = 0.034; // m below the hull-bottom datum
+// Their values (designs/revC_geometry.json, C3).
+export const REVC_IXX = 3.1;
+export const REVC_IYY = 5.256;
+export const REVC_IZZ = 2.206; // not used yet (no yaw model)
+export const REVC_IXZ = -0.449; // not used yet (no yaw model)
+const REVC_CG_X = 0.824; // m aft of the bow
+const REVC_CG_BELOW_BOTTOM = 0.028; // m below the hull-bottom datum
 /** Our point-mass estimate of the CG and roll inertia, kept to check theirs. */
 export const REVC_POINT_MASS = {
   ...revcMass,
@@ -272,13 +280,13 @@ export const REVC_POINT_MASS = {
 
 export const RANDOLPH_REVC: HullParams = {
   name: "Randolph Rev C",
-  mass: 25.2,
-  waterlineLength: 1.43, // their simulator at the 98 mm waterline
+  mass: 26.9,
+  waterlineLength: 1.43, // their simulator (length change under 1 cm at the C3 waterline)
   waterlineBeam: 0.34, // their randolph_rev_c.yaml
   waterplaneCoeff: 0.68, // GUESS: as Rev B
   gzTable: revcGz,
-  rollInertia: REVC_IXX, // their measured Ixx about the CG
-  pitchInertia: REVC_IYY, // their measured Iyy about the CG
+  rollInertia: REVC_IXX, // their Ixx about the CG
+  pitchInertia: REVC_IYY, // their Iyy about the CG
   cgBelowWaterline: REVC_WATERLINE + REVC_CG_BELOW_BOTTOM,
   cgX: REVC_CG_X,
   addedHeave: 1.0,
@@ -290,7 +298,7 @@ export const RANDOLPH_REVC: HullParams = {
   // as Rev B, with the CG ~0.07 m above the bottom and the D72 bulb (0.32 x 0.072 m)
   rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.16, -0.07, 0.43 - 0.07) + 0.023 * 0.5 ** 3),
   source:
-    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), simulator/drone_sim/design.py (masses), designs/revC_geometry.json (measured inertias and CG)",
+    "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), designs/revC_geometry.json (masses, inertias and CG)",
 };
 
 // --- Stock vessels (Theo, configs/stock_*.yaml) ---------------------------------
@@ -324,6 +332,35 @@ export const CRUISER31: HullParams = {
   // keel 0.9 m chord from 0.4 to 1.75 m below the CG, bulb 1.6 x 0.34 m at 1.6 m
   rollQuadDamping: 0.5 * RHO * 1.2 * (finR3(0.9, 0.4, 1.75) + 0.54 * 1.6 ** 3),
   source: "configs/stock_cruiser31.yaml (GZ, mass); inertia and damping GUESS",
+};
+
+// Pearson 31-2 (our model of Randolph's boat), deep keel: configs/stock_pearson31_2.yaml.
+// GM about 1.0 m (GUESS, see the yaml). An elliptical lead fin, no bulb: ballast centre
+// about 1.2 m down (GUESS), the rest of the boat about 0.42 m up (as the cruiser), so
+// the CG sits about 0.20 m below the waterline. Roll period about 3.8 s (GUESS).
+export const PEARSON31_2: HullParams = {
+  name: "Pearson 31-2 (our model of Randolph's boat)",
+  mass: 4536,
+  waterlineLength: 7.74,
+  waterlineBeam: 2.95, // GUESS: 3.29 m beam, a little less at the waterline
+  waterplaneCoeff: 0.7, // GUESS
+  gzTable: deg(
+    [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 180],
+    [0, 0.165, 0.31, 0.43, 0.51, 0.55, 0.55, 0.51, 0.43, 0.33, 0.21, 0.09, -0.03, -0.15, 0],
+  ),
+  rollInertia: 14700, // GUESS: 4536 kg x (1.8 m)^2
+  pitchInertia: 4536 * (0.25 * 9.39) ** 2, // GUESS
+  cgBelowWaterline: 0.2, // GUESS: (1724 kg x 1.2 m - 2812 kg x 0.42 m) / 4536 kg
+  cgX: 4.45, // GUESS: over the keel
+  addedHeave: 0.8, // GUESS
+  addedPitch: 0.5, // GUESS
+  addedRoll: 0.15, // GUESS
+  zetaHeave: 0.2, // GUESS
+  zetaPitch: 0.2, // GUESS
+  zetaRoll: 0.1, // GUESS: fin keel yachts ~0.1
+  // keel about 1.1 m mean chord, from the canoe body (0.35 m below the CG) to its tip (1.51 m)
+  rollQuadDamping: 0.5 * RHO * 1.2 * finR3(1.1, 0.35, 1.51),
+  source: "configs/stock_pearson31_2.yaml (GZ, mass); inertia and damping GUESS",
 };
 
 // 14 ft dinghy, nobody aboard: form stability only, and it turtles past ~75 deg.
@@ -511,12 +548,15 @@ const GRID_Z = [-0.5, 0, 0.5]; // fractions of waterline beam
 
 export function seaUnderHull(
   p: HullParams,
-  comps: WaveComponent[],
+  sea: WaveComponent[] | SeaSurface,
   x: number,
   z: number,
   yaw: number,
   t: number,
 ): SeaUnderHull {
+  // The drawn surface (sharp, forward-leaning crests), not plain sines: the boat floats
+  // on the sea we draw. A bare list of trains is the shader's Gerstner sea.
+  const surf = Array.isArray(sea) ? gerstnerSurface(sea) : sea;
   // yaw rotates the boat about +y: local +x (bow) -> world (cos yaw, 0, -sin yaw)
   const cx = Math.cos(yaw);
   const sx = Math.sin(yaw);
@@ -532,7 +572,7 @@ export function seaUnderHull(
       const lz = fz * p.waterlineBeam;
       const wx = x + lx * cx + lz * sx;
       const wz = z - lx * sx + lz * cx;
-      const e = waveHeight(comps, wx, wz, t);
+      const e = surf.heightAt(wx, wz, t);
       n++;
       se += e;
       sxe += lx * e;
@@ -553,6 +593,7 @@ export interface Pose {
 
 export class BoatMotion {
   static readonly DT = 0.005; // s, substep
+  static readonly SEA_DT = 0.02; // s, between samples of the sea under the hull
   readonly p: HullParams;
   readonly d: Derived;
   pose: Pose;
@@ -570,6 +611,8 @@ export class BoatMotion {
    * over and floats upside down, rocking about 180 deg (a boat with nobody to right it). */
   capsized = 0;
   private prevEta: number | null = null;
+  private seaA: { t: number; x: number; z: number; yaw: number; s: SeaUnderHull } | null = null;
+  private seaB: { t: number; x: number; z: number; yaw: number; s: SeaUnderHull } | null = null;
 
   constructor(p: HullParams, pose: Pose = { x: 0, z: 0, yaw: 0 }) {
     this.p = p;
@@ -578,16 +621,39 @@ export class BoatMotion {
   }
 
   /** Advance to time `t` (s) in substeps of DT. */
-  advance(comps: WaveComponent[], t: number): void {
+  advance(sea: WaveComponent[] | SeaSurface, t: number): void {
     if (t <= this.t) return;
+    const surf = Array.isArray(sea) ? gerstnerSurface(sea) : sea;
     const steps = Math.min(Math.ceil((t - this.t) / BoatMotion.DT), 2000); // cap a long pause
     const dt = (t - this.t) / steps;
-    for (let i = 0; i < steps; i++) this.step(comps, dt);
+    for (let i = 0; i < steps; i++) this.step(surf, dt);
   }
 
-  step(comps: WaveComponent[], dt: number): void {
+  /** The sea under the hull at time t: sampled every SEA_DT and interpolated, as the
+   *  drawn surface costs a few fixed-point steps per point. */
+  private seaAt(sea: SeaSurface, t: number): SeaUnderHull {
+    const { x, z, yaw } = this.pose;
+    const moved = (s: { x: number; z: number; yaw: number }) => s.x !== x || s.z !== z || s.yaw !== yaw;
+    let a = this.seaA;
+    let b = this.seaB;
+    if (!a || !b || t < a.t || t > b.t + BoatMotion.SEA_DT || moved(b)) {
+      const t0 = Math.floor(t / BoatMotion.SEA_DT) * BoatMotion.SEA_DT;
+      a = { t: t0, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, t0) };
+      b = { t: t0 + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, t0 + BoatMotion.SEA_DT) };
+    } else if (t > b.t) {
+      a = b;
+      b = { t: a.t + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, a.t + BoatMotion.SEA_DT) };
+    }
+    this.seaA = a;
+    this.seaB = b;
+    const f = (t - a.t) / (b.t - a.t);
+    const lerp = (u: number, v: number) => u + (v - u) * f;
+    return { eta: lerp(a.s.eta, b.s.eta), slopeX: lerp(a.s.slopeX, b.s.slopeX), slopeZ: lerp(a.s.slopeZ, b.s.slopeZ) };
+  }
+
+  step(sea: WaveComponent[] | SeaSurface, dt: number): void {
     const { p, d } = this;
-    const s = seaUnderHull(p, comps, this.pose.x, this.pose.z, this.pose.yaw, this.t + dt);
+    const s = this.seaAt(Array.isArray(sea) ? gerstnerSurface(sea) : sea, this.t + dt);
     const etaRate = this.prevEta === null ? 0 : (s.eta - this.prevEta) / dt;
     this.prevEta = s.eta;
     const W = d.displacementN;

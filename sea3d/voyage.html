@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>boat-sim 3D: voyage replay</title>
+<title>Bluewater: Watch a voyage</title>
 <style>
+  :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.72); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
     --orange: #ff8a2a; --good: #3ddc97; --bad: #ff5d5d; --warn: #ffc247; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1726; color: var(--ink);
@@ -12,62 +13,172 @@
   #app { position: fixed; inset: 0; }
   .glass { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
-  #top { position: fixed; top: 12px; left: 12px; padding: 10px 14px; width: 330px; }
-  #top h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: .2px; }
-  #top .sub { color: var(--dim); font-size: 12px; margin: 0 0 8px; }
-  #top select { width: 100%; font: inherit; padding: 5px 6px; border-radius: 7px; background: #13263d;
-    color: var(--ink); border: 1px solid var(--line); }
-  #top .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
-  #top .row select { width: auto; padding: 2px 4px; }
-  #top a { color: #8ab4ff; }
-  #top .row button { font: 600 12px system-ui, sans-serif; padding: 4px 10px; border-radius: 7px; cursor: pointer; color: var(--ink); background: #1b3352; border: 1px solid var(--line); }
-  #top .row button[aria-pressed="true"] { background: rgba(255,138,42,.18); border-color: var(--orange); }
+  /* Watch a voyage on the helm's system (Leo's delta, approved by Elena 12 Nov): the world gets the
+     screen; one slim strip at the bottom, a corner map top right, the replay settings in a drawer on
+     the left, toasts top centre, history docked at the right edge. */
+  :root { --ui: clamp(12px, 1.667vh, 18px); --hud: rgba(8,16,28,.46); --hud-solid: rgba(8,16,28,.82); --hud-line: rgba(200,220,245,.14);
+    --strip-w: min(calc(var(--ui) * 80), calc(100vw - 16px)); --strip-h: calc(var(--ui) * 4.83); --edge: 10px; --strip-bg: rgba(10,18,28,.62); }
+  .hud { background: var(--hud); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); border-radius: 10px; }
+  button { font: 600 13px system-ui, sans-serif; color: var(--ink); background: rgba(27,51,82,.75); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: #8ab4ff; }
+  button.x { background: none; border: 0; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--dim); }
+  button.x:hover { color: var(--ink); }
+  /* The site's bar slides up once the replay is on; the mouse at the top edge brings it back. */
+  body.immersive { --bar: 0px; }
+  body.immersive #topbar { height: 40px; transform: translateY(-100%); transition: transform .35s ease; }
+  body.immersive.peek #topbar { transform: none; }
+  body.no-bar-anim #topbar { transition: none !important; }
+
+  /* The strip: time, day, heading, speed, battery, wind and waves, equipment. */
+  #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
+    display: flex; align-items: center; padding: 0 .67em 0 1em; z-index: 6; font-size: var(--ui);
+    background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
+  #strip .cell { min-width: 0; flex: 1 1 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
+    border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
+  #strip .cell:first-of-type { border-left: 0; padding-left: 0; }
+  #strip .c-time { flex: 0 0 auto; }
+  /* Wide windows, one row: the speed bar, the day, wind and waves and the equipment icons always show whole
+     ("Real time" first, T1; "35kn NW · 10.5m"); the heading, speed and battery give way. */
+  #strip #c-eq { min-width: max-content; }
+  @media (min-width: 1101px) { #strip #c-wind, #strip #c-day, #strip #c-head, #strip #c-bat { min-width: max-content; } #strip #c-speed { min-width: 0; flex-shrink: 1; } } /* the day, heading and battery whole too: "Day 16.7 of 59.3", "067° NE", "charging" (Omar, Nina) */
+  #strip #c-day { flex: 1.8 1 0; } #strip #c-wind { flex: 1.5 1 0; } #strip #c-eq { flex: 1.9 1 0; }
+  #strip #c-report, #strip #c-eta { flex: 1.3 1 0; }
+  #strip .v { font: 650 1.42em/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  #strip .v small { font-size: .7em; font-weight: 500; color: var(--dim); margin-left: 1px; }
+  #strip .v .arrow { display: inline-block; margin-left: .2em; color: var(--dim); font-size: .8em; transition: transform .25s; }
+  #strip .l { font-size: .875em; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  #strip button.cell { cursor: pointer; border: 0; border-left: 1px solid var(--hud-line); }
+  #strip button.cell:hover .l { color: var(--ink); }
+  #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
+  #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
+  #tb { display: flex; gap: 2px; align-items: center; }
+  #tb button { white-space: nowrap; padding: .1em .42em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
+  #tb button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
+  #tb #play { min-width: 2.2em; }
+  #tb #play.paused { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #warp { display: flex; gap: 2px; }
+  #keysbtn { flex: none; width: 1.83em; height: 1.83em; padding: 0; border-radius: 50%; font-size: 1em; margin-left: .5em; background: rgba(255,255,255,.08); border-color: var(--hud-line); color: var(--dim); }
+  /* The scrubber along the strip's top edge, like a video player's. */
+  #scrubwrap { position: absolute; left: 10px; right: 10px; top: -7px; height: 14px; }
+  #scrub { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; margin: 0; background: none; cursor: pointer; }
+  #scrub::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--orange) var(--p, 0%), rgba(255,255,255,.22) var(--p, 0%)); transition: height .15s; }
+  #scrub::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); }
+  #scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--orange); }
+  #scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 0 0 3px rgba(255,138,42,.5); opacity: 0; transition: opacity .15s; }
+  #scrub::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 0; opacity: 0; }
+  #scrubwrap:hover #scrub::-webkit-slider-runnable-track { height: 12px; }
+  #scrubwrap:hover #scrub::-webkit-slider-thumb { opacity: 1; margin-top: 0; }
+  #scrubwrap:hover #scrub::-moz-range-track, #scrubwrap:hover #scrub::-moz-range-progress { height: 12px; }
+  #scrubwrap:hover #scrub::-moz-range-thumb { opacity: 1; }
+  #ticks { position: absolute; left: 6px; right: 6px; top: 1px; height: 12px; pointer-events: none; z-index: 1; }
+  #ticks i { position: absolute; top: 4px; width: 2px; height: 4px; border-radius: 1px; pointer-events: auto; cursor: pointer; transition: top .15s, height .15s; }
+  #ticks i::before { content: ""; position: absolute; left: -4px; right: -4px; top: -4px; bottom: -4px; } /* an easier target */
+  #scrubwrap:hover #ticks i { top: 0; height: 12px; }
+  /* Equipment: nine small line icons, dim while they work, red when they break. */
+  #eq { display: flex; gap: .22em; align-items: center; height: 1.42em; }
+  #eq .part { width: 1.1em; height: 1.1em; color: rgba(233,241,251,.55); flex: none; display: inline-flex; }
+  #eq .part svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #eq .part.bad { color: var(--bad); filter: drop-shadow(0 0 3px rgba(255,93,93,.8)); }
+  #eq .part.pulse { animation: eqpulse .9s ease-in-out 1; }
+  /* Broken parts: a red dot with the count on the cell, and it stays (Elena). */
+  #strip #c-eq .l[data-bad]::after { content: attr(data-bad); display: inline-block; vertical-align: 1px; margin-left: .45em; min-width: 1.45em; height: 1.45em; padding: 0 .3em; box-sizing: border-box; letter-spacing: 0;
+    border-radius: 999px; background: var(--bad); color: #fff; font: 700 .8em/1.8em system-ui, sans-serif; text-align: center; }
+  @keyframes eqpulse { 50% { transform: scale(1.45); } }
+  @media (prefers-reduced-motion: reduce) { #eq .part.pulse { animation: none; } }
+  #keylist { position: fixed; right: max(8px, calc(50vw - 480px)); bottom: calc(var(--edge) + var(--strip-h) + 12px); z-index: 21; padding: 10px 14px; background: var(--hud-solid); font-size: 12.5px; }
+  #keylist:not([hidden]) { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+  #keylist .kh { grid-column: 1 / -1; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 2px 0 2px; }
+  #keylist kbd { font: 600 11px system-ui, sans-serif; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--hud-line); background: rgba(255,255,255,.06); text-align: center; white-space: nowrap; justify-self: start; min-width: 14px; }
+
+  /* The replay drawer: left, from under the top edge to above the strip. R opens and closes it. */
+  #top { position: fixed; left: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); max-height: calc(100vh - var(--bar, 0px) - 2 * var(--edge) - var(--strip-h) - 14px); width: 330px; box-sizing: border-box;
+    padding: 12px 14px; overflow-y: auto; overscroll-behavior: contain; z-index: 7; background: var(--hud-solid); border: 1px solid var(--hud-line);
+    transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; }
+  #top:not(.open) { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
+  #top h2 { margin: 0 0 4px; display: flex; justify-content: space-between; align-items: center; }
+  #top #h1 { font-size: 15px; font-weight: 650; letter-spacing: .2px; }
+  #top .sub { color: var(--dim); font-size: 11.5px; margin: 0 0 8px; }
+  #top select { width: 100%; font: inherit; font-size: 13px; padding: 5px 6px; border-radius: 7px; background: #13263d; color: var(--ink); border: 1px solid var(--line); }
   #top select + select { margin-top: 6px; }
+  #top .row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 9px; font-size: 12px; color: var(--dim); }
+  #top .row select { width: auto; padding: 3px 24px 3px 7px; font-size: 12px; }
+  #top .lh { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--hud-line); font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); }
+  #top a { color: var(--ink); text-decoration: none; font: 600 12px system-ui, sans-serif; padding: 4px 9px; border-radius: 7px; background: rgba(255,255,255,.06); border: 1px solid transparent; }
+  #top a:hover { border-color: var(--hud-line); background: rgba(255,255,255,.12); }
+  #top a .go { color: #ffb070; margin-left: 2px; }
+  #top select { -webkit-appearance: none; appearance: none; padding-right: 26px; background-color: rgba(255,255,255,.06); border-color: var(--hud-line); cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+    background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
+  #top select:hover { border-color: rgba(200,220,245,.35); }
+  #top select option { background: #13263d; }
+  #top kbd { font: 600 10.5px system-ui, sans-serif; padding: 0 5px; border-radius: 4px; border: 1px solid var(--hud-line); color: var(--dim); }
+  #top #warp2 { display: flex; gap: 4px; }
+  #top #warp2 button { font-size: 12px; padding: 3px 8px; }
+  #top #warp2 button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); }
   #focus { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
-  #focus[hidden] { display: none; }
-  #focus button { font: 600 12px system-ui, sans-serif; padding: 4px 10px; border-radius: 7px; cursor: pointer;
-    border: 1px solid var(--line); background: #1b3352; color: var(--ink); }
+  #focus button { font-size: 12px; padding: 4px 10px; }
   #focus button[data-lane="0"][aria-pressed="true"] { background: #ff8a2a; color: #1a0d00; border-color: #ff8a2a; }
   #focus button[data-lane="1"][aria-pressed="true"] { background: #2ec4b6; color: #002420; border-color: #2ec4b6; }
-  #hud { position: fixed; top: 12px; right: 12px; display: grid; grid-template-columns: repeat(3, 134px); gap: 8px; }
-  .card { padding: 8px 11px 9px; }
-  .card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
-  .card .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 1px; white-space: nowrap; }
-  .card .v small { font-size: 12px; font-weight: 500; color: var(--dim); margin-left: 2px; }
-  .card .s { font-size: 11px; color: var(--dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #h-tp { white-space: normal; } /* the swell line wraps rather than hiding */
-  .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); margin-top: 5px; overflow: hidden; }
-  .bar i { display: block; height: 100%; background: var(--good); border-radius: 3px; transition: width .2s; }
-  .card.wide { grid-column: 1 / -1; }
-  #eq { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 11.5px; }
-  .chip { white-space: nowrap; }
-  .chip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 4px; vertical-align: 0; }
-  .chip.bad { color: #ffb3b3; }
-  .chip.bad i { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
-  .arrow { display: inline-block; transition: transform .25s; margin-left: 4px; color: var(--dim); font-size: 15px; }
-  #chartbox { position: fixed; left: 12px; bottom: 86px; width: 470px; height: 255px; padding: 0; overflow: hidden;
-    cursor: zoom-in; transition: all .35s ease; }
-  #chartbox.big { left: 50%; bottom: 50%; transform: translate(-50%, 50%); width: min(1100px, 92vw); height: min(560px, 70vh); cursor: zoom-out; z-index: 5; }
-  #chart { width: 100%; height: 100%; display: block; }
-  #chartbox .lbl { position: absolute; top: 7px; left: 10px; font-size: 11px; color: var(--dim); letter-spacing: .6px; pointer-events: none; }
-  #legend { position: absolute; bottom: 6px; left: 10px; font-size: 10.5px; color: var(--dim); pointer-events: none; }
-  #legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 3px 0 8px; vertical-align: -1px; }
-  #transport { position: fixed; left: 12px; right: 12px; bottom: 12px; padding: 9px 14px; display: flex; gap: 12px; align-items: center; }
-  #transport button { font: 600 13px system-ui, sans-serif; color: var(--ink); background: #1b3352; border: 1px solid var(--line);
-    border-radius: 8px; padding: 6px 11px; cursor: pointer; }
-  #transport button[aria-pressed="true"] { background: var(--orange); color: #1a0d00; border-color: var(--orange); }
-  #play { width: 44px; font-size: 16px !important; }
-  #warp { display: flex; gap: 4px; }
-  #scrubwrap { position: relative; flex: 1; height: 28px; }
-  #scrub { position: absolute; inset: 0; width: 100%; margin: 0; accent-color: var(--orange); }
-  #ticks { position: absolute; left: 8px; right: 8px; top: 0; height: 6px; pointer-events: none; }
-  #ticks i { position: absolute; top: 0; width: 2px; height: 6px; border-radius: 1px; }
-  #when { min-width: 168px; text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12.5px; }
-  #when b { color: var(--ink); font-size: 14px; }
-  #toasts { position: fixed; right: 12px; top: 262px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
-  .toast { padding: 7px 11px; border-left: 4px solid var(--c); font-size: 12.5px; animation: in .3s ease; }
-  .toast b { display: block; font-size: 11px; color: var(--dim); font-weight: 500; }
+  #replay-tab { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 6; width: 26px; height: 92px; padding: 0; border-radius: 0 9px 9px 0;
+    border: 0; background: var(--hud); color: #ffb070; }
+  #replay-tab span { display: inline-block; transform: rotate(-90deg); font: 650 11px system-ui, sans-serif; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
+  #replay-tab:hover { background: var(--hud-solid); }
+  body.drawer-open #replay-tab { visibility: hidden; }
+
+  /* The map: a corner map top right; M or a click makes it big, with the legend and the log. */
+  #mapbox { position: fixed; right: var(--edge); top: calc(var(--bar, 0px) + var(--edge)); width: 232px; box-sizing: border-box; padding: 6px; z-index: 6;
+    background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); } /* the strip's glass, so it holds at night (Ines) */
+  #mapbox .mhead { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 4px; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); }
+  #h-dist { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #h-dist small { font-weight: 500; color: var(--dim); margin-left: 1px; }
+  #map-x, #mside { display: none; }
+  #mbody { display: flex; gap: 12px; }
+  #chart { width: 100%; height: 132px; display: block; border-radius: 6px; cursor: zoom-in; }
+  #film { display: flex; gap: 4px; justify-content: flex-end; margin-top: 5px; }
+  #film button { width: 30px; height: 26px; padding: 0; font-size: 14px; line-height: 1; border-radius: 7px; background: rgba(255,255,255,.07); border-color: transparent; }
+  #film button:hover { border-color: var(--hud-line); background: rgba(255,255,255,.14); }
+  #mapbtn { display: none; }
+  #mapbox.big { left: 50%; top: calc(var(--bar, 0px) + 50%); right: auto; transform: translate(-50%, -50%); width: min(1100px, calc(100vw - 40px)); height: min(640px, 72vh);
+    padding: 12px 14px; z-index: 12; background: var(--hud-solid); display: flex; flex-direction: column; }
+  #mapbox.big .mhead { font-size: 11px; }
+  #mapbox.big #h-dist { font-size: 14px; }
+  #mapbox.big #map-x { display: inline; margin-left: 8px; }
+  #mapbox.big #mbody { flex: 1; min-height: 0; }
+  #mapbox.big #chart { flex: 1; width: auto; min-width: 0; height: 100%; cursor: default; }
+  #mapbox.big #mside { display: flex; flex-direction: column; gap: 6px; width: 290px; flex: none; font-size: 13px; min-height: 0; }
+  #mapbox.big #film { display: none; }
+  #legend { font-size: 11.5px; color: var(--dim); line-height: 1.8; }
+  #legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: -1px; }
+  #legend i:first-child { margin-left: 0; }
+  #mside .lh { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); border-top: 1px solid var(--hud-line); padding-top: 6px; }
+  #mside .lh label { text-transform: none; letter-spacing: 0; font-size: 12px; }
+  #log { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; font-size: 12.5px; }
+  #log li { padding: 3px 0 3px 8px; border-left: 3px solid var(--c, #8ab4ff); margin-bottom: 4px; }
+  #log li .when { color: var(--dim); font-size: 11px; display: block; }
+  #log:empty::before { content: "Nothing yet."; color: var(--dim); }
+
+  /* Toasts: top centre, at most two, gone on their own. */
+  #toasts { position: fixed; top: calc(var(--bar, 0px) + var(--edge)); left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 600px)); min-width: 280px;
+    display: flex; flex-direction: column; gap: 6px; z-index: 7; pointer-events: none; }
+  .toast { padding: 6px 12px; border-left: 3px solid var(--c); font-size: 13.5px; background: var(--hud-solid); border-radius: 9px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    animation: toast-in .35s cubic-bezier(.2,.8,.2,1); transition: opacity .6s, transform .6s; }
+  .toast b { display: block; font-size: 10.5px; color: var(--dim); font-weight: 500; letter-spacing: .3px; }
+  .toast.out { opacity: 0; transform: translateY(-6px); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
   @keyframes in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+  #baretip { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; background: var(--hud); font-size: 12px; z-index: 6; pointer-events: none; transition: opacity .8s; }
+  #baretip.gone { opacity: 0; }
+  /* H: the world and nothing else. */
+  body.bare #strip, body.bare #top, body.bare #replay-tab, body.bare #mapbox, body.bare #toasts, body.bare #keylist, body.bare #credits, body.bare .poi-card,
+  body.bare #skylabels, body.map-big .poi-card { visibility: hidden !important; }
+  /* History cards dock at the right edge, mid-height, clear of the boat (src/pois.ts compact); "Read more"
+     grows up to the corner map and no further. */
+  :root { --poi-right: var(--edge); --poi-bottom: calc(var(--edge) + var(--strip-h) + 120px); --poi-max: calc(100vh - var(--bar, 0px) - var(--poi-bottom) - 230px); }
+  #osm[hidden] { display: none; }
+  #credits { position: fixed; right: 8px; bottom: 0; z-index: 5; font: 10px/13px system-ui, sans-serif; color: rgba(255,255,255,.8); text-shadow: 0 0 3px #000; text-align: right; }
+  #credbtn { background: none; border: 0; padding: 0 2px; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; border-radius: 0; }
+  #credtext { position: absolute; right: 0; bottom: 16px; width: min(520px, 90vw); padding: 6px 9px; border-radius: 8px; background: rgba(12,22,34,.85); text-shadow: none; text-align: left; }
+  #credtext a { color: inherit; }
   #outcome { position: fixed; left: 50%; top: 27%; transform: translate(-50%, -50%); width: 380px; padding: 20px 22px 18px;
     text-align: center; display: none; z-index: 6; }
   #outcome.show { display: block; animation: pop .4s ease; }
@@ -76,10 +187,15 @@
   #outcome p { color: var(--dim); margin: 6px 0; }
   #outcome button { font: 600 13px system-ui, sans-serif; margin: 10px 4px 0; padding: 7px 13px; border-radius: 8px;
     border: 1px solid var(--line); background: #1b3352; color: var(--ink); cursor: pointer; }
+  /* One bright next step on an end card (Elena's rule): Watch again / Play again. The rest stay quiet. */
+  #outcome #o-again { background: var(--orange); border-color: var(--orange); color: #1a0d02; }
+  #outcome #o-again:hover { background: #ff9c4a; }
+  #outcome #o-close, #outcome #o-postcard { background: transparent; color: var(--dim); }
+  #outcome #o-close:hover, #outcome #o-postcard:hover { color: var(--ink); border-color: #8ab4ff; }
   #error { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); padding: 16px 20px; display: none; max-width: 520px; }
   .muted { color: var(--dim); font-size: 12px; }
   /* "Pick your launch day" */
-  #game { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 8;
+  #game { position: fixed; inset: 0; top: var(--bar, 0px); display: none; align-items: center; justify-content: center; z-index: 8;
     background: radial-gradient(ellipse at center, rgba(8,18,32,.35), rgba(8,18,32,.75)); }
   #game.show { display: flex; }
   #game .panel { width: min(640px, 92vw); padding: 24px 28px 22px; text-align: center; }
@@ -118,19 +234,28 @@
   body.game #guesschip:not([hidden]) { display: block; }
   #o-postcard { display: none; }
   body.game #o-postcard { display: inline-block; background: var(--orange); color: #1a0d00; border-color: var(--orange); }
-  /* Sky guide: compass strip and labels on the sun, moon and North Star */
-  #compass { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); width: 420px; height: 46px; overflow: hidden; padding: 0; }
-  #compass[hidden], #skylabels[hidden] { display: none; }
+  /* Sky guide: the compass strip along the top (bow, sun, moon, North Star) and labels in the sky.
+     John's call L4: the strip stays. It sits top centre, in the gap between the drawer and the map;
+     "Look up at the sky" sits just under it, and toasts come in under both. */
+  #compass { position: fixed; top: calc(var(--bar, 0px) + var(--edge)); left: 50%; transform: translateX(-50%); width: clamp(240px, calc(100vw - 704px), 420px); height: 60px;
+    overflow: hidden; padding: 0; border-radius: 10px; background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); z-index: 5; }
   #tape { position: absolute; inset: 0; }
   #tape span { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
   #tape .tick { top: 0; width: 1px; height: 7px; background: rgba(255,255,255,.35); }
   #tape .tick.big { height: 11px; background: rgba(255,255,255,.7); }
   #tape .lbl { top: 11px; font-size: 11px; color: var(--dim); }
-  #tape .lbl.card { font-size: 13px; font-weight: 700; color: var(--ink); }
-  #tape .lbl.card.n { color: #ff6b6b; }
+  #tape .lbl.pt { font-size: 13px; font-weight: 700; color: var(--ink); }
+  #tape .lbl.pt.n { color: #ff6b6b; }
   #tape .mk { bottom: 2px; font-size: 11.5px; font-weight: 600; }
+  #tape .mk.up { bottom: 17px; }
   #compass .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--orange); opacity: .8; }
   #compass .hint { position: absolute; right: 6px; top: 2px; font-size: 9.5px; color: var(--dim); letter-spacing: .5px; }
+  #lookup { position: fixed; top: calc(var(--bar, 0px) + var(--edge) + 66px); left: 50%; transform: translateX(-50%); z-index: 5; font: 600 12px system-ui, sans-serif; padding: 4px 12px;
+    border-radius: 8px; border: 1px solid var(--hud-line); background: var(--strip-bg); color: var(--ink); cursor: pointer; }
+  #lookup[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); }
+  body:has(#compass:not([hidden])) #toasts { top: calc(var(--bar, 0px) + var(--edge) + 98px); }
+  body.bare #compass, body.bare #lookup, body.map-big #compass, body.map-big #lookup, body.game #compass, body.game #lookup { visibility: hidden !important; }
+  @media (max-width: 899px) { #compass, #lookup { display: none !important; } }
   #skylabels { position: fixed; inset: 0; pointer-events: none; }
   #skylabels span { position: absolute; transform: translate(-50%, -100%); margin-top: -10px; font-size: 11.5px; color: #e9f1fb;
     text-shadow: 0 1px 3px rgba(0,0,0,.9); white-space: nowrap; }
@@ -139,18 +264,41 @@
   /* Live tracker (?live): the forecast look past "now". */
   #forecasttag { position: fixed; top: 46%; left: 50%; transform: translate(-50%, -120px); padding: 4px 12px; border-radius: 999px;
     background: rgba(200,220,255,.18); border: 1px dashed rgba(220,232,255,.8); color: #e8f0ff; font: 700 12px system-ui, sans-serif; letter-spacing: 1px; pointer-events: none; }
-  body.live #c-wind, body.live #c-waves, body.live #playlink, body.live #livelink, body.game #livelink, body.live #top a[href="./index.html"] { display: none !important; }
-  #lookup { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); font: 600 12px system-ui, sans-serif; padding: 5px 12px;
-    border-radius: 8px; border: 1px solid var(--line); background: var(--glass); color: var(--ink); cursor: pointer; }
-  #lookup[hidden] { display: none; }
-  #lookup[aria-pressed="true"] { background: #1b3352; border-color: #8ab4ff; }
+  body.live #c-wind, body.live #playlink, body.live #livelink, body.game #livelink, body.live #top a[href="./index.html"] { display: none !important; }
+  /* Narrow windows: the strip wraps to two rows, the drawer takes the width, the map is a button. */
+  /* Switches, not the browser's blue boxes (audit item 7): a small pill, orange when on. */
+  #top input[type=checkbox], #mside input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 26px; height: 15px; margin: 0 6px 0 0; vertical-align: -3px;
+    border-radius: 8px; background: rgba(255,255,255,.16); border: 1px solid var(--hud-line); cursor: pointer; transition: background .15s; flex: none; }
+  #top input[type=checkbox]::before, #mside input[type=checkbox]::before { content: ""; position: absolute; top: 1px; left: 1px; width: 11px; height: 11px; border-radius: 50%; background: #cfd8e3; transition: transform .15s, background .15s; }
+  #top input[type=checkbox]:checked, #mside input[type=checkbox]:checked { background: rgba(255,138,42,.85); border-color: rgba(255,138,42,.9); }
+  #top input[type=checkbox]:checked::before, #mside input[type=checkbox]:checked::before { transform: translateX(11px); background: #fff; }
+  #top input[type=checkbox]:focus-visible, #mside input[type=checkbox]:focus-visible { outline: 2px solid var(--orange, #ff8a2a); outline-offset: 2px; }
+  @media (max-width: 1100px) {
+    :root { --strip-h: calc(var(--ui) * 8.67); }
+    #strip { flex-wrap: wrap; align-content: center; height: var(--strip-h); padding-top: .3em; background: rgba(10,18,28,.8); } /* the taller strip shows more sea: a whitecap under thin glass read as a stray box (Ines, Leo) */
+    #strip .cell { flex: 0 0 20%; height: 3.6em; }
+    #strip .c-time { flex-basis: 32%; } #strip #c-day { flex-basis: 28%; }
+    #strip #c-bat { flex-basis: 26%; border-left: 0; padding-left: 0; } #strip #c-wind { flex-basis: 30%; } #strip #c-eq { flex: 1 1 0; }
+    #toasts { width: min(420px, calc(100vw - 24px)); top: calc(var(--bar, 0px) + 54px); }
+    #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
+    #mapbox:not(.big) { width: auto; padding: 4px; }
+    #mapbox:not(.big) #film { margin-top: 0; }
+    #mapbtn { display: inline-block !important; }
+  }
+  @media (max-width: 1199px) {
+    body.drawer-open .poi-card:not(.poi-open) { width: auto; max-width: 320px; padding: 6px 12px; }
+    body.drawer-open .poi-card:not(.poi-open) > :not(.poi-t):not(.poi-time) { display: none !important; }
+    body.drawer-open .poi-card:not(.poi-open) .poi-t { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @media (max-width: 700px) { #top { width: auto; right: var(--edge); } #mapbox.big #mside { display: none; } }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<div id="top" class="glass">
-  <h1 id="h1">Voyage replay</h1>
-  <p class="sub" id="sub">Our v4 kayak sailing one simulated voyage: real weather and currents for that year, with its battery, breakdowns and all.</p>
+<button id="replay-tab" aria-controls="top" aria-expanded="true" title="Replay settings (R)"><span>Replay</span></button>
+<div id="top" class="open" aria-label="Replay settings">
+  <h2><span id="h1">Voyage replay</span><button class="x" id="top-x" aria-label="Close the replay settings (R)" title="Close (R)">&times;</button></h2>
+  <p class="sub" id="sub">Our kayak on one voyage through real weather, waves and currents, battery and breakdowns included.</p>
   <select id="boat" aria-label="Boat"></select>
   <select id="voyage" aria-label="Voyage"></select>
   <div id="guesschip" hidden>Your prediction: <b id="g-chip"></b></div>
@@ -160,64 +308,94 @@
     <button data-lane="1" aria-pressed="false">Randolph (our model)</button>
   </div>
   <div class="row">
-    <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option><option value="ultra">Ultra (good graphics card)</option></select></label>
-    <label title="A compass along the top, and labels on the sun, moon and North Star"><input type="checkbox" id="skyguide" checked> Sky guide</label>
-    <a href="./index.html">Both boats side by side &rarr;</a>
-  </div>
-  <div class="row">
-    <a href="?mode=game" id="playlink">&#127922; Play: pick your launch day</a>
-    <a href="?live" id="livelink">&#128225; Live tracker</a>
-    <label id="placelabel" title="Real land from satellite pictures and height maps">&#9968; <select id="placepick" aria-label="Sail by real land"><option value="">Sail by real land&hellip;</option></select></label>
+    <a href="./index.html">Both boats side by side<span class="go"> &rsaquo;</span></a>
+    <a href="?mode=game" id="playlink">Pick your launch day<span class="go"> &rsaquo;</span></a>
+    <a href="?live" id="livelink">Live tracker<span class="go"> &rsaquo;</span></a>
     <a href="./voyage.html" id="quitlink" hidden>Leave the game</a>
   </div>
   <div class="row">
-    <button id="cinebtn" title="The panels fade and the camera films the boat on its own. Any key or a click to leave.">&#127916; Cinematic</button>
-    <button id="soundbtn" aria-pressed="false" title="Wind, rain and waves, made from the weather">Sound off</button>
+    <label id="placelabel" title="Real land from satellite pictures and height maps"><select id="placepick" aria-label="Sail past a real coast"><option value="">Sail past a real coast&hellip;</option></select></label>
+  </div>
+  <div class="lh">View</div>
+  <div class="row">
+    <label>Quality <select id="quality"><option value="low">Low</option><option value="high" selected>High</option><option value="ultra">Ultra (good graphics card)</option></select></label>
+    <label title="A compass along the top, and labels on the sun, moon and North Star"><input type="checkbox" id="skyguide" checked> Sky guide</label>
+  </div>
+  <div class="lh">Slower speeds</div>
+  <div class="row">
+    <div id="warp2" role="group" aria-label="Slower time warp">
+      <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
+      <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
+    </div>
   </div>
 </div>
-<div id="hud">
-  <div class="card glass"><div class="k">Day</div><div class="v" id="h-day">0</div><div class="s" id="h-date"></div><div class="s" id="h-local"></div></div>
-  <div class="card glass"><div class="k">Battery</div><div class="v" id="h-soc">-</div><div class="bar"><i id="h-socbar"></i></div><div class="s" id="h-charge"></div></div>
-  <div class="card glass"><div class="k">Speed</div><div class="v" id="h-stw">-</div><div class="s">through the water</div></div>
-  <div class="card glass" id="c-report" hidden><div class="k">Last report</div><div class="v" id="l-age">-</div><div class="s" id="l-src"></div></div>
-  <div class="card glass" id="c-eta" hidden><div class="k">Forecast arrival</div><div class="v" id="l-eta">-</div><div class="s" id="l-range"></div></div>
-  <div class="card glass" id="c-wind"><div class="k">Wind</div><div class="v" id="h-wind">-</div><div class="s" id="h-winddir"></div></div>
-  <div class="card glass" id="c-waves"><div class="k">Waves</div><div class="v" id="h-hs">-</div><div class="s" id="h-tp"></div></div>
-  <div class="card glass"><div class="k">To target</div><div class="v" id="h-dist">-</div><div class="s" id="h-sun"></div></div>
-  <div class="card glass wide"><div class="k">Equipment <span class="muted">· green working, red broken</span></div><div id="eq"></div></div>
-</div>
-<div id="compass" class="glass" aria-label="Compass: which way the camera is looking"><div id="tape"></div><div class="mid"></div><div class="hint">VIEW</div></div>
+<div id="compass" aria-label="Compass: which way the camera is looking"><div id="tape"></div><div class="mid"></div><div class="hint">VIEW</div></div>
+<button id="lookup" aria-pressed="false" title="Tilt the view up to see the moon and stars (L)">&#11014; Look up at the sky</button>
 <div id="skylabels"></div>
-<button id="lookup" aria-pressed="false" title="Tilt the view up to see the moon and stars">&#11014; Look up at the sky</button>
 <div id="toasts"></div>
 <div id="forecasttag" hidden>FORECAST</div>
-<div id="chartbox" class="glass" title="Click to enlarge">
-  <canvas id="chart"></canvas>
-  <div class="lbl">NORTH ATLANTIC</div>
-  <div id="legend"><i style="background:var(--orange)"></i><span id="lg-ours">track</span><span id="lg-theirs" hidden><i id="lg-theirs-dot" style="background:#2ec4b6"></i><span id="lg-theirs-name">Randolph (our model)</span></span><i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss<i style="background:#c9a46b"></i>wreck</div>
-</div>
-<div id="transport" class="glass">
-  <button id="play" aria-label="Play or pause">&#9654;</button>
-  <button id="now" hidden title="Back to the latest report">Now</button>
-  <div id="warp" role="group" aria-label="Time warp">
-    <button data-warp="0.000277778" title="Real time: one second of voyage per second" aria-pressed="true">Real time</button>
-    <button data-warp="0.0166667" title="One minute of voyage per second">1 min/s</button>
-    <button data-warp="0.166667" title="Ten minutes of voyage per second">10 min/s</button>
-    <button data-warp="1">1 h/s</button>
-    <button data-warp="6">6 h/s</button>
-    <button data-warp="24">1 day/s</button>
-    <button data-warp="96">4 days/s</button>
+<div id="mapbox" class="hud">
+  <div class="mhead"><span>North Atlantic</span><span id="h-dist" title="To the target">-</span><button class="x" id="map-x" aria-label="Close the big map (M)">&times;</button></div>
+  <div id="mbody">
+    <canvas id="chart" title="Click for the big map (M)"></canvas>
+    <div id="mside">
+      <div id="legend"><i style="background:var(--orange)"></i><span id="lg-ours">track</span><span id="lg-theirs" hidden><i id="lg-theirs-dot" style="background:#2ec4b6"></i><span id="lg-theirs-name">Randolph (our model)</span></span><i style="background:var(--good)"></i>milestone<i style="background:var(--warn)"></i>trouble<i style="background:var(--bad)"></i>loss<i style="background:#c9a46b"></i>wreck</div>
+      <div class="lh">What happened so far <label><input type="checkbox" id="logeq"> Equipment only</label></div>
+      <ol id="log"></ol>
+    </div>
   </div>
-  <div id="scrubwrap"><div id="ticks"></div><input id="scrub" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the voyage"></div>
-  <div id="when"><b id="w-day">Day 0</b><br><span id="w-date"></span><br><span id="w-local"></span></div>
+  <div id="film">
+    <button id="mapbtn" title="Map (M)" aria-label="Map">&#128506;</button>
+    <button id="cinebtn" title="Cinematic (C): the panels fade and the camera films the boat on its own. Any key or a click to leave." aria-label="Cinematic">&#127916;</button>
+    <button id="soundbtn" data-icon="1" aria-pressed="false" title="Sound (N): wind, rain and waves, made from the weather" aria-label="Sound">&#128263;</button>
+    <button id="hidebtn" title="Hide everything (H)" aria-label="Hide everything">&#128065;</button>
+  </div>
 </div>
+<div id="strip" class="hud">
+  <div id="scrubwrap"><div id="ticks"></div><input id="scrub" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the voyage"></div>
+  <div class="cell c-time">
+    <div id="tb">
+      <button id="play" aria-label="Play or pause (Space)" title="Play or pause (Space)">&#9654;</button>
+      <button id="now" hidden title="Back to the latest report">Now</button>
+      <div id="warp" role="group" aria-label="Time warp">
+        <button data-warp="0.000277778" title="Real time: one second of the voyage every second">Real time</button>
+        <button data-warp="1" title="One hour of voyage per second">1h</button>
+        <button data-warp="6" title="Six hours of voyage per second">6h</button>
+        <button data-warp="24" title="One day of voyage per second">1d</button>
+        <button data-warp="96" title="Four days of voyage per second">4d</button>
+      </div>
+    </div>
+    <div class="l">per second</div>
+  </div>
+  <div class="cell" id="c-day"><div class="v" id="w-day">Day 0</div><div class="l" id="w-date"></div><span id="w-local" hidden></span></div>
+  <div class="cell" id="c-head"><div class="v" id="h-head">-</div><div class="l">heading</div></div>
+  <div class="cell" id="c-speed"><div class="v" id="h-stw">-</div><div class="l" id="h-stwl">speed</div></div>
+  <div class="cell" id="c-bat"><div class="v" id="h-soc">-</div><div class="l" id="h-charge">battery</div><span class="meter"><i id="h-socbar"></i></span></div>
+  <div class="cell" id="c-report" hidden><div class="v" id="l-age">-</div><div class="l" id="l-src">last report</div></div>
+  <div class="cell" id="c-eta" hidden><div class="v" id="l-eta">-</div><div class="l" id="l-range">forecast arrival</div></div>
+  <div class="cell" id="c-wind"><div class="v"><span id="h-wind">-</span> <span id="h-hs"></span></div><div class="l" id="h-winddir">wind &middot; waves</div></div>
+  <button class="cell" id="c-eq" title="Equipment: hover an icon for its name, click for the log"><div id="eq"></div><div class="l">equipment</div></button>
+  <button id="keysbtn" aria-expanded="false" title="Keys (?)">?</button>
+</div>
+<div id="keylist" class="hud" hidden>
+  <div class="kh">Keys</div>
+  <kbd>Space</kbd><span>Play or pause</span>
+  <kbd>R</kbd><span>Replay settings</span>
+  <kbd>M</kbd><span>Big map and log</span>
+  <kbd>L</kbd><span>Look up at the sky</span>
+  <kbd>C</kbd><span>Cinematic</span>
+  <kbd>N</kbd><span>Sound</span>
+  <kbd>H</kbd><span>Hide everything</span>
+  <kbd>Esc</kbd><span>Close what's open</span>
+</div>
+<div id="baretip" hidden>H to show</div>
 <div id="outcome" class="glass">
   <div class="muted" id="o-kicker">Voyage over</div>
   <div class="big" id="o-title"></div>
   <p id="o-text"></p>
-  <button id="o-postcard">Save postcard</button>
   <button id="o-again">Watch again</button>
   <button id="o-close">Look around</button>
+  <button id="o-postcard">Save postcard</button>
 </div>
 <div id="game">
   <div class="panel glass">
@@ -246,7 +424,8 @@
   <div class="row"><div class="timer"><i id="b-timer"></i></div><button id="b-next">Keep going &#9654;</button></div>
 </div>
 <div id="error" class="glass"></div>
+<script type="module" src="./src/topbar.ts"></script>
 <script type="module" src="./src/voyage.ts"></script>
-<div id="credits" style="position:fixed;right:8px;bottom:0;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.75);text-shadow:0 0 3px #000;z-index:5;pointer-events:auto">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
+<div id="credits"><span id="osm" hidden>&copy; OpenStreetMap contributors &middot; </span><button id="credbtn" aria-expanded="false" title="Where the data comes from">Credits</button><div id="credtext" hidden><span id="landcredit"></span>Weather: Copernicus C3S ERA5 &middot; Currents: Copernicus Marine &middot; Land: Natural Earth &middot; Ships: EMODnet, World Bank &middot; <a href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">All notices</a></div></div>
 </body>
 </html>

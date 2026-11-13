@@ -28,6 +28,23 @@ export type NavLighting = "all_round" | "tricolour";
 /** Night 0..1 for every boat's lights (Atmosphere.set sets it): lights are on day and night but only show in the dark. */
 export const NAV_NIGHT = { value: 0 };
 
+/** The boat's own lamp as it falls on foam near it (wake, collar, spray): world x, y, z and
+ *  strength (0 by day). Shared by reference: foam materials merge FOAM_LAMP_UNIFORMS, the
+ *  page that owns the lamp moves it. Unlit foam can't take a real PointLight. */
+export const FOAM_LAMP_UNIFORMS = {
+  uFoamLamp: { value: new THREE.Vector4(0, 0, 0, 0) },
+  uFoamLampR: { value: 1.5 }, // m: the light falls to half at this distance
+};
+/** GLSL: foamLamp(worldPos), the lamp's extra light on foam there. */
+export const FOAM_LAMP_GLSL = /* glsl */ `
+uniform vec4 uFoamLamp;
+uniform float uFoamLampR;
+float foamLamp(vec3 w) {
+  vec3 d = w - uFoamLamp.xyz;
+  return uFoamLamp.w / (1.0 + dot(d, d) / (uFoamLampR * uFoamLampR));
+}
+`;
+
 /** One lantern's arc, in degrees from dead ahead, clockwise (to starboard): from, to. */
 export interface Arc {
   colour: number;
@@ -76,7 +93,7 @@ export interface LanternLook {
 }
 
 let glowTex: THREE.Texture | null = null;
-/** A soft round glow with a bright core. */
+/** A bright point with a small glow (Ines, 12 Nov: a lantern is a point, not a moon-sized disc). */
 function glow(): THREE.Texture | null {
   if (glowTex) return glowTex;
   if (typeof document === "undefined") return null; // no page (unit tests)
@@ -85,9 +102,10 @@ function glow(): THREE.Texture | null {
   const g = c.getContext("2d")!;
   const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   r.addColorStop(0, "rgba(255,255,255,1)");
-  r.addColorStop(0.12, "rgba(255,255,255,0.9)");
-  r.addColorStop(0.3, "rgba(255,255,255,0.25)");
-  r.addColorStop(1, "rgba(255,255,255,0)");
+  r.addColorStop(0.1, "rgba(255,255,255,0.95)");
+  r.addColorStop(0.2, "rgba(255,255,255,0.22)");
+  r.addColorStop(0.45, "rgba(255,255,255,0.04)");
+  r.addColorStop(0.7, "rgba(255,255,255,0)");
   g.fillStyle = r;
   g.fillRect(0, 0, 64, 64);
   glowTex = new THREE.CanvasTexture(c);
@@ -112,7 +130,7 @@ export function addLanterns(group: THREE.Object3D, lanterns: Lantern[], look: La
     for (const a of l.arcs) {
       const s = new THREE.Sprite(lanternMaterial(a, look.range ?? NO_RANGE));
       s.position.copy(l.at);
-      s.scale.setScalar(look.size ?? 0.034);
+      s.scale.setScalar(look.size ?? 0.024);
       s.renderOrder = 30;
       lights.add(s);
     }
@@ -129,6 +147,12 @@ function lanternMaterial(a: Arc, range: { value: number }): THREE.SpriteMaterial
     sh.uniforms.uRange = range;
     sh.vertexShader = sh.vertexShader
       .replace("void main() {", "uniform vec2 uArc;\nuniform float uRange;\nvarying float vLit;\nvoid main() {")
+      // The same size on screen whatever the lens (a 24 degree cinema lens made it a moon on the
+      // masthead), and a little smaller far off: a lantern is a hard point with a tight glow.
+      .replace(
+        "vec2 alignedPosition",
+        "scale *= 2.4142 / projectionMatrix[1][1] * mix(1.0, 0.6, smoothstep(20.0, 200.0, -mvPosition.z));\n\tvec2 alignedPosition",
+      )
       .replace(
         "#include <logdepthbuf_vertex>",
         `#include <logdepthbuf_vertex>
@@ -149,7 +173,7 @@ function lanternMaterial(a: Arc, range: { value: number }): THREE.SpriteMaterial
       .replace("void main() {", "uniform float uNight;\nvarying float vLit;\nvoid main() {")
       .replace("#include <opaque_fragment>", "diffuseColor.a *= vLit * uNight;\n#include <opaque_fragment>");
   };
-  m.customProgramCacheKey = () => "boatsim-navlight-v2";
+  m.customProgramCacheKey = () => "boatsim-navlight-v3";
   return m;
 }
 

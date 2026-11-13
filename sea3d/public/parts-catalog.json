@@ -46,7 +46,7 @@
     {
      "id": "one-t200",
      "n": "One T200",
-     "d": "Steers with the rudder only. Simulator: 54% instead of 78%",
+     "d": "Steers with the rudder only",
      "cost": 378.8,
      "kg": -0.45,
      "thr": 1,
@@ -72,7 +72,7 @@
     {
      "id": "solar-200",
      "n": "200 W: 2 × 100 W",
-     "d": "Cheaper, and about 0.1 kt slower (design doc)",
+     "d": "Two panels, and about 0.1 kn slower",
      "cost": 252.92,
      "kg": -1.2,
      "wp": 200,
@@ -206,7 +206,7 @@
     {
      "id": "smartone-solar",
      "n": "Globalstar SmartOne Solar",
-     "d": "Has its own solar cell and sends position every 6 hours. Price includes about 5 months of service",
+     "d": "Has its own solar cell and sends position every 6 hours.",
      "cost": 472,
      "kg": 0,
      "beacon": 1,
@@ -242,7 +242,7 @@
     {
      "id": "dy-ait1500",
      "n": "Digital Yacht AIT1500, Class B",
-     "d": "Same price, under 2 W",
+     "d": "Under 2 W",
      "cost": 729.94,
      "kg": 0.1,
      "wh": 40,
@@ -277,7 +277,7 @@
     {
      "id": "davis-echomaster",
      "n": "Davis Echomaster",
-     "d": "$125 cheaper, if it fits inside the dome",
+     "d": "Another reflector, if it fits inside the dome",
      "cost": 199.99,
      "kg": 0,
      "url": "https://davisinstruments.com/products/echomaster-radar-reflector"

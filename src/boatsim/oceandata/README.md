@@ -303,6 +303,14 @@ Iris's land spikes read:
   from Overture Maps. Where Overture has no height or floor count, the height
   is a GUESS from the footprint size (7, 10 or 13 m). `annapolis.json` is a
   derived database under the ODbL and carries that notice.
+- **Chesapeake Bay coast squares** (`landtiles.py`, place `baytiles`): the Bay
+  cut into 0.05 degree squares so a page can load just the ones near the boat.
+  Per square `bay_<key>_meta.json`, `bay_<key>_height.bin` (int16 DECIMETRES,
+  257 x 257, about 17-22 m spacing, real depths below 0, edges shared with the
+  neighbours) and `bay_<key>_colour.jpg` (512 x 512 Sentinel-2), plus
+  `bay_index.json`. Heights and depths are NOAA CUDEM 1/9 arc-second topobathy
+  (public domain), read window by window from its cloud-optimized files. The
+  first set is Annapolis to Thomas Point (12 squares, about 2.4 MB).
 - Run: Actions -> "Land data" (no secrets). Tick publish to update the
   `land-data` release; the 3D page's build copies it into `public/land/`.
   Locally: `python -m boatsim.oceandata.landviews annapolis --out site/land`

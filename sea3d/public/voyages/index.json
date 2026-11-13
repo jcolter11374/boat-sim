@@ -6,7 +6,7 @@
    "boat": "v4 kayak",
    "start": "2020-04-01T12:00",
    "outcome": "arrived",
-   "days": 120.68
+   "days": 67.13
   },
   {
    "file": "voyage_randolph-rev-b_2020-04-01.json",
@@ -41,7 +41,7 @@
    "boat": "v4 kayak",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 70.16
+   "days": 57.55
   },
   {
    "file": "voyage_randolph-rev-b_2020-04-15.json",
@@ -55,7 +55,7 @@
    "boat": "Randolph Rev C",
    "start": "2020-04-15T12:00",
    "outcome": "lost",
-   "days": 78.88
+   "days": 73.42
   },
   {
    "file": "voyage_31-ft-cruiser_2020-04-15.json",
@@ -69,7 +69,7 @@
    "boat": "wind-powered ocean drone",
    "start": "2020-04-15T12:00",
    "outcome": "arrived",
-   "days": 47.03
+   "days": 30.95
   },
   {
    "file": "voyage_2020-05-01.json",
@@ -89,8 +89,8 @@
    "file": "voyage_randolph-rev-c_2020-05-01.json",
    "boat": "Randolph Rev C",
    "start": "2020-05-01T12:00",
-   "outcome": "timeout",
-   "days": 150.0
+   "outcome": "lost",
+   "days": 137.31
   },
   {
    "file": "voyage_31-ft-cruiser_2020-05-01.json",
@@ -125,7 +125,7 @@
    "boat": "Randolph Rev C",
    "start": "2020-05-15T12:00",
    "outcome": "aground",
-   "days": 11.92
+   "days": 11.99
   },
   {
    "file": "voyage_31-ft-cruiser_2020-05-15.json",
@@ -139,14 +139,14 @@
    "boat": "wind-powered ocean drone",
    "start": "2020-05-15T12:00",
    "outcome": "arrived",
-   "days": 45.89
+   "days": 42.21
   },
   {
    "file": "voyage_2020-06-01.json",
    "boat": "v4 kayak",
    "start": "2020-06-01T12:00",
    "outcome": "arrived",
-   "days": 59.76
+   "days": 59.26
   },
   {
    "file": "voyage_randolph-rev-b_2020-06-01.json",
@@ -159,8 +159,8 @@
    "file": "voyage_randolph-rev-c_2020-06-01.json",
    "boat": "Randolph Rev C",
    "start": "2020-06-01T12:00",
-   "outcome": "lost",
-   "days": 73.58
+   "outcome": "timeout",
+   "days": 150.0
   },
   {
    "file": "voyage_31-ft-cruiser_2020-06-01.json",
@@ -181,7 +181,7 @@
    "boat": "v4 kayak",
    "start": "2020-06-15T12:00",
    "outcome": "arrived",
-   "days": 66.67
+   "days": 60.6
   },
   {
    "file": "voyage_randolph-rev-b_2020-06-15.json",
@@ -195,7 +195,7 @@
    "boat": "Randolph Rev C",
    "start": "2020-06-15T12:00",
    "outcome": "aground",
-   "days": 1.88
+   "days": 1.17
   },
   {
    "file": "voyage_31-ft-cruiser_2020-06-15.json",
@@ -209,7 +209,7 @@
    "boat": "wind-powered ocean drone",
    "start": "2020-06-15T12:00",
    "outcome": "arrived",
-   "days": 54.62
+   "days": 38.13
   }
  ]
 }

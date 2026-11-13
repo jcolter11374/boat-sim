@@ -7,8 +7,10 @@
 // The motion model sets that group's position and rotation; nothing in here
 // moves the boat.
 
+import { paintBoatName } from "./boatName";
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
+import { nightLook } from "./nightlook";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
@@ -116,6 +118,7 @@ export function buildKayak(quality: Quality): BoatModel {
   const guard = kit.std(0xc9ced3, { metalness: 0.8, roughness: 0.3 });
   if (kayakDetailed) {
     g.add(kayakDetailed.clone(true)); // hull, dome, panels, keel, rudder, deck kit
+    void paintBoatName(g); // the player's name for her on both stern quarters (once she has one)
   } else {
     const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
     kit.mesh(kit.hull(K, { top: 0xf26a1b, deck: 0xe0601a, bottom: 0x3b4248, boot: 0xffffff }), hullMat, g);
@@ -276,7 +279,8 @@ export function buildKayak(quality: Quality): BoatModel {
 }
 
 // =====================================================================
-// RANDOLPH DRONE, Rev B. Every number from their build-files/source/design.py (mm -> m).
+// RANDOLPH DRONE. Every number from their build-files/source/design.py (mm -> m); Rev C3
+// (11 Nov 2026): fibreglass stern post and counterweight arm, YB3 off the post (Boatyard dress).
 // =====================================================================
 export function buildRandolph(quality: Quality): BoatModel {
   const kit = new Kit(quality);
@@ -321,6 +325,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     const pvc = kit.std(0xe9ecee);
     const dark = kit.std(0x26292c);
     const spar = kit.std(0x2a2d31, { metalness: 0.4 });
+    const glass = kit.std(0xd6d3bd, { roughness: 0.5 }); // pultruded fibreglass (Rev C3)
     kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
     kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
     // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.
@@ -328,16 +333,18 @@ export function buildRandolph(quality: Quality): BoatModel {
     pivot.name = "wing_pivot";
     pivot.position.set(0.6, 0, 0);
     g.add(pivot);
-    kit.mesh(kit.foil(0.3, 0.3, -0.066, -0.066, 0.3, 1.3, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
-    kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.31);
+    // Rev C5 wing (Wing_Shape_Study.md): 0.80 m span x 0.375 m chord, same area as the old 1.00 x 0.30,
+    // on the spar at 22% chord as before. GUESS: the spar now stops just above the shorter wing.
+    kit.mesh(kit.foil(0.375, 0.375, -0.0825, -0.0825, 0.3, 1.1, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
+    kit.cyl(pivot, spar, 0.0125, 0, 0.05, 1.11);
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
     kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
     kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot).name = "tail_flap";
-    kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]);
+    kit.rod(pivot, glass, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]); // 12 mm solid fibreglass rod
     kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
     // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
     kit.box(g, dark, 1.49, 1.545, 0.15, 0.2, -0.02, 0.02);
-    kit.cyl(g, spar, 0.01, 1.53, 0.15, 0.65);
+    kit.cyl(g, glass, 0.01, 1.53, 0.15, 0.65); // 20 x 2 mm fibreglass tube
     kit.cyl(g, pvc, 0.04, 1.53, 0.553, 0.567);
     kit.cyl(g, dark, 0.018, 1.53, 0.65, 0.69);
     const vane = new THREE.Group();
@@ -360,7 +367,7 @@ export function buildRandolph(quality: Quality): BoatModel {
       entangled: V(0.62, -0.26, 0),
       electronics_main: V(0.43, 0.42, 0), // under the hatch
       leak_main_tub: V(0.43, 0.2, 0.24),
-      beacon: V(1.45, 0.47, 0),
+      beacon: V(0.18, 0.27, 0), // the YB3's foredeck well (Rev C3)
       comms_silent: V(1.53, 0.76, 0),
     },
     smoky: ["electronics_main"],
@@ -370,7 +377,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     spec: RANDOLPH,
     root,
     stern: new THREE.Vector3(RANDOLPH.cgX - R.L, RANDOLPH.cgBelowWaterline, 0),
-    tagHeight: 1.6 + RANDOLPH.cgBelowWaterline,
+    tagHeight: 1.4 + RANDOLPH.cgBelowWaterline, // just above the Rev C5 wing
     gear,
     form: R,
     animate: (t) => gear.update(idleGear(t), t),
@@ -382,12 +389,22 @@ export function buildRandolph(quality: Quality): BoatModel {
   };
 }
 
+/** Every boat reads at night: a cool rim of light on its edges after dark (nightlook.ts). */
+const lit =
+  (build: (q: Quality) => BoatModel) =>
+  (q: Quality): BoatModel => {
+    const m = build(q);
+    nightLook(m.root);
+    return m;
+  };
+
 export const BUILDERS: Record<BoatSpec["key"], (q: Quality) => BoatModel> = {
-  kayak: buildKayak,
-  randolph: buildRandolph,
-  stock_cruiser31: (q) => buildStock("stock_cruiser31", q),
-  stock_dinghy14: (q) => buildStock("stock_dinghy14", q),
-  stock_beachcat16: (q) => buildStock("stock_beachcat16", q),
-  stock_sail_drone7: (q) => buildStock("stock_sail_drone7", q),
-  stock_ocean_rower45: (q) => buildStock("stock_ocean_rower45", q),
+  kayak: lit(buildKayak),
+  randolph: lit(buildRandolph),
+  stock_cruiser31: lit((q) => buildStock("stock_cruiser31", q)),
+  stock_dinghy14: lit((q) => buildStock("stock_dinghy14", q)),
+  stock_beachcat16: lit((q) => buildStock("stock_beachcat16", q)),
+  stock_sail_drone7: lit((q) => buildStock("stock_sail_drone7", q)),
+  stock_ocean_rower45: lit((q) => buildStock("stock_ocean_rower45", q)),
+  stock_pearson31_2: lit((q) => buildStock("stock_pearson31_2", q)),
 };

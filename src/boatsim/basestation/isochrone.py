@@ -65,17 +65,59 @@ Owner: Sam.
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from boatsim.basestation.replan import ForecastReplanPolicy, _ground_velocity
-from boatsim.geo import bearing_deg, distance_m, move
+import numpy as np
+
+from boatsim.basestation.replan import ForecastReplanPolicy, _ground_velocity, vmc_table
+from boatsim.geo import EARTH_RADIUS_M, bearing_deg, distance_m, move
 from boatsim.oceandata.base import Environment
 from boatsim.oceandata.grid import OutsideCoverage
 from boatsim.runner.arrival import TARGET_RADIUS_M
 from boatsim.types import Mission, Waypoint
 from boatsim.vessel.kayak import SteadyPolar  # noqa: F401  (moved; kept importable here)
+
+
+def _haversine(lat1, lon1, lat2, lon2):
+    """geo.distance_m on numpy arrays."""
+    p1, p2 = np.radians(lat1), np.radians(lat2)
+    dp = p2 - p1
+    dl = np.radians(lon2 - lon1)
+    a = np.sin(dp / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dl / 2) ** 2
+    return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
+
+
+def _bearing(lat1, lon1, lat2, lon2):
+    """geo.bearing_deg on numpy arrays."""
+    p1, p2 = np.radians(lat1), np.radians(lat2)
+    dl = np.radians(lon2 - lon1)
+    x = np.sin(dl) * np.cos(p2)
+    y = np.cos(p1) * np.sin(p2) - np.sin(p1) * np.cos(p2) * np.cos(dl)
+    return np.degrees(np.arctan2(x, y)) % 360.0
+
+
+def _move(lat, lon, east_m, north_m):
+    """geo.move on numpy arrays."""
+    dlat = np.degrees(north_m / EARTH_RADIUS_M)
+    dlon = np.degrees(east_m / (EARTH_RADIUS_M * np.cos(np.radians(lat))))
+    return lat + dlat, ((lon + dlon + 180.0) % 360.0) - 180.0
+
+
+def _ground_velocity_np(heading_deg, speed, ce, cn):
+    """replan._ground_velocity on numpy arrays."""
+    hr = np.radians(heading_deg)
+    ue, un = np.sin(hr), np.cos(hr)
+    along = ce * ue + cn * un
+    cross = ce * un - cn * ue
+    crab = speed > np.abs(cross)
+    g = along + np.sqrt(np.where(crab, speed * speed - cross * cross, 0.0))
+    side = cross - np.copysign(speed, cross)
+    e = np.where(crab, g * ue, along * ue + side * un)
+    n = np.where(crab, g * un, along * un - side * ue)
+    return e, n
 
 
 @dataclass
@@ -125,6 +167,34 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
         v = self._vmc_ms(heading, w.wind_u, w.wind_v)
         return _ground_velocity(heading, v, w.current_u, w.current_v)
 
+    def _water_speed(self, rows, h: np.ndarray, speed: float):
+        """For each node's forecast sample (rows) and headings h (nodes x
+        headings): speed through the water along each line, as _velocity()
+        works it out, and the current (east, north) that carries the boat."""
+        ws = [w for _, _, w in rows]
+        wu = np.array([w.wind_u for w in ws])
+        wv = np.array([w.wind_v for w in ws])
+        cu = np.array([w.current_u for w in ws])
+        cv = np.array([w.current_v for w in ws])
+        if self.polar is None:
+            v = np.full(h.shape, float(speed))
+            return v, cu + self.windage * wu, cv + self.windage * wv
+        keys = [round(math.hypot(w.wind_u, w.wind_v) * 4) for w in ws]
+        tables = np.zeros((len(ws), 181))
+        for r, key in enumerate(keys):
+            if key <= 0:
+                continue  # calm: no speed
+            table = self._vmc.get(key)
+            if table is None:
+                table = self._vmc[key] = vmc_table(
+                    self.polar, key / 4, self.min_twa_deg, self.max_twa_deg
+                )
+            tables[r] = table
+        wind_from = np.degrees(np.arctan2(-wu, -wv)) % 360.0
+        off = np.abs((h - wind_from[:, None] + 180.0) % 360.0 - 180.0)
+        idx = np.rint(off).astype(int)
+        return self.polar_factor * np.take_along_axis(tables, idx, axis=1), cu, cv
+
     def plan(
         self,
         forecast: Environment,
@@ -151,11 +221,32 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
                 int(self.fan_deg // self.heading_step_deg) + 1,
             )
         ]
+        offs = np.array(offsets, dtype=float)
+        # Distance to the goal along the route from a point, as _route_after():
+        # to the first route waypoint east of it, then the route's own legs.
+        route = self.route
+        rlat = np.array([w.lat for w in route])
+        rlon = np.array([w.lon for w in route])
+        rest = [
+            [distance_m(a.lat, a.lon, b.lat, b.lon) for a, b in itertools.pairwise(route[k:])]
+            for k in range(len(route))
+        ]
+        width = max(len(r) for r in rest)
+        rest_m = np.array([r + [0.0] * (width - len(r)) for r in rest]).reshape(len(route), width)
+
+        def route_left(nlat: np.ndarray, nlon: np.ndarray) -> np.ndarray:
+            east = rlon[None, :] > (nlon[:, None] + self.east_margin_deg)
+            k = np.where(east.any(axis=1), east.argmax(axis=1), len(route) - 1)
+            dist = _haversine(nlat, nlon, rlat[k], rlon[k])
+            for c in range(width):
+                dist = dist + rest_m[k, c]
+            return dist
+
         t = t0
         samples: dict[tuple[float, float], object] = {}
         for i in range(n_steps):
             samples.clear()
-            sectors: dict[int, _Node] = {}
+            rows = []  # (index in layer, node, sample)
             for j, node in enumerate(layers[-1]):
                 if node.done_s is not None:  # finished on the way here: stop
                     if best is None or node.done_s < best[0]:
@@ -167,34 +258,78 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
                         samples[key] = forecast.sample(t, node.lat, node.lon)
                     except OutsideCoverage:  # off the forecast's map: a dead end
                         samples[key] = None
-                w = samples[key]
-                if w is None:
-                    continue
-                to_goal = bearing_deg(node.lat, node.lon, goal.lat, goal.lon)
-                for off in offsets:
-                    h = (to_goal + off) % 360.0
-                    ve, vn = self._velocity(w, h, speed)
-                    if ve == 0.0 and vn == 0.0:
-                        continue
-                    nlat, nlon = move(node.lat, node.lon, ve * secs, vn * secs)
-                    if self._inside(nlat, nlon, margin) or self.crosses_keep_out(
-                        node.lat, node.lon, nlat, nlon, margin
-                    ):
-                        continue
-                    left, _ = self._route_after(nlat, nlon)
-                    hit = self._reaches(node.lat, node.lon, nlat, nlon)
-                    done = None if hit is None else (i + hit) * secs
-                    s = int(bearing_deg(lat, lon, nlat, nlon) // self.sector_deg)
-                    kept = sectors.get(s)
-                    better = kept is None or (
-                        (done if done is not None else math.inf, left)
-                        < (kept.done_s if kept.done_s is not None else math.inf, kept.left_m)
-                    )
-                    if better:
-                        sectors[s] = _Node(nlat, nlon, j, 0.0 if done is not None else left, done)
-            if not sectors:
+                if samples[key] is not None:
+                    rows.append((j, node, samples[key]))
+            if not rows:
                 break
-            layers.append(list(sectors.values()))
+            # Every heading from every node at once (numpy): nodes down, headings across.
+            plat = np.array([n.lat for _, n, _ in rows])
+            plon = np.array([n.lon for _, n, _ in rows])
+            to_goal = _bearing(plat, plon, goal.lat, goal.lon)
+            h = (to_goal[:, None] + offs[None, :]) % 360.0
+            v, ce, cn = self._water_speed(rows, h, speed)
+            ve, vn = _ground_velocity_np(h, v, ce[:, None], cn[:, None])
+            nlat, nlon = _move(plat[:, None], plon[:, None], ve * secs, vn * secs)
+            moving = ~((ve == 0.0) & (vn == 0.0))
+            left = route_left(nlat.ravel(), nlon.ravel()).reshape(nlat.shape)
+            sector = np.floor_divide(_bearing(lat, lon, nlat, nlon), self.sector_deg).astype(int)
+            # The finish circle: only legs that start near it need the full check.
+            leg_m = np.hypot(ve, vn) * secs
+            from_goal = _haversine(plat, plon, goal.lat, goal.lon)
+            near = from_goal[:, None] <= self.finish_radius_m + 2.0 * leg_m + 10_000.0
+            done = np.full(nlat.shape, math.inf)
+            for r, c in zip(*np.nonzero(near & moving), strict=True):
+                hit = self._reaches(plat[r], plon[r], nlat[r, c], nlon[r, c])
+                if hit is not None:
+                    done[r, c] = (i + hit) * secs
+            # Each sector keeps its best candidate that is clear of land: soonest
+            # finish, then least route left, then the first in the fan. Land is
+            # the costly check, so it is made best-first and stops at the first
+            # clear one.
+            rr, cc = np.nonzero(moving)  # in fan order: node by node, heading by heading
+            sec_of = sector[rr, cc]
+            clear: dict[int, bool] = {}  # land checks made, by candidate
+
+            def is_clear(o: int, rr=rr, cc=cc, rows=rows, nlat=nlat, nlon=nlon, clear=clear):
+                if o not in clear:
+                    r, c = rr[o], cc[o]
+                    clear[o] = self._clear_leg(
+                        rows[r][1], float(nlat[r, c]), float(nlon[r, c]), margin
+                    )
+                return clear[o]
+
+            # A finished candidate ranks by its finish time alone (as the sweep's
+            # kept node stores no distance left), so ties go to the first found.
+            rank_left = np.where(np.isinf(done[rr, cc]), left[rr, cc], 0.0)
+            order = np.lexsort((np.arange(len(rr)), rank_left, done[rr, cc], sec_of))
+            kept: dict[int, _Node] = {}
+            for o in order:
+                sec = int(sec_of[o])
+                if sec in kept or not is_clear(int(o)):
+                    continue
+                r, c = rr[o], cc[o]
+                d = float(done[r, c])
+                fin = None if d == math.inf else d
+                kept[sec] = _Node(
+                    float(nlat[r, c]),
+                    float(nlon[r, c]),
+                    rows[r][0],
+                    0.0 if fin is not None else float(left[r, c]),
+                    fin,
+                )
+            # The layer lists its sectors in the order the fan first finds a clear
+            # point in each (as a one-by-one sweep would), so the next layer's
+            # forecast lookups, shared within 0.1 deg, come out the same.
+            first: dict[int, int] = {}
+            for o in range(len(rr)):
+                sec = int(sec_of[o])
+                if sec in kept and sec not in first and is_clear(o):
+                    first[sec] = o
+                    if len(first) == len(kept):
+                        break
+            if not kept:
+                break
+            layers.append([kept[sec] for sec in sorted(first, key=first.get)])
             t += self.step
         last = len(layers) - 1
         if last > 0:
@@ -215,12 +350,28 @@ class IsochroneReplanPolicy(ForecastReplanPolicy):
         track.reverse()
         return track, (score if len(track) > 1 else math.inf)
 
-    def _reaches(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float | None:
+    def _clear_leg(self, node: _Node, lat: float, lon: float, margin: float | None) -> bool:
+        """Is the leg from `node` to (lat, lon) clear of land (and its margin)?"""
+        return not (
+            self._inside(lat, lon, margin)
+            or self.crosses_keep_out(node.lat, node.lon, lat, lon, margin)
+        )
+
+    def _reaches(
+        self, lat1: float, lon1: float, lat2: float, lon2: float, leg_m: float | None = None
+    ) -> float | None:
         """Does the leg from point 1 to point 2 pass within the finish circle?
         The fraction of the leg sailed when it first does (0 to 1), or None.
         Checked at 8 points along the leg: a 6 h leg is at most about 60 km,
-        so the gaps are well inside the 25 km circle."""
+        so the gaps are well inside the 25 km circle. `leg_m`, the leg's
+        length if known, skips the checks for a leg nowhere near the circle."""
         goal = self.route[-1]
+        if leg_m is not None:
+            # Every checked point is within about a leg of point 1 (doubled,
+            # and 10 km more, to cover the straight lat/lon line's bend).
+            near = self.finish_radius_m + 2.0 * leg_m + 10_000.0
+            if distance_m(lat1, lon1, goal.lat, goal.lon) > near:
+                return None
         for k in range(9):
             f = k / 8
             if (

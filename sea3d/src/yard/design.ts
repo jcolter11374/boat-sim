@@ -7,6 +7,7 @@ export interface CatalogOption {
   id: string;
   n: string; // name
   d: string; // what it means
+  more?: string; // the longer story, behind an "i" (Milo: one line on the row)
   cost: number; // USD
   kg: number; // weight change vs the planned build
   url?: string;
@@ -25,6 +26,8 @@ export interface CatalogOption {
   effect?: string;
   basis?: string;
   simEst?: boolean;
+  /** The simulator settings this option changes (sim-slots.json "sim"); [] = none. */
+  simKeys?: string[];
   /** No price or weight yet (the simulator's new slots: drive, hull material, hull shape). */
   priceTbd?: boolean;
   [k: string]: unknown;
@@ -109,7 +112,7 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
     ...s,
     opts: s.opts.map((o) => {
       const so = by.get(s.id)?.get(o.id);
-      return so ? { ...o, effect: so.effect, basis: so.basis, simEst: so.est } : o;
+      return so ? { ...o, effect: so.effect, basis: so.basis, simEst: so.est, ...(so.sim ? { simKeys: so.sim } : {}) } : o;
     }),
   }));
   // The simulator's slots the parts catalog doesn't have yet (drive, hull material, hull shape) go at the end.
@@ -129,6 +132,7 @@ export function withSim(cat: Catalog, sim: SimSlots | null): Catalog {
         effect: o.effect,
         basis: o.basis,
         simEst: o.est,
+        ...(o.sim ? { simKeys: o.sim } : {}),
         priceTbd: i !== 0,
       })),
     });
@@ -251,8 +255,6 @@ export function hintsFor(from: CatalogOption | undefined, to: CatalogOption, mmP
     const kg = `${Math.abs(dkg).toFixed(1)} kg ${dkg > 0 ? "heavier" : "lighter"}`;
     out.push(mm >= 1 ? `${kg}: sits ${mm} mm ${dkg > 0 ? "lower" : "higher"} in the water` : kg);
   }
-  const dc = to.cost - from.cost;
-  if (Math.abs(dc) >= 1) out.push(dc > 0 ? `$${Math.round(dc)} more` : `saves $${Math.round(-dc)}`);
   if (to.wp != null && from.wp != null && to.wp !== from.wp)
     out.push(to.wp > from.wp ? "more solar: more charge on cloudy days" : "less solar: slower charging, slower on cloudy days");
   if (to.bat != null && from.bat != null && to.bat !== from.bat)
@@ -266,7 +268,7 @@ export function hintsFor(from: CatalogOption | undefined, to: CatalogOption, mmP
   if (to.af === 0) out.push("weed and barnacles slow it down over the weeks");
   if (to.est) out.push("figure is an estimate");
   if (to.effect === "no effect yet") out.push("the simulator doesn't model this yet: a launch sails it as built");
-  if (to.priceTbd) out.push("price and weight not worked out yet");
+  if (to.priceTbd) out.push("weight not worked out yet");
   return out;
 }
 
@@ -312,8 +314,6 @@ export function designYaml(cat: Catalog, d: Design, name = "my boatyard design")
     "picks:",
     ...cat.slots.map((sl) => `  ${sl.id}: ${d.picks[sl.id]}`),
     "summary:",
-    `  parts_cost_usd: ${Math.round(s.partsCost)}`,
-    `  program_cost_usd: ${Math.round(s.programCost)}`,
     `  mass_kg: ${s.massKg.toFixed(1)}`,
     `  thrusters: ${s.thrusters}`,
     `  solar_w: ${s.solarW}`,

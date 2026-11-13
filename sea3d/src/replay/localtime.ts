@@ -60,3 +60,17 @@ export function localTime(ms: number, lat: number, lon: number, seconds = false)
   const ss = seconds ? ":" + String(d.getUTCSeconds()).padStart(2, "0") : "";
   return `${h}:${mm}${ss} ${ampm} local (UTC${z.offset === 0 ? "" : sign(z.offset)}, ${z.name})`;
 }
+
+/** The zone in a few letters for an instrument: the shore's own name ("EDT") near land,
+ *  "UTC−4" out at sea (the nautical zone), "UTC" on the Greenwich strip. */
+export function zoneLabel(lat: number, lon: number, ms: number): string {
+  const z = zoneAt(lat, lon, ms);
+  return z.zone ? z.name : `UTC${z.offset === 0 ? "" : sign(z.offset)}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "3 Apr 19:00": the boat's local date and time, short enough for an instrument (the strips put zoneLabel after it). */
+export function shortLocal(ms: number, lat: number, lon: number): string {
+  const d = new Date(ms + zoneAt(lat, lon, ms).offset * 3600e3);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}

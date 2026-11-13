@@ -23,7 +23,10 @@ kept as they wrote it; the Rev C righting-arm curve and point masses in
 `sea3d/src/motion.ts` come from their `docs/data/revC_gz_curve.csv` and
 `simulator/drone_sim/design.py`. The Boatyard's Randolph Rev B and Rev C
 starting designs (`sea3d/src/yard/bases.ts`) take their parts, prices and weights
-from the parts table in their `docs/Build_Plan.md` (Nov 2026). All under the same licence:
+from the parts table in their `docs/Build_Plan.md` (Nov 2026); its Rev C5 refresh (26.9 kg, a shorter, wider wing, acetal mast bearings,
+the YB3 in a foredeck well, fibreglass stern post and counterweight arm, servo-savers, a
+stronger fin and spar) follows their Rev C5 `randolph_rev_c.yaml`, `docs/data/revC_gz_curve.csv`, `docs/Design_RevC.md`,
+`docs/Structural_Review.md` and `docs/Wing_Shape_Study.md` (11 Nov 2026). All under the same licence:
 
 ```
 MIT License
@@ -118,6 +121,10 @@ with `sea3d/scripts/stars.py`.
   NumPy, pandas and PyYAML (BSD and MIT) builds it carries. The Boatyard loads
   them unmodified from the jsDelivr CDN at run time. We don't copy or change
   them.
+- **Fraunces** (SIL Open Font License 1.1, Copyright 2020 The Fraunces Project
+  Authors), the typeface of the Bluewater wordmark. We ship the Latin subset
+  unmodified as `sea3d/public/fonts/fraunces-latin-full-normal.woff2`, with its
+  licence beside it in `sea3d/public/fonts/Fraunces-OFL.txt`.
 - **Blender** (GPL) is used only as a tool in CI to build the boat models.
   Models made with Blender belong to whoever made them, so the GPL doesn't
   cover our `.glb` files. Our build scripts that call Blender's Python API are
@@ -185,6 +192,11 @@ stored in git. Resampled by us.
 - Terrain: AWS Terrain Tiles (Mapzen/Tilezen), from SRTM, GMTED2010, ETOPO1,
   USGS 3DEP and others; see
   https://github.com/tilezen/joerd/blob/master/docs/attribution.md.
+- Heights and depths of the Chesapeake Bay coast squares (`bay_*`, built by
+  `landtiles.py`): NOAA NCEI Continuously Updated Digital Elevation Model
+  (CUDEM), 1/9 arc-second topobathy, via the NOAA Open Data Dissemination
+  program. US Government work, public domain; credited as a courtesy. Their
+  colour is the Sentinel-2 credit below. Shown on the helm page near Annapolis.
 - Colour of Pico and Faial: contains modified Copernicus Sentinel data 2023-2024
   (Sentinel-2 L2A, via the Registry of Open Data on AWS).
   Shown at voyage.html?place=pico ("Off Pico, Azores"), with both credits on the
@@ -196,3 +208,10 @@ stored in git. Resampled by us.
   code; any public copy keeps this notice.
   Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
   work, with the OpenStreetMap / Overture credit on the page's credit line.
+
+## Yesteryear (font)
+
+`sea3d/public/fonts/bw-name-script.woff2` ("Bluewater Name Script") is a Latin subset of
+Yesteryear by Astigmatic (from Google Fonts), used for the boat's painted name. As a modified
+version it is renamed, as the SIL Open Font License 1.1 asks for its Reserved Font Name; the
+licence text is `sea3d/public/fonts/OFL-Yesteryear.txt`.

@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "test": "node tests/smoke.mjs",
-    "test:unit": "esbuild tests/motion.test.ts tests/waves.test.ts tests/gear.test.ts tests/ultra.test.ts tests/story.test.ts tests/sky.test.ts tests/yard.test.ts tests/clouds.test.ts tests/feed.test.ts tests/seastate.test.ts tests/localtime.test.ts tests/challenges.test.ts tests/pois.test.ts tests/sandbox.test.ts tests/ports.test.ts tests/land.test.ts tests/mirror.test.ts tests/nearby.test.ts tests/storm.test.ts tests/traffic.test.ts tests/workers.test.ts --bundle --platform=node --format=esm --outdir=test-output --out-extension:.js=.mjs --log-level=warning && node --test test-output/motion.test.mjs test-output/waves.test.mjs test-output/gear.test.mjs test-output/ultra.test.mjs test-output/story.test.mjs test-output/sky.test.mjs test-output/yard.test.mjs test-output/clouds.test.mjs test-output/feed.test.mjs test-output/seastate.test.mjs test-output/localtime.test.mjs test-output/challenges.test.mjs test-output/pois.test.mjs test-output/sandbox.test.mjs test-output/ports.test.mjs test-output/land.test.mjs test-output/mirror.test.mjs test-output/nearby.test.mjs test-output/storm.test.mjs test-output/traffic.test.mjs test-output/workers.test.mjs"
+    "test:unit": "node tests/run-unit.mjs",
+    "test:quick": "node tests/quick.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"

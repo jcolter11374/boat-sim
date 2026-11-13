@@ -34,6 +34,7 @@ BY_OUTCOME = {
     "aground": ("Ran ashore", "washed up on land before the finish"),
     "disqualified": ("Disqualified", "silent too long under the race rules"),
     "timeout": ("Still at sea", "still sailing when the clock ran out"),
+    "goal": ("Made it", "still sailing at the mission's deadline"),
     "left_data_box": ("Off the map", "sailed out of the weather we have"),
     "at_sea": ("Still at sea", "still sailing"),
     "lost": ("Lost", "lost at sea"),

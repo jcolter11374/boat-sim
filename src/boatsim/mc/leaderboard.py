@@ -7,7 +7,8 @@ John picks it from the roadmap.
 A board is a list of entries, one per design, each with its voyages on one
 launch set:
 
-    {"board": {"launch_set": "2020-AJ-v1", "holdout_set": "2021-AJ-v1"},
+    {"board": {"launch_set": "2020-AJ-v1", "holdout_set": "2021-AJ-v1",
+               "made": "2026-11-11T20:15Z", "sha": "903c638..."},
      "entries": [
        {"design": "k-p25", "design_sha256": "...", "badges": ["breaks 2.4 m cap"],
         "run": {"job": "42868553501/130013370715", "commit": "903c638",
@@ -42,6 +43,7 @@ import json
 import math
 import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from itertools import combinations
 from pathlib import Path
 
@@ -281,6 +283,7 @@ def summary(board: dict, reference: str = "k-p25") -> dict:
         row = {
             **r,
             "label": e.get("label", r["design"]),
+            **({"note": e["note"]} if e.get("note") else {}),
             "class": e.get("class", DRONE_CLASS),
             "finished": sum(_finished(x) for x in e["launches"]),
         }
@@ -431,6 +434,7 @@ def assemble(public, holdout, every_days: int, public_years, holdout_years) -> d
         e = {
             "design": bid,
             "label": b.label,
+            **({"note": b.note} if b.note else {}),
             "design_sha256": design_hash(b),
             "class": boat_class(b.design_path),
             "badges": badges(b),
@@ -446,6 +450,10 @@ def assemble(public, holdout, every_days: int, public_years, holdout_years) -> d
             "holdout_set": launch_set_id(holdout_years, every_days) if holdout_years else None,
             "headline": HEADLINE,
             "min_launches": MIN_LAUNCHES,
+            # When and from which sim commit, so a page can say how old the board is
+            # (Ravi, Results card review: a stale row must not read as current).
+            "made": datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ"),
+            "sha": run["commit"],
         },
         "entries": entries,
     }

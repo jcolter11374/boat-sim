@@ -266,3 +266,22 @@ def test_the_engine_charges_a_low_battery_out_of_gear(boat):
     spare = replace(s, damage={"electronics_main": True})  # a spare autopilot box still works
     assert boat.wants_charge(spare, s.fuel_l)
     assert not boat.wants_charge(s, boat.fuel_reserve_l)
+
+
+def test_trim_share_scales_sail_speed_only_and_none_is_unchanged(boat):
+    """A helm spell's watch (Command.trim_share): sail speed is share /
+    autopilot_factor of the autopilot's; at the autopilot's own share, or with
+    no share, the boat sails exactly as before. The engine isn't scaled."""
+    beam = EnvState(wind_u=0.0, wind_v=6.2, hs=1.0, tp=6, wave_dir=0)  # 12 kn from the south
+    f = boat.autopilot_factor
+    assert f == pytest.approx(0.93)
+    auto = _run(boat, beam, Command(90, 0.0, engine=False))
+    same = _run(boat, beam, Command(90, 0.0, engine=False, trim_share=f))
+    assert same.speed_through_water == auto.speed_through_water
+    assert (same.lat, same.lon) == (auto.lat, auto.lon)
+    best = _run(boat, beam, Command(90, 0.0, engine=False, trim_share=1.0))
+    assert best.speed_through_water == pytest.approx(auto.speed_through_water / f, rel=1e-9)
+    calm = EnvState(wind_u=0.0, wind_v=0.5, hs=0.0, tp=6, wave_dir=0)  # motoring in a calm
+    m0 = _run(boat, calm, Command(90, 0.7, sail_plan="down", engine=True))
+    m1 = _run(boat, calm, Command(90, 0.7, sail_plan="down", engine=True, trim_share=1.0))
+    assert m1.speed_through_water == m0.speed_through_water > 0.0

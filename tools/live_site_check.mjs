@@ -5,6 +5,7 @@
 // sailing. Read-only: it only visits the public site.
 //
 //   node tools/live_site_check.mjs [check ...]     (no names = every check)
+//   SHARD=2/4 node tools/live_site_check.mjs       (every 4th check, from the 2nd)
 //   SITE=https://example.github.io/boat-sim/ node tools/live_site_check.mjs helm-drop
 //
 // Each check prints one PASS/FAIL line plus its evidence, and writes
@@ -78,7 +79,26 @@ async function frameTimes(page, secs = 3) {
 }
 
 /** Click, and if it gets stuck say which control it was and why (Maya, #293). */
+/** The helm's orders drawer (Leo's layout plan): open it before using what's inside. Builds without one: nothing to do. */
+async function openOrders(page) {
+  if (!(await page.locator("#orders-tab").count())) return;
+  // At the start the drawer opens by itself for 10 s with a tip, then slides shut unless it's
+  // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
+  // until it has fully slid in, then point at it, which keeps it open (the player is using it).
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    const there = await page
+      .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
+      .then(() => true, () => false);
+    if (!there) continue;
+    await page.hover("#orders h2", { timeout: 10_000 }).catch(() => {});
+    if (await page.locator("#orders.open").count()) return;
+  }
+}
+const IN_DRAWER = /^#(s6|sday|sevent|share|send|b-wheel|b-auto|b-finish|b-route)$/;
+
 async function clickNamed(page, selector, what, opts = {}) {
+  if (IN_DRAWER.test(selector)) await openOrders(page);
   try {
     await page.click(selector, opts);
   } catch (e) {
@@ -93,8 +113,10 @@ async function clickNamed(page, selector, what, opts = {}) {
 const HELM = "helm.html?quality=low";
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+  // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
+  await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
   await setup(page);
-  await clickNamed(page, "#go", "Take the helm");
+  await clickNamed(page, "#go", "Set sail");
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
   const s = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
@@ -143,7 +165,16 @@ const helm = (setup, extra = async () => "") => async (page) => {
 const pickBoat = (value) => async (page) => {
   const r = page.locator(`input[name="boat"][value="${value}"]`);
   must((await r.count()) === 1, `the boat picker doesn't offer ${value || "our kayak"}`);
-  await r.check();
+  if (await r.isVisible()) return r.check();
+  // The Set sail card (#432) keeps the boat radios hidden as the helm's state and picks a boat
+  // through the top bar's "My boat" picker, which ticks the row and fires change: do the same.
+  await r.evaluate((el) => {
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const shown = await page.evaluate(() => document.getElementById("ss-boatname")?.textContent ?? "");
+  const want = await r.evaluate((el) => el.parentElement?.querySelector("b")?.textContent ?? "");
+  must(!shown || shown === want, `the Set sail card shows ${JSON.stringify(shown)}, not ${JSON.stringify(want)}`);
 };
 
 const CHECKS = {
@@ -212,6 +243,38 @@ const CHECKS = {
     },
   },
   "helm-base": { path: HELM, run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
+};
+
+// The Sea page leads into the game (sea3d/src/sailLink.ts): with Gale on screen,
+// "Sail this sea" opens the helm with the Spring gale challenge already picked,
+// the player sets sail as they are, and it sails a day. "Build a boat" opens the Boatyard.
+CHECKS["sea-sail"] = {
+  path: "?title=0&quality=low",
+  run: async (page) => {
+    await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 2 * MIN });
+    must(await page.isVisible("#sail"), 'the Sea page has no "Sail this sea" button');
+    const build = await page.evaluate(() => (document.getElementById("build")?.offsetParent ? document.getElementById("build").href : ""));
+    must(build === `${SITE}boatyard.html`, `"Build a boat" should show and open the Boatyard, not ${JSON.stringify(build)}`);
+    await page.selectOption("#sea", "gale");
+    // The Sea page is on Low, so the link carries it and the helm opens on Low, like the
+    // other helm checks, in one navigation. (Reloading the helm to add ?quality=low aborted
+    // its first simulator downloads, which Firefox logs as NS_BINDING_ABORTED; #349.)
+    await Promise.all([page.waitForURL(/helm\.html\?challenge=spring-gale&quality=low$/, { timeout: 2 * MIN }), clickNamed(page, "#sail", "Sail this sea")]);
+    return helm(
+      async (p) => {
+        await p.waitForFunction(() => !document.querySelector("#chpick").hidden, null, { timeout: MIN }).catch(() => {
+          throw new CheckFail("the weather challenge picker never appeared");
+        });
+        const v = await p.evaluate(() => document.querySelector("#challenge").value);
+        must(v === "spring-gale", `the helm arrived with ${JSON.stringify(v)} picked, not Spring gale`);
+      },
+      async (p) => {
+        const id = await p.evaluate(() => window.__helm.challenge);
+        must(id === "spring-gale", `the game sailed ${JSON.stringify(id)}, not Spring gale`);
+        return `, from the Sea page on challenge ${id}`;
+      },
+    )(page);
+  },
 };
 
 // One helm check per boat the live picker offers (our kayak is helm-drop).
@@ -319,14 +382,18 @@ for (const [name, pageName] of Object.entries(VISUAL)) {
 }
 // Iris's find: in a small window the helm's start card must still let you reach "Take the helm".
 CHECKS["helm-small-window"] = {
-  path: "helm.html",
+  path: HELM,
   viewport: { width: 960, height: 540 },
   run: async (page) => {
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
-    await page.click("#go", { trial: true, timeout: 10_000 }).catch(() => {
-      throw new CheckFail('"Take the helm" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
+    // A trial click takes about a dozen frames of Playwright's own checks (visible,
+    // stable, scrolled, not covered); with software graphics at about a frame a second
+    // 10 s was too tight. Main's unscrollable card still fails at 30 s ("outside of
+    // the viewport"), so the check still catches the bug (#288).
+    await page.click("#go", { trial: true, timeout: 30_000 }).catch(() => {
+      throw new CheckFail('"Set sail" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
     });
-    return '"Take the helm" is reachable at 960x540';
+    return '"Set sail" is reachable at 960x540';
   },
 };
 
@@ -368,8 +435,15 @@ async function runCheck(browser, name) {
   return out;
 }
 
-const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
-for (const n of names) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
+const all = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CHECKS);
+for (const n of all) if (!CHECKS[n]) throw new Error(`unknown check ${n}; known: ${Object.keys(CHECKS).join(" ")}`);
+// SHARD=k/n runs every n-th check starting at the k-th (1-based), so n runners
+// together run every check exactly once, new checks included (Kai: the
+// post-deploy check used one runner per check, 23 runners per deploy).
+const shard = /^(\d+)\/(\d+)$/.exec(process.env.SHARD ?? "");
+if (process.env.SHARD && !(shard && +shard[1] >= 1 && +shard[1] <= +shard[2])) throw new Error(`SHARD must be k/n with 1 <= k <= n, got ${process.env.SHARD}`);
+const names = shard ? all.filter((_, i) => i % +shard[2] === +shard[1] - 1) : all;
+if (shard) console.log(`shard ${shard[0]}: ${names.length} of ${all.length} checks (shards split by position before any check runs, so a SKIP never moves one): ${names.join(" ")}`);
 // BROWSER=firefox (or webkit) plays the same checks in another engine; default Chrome.
 // Headless Firefox on a runner has no WebGL ("WebGL creation failed"); run it
 // headed under xvfb (HEADED=1, see the workflows) on Mesa's software GL, with WebGL forced on.

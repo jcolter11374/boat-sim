@@ -504,6 +504,7 @@ STOCK_BASES = {
     name: f"configs/{name}.yaml"
     for name in (
         "stock_cruiser31",
+        "stock_pearson31_2",  # Randolph and Becky's own boat (our model)
         "stock_dinghy14",
         "stock_beachcat16",
         "stock_sail_drone7",
@@ -550,8 +551,8 @@ def _rudder(n: int, base: str) -> Option:
 
 def _bulb(kg: float, base: str) -> Option:
     ref = {"revc": 9.0, "revb": 8.2}[base]
-    heel = {"revc": 19.7, "revb": 17.4}[base]
-    mass = {"revc": 25.2, "revb": 20.8}[base]
+    heel = {"revc": 21.2, "revb": 17.4}[base]
+    mass = {"revc": 26.9, "revb": 20.8}[base]
     # GUESS: righting moment goes with the bulb's share of the weight; staying upside
     # down after a knockdown with the square of the shortfall (the kayak's bulb rule).
     p_stuck = 4.0e-5 * max(1.0, (ref / kg) ** 2)
@@ -576,7 +577,11 @@ def _rslots(base: str) -> dict[str, dict[str, Option]]:
     }
     return {
         "drive": {
-            "wing": Option(basis="their design.py: 1.0 x 0.30 m free-rotating wing"),
+            "wing": Option(
+                basis="their Rev C5: 0.80 x 0.375 m free-rotating wing"
+                if base == "revc"
+                else "their design.py: 1.0 x 0.30 m free-rotating wing"
+            ),
             "wing-thruster": Option(
                 (
                     ("propulsion", "thrusters", "1 x 35 W thruster"),
@@ -641,6 +646,68 @@ RSLOT_NAMES = {
     "paint": "Antifouling",
     "spares": "Spares",
 }
+# What a player reads for a change from the planned build (or Randolph's as built):
+# the one name map for builds (Leo's words: quality audit item 9,
+# /mnt/project-files/simulator/gameplay/finish-layer-copy.md). Names never show a
+# slot name or an option id ("Drive: hybrid", "solar-300"); a test fails if one does.
+# Kayak options and Randolph's share the table (their slot ids don't clash).
+CHANGE_NAMES = {
+    ("thr", "one-t200"): "one motor",
+    ("sol", "solar-200"): "smaller panels",
+    ("sol", "solar-300"): "bigger panels",
+    ("bat", "one-50ah"): "one battery",
+    ("bat", "two-100ah"): "bigger batteries",
+    ("mppt", "one-mppt"): "one charge controller",
+    ("brain", "one-box"): "no backup autopilot",
+    ("beacon", "none"): "no backup beacon",
+    ("ais", "dy-ait1500"): "another AIS",
+    ("ais", "none"): "hidden from ships (no AIS)",
+    ("radar", "davis-echomaster"): "cheaper radar reflector",
+    ("lead", "lead-50-scrap"): "scrap-lead keel",
+    ("lead", "lead-40"): "lighter keel (40 kg)",
+    ("paint", "none"): "no bottom paint",
+    ("spares", "spares-no-pixhawk"): "fewer spares",
+    ("spares", "none"): "no spares",
+    # added: "Our kayak + wing sail and motors" (Ines: not to be confused with wing sail only)
+    ("drive", "hybrid"): "wing sail and motors",
+    ("drive", "wing-sail"): "wing sail only (no motors)",
+    ("material", "fibreglass"): "fibreglass hull",
+    ("material", "carbon"): "carbon hull",
+    ("material", "plywood-epoxy"): "plywood hull",
+    ("material", "aluminium"): "aluminium hull",
+    # Randolph's boats
+    ("drive", "wing-thruster"): "small motor",  # added
+    ("brain", "two-box"): "backup autopilot",  # added
+    ("rudder", "twin"): "two rudders",
+    ("rudder", "single"): "one rudder",
+    ("rsol", "deck-60w"): "bigger panel",
+    ("rbat", "lfp-384wh"): "bigger battery",
+    ("keel", "bulb-9kg"): "heavier keel",
+    ("keel", "bulb-8kg"): "lighter keel",
+    ("tracker", "none"): "no backup tracker",
+}
+# Things added go after a "+" ("Our kayak + wing sail"); everything else after a comma.
+ADDED = {("drive", "hybrid"), ("drive", "wing-thruster"), ("brain", "two-box")}
+# Two changes that read as one phrase.
+MERGED = {
+    frozenset({("sol", "solar-300"), ("bat", "two-100ah")}): "bigger panels and batteries",
+    frozenset({("rsol", "deck-60w"), ("rbat", "lfp-384wh")}): "bigger panels and battery",
+    frozenset({("brain", "one-box"), ("beacon", "none")}): "no backup autopilot or beacon",
+}
+# A hull shape replaces the boat's name.
+SHAPE_NAMES = {
+    "cat": "Catamaran version",
+    "semisub": "Semi-submerged version",
+    "board": "Surfboard version",
+}
+
+
+def cruise_name(w: int, alone: bool = True) -> str:
+    """The kayak's motor setting in words (the planned build cruises at 25 W)."""
+    words = f"motors turned {'down' if w < DEFAULT_CRUISE_W else 'up'}"
+    return f"{words} ({w} W)" if alone else words
+
+
 RSLOTS = {b: {k: v for k, v in _rslots(b).items() if v} for b in ("revc", "revb")}
 RDEFAULTS = {
     b: {

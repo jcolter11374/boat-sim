@@ -8,6 +8,9 @@
 // with Theo's precomputed grid now and the simulator in the browser later.
 
 import * as THREE from "three";
+import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
+import { tidyCatalog } from "./yard/words";
+import { tierOf, type BoardTiers } from "./yard/tier";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -29,6 +32,7 @@ import {
   optionOf,
   plannedDesign,
   sailOnly,
+  simChoices,
   summarise,
   withSim,
   type SimSlots,
@@ -40,11 +44,13 @@ import {
 import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/bases";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
+import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
+import { chanceFor, type Chance } from "./yard/chance";
+import { OddsModel } from "./yard/estimate";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
 // ---------- 3D: the kayak on a calm sea ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -62,8 +68,10 @@ controls.autoRotateSpeed = 0.4;
 renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false));
 const atmos = new Atmosphere(renderer, scene, camera);
 atmos.set(28, 215, 0, true);
-// ?quality=low for software graphics (tests); High otherwise.
-const quality: Quality = new URLSearchParams(location.search).get("quality") === "low" ? "low" : "high";
+// High on a graphics card; Low without one (software graphics drew the spectral sea at High at under
+// one frame a second, so a click could wait 30 s). ?quality=low|high overrides either way.
+const askedQuality = new URLSearchParams(location.search).get("quality");
+const quality: Quality = askedQuality === "low" || (askedQuality !== "high" && atmos.software) ? "low" : "high";
 renderer.setPixelRatio(quality === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.6 : 1);
 atmos.setBloom(quality === "high");
 atmos.setPixelRatio(renderer.getPixelRatio());
@@ -112,7 +120,8 @@ function build(): void {
   motion = new BoatMotion(KAYAK_V4, place);
   model = BUILDERS.kayak(quality);
   shadowsOn(model.root);
-  contact = new Contact(model.form, KAYAK, quality);
+  contact = new Contact(model.form, KAYAK, quality, model.root);
+  contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, contact.collar, contact.spray);
   outfit = new Outfit(model);
   outfit.onShapeLoaded = () => cat && redraw();
@@ -122,15 +131,30 @@ function build(): void {
 // Port quarter, a little above the deck: the panels, the dome and the keel all show.
 camera.position.set(-4.6, 1.9, 6.6);
 controls.target.set(0.1, -0.15, 0);
-// Centre the boat in the open space between the two panels.
+// Centre the boat in the open space between the two panels. Where that gap is too narrow for her
+// (1024 wide), she drops into the space under the build card instead, clear of both panels (Ines).
 function frameView(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const left = w > 900 ? 404 : 0;
-  const right = w > 900 ? 324 : 0;
-  camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+  if (w <= 900) {
+    camera.setViewOffset(w, h, 0, 0, w, h);
+    return;
+  }
+  const left = 404;
+  const right = 324;
+  if (w - left - right >= 520) {
+    camera.setViewOffset(w, h, (right - left) / 2, 0, w, h);
+    return;
+  }
+  const sumBottom = document.getElementById("sum")?.getBoundingClientRect().bottom ?? h / 2;
+  const viewsTop = document.getElementById("views")?.getBoundingClientRect().top ?? h - 60;
+  const cx = (left + w) / 2;
+  const cy = Math.min((sumBottom + viewsTop) / 2, h * 0.78);
+  camera.setViewOffset(w, h, w / 2 - cx, h / 2 - cy, w, h);
 }
 frameView();
+// The build card grows (a test's result), so the space under it moves.
+new ResizeObserver(() => frameView()).observe(document.getElementById("sum")!);
 
 // ---------- the catalog and the design ----------
 let cat: Catalog | null = null;
@@ -146,6 +170,7 @@ const isAsBuilt = (d: Design) => !!cat && encodeDesign(cat, d) === "";
 const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
 const sandboxReady = sandbox.available();
 let launching = false;
+let chanceTurn = 0; // the latest "chance of finishing" lookup (a part changed since: drop the older)
 let planned: LaunchResult | null = null;
 const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
@@ -166,12 +191,18 @@ const status = {
   summary: {} as Record<string, unknown>,
   dressed: {} as Record<string, unknown>,
   share: "",
+  /** The odds "Your build" shows (#315). */
+  chance: null as Chance | null,
+  /** The player's saved boat ("my boat"), as this page last drew it. */
+  mine: null as MyBoat | null,
   yaml: "",
   launch: null as unknown,
   launchError: "",
   planned: null as unknown,
   backend: "",
   frames: 0,
+  /** The Blender models: "loading" until they arrive (or don't). Their rebuild is a long frame on slow graphics. */
+  models: "loading" as "loading" | "detailed" | "simple",
   view: "afloat" as View,
   lift: 0,
   setView: (v: View) => setView(v),
@@ -206,28 +237,38 @@ function optionButton(slot: CatalogSlot, o: CatalogOption): HTMLButtonElement {
   top.className = "top";
   const name = document.createElement("span");
   name.textContent = o.n;
-  if (o.def) name.append(badge("plan", base === "kayak" ? "PLANNED" : "AS BUILT"));
-  if (o.est) name.append(badge("est", "ESTIMATE"));
-  if (o.effect === "no effect yet") {
-    name.append(badge("noeff", "NO EFFECT YET"));
-    b.classList.add("noeff");
-    b.title = `The simulator doesn't model this yet${o.basis ? `: ${o.basis}` : ""}. A launch sails it as built.`;
-  }
-  const price = document.createElement("span");
-  price.className = "price";
-  price.textContent = o.priceTbd ? "price TBD" : o.cost ? usd(o.cost) : "$0";
-  top.append(name, price);
+  // Tags in a player's words (Leo, audit item 10): the planned part, quietly. No prices
+  // (John: no money in the game); estimates show as "~" before the part's figure.
+  if (o.def) name.append(badge("plan", base === "kayak" ? "Planned" : "As built", base === "kayak" ? "The part on our kayak" : "The part on their boat"));
+  // What this part would do to the odds, filled in by drawChance (Leo: see which swap is worth trying).
+  const delta = document.createElement("span");
+  delta.className = "delta";
+  name.append(delta);
+  const fig = document.createElement("span");
+  fig.className = "price figure";
+  fig.textContent = partFigure(slot, o);
+  if (o.est && fig.textContent) fig.title = "Our estimate: nobody has measured this yet.";
+  top.append(name, fig);
   const d = document.createElement("div");
   d.className = "d";
   d.textContent = o.d;
+  // The longer story stays one hover away (Milo: the Rev C5 wing was a 9-line history).
+  // The "i" sits inside the option's button, so it can't take focus itself: the same words go in
+  // hidden text that screen readers read with the button (Lena), and the "i" is for hover.
+  if (o.more) {
+    const i = Object.assign(document.createElement("span"), { className: "info", textContent: "i", title: o.more });
+    i.setAttribute("aria-hidden", "true");
+    d.append(" ", i, Object.assign(document.createElement("span"), { className: "sr", textContent: ` ${o.more}` }));
+  }
   b.append(top, d);
   b.addEventListener("click", () => choose(slot.id, o.id));
   return b;
 }
-function badge(kind: string, text: string): HTMLSpanElement {
+function badge(kind: string, text: string, title = ""): HTMLSpanElement {
   const s = document.createElement("span");
   s.className = `badge ${kind}`;
   s.textContent = text;
+  if (title) s.title = title;
   return s;
 }
 
@@ -242,26 +283,102 @@ function drawSlots(): void {
   for (const [title, ids] of groups) {
     const g = document.createElement("div");
     g.className = "slot";
+    // A section is one line until opened ("Power: 250 W solar, 1,280 Wh"); Driving starts open (Elena).
+    g.dataset.group = title;
     const h = document.createElement("h3");
-    h.textContent = title;
+    h.tabIndex = 0;
+    h.setAttribute("role", "button");
+    const gname = document.createElement("span");
+    gname.textContent = title;
+    const gsum = document.createElement("span");
+    gsum.className = "gsum";
+    gsum.id = `gsum-${title.replace(/\W+/g, "-")}`;
+    h.append(gname, gsum);
+    const flip = () => {
+      if (openGroups.has(title)) openGroups.delete(title);
+      else openGroups.add(title);
+      showOpenGroups();
+    };
+    h.addEventListener("click", flip);
+    h.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        flip();
+      }
+    });
     g.append(h);
     if (title === "Driving") g.append(cruiseControl());
     for (const id of ids) {
       const slot = cat.slots.find((s) => s.id === id)!;
       used.add(id);
-      const name = document.createElement("div");
-      name.className = "muted";
-      name.style.margin = "6px 2px 4px";
-      name.textContent = slot.name;
-      g.append(name);
-      for (const o of slot.opts) g.append(optionButton(slot, o));
+      const shown = shownOptions(slot);
+      if (!shown.length) continue;
+      // Each slot is one line until opened, "Thrusters: Two T200 ▸", so the boat gets the middle of
+      // the screen (Milo, M5); the open one stays open, so its options can be compared (Leo).
+      const sl = document.createElement("div");
+      sl.className = "sl";
+      sl.dataset.slot = slot.id;
+      const head = document.createElement("button");
+      head.className = "sl-head";
+      head.dataset.slot = slot.id;
+      head.setAttribute("aria-expanded", String(openSlot === slot.id));
+      head.setAttribute("aria-controls", `sl-body-${slot.id}`);
+      const nm = document.createElement("span");
+      nm.className = "sl-name";
+      nm.textContent = slot.name;
+      const pick = document.createElement("span");
+      pick.className = "sl-pick";
+      pick.id = `sl-pick-${slot.id}`;
+      head.append(nm, pick);
+      head.addEventListener("click", () => {
+        openSlot = openSlot === slot.id ? null : slot.id;
+        showOpenSlot();
+      });
+      const body = document.createElement("div");
+      body.className = "sl-body";
+      body.id = `sl-body-${slot.id}`;
+      for (const o of shown) body.append(optionButton(slot, o));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;
-      g.append(hints);
+      sl.append(head, body, hints);
+      g.append(sl);
     }
-    box.append(g);
+    if (g.querySelector(".sl") || title === "Driving") box.append(g); // no empty sections
   }
+}
+
+/** The sections that are open; the rest fold to one summary line. */
+const openGroups = new Set<string>(["Driving"]);
+function showOpenGroups(): void {
+  document.querySelectorAll<HTMLElement>(".slot[data-group]").forEach((g) => {
+    const on = openGroups.has(g.dataset.group!);
+    g.classList.toggle("gopen", on);
+    g.querySelector("h3")?.setAttribute("aria-expanded", String(on));
+  });
+}
+/** A folded section's one line: Power in figures, the others by their picks. */
+function groupSummaries(solarW: number, batteryWh: number): void {
+  document.querySelectorAll<HTMLElement>(".slot[data-group]").forEach((g) => {
+    const el = g.querySelector<HTMLElement>(".gsum");
+    if (!el) return;
+    if (g.dataset.group === "Power") {
+      el.textContent = `${solarW} W solar, ${batteryWh.toLocaleString("en-US")} Wh`;
+      return;
+    }
+    const names = Array.from(g.querySelectorAll<HTMLElement>(".sl-pick")).map((p) => p.textContent ?? "").filter(Boolean);
+    el.textContent = names.length > 1 ? `${names[0]} and ${names.length - 1} more` : (names[0] ?? "");
+  });
+}
+
+/** The slot whose options are showing; the rest are one line each. */
+let openSlot: string | null = null;
+function showOpenSlot(): void {
+  document.querySelectorAll<HTMLElement>(".sl").forEach((el) => {
+    const on = el.dataset.slot === openSlot;
+    el.classList.toggle("open", on);
+    el.querySelector(".sl-head")?.setAttribute("aria-expanded", String(on));
+  });
 }
 
 function cruiseControl(): HTMLElement {
@@ -342,6 +459,13 @@ function redraw(): void {
     b.setAttribute("aria-pressed", String(design.picks[b.dataset.slot!] === b.dataset.opt)),
   );
   for (const slot of cat.slots) {
+    const pick = document.getElementById(`sl-pick-${slot.id}`);
+    if (pick) pick.textContent = optionOf(cat, slot.id, design)?.n ?? "";
+  }
+  showOpenSlot();
+  showOpenGroups();
+  groupSummaries(s.solarW, s.batteryWh);
+  for (const slot of cat.slots) {
     const ul = document.getElementById(`hints-${slot.id}`);
     if (!ul) continue;
     const hints = hintsFor(optionOf(cat, slot.id, plan), optionOf(cat, slot.id, design)!, cat.mmPerKg);
@@ -369,14 +493,12 @@ function redraw(): void {
     b.title = sail ? "Doesn't apply: the wing sail only build has no motors" : "";
   });
   // Totals.
-  $("s-cost").textContent = usd(s.partsCost);
-  $("s-prog").textContent = usd(s.programCost);
-  $("s-total").textContent = usd(s.partsCost + s.programCost);
   $("s-kg").textContent = `${s.massKg.toFixed(1)} kg`;
   $("s-sol").textContent = `${s.solarW} W`;
   $("s-bat").textContent = `${s.batteryWh.toLocaleString("en-US")} Wh`;
   $("s-night").textContent = `about ${Math.round(nightHours(s))} h`;
-  $("s-est").textContent = s.estimates.length ? `Includes estimates: ${s.estimates.join(", ")}.` : "";
+  $("s-est").textContent = s.estimates.length ? `~ Includes our estimates for: ${s.estimates.join(", ")}.` : "";
+  void drawChance();
   // The model.
   if (outfit && base === "kayak") {
     const lead = optionOf(cat, "lead", design);
@@ -399,16 +521,179 @@ function redraw(): void {
   status.summary = { ...s };
   status.share = hash;
   $("result").replaceChildren();
+  drawMine();
 }
+
+// ---------- chance of finishing (#315 item 12) ----------
+/** "Your build": the grid's odds when this design is a tested build, else "not tested yet". */
+async function drawChance(): Promise<void> {
+  if (!cat) return;
+  const turn = ++chanceTurn;
+  const [n, src, model] = await Promise.all([grid.nearest(design), grid.source(), oddsModel()]);
+  if (turn !== chanceTurn) return; // the player has changed a part since
+  const c = chanceFor(n, src ?? null);
+  const e = model?.odds(design) ?? null;
+  const v = $("s-odds");
+  const was = shownBase === base ? shownOdds : null; // no flash when switching boats
+  shownOdds = e?.p ?? null;
+  shownBase = base;
+  // Tested: the grid's own figure. Untested: the quick estimate, said so (estimate.ts).
+  // The comparison as two odds side by side, not "points" (Leo): "Our kayak: 78%."
+  const vsWhat = base === "kayak" ? "our kayak" : `${SHORT[base]} as built`;
+  const vs =
+    e?.p != null && !(e.tested && e.p === e.planned)
+      ? Math.abs(Math.round((e.p - e.planned) * 100)) < NOISE_PTS
+        ? ` About the same as ${vsWhat}.`
+        : ` ${vsWhat[0].toUpperCase()}${vsWhat.slice(1)}: ${Math.round(e.planned * 100)}%.`
+      : "";
+  if (c.tested || !e || e.p === null) {
+    v.textContent = c.value;
+    const note = $("s-odds-note");
+    note.textContent =
+      e && e.p === null && e.missing ? `No estimate yet: "${e.missing}" hasn't been tested. Press "Test it" to find out.` : `${c.note}${vs}`;
+    // One sentence from one source on both pages (Milo M4): which launches, behind the "i".
+    if (c.about) note.append(" ", Object.assign(document.createElement("span"), { className: "info", textContent: "i", tabIndex: 0, title: c.about, role: "note", ariaLabel: c.about }));
+  } else {
+    v.textContent = `about ${Math.round(e.p * 100)}%`;
+    $("s-odds-note").textContent = `Quick estimate from builds we've tested.${vs} Press "Test it" to sail it for real.`;
+  }
+  v.classList.toggle("untested", !c.tested && (!e || e.p === null));
+  v.classList.toggle("estimate", !c.tested && !!e && e.p !== null);
+  // Green only for the leaderboard's Best group; Long shot in amber; anything else plain (Milo).
+  v.dataset.tier = c.tested && n?.exact ? tierOf(boardTiers, n.build.id) : "";
+  // A short flash when the figure moves: green up, red down (Leo).
+  v.classList.remove("up", "down");
+  if (was !== null && shownOdds !== null && Math.round(was * 100) !== Math.round(shownOdds * 100)) {
+    void v.offsetWidth; // restart the animation
+    v.classList.add(shownOdds > was ? "up" : "down");
+  }
+  status.chance = { ...c, estimate: e?.p ?? null } as Chance;
+  drawDeltas(model);
+  $("legend").hidden = !model;
+}
+let shownOdds: number | null = null;
+/** The leaderboard's groups by build id, once loaded (the odds colour follows them). */
+let boardTiers: BoardTiers | null = null;
+fetch("./leaderboard/board.json")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((b) => {
+    boardTiers = b?.summary?.rows ? new Map(b.summary.rows.map((r: { design: string; tier: number }) => [r.design, r.tier])) : null;
+    if (boardTiers) redraw();
+  })
+  .catch(() => null);
+let shownBase = "";
+// Under 3 points is inside the grid's own noise (100 launches a build), so it reads
+// "about the same" rather than suggesting, say, that dropping the AIS helps (Ravi's rule on #323).
+const NOISE_PTS = 3;
+const modelFor = new Map<BaseKey, OddsModel>();
+/** The quick-estimate model for the boat on show (null without the grid). */
+async function oddsModel(): Promise<OddsModel | null> {
+  const builds = await grid.all();
+  if (!cat || !builds.length) return null;
+  let m = modelFor.get(base);
+  if (!m) modelFor.set(base, (m = new OddsModel(cat, builds)));
+  return m;
+}
+/** Each part's effect on the odds if you picked it now: "+6", "−24", or nothing when no tested build covers it
+ *  (Milo: the "~" and "Our estimate." already say a part is a guess; a third badge was noise). */
+function drawDeltas(model: OddsModel | null): void {
+  const here = model?.odds(design)?.p ?? null;
+  document.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => {
+    const span = b.querySelector<HTMLSpanElement>(".delta");
+    if (!span) return;
+    const slot = b.dataset.slot!;
+    const opt = b.dataset.opt!;
+    let text = "";
+    let cls = "delta";
+    if (model && here !== null && design.picks[slot] !== opt && !b.classList.contains("na")) {
+      const p = model.odds({ ...design, picks: { ...design.picks, [slot]: opt } })?.p ?? null;
+      if (p === null) [text, cls] = ["", "delta none"];
+      else {
+        const n = Math.round((p - here) * 100);
+        [text, cls] = Math.abs(n) < NOISE_PTS ? ["about the same", "delta same"] : [`${n > 0 ? "+" : "−"}${Math.abs(n)}`, n > 0 ? "delta up" : "delta down"];
+      }
+    }
+    span.textContent = text;
+    span.className = cls;
+    span.title = text ? "Change in the odds if you pick this part (quick estimate)" : "";
+  });
+}
+// What "Test it" does, on the button (#315 item 13): the simulator in this browser
+// sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
+// slow computer; without it, the page shows the precomputed voyages at once.
+void sandboxReady.then((inBrowser) => {
+  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see its simulated voyages";
+  $("launch").title = inBrowser
+    ? "The autopilot sails your design from 6 real spring 2020 start dates, in this browser, and sails the boat you started from on the same dates to compare"
+    : "Shows the voyages our servers sailed for the closest tested build";
+});
+
+// ---------- my boat (remembered in this browser, carried to the other pages) ----------
+const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C5", revb: "Rev B" };
+let nameTyped = false; // the player has typed a name: keep it while they change parts
+const defaultName = () => `My ${SHORT[base]}`;
+function drawMine(): void {
+  const mine = loadMyBoat();
+  status.mine = mine;
+  const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
+  const input = $<HTMLInputElement>("mb-name");
+  if (!nameTyped) input.value = here ? mine.name : ""; // empty until she's named: "Name her" (Elena)
+  const saved = here && input.value.trim() === mine.name;
+  $("mb-save").textContent = saved ? "Saved" : here ? "Rename my boat" : mine ? "Make this my boat" : "Save as my boat";
+  // "Saved" is a status, not a button (Milo, M3): a dim tick.
+  $("mb-save").classList.toggle("saved", saved);
+  $<HTMLButtonElement>("mb-save").disabled = saved;
+  // The name is the player's own text: textContent only, never innerHTML.
+  const line = $("mb-line");
+  line.replaceChildren();
+  if (!mine) line.textContent = "Save it to take it to the other pages: the helm, the race and the voyage.";
+  else if (here) line.textContent = "This design is your boat. It's remembered in this browser.";
+  else if (mine.kind === "yard") {
+    const a = Object.assign(document.createElement("a"), { href: myBoatYardLink(mine), textContent: mine.name });
+    line.append("Your boat now: ", a, ". Saving this design replaces it.");
+  } else line.append(`Your boat now: ${mine.name} (a stock boat). Saving this design replaces it.`);
+}
+function saveMine(): void {
+  if (!cat) return;
+  const name = $<HTMLInputElement>("mb-name").value.trim().slice(0, 20) || defaultName();
+  saveMyBoat({ kind: "yard", base, hash: status.share, name, choices: simChoices(design, plannedDesign(cat)) });
+  nameTyped = false;
+  toast(`Saved "${name}" as your boat, in this browser.`);
+}
+$("mb-save").addEventListener("click", saveMine);
+$<HTMLInputElement>("mb-name").addEventListener("input", () => {
+  nameTyped = true;
+  drawMine();
+});
+$<HTMLInputElement>("mb-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") saveMine();
+});
+onMyBoatChange(() => cat && drawMine());
+// "Your boat now" links here with a new hash: open that design without a reload.
+window.addEventListener("hashchange", () => {
+  const b = baseFromHash(location.hash);
+  if (!catalogs.has(b)) return;
+  if (b !== base) {
+    base = b;
+    if (view === "inside" && b !== "kayak") view = "afloat";
+    build();
+    fly = { p0: camera.position.clone(), p1: framePos(view), t0: controls.target.clone(), t1: frameTarget(view), k: 0 };
+  }
+  useBase(location.hash);
+  setView(view);
+});
 
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
-  kayak:
-    "Build your own version of our kayak: swap parts in and out and watch the boat change. Prices are real (checked 10 Nov 2026); ESTIMATE marks figures nobody has measured or quoted yet.",
-  revc:
-    "Our model of the Randolph team's Rev C: a 1.5 m self-righting boat driven by a rigid wing sail, with two rudders. Prices are from their published build plan; ESTIMATE marks our guesses.",
-  revb:
-    "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder, and an 8.2 kg keel bulb. Prices are from their published build plan; ESTIMATE marks our guesses.",
+  kayak: "Build your own version of our kayak. Swap a part and watch the boat and its odds of finishing change.",
+  revc: "Our model of the Randolph team's Rev C5: a 1.5 m self-righting boat with a rigid wing sail and two rudders. Swap a part and watch its odds change.",
+  revb: "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder and an 8.2 kg keel.",
+};
+/** Behind the intro's "i" (Leo): where the parts come from. No prices (John: no money in the game). */
+const INTRO_NOTE: Record<BaseKey, string> = {
+  kayak: "The parts are real ones you can buy. A ~ before a number means it's our estimate: nobody has weighed or measured it yet.",
+  revc: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
+  revb: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
 };
 /** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
 function useBase(hash: string): void {
@@ -416,14 +701,20 @@ function useBase(hash: string): void {
   if (!c) return;
   cat = c;
   design = decodeDesign(c, hash);
+  design.picks = livePicks(c.slots, design.picks); // hidden parts sail like the planned one
   status.base = base;
-  $("intro").textContent = INTRO[base];
+  const intro = $("intro");
+  intro.textContent = `${INTRO[base]} `;
+  const i = Object.assign(document.createElement("span"), { className: "info", textContent: "i", tabIndex: 0, title: INTRO_NOTE[base] });
+  i.setAttribute("role", "note");
+  i.setAttribute("aria-label", INTRO_NOTE[base]);
+  intro.append(i);
   const credit = $("credit");
   credit.replaceChildren();
   if (c.credit) {
     credit.append(`${c.credit.text} `, Object.assign(document.createElement("a"), { href: c.credit.url, target: "_blank", rel: "noopener", textContent: "Their repository" }));
   }
-  $("reset").textContent = base === "kayak" ? "Back to the planned build" : "Back to as built";
+  $("reset").textContent = base === "kayak" ? "Start again from our kayak" : `Start again from ${SHORT[base]}`;
   // The Randolph boat has no "see inside" yet (our model has no cut-away).
   const inside = document.querySelector<HTMLButtonElement>('#views button[data-view="inside"]');
   if (inside) inside.hidden = base !== "kayak";
@@ -491,7 +782,7 @@ $("launch").addEventListener("click", async () => {
     draw();
   };
   const tick = setInterval(draw, 1000);
-  say("Launching...");
+  say("Testing...");
   launching = true;
   btn.disabled = true;
   let r: LaunchResult | null = null;
@@ -525,7 +816,7 @@ $("launch").addEventListener("click", async () => {
       planned = p ?? null;
     } else planned = null;
   } catch (e) {
-    say(`The launch failed: ${e instanceof Error ? e.message : e}`);
+    say(`The test failed: ${e instanceof Error ? e.message : e}`);
     status.launchError = String(e);
     return;
   } finally {
@@ -599,6 +890,10 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   box.append(t);
 }
 
+/** Said wherever a number comes from the simulator in this browser (#335). */
+const BROWSER_WEATHER_NOTE = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays and leaderboard.";
+const SIMPLIFIED_BACKEND = "simulator in the browser";
+
 function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | null = null): void {
   box.replaceChildren();
   if (!r) {
@@ -617,12 +912,18 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
     const big = Object.assign(document.createElement("div"), { className: "odds", textContent: `${Math.round(o.odds * 100)}% finish` });
     const range = Object.assign(document.createElement("div"), {
       className: "muted",
-      textContent: `${o.finished} of ${o.voyages} simulated voyages (likely range ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%)` +
+      textContent: `${o.finished} of ${o.voyages} launches made it, likely range ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%` +
         (o.median_days ? `, typically ${Math.round(o.median_days)} days` : ""),
     });
     box.append(big, range);
   }
   box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: r.note }));
+  if (r.detail) {
+    const d = document.createElement("details");
+    d.className = "muted result-detail";
+    d.append(Object.assign(document.createElement("summary"), { textContent: r.detail.summary }), Object.assign(document.createElement("p"), { textContent: r.detail.text }));
+    box.append(d);
+  }
   if (r.credits) {
     const p = Object.assign(document.createElement("p"), { className: "muted credits", textContent: `${r.credits.text} ` });
     const a = Object.assign(document.createElement("a"), { href: r.credits.url, target: "_blank", rel: "noopener", textContent: "Sources" });
@@ -647,6 +948,9 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
       ul.append(li);
     }
     box.append(ul);
+    // #335, beside the day counts it explains: the browser sails on a lighter weather
+    // file than the full runs behind the voyage replays and the leaderboard.
+    if (status.backend === SIMPLIFIED_BACKEND) box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: BROWSER_WEATHER_NOTE }));
   }
   if (r.fingerprints?.length) {
     // Ravi's gate: these must match reference.json exactly (python -m boatsim.sandbox compare ... --exact).
@@ -707,6 +1011,7 @@ function drawLabels(): void {
 build();
 loadDetailedModels().then((ok) => {
   if (ok) build();
+  status.models = ok ? "detailed" : "simple";
 });
 Promise.all([
   fetch("./parts-catalog.json").then((r) => {
@@ -720,10 +1025,10 @@ Promise.all([
 ])
   .then(([catalog, sim]) => {
     const c = withSim(catalog, sim);
-    catalogs.set("kayak", c);
+    catalogs.set("kayak", tidyCatalog(c));
     for (const k of ["revc", "revb"] as const) {
       const rc = randolphCatalog(k, sim, c);
-      if (rc) catalogs.set(k, rc);
+      if (rc) catalogs.set(k, tidyCatalog(rc));
     }
     // Only offer the boats the slot table has.
     document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => (b.hidden = !catalogs.has(b.dataset.base as BaseKey)));
@@ -780,7 +1085,7 @@ renderer.setAnimationLoop(() => {
       model.root.updateMatrixWorld();
       bowW.set(contact.bow[0], KAYAK.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
-      contact.update(comps, t, place, hsOf(comps), { speed: 0, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.ambient });
+      contact.update(comps, t, place, hsOf(comps), { speed: 0, bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t), light: atmos.foamLight });
     }
   }
   controls.update();

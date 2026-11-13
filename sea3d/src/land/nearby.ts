@@ -8,7 +8,9 @@ import * as THREE from "three";
 import type { Quality } from "../boats/parts";
 import { reflectable } from "../mirror";
 import { Island, type LandGrid } from "./island";
+import { Landmarks } from "./landmarks";
 import { PLACES, type Place } from "./place";
+import { CoastSquares, SQUARE_CREDIT } from "./squares";
 import { metresPerDegree } from "./shader";
 import { Town } from "./town";
 import { Trees } from "./trees";
@@ -93,10 +95,16 @@ interface Loaded {
 }
 
 export class NearbyLand {
-  /** Moved each frame so the land stays put as the boat sails. */
+  /** Everything this shows (added to the scene once). */
   readonly root = new THREE.Group();
+  /** The place's land, moved each frame so it stays put as the boat sails. */
+  private readonly placeRoot = new THREE.Group();
   /** What's loaded (for tests and the page): the place's key, its distance (km), the town and trees. */
-  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0 };
+  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0 };
+  /** The Bay's coast squares (squares.ts), around and between the places. */
+  private squares: CoastSquares | null = null;
+  /** Lighthouses and the like at their true spots (landmarks.ts). */
+  private readonly landmarks = new Landmarks();
   private tiles: Tile[] = [];
   private now: Loaded | null = null;
   private loading = false;
@@ -107,6 +115,7 @@ export class NearbyLand {
     private readonly base: string,
   ) {
     this.root.name = "nearby-land";
+    this.root.add(this.placeRoot, this.landmarks.root);
   }
 
   /** Learn where the land files reach (their small meta files); none published means no land. */
@@ -125,17 +134,25 @@ export class NearbyLand {
       }),
     );
     n.tiles = found.filter((t): t is Tile => t !== null);
+    n.squares = await CoastSquares.create(quality, base);
+    n.root.add(n.squares.root);
     return n;
   }
 
   /** How many places' land this copy of the site has. */
   get known(): number {
-    return this.tiles.length;
+    return this.tiles.length + (this.squares?.known ? 1 : 0);
   }
 
   /** True when land is in the scene (the view should reach out to LAND_HORIZON). */
   get active(): boolean {
-    return this.now !== null;
+    return this.now !== null || (this.squares?.count ?? 0) > 0;
+  }
+
+  /** The credit line for what's in view ("" with nothing). */
+  get credit(): string {
+    const parts = [this.now ? this.now.tile.place.credit : "", this.shown.squares ? SQUARE_CREDIT : ""];
+    return parts.filter(Boolean).join(" · ");
   }
 
   /**
@@ -152,11 +169,18 @@ export class NearbyLand {
       if (km > DROP_KM || (near && near.tile !== cur.tile && near.km < LOAD_KM && near.km < km)) this.drop();
     }
     if (!this.now && !this.loading && near && near.km < LOAD_KM) void this.load(near.tile);
+    this.landmarks.update(lat, lon, t, a.sunEl);
+    this.shown.landmarks = this.landmarks.count;
     const l = this.now;
+    // The squares wait while a place loads: they leave a hole for its finer land, so they'd only be laid out twice.
+    if (this.squares && !this.loading) {
+      this.squares.update(lat, lon, l ? l.tile : null, t, a);
+      this.shown.squares = this.squares.count;
+    }
     if (!l) return;
     const { place } = l.tile;
     const o = placeOffset(place, lat, lon, (l.tile.lat0 + l.tile.lat1) / 2);
-    this.root.position.set(o.x, 0, o.z);
+    this.placeRoot.position.set(o.x, 0, o.z);
     if (l.detail === "no" && Math.hypot(o.x, o.z) < DETAIL_KM * 1000) void this.loadDetail(l);
     l.island.update(t, a.haze, a.light, a.hs, a.storm);
     l.town?.update(t, a.sunEl, a.hs, a.wu, a.wv);
@@ -173,7 +197,7 @@ export class NearbyLand {
       this.tiles = this.tiles.filter((t) => t !== tile);
       return;
     }
-    this.root.add(island.group);
+    this.placeRoot.add(island.group);
     const ground = island.group.getObjectByName("island");
     if (ground) reflectable(ground);
     this.now = { tile, island, town: null, trees: null, detail: "no" };
@@ -194,13 +218,13 @@ export class NearbyLand {
     }
     if (town) {
       l.town = town;
-      this.root.add(town.group);
+      this.placeRoot.add(town.group);
       town.mirrored();
       this.shown.buildings = town.shown.buildings;
     }
     if (trees) {
       l.trees = trees;
-      this.root.add(trees.group);
+      this.placeRoot.add(trees.group);
       reflectable(trees.group);
       this.shown.trees = trees.count;
     }
@@ -211,15 +235,17 @@ export class NearbyLand {
     if (!l) return;
     for (const g of [l.island.group, l.town?.group, l.trees?.group]) {
       if (!g) continue;
-      this.root.remove(g);
+      this.placeRoot.remove(g);
       release(g);
     }
     this.now = null;
-    Object.assign(this.shown, { place: "", km: Infinity, buildings: 0, trees: 0 });
+    Object.assign(this.shown, { place: "", km: Infinity, buildings: 0, trees: 0 });  // squares and landmarks: kept, they're counted each frame
   }
 
   dispose(): void {
     this.gone = true;
     this.drop();
+    this.squares?.dispose();
+    this.landmarks.dispose();
   }
 }

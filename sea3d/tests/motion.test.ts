@@ -90,26 +90,26 @@ test("Rev B uses the Randolph team's own GZ curve and inertias (#50)", () => {
   assert.equal(RANDOLPH_REVB.pitchInertia, 4.117);
 });
 
-test("Rev C uses the Randolph team's own GZ curve, and its masses add up to 25.2 kg (#179)", () => {
-  // spot values from their docs/data/revC_gz_curve.csv
-  for (const [a, g] of [[25, 0.0798], [90, 0.1791], [105, 0.3782], [150, 0.171]]) {
+test("Rev C uses the Randolph team's own C5 GZ curve, and its masses add up to 26.9 kg (#179)", () => {
+  // spot values from their docs/data/revC_gz_curve.csv (Rev C5: the shorter wing lowers the weight)
+  for (const [a, g] of [[25, 0.0803], [90, 0.1781], [105, 0.3717], [150, 0.1723]]) {
     assert.ok(Math.abs(gz(RANDOLPH_REVC, a * D2R) - g) < 1e-9, `GZ at ${a} deg`);
   }
   assert.ok(Math.abs(gmOf(RANDOLPH_REVC) - REVC_GM) < 0.002, `GM ${gmOf(RANDOLPH_REVC)}`);
-  // their heel-limit moment in randolph_rev_c.yaml: 25.2 kg x g x GZ(25 deg) = 19.7 N m
-  assert.ok(Math.abs(25.2 * 9.81 * gz(RANDOLPH_REVC, 25 * D2R) - 19.7) < 0.05);
+  // their heel-limit moment in randolph_rev_c.yaml (Rev C5): 26.9 kg x g x GZ(25 deg) = 21.2 N m
+  assert.ok(Math.abs(26.9 * 9.81 * gz(RANDOLPH_REVC, 25 * D2R) - 21.2) < 0.1);
   const mp = massProperties(REVC_MASS_ITEMS);
   assert.ok(Math.abs(mp.mass - RANDOLPH_REVC.mass) < 0.1, `mass ${mp.mass}`);
   // heavier bulb and more mass aloft: a bit more inertia than Rev B, and a
-  // slightly lower GM (0.187 vs 0.201 m), so it rolls a little slower
+  // slightly lower GM (0.188 vs 0.201 m), so it rolls a little slower
   assert.ok(RANDOLPH_REVC.rollInertia > RANDOLPH_REVB.rollInertia && RANDOLPH_REVC.rollInertia < 3.5);
   assert.ok(derive(RANDOLPH_REVC).periodRoll > derive(RANDOLPH_REVB).periodRoll);
-  // their measured inertias and CG (revC_geometry.json); our point masses agree to 3 %
-  assert.equal(RANDOLPH_REVC.rollInertia, 2.9);
-  assert.equal(RANDOLPH_REVC.pitchInertia, 5.0);
-  assert.ok(Math.abs(RANDOLPH_REVC.cgBelowWaterline - 0.132) < 1e-9);
+  // their inertias and CG (revC_geometry.json, C3); our point masses agree to 3 %
+  assert.equal(RANDOLPH_REVC.rollInertia, 3.1);
+  assert.equal(RANDOLPH_REVC.pitchInertia, 5.256);
+  assert.ok(Math.abs(RANDOLPH_REVC.cgBelowWaterline - 0.13) < 1e-9);
   assert.ok(Math.abs(REVC_POINT_MASS.cgX / RANDOLPH_REVC.cgX - 1) < 0.03);
-  assert.ok(Math.abs(REVC_POINT_MASS.cg - (0.098 - 0.132)) < 0.01);
+  assert.ok(Math.abs(REVC_POINT_MASS.cg - (0.102 - 0.13)) < 0.01);
 });
 
 test("both curves are positive all the way to 180 deg (no stable upside-down position)", () => {
