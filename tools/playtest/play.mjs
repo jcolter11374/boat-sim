@@ -1852,6 +1852,55 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #465 (Elena): with a crossing saved, the Set sail card at 390x844 and 1280x720, before and while
+  // "End your voyage…?" is up: is the boat on the sea and whole, above the card (phone) or to its right?
+  "look-continue": {
+    manual: true,
+    path: "helm.html",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      if (!(await page.locator("#ss-ask").count())) throw new SkipCheck("this build has no ask before a new crossing (#465 not deployed)");
+      // A saved crossing: sail one for a while, then take its save.
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      await page.waitForFunction(() => !!localStorage.getItem("boatsim.voyage.v1"), null, { timeout: 2 * MIN }).catch(() => {});
+      const raw = await page.evaluate(() => localStorage.getItem("boatsim.voyage.v1"));
+      must(raw, "no voyage was saved after setting sail");
+      const browser = page.context().browser();
+      const shots = [];
+      const out = [];
+      for (const s of [{ name: "1280x720", viewport: { width: 1280, height: 720 } }, { name: "phone-390x844", viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }]) {
+        const { name, ...opts } = s;
+        const ctx = await browser.newContext({ ...opts, serviceWorkers: "block" });
+        await ctx.addInitScript((v) => { try { if (!localStorage.getItem("boatsim.voyage.v1")) localStorage.setItem("boatsim.voyage.v1", v); } catch {} }, raw);
+        const p = await ctx.newPage();
+        const shot = async (tag) => {
+          const path = `look-continue-${name}-${tag}.jpg`;
+          if (!(await jpeg(p, path))) return;
+          const b64 = readFileSync(path).toString("base64");
+          console.log(`LOOK-BEGIN ${path}`);
+          for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+          console.log(`LOOK-END ${path}`);
+          shots.push(`${name}-${tag}`);
+        };
+        await p.goto(SITE + "helm.html", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+        await p.waitForLoadState("networkidle").catch(() => {});
+        await p.waitForTimeout(6000);
+        const offer = await p.evaluate(() => { const e = document.getElementById("ss-continue"); return { shown: !!e && !e.hidden && e.offsetParent !== null, words: e?.innerText.trim().replace(/\s+/g, " ") ?? "" }; });
+        await shot("1-card");
+        await p.evaluate(() => document.getElementById("go").click());
+        const asked = await p.waitForFunction(() => { const e = document.getElementById("ss-ask"); return e && !e.hidden && e.offsetParent !== null; }, null, { timeout: 20_000 }).then(() => true, () => false);
+        await p.waitForTimeout(3000);
+        const q = await p.evaluate(() => ({ q: document.getElementById("ss-ask-q")?.textContent.trim() ?? "", btns: [...document.querySelectorAll("#ss-ask button")].map((b) => b.textContent.trim()), sailing: !!window.__helm.ready }));
+        await shot("2-ask");
+        out.push(`${name}: offer ${offer.shown ? `"${offer.words.slice(0, 80)}"` : "NOT shown"}; Set sail ${asked ? `asked "${q.q}" [${q.btns.join(" / ")}]` : "did NOT ask"}${q.sailing ? "; a NEW CROSSING STARTED" : ""}`);
+        await ctx.close().catch(() => {});
+      }
+      return `${out.join("; ")}; frames ${shots.join(", ")}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
