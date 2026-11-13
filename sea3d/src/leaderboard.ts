@@ -297,7 +297,7 @@ wireStats();
 
 declare global {
   interface Window {
-    __leaderboard?: { ready: boolean; rows: number; error: string | null; sample: boolean };
+    __leaderboard?: { ready: boolean; rows: number; error: string | null; sample: boolean; sea?: { frames: number; quality: string } | null };
   }
 }
 
@@ -319,4 +319,18 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+/** The sea and sky behind the page, once the board is up. ?sea=0 keeps the plain page; so does a computer that can't draw it. */
+async function sea(): Promise<void> {
+  const host = document.getElementById("sea");
+  if (!host || new URLSearchParams(location.search).get("sea") === "0") return;
+  try {
+    const { mountBackdrop } = await import("./backdrop");
+    const b = mountBackdrop(host);
+    document.body.classList.add("sea");
+    if (window.__leaderboard) window.__leaderboard.sea = b;
+  } catch {
+    if (window.__leaderboard) window.__leaderboard.sea = null; // no 3D here: the dark page stays
+  }
+}
+
+void main().then(sea);
