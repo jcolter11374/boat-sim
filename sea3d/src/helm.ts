@@ -1154,7 +1154,8 @@ function showReadings(raw: Status): void {
     windTo = (Math.atan2(w.wind_u, w.wind_v) * 180) / Math.PI;
     const from = compassWord(windTo + 180);
     const cur = Math.hypot(w.current_u, w.current_v) * KN;
-    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
+    // No current to speak of has no direction: leave it out rather than say "0.0 kn southward".
+    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m${cur < 0.05 ? "" : ` · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`}`;
   }
   compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
   // The race with the ghost; in base mode, also what base knows (the picture's numbers would be the truth).
