@@ -7,10 +7,12 @@ import type { Quality } from "./boats/parts";
 
 export type Look = Quality | "ultra";
 
-/** Starting look: ?quality=low|high|ultra, else the select's own default. */
-export function startLook(select: HTMLSelectElement): Look {
+/** Starting look: ?quality=low|high|ultra, else Low without a graphics card (`software`,
+ *  the helm's and the Boatyard's rule), else the select's own default. */
+export function startLook(select: HTMLSelectElement, software = false): Look {
   const q = new URLSearchParams(location.search).get("quality");
   if (q === "low" || q === "high" || q === "ultra") select.value = q;
+  else if (software) select.value = "low";
   return (select.value as Look) || "high";
 }
 

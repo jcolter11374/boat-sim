@@ -87,8 +87,10 @@ atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
 const clock = new THREE.Clock();
-// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
-let look: Look = startLook(qualitySelect);
+// ?quality=low|high|ultra picks the starting look; without a graphics card it starts Low, as
+// the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
+// the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
+let look: Look = startLook(qualitySelect, atmos.software);
 // The title screen's Take the helm: fetch its simulator at idle so Set sail is quick (F2).
 prefetchHelm(new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href);
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
