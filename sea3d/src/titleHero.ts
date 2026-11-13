@@ -44,5 +44,8 @@ export function cardRightOf(el: Element | null, width: number): number {
 export function cardBelowOf(el: Element | null, width: number, height: number): boolean {
   const r = el?.getBoundingClientRect();
   if (!r || !r.width || !width || !height) return false;
-  return r.width > 0.7 * width && r.top > 0.4 * height;
+  // By where the card's middle is, not its top: on a short phone (375x667, 360x640) the card
+  // is taller than 60% of the screen, and a rule on its top edge took it for the desktop
+  // layout, so the boat was framed behind the menu.
+  return r.width > 0.7 * width && (r.top + r.bottom) / 2 > 0.5 * height;
 }
