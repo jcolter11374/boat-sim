@@ -30,6 +30,7 @@ import { setBacklight } from "./boats/nightlook";
 import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
+import { TitleShore } from "./titleShore";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 
@@ -233,6 +234,14 @@ clouds.group.visible = false;
 scene.add(clouds.group);
 let heroWas = false;
 let heroL = heroLightFor("kayak");
+// The shore on the title's horizon (titleShore.ts): asked for once the title is drawing, never before.
+let shore: TitleShore | null = null;
+let shoreAsked = false;
+const osmCredit = document.getElementById("osm");
+function shoreShown(on: boolean): void {
+  if (shore) shore.mesh.visible = on;
+  if (osmCredit) osmCredit.hidden = !(on && shore);
+}
 /** The title's light for the boat it shows now (again whenever the boat changes). */
 function heroLight(): void {
   if (!heroOn()) return;
@@ -259,6 +268,7 @@ function heroMode(): void {
   }
   clouds.group.visible = on;
   controls.enabled = !on;
+  shoreShown(on);
   if (on) {
     atmos.cloud = HERO_CLOUD;
     atmos.setGlow(HERO_GLOW.scale, HERO_GLOW.radius); // small and tight: no veil over the boat
@@ -504,6 +514,15 @@ renderer.setAnimationLoop(() => {
     if (camera.fov !== shot.fov) {
       camera.fov = shot.fov;
       camera.updateProjectionMatrix();
+    }
+    if (!shoreAsked && status.frames > 3) {
+      shoreAsked = true;
+      void TitleShore.load(HERO_SUN.az, { sunDir: atmos.sunDir, sun: atmos.sun.color, haze: atmos.fog.color }).then((s) => {
+        if (!s) return;
+        shore = s;
+        scene.add(s.mesh);
+        shoreShown(heroOn());
+      });
     }
     const under = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < under) camera.position.y = under;
