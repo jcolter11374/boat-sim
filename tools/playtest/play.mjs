@@ -1923,6 +1923,40 @@ const CHECKS = {
       return `${out.join("; ")}; frames ${shots.join(", ")}`;
     },
   },
+  // Standing check (Maya, after #453 hid it everywhere; fix #466): while sailing, the helm's corner
+  // chart shows at 1280 and 1920; at 1000 and 390 it folds to the map button.
+  "helm-chart": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start");
+      const seen = (id) => page.evaluate((id) => { const e = document.getElementById(id); if (!e) return false; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 8 && r.height > 8 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight; }, id);
+      const out = [];
+      const bad = [];
+      for (const [w, h, want] of [[1280, 720, "chart"], [1920, 1080, "chart"], [1000, 700, "button"], [390, 844, "button"]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(1500);
+        const chart = await seen("chart");
+        const btn = await seen("mapbtn");
+        const got = chart ? "chart" : btn ? "button" : "neither";
+        out.push(`${w}x${h}: ${got}${chart && btn ? " and the map button too" : ""}`);
+        if (got !== want) bad.push(`${w}x${h} shows ${got === "neither" ? "neither the chart nor the map button" : `the ${got}`}, should show the ${want}`);
+        if (w === 1280) {
+          const path = `look-helm-chart-${w}.jpg`;
+          if (BROWSER === "chromium" && (await jpeg(page, path))) {
+            const b64 = readFileSync(path).toString("base64");
+            console.log(`LOOK-BEGIN ${path}`);
+            for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+            console.log(`LOOK-END ${path}`);
+          }
+        }
+      }
+      must(!bad.length, `the corner chart: ${bad.join("; ")} (${out.join("; ")})`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
