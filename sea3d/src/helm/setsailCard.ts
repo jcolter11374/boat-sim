@@ -216,8 +216,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("go").setAttribute("aria-disabled", String(auto && !voyage && !race));
     // With the autopilot the days are all one year's: the year is said once, in the label, not on every pill (Elena).
     $("ss-when").querySelector(".ss-l")!.textContent = auto && days.length ? `${WHO_WORDS.dayLabel}, ${days[0].year}` : WHO_WORDS.dayLabel;
-    // Watching her sail herself is not setting sail: the button says what happens (Elena). A race keeps "Set sail".
-    $("go").textContent = auto && !racing ? WHO_WORDS.autopilot.go : WHO_WORDS.go;
+    // Watching her sail herself is not setting sail, and nor is a race: the button says what happens (Elena).
+    $("go").textContent = racing ? RIVAL_WORDS.boat.go : auto ? WHO_WORDS.autopilot.go : WHO_WORDS.go;
     const lv = launch.value;
     const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : lv;
     // "Pick a day…" opens the other launch days as pills of their own, like the challenges' "More…"

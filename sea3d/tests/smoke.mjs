@@ -917,8 +917,9 @@ try {
       rival: document.querySelector('#ss-rival-opts .ss-pill[aria-pressed="true"]')?.textContent,
       against: document.getElementById("ss-against-name").textContent,
       after: document.getElementById("ss-after").textContent,
+      go: document.getElementById("go").textContent,
     }));
-    if (rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
+    if (rr.go !== "Start the race" || rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
     await page.click("#go");
     await page.waitForURL(/race=kayak,revc&launch=4/, { timeout: 15000 }).catch(() => fail(`Set sail with another boat opened ${page.url()}`));
     log.push("Race against: Set sail with another boat opens the race on the sailing screen");

@@ -75,7 +75,7 @@ export function watchLink(search: string, file: string): string {
 export const RIVAL_WORDS = {
   label: "Race against",
   nobody: { pill: "Nobody", line: "Just her and the sea." },
-  boat: { pill: "Another boat", line: "Same sea, same day. First to the finish wins.", after: "You can change speed and pause; both boats steer themselves." },
+  boat: { pill: "Another boat", line: "Same sea, same day. First to the finish wins.", after: "You can change speed and pause; both boats steer themselves.", go: "Start the race" },
   /** With you steering the row isn't a choice: it says who the rival is. */
   you: "The ghost, the autopilot in a boat just like yours.",
   against: "Against:",
