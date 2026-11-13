@@ -174,13 +174,15 @@ interface Piece {
 /** Sheets, reefs and steers a stock boat's model by name. */
 export class StockRig {
   /** What the rig is showing (for the smoke test). */
-  readonly shown = { boom: 0, main: 1, jib: 1, plan: "" };
+  readonly shown = { boom: 0, main: 1, jib: 1, plan: "", tack: 0 };
   private readonly main: THREE.Object3D | null;
   private readonly jib: THREE.Object3D | null;
   private readonly mains: Piece[] = [];
   private readonly jibs: Piece[] = [];
   private readonly rudders: THREE.Object3D[] = [];
   private boom = 0;
+  /** The side the sails belly to: +1 wind from port (boom out to starboard), -1 the other; 0 not set yet. */
+  private tack = 0;
   private t = 0;
 
   constructor(
@@ -232,9 +234,18 @@ export class StockRig {
     // starboard) puts the boom out to starboard: + about the builder y axis.
     const awaDeg = THREE.MathUtils.radToDeg(awa);
     let want = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(awaDeg / 2 - 10, 4, 80));
-    if (awaDeg < 28 && size.main > 0) want = THREE.MathUtils.degToRad(3) * Math.sin(this.t * 7); // head to wind: flogging
+    const flogging = awaDeg < 28;
+    if (flogging && size.main > 0) want = THREE.MathUtils.degToRad(3) * Math.sin(this.t * 7); // head to wind: flogging
+    // Which side the sails belly out to. It changes only once the wind has filled them on the
+    // other side, never while she is head to wind. It used to follow the boom's sign, and the
+    // flogging boom wobbles across the middle every half second: the bellied sails flipped
+    // from one side of the mast to the other with it, so the genoa hid the mast, then didn't,
+    // and the mast broke up and came and went (John, 13 Nov: the Pearson on the title, which
+    // lies head to a light breeze, idleGear). Each boat keeps one tack there now.
     const side = s.flow.z >= 0 ? 1 : -1;
-    want *= side;
+    if (this.tack === 0 || (!flogging && speed >= 0.3 && side !== this.tack)) this.tack = side;
+    want *= this.tack;
+    this.shown.tack = this.tack;
     const d = want - this.boom;
     // A gybe (the boom crossing) is quick; trimming is slow.
     this.boom += d * Math.min(1, dt * (Math.abs(d) > 0.6 ? 2.5 : 0.8));
@@ -242,11 +253,11 @@ export class StockRig {
     if (this.main) {
       this.main.rotation.y = this.boom;
       // The sails are built bellied to port (builder +z); mirror them on the other tack.
-      this.main.scale.z = this.boom > 0 ? -1 : 1;
+      this.main.scale.z = this.tack > 0 ? -1 : 1;
     }
     if (this.jib) {
       this.jib.rotation.y = this.boom * 0.7;
-      this.jib.scale.z = this.boom > 0 ? -1 : 1;
+      this.jib.scale.z = this.tack > 0 ? -1 : 1;
     }
     for (const r of this.rudders) r.rotation.y = s.rudder;
   }
