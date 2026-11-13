@@ -10,7 +10,7 @@ import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
-import { AUTO_DAYS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
+import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -230,30 +230,19 @@ export function mountSetSailCard(hooks: CardHooks): void {
       .map((o) => ({ key: o.value, label: (o.textContent ?? "").replace(/:.*$/, "").replace(/ 2020$/, "").replace(/(\d+) (\w{3})\w*/, "$1 $2") }));
     const showDays = allDays || (named !== "calm" && named !== "rough");
     if (auto) {
-      // The same control as with you steering (Elena): Calm, Rough, then "Pick a day…" for the rest.
-      // Her calm day is the day Watch a voyage has always opened on; her rough day is the same 1 April.
-      const has = (d: string) => days.some((x) => x.day === d);
-      const at = on?.day ?? "";
-      const nameOf = (d: string) => (d === AUTO_DAYS.calm ? "calm" : d === AUTO_DAYS.rough ? "rough" : d);
-      const rest = days.filter((d) => d.day !== AUTO_DAYS.calm && d.day !== AUTO_DAYS.rough).map((d) => ({ key: d.day, label: d.label }));
-      const open = allDays || (at !== AUTO_DAYS.calm && at !== AUTO_DAYS.rough) || (!has(AUTO_DAYS.calm) && !has(AUTO_DAYS.rough));
+      // Named pills first, as with you steering, then her other days as plain dates (Elena): Usual (the day
+      // watching has always opened on), Calm, Rough, then the rest. Each named pill shows its date.
+      const kinds = (Object.keys(AUTO_DAYS) as (keyof typeof AUTO_DAYS)[]).filter((k) => days.some((x) => x.day === AUTO_DAYS[k]));
+      const isNamed = (d: string) => kinds.some((k) => AUTO_DAYS[k] === d);
       pills(
         $("ss-when-opts"),
-        days.length
-          ? [
-              ...(has(AUTO_DAYS.calm) ? [{ key: "calm", label: CARD_WORDS.when.calm[0], sub: dayLabel(AUTO_DAYS.calm) }] : []),
-              ...(has(AUTO_DAYS.rough) ? [{ key: "rough", label: CARD_WORDS.when.rough[0], sub: dayLabel(AUTO_DAYS.rough) }] : []),
-              ...(open ? rest : rest.length ? [{ key: "\u2026", label: "Pick a day\u2026" }] : []),
-            ]
-          : [],
-        nameOf(at),
+        [
+          ...kinds.map((k) => ({ key: AUTO_DAYS[k], label: AUTO_DAY_WORDS[k], sub: dayLabel(AUTO_DAYS[k]) })),
+          ...days.filter((d) => !isNamed(d.day)).map((d) => ({ key: d.day, label: d.label })),
+        ],
+        on?.day ?? "",
         (k) => {
-          if (k === "\u2026") {
-            allDays = true;
-            draw();
-            return;
-          }
-          day = k === "calm" ? AUTO_DAYS.calm : k === "rough" ? AUTO_DAYS.rough : k;
+          day = k;
           draw();
         },
       );

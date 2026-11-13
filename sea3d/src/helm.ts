@@ -47,6 +47,7 @@ import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/w
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
+import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
@@ -2926,7 +2927,7 @@ async function watchFinish(): Promise<void> {
   $("r-next").replaceChildren();
   hud.orders(false); // the compass drawer would sit half under the card
   // Save postcard as the old Watch a voyage ended: the picture on screen, the map and what happened.
-  openResults("watch", { sailHref: sailLink(location.search, r.start), day: r.start, raceId: "kayak", canLook: true }, nums);
+  openResults("watch", { sailHref: sailLink(location.search, r.start), day: r.start, raceId: "kayak", canLook: true }, nums, { lines: watchHighlights(r) });
 }
 
 /** The card's big numbers ("58 days at sea"), at most three. */
@@ -2935,7 +2936,7 @@ type Big = { value: string; unit: string; label: string };
  * One function opens the results card for every mode (M3): the numbers, the parts a mode has something to
  * put in (the rest left out), the ways on, then the card itself. The headline and story are set before.
  */
-function openResults(mode: EndMode, ctx: Omit<WayCtx, "search">, nums: Big[] | null, opt: { calls?: boolean; settle?: boolean } = {}): void {
+function openResults(mode: EndMode, ctx: Omit<WayCtx, "search">, nums: Big[] | null, opt: { calls?: boolean; lines?: string[]; settle?: boolean } = {}): void {
   $("result").querySelector<HTMLElement>(".rc-mid")!.hidden = !nums; // practice has no ocean chart
   $("r-nums").replaceChildren(
     ...(nums ?? []).slice(0, 3).map((n) => {
@@ -2954,7 +2955,11 @@ function openResults(mode: EndMode, ctx: Omit<WayCtx, "search">, nums: Big[] | n
   $("r-info").hidden = !own;
   if (!own) $("r-caveat").hidden = true;
   if (!own) $("r-stars").hidden = true;
-  $("r-calls").hidden = !opt.calls;
+  // The highlights: your calls on a crossing you steered; what happened on a watched voyage or a race (E4).
+  const lines = opt.calls ? null : (opt.lines ?? []).slice(0, 3);
+  $("r-calls").querySelector(".rc-h")!.textContent = lines ? HIGHLIGHT_WORDS.title : "Your calls";
+  if (lines) $("r-calllist").replaceChildren(...lines.map((t) => Object.assign(document.createElement("li"), { textContent: t })));
+  $("r-calls").hidden = !opt.calls && !lines?.length;
   if (nums) drawResultMap();
   showWays(mode, ctx);
   document.body.classList.add("results");
@@ -3054,7 +3059,10 @@ async function raceFinish(): Promise<void> {
   const nums = c.race.boats.slice(0, more ? 1 : 2).map((x, k) => ({ value: x.days.toFixed(1), unit: "days", label: raceLabel(x, short(names[k])) }));
   $("r-next").replaceChildren();
   // "Follow her to the end" when she is still sailing; "Change the boats" goes back to the Set sail card with the autopilot and this other boat picked.
-  openResults("race", { rival: (params.get("race") ?? "").split(",")[1] ?? "", followName: more ? short(names[1]) : undefined }, nums);
+  // What happened (E4): the lead, what broke, the knockdowns or the roughest sea, from both boats' own logs.
+  const [ra, rb] = followed ? [game.ghost, game.boat] : [game.boat, game.ghost]; // the race's own order (A, B)
+  const lines = ra && rb ? raceHighlights(ra, rb, [short(names[0]), short(names[1])], ra.course.target as [number, number]) : [];
+  openResults("race", { rival: (params.get("race") ?? "").split(",")[1] ?? "", followName: more ? short(names[1]) : undefined }, nums, { lines });
 }
 
 async function finish(): Promise<void> {
@@ -4218,9 +4226,9 @@ function frameBoat(dt: number): void {
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
     // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
     const band = phoneBand();
-    // The results card on a phone is tall and leaves a short band: step the camera back until she fits it
-    // (her hull, or a yacht's mast, at most about 60% of the band's height and 80% of the width).
-    if (phoneResults && phone && smoothYaw !== null) {
+    // A card on a phone (Set sail, or the results) is tall and leaves a short band: step the camera back until
+    // she fits it (her hull, or a yacht's mast, at most about 60% of the band's height and 80% of the width).
+    if (phone) {
       const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const tall = spec.length > 5 ? spec.length * 1.3 : spec.length * 0.45;
       const need = Math.max((tall * window.innerHeight) / (0.6 * Math.max(band.bottom - band.top, 60)), spec.length / 0.8 / camera.aspect) / (2 * tan);
