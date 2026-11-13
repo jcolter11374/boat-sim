@@ -3031,6 +3031,8 @@ const CHECKS = {
     run: async (page) => {
       const out = [];
       const verdict = {};
+      const ONLY = globalThis.__M3_ONLY ?? (process.env.M3_ONLY ?? "").split(/\s+/).filter(Boolean);
+      const want = (m) => !ONLY.length || ONLY.includes(m);
       const SIZES = [[1280, 720], [390, 844], [360, 740]];
       const EXPECT = {
         practice: [/^(Try again|Race your best run)$/, /^Another course$/],
@@ -3094,9 +3096,14 @@ const CHECKS = {
           await page.evaluate(() => { if (window.__helm?.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
           await page.waitForTimeout(2500);
         }
-        verdict[mode] = `FAIL (no results card after ${limitMin} min at 4 days a second)`;
+        const st = await page.evaluate(() => { const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; const h = window.__helm ?? {}; return { url: location.search, ready: h.ready, busy: h.busy, error: h.error, hour: h.hour, day: h.status?.day, over: h.status?.over, clock: h.clock, view: h.view, frames: h.frames, rate: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, strip: document.getElementById("day")?.textContent.trim(), shown: [...document.querySelectorAll(".overlay, [role=dialog], #decide, #start, #arrive, #nl, #busy")].filter(vis).map((e) => e.id || e.className), msg: (document.getElementById("busytext") ?? document.getElementById("msg"))?.textContent?.trim() ?? null }; }).catch((e) => ({ err: String(e) }));
+        const path = `look-m3-${BROWSER}-${mode}-stuck.jpg`;
+        if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+        console.log(`STUCK ${BROWSER} ${mode}: ${JSON.stringify(st)}`);
+        verdict[mode] = `FAIL (no results card after ${limitMin} min at 4 days a second; state ${JSON.stringify(st)})`;
         return false;
       };
+      if (want("practice")) {
       // 1. Practice: the triangle, then hand the wheel back (Esc).
       await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
@@ -3112,14 +3119,20 @@ const CHECKS = {
       }
       if (handed) await judge("practice");
       else verdict.practice = "FAIL (no card after handing back)";
+      }
+      if (want("watch")) {
       // 2. A watched voyage to her end: our kayak launched 1 May 2020, lost on day 3.9 (a short one).
       await page.goto(SITE + "helm.html?watch=2020-05-01&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error), null, { timeout: 5 * MIN }).catch(() => {});
       if (await toEnd("watch", 10)) await judge("watch");
+      }
+      if (want("race")) {
       // 3. A race whose card comes early: our model of the Rev B (lost on day 13 of 1 Apr) against our kayak.
       await page.goto(SITE + "helm.html?race=revb,kayak&launch=0&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN }).catch(() => {});
       if (await toEnd("race", 12)) await judge("race");
+      }
+      if (want("challenge")) {
       // 4. A weather challenge (Sandy's shadow, nine days), then its row on the Weather challenges tab.
       await page.goto(SITE + "helm.html?quality=low&challenge=sandys-shadow", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
@@ -3137,6 +3150,7 @@ const CHECKS = {
         verdict.board = ok ? "PASS" : `FAIL (tab selected ${b.tab}; Sandy row ${JSON.stringify(row)})`;
         out.push(`board: from "${href}", Weather challenges tab ${b.tab === "true" ? "open" : "NOT open"}; Sandy's row ${JSON.stringify(row)}`);
       } else verdict.board = "not reached";
+      }
       const sum = Object.entries(verdict).map(([k, v]) => `${k} ${v}`).join(" | ");
       console.log(`M3 ${BROWSER}: ${sum} || ${out.join(" || ")}`);
       must(!/FAIL|not reached/.test(sum), `${sum} [[ ${out.join(" || ")} ]]`);
@@ -3207,6 +3221,12 @@ const CHECKS = {
       must(b.card && /start the race/i.test(b.go ?? ""), `Race it (${links[0].href}) opened ${b.url} with "${b.go}" (card ${b.card})`);
       return `#challenges opens the Weather challenges tab (${a.rows} rows); "${links[0].t}" ${links[0].href} opened the card on "${b.go}" against ${b.against}`;
     },
+  },
+  // m3-ends for the watched voyage and the race only (they time out on slow runners: frames and state when stuck).
+  "m3-watch-race": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => { globalThis.__M3_ONLY = ["watch", "race"]; try { return await CHECKS["m3-ends"].run(page); } finally { globalThis.__M3_ONLY = undefined; } },
   },
   "look-marks": {
     manual: true,
