@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { groupSummary, launchSetWords, launchSetYears, sharedKayakBadges, tierName, versusWords } from "../src/boardwords";
 
 test("launch sets in words", () => {
-  assert.equal(launchSetWords("2015-2019-AprJun-every7d-v1"), "April to June launches every 7 days, 2015 to 2019");
-  assert.equal(launchSetWords("2021-2021-AprJun-every7d-v1"), "April to June launches every 7 days, 2021");
+  assert.equal(launchSetWords("2015-2019-AprJun-every7d-v1"), "A launch day every 7 days, April to June, 2015 to 2019");
+  assert.equal(launchSetWords("2021-2021-AprJun-every7d-v1"), "A launch day every 7 days, April to June, 2021");
   assert.equal(launchSetWords("2020-AJ-v1"), "2020-AJ-v1"); // unknown shape: as it is
   assert.equal(launchSetYears("2021-2021-AprJun-every7d-v1"), "2021");
   assert.equal(launchSetYears("2020-2021-AprJun-every7d-v1"), "2020 to 2021");

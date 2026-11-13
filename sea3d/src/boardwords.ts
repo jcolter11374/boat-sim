@@ -8,12 +8,12 @@ const MONTHS: Record<string, string> = {
   Jul: "July", Aug: "August", Sep: "September", Oct: "October", Nov: "November", Dec: "December",
 };
 
-/** "2015-2019-AprJun-every7d-v1" -> "April to June launches every 7 days, 2015 to 2019". Unknown shapes come back as they are. */
+/** "2015-2019-AprJun-every7d-v1" -> "A launch day every 7 days, April to June, 2015 to 2019". Unknown shapes come back as they are. */
 export function launchSetWords(id: string): string {
   const m = /^(\d{4})-(\d{4})-([A-Z][a-z]{2})([A-Z][a-z]{2})-every(\d+)d-v\d+$/.exec(id);
   if (!m || !MONTHS[m[3]] || !MONTHS[m[4]]) return id;
   const years = m[1] === m[2] ? m[1] : `${m[1]} to ${m[2]}`;
-  return `${MONTHS[m[3]]} to ${MONTHS[m[4]]} launches every ${m[5]} days, ${years}`;
+  return `A launch day every ${m[5]} days, ${MONTHS[m[3]]} to ${MONTHS[m[4]]}, ${years}`;
 }
 
 /** The hidden check's year(s): "2021", or "2020 to 2021". */
