@@ -2694,6 +2694,7 @@ async function raceFinish(): Promise<void> {
   page.card = c;
   const names = page.race?.names ?? [c.race.boats[0].name, c.race.boats[1].name];
   const win = c.race.winner;
+  // The headline keeps the full names: a Randolph boat is always "(our model)" there (John, B2). The small labels under it are short.
   const short = (n: string) => n.replace(/\s*\(our model\)$/, "");
   const lost = (i: number) => OUTCOME[c.race.boats[i].outcome] ?? c.race.boats[i].outcome.replace(/_/g, " ");
   $("r-head").textContent =
@@ -2702,8 +2703,8 @@ async function raceFinish(): Promise<void> {
       : win === null
         ? "Neither boat finished."
         : c.race.margin_days !== null
-          ? `${short(names[win])} finished first, ${Math.abs(c.race.margin_days).toFixed(1)} days ahead.`
-          : `${short(names[win])} finished. ${short(names[1 - win])} ${lost(1 - win)}.`;
+          ? `${names[win]} finished first, ${Math.abs(c.race.margin_days).toFixed(1)} days ahead.`
+          : `${names[win]} finished. ${names[1 - win]} ${lost(1 - win)}.`;
   const launched = new Date(utc(c.race.launch)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
   $("r-story").textContent = `${names[0]} against ${names[1]}, launched ${launched} into the same weather with the same luck. One race is one roll of the dice.`;
   $("r-nums").replaceChildren(
