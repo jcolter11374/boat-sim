@@ -3197,8 +3197,10 @@ const CHECKS = {
         links = await page.evaluate(() => [...document.querySelectorAll("a")].filter((e) => e.offsetParent !== null && /race it/i.test(e.textContent)).map((e) => ({ t: e.textContent.trim(), href: e.getAttribute("href") })));
       }
       must(links.length, "no Race it link on either tab");
+      console.log(`BOARD ${BROWSER}: tab ${a.tab}, ${a.rows} rows; Race it links ${JSON.stringify(links)}`);
       await page.goto(new URL(links[0].href, SITE + "leaderboard.html").href, { waitUntil: "load", timeout: 2 * MIN });
-      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 3 * MIN });
+      const landed = await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 3 * MIN }).then(() => true, () => false);
+      if (!landed) throw new CheckFail(`Race it (${links[0].href}) went to ${page.url()}, which never started a helm screen; it shows "${await page.evaluate(() => document.body.innerText.slice(0, 200).replace(/\s+/g, " ")).catch(() => "?")}"`);
       await page.waitForFunction(() => /start the race/i.test(document.getElementById("go")?.textContent ?? ""), null, { timeout: 30_000 }).catch(() => {});
       const b = await page.evaluate(() => ({ url: location.search, go: document.getElementById("go")?.textContent.trim(), card: !document.getElementById("start")?.hidden, against: document.getElementById("ss-against-name")?.textContent.trim() ?? null }));
       if (BROWSER === "chromium") { const path = "look-board-raceit.jpg"; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } }
