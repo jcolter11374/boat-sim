@@ -1562,7 +1562,11 @@ const CHECKS = {
       const firstRate = (p) => p.evaluate(() => document.querySelector("#timebar .rate")?.textContent.trim() ?? "?");
       // Clicks go in through the page (el.click()): on the runner's software graphics Playwright's
       // own click waits for a steady frame and times out, while a player's click simply lands late.
-      const tap = (p, sel) => p.waitForFunction((s) => { const e = document.querySelector(s); if (!e || e.offsetParent === null) return false; e.click(); return true; }, sel, { timeout: 3 * MIN, polling: 250 });
+      // (Wait, then click in a second step: a click that leaves the page would otherwise be retried on the next page.)
+      const tap = async (p, sel) => {
+        await p.waitForFunction((s) => { const e = document.querySelector(s); return !!e && e.offsetParent !== null; }, sel, { timeout: 3 * MIN, polling: 250 });
+        await p.evaluate((s) => document.querySelector(s).click(), sel).catch(() => {});
+      };
       const KINDS = {
         crossing: async (p, mark) => {
           await tap(p, "#t-setsail");
