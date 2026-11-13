@@ -13,7 +13,10 @@ export type Who = "you" | "autopilot";
 export const WHO_WORDS = {
   label: "Who steers",
   you: { pill: "You", line: "You give the orders, and race the ghost to Portugal.", after: "You can change speed, pause, and take the wheel once you're at sea." },
-  autopilot: { pill: "The autopilot", line: "She sails herself across. You sit back and watch her go.", after: "You can change speed and pause; she steers herself." },
+  autopilot: { pill: "The autopilot", line: "She sails herself across. You sit back and watch her go.", after: "You can change speed and pause; she steers herself.", go: "Watch her go" },
+  /** The card's button, and its launch day label (with the autopilot the year follows: "Launch day, 2020"). */
+  go: "Set sail",
+  dayLabel: "Launch day",
   /** The boat on the card has no voyage to watch (a design of your own, say). */
   none: "She hasn't sailed on that day yet. Pick another day, or test her in the Boatyard.",
 } as const;
@@ -72,7 +75,7 @@ export function watchLink(search: string, file: string): string {
 export const RIVAL_WORDS = {
   label: "Race against",
   nobody: { pill: "Nobody", line: "Just her and the sea." },
-  boat: { pill: "Another boat", line: "Same sea, same launch day, each boat steered by its own autopilot. First to the finish wins.", after: "You can change speed and pause; both boats steer themselves." },
+  boat: { pill: "Another boat", line: "Same sea, same day. First to the finish wins.", after: "You can change speed and pause; both boats steer themselves.", go: "Start the race" },
   /** With you steering the row isn't a choice: it says who the rival is. */
   you: "The ghost, the autopilot in a boat just like yours.",
   against: "Against:",

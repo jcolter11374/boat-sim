@@ -901,9 +901,10 @@ try {
       day: document.querySelector('#ss-when-opts .ss-pill[aria-pressed="true"]')?.textContent,
       days: document.querySelectorAll("#ss-when-opts .ss-pill").length,
       go: document.getElementById("go").textContent,
+      label: document.querySelector("#ss-when .ss-l").textContent,
       bad: /record|replay/i.test(document.getElementById("ss-card").innerText),
     }));
-    if (ws.who !== "The autopilot" || ws.day !== "1 Jun 2020" || ws.days < 2 || ws.go !== "Set sail" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
+    if (ws.who !== "The autopilot" || ws.day !== "1 Jun" || ws.label !== "Launch day, 2020" || ws.days < 2 || ws.go !== "Watch her go" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
     await page.click("#go");
     await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
     if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
@@ -916,8 +917,9 @@ try {
       rival: document.querySelector('#ss-rival-opts .ss-pill[aria-pressed="true"]')?.textContent,
       against: document.getElementById("ss-against-name").textContent,
       after: document.getElementById("ss-after").textContent,
+      go: document.getElementById("go").textContent,
     }));
-    if (rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
+    if (rr.go !== "Start the race" || rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
     await page.click("#go");
     await page.waitForURL(/race=kayak,revc&launch=4/, { timeout: 15000 }).catch(() => fail(`Set sail with another boat opened ${page.url()}`));
     log.push("Race against: Set sail with another boat opens the race on the sailing screen");

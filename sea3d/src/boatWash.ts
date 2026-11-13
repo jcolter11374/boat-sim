@@ -179,6 +179,24 @@ float washShade(vec2 xz) {
   }
   return o;
 }
+/** How far a ripple may push a hull's reflection about, 0 at the hull's side .. 1 a hull
+ *  length out: a ripple moves the image of a point by its height above the water, so
+ *  the reflection stays joined to the waterline and wobbles more toward its far end
+ *  (Elena: it sat beside the boat as a smear). 1 where no hull is near (land, far boats). */
+float washPin(vec2 xz) {
+  float o = 1.0;
+  for (int i = 0; i < ${MAX_WASH_BOATS}; i++) {
+    if (i >= uWashN) break;
+    vec4 dim = uWashDim[i];
+    if (dim.x <= 0.0) continue;
+    vec2 dd = xz - uWashPos[i].xy;
+    float rr = 3.0 * dim.x + 2.0;
+    if (dot(dd, dd) > rr * rr) continue;
+    vec4 l = washLocal(i, xz);
+    o = min(o, smoothstep(0.0, 2.0 * dim.x, max(l.w, 0.0)));
+  }
+  return o;
+}
 /** The hulls' waves on the open water (none inside a hull). */
 float boatWave(vec2 xz) { return boatWaveK(xz, 0.0); }
 /** The same, read from the hull's own skin: the height the water climbs to there. */

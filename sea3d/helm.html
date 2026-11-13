@@ -243,7 +243,7 @@
   @media (max-width: 899px) { #compass, #lookup { display: none !important; } body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + 54px); } }
   body.racing.followed #c-lead, body.racing.followed #watch { display: none; } /* following the one boat left in a race */
   body.racing.results:not(.followed) #c-lead { visibility: hidden; } /* the faded strip behind the card must not give away who is ahead (Elena) */
-  #result.raced #r-race { display: none; } /* you have just raced: "Change the boats" is the way on (Elena) */
+  #result.raced #r-race, #result.watched #r-race { display: none; } /* you have just raced: "Change the boats" is the way on (Elena) */
   #result.watched #r-watch, #result.watched #r-day, #result.watched:not(.raced) #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
@@ -388,6 +388,13 @@
   .rc-links { display: flex; gap: 14px; margin: 10px 0 2px; font-size: 13px; }
   .rc-links a { color: var(--dim); text-decoration: none; }
   .rc-links a:hover, .rc-links a:focus-visible { color: var(--ink); text-decoration: underline; }
+  .rc-links button { all: unset; color: var(--dim); cursor: pointer; }
+  .rc-links button:hover, .rc-links button:focus-visible { color: var(--ink); text-decoration: underline; }
+  .rc-links button[hidden], #r-back[hidden] { display: none; }
+  /* Looking around after a watched voyage: the one way back to its ending card. */
+  #r-back { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + var(--strip-h, 62px) + 12px); z-index: 6; font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px;
+    color: var(--ink); background: rgba(10,18,30,.62); border: 1px solid rgba(255,255,255,.22); backdrop-filter: blur(8px); cursor: pointer; }
+  body.bare #r-back, body.cinema #r-back { display: none; }
   #r-details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; font-size: 13px; }
   #r-details summary { cursor: pointer; color: var(--dim); list-style: none; }
   #r-details summary::-webkit-details-marker { display: none; }
@@ -848,6 +855,7 @@
   <h2>Beat the autopilot to Portugal.</h2>
   <p><b id="goalkm">5,256 km.</b> It&rsquo;s sailing the same boat, from the same start.</p>
 </div>
+<button id="r-back" hidden>Back to the ending</button>
 <div id="result" class="overlay" hidden>
   <div class="card glass rc" role="dialog" aria-labelledby="r-head">
     <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
@@ -857,8 +865,8 @@
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a></div>
-    <div class="rc-links" id="r-links"><a id="r-race" href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
+    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button></div>
+    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>
