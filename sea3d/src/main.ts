@@ -6,6 +6,7 @@
 // The simple surface follower (standin.ts) is kept as a fallback.
 
 import * as THREE from "three";
+import { detailFor } from "./seaDetail";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
@@ -17,8 +18,17 @@ import { Contact } from "./contact";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
 import { Atmosphere } from "./atmosphere";
 import { Sea } from "./water";
-import { SEA_STATES, components, heightAt, hsOf, type WaveComponent } from "./waves";
+import { SEA_STATES, components, heightAt, hsOf, type SeaState, type WaveComponent } from "./waves";
 import { mountSailLink } from "./sailLink";
+import { Clouds } from "./clouds";
+import { seaUniforms } from "./seaSurface";
+import { heightOf, titleHeading, titleShot } from "./framing";
+import { loadMyBoat, onMyBoatChange } from "./myboat";
+import { hasDetailedStock, loadStockModel } from "./boats/stock";
+import type { StockKey } from "./boats/specs";
+import { setBacklight } from "./boats/nightlook";
+import { HERO_CLOUD, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
+import { prefetchHelm } from "./helm/prefetch";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -77,8 +87,12 @@ atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
 const clock = new THREE.Clock();
-// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
-let look: Look = startLook(qualitySelect);
+// ?quality=low|high|ultra picks the starting look; without a graphics card it starts Low, as
+// the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
+// the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
+let look: Look = startLook(qualitySelect, atmos.software);
+// The title screen's Take the helm: fetch its simulator at idle so Set sail is quick (F2).
+prefetchHelm(new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href);
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
@@ -121,21 +135,92 @@ function buildBoats(q: Quality): void {
       b.contact.dispose();
     }
     b.model = BUILDERS[b.spec.key](q);
-    b.contact = new Contact(b.model.form, b.spec, q);
+    b.contact = new Contact(b.model.form, b.spec, q, b.model.root);
+    b.contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
     scene.add(b.contact.collar, b.contact.spray);
     b.wake = new Wake(q, b.spec.cruiseSpeed, b.spec.beam, b.model.stern.x);
+    b.wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
     shadowsOn(b.model.root);
     scene.add(b.model.root, b.wake.points);
   }
 }
 
+// ---------- the title hero: the player's own boat, alone, at golden hour ----------
+let hero: Boat | null = null;
+const heroOn = () => document.body.classList.contains("title");
+const heroPlace: Placement = { x: 0, z: 0, yaw: 0 };
+function buildHero(q: Quality): void {
+  if (hero) {
+    scene.remove(hero.model.root, hero.wake.points, hero.contact.collar, hero.contact.spray);
+    hero.model.dispose();
+    hero.wake.dispose();
+    hero.contact.dispose();
+    hero = null;
+  }
+  if (!heroOn()) return;
+  const spec = heroSpec(loadMyBoat());
+  const model = BUILDERS[spec.key](q);
+  const contact = new Contact(model.form, spec, q);
+  contact.collar.visible = contact.spray.visible = !model.twinHull && spec.key !== "randolph";
+  const wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
+  shadowsOn(model.root);
+  scene.add(model.root, wake.points, contact.collar, contact.spray);
+  hero = { spec, model, motion: newMotion(spec, heroPlace, clock.getElapsedTime()), wake, contact, place: heroPlace, tag: null! };
+  // A stock boat's detailed model loads on demand: swap it in when it arrives.
+  if (spec.key.startsWith("stock_") && !hasDetailedStock(spec.key as StockKey)) {
+    const k = spec.key as StockKey;
+    void loadStockModel(k).then((ok) => ok && hero?.spec.key === k && buildHero(quality));
+  }
+}
+const clouds = new Clouds(quality);
+clouds.group.visible = false;
+scene.add(clouds.group);
+let heroWas = false;
+/** Into or out of the title: the hero's boat, sun, sky and sea; or the two demo boats as before. */
+function heroMode(): void {
+  const on = heroOn();
+  if (on === heroWas && (!on || hero)) return;
+  heroWas = on;
+  buildHero(quality);
+  for (const b of boats) {
+    b.model.root.visible = b.wake.points.visible = !on;
+    b.contact.collar.visible = b.contact.spray.visible = !on;
+    b.tag.style.visibility = on ? "hidden" : "";
+  }
+  clouds.group.visible = on;
+  controls.enabled = !on;
+  if (on) {
+    atmos.cloud = HERO_CLOUD;
+    atmos.set(HERO_SUN.el, HERO_SUN.az, 0, true);
+    clouds.seed(HERO_SKY_DAY);
+    heroPlace.yaw = titleHeading(atmos.sunDir);
+    setSea("title", HERO_SEA);
+    // Backlit (Ines): the near side of the boat in her own shadow, her edges and sails lit
+    // by the sun behind her. Less fill from the sky dome and the sky's reflections.
+    setBacklight(atmos.sunDir, 1, atmos.sun.color);
+    atmos.hemi.intensity *= 0.35;
+    scene.environmentIntensity = 0.25;
+  } else {
+    atmos.cloud = 0;
+    setBacklight(atmos.sunDir, 0);
+    atmos.set(10, 330, 0, true);
+    seaUniforms.uSeaSky.value.set(0, 0, 0, 0);
+    seaUniforms.uSeaBreak.value.set(0, 0, 0, 0);
+    camera.fov = 45;
+    camera.updateProjectionMatrix();
+    setSea(seaSelect.value);
+    placeBoats();
+    goTo("side", true);
+  }
+}
+
 let comps: WaveComponent[] = [];
 let seaKey = seaSelect.value;
-function setSea(key: string): void {
+function setSea(key: string, state: SeaState = SEA_STATES[key]): void {
   seaKey = key;
-  comps = components(SEA_STATES[key]);
-  sea.setSea(SEA_STATES[key].hs);
-  for (const b of boats) {
+  comps = components(state);
+  sea.setSea(state.hs);
+  for (const b of [...boats, ...(hero ? [hero] : [])]) {
     b.motion = newMotion(b.spec, b.place, clock.getElapsedTime());
     b.wake.reset();
   }
@@ -163,7 +248,9 @@ function setQuality(l: Look): void {
   const q = geometryOf(l);
   quality = q;
   sea.setQuality(q);
+  sea.setDetail(detailFor(l));
   buildBoats(q);
+  if (hero) buildHero(q);
   // Low on software graphics (no graphics card) draws at half resolution to keep moving.
   const ratio = q === "high" ? Math.min(window.devicePixelRatio, 2) : atmos.software ? 0.5 : 1;
   renderer.setPixelRatio(ratio);
@@ -229,11 +316,18 @@ window.addEventListener("resize", () => {
 setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
 loadDetailedModels().then((ok) => {
-  if (ok) buildBoats(quality);
+  if (ok) {
+    buildBoats(quality);
+    heroWas = !heroOn();
+    heroMode();
+  }
 });
 setSea(seaKey);
 placeBoats();
 goTo("side", true);
+heroMode();
+new MutationObserver(heroMode).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+onMyBoatChange(() => heroOn() && buildHero(quality));
 
 // ---------- hooks for the smoke test ----------
 interface BoatStatus {
@@ -253,11 +347,32 @@ const status = {
   physical: PHYSICS,
   boats: [] as BoatStatus[],
   maxRoll: {} as Record<string, number>, // largest |roll| seen since the sea state was set, rad
+  /** The boat the title hero shows ("" when the title is off). */
+  hero: "",
 };
 (window as unknown as { __sea3d: typeof status }).__sea3d = status;
 seaSelect.addEventListener("change", () => (status.maxRoll = {}));
 
 // ---------- loop ----------
+/** What titleShot needs to know about the hero's boat now. */
+function heroHost(t: number) {
+  const b = hero!;
+  return {
+    camera,
+    controls,
+    yaw: () => b.place.yaw,
+    length: () => b.spec.length,
+    height: () => heightOf(b.model.root, b.model.root.position.y + b.spec.cgBelowWaterline),
+    water: (x: number, z: number) => heightAt(comps, x, z, t),
+    sunDir: () => atmos.sunDir,
+  };
+}
+let heroT = 0;
+function heroDt(t: number): number {
+  const dt = Math.min(0.1, Math.max(0, t - heroT));
+  heroT = t;
+  return dt;
+}
 const guard = new FpsGuard();
 const bowW = new THREE.Vector3();
 const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
@@ -279,7 +394,7 @@ renderer.setAnimationLoop(() => {
     b.contact.update(comps, t, b.place, hsOf(comps), {
       speed: b.spec.cruiseSpeed,
       bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t),
-      light: atmos.ambient,
+      light: atmos.foamLight,
     });
     status.maxRoll[b.spec.key] = Math.max(status.maxRoll[b.spec.key] ?? 0, Math.abs(b.motion.roll));
     return {
@@ -290,6 +405,46 @@ renderer.setAnimationLoop(() => {
       surface: heightAt(comps, b.place.x, b.place.z, t),
     };
   });
+  if (hero) {
+    const b = hero;
+    b.motion.advance(comps, t);
+    const root = b.model.root;
+    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline, b.place.z);
+    root.rotation.set(b.motion.roll, b.place.yaw, b.motion.pitch, "YZX");
+    b.model.animate(t);
+    b.wake.update(comps, t, b.place);
+    root.updateMatrixWorld();
+    bowW.set(b.contact.bow[0], b.spec.cgBelowWaterline, b.contact.bow[1]);
+    root.localToWorld(bowW);
+    b.contact.update(comps, t, b.place, hsOf(comps), {
+      speed: b.spec.cruiseSpeed,
+      bowClearance: bowW.y - heightAt(comps, bowW.x, bowW.z, t),
+      light: atmos.ambient,
+    });
+    // The shot: titleShot's 20 s loop, the boat right of the menu, looking into the low sun.
+    const card = document.getElementById("title");
+    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight));
+    camera.position.copy(shot.pos);
+    camera.quaternion.copy(shot.quat);
+    if (camera.fov !== shot.fov) {
+      camera.fov = shot.fov;
+      camera.updateProjectionMatrix();
+    }
+    const under = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
+    if (camera.position.y < under) camera.position.y = under;
+    clouds.update(t, heroDt(t), camera, HERO_CLOUD, 0, 0, 3, 1, atmos.sunDir, atmos.fog.color, atmos.ambient);
+    clouds.closeIn(atmos.fog);
+    atmos.cloud = clouds.cover;
+    clouds.seaSky(seaUniforms.uSeaSky.value);
+    clouds.seaBreak(seaUniforms.uSeaBreak.value);
+    sea.setSun(atmos.glintDir, atmos.glintLight);
+    atmos.render();
+    status.frames++;
+    status.hs = hsOf(comps);
+    status.hero = b.spec.key;
+    return;
+  }
+  status.hero = "";
   // Camera rides the swell with the boats (mean heave), and never dips under the water.
   const meanHeave = boats.reduce((a, b) => a + b.motion.heave, 0) / boats.length;
   const dy = meanHeave - rigHeave;

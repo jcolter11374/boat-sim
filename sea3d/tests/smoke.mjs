@@ -10,6 +10,15 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFixture, writeRaceFixture } from "./fixture-voyage.mjs";
 import { chromium } from "playwright";
 
+/** Set one of the Set sail card's hidden source selects (#launch, #challenge), as its pills do. */
+async function pickSource(page, id, value) {
+  await page.evaluate(([i, v]) => {
+    const s = document.getElementById(i);
+    s.value = v;
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [id, value]);
+}
+
 const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
@@ -62,6 +71,9 @@ try {
     });
   }
   const page = await context.newPage();
+  // A screenshot that times out says which one it was (a bare "page.screenshot: Timeout" left
+  // #426's smoke (2) unplaceable).
+  const snap = (opts) => page.screenshot(opts).catch((e) => fail(`screenshot ${opts.path}: ${e.message.split("\n")[0]}`));
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   // SMOKE_PART=1 or 2 runs one half on its own runner (the pre-release gate runs
@@ -93,12 +105,27 @@ try {
       panel: getComputedStyle(document.getElementById("panel")).display,
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
-      build: document.getElementById("t-build").classList.contains("main"),
+      barShown: [...document.querySelectorAll("#topbar a.nav, #topbar .more")].filter((a) => a.offsetParent).length,
+      more: [...document.querySelectorAll("#topbar .more .menu a")].map((a) => a.textContent),
+      setsail: document.getElementById("t-setsail").classList.contains("main"),
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
-    if (!ts.title || ts.panel !== "none" || ts.bar.length !== 5 || ts.barH !== 40 || !ts.build) fail(`title screen: ${JSON.stringify(ts)}`);
+    // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is bare (Elena).
+    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.barH !== 40 || !ts.setsail)
+      fail(`title screen: ${JSON.stringify(ts)}`);
+    // The chip opens the boat picker; picking the Pearson makes it my boat, and Our kayak puts it back.
+    await page.click("#topbar-boat");
+    await page.waitForFunction(() => window.__boatpick?.open, null, { timeout: 15000 });
+    await page.check('#boatpick input[value="stock_pearson31_2"]');
+    await page.click("#boatpick .go");
+    const picked = await page.evaluate(() => ({ chip: document.getElementById("topbar-boat").textContent, title: document.getElementById("t-boatname").textContent, open: window.__boatpick.open }));
+    if (picked.open || picked.chip !== "My boat: Pearson 31-2 (our model)" || picked.title !== "Pearson 31-2 (our model)") fail(`boat picker: ${JSON.stringify(picked)}`);
+    await page.click("#t-change");
+    await page.check('#boatpick input[value="kayak"]');
+    await page.click("#boatpick .go");
     // No boat saved yet: you sail Our kayak, so the chip says so, the Boatyard included (audit A3).
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
+    await page.click("#t-more summary"); // "Just watch the sea" lives under More (Elena)
     await page.click("#t-sea");
     const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
     if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
@@ -121,7 +148,7 @@ try {
         }
         if (Math.abs(b.pitch) > 1.2 || Math.abs(b.roll) > 1.2) fail(`${b.key} capsized-looking pose in ${sea}`);
       }
-      const png = await page.screenshot({ path: `test-output/sea-${sea}.png` });
+      const png = await snap({ path: `test-output/sea-${sea}.png` });
       // A blank canvas compresses to almost nothing; a rendered sea doesn't.
       if (png.length < 20000) fail(`${sea} screenshot looks blank (${png.length} bytes)`);
       log.push(`${sea} Hs ${s.hs} m`);
@@ -133,7 +160,7 @@ try {
     await page.waitForTimeout(500);
     vHigh = await page.evaluate(() => window.__sea3d.seaVertices);
     if (!(vLow > 0 && vLow < vHigh)) fail(`low quality should use fewer sea vertices (high ${vHigh}, low ${vLow})`);
-    const pngHigh = await page.screenshot({ path: "test-output/sea-gale-high.png" });
+    const pngHigh = await snap({ path: "test-output/sea-gale-high.png" });
     if (pngHigh.length < 20000) fail(`high-quality screenshot looks blank (${pngHigh.length} bytes)`);
     await page.selectOption("#quality", "low");
 
@@ -226,7 +253,7 @@ try {
       if (JSON.stringify([...g1.failed].sort()) !== JSON.stringify(broke)) fail(`${v.file}: gear shows broken ${JSON.stringify(g1.failed)}, log says ${JSON.stringify(broke)}`);
       const unsigned = broke.filter((p) => !g1.now.signs.includes(p));
       if (real && unsigned.length) fail(`${v.file}: no warning sign for ${unsigned.join(", ")}`);
-      const pngV = await page.screenshot({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
+      const pngV = await snap({ path: `test-output/voyage-${v.file.replace(".json", "")}.png` });
       if (pngV.length < 20000) fail(`voyage screenshot looks blank (${pngV.length} bytes)`);
       log.push(`${real ? "" : "fixture "}${v.file} ${rep.h.length} rows, ${whole.length} whole hours checked`);
     }
@@ -277,10 +304,10 @@ try {
     // Its moving parts: wing, wind vane, rudder, comms light; no propellers.
     const gR = (await page.evaluate(() => window.__replay.gear)).parts ?? {};
     if (gR.props !== 0 || !gR.wing || !gR.vane || !gR.rudder || !gR.light) fail(`Randolph gear missing: ${JSON.stringify(gR)}`);
-    await page.screenshot({ path: "test-output/voyage-race-randolph.png" });
+    await snap({ path: "test-output/voyage-race-randolph.png" });
     await page.evaluate(() => { window.__replay.pause(); window.__replay.setHour(window.__replay.maxHour); });
     await page.waitForSelector("#outcome.show", { timeout: 10000 });
-    const pngR = await page.screenshot({ path: "test-output/voyage-race-end.png" });
+    const pngR = await snap({ path: "test-output/voyage-race-end.png" });
     if (pngR.length < 20000) fail(`race screenshot looks blank (${pngR.length} bytes)`);
     log.push(`${raceDate ? "" : "fixture "}race ${date}`);
     if (errors.length) fail(`page errors: ${errors.join("; ")}`);
@@ -350,12 +377,13 @@ try {
     log.push("water off the deck, fog and cloud");
 
     // Live tracker on the sample feed (Sam's replay mode, day 30: main box down, beacon only):
-    // the "simulated voyage" label, "now" at the latest report, and the forecast look past it.
+    // no "simulated" label even on the demo feed (John's call S2), "now" at the latest report,
+    // and the forecast look past it.
     await page.goto(`${URL}voyage.html?live&feed=feed-sample/&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 60000 })
       .catch(async () => fail(`live tracker didn't load: ${await page.evaluate(() => window.__replay?.error)}`));
     const lv = await page.evaluate(() => ({ ...window.__replay.live, hour: window.__replay.hour, label: /simulated voyage/.test(document.getElementById("h1").textContent), local: document.getElementById("w-local").textContent }));
-    if (!lv.simulated || !lv.label) fail(`simulated feed without its label: ${JSON.stringify(lv)}`);
+    if (!lv.simulated || lv.label || lv.banner) fail(`live tracker: demo feed must load with no "simulated" label (S2): ${JSON.stringify(lv)}`);
     if (!/^\d+:\d\d(:\d\d)? [AP]M local \(UTC/.test(lv.local)) fail(`no local time under the clock: ${JSON.stringify(lv)}`);
     if (Math.abs(lv.hour - lv.now) > 0.01 || lv.now < lv.lastFix || lv.fixes < 50) fail(`live tracker not at now: ${JSON.stringify(lv)}`);
     await page.evaluate((h) => window.__replay.setHour(h), lv.now + 24 * 5);
@@ -371,7 +399,11 @@ try {
     await page.goto(`${URL}boatyard.html?quality=low`);
     await page.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 60000 });
     const y0 = await page.evaluate(() => window.__yard.summary);
+    // Slots are one line each until opened (M5): open, then pick.
+    await page.locator('.sl-head[data-slot="thr"]').click();
     await page.locator('.opt[data-slot="thr"][data-opt="one-t200"]').click();
+    await page.locator('.slot[data-group="Power"] h3').click(); // sections fold too; Driving starts open
+    await page.locator('.sl-head[data-slot="bat"]').click();
     await page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click();
     const y1 = await page.evaluate(() => ({ s: window.__yard.summary, d: window.__yard.dressed, share: window.__yard.share }));
     if (!(y1.s.batteryWh === 2560 && y1.s.thrusters === 1 && y1.s.massKg > y0.massKg && y1.d.thrusters === 1))
@@ -565,6 +597,11 @@ try {
       .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
     if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
     log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+    // Off Annapolis: Thomas Point Light stands on its shoal (the model, or its drawn stand-in), no page errors.
+    await page.goto(`${URL}helm.html?quality=low&spot=38.91,-76.45`);
+    await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.land.landmarks > 0, null, { timeout: 60000 })
+      .catch(async () => fail(`helm: no Thomas Point Light off Annapolis (${await page.evaluate(() => JSON.stringify(window.__helm?.land))})`));
+    if (errors.length) fail(`page errors by Thomas Point Light: ${errors.join("; ")}`);
     // A storm force wind (forced for the looks): spindrift flies, the view closes in, nothing breaks.
     await page.goto(`${URL}voyage.html?voyage=2020-04-15&quality=low`);
     await page.waitForFunction(() => window.__replay?.ready && window.__replay.frames > 2, null, { timeout: 120000 });
@@ -610,8 +647,7 @@ try {
     log.push(`helm ports: ${await page.evaluate(() => window.__helm.ports)}`);
     // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
     // so a whole game fits in the smoke test.
-    await page.evaluate(() => (document.getElementById("more").open = true)); // More options
-    await page.selectOption("#launch", "2");
+    await pickSource(page, "launch", "2"); // the card's own select (its pills write it; M1 piece 5)
     await page.click("#go");
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
@@ -676,15 +712,16 @@ try {
       if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
       // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
-      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Voyage replays.
+      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Watch a voyage.
       const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
       if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
-      await page.screenshot({ path: "test-output/helm-result.png" });
+      await snap({ path: "test-output/helm-result.png" });
       log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
       // Start from a port (John hit "can't start from a port yet" when the page
       // got ahead of its simulator): the packed simulator must take the port.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ports >= 20, null, { timeout: 60000 });
+      await page.evaluate(() => (document.getElementById("more").open = true)); // the port is under More options on the Set sail card
       await page.selectOption("#port", "baltimore");
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
@@ -710,7 +747,12 @@ try {
       // Picking another boat on the start card makes it my boat, for the other pages.
       await page.goto(`${URL}helm.html?quality=low`);
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 60000 });
-      await page.check('input[name="boat"][value="stock_cruiser31"]');
+      // The Set sail card keeps the boat radios hidden and picks through the top bar's My boat picker,
+      // which ticks the row and fires change: do the same.
+      await page.locator('input[name="boat"][value="stock_cruiser31"]').evaluate((el) => {
+        el.checked = true;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"));
@@ -743,8 +785,7 @@ try {
       log.push(`helm challenges: files there but no simulator (${hm.err})`);
     } else {
       if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
-      await page.evaluate(() => (document.getElementById("more").open = true));
-      await page.selectOption("#challenge", chFile.id);
+      await pickSource(page, "challenge", chFile.id);
       await page.click("#go");
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       let ch = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, msg: document.querySelector("#startmsg").textContent }));
@@ -811,6 +852,21 @@ try {
     await page.waitForTimeout(500);
     const mod = await page.evaluate(() => ({ asked: window.__helm.asked, value: document.getElementById("challenge").value }));
     if (mod.asked || mod.value) fail(`a plain helm link preselected a challenge: ${JSON.stringify(mod)}`);
+    // The one Set sail card's choices ride in the URL (the one-game plan, step 1): a rough start
+    // fills in the 1 April launch, and an Annapolis link with go=1 is at the wheel at once.
+    await page.goto(`${URL}helm.html?quality=low&when=rough`);
+    await page.waitForFunction(() => window.__setsail, null, { timeout: 60000 });
+    const rough = await page.evaluate(() => ({ launch: document.getElementById("launch").value, ss: window.__setsail.current() }));
+    if (rough.launch !== "0" || rough.ss.when !== "rough") fail(`?when=rough didn't fill in the rough start: ${JSON.stringify(rough)}`);
+    await page.goto(`${URL}helm.html?quality=low&where=annapolis&course=triangle&go=1`);
+    await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 90000 }).catch(() => fail("an Annapolis Set sail link didn't put you at the wheel"));
+    if (new globalThis.URL(page.url()).searchParams.has("go")) fail("go=1 stayed in the URL, so a reload would set sail again");
+    // Practice's front door is the Set sail card too (M1 piece 3): ?practice opens it with Annapolis picked.
+    await page.goto(`${URL}helm.html?quality=low&practice`);
+    await page.waitForFunction(() => window.__setsail && document.querySelector("#ss-where-opts .ss-pill"), null, { timeout: 60000 });
+    const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("practice-end").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
+    if (!pc.start || !pc.course || pc.old || !/Annapolis/.test(pc.where ?? "")) fail(`?practice didn't open the Set sail card on Annapolis: ${JSON.stringify(pc)}`);
+    log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once; ?practice opens the card on Annapolis");
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);
@@ -836,7 +892,7 @@ try {
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
-    await page.screenshot({ path: "test-output/leaderboard.png", fullPage: true });
+    await snap({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
     // Race view: with the simulator files it races our kayak against Rev C for a
     // day from the same launch; without them (or with an older simulator) it says so.
@@ -851,7 +907,7 @@ try {
       const r = await page.evaluate(() => ({ s: window.__race.status, stops: window.__race.stops, err: window.__race.error, tracks: window.__race.tracks.map((t) => t.length) }));
       const names = r.s?.boats.map((b) => b.name) ?? [];
       if (r.err || Math.abs(r.s.day - 1) > 0.01 || r.stops.join() !== "time" || !Number.isFinite(r.s.lead_km) || r.s.boats[0].t !== r.s.boats[1].t
-        || names[0] !== "Our kayak" || !/Rev C \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
+        || names[0] !== "Our kayak" || !/Rev C5 \(our model\)/.test(names[1]) || r.tracks.some((n) => n < 1))
         fail(`race after a day: ${JSON.stringify({ ...r, s: { day: r.s?.day, lead: r.s?.lead_km, names } })}`);
       // The 3D views: each boat on its own sea, drawing, and the right boat in each.
       await page.locator("#views").scrollIntoViewIfNeeded();
@@ -859,7 +915,7 @@ try {
         .catch(async () => fail(`race 3D views: ${JSON.stringify(await page.evaluate(() => window.__race.views))}`));
       const vb = await page.evaluate(() => window.__race.views.map((v) => v.boat));
       if (vb.join() !== "kayak,randolph") fail(`race 3D views show ${vb.join()}`);
-      await page.screenshot({ path: "test-output/race.png", fullPage: true });
+      await snap({ path: "test-output/race.png", fullPage: true });
       log.push(`race: ${names.join(" vs ")} sailed a day in step, lead ${r.s.lead_km.toFixed(0)} km`);
       // My boat is boat A to start with, and the race sails its own parts.
       await page.evaluate(() => localStorage.setItem("boatsim.myboat.v1", JSON.stringify({ v: 1, kind: "yard", base: "kayak", hash: "#thr=one-t200", name: "One motor", choices: { thr: "one-t200", cruise_w: 25 }, saved: "2026-11-11T00:00:00.000Z" })));

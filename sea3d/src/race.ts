@@ -105,7 +105,12 @@ if (mine) {
 /** The player's name for boat A when it's "my boat" (null otherwise): shown instead of the simulator's
  *  generic name ("Our kayak") everywhere the page names the boats. Plain text only. */
 let nameA: string | null = null;
-function ownNames<T extends { boats: { name: string }[] }>(x: T): T {
+/** The Randolph boat by the name the Boatyard and Set sail use (Elena): the simulator says "Rev C". */
+const revC5 = (t: string) => t.replace(/\bRev C\b(?!\d)/g, "Rev C5");
+function ownNames<T extends { boats: { name: string }[]; words?: string; verdict?: string }>(x: T): T {
+  for (const b of x.boats) b.name = revC5(b.name);
+  if (typeof x.words === "string") x.words = revC5(x.words);
+  if (typeof x.verdict === "string") x.verdict = revC5(x.verdict);
   if (nameA && x.boats[0]) x.boats[0].name = nameA;
   return x;
 }
@@ -133,6 +138,7 @@ function setBusy(on: boolean): void {
   $<HTMLButtonElement>("go").disabled = on;
   for (const id of ["day", "week", "until", "end"]) $<HTMLButtonElement>(id).disabled = on || !page.ready || over;
   $<HTMLButtonElement>("seasonbtn").disabled = on || !page.ready;
+  for (const b of barButtons()) b.disabled = on || !page.ready || over;
   drawMap(); // the empty chart's hint goes while the simulator loads
 }
 
@@ -173,7 +179,6 @@ function drawBoat(i: 0 | 1): void {
     row("Waves", `${b.weather.hs.toFixed(1)} m`);
   }
   row("Breakdowns", b.breakdowns.length ? b.breakdowns.map((x) => x.replace(/_/g, " ")).join(", ") : "none", b.breakdowns.length ? "warn" : "");
-  box.append(el("div", "muted", `Build ${b.build}`));
 }
 
 function drawMap(): void {
@@ -293,7 +298,9 @@ function drawSeason(progress?: { done: number; of: number; rows: { a: LaunchResu
 
 // ---------------------------------------------------------------- 3D views
 // Each boat on its own patch of sea, in its own weather, side by side.
-const quality = params.get("quality") === "low" ? "low" : "high";
+// ?quality=low|high forces it; otherwise each view picks (High on a graphics card, Low on software graphics).
+const askedQuality = params.get("quality");
+const quality = askedQuality === "low" || askedQuality === "high" ? askedQuality : "auto";
 let views: [BoatView, BoatView] | null = null;
 let viewsOn = true; // false while the views are scrolled out of sight
 function draw3d(): void {
@@ -342,6 +349,8 @@ function drawAll(): void {
   drawBoat(0);
   drawBoat(1);
   drawCard();
+  if (page.status && play.rate === null && !play.ahead) play.clock = tOf(page.status);
+  drawBar();
 }
 
 // ---------------------------------------------------------------- actions
@@ -391,7 +400,7 @@ async function startRace(): Promise<void> {
 }
 
 const STOP_WORDS: Record<string, string> = {
-  time: "Time's up for this hop.",
+  time: "", // a fixed hop ended on time: nothing to say (Elena)
   lead_change: "The lead just changed hands.",
   breakdown: "Something broke on one of the boats.",
   finished: "One boat's voyage just ended.",
@@ -447,6 +456,8 @@ async function season(): Promise<void> {
       rows.push(await worker.ask<{ a: LaunchResult; b: LaunchResult }>({ type: "season_launch", i }));
     }
     page.season = await worker.ask<Season>({ type: "season_verdict" });
+    page.season.names = page.season.names.map(revC5) as [string, string];
+    page.season.words = revC5(page.season.words);
     if (nameA) page.season.names[0] = nameA;
     drawSeason();
     msg("Season done.");
@@ -456,12 +467,130 @@ async function season(): Promise<void> {
   setBusy(false);
 }
 
-$("go").addEventListener("click", () => void startRace());
-$("day").addEventListener("click", () => void sail(24));
-$("week").addEventListener("click", () => void sail(24 * 7));
-$("until").addEventListener("click", () => void sail(null));
-$("end").addEventListener("click", () => void end());
-$("seasonbtn").addEventListener("click", () => void season());
+
+// ---------------------------------------------------------------- speed bar
+// Let both boats sail on at a steady pace (T1: Real time first, as on the helm's bar).
+// The clock runs at the picked rate; the simulator sails one hop ahead (one second's
+// worth, at least an hour) and each hop shows when the clock reaches it.
+const barButtons = () => Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar button"));
+const play = {
+  /** Hours of the voyage per second; null while paused. */
+  rate: null as number | null,
+  /** The clock shown (ms, on the same footing as Date.parse of the simulator's times). */
+  clock: 0,
+  /** The next hop, sailed but not shown yet. */
+  ahead: null as { stopped: string; status: Status; track: [Row[], Row[]] } | null,
+  fetching: false,
+  /** Bumped by every new race, so a hop from the last one is dropped. */
+  gen: 0,
+};
+(page as unknown as { play: typeof play }).play = play;
+const tOf = (st: Status) => Math.max(...st.boats.map((b) => Date.parse(b.t)));
+
+function drawBar(): void {
+  for (const b of barButtons()) {
+    const r = b.dataset.rate;
+    const on = r === undefined ? play.rate === null : (r === "rt" ? 1 / 3600 : Number(r)) === play.rate;
+    b.setAttribute("aria-pressed", String(on));
+  }
+  const st = page.status;
+  if (!st) return void ($("rclock").textContent = "");
+  const s = Math.max(0, Math.round((play.clock - Date.parse(st.launch)) / 1000));
+  const hh = String(Math.floor((s % 86400) / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  $("rclock").textContent = `Day ${Math.floor(s / 86400)}, ${hh}:${mm}:${ss} since the launch`;
+}
+
+/** Show a sailed hop: the boats, the map and, when both voyages have ended, the results. */
+async function showHop(v: { stopped: string; status: Status; track: [Row[], Row[]] }): Promise<void> {
+  page.status = ownNames(v.status);
+  page.tracks = v.track;
+  if (v.stopped !== "time") {
+    page.stops.push(v.stopped);
+    msg(STOP_WORDS[v.stopped] ?? v.stopped);
+  }
+  if (v.status.over) {
+    play.rate = null;
+    await toEnd();
+    msg(STOP_WORDS.over);
+    setBusy(false);
+  }
+  drawAll();
+}
+
+/** Stop the clock, and show anything already sailed so the page and the simulator agree. */
+async function pause(): Promise<void> {
+  if (play.rate !== null) msg("Paused.");
+  play.rate = null;
+  if (play.ahead) {
+    const v = play.ahead;
+    play.ahead = null;
+    await showHop(v);
+  }
+  if (page.status) play.clock = tOf(page.status);
+  drawBar();
+}
+
+function setRate(rate: number | null): void {
+  if (rate === null) return void pause();
+  if (!worker || !page.ready || page.busy || page.status?.over) return;
+  play.rate = rate;
+  drawBar();
+}
+
+let lastTick = performance.now();
+function tick(now: number): void {
+  const dt = Math.min((now - lastTick) / 1000, 0.25);
+  lastTick = now;
+  const st = page.status;
+  if (play.rate !== null && st && page.ready && !page.busy && !st.over && worker) {
+    const limit = play.ahead ? tOf(play.ahead.status) : tOf(st);
+    play.clock = Math.min(play.clock + play.rate * 3600e3 * dt, limit);
+    if (play.ahead && play.clock >= limit) {
+      const v = play.ahead;
+      play.ahead = null;
+      void showHop(v).catch(fail);
+    } else if (!play.ahead && !play.fetching && play.clock >= tOf(st) - 1) {
+      play.fetching = true;
+      const gen = play.gen;
+      worker
+        .ask<{ stopped: string; status: Status; track: [Row[], Row[]] }>({ type: "run", hours: Math.max(1, play.rate) })
+        .then((v) => {
+          play.fetching = false;
+          if (gen !== play.gen) return;
+          if (play.rate === null) return showHop(v); // paused meanwhile: show it now
+          play.ahead = v;
+        })
+        .catch((e) => {
+          play.fetching = false;
+          play.rate = null;
+          fail(e);
+        });
+    }
+    drawBar();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+for (const b of barButtons())
+  b.addEventListener("click", () => {
+    const r = b.dataset.rate;
+    setRate(r === undefined ? null : r === "rt" ? 1 / 3600 : Number(r));
+  });
+
+$("go").addEventListener("click", () =>
+  void pause().then(() => {
+    play.gen++;
+    play.ahead = null;
+    return startRace();
+  }),
+);
+$("day").addEventListener("click", () => void pause().then(() => sail(24)));
+$("week").addEventListener("click", () => void pause().then(() => sail(24 * 7)));
+$("until").addEventListener("click", () => void pause().then(() => sail(null)));
+$("end").addEventListener("click", () => void pause().then(end));
+$("seasonbtn").addEventListener("click", () => void pause().then(season));
 // The share-link boxes are for experts: a link opens each one (#317).
 for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>(".pastelink")))
   b.addEventListener("click", () => {
