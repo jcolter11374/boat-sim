@@ -1527,6 +1527,51 @@ const CHECKS = {
       return `${shots.length} frames: ${shots.join(", ")}`;
     },
   },
+  "look-calm": {
+    manual: true,
+    path: "voyage.html?voyage=2020-04-15&quality=high",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const shots = [];
+      const shot = async (name) => {
+        const path = `look-${name}.jpg`;
+        if (!(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+        shots.push(name);
+      };
+      await page.waitForFunction(() => window.__replay && (window.__replay.ready || window.__replay.error), null, { timeout: 3 * MIN });
+      if (!(await page.evaluate(() => "cam" in window.__replay && Array.isArray(window.__replay.force?.sea)))) throw new SkipCheck("this build has no proof hooks (force.sea, cam)");
+      // Midday on day 2: the sun high, so foam and wake read in plain light.
+      await page.evaluate(() => {
+        const r = window.__replay;
+        r.pause();
+        let best = 30, el = -90;
+        for (let h = 24; h < 48; h += 0.25) { const e = r.sunAt?.(h) ?? -90; if (e > el) [best, el] = [h, e]; }
+        r.setHour(best);
+      });
+      // #480: on a calm sea the hull's reflection sits under the hull, joined at the waterline.
+      const SEAS = { calm: [1.5, 0.15, 5.0, 0.15], light: [4.0, 0.4, 5.0, 0.2] };
+      const VIEWS = { side: { az: 90, dist: 7, h: 0.8, fov: 35, look: 0.2 }, quarter: { az: 140, dist: 8, h: 1.4, fov: 35, look: 0.2 }, close: { az: 100, dist: 4.5, h: 0.5, fov: 35, look: 0.1 } };
+      for (const [sea, [wind, hs, tp, cloud]] of Object.entries(SEAS)) {
+        await page.evaluate(([wind, hs, tp, cloud]) => {
+          const f = window.__replay.force;
+          f.wind = wind; f.cloud = cloud; f.fog = 0; f.sea = [hs, tp, -1];
+          window.__replay.setHour(window.__replay.hour); // re-seek so the forced sea is built now
+        }, [wind, hs, tp, cloud]);
+        await page.waitForTimeout(6000);
+        for (const [view, cam] of Object.entries(VIEWS)) {
+          await page.evaluate((cam) => { window.__replay.cam = cam; }, cam);
+          await page.waitForTimeout(3000);
+          await shot(`calm-${sea}-${view}`);
+        }
+      }
+      return `${shots.length} frames: ${shots.join(", ")}`;
+    },
+  },
   // #442 (M1 piece 6): the title hero, your own boat at golden hour behind the menu (desktop) or
   // above it (phone). Elena: look at the hull's top edge at a pixel ratio of 2 or more.
   "look-title": {
