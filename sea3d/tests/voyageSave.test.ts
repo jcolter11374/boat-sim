@@ -190,7 +190,7 @@ test("welcome back says 'right where you left off' only when that is true", () =
   assert.equal(welcomeBack(1.56, 1.56), "Welcome back. It's day 1.6, right where you left off. Press play to carry on.");
   assert.equal(welcomeBack(1.8, 1.56), "Welcome back. It's day 1.8, right where you left off. Press play to carry on.");
   // Omar's case: left on day 1.56, the last save was day 0.81.
-  assert.equal(welcomeBack(0.81, 1.56), "Welcome back. Your voyage was last saved on day 0.8, a little before you left on day 1.6. Press play to carry on from there.");
+  assert.equal(welcomeBack(0.81, 1.56), "Welcome back. You left on day 1.6, but the last save was on day 0.8, so that's where you are. Press play to carry on.");
   // Within the hour, or the same day to one decimal: no fuss.
   assert.match(welcomeBack(1.52, 1.56), /right where you left off/);
   // Well ahead of what was on the screen, or a save that doesn't say: just the day.

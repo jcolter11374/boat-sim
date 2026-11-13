@@ -218,7 +218,7 @@ const AHEAD_OK_DAYS = 0.5;
 export function welcomeBack(day: number, left: number | null): string {
   const d = day.toFixed(1);
   if (left !== null && left - day > BEHIND_OK_DAYS && left.toFixed(1) !== d)
-    return `Welcome back. Your voyage was last saved on day ${d}, a little before you left on day ${left.toFixed(1)}. Press play to carry on from there.`;
+    return `Welcome back. You left on day ${left.toFixed(1)}, but the last save was on day ${d}, so that's where you are. Press play to carry on.`;
   if (left !== null && day - left <= AHEAD_OK_DAYS) return `Welcome back. It's day ${d}, right where you left off. Press play to carry on.`;
   return `Welcome back. It's day ${d}. Press play to carry on.`;
 }
