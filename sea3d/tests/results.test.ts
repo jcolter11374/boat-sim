@@ -32,7 +32,7 @@ test("a build on a fair board: the group leads, with no place", () => {
   assert.equal(c.kind === "board" ? c.rank : 0, 2); // same rate as revb: same place
   const t = standingText(s);
   assert.equal(t.head, "On the board of 11 Nov: Good group, about 74% finish.");
-  assert.equal(t.detail, "Tested on 65 launches. Likely range 64% to 84%.");
+  assert.equal(t.detail, "Tested on 65 launch days. Likely range 64% to 84%.");
   const top = standingText(standing("revc", board(), grid));
   assert.equal(top.head, "On the board of 11 Nov: Best group, about 74% finish (with 1 boat just as good).");
   assert.doesNotMatch(top.head + top.detail + t.detail, /\d(st|nd|rd|th) of \d/); // no place at all
@@ -42,7 +42,7 @@ test("one group only: no place at all", () => {
   const b = board();
   b.summary!.rows = b.summary!.rows.map((r) => ({ ...r, tier: 1 }));
   const t = standingText(standing("k-p10", b, grid));
-  assert.equal(t.head, "On the board of 11 Nov: all 4 boats are in one group, which these launch days can't tell apart. It finishes 50% of 65 launches.");
+  assert.equal(t.head, "On the board of 11 Nov: all 4 boats are in one group, which these launch days can't tell apart. It finishes on 50% of 65 launch days.");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th)/);
 });
 
@@ -74,7 +74,7 @@ test("off the board: the Boatyard's odds, with no place (another launch set)", (
   const s = standing("k-p15", board(), grid);
   assert.equal(s.kind, "odds");
   const t = standingText(s);
-  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launches (2012 to 2021).");
+  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launch days (2012 to 2021).");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th) of/);
   assert.equal(standing("k-p15", null, grid).kind, "odds");
 });
@@ -82,12 +82,12 @@ test("off the board: the Boatyard's odds, with no place (another launch set)", (
 test("no board and no odds: says so; a grid build without odds doesn't count", () => {
   assert.equal(standing("k-p20", board(), grid).kind, "none");
   assert.equal(standing("anything", null, null).kind, "none");
-  assert.equal(standingText({ kind: "none" }).head, "No odds for this build yet.");
+  assert.equal(standingText({ kind: "none" }).head, "No odds for this boat yet.");
 });
 
 test("odds without the years still read cleanly", () => {
   const t = standingText(standing("k-p15", null, { builds: grid.builds }));
-  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launches.");
+  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launch days.");
 });
 
 test("ordinals", () => {

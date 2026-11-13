@@ -74,7 +74,7 @@ export function standingText(s: Standing): { head: string; detail: string } {
     const r = s.row;
     const when = boardDay(s.made);
     const on = when ? `On the board of ${when}` : "On the leaderboard";
-    const rate = `It finishes ${pct(r.finish_rate)} of ${r.launches} launches.`;
+    const rate = `It finishes on ${pct(r.finish_rate)} of ${r.launches} launch days.`;
     const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
     if (s.tiers <= 1)
       return {
@@ -89,18 +89,18 @@ export function standingText(s: Standing): { head: string; detail: string } {
     const with_ = others === 0 ? "" : s.tier === 1 ? ` (with ${builds} just as good)` : ` (with ${builds} like it)`;
     return {
       head: `${on}: ${tier} group, about ${pct(r.finish_rate)} finish${with_}.`,
-      detail: `Tested on ${r.launches} launches. ${range}`,
+      detail: `Tested on ${r.launches} launch days. ${range}`,
     };
   }
   if (s.kind === "odds") {
     const o = s.build.odds!;
     const yrs = s.years ? ` (${s.years[0]} to ${s.years[1]})` : "";
     return {
-      head: `Not on the leaderboard yet. The simulator gives it ${pct(o.odds)} over ${o.voyages} launches${yrs}.`,
+      head: `Not on the leaderboard yet. The simulator gives it ${pct(o.odds)} over ${o.voyages} launch days${yrs}.`,
       detail: `Likely range ${pct(o.low95)} to ${pct(o.high95)}. One voyage is one roll of the dice; these odds are the better guide.`,
     };
   }
-  return { head: "No odds for this build yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
+  return { head: "No odds for this boat yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

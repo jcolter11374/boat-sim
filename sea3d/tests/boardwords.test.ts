@@ -12,17 +12,17 @@ test("launch sets in words", () => {
 
 test("against our kayak, without statistician's notation", () => {
   const worse = versusWords({ gap: -0.17, ci95: [-0.29, -0.05], gained: 2, lost: 13, clear: true });
-  assert.equal(worse.head, "Clearly worse: about 17 fewer finishes per 100 launches");
+  assert.equal(worse.head, "Clearly worse: about 17 fewer finishes per 100 launch days");
   assert.equal(worse.tone, "bad");
-  assert.equal(worse.detail, "Likely range −29 to −5 finishes per 100. It finished 2 launches our kayak didn't, and missed 13 launches our kayak made.");
+  assert.equal(worse.detail, "Likely range −29 to −5 finishes per 100. It finished 2 launch days our kayak didn't, and missed 13 launch days our kayak made.");
   const better = versusWords({ gap: 0.12, ci95: [0.03, 0.21], gained: 9, lost: 1, clear: true });
-  assert.equal(better.head, "Clearly better: about 12 more finishes per 100 launches");
-  assert.match(better.detail, /missed 1 launch our kayak made\.$/);
+  assert.equal(better.head, "Clearly better: about 12 more finishes per 100 launch days");
+  assert.match(better.detail, /missed 1 launch day our kayak made\.$/);
   const close = versusWords({ gap: 0.0, ci95: [-0.09, 0.09], gained: 3, lost: 3, clear: false });
-  assert.equal(close.head, "About the same as our kayak on these launches");
+  assert.equal(close.head, "About the same as our kayak on these launch days");
   assert.equal(close.tone, "");
   const unsure = versusWords({ gap: -0.06, ci95: [-0.15, 0.03], gained: 2, lost: 6, clear: false });
-  assert.equal(unsure.head, "Can't tell apart from our kayak on these launches: about 6 fewer per 100, which could be luck");
+  assert.equal(unsure.head, "Can't tell apart from our kayak on these launch days: about 6 fewer per 100, which could be luck");
   assert.match(versusWords({ gap: 0.04, ci95: [-0.05, 0.13], gained: 5, lost: 2, clear: false }).head, /about 4 more per 100/);
   for (const w of [worse, better, close, unsure]) assert.doesNotMatch(w.head, /95%|points|\+0/);
   // A clear result's range ends round away from zero: never "−0".

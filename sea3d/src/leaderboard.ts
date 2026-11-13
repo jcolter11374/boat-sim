@@ -277,7 +277,7 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     const top = s.rows.filter((r) => r.tier === 1).sort((x, y) => Number(y.design === s.reference) - Number(x.design === s.reference));
     const groups = Math.max(0, ...s.rows.map((r) => r.tier));
     head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
-    if (mine) sub.textContent = "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others.";
+    if (mine) sub.textContent = "Your boat isn't on the leaderboard yet. The board tests a fixed list of boats. The Boatyard gives the odds for others.";
     else {
       sub.textContent = "Boats in the same group can't be told apart with this many launch days. ";
       const n = s.rows[0]?.launches ?? 0;

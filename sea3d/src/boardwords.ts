@@ -41,7 +41,7 @@ const awayFromZero = (x: number) => `${x >= 0 ? "+" : "−"}${Math.max(1, Math.c
  *  be luck)", "Worse: 12 fewer finishes in 100"); the headline goes behind the cell's "i". */
 export function versusWords(v: Versus): { head: string; short: string; tone: "good" | "bad" | ""; detail: string } {
   const n = per100(v.gap);
-  const launches = (k: number) => `${k} launch${k === 1 ? "" : "es"}`;
+  const launches = (k: number) => `${k} launch day${k === 1 ? "" : "s"}`;
   const end = v.clear ? awayFromZero : signed;
   const detail =
     `Likely range ${end(v.ci95[0])} to ${end(v.ci95[1])} finishes per 100. ` +
@@ -49,7 +49,7 @@ export function versusWords(v: Versus): { head: string; short: string; tone: "go
   if (v.clear && n > 0) {
     const better = v.gap > 0;
     return {
-      head: `Clearly ${better ? "better" : "worse"}: about ${n} ${better ? "more" : "fewer"} finishes per 100 launches`,
+      head: `Clearly ${better ? "better" : "worse"}: about ${n} ${better ? "more" : "fewer"} finishes per 100 launch days`,
       short: `${better ? "Better" : "Worse"}: ${n} ${better ? "more" : "fewer"} finishes in 100`,
       tone: better ? "good" : "bad",
       detail,
@@ -57,9 +57,9 @@ export function versusWords(v: Versus): { head: string; short: string; tone: "go
   }
   // Not clear: we can't tell them apart, which isn't the same as equal (Ravi). "About
   // the same" only when the gap itself is small too.
-  if (n < 3) return { head: "About the same as our kayak on these launches", short: "Same as ours", tone: "", detail };
+  if (n < 3) return { head: "About the same as our kayak on these launch days", short: "Same as ours", tone: "", detail };
   return {
-    head: `Can't tell apart from our kayak on these launches: about ${n} ${v.gap > 0 ? "more" : "fewer"} per 100, which could be luck`,
+    head: `Can't tell apart from our kayak on these launch days: about ${n} ${v.gap > 0 ? "more" : "fewer"} per 100, which could be luck`,
     short: `Maybe ${v.gap > 0 ? "better" : "worse"} (could be luck)`,
     tone: "",
     detail,
