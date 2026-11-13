@@ -9,6 +9,8 @@
 import * as THREE from "three";
 import { BOAT_WASH_PARS, washUniforms } from "../boatWash";
 import { SEA_SURFACE_PARS, seaUniforms } from "../seaSurface";
+import { nightFloor, skyShade } from "./finishes";
+import { rimLit } from "./nightlook";
 
 /** One boat's water look; update() every frame. */
 export interface InWaterLook {
@@ -213,7 +215,9 @@ export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySe
  * root's frame; she must stand unturned at the origin) get their own copies of their materials,
  * so the light look above (putInWater lite, only these) is hers alone: the demo boats share the
  * detailed model's materials and keep their own look, and the shared full hook cost the title a
- * freeze (#511). A material with a hook already (wire.ts) stays shared: a copy would lose it.
+ * freeze (#511). A material with our own boat hooks (the hull's night floor and sky shade, every
+ * boat's night rim) is copied with those hooks put back, since clone() drops them; one with any
+ * other hook (wire.ts, sailcloth) stays shared.
  * Returns the copies, to dispose with the boat.
  */
 export function ownWetMaterials(root: THREE.Object3D, waterY: number, reach = 0.2): THREE.Material[] {
@@ -222,9 +226,11 @@ export function ownWetMaterials(root: THREE.Object3D, waterY: number, reach = 0.
   const box = new THREE.Box3();
   const own = (m: THREE.Material): THREE.Material => {
     const lit = (m as THREE.MeshStandardMaterial).isMeshStandardMaterial || (m as THREE.MeshLambertMaterial).isMeshLambertMaterial || (m as THREE.MeshPhongMaterial).isMeshPhongMaterial;
-    if (!lit || m.userData.inWater || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return m;
+    if (!lit || m.userData.inWater) return m;
+    const hooked = m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile;
+    if (hooked && !rehookable(m)) return m;
     let c = copies.get(m);
-    if (!c) copies.set(m, (c = m.clone()));
+    if (!c) copies.set(m, (c = hooked ? copyWithHooks(m as THREE.MeshStandardMaterial) : m.clone()));
     return c;
   };
   root.traverse((o) => {
@@ -234,4 +240,28 @@ export function ownWetMaterials(root: THREE.Object3D, waterY: number, reach = 0.
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material);
   });
   return [...copies.values()];
+}
+
+/** The hooks a boat's material can carry that a copy can be given again: finishes.ts and nightlook.ts. */
+const REHOOK = ["nightFloor", "skyShade", "nightRim"] as const;
+/** Every hook this material has is one of REHOOK (each sets its flag), so a copy can have them all back. */
+function rehookable(m: THREE.Material): boolean {
+  if (!(m as THREE.MeshStandardMaterial).isMeshStandardMaterial) return false;
+  if (m.userData.holdWidth || m.userData.sailcloth || m.userData.inWater) return false;
+  return REHOOK.some((k) => m.userData[k]);
+}
+/**
+ * A copy of a hooked boat material with its hooks put back in the order they first went on
+ * (the finishes when the model loads, the night rim when the boat is built). clone() copies the
+ * flags but not the hooks, so the flags are cleared first. Exported for the tests.
+ */
+export function copyWithHooks(m: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  const had = Object.fromEntries(REHOOK.map((k) => [k, !!m.userData[k]]));
+  const cloth = /nightrim-v2c/.test(m.customProgramCacheKey());
+  const c = m.clone();
+  for (const k of REHOOK) delete c.userData[k];
+  if (had.nightFloor) nightFloor(c);
+  if (had.skyShade) skyShade(c);
+  if (had.nightRim) rimLit(c, cloth);
+  return c;
 }
