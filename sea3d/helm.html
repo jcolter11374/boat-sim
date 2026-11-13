@@ -299,6 +299,11 @@
      390x844 screen even with a saved voyage's line on it. */
   @media (max-width: 699px) { #start { align-items: flex-end; padding: 0 16px 12px; } #ss-card { max-height: calc(100dvh - var(--bar, 0px) - 200px); padding: 12px 18px 8px; }
     #ss-card h1 { font-size: 23px; margin-bottom: 4px; } #ss-card .ss-row { margin: 6px 0; } #ss-card .ss-l { margin: 5px 0 3px; } #ss-card .ss-continue { padding: 6px 10px; } #ss-card .ss-after { margin: 5px 0 0; } }
+  /* A phone's card that scrolls: Set sail stays whole at the card's bottom and the rows scroll above it (it was cut
+     by the card's edge and looked broken, Elena). The ring in the card's colour hides the rows passing under it. */
+  @media (max-width: 699px) { #ss-card #go { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 0 0 6px rgb(13,31,54); } }
+  /* On a phone the card reaches the bottom corner where Credits sits: before sailing the link moves up under the bar. */
+  @media (max-width: 699px) { body:not(.sailing) #credits { bottom: auto; top: calc(var(--bar, 0px) + 6px); } body:not(.sailing) #credtext { bottom: auto; top: 16px; } }
   .ss-pill small { display: block; margin: 1px 0 0 !important; font-size: 11.5px; }
   #ss-card h1 { font: 800 28px/1.1 "Fraunces", Georgia, serif; margin: 0 0 6px; }
   .ss-row { margin: 8px 0; }
