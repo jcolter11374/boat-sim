@@ -1121,15 +1121,11 @@ const CHECKS = {
       await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 1.5, null, { timeout: 3 * MIN }).catch(() => {});
       await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
       await page.waitForTimeout(3000);
-      const savedDay = () => page.evaluate(() => { try { return JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null")?.day ?? null; } catch { return null; } });
-      const left = { day: await page.evaluate(() => window.__helm.status?.day), savedAtPause: await savedDay() };
-      // The save runs on a 15 s timer (voyageKeeper.ts), so at speed it trails the boat. Paused,
-      // the next save catches up: wait for that, so "where she was left" is one known day.
-      await page.waitForFunction((d) => { try { return Math.abs((JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null")?.day ?? -9) - d) < 0.05; } catch { return false; } }, left.day, { timeout: 40_000 }).catch(() => {});
-      left.saved = await savedDay();
-      must(left.saved !== null, `no crossing was saved in the browser after sailing to day ${left.day}`);
-      must(Math.abs(left.saved - left.day) < 0.05, `paused at day ${left.day?.toFixed(2)} for 40 s, but the save still says day ${left.saved?.toFixed(2)}`);
-      out.push(`paused at day ${left.day?.toFixed(2)}; the save said day ${left.savedAtPause === null ? "nothing" : left.savedAtPause.toFixed(2)} at that moment, and day ${left.saved.toFixed(2)} within 40 s`);
+      // Paused for 3 s, then left (#482, Sam): the save's "left" is the day on the screen as the
+      // page went, and "day", where the simulator's code stands, is never behind it. The day on
+      // the screen is noted as the page goes, as the keeper does.
+      await page.evaluate(() => addEventListener("pagehide", () => sessionStorage.setItem("omar.left", String(window.__helm.hour / 24))));
+      const left = { day: NaN, saved: null };
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
       for (const [w, h, tag] of [[1280, 720, "1280"], [375, 667, "375"]]) {
         await page.setViewportSize({ width: w, height: h });
@@ -1137,6 +1133,13 @@ const CHECKS = {
         await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 20, null, { timeout: 2 * MIN }).catch(() => {});
         await page.waitForTimeout(4000);
         const t = await page.evaluate(() => { const a = document.getElementById("t-continue"); const c = document.getElementById("title"); return { shown: !!a && !a.hidden && a.offsetParent !== null, text: (a?.innerText ?? "").replace(/\s+/g, " "), scrolls: c.scrollHeight > c.clientHeight + 1 }; });
+        if (!left.saved) {
+          Object.assign(left, await page.evaluate(() => ({ day: Number(sessionStorage.getItem("omar.left")), saved: JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null") })));
+          must(left.saved, `no crossing was saved in the browser after pausing and leaving on day ${left.day.toFixed(2)}`);
+          must(typeof left.saved.left === "number" && Math.abs(left.saved.left - left.day) <= 0.05, `paused for 3 s and left on day ${left.day.toFixed(2)}, but the save says she was left on day ${left.saved.left}`);
+          must(left.saved.day >= left.saved.left, `the save's code stands at day ${left.saved.day}, behind the day she was left on (${left.saved.left})`);
+          out.push(`paused 3 s and left on day ${left.day.toFixed(2)}; the save says left on day ${left.saved.left}, code at day ${left.saved.day}`);
+        }
         await shot(`title-${tag}`);
         must(t.shown, `the title doesn't offer "Continue your voyage" at ${tag} after a crossing was left at day ${left.day}`);
         out.push(`title ${tag}: "${t.text}"${t.scrolls ? " (the menu scrolls inside itself)" : ""}`);
@@ -1159,11 +1162,12 @@ const CHECKS = {
       await page.waitForFunction(() => /continue=1/.test(location.search) && window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await ready();
       await page.waitForTimeout(5000);
-      const back = await page.evaluate(() => ({ day: window.__helm.status?.day, err: window.__helm.error, clock: window.__helm.clock, rt: document.querySelector("#timebar .rate")?.dataset.rate }));
+      const back = await page.evaluate(() => ({ day: window.__helm.hour / 24, err: window.__helm.error, clock: window.__helm.clock, rt: document.querySelector("#timebar .rate")?.dataset.rate, notes: document.getElementById("notes").innerText.replace(/\s+/g, " ") }));
       await shot("continued");
-      must(!back.err && Math.abs((back.day ?? 0) - left.day) < 0.1, `"Keep sailing" didn't come back where she was left: left day ${left.day}, back ${JSON.stringify(back)}`);
+      must(!back.err && Math.abs(back.day - left.day) <= 0.05, `"Keep sailing" didn't come back where she was left: left day ${left.day}, back ${JSON.stringify(back)}`);
+      must(/right where you left off/.test(back.notes), `back on the day she was left, but the welcome doesn't say "right where you left off": "${back.notes.slice(0, 200)}"`);
       must(back.rt === "rt", `Real time isn't first on the speed bar after continuing (${back.rt})`);
-      out.push(`continued at day ${back.day?.toFixed(2)} (left at ${left.day?.toFixed(2)})`);
+      out.push(`continued on day ${back.day.toFixed(2)} (left on ${left.day.toFixed(2)})`);
       // 2. Race it on the sailing screen: our kayak against our model of the Rev C5, 1 May 2020.
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
       await page.goto(SITE + "helm.html?race=kayak,revc&launch=2&quality=low", { waitUntil: "load", timeout: 2 * MIN });
@@ -1182,6 +1186,105 @@ const CHECKS = {
       const r1 = await bar();
       await shot("race-day3");
       out.push(`race: opens (${r0.rates.join(" ")}), strip "${r0.strip.slice(0, 160)}"; later day ${r1.day?.toFixed(1)}, over ${r1.over}, strip "${r1.strip.slice(0, 160)}"`);
+      return out.join("; ");
+    },
+  },
+  // Manual: what a saved crossing promises (#482, Sam's bounds, 13 Nov). The save is
+  // localStorage boatsim.voyage.v1: "day" is where the simulator's code stands, "left" the day
+  // on the screen when the page was last written. Leaving is a navigation to the title, which
+  // fires pagehide as closing the tab does.
+  "continue-save": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      const out = [];
+      const ready = () => page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      const saved = () => page.evaluate(() => { try { return JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null"); } catch { return null; } });
+      const rate = (r) => page.evaluate((r) => document.querySelector(`#timebar .rate[data-rate="${r}"]`)?.click(), r);
+      const play = () => page.evaluate(() => { if (!(window.__helm.clock > 0)) document.getElementById("t-pause")?.click(); });
+      /** Keep her sailing until the simulator (or, with `screen`, the picture) reaches `day`: a
+       *  call or an event pauses the clock, and play is pressed again. Where she stands at the end. */
+      const sailTo = async (day, ms, screen = false) => {
+        const end = Date.now() + ms;
+        for (;;) {
+          const st = await page.evaluate(() => ({ sim: window.__helm.status?.day ?? 0, screen: window.__helm.hour / 24, over: !!window.__helm.status?.over, clock: window.__helm.clock, busy: !!window.__helm.busy }));
+          if (st.over || ((screen ? st.screen : st.sim) >= day && st.clock > 0) || Date.now() > end) return st;
+          if (!(st.clock > 0) && !st.busy) await play();
+          await page.waitForTimeout(400);
+        }
+      };
+      /** Leave for the title while she runs; the day on the screen is noted as the page goes. */
+      const leave = async () => {
+        await page.evaluate(() => addEventListener("pagehide", () => sessionStorage.setItem("omar.left", String(window.__helm.hour / 24))));
+        await page.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 20, null, { timeout: 2 * MIN }).catch(() => {});
+        const t = await page.evaluate(() => { const a = document.getElementById("t-continue"); return { on: Number(sessionStorage.getItem("omar.left")), shown: !!a && !a.hidden, sub: document.getElementById("t-continue-sub")?.textContent ?? "", href: a?.getAttribute("href") ?? "" }; });
+        return { ...t, v: await saved() };
+      };
+      /** Come back by the title's own link; checks the day and the welcome against the save. */
+      const comeBack = async (t, what) => {
+        const stands = Math.min(t.v.day, t.v.left);
+        // 6. The title's "Day N" is the whole part of the day she comes back on.
+        const want = stands < 1 ? "The first day" : `Day ${Math.floor(stands)}`;
+        must(t.shown && t.sub.startsWith(want), `${what}: the title says "${t.sub}", but she comes back on day ${stands.toFixed(2)} ("${want}")`);
+        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+        await page.goto(new URL(t.href, SITE).href + "&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+        await ready();
+        await page.waitForTimeout(4000);
+        const b = await page.evaluate(() => ({ day: window.__helm.hour / 24, err: window.__helm.error, notes: document.getElementById("notes").innerText.replace(/\s+/g, " ") }));
+        must(!b.err, `${what}: coming back failed: ${b.err}`);
+        must(Math.abs(b.day - stands) <= 0.05, `${what}: came back on day ${b.day.toFixed(2)}, the save stands at day ${stands.toFixed(2)} (left ${t.v.left}, code ${t.v.day})`);
+        const same = /right where you left off/.test(b.notes);
+        if (Math.abs(b.day - t.v.left) <= 0.05) must(same, `${what}: back on the day she was left (${b.day.toFixed(2)}), but the welcome doesn't say so: "${b.notes.slice(0, 200)}"`);
+        else {
+          must(!same, `${what}: the welcome says "right where you left off" on day ${b.day.toFixed(2)}, but she was left on day ${t.v.left}`);
+          must(b.notes.includes(`day ${t.v.left.toFixed(1)}`) && b.notes.includes(`day ${b.day.toFixed(1)}`), `${what}: back on day ${b.day.toFixed(2)}, not the day she was left (${t.v.left}), and the welcome doesn't name both days: "${b.notes.slice(0, 200)}"`);
+        }
+        return `${what}: on screen day ${t.on.toFixed(2)} as she was left, save left ${t.v.left} code ${t.v.day}, title "${t.sub}", back on day ${b.day.toFixed(2)}${same ? ", right where you left off" : ", told it was saved a little before"}`;
+      };
+      await helmStart(page);
+      // 4. Real time: after 20 s the save's "left" is the day on the screen.
+      await rate("rt");
+      await play();
+      await page.waitForTimeout(20_000);
+      const rt = await page.evaluate(() => ({ day: window.__helm.hour / 24, v: JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null") }));
+      must(rt.v && typeof rt.v.left === "number" && Math.abs(rt.v.left - rt.day) <= 0.01, `real time for 20 s: day ${rt.day.toFixed(3)} on screen, the save says ${JSON.stringify(rt.v && { left: rt.v.left, day: rt.v.day })}`);
+      out.push(`real time 20 s: screen day ${rt.day.toFixed(3)}, save left ${rt.v.left}`);
+      // 2. Leave without pausing at 6 h a second.
+      await rate("6");
+      // (On a runner's software graphics Chrome's picture can take minutes to show a day: a third of one will do.)
+      let at = await sailTo(1.5, 3 * MIN, true);
+      must(!at.over && at.clock > 0 && at.screen >= 0.3, `6 h a second: the picture didn't sail on and keep going: ${JSON.stringify(at)}`);
+      let t = await leave();
+      must(t.v, "6 h a second: nothing was saved on leaving");
+      must(Math.abs(t.v.left - t.on) <= 0.1, `6 h a second: left on day ${t.on.toFixed(2)}, the save says left on day ${t.v.left}`);
+      must(t.v.day >= t.v.left - 0.5, `6 h a second: the save's code stands at day ${t.v.day}, more than half a day before she was left (${t.v.left})`);
+      out.push(await comeBack(t, "6 h a second, not paused"));
+      // 5. An order: send one, wait 3 s, leave without pausing; back and playing, the strip shows it.
+      await play();
+      await openOrders(page);
+      await page.click("#b-finish", { timeout: 15_000 });
+      const sent = await page.evaluate(() => document.getElementById("c-orderv").textContent);
+      await page.waitForTimeout(3000);
+      t = await leave();
+      must(t.v, "an order: nothing was saved on leaving");
+      out.push(await comeBack(t, "after an order"));
+      await play();
+      await page.waitForTimeout(3000);
+      const order = await page.evaluate(() => document.getElementById("c-orderv").textContent);
+      must(order === sent && /finish/i.test(order), `the order sent before leaving was "${sent}"; back and playing, the strip shows "${order}"`);
+      out.push(`order kept: "${order}"`);
+      // 3. Leave without pausing at 4 days a second.
+      // (Left once the simulator is 8 days on: a runner's Chrome draws the picture far behind it.)
+      const from = await page.evaluate(() => window.__helm.status?.day ?? 0);
+      await rate("96");
+      const fast = await sailTo(from + 8, 3 * MIN);
+      must(!fast.over && fast.clock > 0 && fast.sim >= from + 8, `4 days a second: from day ${from.toFixed(2)} she didn't sail 8 days on and keep going: ${JSON.stringify(fast)}`);
+      t = await leave();
+      must(t.v, "4 days a second: nothing was saved on leaving");
+      must(t.v.day >= t.v.left - 8, `4 days a second: the save's code stands at day ${t.v.day}, more than 8 days before she was left (${t.v.left})`);
+      out.push(await comeBack(t, "4 days a second, not paused"));
       return out.join("; ");
     },
   },
