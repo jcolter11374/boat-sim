@@ -2921,6 +2921,48 @@ const CHECKS = {
       } finally { await ctx.close().catch(() => {}); }
     },
   },
+  // #498: the title off Annapolis at sunset with the town's skyline. 1280 High, kayak and Pearson, in both
+  // browsers (frames live-<browser>-<boat>-1280.jpg); the "© OpenStreetMap contributors" credit shows on the
+  // title and goes after Set sail.
+  "look-title-shore": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const problems = [];
+      const PEARSON = JSON.stringify({ v: 1, kind: "stock", base: "stock_pearson31_2", hash: "", name: "Pearson 31-2 (our model)", choices: { base: "stock_pearson31_2" }, saved: "2026-11-13T09:00:00.000Z" });
+      const osm = (p) => p.evaluate(() => { const e = document.getElementById("osm"); const r = e?.getBoundingClientRect(); return { here: !!e, shown: !!e && !e.hidden && e.offsetParent !== null && r.width > 0 && r.bottom <= innerHeight + 1, text: e?.textContent.trim() ?? "" }; });
+      for (const [boat, saved] of [["kayak", null], ["pearson", PEARSON]]) {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        if (saved) await ctx.addInitScript((v) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", v); } catch {} }, saved);
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+          await p.waitForLoadState("networkidle").catch(() => {});
+          await p.waitForTimeout(12000);
+          const name = await p.evaluate(() => document.getElementById("t-boatname")?.textContent.trim());
+          const a = await osm(p);
+          const path = `live-${BROWSER}-${boat}-1280.jpg`;
+          if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+          if (!a.shown) problems.push(`${boat}: the OpenStreetMap credit isn't showing on the title (${JSON.stringify(a)})`);
+          // Set sail: the title goes; the credit with it.
+          await p.evaluate(() => document.getElementById("t-setsail").click());
+          await Promise.race([p.waitForURL(/helm\.html/, { timeout: MIN }), p.waitForFunction(() => document.getElementById("title")?.hidden, null, { timeout: MIN })]).catch(() => {});
+          await p.waitForLoadState("load").catch(() => {});
+          await p.waitForTimeout(6000);
+          const url = new URL(p.url()).pathname.split("/").pop() || "index";
+          const b = await osm(p).catch(() => ({ here: false, shown: false, text: "" }));
+          if (b.shown) problems.push(`${boat}: after Set sail (${url}) the OpenStreetMap credit still shows: "${b.text}"`);
+          out.push(`${boat}: My boat "${name}"; title credit ${a.shown ? `shown "${a.text}"` : "NOT shown"}; after Set sail on ${url}: credit ${b.shown ? "STILL shown" : "gone"}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`SHORE ${BROWSER}: ${out.join(" || ")}`);
+      must(!problems.length, `${problems.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
