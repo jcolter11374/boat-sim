@@ -266,9 +266,9 @@ export class HelmGame {
     return v.status;
   }
 
-  /** A shared game, sailed back to where it was saved. */
-  async load(code: string, bundle?: string): Promise<{ status: Status; orders: { heading: Heading; power: number }[]; launch: number }> {
-    const v = await this.ask<{ launches: string[]; status: Status; orders: { heading: Heading; power: number }[]; launch: number; boat: Replay; ghost: Replay }>({ type: "load", code, bundle });
+  /** A shared game (or, with `mine`, your own saved voyage), sailed back to where it was saved. */
+  async load(code: string, bundle?: string, mine = false): Promise<{ status: Status; orders: { heading: Heading; power: number }[]; launch: number }> {
+    const v = await this.ask<{ launches: string[]; status: Status; orders: { heading: Heading; power: number }[]; launch: number; boat: Replay; ghost: Replay }>({ type: "load", code, bundle, mine });
     this.launches = v.launches;
     this.take(v);
     return v;

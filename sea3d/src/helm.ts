@@ -48,6 +48,8 @@ import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceS
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
+import { VoyageKeeper } from "./helm/voyageKeeper";
+import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { LIGHT_WIND_FROM, MEDAL_WORDS, ROBOT_SECS, clock as trialClock, ghostAt, medalFor, medalTime, readGhost, saveGhost, turnTrack, type Medal, type Track } from "./helm/trial";
@@ -347,6 +349,13 @@ let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
 const shared = params.get("g");
+/** Your own saved crossing coming back ("Continue your voyage", M3): it opens like a shared
+ * game, sailed again from its code, but it is yours, so the calls and the ending are too. */
+const RESUMED = !!shared && params.get("continue") === "1";
+/** Set for one reload when a saved voyage wouldn't open, so the Set sail card can say why. */
+const LOST_KEY = "boatsim.helm.lostvoyage";
+/** A game someone else shared with you. */
+const THEIRS = !!shared && !RESUMED;
 /** The title's one-click Set sail (F1): helm.html?sail. */
 const ONE_CLICK = params.has("sail") && !shared && !params.has("practice") && !SPECTATE;
 // Weather challenges (challenge-data release, copied to public/challenges/).
@@ -1464,6 +1473,21 @@ async function wheelEnded(r: WheelResult): Promise<void> {
 // the old drills: a spell to a mark in a steady wind, a new one each time.
 // Practice never feeds a voyage, the odds or the leaderboard (Maya's condition 1).
 const PRACTICE = SS.where === "annapolis" && !SPECTATE; // ?where=annapolis, or the old ?practice
+
+// Crossings saved in the browser (M3): your own crossing is kept as it goes, so closing the
+// tab and coming back can offer "Continue your voyage". Not a watched voyage or race, practice, or a
+// game someone shared with you (?continue=1 marks your own, coming back).
+/** The boat's name on the offer: the Set sail card's (the player's own words for their design);
+ * for a voyage that came back, the name it was saved with. */
+let keptBoat: string | null = null;
+if (!SPECTATE && !PRACTICE && !THEIRS)
+  new VoyageKeeper(
+    () => {
+      const st = page.ready ? page.status : null;
+      return st ? { day: st.day, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge } : null;
+    },
+    () => game.save(),
+  ).start();
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
 let practiceWind: { u: number; v: number } | null = null;
@@ -2075,7 +2099,7 @@ const MIN_CALL_GAP_H = 48;
 
 /** The decision due now, if any. */
 function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
-  if (mode !== "hands_on" || st.over || shared || st.no_link) return null;
+  if (mode !== "hands_on" || st.over || THEIRS || st.no_link) return null;
   const h = st.day * 24;
   const w = st.weather;
   const motors = !st.sailboat && st.power_w > 0;
@@ -2284,7 +2308,7 @@ const CHASE_SOC = 0.25;
 /** Look for a better line; true if the clock was stopped to look. */
 function maybeRouteCheck(st: Status): boolean {
   // No link, no orders (#404): no route looks, chases or navigator's notes to act on either.
-  if (mode !== "hands_on" || st.over || shared || st.no_link || linkCut) return false;
+  if (mode !== "hands_on" || st.over || THEIRS || st.no_link || linkCut) return false;
   // A challenge with a goal has its own one big call (Sandy, #431, signed off as that): the route
   // check and the first chase stay out of it, and never start a look from a skip's stopped clock.
   if (!callAllowed("route", !!mission()) || !callAllowed("chase", !!mission())) return false;
@@ -2743,8 +2767,8 @@ async function finish(): Promise<void> {
   hud.orders(false);
   // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
   // Any other ending gets a quiet beat on the boat's last moment before the card (Leo's plan).
-  if (c.boat.outcome === "arrived" && finishesOffLisbon() && !shared) await arrivalScene(c);
-  else if (!shared) await new Promise((ok) => setTimeout(ok, 2000));
+  if (c.boat.outcome === "arrived" && finishesOffLisbon() && !THEIRS) await arrivalScene(c);
+  else if (!THEIRS) await new Promise((ok) => setTimeout(ok, 2000));
   page.card = c;
   const me = c.boat;
   const gh = c.ghost;
@@ -2787,7 +2811,7 @@ async function finish(): Promise<void> {
     }),
   );
   // Your calls (hands on only: from base, orders go by satellite and aren't calls).
-  $("r-calls").hidden = mode !== "hands_on" || !!shared;
+  $("r-calls").hidden = mode !== "hands_on" || THEIRS;
   $("r-calllist").replaceChildren(
     ...callLines(calls, lead).map((t) => {
       const li = document.createElement("li");
@@ -3167,7 +3191,7 @@ async function begin(): Promise<void> {
   if (!SPECTATE && !ONE_CLICK && !/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
   try {
     if (shared) {
-      const v = await game.load(shared, ch && bundleUrl(ch, challengesBase));
+      const v = await game.load(shared, ch && bundleUrl(ch, challengesBase), RESUMED);
       useBoat(game.boatBase);
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
@@ -3176,6 +3200,16 @@ async function begin(): Promise<void> {
       else order = mode === "base" ? "finish" : "auto";
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
+      if (RESUMED) {
+        // Back at the speed you left it at, once you press play (it opens paused, to look around).
+        const was = loadVoyage();
+        const r = was?.code === shared ? (was.rate === SAVED_REAL_TIME ? REAL_TIME : was.rate) : 0;
+        keptBoat = was?.code === shared ? was.boat : "";
+        if ([REAL_TIME, 1, 6, 24, 96].includes(r)) lastRate = r;
+        // A challenge's one big call was asked before you left: it isn't asked twice.
+        const callDay = mission()?.goal.call_day;
+        if (callDay != null && v.status.day > callDay) asked.mission = true;
+      }
     } else if (SPECTATE) {
       // A recorded voyage (its file is the game) or a race (the source knows its boats and launch).
       // No order goes: the autopilots sail.
@@ -3219,7 +3253,8 @@ async function begin(): Promise<void> {
     document.body.classList.toggle("watching", WATCH);
     document.body.classList.toggle("racing", RACE);
     const d = `Day ${page.status!.day.toFixed(1)}`;
-    if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
+    if (RESUMED) note(`Your voyage, back where you left it on day ${page.status!.day.toFixed(1)}. Press play to carry on.`, d, TONE_COLOUR.info);
+    else if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
     // The game's hints are one coach line in the orders drawer, open for the first seconds (Leo's plan).
@@ -3280,6 +3315,18 @@ async function begin(): Promise<void> {
     } else if (/BAD_CODE/.test(err)) {
       page.error = "bad share link";
       setBusy(false);
+      // A saved crossing the simulator won't sail the same way again (it has been updated since)
+      // can't be continued: say so once, and stop offering it.
+      // The Set sail card comes back whole (it isn't built for a link's game), with why.
+      if (RESUMED) {
+        clearVoyage();
+        try {
+          sessionStorage.setItem(LOST_KEY, "1");
+        } catch {
+          // no storage: the card still comes back, without the line
+        }
+        return location.replace(location.pathname);
+      }
       $("startmsg").textContent = `That share link didn't open: ${err.replace(/^.*BAD_CODE\s*/, "")}. Start a new game instead.`;
       history.replaceState(null, "", location.pathname);
     } else if (/NO_RACE/.test(err)) {
@@ -3396,7 +3443,29 @@ $("boats").addEventListener("change", () => showProloguePick());
 // Base mode turns the boat's own battery guard on by default, as the simulator does.
 for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name="mode"]')))
   r.addEventListener("change", () => ($<HTMLInputElement>("safe").checked = r.value === "base" && r.checked));
-if (shared) {
+try {
+  if (sessionStorage.getItem(LOST_KEY)) {
+    sessionStorage.removeItem(LOST_KEY);
+    $("startmsg").textContent = "Your saved voyage couldn't be opened: the simulator has changed since you left it, and it would sail differently now. Set sail on a new one.";
+  }
+} catch {
+  // no storage: nothing to say
+}
+if (RESUMED) {
+  // Your own voyage goes straight back to sea: there's nothing to pick. Any trouble opening it
+  // brings the card back with why.
+  $("start").hidden = true;
+  $("loadtext").textContent = "Sailing your voyage back to where you left it…";
+  $("loading").hidden = false;
+  void challengesReady
+    .finally(() => begin())
+    .then(() => {
+      if (page.ready) return;
+      $("loading").hidden = true; // it said why on the card
+      $("start").hidden = false;
+    });
+}
+if (THEIRS) {
   $("modes").hidden = true;
   $("boats").hidden = true; // the shared game says which boat
   for (const id of ["launch", "breakdowns", "safe"]) $<HTMLInputElement>(id).disabled = true;
