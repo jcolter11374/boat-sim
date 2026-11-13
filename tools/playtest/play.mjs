@@ -3070,8 +3070,8 @@ const CHECKS = {
           await page.setViewportSize({ width: w, height: h });
           await page.waitForTimeout(2500);
           const c = await look(AWARD[mode]);
-          if (BROWSER === "chromium") {
-            const path = `look-m3-${mode}-${w}.jpg`;
+          {
+            const path = `look-m3-${BROWSER}-${mode}-${w}.jpg`;
             if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
           }
           if (!c.up) { bad.push(`${w}: card not up`); continue; }
@@ -3101,18 +3101,25 @@ const CHECKS = {
       await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await practiceTriangle(page);
-      await page.waitForTimeout(4000);
-      await page.keyboard.press("Escape");
-      if (await page.waitForFunction(() => { const r = document.getElementById("result"); return r && !r.hidden && r.offsetParent !== null; }, null, { timeout: MIN }).then(() => true, () => false)) await judge("practice");
+      // Hand back only once the wheel is really ours (slow runners take a while to give it), and try again if needed.
+      await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 2 * MIN }).catch(() => {});
+      await page.waitForTimeout(3000);
+      let handed = false;
+      for (let k = 0; k < 4 && !handed; k++) {
+        await page.evaluate(() => document.activeElement?.blur?.());
+        await page.keyboard.press("Escape");
+        handed = await page.waitForFunction(() => { const r = document.getElementById("result"); return r && !r.hidden && r.offsetParent !== null; }, null, { timeout: 30_000 }).then(() => true, () => false);
+      }
+      if (handed) await judge("practice");
       else verdict.practice = "FAIL (no card after handing back)";
-      // 2. A watched voyage to her finish.
-      await page.goto(SITE + "helm.html?watch=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      // 2. A watched voyage to her end: our kayak launched 1 May 2020, lost on day 3.9 (a short one).
+      await page.goto(SITE + "helm.html?watch=2020-05-01&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error), null, { timeout: 5 * MIN }).catch(() => {});
-      if (await toEnd("watch", 15)) await judge("watch");
-      // 3. A race to the finish (our kayak against Rev C, 1 Apr).
-      await page.goto(SITE + "helm.html?race=kayak,revc&launch=0&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      if (await toEnd("watch", 10)) await judge("watch");
+      // 3. A race whose card comes early: our model of the Rev B (lost on day 13 of 1 Apr) against our kayak.
+      await page.goto(SITE + "helm.html?race=revb,kayak&launch=0&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN }).catch(() => {});
-      if (await toEnd("race", 20)) await judge("race");
+      if (await toEnd("race", 12)) await judge("race");
       // 4. A weather challenge (Sandy's shadow, nine days), then its row on the Weather challenges tab.
       await page.goto(SITE + "helm.html?quality=low&challenge=sandys-shadow", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
