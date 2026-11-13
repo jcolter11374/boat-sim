@@ -205,7 +205,7 @@ export class BoatView {
       );
       m.rig?.update(dt, { flow, plan: null, rudder: m.gear.shown.rudder });
     }
-    this.wake?.update(comps, t, this.place, stw);
+    this.wake?.update(comps, t, this.place, stw, hs);
     const dy = this.motion.heave - this.heave;
     this.heave = this.motion.heave;
     this.camera.position.y += dy;

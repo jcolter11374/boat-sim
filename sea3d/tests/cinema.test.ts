@@ -343,3 +343,27 @@ test("never centred, not even end-on; a tall boat's masthead stays inside the le
 test("a yacht never gets the kayak's solar-panel close-up", () => {
   for (let i = 0; i < 50; i++) assert.ok(!shotsFor("passage", null, Math.random, ["panels"]).includes("panels"));
 });
+
+test("night's opening shot keeps both ends of the boat in the frame, from either side (Elena, 13 Nov)", () => {
+  for (const len of [3.05, 9.39]) {
+    for (const side of [1, -1]) {
+      for (const u of [0, 1]) {
+        const f = film("light", len, 37, side, u);
+        for (const [name, p] of [["bow", f.bowP], ["stern", f.sternP]] as const) {
+          assert.ok(Math.abs(p.x) < 0.9, `light L${len} side ${side} u${u}: the ${name} is at ${p.x.toFixed(2)} of the half-width`);
+        }
+      }
+    }
+  }
+});
+
+test("the astern night shot is framed by the hull: the horizon on the upper third, a third closer", () => {
+  assert.ok(SHOTS.sternlight.hull);
+  for (const u of [0, 1]) {
+    const f = film("sternlight", 3.05, 37, 1, u);
+    assert.ok(Math.abs(f.horizon.y - 0.25) < 0.03, `horizon at ${f.horizon.y.toFixed(2)}`);
+    // About a third closer than when the aerial set the distance (9.7 m then).
+    const d = f.c.pos.distanceTo(f.c.aim);
+    assert.ok(d > 5.5 && d < 7, `camera ${d.toFixed(1)} m off`);
+  }
+});

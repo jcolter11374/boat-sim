@@ -89,7 +89,13 @@ const frag = /* glsl */ `
     float churn = body;
     // Broken, never a solid sheet: about a third of the churned band is white near the stern,
     // thinning to wisps aft (Ines: no pale slab behind the transom).
-    float foam = body * smoothstep(0.5 + 0.12 * age, 0.66 + 0.14 * age, st + 0.08 * (1.0 - age)) * (1.0 - 0.5 * age);
+    // A slow hull leaves a thin, soft trail, not crisp stripes (Elena: two flat pale stripes
+    // with hard edges in a calm, painted on): the cut softens as the wake weakens, and
+    // the streaks break along their length. GUESS by eye.
+    float soft = 0.05 + 0.2 * (1.0 - clamp(uI, 0.0, 1.0));
+    float brkN = 0.65 * vnoise(vec2(q.x * 1.1, q.y * 2.2) + 21.0) + 0.35 * vnoise(vec2(q.x * 3.1, q.y * 5.0) + 4.0);
+    float brk = mix(1.0, 0.1 + 0.9 * smoothstep(0.32, 0.68, brkN), clamp(1.3 - 0.6 * uI, 0.0, 1.0));
+    float foam = body * brk * smoothstep(0.5 + 0.12 * age - soft, 0.66 + 0.14 * age + soft, st + 0.08 * (1.0 - age)) * (1.0 - 0.5 * age);
     // Fresh foam under the stern is a churned white mass, the hull's width.
     float fresh = (1.0 - smoothstep(0.0, 0.08, age)) * (1.0 - smoothstep(0.4, 1.1, across / max(centreW, 0.05) + wob));
     foam = max(foam, 0.8 * fresh * lumps(q * 1.3 + 5.7, 0.55) * smoothstep(0.45, 0.7, st));
@@ -98,7 +104,9 @@ const frag = /* glsl */ `
     // Low's size); a gentle streak keeps it from reading as a painted stripe.
     foam = body * (0.55 + 0.45 * st) * (1.0 - smoothstep(0.0, 0.85, age)) * 0.55;
 #endif
-    float a = foam * uI * smoothstep(0.0, 0.04, age);   // soft start under the stern
+    // A slow hull leaves a faint slick, not white foam (Elena: about half as strong at a
+    // kayak's 2 kn, full near hull speed). GUESS: x 0.5 up to strength 0.45, x 1 from 1.
+    float a = foam * uI * mix(0.5, 1.0, smoothstep(0.45, 1.0, uI)) * smoothstep(0.0, 0.04, age);   // soft start under the stern
     // Bubbles just under the surface make the whole band a pale, milky turquoise.
     float milk = centre * uI * 0.07 * (1.0 - 0.7 * age) * smoothstep(0.45, 0.8, isl);
     vec3 col = mix(vec3(0.55, 0.78, 0.8), vec3(0.86, 0.9, 0.91), clamp(a / max(a + milk, 1e-3), 0.0, 1.0));
@@ -109,6 +117,11 @@ const frag = /* glsl */ `
     #include <colorspace_fragment>
   }
 `;
+
+function smooth(x: number, a: number, b: number): number {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+}
 
 export class Wake {
   /** The wake's mesh (add it to the scene). */
@@ -172,9 +185,14 @@ export class Wake {
 
   /** Wake strength 0..1.3 by the hull's Froude number (speed / sqrt(g L)): a thin trail at a
    *  kayak's 2 kt (Fn 0.16), a broad foamy one near hull speed (Sam's checklist 5). */
-  private strength(speed: number): number {
+  private strength(speed: number, hs = 0): number {
     const fn = speed / Math.sqrt(9.81 * Math.max(2 * Math.abs(this.sternX), 0.5));
-    return Math.min(1.3, Math.max(0, (fn - 0.05) / 0.3));
+    // A sea running rubs out a slow hull's trail: the chop and whitecaps break it up
+    // within a boat length, and the foam sheet only showed as flat hard-edged patches
+    // cutting through the waves (Elena, force 6 at 1.2 kn). A hull near its hull speed
+    // keeps hers. GUESS by eye: gone by 2.4 m of sea below Fn 0.15, untouched above Fn 0.35.
+    const rubbed = smooth(hs, 0.6, 2.4) * (1 - smooth(fn, 0.15, 0.35));
+    return Math.min(1.3, Math.max(0, (fn - 0.05) / 0.3)) * (1 - 0.9 * rubbed);
   }
 
   reset(): void {
@@ -182,13 +200,14 @@ export class Wake {
     this.lastT = -1;
   }
 
-  /** speed: water going past now, m/s (defaults to the constructor's). */
-  update(comps: WaveComponent[], t: number, place: Placement, speed = this.speed): void {
+  /** speed: water going past now, m/s (defaults to the constructor's); hs: the sea's
+   *  significant wave height, m (0: not given, the wake as in flat water). */
+  update(comps: WaveComponent[], t: number, place: Placement, speed = this.speed, hs = 0): void {
     if (this.lastT >= 0 && t > this.lastT) this.odo += speed * Math.min(t - this.lastT, 0.1);
     this.lastT = t;
     // The strip is as long as the water runs in the foam's lifetime (at least a boat's width).
     const len = Math.max(speed * LIFE, this.beam * 1.5);
-    const k = this.strength(speed);
+    const k = this.strength(speed, hs);
     const pos = this.points.geometry.attributes.position.array as Float32Array;
     const uv = this.points.geometry.attributes.aUV.array as Float32Array;
     for (let i = 0; i <= this.nAlong; i++) {
@@ -211,7 +230,7 @@ export class Wake {
     un.uOdo.value = this.odo;
     un.uLen.value = len;
     un.uTime.value = t;
-    un.uI.value = this.strength(speed);
+    un.uI.value = k;
   }
 
   dispose(): void {

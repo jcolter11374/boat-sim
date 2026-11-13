@@ -261,6 +261,38 @@ const CHECKS = {
       must(!st.loading, "the loading message stayed up after it started");
       must(st.timebar, "no time bar once sailing");
       must(st.clock > 0, `time didn't start by itself (clock ${st.clock}, says "${st.state}")`);
+      // The strip's time cell at three window widths: the day, date and zone whole and above the speed
+      // buttons, every button on one line, all of it inside the strip. Measured as the browser draws it and
+      // again with the letters spaced out, which stands in for a browser whose system face is wider (a wide
+      // face once wrapped "Real time" onto two lines, and the taller bar hid the day and date).
+      await page.waitForFunction(() => { const s = document.getElementById("strip"); return getComputedStyle(s).visibility === "visible" && +getComputedStyle(s).opacity > 0.9; }, null, { timeout: 60_000 }).catch(() => {});
+      for (const wide of [false, true]) {
+        const tag = wide ? await page.addStyleTag({ content: "#strip, #strip * { letter-spacing: .08em !important; }" }) : null;
+        for (const [w, h] of [[1100, 700], [1280, 720], [1920, 1080]]) {
+          await page.setViewportSize({ width: w, height: h });
+          await page.waitForTimeout(400);
+          const bad = await page.evaluate(() => {
+            const R = (e) => e.getBoundingClientRect();
+            const strip = R(document.getElementById("strip")), cell = R(document.querySelector("#strip .c-time")), v = document.querySelector("#strip .c-time .v"), vr = R(v), bar = R(document.getElementById("timebar"));
+            const out = [];
+            if (vr.height < parseFloat(getComputedStyle(v).fontSize)) out.push(`the day and date line is squashed to ${Math.round(vr.height)} px`);
+            if (vr.top < strip.top - 1) out.push("the day and date stick out above the strip");
+            if (vr.bottom > bar.top + 1) out.push("the speed buttons cover the day and date");
+            if (v.scrollWidth > v.clientWidth + 1) out.push(`the day, date and zone are cut off ("${v.textContent.trim().slice(0, 40)}")`);
+            if (bar.bottom > strip.bottom + 1) out.push("the speed buttons stick out below the strip");
+            for (const b of document.querySelectorAll("#timebar button")) {
+              const r = R(b);
+              if (r.height > parseFloat(getComputedStyle(b).fontSize) * 2.2) out.push(`"${b.textContent.trim()}" wraps onto two lines`);
+              if (r.right > cell.right + 1) out.push(`"${b.textContent.trim()}" runs past the time cell`);
+            }
+            return out;
+          });
+          if (bad.length) await page.screenshot({ path: `play-${BROWSER}-strip-time-${w}${wide ? "-wide" : ""}.png` }).catch(() => {});
+          must(!bad.length, `the strip's time cell at ${w}x${h}${wide ? " with wider letters" : ""}: ${bad.join("; ")}`);
+        }
+        if (tag) await tag.evaluate((e) => e.remove());
+      }
+      await page.setViewportSize({ width: 1400, height: 900 });
       const d0 = await page.evaluate(() => window.__helm.status?.day ?? 0);
       await page.waitForFunction((d0) => (window.__helm.status?.day ?? 0) > d0 || window.__helm.clock === 0, d0, { timeout: 60_000 }).catch(() => {
         throw new CheckFail(`the day didn't move on its own in 60 s (day ${d0})`);

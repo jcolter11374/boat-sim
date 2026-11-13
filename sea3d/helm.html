@@ -198,7 +198,7 @@
   body.watching #dialrow .side { font-size: 13px; }
   #dialkey { color: var(--dim); font-size: 11.5px; line-height: 1.45; }
   #dialkey i { display: inline-block; width: 9px; height: 3px; margin-right: 5px; vertical-align: middle; }
-  @media (min-width: 1101px) { body.watching #strip { grid-template-columns: 2.05fr 1.25fr .9fr .75fr .95fr 1.35fr max-content 2.2em; } }
+  @media (min-width: 1101px) { body.watching #strip { grid-template-columns: minmax(max-content, 2.05fr) 1.25fr .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 2.2em; } }
   @media (max-width: 760px) { body.watching #strip #c-wind { grid-column: span 7; } }
   /* A race (M2, R3): nobody steers either, but the lead cell stays: it's boat A against boat B. */
   body.racing #orders, body.racing #orders-tab, body.racing #c-order { display: none; }
@@ -208,7 +208,7 @@
   /* The tags over the far boat belong to the sea, not the big map: one peeked out beside it. */
   body:has(#mapbox.big) #ghosttag, body:has(#mapbox.big) #rivaltag { visibility: hidden; }
   body.racing #mside .mleg { line-height: 1.7; } body.racing #mside .mleg i { margin-left: 0; }
-  @media (min-width: 1101px) { body.racing #strip { grid-template-columns: 2.05fr .9fr .75fr .95fr 1.35fr max-content 1.5fr 2.2em; } }
+  @media (min-width: 1101px) { body.racing #strip { grid-template-columns: minmax(max-content, 2.05fr) .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 1.5fr 2.2em; } }
   @media (max-width: 1100px) and (min-width: 761px) { body.racing #strip .c-time { grid-column: span 2; } body.racing #strip { grid-template-columns: 1fr 1fr 1fr 1fr 2.2em; }
     body.racing #strip #c-lead { grid-column: span 2; } }
   @media (max-width: 760px) { body.racing #strip #c-head, body.racing #strip #c-speed { grid-column: span 3; } body.racing #strip #c-bat { grid-column: span 4; border-left: 1px solid var(--hud-line); padding-left: .5em; }
@@ -431,7 +431,7 @@
      the one Watch a voyage has (M2, one strip for every mode): the strip is 13 units wider to seat it,
      so the other cells keep their widths (the time cell must hold "Real time" on one line). */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 2.05fr 1.25fr .9fr .75fr .95fr 1.35fr max-content 1fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: minmax(max-content, 2.05fr) 1.25fr .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 1fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -468,7 +468,12 @@
   #chbrief[hidden] { display: none; }
   #r-stars { margin: .2em 0 .6em; }
   #r-stars[hidden], #r-stars .s-real[hidden] { display: none; }
+  /* The speed buttons never wrap or squeeze, whatever face the browser has for system-ui (a wide one put
+     "Real time" on two lines and the taller bar pushed the day and date out of the strip): on a wide window the
+     time column is at least as wide as its day, date and zone and its buttons, the wind cell as wide as its
+     wind and waves, and the other cells give way. */
   #timebar { display: flex; gap: 2px; margin-top: 3px; }
+  #timebar button { white-space: nowrap; flex: none; }
   #timebar[hidden] { display: none; }
   #timebar button { padding: .1em .5em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
   #timebar button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
