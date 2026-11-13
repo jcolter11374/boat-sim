@@ -278,7 +278,6 @@ export interface StripData {
 
 const POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 export const point = (deg: number): string => POINTS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-/** Arrows for where the wind blows TO, as on the forecast. */
 
 /** The wind cell's last values: speed (kn), where it blows to (degrees), wave height (m). */
 const wind: { kn: number | null; to: number | null; hs: number | null; shown: string } = { kn: null, to: null, hs: null, shown: "" };
