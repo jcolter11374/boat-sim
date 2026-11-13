@@ -6,6 +6,8 @@
 // none of these letters is taken.
 // This file only shows and hides things; the game (src/helm.ts) says what's in them.
 
+import { raceLead } from "./raceWords";
+
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
 /** How long a toast stays, ms: an event 6 s, a breakdown or a warning 10 s (Leo's plan, item 6). */
@@ -282,6 +284,12 @@ export const point = (deg: number): string => POINTS[Math.round((((deg % 360) + 
 /** The wind cell's last values: speed (kn), where it blows to (degrees), wave height (m). */
 const wind: { kn: number | null; to: number | null; hs: number | null; shown: string } = { kn: null, to: null, hs: null, shown: "" };
 
+/** A race's two boats, by name: the lead cell then says which is ahead (no "you", no ghost). */
+let racers: [string, string] | null = null;
+export function setRacers(names: [string, string] | null): void {
+  racers = names;
+}
+
 export function showStrip(d: StripData): void {
   if (d.order !== undefined) $("c-orderv").textContent = d.order;
   if (d.heading !== undefined)
@@ -331,7 +339,18 @@ export function showStrip(d: StripData): void {
       $("c-wavel").textContent = wind.hs == null ? "wind" : "wind · waves";
     }
   }
-  if (d.lead !== undefined) {
+  if (d.lead !== undefined && racers) {
+    // A race: who is ahead and by how far, in the boats' own names (helm/raceWords.ts).
+    const c = raceLead(d.lead, racers);
+    const key = `${c.value}|${c.label}`;
+    const cell = $("c-lead");
+    if (cell.dataset.v !== key) {
+      cell.dataset.v = key;
+      $("c-leadv").replaceChildren(c.value, ...(c.unit ? [Object.assign(document.createElement("span"), { className: "sub", textContent: c.unit })] : []));
+      cell.querySelector(".l")!.textContent = c.label;
+      cell.classList.remove("ahead", "behind");
+    }
+  } else if (d.lead !== undefined) {
     const lead = $("c-lead");
     const km = Math.round(Math.abs(d.lead));
     $("c-leadv").textContent = km < 1 ? "level" : `${d.guess ? "~" : ""}${d.lead > 0 ? "+" : "−"}${km.toLocaleString()} km`;
