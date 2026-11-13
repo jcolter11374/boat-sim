@@ -1167,6 +1167,17 @@ const CHECKS = {
       const saved = () => page.evaluate(() => { try { return JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null"); } catch { return null; } });
       const rate = (r) => page.evaluate((r) => document.querySelector(`#timebar .rate[data-rate="${r}"]`)?.click(), r);
       const play = () => page.evaluate(() => { if (!(window.__helm.clock > 0)) document.getElementById("t-pause")?.click(); });
+      /** Keep her sailing until the simulator (or, with `screen`, the picture) reaches `day`: a
+       *  call or an event pauses the clock, and play is pressed again. Where she stands at the end. */
+      const sailTo = async (day, ms, screen = false) => {
+        const end = Date.now() + ms;
+        for (;;) {
+          const st = await page.evaluate(() => ({ sim: window.__helm.status?.day ?? 0, screen: window.__helm.hour / 24, over: !!window.__helm.status?.over, clock: window.__helm.clock, busy: !!window.__helm.busy }));
+          if (st.over || ((screen ? st.screen : st.sim) >= day && st.clock > 0) || Date.now() > end) return st;
+          if (!(st.clock > 0) && !st.busy) await play();
+          await page.waitForTimeout(400);
+        }
+      };
       /** Leave for the title while she runs; the day on the screen is noted as the page goes. */
       const leave = async () => {
         await page.evaluate(() => addEventListener("pagehide", () => sessionStorage.setItem("omar.left", String(window.__helm.hour / 24))));
@@ -1203,13 +1214,13 @@ const CHECKS = {
       await play();
       await page.waitForTimeout(20_000);
       const rt = await page.evaluate(() => ({ day: window.__helm.hour / 24, v: JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null") }));
-      must(rt.v && Math.abs(rt.v.left - rt.day) <= 0.01, `real time for 20 s: day ${rt.day.toFixed(3)} on screen, the save says ${JSON.stringify(rt.v && { left: rt.v.left, day: rt.v.day })}`);
+      must(rt.v && typeof rt.v.left === "number" && Math.abs(rt.v.left - rt.day) <= 0.01, `real time for 20 s: day ${rt.day.toFixed(3)} on screen, the save says ${JSON.stringify(rt.v && { left: rt.v.left, day: rt.v.day })}`);
       out.push(`real time 20 s: screen day ${rt.day.toFixed(3)}, save left ${rt.v.left}`);
       // 2. Leave without pausing at 6 h a second.
       await rate("6");
-      // (On a runner's software graphics Chrome's picture can take minutes to show a day: half a day will do.)
-      await page.waitForFunction(() => window.__helm.hour / 24 >= 1.5, null, { timeout: 2 * MIN }).catch(() => {});
-      must(await page.evaluate(() => window.__helm.hour / 24 >= 0.5 && window.__helm.clock > 0), "6 h a second: the picture didn't reach half a day in 2 minutes, or the clock isn't running");
+      // (On a runner's software graphics Chrome's picture can take minutes to show a day: a third of one will do.)
+      let at = await sailTo(1.5, 3 * MIN, true);
+      must(!at.over && at.clock > 0 && at.screen >= 0.3, `6 h a second: the picture didn't sail on and keep going: ${JSON.stringify(at)}`);
       let t = await leave();
       must(t.v, "6 h a second: nothing was saved on leaving");
       must(Math.abs(t.v.left - t.on) <= 0.1, `6 h a second: left on day ${t.on.toFixed(2)}, the save says left on day ${t.v.left}`);
@@ -1233,8 +1244,7 @@ const CHECKS = {
       // (Left once the simulator is 8 days on: a runner's Chrome draws the picture far behind it.)
       const from = await page.evaluate(() => window.__helm.status?.day ?? 0);
       await rate("96");
-      await page.waitForFunction((d) => (window.__helm.status?.day ?? 0) >= d + 8 || window.__helm.status?.over, from, { timeout: 3 * MIN }).catch(() => {});
-      const fast = await page.evaluate(() => ({ sim: window.__helm.status?.day, screen: window.__helm.hour / 24, over: !!window.__helm.status?.over, clock: window.__helm.clock }));
+      const fast = await sailTo(from + 8, 3 * MIN);
       must(!fast.over && fast.clock > 0 && fast.sim >= from + 8, `4 days a second: from day ${from.toFixed(2)} she didn't sail 8 days on and keep going: ${JSON.stringify(fast)}`);
       t = await leave();
       must(t.v, "4 days a second: nothing was saved on leaving");
