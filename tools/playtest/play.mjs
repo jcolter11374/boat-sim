@@ -61,12 +61,20 @@ async function tickBoat(r) {
   });
 }
 
+/** Press Set sail. If a crossing is saved in this browser (#462), the card asks before a new one
+ *  ends it (#465): a check wants the new crossing, so it answers that and carries on. */
+async function pressSetSail(page, opts = {}) {
+  await page.click("#go", opts);
+  const ask = page.locator("#ss-ask");
+  if ((await ask.count()) && (await ask.isVisible().catch(() => false))) await page.click("#ss-ask-new", { noWaitAfter: true, timeout: 15_000 });
+}
+
 async function helmStart(page, setup = async () => {}) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
   await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
   await setup(page);
-  await page.click("#go");
+  await pressSetSail(page);
   await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
   const s = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
   must(s.ready && !s.err, `didn't start: ${s.err || "no error"}; the page says "${s.msg}"`);
@@ -1081,7 +1089,7 @@ const CHECKS = {
       must(s.contexts === 0, `an AudioContext existed on load, before any click (${s.contexts})`);
       must(!s.pressed, `the speaker button says on before any click`);
       await watchAsk();
-      await page.click("#go", { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
+      await pressSetSail(page, { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await sailed();
       s = await soundState(page);
       must(s.contexts === 0, `clicking "Set sail" started sound without being asked (${s.contexts} AudioContext)`);
@@ -1097,7 +1105,7 @@ const CHECKS = {
       await calmReload(page);
       await loaded();
       await watchAsk();
-      await page.click("#go", { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
+      await pressSetSail(page, { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await sailed();
       await page.waitForTimeout(2000);
       const again = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
@@ -1131,7 +1139,7 @@ const CHECKS = {
       s = await soundState(page);
       must(s.contexts === 0 && !s.pressed, `a remembered "on" started sound on load (${s.contexts} AudioContext, button ${s.pressed})`);
       await watchAsk();
-      await page.click("#go", { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
+      await pressSetSail(page, { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await page.waitForTimeout(1000);
       s = await soundState(page);
       must(s.contexts === 1 && s.pressed, `a remembered "on" didn't come back at the first click (${s.contexts} AudioContext, button ${s.pressed})`);
