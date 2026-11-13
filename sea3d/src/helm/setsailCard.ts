@@ -8,6 +8,7 @@
 // startVoyage (window.__setsail.start), which reloads into practice with the choices.
 import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { onMyBoatChange, type MyBoat } from "../myboat";
+import { continueLink, loadVoyage, offerWords } from "./voyageSave";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -98,6 +99,14 @@ export function mountSetSailCard(hooks: CardHooks): void {
   const challenge = $<HTMLSelectElement>("challenge");
   const more = $<HTMLDetailsElement>("more");
 
+  // "Continue your voyage" (M3): a crossing saved in this browser is offered before a new one.
+  const kept = loadVoyage();
+  if (kept) {
+    $("ss-continue-words").textContent = `You have a voyage at sea: ${offerWords(kept)}.`; // textContent: the boat's name is the player's
+    $<HTMLAnchorElement>("ss-continue-go").href = `./${continueLink(kept)}`;
+    $("ss-continue").hidden = false;
+  }
+
   const checkedBoat = () => document.querySelector<HTMLInputElement>('input[name="boat"]:checked');
   const draw = () => {
     const s = { ...hooks.current(), where, challenge: where === "ocean" ? challenge.value : "" };
@@ -109,6 +118,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("ss-boatname").textContent = checkedBoat()?.parentElement?.querySelector("b")?.textContent ?? "Our kayak";
     // Practice always sails the club's yacht: say so, so nobody wonders where their boat went (Ines).
     $("ss-boat").hidden = !show.boatShown;
+    // A new crossing takes the saved one's place; practice doesn't touch it.
+    $("ss-continue-new").hidden = where !== "ocean";
     $("ss-practiceboat").hidden = show.boatShown;
     pills($("ss-where-opts"), SET_SAIL.where.filter((o) => o.key === "ocean" || ANNAPOLIS_ON_CARD).map((o) => ({ key: o.key, label: CARD_WORDS.where[o.key][0], sub: CARD_WORDS.where[o.key][1] || undefined })), where, (k) => {
       where = k as SetSail["where"];
