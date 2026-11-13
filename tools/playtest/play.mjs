@@ -3381,6 +3381,110 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #515: the Pearson's front sail stays on its stay (title, Set sail, and the Beneteau through head to wind in practice);
+  // the picker names "Pearson 31-2 (our model)" and "Beneteau First 31.7" with "Specs and history" boxes;
+  // the practice card and top bar say "Beneteau First 31.7". Frames look-515-<browser>-*.jpg.
+  "stock-515": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [];
+      const emit = async (p, name) => { const path = `look-515-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const PEARSON = { v: 1, kind: "stock", base: "stock_pearson31_2", hash: "", name: "Pearson 31-2 (our model)", choices: { base: "stock_pearson31_2" }, saved: Date.now() };
+      const shots = [];
+      // 1. The Pearson on the title, then the picker, then Set sail.
+      {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        await ctx.addInitScript((mb) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", JSON.stringify(mb)); } catch {} }, PEARSON);
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 10, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.waitForLoadState("networkidle").catch(() => {});
+          await p.waitForTimeout(6000);
+          for (let i = 1; i <= 4; i++) { shots.push(await emit(p, `title-${i}`)); await p.waitForTimeout(5000); }
+          await p.evaluate(() => document.getElementById("t-change")?.click());
+          await p.waitForFunction(() => document.querySelector("#boatpick label"), null, { timeout: MIN }).catch(() => {});
+          const pick = await p.evaluate(() => {
+            const names = [...document.querySelectorAll("#boatpick label b")].map((b) => b.textContent.trim());
+            const boxes = [...document.querySelectorAll("#boatpick details.about")].map((d) => {
+              d.open = true;
+              const row = d.previousElementSibling?.querySelector("b")?.textContent.trim() ?? "?";
+              const r = d.getBoundingClientRect();
+              return { row, summary: d.querySelector("summary")?.textContent.trim(), nums: d.querySelectorAll("dt").length, words: [...d.querySelectorAll("p:not(.src)")].map((x) => x.textContent).join(" ").length, links: d.querySelectorAll(".src a").length, shown: r.height > 30 };
+            });
+            const pd = [...document.querySelectorAll("#boatpick details.about")].find((d) => /Pearson/.test(d.previousElementSibling?.textContent ?? ""));
+            pd?.scrollIntoView({ block: "center" });
+            return { names, boxes, text: document.getElementById("boatpick")?.innerText ?? "" };
+          });
+          await p.waitForTimeout(800);
+          shots.push(await emit(p, "picker-pearson-open"));
+          await p.evaluate(() => { const d = [...document.querySelectorAll("#boatpick details.about")].find((x) => /Beneteau/.test(x.previousElementSibling?.textContent ?? "")); d?.scrollIntoView({ block: "center" }); });
+          await p.waitForTimeout(500);
+          shots.push(await emit(p, "picker-beneteau-open"));
+          for (const want of ["Pearson 31-2 (our model)", "Beneteau First 31.7"]) if (!pick.names.includes(want)) bad.push(`picker has no "${want}" (rows: ${pick.names.join(" / ")})`);
+          if (/Cruiser 31/.test(pick.text)) bad.push(`picker still says "Cruiser 31"`);
+          for (const b of pick.boxes) if (b.summary !== "Specs and history" || b.nums < 1 || b.words < 40 || b.links < 1 || !b.shown) bad.push(`${b.row}: box "${b.summary}" ${b.nums} numbers, ${b.words} chars of history, ${b.links} source links${b.shown ? "" : ", did not unfold"}`);
+          out.push(`picker rows: ${pick.names.join(" / ")}; boxes: ${pick.boxes.map((b) => `${b.row} [${b.nums} numbers, ${b.words} chars, ${b.links} links${b.shown ? "" : ", NOT unfolded"}]`).join("; ")}`);
+          await p.evaluate(() => document.querySelector("#boatpick .x")?.click());
+          await p.waitForTimeout(500);
+          await p.evaluate(() => document.getElementById("t-setsail")?.click());
+          await p.waitForURL(/helm\.html/, { timeout: MIN }).catch(() => {});
+          await p.waitForFunction(() => document.querySelector("#go"), null, { timeout: 2 * MIN }).catch(() => {});
+          await p.waitForFunction(() => !window.__helm?.busy, null, { timeout: 2 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.waitForTimeout(6000);
+          for (let i = 1; i <= 3; i++) { shots.push(await emit(p, `setsail-${i}`)); await p.waitForTimeout(5000); }
+          const top = await p.evaluate(() => document.getElementById("topbar-boat")?.textContent.trim() ?? "");
+          out.push(`Set sail top bar "${top}"`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      // 2. Practice: the Beneteau's name, then turn her through head to wind and shoot there.
+      {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + "helm.html?practice&quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__helm && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
+          const card = await p.evaluate(() => document.body.innerText);
+          const cardName = /Beneteau First 31\.7/.test(card), cardOld = /Cruiser 31/.test(card);
+          shots.push(await emit(p, "practice-card"));
+          await practiceTriangle(p);
+          for (let i = 0; i < 4; i++) await p.click(".w-gskip", { timeout: 2000 }).catch(() => {});
+          await p.waitForTimeout(3000);
+          const top = await p.evaluate(() => document.getElementById("topbar-boat")?.textContent.trim() ?? "");
+          const wheelName = await p.evaluate(() => document.querySelector(".w-gname")?.textContent.trim() ?? "");
+          const all = await p.evaluate(() => document.body.innerText);
+          if (!cardName && !/Beneteau First 31\.7/.test(all)) bad.push(`practice never says "Beneteau First 31.7"`);
+          if (cardOld || /Cruiser 31/.test(all)) bad.push(`practice still says "Cruiser 31"`);
+          if (top && !/Beneteau First 31\.7/.test(top)) bad.push(`practice top bar says "${top}"`);
+          // Head to wind: turn toward the wind until the wheel reads under 20 degrees off the bow.
+          const twa = () => p.evaluate(() => { const t = document.querySelector(".w-twa")?.title ?? ""; const m = t.match(/(-?\d+)°/); return m ? Math.abs(+m[1]) : null; });
+          const side = await p.evaluate(() => (document.body.innerText.match(/(?:upwind|reach|behind), (left|right)/) || [""])[0]);
+          const key = /left/.test(side) ? "ArrowLeft" : "ArrowRight";
+          let best = await twa(), hw = 0;
+          await p.keyboard.down(key);
+          const t0 = Date.now();
+          while (Date.now() - t0 < 90_000 && hw < 2) {
+            const a = await twa();
+            if (a != null && a < (best ?? 999)) best = a;
+            if (a != null && a <= 20) { await p.keyboard.up(key); shots.push(await emit(p, `practice-head-to-wind-${++hw}`)); await p.keyboard.down(key); await p.waitForTimeout(400); }
+            await p.waitForTimeout(250);
+          }
+          await p.keyboard.up(key);
+          await p.waitForTimeout(3000);
+          shots.push(await emit(p, "practice-after-turn"));
+          out.push(`practice: card ${cardName ? "says Beneteau First 31.7" : "no Beneteau on the first card"}, top bar "${top}", wheel "${wheelName}"; closest to the wind ${best ?? "?"} deg off the bow${hw ? `, ${hw} frame(s) head to wind` : " (no head-to-wind frame)"}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`S515 ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
