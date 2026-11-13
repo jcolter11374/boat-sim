@@ -668,8 +668,12 @@ try {
       const run0 = six.day;
       await page.waitForFunction((d) => window.__helm.status.day > d + 0.4 || window.__helm.clock === 0 || window.__helm.error, run0, { timeout: 240000 })
         .catch(() => fail(`helm: at 1 day a second the clock didn't move from day ${run0}`));
-      const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent }));
-      if (ran.err || (ran.clock === 0 ? ran.stop === "time" : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
+      // A "Your call" card (#391) is a reason to pause after a "time" run too; a bare pause isn't.
+      // The card shows once the picture reaches the call's moment, a second or two after the pause.
+      if (await page.evaluate(() => window.__helm.clock === 0 && window.__helm.lastStop === "time"))
+        await page.waitForFunction(() => !document.getElementById("decide").hidden, null, { timeout: 15000 }).catch(() => {});
+      const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent, card: !document.getElementById("decide").hidden }));
+      if (ran.err || (ran.clock === 0 ? ran.stop === "time" && !ran.card : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
       await page.evaluate(() => window.__helm.clock && document.getElementById("t-pause").click()); // pause, unless it paused itself
       await page.waitForFunction(() => window.__helm.clock === 0, null, { timeout: 10000 });
       await page.waitForTimeout(4000); // a run already under way lands

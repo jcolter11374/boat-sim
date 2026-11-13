@@ -207,7 +207,7 @@ export class Hud {
 
   /** A toast at the top. `sticky` ones (the reason the clock stopped) stay until it runs again.
    * Every toast also goes into the log in the big map. Returns the toast. */
-  toast(text: string, when: string, colour: string, opts: { warn?: boolean; sticky?: boolean } = {}): HTMLElement {
+  toast(text: string, when: string, colour: string, opts: { warn?: boolean; sticky?: boolean; hl?: string } = {}): HTMLElement {
     const el = document.createElement("div");
     el.className = "note";
     el.style.borderLeftColor = colour;
@@ -216,7 +216,14 @@ export class Hud {
     w.textContent = when;
     const t = document.createElement("div");
     t.className = "txt";
-    t.textContent = text;
+    // `hl`: the one part in the toast's colour (the number that matters); the rest stays white.
+    const at = opts.hl ? text.indexOf(opts.hl) : -1;
+    if (at >= 0) {
+      const n = document.createElement("b");
+      n.style.color = colour;
+      n.textContent = opts.hl!;
+      t.append(text.slice(0, at), n, text.slice(at + opts.hl!.length));
+    } else t.textContent = text;
     el.append(w, t);
     if (opts.sticky) el.dataset.sticky = "1";
     const box = $("notes");
