@@ -27,7 +27,7 @@ import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
@@ -264,6 +264,7 @@ function heroMode(): void {
     atmos.set(10, 330, 0, true);
     seaUniforms.uSeaSky.value.set(0, 0, 0, 0);
     seaUniforms.uSeaBreak.value.set(0, 0, 0, 0);
+    seaUniforms.uSeaWarm.value.set(0, 0, 0, 0);
     camera.fov = 45;
     camera.updateProjectionMatrix();
     setSea(seaSelect.value);
@@ -502,6 +503,8 @@ renderer.setAnimationLoop(() => {
     atmos.cloud = clouds.cover;
     clouds.seaSky(seaUniforms.uSeaSky.value);
     clouds.seaBreak(seaUniforms.uSeaBreak.value);
+    // The far water takes some of the sky's warm horizon; the near water stays cool and dark (Elena).
+    seaUniforms.uSeaWarm.value.set(atmos.fog.color.r, atmos.fog.color.g, atmos.fog.color.b, HERO_SEA_WARM);
     sea.setSun(atmos.glintDir, atmos.glintLight);
     atmos.render();
     status.frames++;

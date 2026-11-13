@@ -21,6 +21,8 @@ export const HERO_SKY_DAY = 20190;
  * radius, so the low sun's light stays by the sun and nothing lies over the boat.
  */
 export const HERO_GLOW = { scale: 0.45, radius: 0.2 };
+/** How much the far water takes of the sky's warm horizon colour (0..1; gentle). */
+export const HERO_SEA_WARM = 0.55;
 /** A gentle sea: low enough that the hull stays clear of the crests from a 1.5 m camera, big enough to move. */
 export const HERO_SEA: SeaState = { name: "Title", hs: 0.8, tp: 6.5, meanDirection: 0.3 };
 

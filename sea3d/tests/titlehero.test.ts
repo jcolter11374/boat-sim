@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HERO_GLOW, HERO_SEA, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "../src/titleHero";
+import { HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "../src/titleHero";
 import type { MyBoat } from "../src/myboat";
 
 const boat = (kind: MyBoat["kind"], base: string): MyBoat => ({ kind, base, hash: "", name: "x", choices: {}, saved: "" });
@@ -39,4 +39,8 @@ test("the menu counts as below the boat on short phones too, never on a desktop 
 test("the title's glow is small and tight, so the low sun's light can't lie over the boat", () => {
   assert.ok(HERO_GLOW.scale > 0 && HERO_GLOW.scale <= 0.5, "under half the usual strength, not off");
   assert.ok(HERO_GLOW.radius <= 0.25, "tight (the usual radius is 0.55)");
+});
+
+test("the title's far water is warmed gently: some of the sky's colour, never all of it", () => {
+  assert.ok(HERO_SEA_WARM > 0.2 && HERO_SEA_WARM <= 0.7);
 });
