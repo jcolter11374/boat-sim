@@ -243,8 +243,8 @@
   @media (max-width: 899px) { #compass, #lookup { display: none !important; } body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + 54px); } }
   body.racing.followed #c-lead, body.racing.followed #watch { display: none; } /* following the one boat left in a race */
   body.racing.results:not(.followed) #c-lead { visibility: hidden; } /* the faded strip behind the card must not give away who is ahead (Elena) */
-  #result.raced #r-race, #result.watched #r-race { display: none; } /* you have just raced: "Change the boats" is the way on (Elena) */
-  #result.watched #r-watch, #result.watched #r-day, #result.watched:not(.raced) #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
+  /* Which ways on a card offers is helm/ending.ts's call (the same ones, in the same order, on every ending); these hide the parts a watch or a race has nothing to put in. */
+  #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -341,7 +341,6 @@
   #r-stars .s-ghost, #r-stars .s-real { font-size: 14px; margin: 4px 0; }
   #r-stars .s-ghost:empty { display: none; }
   /* A challenge has its own day, so no other launch day to try. */
-  #result.mission #r-day { display: none; }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
   .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .card select { max-width: 100%; }
@@ -399,7 +398,7 @@
   .rc-links a:hover, .rc-links a:focus-visible { color: var(--ink); text-decoration: underline; }
   .rc-links button { all: unset; color: var(--dim); cursor: pointer; }
   .rc-links button:hover, .rc-links button:focus-visible { color: var(--ink); text-decoration: underline; }
-  .rc-links button[hidden], #r-back[hidden] { display: none; }
+  .rc-links [hidden], .rc-btns [hidden], #r-back[hidden] { display: none; }
   /* Looking around after a watched voyage: the one way back to its ending card. */
   #r-back { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + var(--strip-h, 62px) + 12px); z-index: 6; font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px;
     color: var(--ink); background: rgba(10,18,30,.62); border: 1px solid rgba(255,255,255,.22); backdrop-filter: blur(8px); cursor: pointer; }
@@ -879,8 +878,8 @@
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button></div>
-    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
+    <div class="rc-btns" id="r-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button></div>
+    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./helm.html?who=autopilot&amp;against=revc">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./helm.html?who=autopilot">Watch her go</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>
