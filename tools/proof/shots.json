@@ -33,9 +33,9 @@
       "label": "16 ft beach cat (drawn on a 31 ft cruiser replay: it has no replays of its own yet)"
     },
     "rower": {
-      "voyage": "voyage_2020-04-15.json",
+      "voyage": "voyage_wind-powered-ocean-drone_2020-04-15.json",
       "drawas": "stock_ocean_rower45",
-      "label": "Ocean rowing boat (drawn on our kayak's replay: it has no replays of its own yet)"
+      "label": "Rannoch R45 rowing boat (drawn on the wind drone's replay: it has no replays of its own yet, and the drone sails at about rowing speed)"
     },
     "revc": {
       "voyage": "voyage_randolph-rev-c_2020-04-15.json",

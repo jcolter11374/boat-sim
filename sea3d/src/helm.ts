@@ -3698,6 +3698,8 @@ const BOAT_BLURB: Partial<Record<string, string>> = {
     "the Randolph team's own 9.4 m yacht, as we've modelled it from the builder's numbers: heavier and steadier than the cruiser, with a deep keel and a diesel. The sails trim and reef themselves; you steer and say how hard the engine works.",
   stock_sail_drone7:
     "a 7 m robot boat, like the ones scientists send out for months at a time. Its rigid wing turns itself to the wind; there's no motor, so you only steer.",
+  stock_ocean_rower45:
+    "an 8.6 m ocean rowing boat with a crew of four: two row while two rest, day and night, and they tire over the weeks. In head winds and gales they put out a parachute anchor and wait. You steer; they row.",
 };
 for (const k of PLAYABLE_STOCK) {
   const label = document.createElement("label");
