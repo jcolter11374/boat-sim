@@ -2963,6 +2963,63 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #500 (E3): one results card for every ending. Reach the practice card (hand back with Esc), a watched voyage's
+  // finish and a race finish, and shoot each card at 1280x720 and again with the window at 390x844.
+  "ending-cards": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("frames are taken in Chromium only");
+      const out = [];
+      const problems = [];
+      const card = () => page.evaluate(() => { const r = document.getElementById("result"); const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; const box = r?.getBoundingClientRect(); return { up: vis(r), head: document.getElementById("r-head")?.textContent.trim() ?? "", story: (document.getElementById("r-story")?.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 160), btns: [...document.querySelectorAll("#result .rc-btns > *, #result button, #result a")].filter(vis).map((b) => b.textContent.trim().replace(/\s+/g, " ")).filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 8), box: box ? [Math.round(box.left), Math.round(box.top), Math.round(box.right), Math.round(box.bottom)] : null, win: [innerWidth, innerHeight], boat: window.__helm?.boatBox?.() ?? null }; });
+      const shoot = async (name) => {
+        for (const [w, h] of [[1280, 720], [390, 844]]) {
+          await page.setViewportSize({ width: w, height: h });
+          await page.waitForTimeout(2500);
+          const c = await card();
+          const path = `look-end-${name}-${w}.jpg`;
+          if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+          const inside = c.box && c.box[0] >= -1 && c.box[2] <= c.win[0] + 1;
+          if (!c.up) problems.push(`${name} at ${w}: the card is not up`);
+          else if (!inside) problems.push(`${name} at ${w}: the card is wider than the window ${JSON.stringify(c.box)}`);
+          out.push(`${name} ${w}x${h}: "${c.head}" "${c.story}" [${c.btns.join(" / ")}] card ${JSON.stringify(c.box)} boat ${JSON.stringify(c.boat)}`);
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
+      };
+      const toEnd = async (label, limitMin) => {
+        const t0 = Date.now();
+        let c = await card();
+        while (!c.up && Date.now() - t0 < limitMin * MIN) {
+          await page.evaluate(() => { if (window.__helm?.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
+          await page.waitForTimeout(2500);
+          c = await card();
+        }
+        if (!c.up) problems.push(`${label}: no results card after ${limitMin} min at 4 days a second`);
+        await page.waitForTimeout(3000);
+        return c.up;
+      };
+      // 1. Practice: the triangle, then hand the wheel back (Esc).
+      await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await practiceTriangle(page);
+      await page.waitForTimeout(4000);
+      await page.keyboard.press("Escape");
+      const pr = await page.waitForFunction(() => { const r = document.getElementById("result"); return r && !r.hidden && r.offsetParent !== null; }, null, { timeout: MIN }).then(() => true, () => false);
+      if (pr) await shoot("practice"); else problems.push("practice: no card after handing back");
+      // 2. A watched voyage to her finish.
+      await page.goto(SITE + "helm.html?watch=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error), null, { timeout: 5 * MIN }).catch(() => {});
+      if (await toEnd("watch", 15)) await shoot("watch");
+      // 3. A race to the finish (Rosa's link: our kayak against Rev C, 1 Apr).
+      await page.goto(SITE + "helm.html?race=kayak,revc&launch=0&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN }).catch(() => {});
+      if (await toEnd("race", 20)) await shoot("race");
+      console.log(`ENDS ${BROWSER}: ${out.join(" || ")}`);
+      must(!problems.length, `${problems.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
