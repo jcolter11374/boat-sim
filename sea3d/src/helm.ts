@@ -55,7 +55,7 @@ import { drawForecast } from "./helm/forecast";
 import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
-import { CALLS, HONEST, briefing, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
+import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
@@ -2148,7 +2148,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   // asked once a voyage, the first time the boat is in it, whatever the order. Both answers
   // are ordinary orders the simulator sails in the real current; the ghost stays on auto.
   const cur = w ? Math.hypot(w.current_u, w.current_v) : 0;
-  if (w && cur >= 1 && !asked.stream && h - lastCallH >= MIN_CALL_GAP_H) {
+  // Not in a challenge with a goal: there the Stream is neither a call nor a note (Elena, 13 Nov).
+  if (w && cur >= 1 && !asked.stream && callAllowed("stream", !!m) && h - lastCallH >= MIN_CALL_GAP_H) {
     asked.stream = true;
     const toFinish = bearing([st.boat.lat, st.boat.lon], (game.boat?.course.target ?? [39.5, -13.5]) as [number, number]);
     // Wind against the current heaps the sea up into short steep waves: the Stream's real danger.
@@ -2231,7 +2232,7 @@ function maybeRouteCheck(st: Status): boolean {
   if (mode !== "hands_on" || st.over || shared || st.no_link || linkCut) return false;
   // A challenge with a goal has its own one big call (Sandy, #431, signed off as that): the route
   // check and the first chase stay out of it, and never start a look from a skip's stopped clock.
-  if (mission()) return false;
+  if (!callAllowed("route", !!mission()) || !callAllowed("chase", !!mission())) return false;
   const h = st.day * 24;
   const quiet = h - Math.max(lastCallH, 0) >= quietGapH() && h - routeLookedH >= 24;
   const early = !chaseAsked && h >= CHASE_FROM_H && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
