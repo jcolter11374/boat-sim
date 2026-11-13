@@ -190,6 +190,11 @@ export function offerWords(v: SavedVoyage): string {
   return parts.join(" · ");
 }
 
+/** The question before a new crossing ends the saved one: "End your voyage on day 12 and start a new one?" */
+export function endWords(v: SavedVoyage): string {
+  return `End your voyage on ${v.day < 1 ? "its first day" : `day ${Math.floor(v.day)}`} and start a new one?`;
+}
+
 /** The link that opens the saved voyage where it was left. `continue=1` tells the helm it is
  *  the player's own voyage coming back, not a game someone shared with them. */
 export function continueLink(v: SavedVoyage, page = "helm.html"): string {

@@ -3289,7 +3289,7 @@ async function begin(): Promise<void> {
     if (WATCH) watchLook();
     document.body.classList.toggle("racing", RACE);
     const d = `Day ${page.status!.day.toFixed(1)}`;
-    if (RESUMED) note(`Your voyage, back where you left it on day ${page.status!.day.toFixed(1)}. Press play to carry on.`, d, TONE_COLOUR.info);
+    if (RESUMED) note(`Welcome back. It's day ${page.status!.day.toFixed(1)}, right where you left off. Press play to carry on.`, d, TONE_COLOUR.info);
     else if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
@@ -3482,7 +3482,12 @@ for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[na
 try {
   if (sessionStorage.getItem(LOST_KEY)) {
     sessionStorage.removeItem(LOST_KEY);
-    $("startmsg").textContent = "Your saved voyage couldn't be opened: the simulator has changed since you left it, and it would sail differently now. Set sail on a new one.";
+    // Said at the top of the card, in the box the saved voyage would have been offered in (Leo).
+    $("ss-continue-words").textContent = "Your saved voyage couldn't be opened. The game has been updated since you left, and she would sail differently now. Please set sail on a new one.";
+    $("ss-continue-go").hidden = true;
+    $("ss-continue-new").hidden = true;
+    $("ss-continue").hidden = false;
+    $("ss-continue").dataset.lost = "1";
   }
 } catch {
   // no storage: nothing to say
@@ -3491,7 +3496,7 @@ if (RESUMED) {
   // Your own voyage goes straight back to sea: there's nothing to pick. Any trouble opening it
   // brings the card back with why.
   $("start").hidden = true;
-  $("loadtext").textContent = "Sailing your voyage back to where you left it…";
+  $("loadtext").textContent = "Sailing back to where you left off…";
   $("loading").hidden = false;
   void challengesReady
     .finally(() => begin())

@@ -259,7 +259,16 @@
   .ss-l { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); margin: 6px 0 4px; }
   .ss-line { font-size: 12.5px; margin: 5px 0 2px; }
   .ss-continue { font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,138,42,.45); background: rgba(255,138,42,.08); }
-  .ss-continue a { color: var(--orange, #ff8a2a); font-weight: 650; text-underline-offset: 3px; white-space: nowrap; }
+  .ss-continue a { display: inline-block; margin: 4px 0 3px; color: var(--orange, #ff8a2a); font-weight: 650; text-underline-offset: 3px; }
+  .ss-continue a[hidden] { display: none; }
+  .ss-continue .muted { font-size: 12px; }
+  #ss-ask-q { font-weight: 650; }
+  #go.asked { opacity: .4; filter: saturate(.5); }
+  .ss-ask-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .ss-ask-btns button { cursor: pointer; font: 650 13px system-ui, sans-serif; border-radius: 8px; padding: 7px 12px; color: #e9f1fb; background: rgba(27,51,82,.7); border: 1px solid rgba(160,200,255,.3); }
+  .ss-ask-btns button:hover { border-color: #8ab4ff; }
+  .ss-ask-btns button:focus-visible { outline: 2px solid var(--orange, #ff8a2a); outline-offset: 2px; }
+  #ss-ask-keep { background: var(--orange, #ff8a2a); border-color: var(--orange, #ff8a2a); color: #1a0d02; }
   .ss-opts { display: flex; flex-wrap: wrap; gap: 6px; }
   .ss-pill { font: 600 13.5px system-ui, sans-serif; color: var(--ink); text-align: left; padding: 6px 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(27,51,82,.55); cursor: pointer; }
   .ss-pill small { font-weight: 400; color: var(--dim); margin-left: 6px; }
@@ -715,7 +724,7 @@
 <div id="start" class="overlay">
   <div class="card glass" id="ss-card">
     <h1>Set sail</h1>
-    <p class="ss-row ss-continue" id="ss-continue" hidden><span id="ss-continue-words"></span> <a id="ss-continue-go" href="./helm.html">Continue your voyage</a><span class="muted" id="ss-continue-new"> A new crossing takes its place.</span></p>
+    <div class="ss-row ss-continue" id="ss-continue" hidden><div id="ss-continue-words"></div><a id="ss-continue-go" href="./helm.html">Continue your voyage</a><div class="muted" id="ss-continue-new">Starting a new crossing ends that one.</div><div id="ss-ask" role="alertdialog" aria-labelledby="ss-ask-q" hidden><div id="ss-ask-q"></div><div class="ss-ask-btns"><button type="button" id="ss-ask-keep">Keep sailing</button><button type="button" id="ss-ask-new">Start a new one</button></div></div></div>
     <div class="ss-row" id="ss-boat"><div class="ss-l">Your boat</div><b id="ss-boatname">Our kayak</b> &middot; <button type="button" class="ss-link" id="ss-change">Change</button></div>
     <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
