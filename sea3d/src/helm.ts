@@ -46,7 +46,7 @@ import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { outcomeLine } from "./replay/story";
-import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -2914,11 +2914,7 @@ function boatDrawn(on: boolean): void {
 function followRival(): void {
   if (!raceKept || !game.boat || !game.ghost || !page.race) return;
   [game.boat, game.ghost] = [game.ghost, game.boat];
-  for (const st of [page.status, shown]) {
-    if (!st) continue;
-    [st.boat, st.ghost] = [st.ghost, st.boat];
-    st.lead_km = -st.lead_km;
-  }
+  swapSides(page.status, shown); // usually the one object: swapped once, not twice
   page.race = { names: [page.race.names[1], page.race.names[0]], bases: [page.race.bases[1], page.race.bases[0]], launch: page.race.launch };
   page.followed = true;
   raceLook(page.race.names);
@@ -2962,7 +2958,7 @@ async function raceFinish(): Promise<void> {
   const launched = new Date(utc(c.race.launch)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
   $("r-story").textContent = more
     ? `${names[1]} is still sailing. Both boats launched on ${launched} into the same weather.` // her first mention on this card: the full name (B2)
-    : `${short(names[0])} against ${short(names[1])}, both launched on ${launched} into the same weather, with the same dice for breakdowns. One race is one roll of the dice.`;
+    : `${names[0]} against ${names[1]}, both launched on ${launched} into the same weather, with the same dice for breakdowns. One race is one roll of the dice.`;
   $("r-nums").replaceChildren(
     ...c.race.boats.slice(0, more ? 1 : 2).map((x, i) => {
       const d = document.createElement("div");

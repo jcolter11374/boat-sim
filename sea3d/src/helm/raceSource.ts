@@ -251,3 +251,15 @@ export function racePick(race: string, launch: string | null, mine: RaceChoices 
   const n = Number(launch);
   return { a: choices(a), b: choices(b), launch: launch !== null && Number.isInteger(n) && n >= 0 && n <= 5 ? n : 0, breakdowns: true };
 }
+
+/**
+ * Swap which boat is "yours" in each status given (following the other boat to the end). The page's
+ * two statuses are usually the same object, so each one is swapped once however often it is passed.
+ */
+export function swapSides(...sts: (Status | null | undefined)[]): void {
+  for (const st of new Set(sts)) {
+    if (!st) continue;
+    [st.boat, st.ghost] = [st.ghost, st.boat];
+    st.lead_km = -st.lead_km;
+  }
+}

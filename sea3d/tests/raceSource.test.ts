@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { HelmGame } from "../src/helm/game.ts";
-import { raceBase, raceCard, raceGone, raceHeadline, raceLabel, raceName, racePick, raceStatus, raceWorker, type RaceCard, type RaceCardBoat, type RaceInfo, type RaceStatus } from "../src/helm/raceSource.ts";
+import { raceBase, raceCard, raceGone, raceHeadline, raceLabel, raceName, racePick, raceStatus, raceWorker, swapSides, type RaceCard, type RaceCardBoat, type RaceInfo, type RaceStatus } from "../src/helm/raceSource.ts";
 import { cutAt } from "../src/helm/watchSource.ts";
 import type { Replay } from "../src/replay/data.ts";
 
@@ -135,4 +135,18 @@ test("when your boat is lost and the other sails on, the ending tells only her f
   assert.equal(raceGone(c.boats[0]), true);
   assert.equal(raceGone(c.boats[1]), false, "still at sea is not gone");
   assert.equal(raceGone(cardOf({}, {}).boats[0]), false);
+});
+
+test("following the other boat swaps the sides once, even when the page's two statuses are the one object", () => {
+  const mk = () => ({ boat: { soc: 0.1 }, ghost: { soc: 0.9 }, lead_km: -2585 }) as unknown as Parameters<typeof swapSides>[0] & { boat: { soc: number }; ghost: { soc: number }; lead_km: number };
+  const st = mk();
+  swapSides(st, st);
+  assert.equal(st.boat.soc, 0.9);
+  assert.equal(st.ghost.soc, 0.1);
+  assert.equal(st.lead_km, 2585);
+  const a = mk();
+  const b = mk();
+  swapSides(a, b, null);
+  assert.equal(a.boat.soc, 0.9);
+  assert.equal(b.boat.soc, 0.9);
 });
