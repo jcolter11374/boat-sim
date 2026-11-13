@@ -9,6 +9,7 @@
 import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
+import { continueLink, loadVoyage, offerWords } from "./voyageSave";
 import { RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
@@ -121,6 +122,14 @@ export function mountSetSailCard(hooks: CardHooks): void {
   const challenge = $<HTMLSelectElement>("challenge");
   const more = $<HTMLDetailsElement>("more");
 
+  // "Continue your voyage" (M3): a crossing saved in this browser is offered before a new one.
+  const kept = loadVoyage();
+  if (kept) {
+    $("ss-continue-words").textContent = `You have a voyage at sea: ${offerWords(kept)}.`; // textContent: the boat's name is the player's
+    $<HTMLAnchorElement>("ss-continue-go").href = `./${continueLink(kept)}`;
+    $("ss-continue").hidden = false;
+  }
+
   const checkedBoat = () => document.querySelector<HTMLInputElement>('input[name="boat"]:checked');
   const draw = () => {
     const s = { ...hooks.current(), where, challenge: where === "ocean" ? challenge.value : "" };
@@ -141,6 +150,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const whoShown = where === "ocean" && !!hooks.watch && sailed.length > 0;
     const auto = whoShown && who === "autopilot";
     $("ss-who").hidden = !whoShown;
+    // A new crossing takes the saved one's place; practice and watching the autopilot don't touch it.
+    $("ss-continue-new").hidden = where !== "ocean" || auto;
     pills($("ss-who-opts"), (["you", "autopilot"] as const).map((k) => ({ key: k, label: WHO_WORDS[k].pill })), auto ? "autopilot" : "you", (k) => {
       who = k as Who;
       draw();
