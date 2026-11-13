@@ -273,6 +273,7 @@ function heroMode(): void {
     seaUniforms.uSeaSky.value.set(0, 0, 0, 0);
     seaUniforms.uSeaBreak.value.set(0, 0, 0, 0);
     seaUniforms.uSeaWarm.value.set(0, 0, 0, 0);
+    seaUniforms.uSeaGlint.value.set(0, 0, 0, 0);
     camera.fov = 45;
     camera.updateProjectionMatrix();
     setSea(seaSelect.value);
@@ -513,6 +514,7 @@ renderer.setAnimationLoop(() => {
     clouds.seaBreak(seaUniforms.uSeaBreak.value);
     // The far water takes some of the sky's warm horizon; the near water stays cool and dark (Elena).
     seaUniforms.uSeaWarm.value.set(atmos.fog.color.r, atmos.fog.color.g, atmos.fog.color.b, HERO_SEA_WARM);
+    seaUniforms.uSeaGlint.value.set(atmos.sun.color.r, atmos.sun.color.g, atmos.sun.color.b, heroL.glint);
     sea.setSun(atmos.glintDir, atmos.glintLight);
     atmos.render();
     status.frames++;

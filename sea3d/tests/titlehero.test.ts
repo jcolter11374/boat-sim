@@ -51,5 +51,7 @@ test("a boat with sails is filmed towards the sun; a low boat without sails is l
   // Towards the sun but never straight into it; or the sun well behind the lens's shoulder.
   assert.ok(HERO_LIGHT_SAILS.sunOff >= 25 && HERO_LIGHT_SAILS.sunOff <= 45 && HERO_LIGHT_SAILS.back === 1);
   assert.ok(HERO_LIGHT_LOW.sunOff >= 100 && HERO_LIGHT_LOW.sunOff <= 150 && HERO_LIGHT_LOW.back === 0);
+  // Warm light on the far ripples only where the sun is behind the lens, and gently.
+  assert.ok(HERO_LIGHT_SAILS.glint === 0 && HERO_LIGHT_LOW.glint > 0 && HERO_LIGHT_LOW.glint <= 0.8);
   assert.ok(HERO_LIGHT_LOW.fill > HERO_LIGHT_SAILS.fill && HERO_LIGHT_LOW.env > HERO_LIGHT_SAILS.env);
 });
