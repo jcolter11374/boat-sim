@@ -2573,14 +2573,27 @@ const CHECKS = {
         await p.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
         await p.waitForLoadState("networkidle").catch(() => {});
         await p.waitForTimeout(6000);
-        const m = await p.evaluate(() => { const c = document.getElementById("ss-card").getBoundingClientRect(); const g = document.getElementById("go").getBoundingClientRect(); const b = window.__helm.boatBox?.() ?? null; const k = (window.devicePixelRatio || 1); return { card: [c.left, c.top, c.right, c.bottom].map(Math.round), go: [Math.round(g.top), Math.round(g.bottom)], goOn: g.top >= 0 && g.bottom <= innerHeight, cardOn: c.left >= 0 && c.right <= innerWidth && c.bottom <= innerHeight + 1, boat: b ? { x: Math.round(b.x / k), y: Math.round(b.y / k), w: Math.round(b.w / k), h: Math.round(b.h / k) } : null, win: [innerWidth, innerHeight] }; });
+        const m = await p.evaluate(() => { const c = document.getElementById("ss-card").getBoundingClientRect(); const g = document.getElementById("go").getBoundingClientRect(); const b = window.__helm.boatBox?.() ?? null; const k = (window.devicePixelRatio || 1); return { card: [c.left, c.top, c.right, c.bottom].map(Math.round), go: [Math.round(g.top), Math.round(g.bottom)], goOn: g.top >= 0 && g.bottom <= innerHeight, credits: (() => { const e = document.getElementById("credits"); if (!e || e.offsetParent === null) return "not shown"; const r = e.getBoundingClientRect(); const over = !(r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom); return over ? `OVER the card at [${Math.round(r.left)},${Math.round(r.top)}]` : "clear of the card"; })(), cardOn: c.left >= 0 && c.right <= innerWidth && c.bottom <= innerHeight + 1, boat: b ? { x: Math.round(b.x / k), y: Math.round(b.y / k), w: Math.round(b.w / k), h: Math.round(b.h / k) } : null, win: [innerWidth, innerHeight] }; });
         const path = `look-setsail-phone-${w}x${h}.jpg`;
         if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); shots.push(`${w}x${h}`); }
         const boatAbove = m.boat ? m.boat.y + m.boat.h / 2 <= m.card[1] + 2 && m.boat.x - m.boat.w / 2 >= -2 && m.boat.x + m.boat.w / 2 <= m.win[0] + 2 : null;
-        out.push(`${w}x${h}: card ${JSON.stringify(m.card)} ${m.cardOn ? "on screen" : "RUNS OFF the screen"}, Set sail ${m.goOn ? "on screen" : "off screen (scroll)"}, boat ${m.boat ? `${JSON.stringify(m.boat)} ${boatAbove ? "whole above the card" : "NOT whole above the card"}` : "box not reported"}`);
+        out.push(`${w}x${h}: card ${JSON.stringify(m.card)} ${m.cardOn ? "on screen" : "RUNS OFF the screen"}, Set sail ${m.goOn ? "whole on screen" : "NOT whole on screen"}, Credits ${m.credits}, boat ${m.boat ? `${JSON.stringify(m.boat)} ${boatAbove ? "whole above the card" : "NOT whole above the card"}` : "box not reported"}`);
         await ctx.close().catch(() => {});
       }
       return `${out.join("; ")}; frames ${shots.join(", ")}`;
+    },
+  },
+  // #487: the race strip shows a wind at day 0, before the race is started (it used to show a dash).
+  "race-wind-day0": {
+    path: "helm.html?race=kayak,revb&quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), `the race didn't load: ${await page.evaluate(() => window.__helm.error)}`);
+      await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
+      await page.waitForFunction(() => /\d/.test(document.getElementById("c-windv")?.textContent ?? ""), null, { timeout: 20_000 }).catch(() => {});
+      const t = await page.evaluate(() => ({ wind: document.getElementById("c-windv")?.textContent.trim() ?? "", label: document.getElementById("c-wavel")?.textContent.trim() ?? "", day: document.getElementById("day")?.textContent.trim() ?? "", clock: window.__helm.clock }));
+      must(/\d+\s*kn/.test(t.wind), `at ${t.day}, before the race starts, the strip's wind cell reads "${t.wind}"`);
+      return `${t.day}, paused (clock ${t.clock}): wind cell "${t.wind}" over "${t.label}"`;
     },
   },
   "look-marks": {
