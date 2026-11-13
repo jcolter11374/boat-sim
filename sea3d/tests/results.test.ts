@@ -34,7 +34,7 @@ test("a build on a fair board: the group leads, with no place", () => {
   assert.equal(t.head, "On the board of 11 Nov: Good group, about 74% finish.");
   assert.equal(t.detail, "Tested on 65 launches. Likely range 64% to 84%.");
   const top = standingText(standing("revc", board(), grid));
-  assert.equal(top.head, "On the board of 11 Nov: Best group, about 74% finish (with 1 build just as good).");
+  assert.equal(top.head, "On the board of 11 Nov: Best group, about 74% finish (with 1 boat just as good).");
   assert.doesNotMatch(top.head + top.detail + t.detail, /\d(st|nd|rd|th) of \d/); // no place at all
 });
 
@@ -42,7 +42,7 @@ test("one group only: no place at all", () => {
   const b = board();
   b.summary!.rows = b.summary!.rows.map((r) => ({ ...r, tier: 1 }));
   const t = standingText(standing("k-p10", b, grid));
-  assert.equal(t.head, "On the board of 11 Nov: all 4 builds are in one group, which these launches can't tell apart. It finishes 50% of 65 launches.");
+  assert.equal(t.head, "On the board of 11 Nov: all 4 boats are in one group, which these launch days can't tell apart. It finishes 50% of 65 launches.");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th)/);
 });
 

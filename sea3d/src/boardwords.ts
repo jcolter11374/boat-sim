@@ -81,7 +81,7 @@ export function bestHeadline(top: { label: string; finish_rate: number }[], grou
   const rates = top.map((r) => r.finish_rate).sort((a, b) => a - b);
   const mid = rates[Math.floor((rates.length - 1) / 2)];
   const pct = `${Math.round(mid * 100)}%`;
-  if (groups <= 1) return `Too close to call: every build finishes about ${pct} of the time.`;
+  if (groups <= 1) return `Too close to call: every boat finishes about ${pct} of the time.`;
   const first = top[0].label; // as the rows write it, capital O and all (Ines)
   if (top.length === 1) return `Best: ${first}, about ${pct} finish.`;
   const n = top.length - 1;
@@ -103,7 +103,7 @@ export function groupSummary(names: string[], best: boolean): string {
   const short = names.map((n) => n.replace(/, as built$/, ""));
   const n = short.length - 1;
   if (n <= 0) return names[0] ?? "";
-  if (best) return `${short[0]} and ${n} build${n === 1 ? "" : "s"} just as good`;
+  if (best) return `${short[0]} and ${n} boat${n === 1 ? "" : "s"} just as good`;
   if (short.length > 3) return `${short[0]} and ${n} more`;
   // "Randolph Rev C5 and Rev B": say the team's name once.
   const team = /^(Randolph )/.exec(short[0])?.[1];

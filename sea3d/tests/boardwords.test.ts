@@ -56,7 +56,7 @@ test("groups are named and fold to one row (Milo M6, M7)", () => {
   assert.deepEqual([1, 2, 3, 4].map((t) => tierName(t, 4)), ["Best", "Good", "Good", "Long shot"]);
   for (let g = 1; g <= 6; g++) for (let t = 1; t <= g; t++) assert.doesNotMatch(tierName(t, g), /poor|bad|worst/i);
   const five = ["Our kayak", "Our kayak + wing sail and motors", "Our kayak, bigger panels and batteries", "Our kayak, motors turned up (30 W)", "Our kayak, motors turned down (20 W)"];
-  assert.equal(groupSummary(five, true), "Our kayak and 4 builds just as good");
+  assert.equal(groupSummary(five, true), "Our kayak and 4 boats just as good");
   assert.equal(groupSummary(["Randolph Rev C5, as built", "Randolph Rev B, as built"], false), "Randolph Rev C5 and Rev B");
   assert.equal(groupSummary(["A", "B", "C"], false), "A, B and C");
   assert.equal(groupSummary(five, false), "Our kayak and 4 more");

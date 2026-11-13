@@ -157,7 +157,7 @@ function holdoutCell(r: Row): HTMLElement {
   const h = r.holdout;
   const top = el("div", h.flag ? "warn" : "", `${pct(h.finish_rate)} of ${h.launches}`);
   td.append(top);
-  if (h.flag) td.append(el("div", "warn", "Much worse than on the main launches: may be tuned to the test"));
+  if (h.flag) td.append(el("div", "warn", "Much worse than on the main launch days: may be tuned to the test"));
   return td;
 }
 
@@ -279,11 +279,11 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
     if (mine) sub.textContent = "Your build isn't on the leaderboard: it sails a fixed list of builds. The Boatyard gives the odds for others.";
     else {
-      sub.textContent = "Builds in the same group can't be told apart with this many launches. ";
+      sub.textContent = "Boats in the same group can't be told apart with this many launch days. ";
       const n = s.rows[0]?.launches ?? 0;
       const when = launchSetWords(b.board.launch_set).replace(/ launches every \d+ days, /, ", ");
       // One sentence from one source for both pages' "i" (Milo M4).
-      sub.append(info(`Every build sails the same ${n} launches, ${when}, so the weather is identical for all. The Boatyard tests on a wider set of 100 launches, so its odds can differ by a few points.`));
+      sub.append(info(`Every boat sails the same ${n} launch days, ${when}, so the weather is identical for all. The Boatyard tests on a wider set of 100 launch days, so its odds can differ by a few points.`));
     }
   }
   box.replaceChildren(head, sub);

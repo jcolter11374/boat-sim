@@ -78,14 +78,14 @@ export function standingText(s: Standing): { head: string; detail: string } {
     const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
     if (s.tiers <= 1)
       return {
-        head: `${on}: all ${s.of} builds are in one group, which these launches can't tell apart. ${rate}`,
+        head: `${on}: all ${s.of} boats are in one group, which these launch days can't tell apart. ${rate}`,
         detail: range,
       };
     const others = s.inTier - 1;
     // The leaderboard's tier names (Milo, 12 Nov): Best, Good, Long shot. No place: builds in
     // one group can't be told apart, so "2nd of 8" would contradict it.
     const tier = s.tier === 1 ? "Best" : s.tier === s.tiers ? "Long shot" : "Good";
-    const builds = `${others} build${others === 1 ? "" : "s"}`;
+    const builds = `${others} boat${others === 1 ? "" : "s"}`;
     const with_ = others === 0 ? "" : s.tier === 1 ? ` (with ${builds} just as good)` : ` (with ${builds} like it)`;
     return {
       head: `${on}: ${tier} group, about ${pct(r.finish_rate)} finish${with_}.`,
