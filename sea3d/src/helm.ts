@@ -42,7 +42,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
-import { watchLink, whoFromUrl } from "./helm/whoSteers";
+import { raceLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { outcomeLine } from "./replay/story";
 import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
@@ -4253,7 +4253,7 @@ if (!shared) mountSetSailCard({
     // voyage" moves here, once the watched screen has everything the old one has (R5: the compass strip and
     // "Look up at the sky" (L4), the story notes, the points of interest, the cinematic).
     ...(params.has("who")
-      ? { who: whoFromUrl(location.search), voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []), watch: (file: string) => location.assign(watchLink(location.search, file)) }
+      ? { who: whoFromUrl(location.search), voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []), watch: (file: string) => location.assign(watchLink(location.search, file)), race: (a: RaceId, b: RaceId, day: string) => location.assign(raceLink(location.search, a, b, day)) }
       : {}),
   });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
