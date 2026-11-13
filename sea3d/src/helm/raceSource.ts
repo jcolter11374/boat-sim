@@ -10,7 +10,7 @@
 // Pure apart from the worker it is handed: no DOM and no fetch here.
 
 import { lastHour, planAt, valueAt, type Replay } from "../replay/data";
-import type { BoatNow, Card, Status, Stop } from "./game";
+import { OUTCOME, type BoatNow, type Card, type Status, type Stop } from "./game";
 
 /** A boat in the race: Boatyard choices ({} is our kayak, {base: "revc"}, a whole design). */
 export type RaceChoices = Record<string, string>;
@@ -122,6 +122,53 @@ export function raceCard(c: RaceCard): Card & { race: RaceCard } {
   return { build: a.build ?? "", launch: c.launch, seed: c.seed ?? 0, breakdowns_on: c.breakdowns_on ?? true, boat: side(a), ghost: side(b), margin_days: c.margin_days, verdict, breakdowns_differ: c.breakdowns_differ, orders: [], race: c };
 }
 
+// ---------------------------------------------------------------- the ending's words (Elena's list, 13 Nov)
+
+/** Outcomes where the boat is simply still out there when the race's clock runs out: not a result. */
+const UNFINISHED = new Set(["at_sea", "timeout", "goal"]);
+/** Is she gone (sunk, lost, aground…), as against finished or still sailing? A lost boat is not drawn sailing on. */
+export function raceGone(b: RaceCardBoat): boolean {
+  return b.outcome !== "arrived" && !UNFINISHED.has(b.outcome);
+}
+/** One decimal, as the strip and the crossing's card give the day (Leo). */
+const onDay = (days: number) => `on day ${days.toFixed(1)}`;
+const afterDays = (days: number) => `still at sea after ${Math.round(days)} days`;
+
+/** What became of a boat, to follow her name: "finished in 61.2 days", "was lost on day 3.9", "was still at sea after 150 days" (Leo's words). */
+export function raceFate(b: RaceCardBoat): string {
+  if (b.outcome === "arrived") return `finished in ${b.days.toFixed(1)} days`;
+  if (UNFINISHED.has(b.outcome)) return `was ${afterDays(b.days)}`; // she was still sailing: not a failure
+  return `${OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")} ${onDay(b.days)}`;
+}
+
+/**
+ * The ending's headline, the most important fact first, in the boats' full names ("(our model)" stays: B2).
+ * `only`: the race is being told as far as that boat's end (the other is still racing on screen), so only her fate is given.
+ */
+export function raceHeadline(c: RaceCard, names: [string, string], only?: 0 | 1): string {
+  const [a, b] = c.boats;
+  if (only !== undefined) return `${names[only]} ${raceFate(c.boats[only])}.`;
+  if (c.verdict === "draw") return "A draw: both finished within a day of each other.";
+  const w = c.winner;
+  if (w === 0 || w === 1) {
+    const l = (1 - w) as 0 | 1;
+    return c.margin_days !== null && c.boats[l].outcome === "arrived"
+      ? `${names[w]} finished first, ${Math.abs(c.margin_days).toFixed(1)} days ahead.`
+      : `${names[w]} ${raceFate(c.boats[w])}. ${names[l]} ${raceFate(c.boats[l])}.`;
+  }
+  // Neither finished: a boat that was lost is the news; the one still at sea comes second.
+  const first: 0 | 1 = raceGone(a) || !raceGone(b) ? 0 : 1;
+  const second = (1 - first) as 0 | 1;
+  return `${names[first]} ${raceFate(c.boats[first])}. ${names[second]} ${raceFate(c.boats[second])}.`;
+}
+
+/** The small line under a boat's days on the card. The race's time limit is not a result, so it says so. */
+export function raceLabel(b: RaceCardBoat, name: string): string {
+  if (b.outcome === "arrived") return `${name}: finished`;
+  if (UNFINISHED.has(b.outcome)) return `${name}: ${afterDays(b.days)}`;
+  return `${name}: ${(OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")).replace(/^was /, "")} ${onDay(b.days)}`;
+}
+
 type Ask = { id: number; type: string; base?: string; hours?: number };
 type Reply = { id?: number; ok?: boolean; value?: unknown; error?: string; type?: string; text?: string };
 type RaceValue = { launches?: string[]; stopped?: string; status: RaceStatus; replays: [Replay, Replay] | null; card?: RaceCard };
@@ -203,4 +250,16 @@ export function racePick(race: string, launch: string | null, mine: RaceChoices 
   const b = ok(rb) ? rb : a === "revc" ? "kayak" : "revc";
   const n = Number(launch);
   return { a: choices(a), b: choices(b), launch: launch !== null && Number.isInteger(n) && n >= 0 && n <= 5 ? n : 0, breakdowns: true };
+}
+
+/**
+ * Swap which boat is "yours" in each status given (following the other boat to the end). The page's
+ * two statuses are usually the same object, so each one is swapped once however often it is passed.
+ */
+export function swapSides(...sts: (Status | null | undefined)[]): void {
+  for (const st of new Set(sts)) {
+    if (!st) continue;
+    [st.boat, st.ghost] = [st.ghost, st.boat];
+    st.lead_km = -st.lead_km;
+  }
 }
