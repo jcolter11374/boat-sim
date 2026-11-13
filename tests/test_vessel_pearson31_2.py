@@ -92,5 +92,5 @@ def test_committed_trim_table_is_the_vpp_output(raw):
     assert set(t["plans"]) == {"full", "reef1", "reef2", "storm"}
     assert t["autopilot_factor"] == p.autopilot_factor
     i, j, k = t["tws_kn"].index(12), t["twa_deg"].index(90), 4
-    x = V.solve_trim(p, 12 * KNOT, 90, p.plans[0], t["sheet_deg"][k], 0.0)
+    x = V.solve_trim(V.hand_sailed(p), 12 * KNOT, 90, p.plans[0], t["sheet_deg"][k], 0.0)
     assert t["plans"]["full"]["speed_kn"][i][j][k] == pytest.approx(x.speed / KNOT, abs=0.002)

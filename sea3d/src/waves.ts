@@ -77,20 +77,24 @@ export function jonswapShape(r: number, gamma = JONSWAP_GAMMA): number {
 
 /** Points that split a density on [lo, hi] into n bands of equal area,
  *  returning each band's area-weighted midpoint. */
-function equalAreaMidpoints(f: (x: number) => number, lo: number, hi: number, n: number): number[] {
-  const m = 4000;
+/** The inverse of f's cumulative distribution on [lo, hi]: q in 0..1 -> x. */
+function inverseCdf(f: (x: number) => number, lo: number, hi: number, m = 4000): (q: number) => number {
   const xs: number[] = [];
   const cum: number[] = [0];
   for (let i = 0; i <= m; i++) xs.push(lo + ((hi - lo) * i) / m);
   for (let i = 1; i <= m; i++) cum.push(cum[i - 1] + 0.5 * (f(xs[i - 1]) + f(xs[i])) * (xs[i] - xs[i - 1]));
   const total = cum[m];
-  const inv = (q: number) => {
+  return (q: number) => {
     let j = 1;
     while (j < m && cum[j] < q * total) j++;
     const c0 = cum[j - 1];
     const c1 = cum[j];
     return xs[j - 1] + ((xs[j] - xs[j - 1]) * (q * total - c0)) / (c1 - c0 || 1);
   };
+}
+
+function equalAreaMidpoints(f: (x: number) => number, lo: number, hi: number, n: number): number[] {
+  const inv = inverseCdf(f, lo, hi);
   const out: number[] = [];
   for (let i = 0; i < n; i++) out.push(inv((i + 0.5) / n));
   return out;
@@ -106,12 +110,17 @@ interface Layout {
  *  spreading, and the band of f / fp it is drawn over. */
 export interface SpectrumShape {
   gamma: number;
-  spread: number; // s in cos^2s
+  spread: number; // s in cos^2s (at the peak, if spreadByFreq)
+  /** Spreading that varies with frequency (Mitsuyasu et al. 1975, as Goda gives it):
+   *  s = spread x (f/fp)^5 below the peak and (f/fp)^-2.5 above, so the waves near the
+   *  peak are long-crested and the shorter ones fan out across them. A wind sea is
+   *  short-crested like that; one s for all reads as parallel rows (Sam's checklist). */
+  spreadByFreq?: boolean;
   lo: number; // f / fp
   hi: number; // f / fp
 }
 /** The wind sea (and the single-number sea of older replays). */
-export const WIND_SEA: SpectrumShape = { gamma: JONSWAP_GAMMA, spread: SPREAD_S, lo: F_LO, hi: F_HI };
+export const WIND_SEA: SpectrumShape = { gamma: JONSWAP_GAMMA, spread: SPREAD_S, spreadByFreq: true, lo: F_LO, hi: F_HI };
 /** Swell from distant storms: a narrow peak (gamma 5, GUESS: swell spectra run
  *  gamma 3-10) and long, parallel crests (s = 40, GUESS: Goda gives 25 for
  *  young swell, 75 for old), with no short-wave tail (the tail is the wind
@@ -121,16 +130,31 @@ export const SWELL: SpectrumShape = { gamma: 5, spread: 40, lo: 0.75, hi: 1.6 };
 const layouts = new Map<string, Layout>();
 
 function layout(n: number, seed: number, shape: SpectrumShape = WIND_SEA): Layout {
-  const key = `${n}:${seed}:${shape.gamma}:${shape.spread}:${shape.lo}:${shape.hi}`;
+  const key = `${n}:${seed}:${shape.gamma}:${shape.spread}:${shape.spreadByFreq ?? false}:${shape.lo}:${shape.hi}`;
   const hit = layouts.get(key);
   if (hit) return hit;
   const rand = mulberry32(seed);
   const ratio = equalAreaMidpoints((r) => jonswapShape(r, shape.gamma), shape.lo, shape.hi, n);
-  const spread = (d: number) => Math.pow(Math.cos(d / 2), 2 * shape.spread);
-  const dirs = equalAreaMidpoints(spread, -Math.PI, Math.PI, n);
-  for (let i = n - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+  const spreadOf = (s: number) => (d: number) => Math.pow(Math.cos(d / 2), 2 * s);
+  let dirs: number[];
+  if (!shape.spreadByFreq) {
+    dirs = equalAreaMidpoints(spreadOf(shape.spread), -Math.PI, Math.PI, n);
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+    }
+  } else {
+    // Each component draws its direction from its own frequency's spreading, at
+    // stratified, shuffled quantiles (so the set still spans the spread evenly).
+    const q = Array.from({ length: n }, (_, i) => (i + 0.5) / n);
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [q[i], q[j]] = [q[j], q[i]];
+    }
+    dirs = ratio.map((r, i) => {
+      const s = Math.max(1, shape.spread * (r <= 1 ? Math.pow(r, 5) : Math.pow(r, -2.5))); // GUESS floor s = 1
+      return inverseCdf(spreadOf(s), -Math.PI, Math.PI, 1440)(q[i]);
+    });
   }
   const phase = ratio.map(() => rand() * 2 * Math.PI);
   const out = { ratio, offset: dirs, phase };
@@ -199,6 +223,7 @@ export class Sea {
   private readonly psi: number[]; // running phase of each component
   private readonly comps: WaveComponent[];
   private tLast: number | null = null;
+  private drift = { x: 0, z: 0 }; // water gone by since the last advance (m)
   /** Where a change of period or direction pivots (world x, z, m). Put it at
    *  the boats: near it the sea changes smoothly; far away the crests sweep
    *  round faster, like a fan opening. */
@@ -231,6 +256,16 @@ export class Sea {
   /** Same, with a preset (direction already in radians of travel). */
   setPreset(sea: SeaState): void {
     this.setTarget(sea.hs, sea.tp, sea.meanDirection);
+  }
+
+  /**
+   * The boat has moved (dx, dz) metres through the water since the last frame:
+   * the sea flows past by that much. Each train's running phase takes it at the
+   * train's own wavenumber, so later changes of period never jump.
+   */
+  flow(dx: number, dz: number): void {
+    this.drift.x += dx;
+    this.drift.z += dz;
   }
 
   /** Ease the height to nothing, keeping the period and direction. */
@@ -275,6 +310,7 @@ export class Sea {
       // starts it where components() would be at time t
       if (first) this.psi[i] = this.L.phase[i] - omega * t + kAnchor;
       else this.psi[i] -= omega * dt;
+      if (this.drift.x || this.drift.z) this.psi[i] += k * (Math.cos(dir) * this.drift.x + Math.sin(dir) * this.drift.z);
       const c = this.comps[i];
       c.amplitude = a;
       c.wavelength = wavelengthFromPeriod(T);
@@ -283,6 +319,8 @@ export class Sea {
       // measured from the anchor so stretching and turning pivot there
       c.phase = this.psi[i] + omega * t - kAnchor;
     }
+    this.drift.x = 0;
+    this.drift.z = 0;
     return this.comps;
   }
 }
@@ -453,6 +491,11 @@ export class MixedSea {
 
   snap(): void {
     for (const p of this.parts) p.snap();
+  }
+
+  /** The boat moved (dx, dz) m through the water: every system flows past (Sea.flow). */
+  flow(dx: number, dz: number): void {
+    for (const p of this.parts) p.flow(dx, dz);
   }
 
   /** Every train of all three systems at time t (s). Call with non-decreasing t. */

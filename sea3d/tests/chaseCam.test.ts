@@ -25,8 +25,8 @@ const diff = (a: number, b: number) => ((((a - b) % 360) + 540) % 360) - 180;
 
 test("the camera stands behind her and to leeward", () => {
   // Heading north, wind on starboard (from the east): she heels to port, so we stand south-west.
-  assert.equal(standAt(0, 1), 210);
-  assert.equal(standAt(0, -1), 150);
+  assert.equal(standAt(0, 1), 222);
+  assert.equal(standAt(0, -1), 138);
   const s = placeFor(0, standAt(0, 1), 9.5, 14, F);
   assert.ok(s.pos[0] < 0 && s.pos[2] > 0, "south-west of the boat");
   assert.ok(s.pos[1] > 3 && s.pos[1] < 15, `raised a little: ${s.pos[1]}`);
@@ -50,7 +50,7 @@ test("at 1280x720, 1920x1080 and 1024x768 the whole boat is in the band above th
 });
 
 test("she sits a third off-centre, with the open side of the frame ahead of her bow", () => {
-  const s = placeFor(0, 210, 9.5, 14, F);
+  const s = placeFor(0, 222, 9.5, 14, F);
   const look = bearingOf(s.look[0] - s.pos[0], s.look[2] - s.pos[2]);
   const toBoat = bearingOf(-s.pos[0], -s.pos[2]);
   const off = diff(look, toBoat);
@@ -62,7 +62,7 @@ test("she sits a third off-centre, with the open side of the frame ahead of her 
 test("it eases round on a tack and doesn't flicker on a dead run", () => {
   const c = new ChaseCam();
   c.update(1 / 30, 0, 45, 9.5, 14, F, false);
-  const first = placeFor(0, 210, 9.5, 14, F).pos;
+  const first = placeFor(0, 222, 9.5, 14, F).pos;
   let s = c.update(1 / 30, 0, 45, 9.5, 14, F, false)!;
   assert.ok(Math.abs(s.pos[0] - first[0]) < 0.5);
   // Tack: wind now on the port side. One frame later the camera has barely moved...
@@ -83,4 +83,24 @@ test("dragging the view hands the camera to the player until 4 s after letting g
   c.drag(false);
   assert.equal(c.update(2, 0, 45, 9.5, 14, F, false), null);
   assert.ok(c.update(3, 0, 45, 9.5, 14, F, false));
+});
+
+test("two subjects: a landmark ahead within 2.5 km brings in the longer lens, never one astern", async () => {
+  const { twoSubject, TWO_FOV, CHASE_FOV: F0, ChaseCam: C } = await import("../src/helm/chaseCam.ts");
+  assert.equal(twoSubject(3000, 0), 0);
+  assert.equal(twoSubject(1200, 0), 1);
+  assert.ok(twoSubject(2000, 10) > 0 && twoSubject(2000, 10) < 1);
+  assert.equal(twoSubject(1200, 120), 0, "behind her: the usual shot");
+  const c = new C();
+  for (let i = 0; i < 300; i++) c.update(1 / 30, 0, 45, 9.5, 14, F, false, { bearing: 5, distM: 1200 });
+  assert.ok(Math.abs(c.fov - TWO_FOV) < 0.5, `${c.fov}`);
+  for (let i = 0; i < 300; i++) c.update(1 / 30, 0, 45, 9.5, 14, F, false, null);
+  assert.ok(Math.abs(c.fov - F0) < 0.5);
+});
+
+test("two subjects: a wide group (the light and its finish gate) widens the lens to hold it, within limits", async () => {
+  const { twoFov, TWO_FOV } = await import("../src/helm/chaseCam.ts");
+  assert.equal(twoFov(0), TWO_FOV);
+  assert.equal(twoFov(15), 34);
+  assert.equal(twoFov(80), 55);
 });

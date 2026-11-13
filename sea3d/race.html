@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>boat-sim: Race two designs</title>
+<title>Bluewater: Race it</title>
 <style>
   :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
@@ -34,11 +34,17 @@
   .pick { border-left: 4px solid var(--orange); padding: 2px 0 6px 10px; margin-bottom: 10px; }
   .pick.b { border-left-color: var(--blue); }
   .pick label, #setup > label { display: block; margin: 6px 0 2px; font-size: 12px; color: var(--dim); }
-  #controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-  #controls .wide { grid-column: 1 / 3; }
+  #controls, #controls2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  #controls .wide, #controls2 .wide { grid-column: 1 / 3; }
   .pastelink { display: block; margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--dim); font: 12px system-ui, sans-serif;
     text-decoration: underline; cursor: pointer; }
   #howto { margin: 8px 0 0; font-size: 12px; line-height: 1.4; }
+  /* How fast time runs, the same buttons and words as the helm's bar (T1: Real time first). */
+  #timebar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 10px; }
+  #timebar .lbl { width: 100%; font-size: 12px; color: var(--dim); }
+  #timebar button { padding: 5px 8px; font-size: 12px; }
+  #timebar button[aria-pressed="true"]:not(:disabled) { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; } /* as on the voyage strip: one solid orange button */
+  #rclock { width: 100%; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   #msg { margin-top: 8px; font-size: 12.5px; min-height: 18px; }
   #mapbox { grid-area: map; padding: 10px 12px; }
   #map { width: 100%; height: 330px; display: block; border-radius: 8px; }
@@ -78,7 +84,7 @@
     <div class="pick">
       <b>Boat A</b>
       <label for="baseA">Start from</label>
-      <select id="baseA"><option value="kayak">Our kayak</option><option value="revc">Randolph Rev C (our model)</option><option value="revb">Randolph Rev B (our model)</option></select>
+      <select id="baseA"><option value="kayak">Our kayak</option><option value="revc">Randolph Rev C5 (our model)</option><option value="revb">Randolph Rev B (our model)</option></select>
       <button type="button" class="pastelink" data-for="pasteA">Paste a design link instead</button>
       <div class="paste" id="pasteA" hidden>
         <label for="shareA">Boatyard share link (it wins over the pick above)</label>
@@ -88,7 +94,7 @@
     <div class="pick b">
       <b>Boat B</b>
       <label for="baseB">Start from</label>
-      <select id="baseB"><option value="kayak">Our kayak</option><option value="revc" selected>Randolph Rev C (our model)</option><option value="revb">Randolph Rev B (our model)</option></select>
+      <select id="baseB"><option value="kayak">Our kayak</option><option value="revc" selected>Randolph Rev C5 (our model)</option><option value="revb">Randolph Rev B (our model)</option></select>
       <button type="button" class="pastelink" data-for="pasteB">Paste a design link instead</button>
       <div class="paste" id="pasteB" hidden>
         <label for="shareB">Boatyard share link (it wins over the pick above)</label>
@@ -102,6 +108,18 @@
     <label><input id="breakdowns" type="checkbox" checked> Things can break (the same dice for both)</label>
     <div id="controls">
       <button id="go" class="go wide">Start the race</button>
+    </div>
+    <div id="timebar" role="group" aria-label="How fast time runs">
+      <span class="lbl">Let both boats sail on, this fast:</span>
+      <button id="t-pause" title="Pause or carry on" aria-pressed="true" disabled>&#10074;&#10074;</button>
+      <button class="rate" data-rate="rt" aria-pressed="false" title="Real time: a second of the voyage every second" disabled>Real time</button>
+      <button class="rate" data-rate="1" aria-pressed="false" title="One hour of the voyage every second" disabled>1h</button>
+      <button class="rate" data-rate="6" aria-pressed="false" title="Six hours every second" disabled>6h</button>
+      <button class="rate" data-rate="24" aria-pressed="false" title="A day every second" disabled>1d</button>
+      <button class="rate" data-rate="96" aria-pressed="false" title="Four days every second" disabled>4d</button>
+      <span id="rclock"></span>
+    </div>
+    <div id="controls2" class="controls">
       <button id="day" disabled>Sail 1 day</button>
       <button id="week" disabled>Sail 1 week</button>
       <button id="until" class="wide" disabled>Until something happens</button>

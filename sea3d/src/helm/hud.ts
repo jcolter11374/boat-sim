@@ -12,8 +12,8 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 export const TOAST_MS = { info: 6000, warn: 10000 };
 /** At most this many toasts at once; older ones leave early. */
 export const MAX_TOASTS = 2;
-/** The coach line in the open drawer for the first seconds after Set sail. */
-export const COACH_MS = 10000;
+/** The coach line in the open drawer for the first seconds after Set sail: long enough to read its three sentences (F4). */
+export const COACH_MS = 12000;
 
 export interface HudHooks {
   /** The map changed size: redraw it. */
@@ -241,7 +241,7 @@ export class Hud {
     for (const el of Array.from($("notes").querySelectorAll<HTMLElement>('.note[data-sticky="1"]'))) this.dropToast(el);
   }
 
-  private dropToast(el: HTMLElement): void {
+  dropToast(el: HTMLElement): void {
     clearTimeout(this.toastTimers.get(el));
     this.toastTimers.delete(el);
     if (el.classList.contains("out")) return;
@@ -305,7 +305,12 @@ export function showStrip(d: StripData): void {
     bar.style.background = b < 15 ? "var(--bad)" : b < 35 ? "var(--warn)" : "var(--good)";
   }
   if (d.windKn !== undefined) $("c-windv").textContent = d.windKn == null ? "–" : `${d.windKn.toFixed(0)} kn ${d.windTo == null ? "" : arrow(d.windTo)}`;
-  if (d.waves !== undefined) $("c-wavel").textContent = d.waves == null ? "wind" : `waves ${d.waves.toFixed(1)} m`;
+  // The label is uppercased by CSS; the unit sits in its own span so it stays "m", not "M" (Milo).
+  if (d.waves !== undefined) {
+    const l = $("c-wavel");
+    if (d.waves == null) l.textContent = "wind";
+    else l.replaceChildren(`waves ${d.waves.toFixed(1)} `, Object.assign(document.createElement("span"), { className: "u", textContent: "m" }));
+  }
   if (d.lead !== undefined) {
     const lead = $("c-lead");
     const km = Math.round(Math.abs(d.lead));

@@ -1,6 +1,7 @@
 // The practice course's marks in the 3D view. Rosa placed them (course.ts); Sam made them
 // float like the real thing (backlog item 1, Elena 12 Nov). Orange for the marks to round,
-// yellow for the start and finish. Thomas Point Light is Iris's model, so the run to it has no buoy.
+// yellow for the start and finish. Thomas Point Light is Iris's model; the run to it finishes
+// through a gate of two yellow marks east of it.
 //
 // A sailor's checklist for an inflatable racing mark (sailor-realism-checklist.md):
 //   * real size, about 1.5 m across and 2 m out of the water; a speck at 800 m, which is
@@ -16,6 +17,10 @@ import { heightAt, type WaveComponent } from "../waves";
 
 const MARK = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.65 });
 const FINISH = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.65 });
+/** A finish gate's marks: a saturated yellow that holds its colour through the haze (Ines: the gate must read). */
+const GATE = new THREE.MeshStandardMaterial({ color: 0xffc400, emissive: 0x6a4a00, roughness: 0.6, fog: false });
+/** A gate mark is never smaller than real size seen from this far (m): about 8 px or more on screen at any range (Ines). GUESS */
+const GATE_SEEN_M = 170;
 const WET = new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.35, transparent: true, opacity: 0.55 });
 
 /** How deep the mark floats (m): the bottom of the body is this far under the surface. GUESS */
@@ -53,16 +58,18 @@ export class Buoys {
   readonly group = new THREE.Group();
   private marks: Mark[] = [];
   private lastT: number | null = null;
+  private gate = false;
 
   constructor() {
     this.group.name = "practice-buoys";
   }
 
   /** The marks, metres east and north of the spell's start; the last is the finish (yellow). */
-  set(xy: { x: number; y: number }[]): void {
+  set(xy: { x: number; y: number }[], gate = false): void {
     for (const m of this.marks) this.group.remove(m.mesh);
+    this.gate = gate; // a finish gate: every mark is yellow and shows from the start
     this.marks = xy.map((p, i) => {
-      const mat = i === xy.length - 1 && xy.length > 1 ? FINISH : MARK;
+      const mat = gate ? GATE : i === xy.length - 1 && xy.length > 1 ? FINISH : MARK;
       const mesh = new THREE.Group();
       mesh.add(new THREE.Mesh(BODY, mat), new THREE.Mesh(TOP, mat), new THREE.Mesh(BAND, WET));
       this.group.add(mesh);
@@ -97,7 +104,7 @@ export class Buoys {
     const leanX = w > 0 ? (-lean * windV) / w : 0;
     for (const [i, m] of this.marks.entries()) {
       const last = i === this.marks.length - 1 && this.marks.length > 1;
-      m.mesh.visible = i >= next && (!last || next >= 1);
+      m.mesh.visible = this.gate || (i >= next && (!last || next >= 1));
       const x = m.x - boat.x;
       const z = -(m.y - boat.y);
       let h = 0;
@@ -114,7 +121,10 @@ export class Buoys {
       m.h = m.h == null ? h : m.h + (h - m.h) * kH;
       m.tx += (wantX - m.tx) * kT;
       m.tz += (wantZ - m.tz) * kT;
-      m.mesh.position.set(x, m.h - DRAFT_M, z);
+      // A gate mark grows with distance past GATE_SEEN_M (bigger than real, on purpose) so it never shrinks to a speck.
+      const k = this.gate ? Math.max(1, Math.hypot(x, z) / GATE_SEEN_M) : 1;
+      m.mesh.scale.setScalar(k);
+      m.mesh.position.set(x, m.h - DRAFT_M * k, z);
       m.mesh.rotation.set(m.tx, 0, m.tz);
     }
   }

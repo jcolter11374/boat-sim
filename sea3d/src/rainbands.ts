@@ -7,8 +7,13 @@
 
 import * as THREE from "three";
 import { R_EARTH } from "./land/shader";
+import { RAIN_SHOWERS, rainUniforms } from "./rainRings";
 
 const SHAFTS = 10;
+/** The distant shower curtains are held back (Ines, 12 Nov: they still read as waterspouts)
+ *  until they're redone with Hana's cloud base; ?showers=1 shows them for that work.
+ *  The showers still drive the sea under them (rainUniforms.uShowers) and the rain here. */
+const CURTAINS = typeof location !== "undefined" && new URLSearchParams(location.search).get("showers") === "1";
 const FIELD = 6000; // m, the square of sky the bands drift through, kept round the camera
 const TOP = 420; // m, where a curtain meets its cloud
 
@@ -38,17 +43,32 @@ float vn(vec2 p) {
   return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y);
 }
 void main() {
-  float edge = 1.0 - smoothstep(0.35, 1.0, abs(vUv.x));
+  // Sheets lean downwind and their edges are ragged, not ruled.
+  float x = vUv.x + uSlant * 0.2 * (0.5 - vUv.y); // leans about the middle, so it stays on its quad
+  float rag = vn(vec2(vUv.y * 4.0 + vShaft.x * 30.0, uTime * 0.03)) - 0.5;
+  // Hangs from the cloud base and fans out a little towards the sea, with a ragged edge.
+  float w = 0.7 + 0.25 * (1.0 - vUv.y);
+  float edge = (1.0 - smoothstep(0.15 * w, w, abs(x) + 0.35 * rag)) * (1.0 - smoothstep(0.85, 1.0, abs(vUv.x)));
   // Thick under the cloud, ragged where it meets the sea, lost in the cloud at the top.
-  float up = smoothstep(0.0, 0.12, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y));
+  // Down to the waterline (a shower reaches the sea), lost into its cloud at the top.
+  float up = smoothstep(0.0, 0.015, vUv.y) * (1.0 - smoothstep(0.75, 1.0, vUv.y));
+  float foot = 1.0 - smoothstep(0.0, 0.1, vUv.y); // the misty foot where the rain lands
   // Streaks of heavier rain, leaning with the wind, slowly shifting.
-  float s = vn(vec2(vUv.x * 7.0 + vUv.y * uSlant + vShaft.x * 50.0, vUv.y * 1.5 - uTime * 0.05));
-  s = 0.45 + 0.55 * s + 0.25 * vn(vec2(vUv.x * 23.0 + vUv.y * uSlant * 3.0, vShaft.x * 9.0));
+  // Soft sheets of heavier and lighter rain (broad noise, no fine vertical comb).
+  // Several veils of different density with lighter gaps between them.
+  float v1 = smoothstep(0.25, 0.75, vn(vec2(x * 2.3 + vShaft.x * 50.0 + 0.6 * vUv.y, vUv.y * 0.8 - uTime * 0.04)));
+  float v2 = smoothstep(0.3, 0.8, vn(vec2(x * 5.0 + vShaft.x * 17.0 + 1.2 * vUv.y, vUv.y * 2.2 - uTime * 0.07)));
+  // Gentle contrast, so no veil stands alone as a narrow dark column (a waterspout look).
+  float s = 0.5 + 0.45 * v1 + 0.2 * v2;
   float near = smoothstep(30.0, 150.0, vDist);
   float far = 1.0 - smoothstep(0.7 * uFar, 1.05 * uFar, vDist); // lost in the haze
-  float a = uAmount * vShaft.y * edge * up * s * near * far * 0.75;
+  float a = uAmount * vShaft.y * edge * up * s * near * far * (1.5 + 0.2 * foot);
   if (a < 0.003) discard;
-  gl_FragColor = vec4(mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.6), a);
+  vec3 c = mix(uColor, uHaze, clamp(vDist / uFar, 0.0, 1.0) * 0.45);
+  c = mix(c, uHaze * 1.08, 0.55 * foot); // spray off the sea, paler than the rain above it
+  gl_FragColor = vec4(c, min(a, 0.92));
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 interface Shaft {
@@ -73,7 +93,7 @@ export class RainBands {
   constructor() {
     let s = 777;
     const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < SHAFTS; i++) this.shafts.push({ x: rnd() * FIELD, z: rnd() * FIELD, width: 350 + 1300 * rnd() ** 2, dense: 0.5 + 0.5 * rnd(), seed: rnd() });
+    for (let i = 0; i < SHAFTS; i++) this.shafts.push({ x: rnd() * FIELD, z: rnd() * FIELD, width: 900 + 1800 * rnd() ** 2, dense: 0.5 + 0.5 * rnd(), seed: rnd() });
     const n = SHAFTS * 4;
     this.pos = new Float32Array(n * 3);
     const uv = new Float32Array(n * 2);
@@ -130,6 +150,7 @@ export class RainBands {
       const x = wrap(sh.x + windX * 0.9 * t, cx);
       const z = wrap(sh.z + windZ * 0.9 * t, cz);
       const d = Math.hypot(x - cx, z - cz);
+      if (i < RAIN_SHOWERS) rainUniforms.uShowers.value[i].set(x, z, sh.width, amount > 0.02 ? sh.dense * THREE.MathUtils.smoothstep(amount, 0.02, 0.25) : 0);
       // Under a band: full in its middle, easing off over its edge.
       const r = d / (sh.width / 2);
       under = Math.max(under, sh.dense * (1 - THREE.MathUtils.smoothstep(r, 0.4, 1.1)));
@@ -150,16 +171,16 @@ export class RainBands {
     // at the boat: the logged rain is the hour's rain right here (GUESS display tuning).
     this.local = THREE.MathUtils.clamp(amount * (0.75 + 0.5 * under), 0, 1);
     this.shown = amount > 0.02 ? shown : 0;
-    this.mesh.visible = amount > 0.02;
+    this.mesh.visible = CURTAINS && amount > 0.02;
     if (!this.mesh.visible) return;
     const u = this.mesh.material.uniforms;
-    u.uAmount.value = THREE.MathUtils.smoothstep(amount, 0.02, 0.5);
+    u.uAmount.value = THREE.MathUtils.smoothstep(amount, 0.02, 0.25); // a passing shower shows even when it only drizzles here
     // A dark curtain shows through haze that hides the paler sea under it, so they reach a little past the fog.
     u.uFar.value = Math.max(fog.far * 1.6, 2000);
     u.uTime.value = t;
     u.uSlant.value = THREE.MathUtils.clamp(Math.hypot(windX, windZ) / 15, 0, 1.5);
     const l = 0.2 + 0.8 * light;
-    u.uColor.value.copy(fog.color).multiplyScalar(0.55 * l + 0.1);
+    u.uColor.value.copy(fog.color).multiplyScalar(0.26 * l + 0.04); // darker than the haze, so a curtain reads against it
     u.uHaze.value.copy(fog.color);
   }
 

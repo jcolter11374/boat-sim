@@ -1,6 +1,6 @@
 /**
- * The title screen on index.html (one-game plan, step 2): the game menu over the
- * live sea. "Just watch the sea" swaps it for the sea controls; that choice lasts
+ * The title screen on index.html (one-game plan, step 1): Set sail, Boatyard and Practice
+ * over the live sea, the rest under More. "Just watch the sea" swaps it for the sea controls; that choice lasts
  * for the browser tab, and `?title=0` skips the menu (for links to the sea demo).
  */
 import { currentBoat, onBoatChange } from "./ui/myboatAdapter";
@@ -29,19 +29,14 @@ export function mountTitle(): void {
     show(false);
   });
 
-  const mine = document.getElementById("t-mine")!;
-  const build = document.getElementById("t-build")!;
+  // "My boat: Our kayak · Change": the name is player data (textContent only); Change opens the picker.
+  const name = document.getElementById("t-boatname")!;
   const draw = () => {
-    const boat = currentBoat();
-    mine.hidden = !boat;
-    build.classList.toggle("main", !boat);
-    if (boat) {
-      document.getElementById("t-boatname")!.textContent = boat.name;
-      (document.getElementById("t-edit") as HTMLAnchorElement).href = boat.href;
-    }
+    name.textContent = currentBoat()?.name ?? "Our kayak";
   };
   draw();
   onBoatChange(draw);
+  document.getElementById("t-change")?.addEventListener("click", () => void import("./ui/boatPicker").then((m) => m.openBoatPicker()));
 }
 
 if (typeof document !== "undefined") mountTitle();

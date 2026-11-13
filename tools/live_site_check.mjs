@@ -165,7 +165,16 @@ const helm = (setup, extra = async () => "") => async (page) => {
 const pickBoat = (value) => async (page) => {
   const r = page.locator(`input[name="boat"][value="${value}"]`);
   must((await r.count()) === 1, `the boat picker doesn't offer ${value || "our kayak"}`);
-  await r.check();
+  if (await r.isVisible()) return r.check();
+  // The Set sail card (#432) keeps the boat radios hidden as the helm's state and picks a boat
+  // through the top bar's "My boat" picker, which ticks the row and fires change: do the same.
+  await r.evaluate((el) => {
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const shown = await page.evaluate(() => document.getElementById("ss-boatname")?.textContent ?? "");
+  const want = await r.evaluate((el) => el.parentElement?.querySelector("b")?.textContent ?? "");
+  must(!shown || shown === want, `the Set sail card shows ${JSON.stringify(shown)}, not ${JSON.stringify(want)}`);
 };
 
 const CHECKS = {
