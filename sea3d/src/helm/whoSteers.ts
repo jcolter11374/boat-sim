@@ -77,7 +77,7 @@ export const RIVAL_WORDS = {
   you: "The ghost, the autopilot in a boat just like yours.",
   against: "Against:",
   picker: "The other boat",
-  pick: "Race this boat",
+  pick: "Pick this boat",
   same: "Pick a different boat. She can't race herself.",
 } as const;
 

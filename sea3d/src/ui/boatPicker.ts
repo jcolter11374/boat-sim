@@ -12,7 +12,7 @@ import { PLAYABLE_STOCK, STOCK, type StockKey } from "../boats/specs";
 export interface PickerEntry {
   /** "kayak", a stock id, "mine" (the saved design) or "yard:<base>" (a Boatyard link). */
   id: string;
-  group: "Ours" | "Stock boats" | "Your designs";
+  group: "Ours" | "Stock boats" | "The Randolph team's boats" | "Your designs";
   name: string;
   /** One plain fact line. */
   fact: string;
@@ -40,7 +40,7 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     const name = nameOf(k);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
-  out.push({ id: "yard:revc", group: "Stock boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
+  out.push({ id: "yard:revc", group: "The Randolph team's boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
   if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === ""))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
   out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "pick a hull, sails or motors, batteries and electronics", href: "./boatyard.html" });

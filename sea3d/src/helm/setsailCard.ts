@@ -145,11 +145,14 @@ export function mountSetSailCard(hooks: CardHooks): void {
       who = k as Who;
       draw();
     });
-    $("ss-who-line").textContent = WHO_WORDS[auto ? "autopilot" : "you"].line;
     // Race against: with you, a plain line naming the rival (the ghost); with the autopilot, nobody or another boat.
     const mine = raceId(checkedBoat()?.value ?? "");
     const racing = auto && !!hooks.race && !!mine && rival === "boat";
-    const against = racing ? (other ?? defaultRival(mine!)) : null;
+    // The other boat is never your own (Elena: an identical boat on the same autopilot is a dead heat).
+    const against = racing ? (other && other !== mine ? other : defaultRival(mine!)) : null;
+    // With a race picked the race line says it all, so the autopilot's own line makes room (Elena; the card must fit a phone).
+    $("ss-who-line").textContent = racing ? "" : WHO_WORDS[auto ? "autopilot" : "you"].line;
+    $("ss-who-line").hidden = racing;
     $("ss-rival").hidden = !whoShown || !hooks.race || (auto && !mine);
     $("ss-rival-opts").hidden = !auto;
     if (auto)
@@ -296,13 +299,13 @@ export function mountSetSailCard(hooks: CardHooks): void {
       m.openBoatPicker(document, {
         title: RIVAL_WORDS.picker,
         button: RIVAL_WORDS.pick,
-        picked: other ?? defaultRival(mine),
+        picked: other && other !== mine ? other : defaultRival(mine),
         entries: [
-          { id: "kayak", group: "Ours", name: rivalName("kayak", null), fact: "a 3 m solar robot boat: two small electric motors, no sail" },
-          { id: "revc", group: "Stock boats", name: rivalName("revc", null), fact: "the Randolph team's wing-sail robot boat" },
-          { id: "revb", group: "Stock boats", name: rivalName("revb", null), fact: "the Randolph team's Rev B design of the same boat" },
+          { id: "kayak", group: "Ours" as const, name: rivalName("kayak", null), fact: "a 3 m solar robot boat: two small electric motors, no sail" },
+          { id: "revc", group: "The Randolph team's boats" as const, name: rivalName("revc", null), fact: "the Randolph team's wing-sail robot boat" },
+          { id: "revb", group: "The Randolph team's boats" as const, name: rivalName("revb", null), fact: "the Randolph team's Rev B design of the same boat" },
           ...(name ? [{ id: "mine", group: "Your designs" as const, name, fact: "your boat from the Boatyard" }] : []),
-        ],
+        ].filter((e) => e.id !== mine),
         choose: (id) => {
           other = id as RaceId;
           draw();
