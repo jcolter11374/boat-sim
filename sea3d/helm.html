@@ -202,7 +202,35 @@
   @media (max-width: 760px) { body.watching #strip #c-wind { grid-column: span 7; } }
   /* A race (M2, R3): nobody steers either, but the lead cell stays: it's boat A against boat B. */
   body.racing #orders, body.racing #orders-tab, body.racing #c-order { display: none; }
-  #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
+  /* Sky guide when watching (decision L4, as on Watch a voyage): the compass strip along the top (which way the
+     camera looks; the bow, sun, moon and North Star along it), "Look up at the sky" just under it, labels in the
+     sky itself. The notes come in under both. */
+  #compass { position: fixed; top: calc(var(--bar, 0px) + var(--edge)); left: 50%; transform: translateX(-50%); width: clamp(240px, calc(100vw - 704px), 420px); height: 60px;
+    overflow: hidden; padding: 0; border-radius: 10px; background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); z-index: 5; transition: opacity .8s; }
+  #tape { position: absolute; inset: 0; }
+  #tape span { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  #tape .tick { top: 0; width: 1px; height: 7px; background: rgba(255,255,255,.35); }
+  #tape .tick.big { height: 11px; background: rgba(255,255,255,.7); }
+  #tape .lbl { top: 11px; font-size: 11px; color: var(--dim); }
+  #tape .lbl.pt { font-size: 13px; font-weight: 700; color: var(--ink); }
+  #tape .lbl.pt.n { color: #ff6b6b; }
+  #tape .mk { bottom: 2px; font-size: 11.5px; font-weight: 600; }
+  #tape .mk.up { bottom: 17px; }
+  #compass .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--orange); opacity: .8; }
+  #compass .hint { position: absolute; right: 6px; top: 2px; font-size: 9.5px; color: var(--dim); letter-spacing: .5px; }
+  #lookup { position: fixed; top: calc(var(--bar, 0px) + var(--edge) + 66px); left: 50%; transform: translateX(-50%); z-index: 5; font: 600 12px system-ui, sans-serif; padding: 4px 12px;
+    border-radius: 8px; border: 1px solid var(--hud-line); background: var(--strip-bg); color: var(--ink); cursor: pointer; transition: opacity .8s; }
+  #lookup[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); }
+  #skylabels { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
+  #skylabels span { position: absolute; transform: translate(-50%, -100%); margin-top: -10px; font-size: 11.5px; color: #e9f1fb; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #skylabels span::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 7px; background: rgba(233,241,251,.6); }
+  #compass[hidden], #lookup[hidden], #skylabels[hidden] { display: none; }
+  body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + var(--edge) + 98px); }
+  body.goal #compass, body.goal #lookup, body.goal #skylabels { opacity: 0; pointer-events: none; }
+  body.bare #compass, body.bare #lookup, body.bare #skylabels, body.cinema #compass, body.cinema #lookup, body.cinema #skylabels,
+  body.results #compass, body.results #lookup, body.results #skylabels, body:has(#mapbox.big) #compass, body:has(#mapbox.big) #lookup { visibility: hidden !important; }
+  @media (max-width: 899px) { #compass, #lookup { display: none !important; } body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + 54px); } }
+  #result.watched #r-watch, #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -634,7 +662,7 @@
     <kbd>Space</kbd><span>pause or carry on</span><kbd>1&ndash;5</kbd><span>how fast time runs (1 is real time)</span>
     <kbd>O</kbd><span>orders</span><kbd>F</kbd><span>forecast</span><kbd>M</kbd><span>map</span>
     <kbd>C</kbd><span>cinematic</span><kbd>N</kbd><span>sound</span><kbd>H</kbd><span>hide everything</span>
-    <kbd>Enter</kbd><span>take the wheel (sailboats)</span><kbd>Esc</kbd><span>close</span></div></div>
+    <kbd>L</kbd><span>look up at the sky (when watching)</span><kbd>Enter</kbd><span>take the wheel (sailboats)</span><kbd>Esc</kbd><span>close</span></div></div>
   <div class="kcol"><div class="kh">At the wheel</div>
     <div class="kg"><kbd>&larr; &rarr;</kbd><span>steer</span><kbd>&uarr; &darr;</kbd><span>sail in, sail out</span>
     <kbd>R</kbd><span>reef (Shift+R shakes out)</span><kbd>T</kbd><span>auto-trim</span><kbd>V</kbd><span>chase or deck camera</span>
@@ -642,6 +670,9 @@
   <label class="picq" title="Lower draws faster on an older computer. Your pick is remembered.">Picture <select id="picq"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
 </div>
 
+<div id="compass" aria-label="Compass: which way the camera is looking" hidden><div id="tape"></div><div class="mid"></div><div class="hint">VIEW</div></div>
+<button id="lookup" aria-pressed="false" title="Tilt the view up to see the moon and stars (L)" hidden>&#11014; Look up at the sky</button>
+<div id="skylabels" hidden></div>
 <button id="orders-tab" class="hud" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span>Orders</span></button>
 <section id="orders" class="glass" aria-label="Your orders">
   <h2>Your orders <button id="orders-x" class="x" aria-label="Close (O)" title="Close (O)">&times;</button></h2>
@@ -805,8 +836,8 @@
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a></div>
-    <div class="rc-links" id="r-links"><a href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a href="./voyage.html">Watch a voyage</a></div>
+    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a></div>
+    <div class="rc-links" id="r-links"><a href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { RACE_IDS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, raceLink, rivalName, watchDay, watchDays, watchLink, whoFromUrl } from "../src/helm/whoSteers.ts";
+import { RACE_IDS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, raceLink, rivalName, sailLink, watchDay, watchDays, watchLink, whoFromUrl } from "../src/helm/whoSteers.ts";
 import { RACE_BOATS, racePick } from "../src/helm/raceSource.ts";
 import { pickVoyage } from "../src/helm/watchSource.ts";
 import type { IndexEntry } from "../src/replay/data.ts";
@@ -75,4 +75,11 @@ test("a Randolph rival is always named as our model (B2), and the race's words p
   assert.equal(rivalName("mine", "Sea Biscuit"), "Sea Biscuit");
   assert.equal(dayLabel("2020-06-15"), "15 Jun");
   assert.doesNotMatch(JSON.stringify(RIVAL_WORDS), /record|replay|real time|per second/i);
+});
+
+test("a watched voyage's ending links to sailing that day yourself: the card, You picked, the same day", () => {
+  const link = sailLink("?quality=low&watch=2020-04-15", "2020-04-15T12:00");
+  assert.equal(link, "helm.html?quality=low&who=you&day=2020-04-15");
+  const back = whoFromUrl(link.slice(link.indexOf("?")));
+  assert.deepEqual([back.who, back.day], ["you", "2020-04-15"]);
 });
