@@ -47,6 +47,7 @@ import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/w
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
+import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
@@ -3189,7 +3190,13 @@ async function finish(): Promise<void> {
   $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
   $("r-notes").textContent = bits.join(" ");
   const mine = loadMyBoat();
-  showWays(mi && (c as Card & { stars?: Stars }).stars ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch });
+  // A weather challenge's try is kept in this browser for the leaderboard's challenges tab (Rosa's helm/challengeBest.ts). Not a shared voyage: that try was someone else's.
+  if (ch && !THEIRS) {
+    const st = c as Card & { stars?: Stars; ghost_stars?: Stars };
+    const run = (x: Card["boat"], s?: Stars) => ({ stars: s ? s.stars : null, finished: x.outcome === "arrived" || x.outcome === "goal", days: x.days });
+    saveChallengeRun(ch.id, run(me, st.stars), { boat: $("ss-boatname").textContent ?? "", autopilot: run(gh, st.ghost_stars) });
+  }
+  showWays(ch ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch });
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle(); // a soft knock, and the sea drops to half under the card
