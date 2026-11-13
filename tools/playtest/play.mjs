@@ -2367,6 +2367,7 @@ const CHECKS = {
       await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
       const bad = [];
       const out = [];
+      const sizes = async (mode) => {
       for (const [w, h] of [[1280, 720], [1100, 700], [1920, 1080], [1400, 900], [1024, 700], [390, 844]]) {
         await page.setViewportSize({ width: w, height: h });
         await page.waitForTimeout(2000);
@@ -2403,12 +2404,24 @@ const CHECKS = {
           const day = document.getElementById("day");
           return { n, out: [...new Set(out)].slice(0, 8), day: day?.textContent.trim() ?? "" };
         });
-        out.push(`${w}x${h}: ${r.n} texts${r.out.length ? `, ${r.out.length} wrong` : " all clear"}`);
-        if (r.out.length) bad.push(`at ${w}x${h}: ${r.out.join("; ")}`);
+        out.push(`${mode} ${w}x${h}: ${r.n} texts${r.out.length ? `, ${r.out.length} wrong` : " all clear"}`);
+        if (r.out.length) bad.push(`${mode} at ${w}x${h}: ${r.out.join("; ")}`);
         if (w === 1280 && BROWSER === "chromium") {
-          const path = "look-helm-strip-1280.jpg";
+          const path = `look-strip-${mode}-1280.jpg`;
           if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
         }
+      }
+      };
+      await sizes("sailing");
+      // The watching and racing strips too (Maya).
+      for (const [mode, q] of [["watching", "watch=2020-04-15"], ["racing", "race=kayak,revb"]]) {
+        await page.setViewportSize({ width: 1400, height: 900 });
+        await page.waitForLoadState("networkidle").catch(() => {});
+        await page.goto(SITE + `helm.html?${q}&quality=low`, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN });
+        if (await page.evaluate(() => window.__helm.error)) { bad.push(`${mode}: didn't load: ${await page.evaluate(() => window.__helm.error)}`); continue; }
+        await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
+        await sizes(mode);
       }
       must(!bad.length, `the helm strip: ${bad.join(" | ")}`);
       return out.join("; ");
