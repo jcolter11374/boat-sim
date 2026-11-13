@@ -2866,6 +2866,17 @@ function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
 }
 
 /** A watched voyage's ending: what became of her, the days and the distance, and her track. No race, so no verdict. */
+// "Look around" (R5: the old Watch a voyage had it): the ending card steps aside so she can be seen where she ended, with one way back to it.
+function lookAround(on: boolean): void {
+  if (!WATCH || !page.card) return;
+  $("result").hidden = on;
+  document.body.classList.toggle("results", !on);
+  $("r-back").hidden = !on;
+  (on ? $("r-back") : $("r-look")).focus();
+}
+$("r-look").addEventListener("click", () => lookAround(true));
+$("r-back").addEventListener("click", () => lookAround(false));
+
 // The watched voyage's postcard (R5: the old Watch a voyage had it): the view now, the ending's map, and how it ended. Saved on the player's own device.
 $("r-postcard").addEventListener("click", () => {
   const r = game.boat;
@@ -2913,6 +2924,7 @@ async function watchFinish(): Promise<void> {
   const sail = $<HTMLAnchorElement>("r-sail");
   sail.href = sailLink(location.search, r.start);
   sail.hidden = false;
+  $("r-look").hidden = false;
   $("r-postcard").hidden = false; // as the old Watch a voyage ended: the picture on screen, the map and what happened
   hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
