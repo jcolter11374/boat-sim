@@ -31,6 +31,7 @@ import { HERO_CLOUD, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf,
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
+import { TitleMusic } from "./titleMusic";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -155,6 +156,11 @@ const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 const titleSound = new TitleSound(sound);
 titleSound.scene.gulls = new URLSearchParams(location.search).get("gulls") === "1"; // off until someone has heard it (Elena)
+// The title's air (titleMusic.ts): a slow plucked tune of our own over a low pad, under the
+// sea. It goes on and off with the sound; ?music=0 leaves the sea and its sounds alone.
+const titleMusic = new TitleMusic(sound);
+titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
+(window as unknown as { __titleMusic: TitleMusic }).__titleMusic = titleMusic; // read-only, for the live sound checks (Nina)
 {
   const btn = document.getElementById("t-sound");
   sound.onChange = () => {
@@ -431,8 +437,10 @@ let soundT = 0;
 renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
   // The title's sound runs while the title is up, and fades out when it goes.
-  if (document.body.classList.contains("title")) titleSound.update(t - soundT);
-  else if (sound.on) sound.disable(false);
+  if (document.body.classList.contains("title")) {
+    titleSound.update(t - soundT);
+    titleMusic.update();
+  } else if (sound.on) sound.disable(false);
   soundT = t;
   sea.update(comps, t);
   status.boats = boats.map((b) => {

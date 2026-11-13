@@ -97,3 +97,52 @@ if "title-each-sound" in levels and "title-sea-only" in levels:
         lines.append(f"{at:6.1f} | {what:8s} | {pk:9.1f} | {ld:18.1f} | {sd:17.1f}")
     (d / "effects.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
+
+# 4. The music on its own: the music-and-sea clip minus the same sea alone. Its loudness in
+#    half-second windows against the sea's, and a spectrogram of the music by itself.
+if "title-music-and-sea" in levels and "title-sea-only-100s" in levels:
+    rate, a = load("title-music-and-sea")
+    _, b = load("title-sea-only-100s")
+    n = min(len(a), len(b))
+    mu, sea = a[:n] - b[:n], b[:n]
+    w = rate // 2
+    k = n // w
+    rm = np.array([db(np.sqrt(np.mean(mu[i * w : (i + 1) * w] ** 2))) for i in range(k)])
+    rs = np.array([db(np.sqrt(np.mean(sea[i * w : (i + 1) * w] ** 2))) for i in range(k)])
+    playing = rm > -70
+    mean = lambda r: 10 * np.log10(np.mean(10 ** (r / 10)))
+    text = (
+        f"music alone, while playing: mean {mean(rm[playing]):.1f} dBFS, loudest half second {rm.max():.1f} dBFS\n"
+        f"sea alone: mean {mean(rs[4:]):.1f} dBFS\n"
+        f"half seconds where the music is louder than the sea under it: {int((rm > rs).sum())} of {int(playing.sum())}\n"
+    )
+    (d / "music.txt").write_text(text)
+    print(text)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7.5), dpi=110)
+    t = np.arange(k) * 0.5
+    ax1.plot(t, rs, label="the sea alone", lw=1.3)
+    ax1.plot(t, np.where(playing, rm, np.nan), label="the music alone", lw=1.3)
+    ax1.set_ylabel("loudness, dB full scale (RMS, half seconds)")
+    ax1.set_title("Title music against the sea under it")
+    ax1.legend(fontsize=8)
+    ax1.grid(alpha=0.3)
+    f, ts, s = spectrogram(mu, rate, nperseg=4096, noverlap=3072)
+    keep = f <= 3000
+    ax2.pcolormesh(
+        ts,
+        f[keep],
+        10 * np.log10(s[keep] + 1e-14),
+        vmin=-130,
+        vmax=-65,
+        cmap="magma",
+        shading="auto",
+    )
+    ax2.axhline(2000, color="w", lw=0.8, ls="--")
+    ax2.set_xlabel("seconds")
+    ax2.set_ylabel("Hz")
+    ax2.set_title(
+        "The music by itself: the pad (low), the plucked tune (300 to 600 Hz and its harmonics), nothing above 2 kHz"
+    )
+    fig.tight_layout()
+    fig.savefig(d / "music.png")
+    plt.close(fig)
