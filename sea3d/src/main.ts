@@ -233,6 +233,7 @@ const clouds = new Clouds(quality);
 clouds.group.visible = false;
 scene.add(clouds.group);
 let heroWas = false;
+let demoStale = false; // the detailed models came while the title was up: the demo boats are built when it goes
 let heroL = heroLightFor("kayak");
 // The shore on the title's horizon (titleShore.ts): asked for once the title is drawing, never before.
 let shore: TitleShore | null = null;
@@ -261,6 +262,10 @@ function heroMode(): void {
   if (on === heroWas && (!on || hero)) return;
   heroWas = on;
   buildHero(quality);
+  if (!on && demoStale) {
+    demoStale = false;
+    buildBoats(quality); // the detailed demo boats, now the title's boat is gone
+  }
   for (const b of boats) {
     b.model.root.visible = b.wake.points.visible = !on;
     b.contact.collar.visible = b.contact.spray.visible = !on;
@@ -393,9 +398,14 @@ window.addEventListener("resize", () => {
 
 setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
-loadDetailedModels().then((ok) => {
+const detailed = loadDetailedModels().then((ok) => {
   if (ok) {
-    buildBoats(quality);
+    // Under the title the two demo boats wait until it goes. Built now, they put their in-water look
+    // (the sea-wash loops, inWater.ts) on the detailed materials, which the title's boat shares with
+    // them (clones share materials), so each of her ten-odd shaders grew it too: about 0.45 s each to
+    // prepare on Direct3D, and the title froze for 4.5 s just after it first moved (John's PC).
+    if (heroOn()) demoStale = true;
+    else buildBoats(quality);
     heroWas = !heroOn();
     heroMode();
   }
@@ -457,7 +467,7 @@ const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) /
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
 let soundT = 0;
-renderer.setAnimationLoop(() => {
+const frame = (): void => {
   const t = clock.getElapsedTime();
   // The title's sound runs while the title is up, and fades out when it goes.
   if (document.body.classList.contains("title")) {
@@ -586,4 +596,7 @@ renderer.setAnimationLoop(() => {
   status.sea = seaKey;
   status.quality = quality;
   status.seaVertices = sea.vertexCount;
-});
+};
+// Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
+// in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => renderer.setAnimationLoop(frame));
