@@ -1793,7 +1793,9 @@ const CHECKS = {
       must(!old.length, `the old pickers still show: ${old.join(", ")}`);
       // #461: "Who steers" shows only with ?who= in the address; the plain card has no such row.
       const who = await page.evaluate(() => { const e = document.getElementById("ss-who"); return !!e && e.offsetParent !== null; });
-      must(!who, 'the plain Set sail card shows the "Who steers" row (it should need ?who=)');
+      // Since #489 the row is on for everyone; before it, it needed ?who=. Either is reported, neither fails here
+      // (setsail-who checks the row itself).
+      out.push(who ? "Who steers row shown" : "no Who steers row");
       const rows = await page.evaluate(() => [...document.querySelectorAll("#ss-card .ss-row")].filter((e) => e.offsetParent !== null).map((e) => e.querySelector(".ss-l")?.textContent.trim()));
       out.push(`rows ${rows.join(" / ")}`);
       // Pick a day…
@@ -2697,6 +2699,135 @@ const CHECKS = {
       const t = await page.evaluate(() => ({ wind: document.getElementById("c-windv")?.textContent.trim() ?? "", label: document.getElementById("c-wavel")?.textContent.trim() ?? "", day: document.getElementById("day")?.textContent.trim() ?? "", clock: window.__helm.clock }));
       must(/\d+\s*kn/.test(t.wind), `at ${t.day}, before the race starts, the strip's wind cell reads "${t.wind}"`);
       return `${t.day}, paused (clock ${t.clock}): wind cell "${t.wind}" over "${t.label}"`;
+    },
+  },
+  // #489: Who steers and Race against are on the plain Set sail card for everyone (no ?who=). The card opens on
+  // You with Set sail; the autopilot gives "Watch her go" (her voyage, in Real time); Another boat gives "Start
+  // the race"; and a first crossing with You still starts. At 1280 and on two phones the whole card is usable.
+  "setsail-who": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const open = async (w, h, phone) => {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}), serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        await p.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 3 * MIN });
+        const has = await p.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill") && document.getElementById("ss-who").offsetParent !== null, null, { timeout: MIN }).then(() => true, () => false);
+        return { ctx, p, has };
+      };
+      const state = (p) => p.evaluate(() => {
+        const vis = (e) => !!e && e.offsetParent !== null;
+        const pills = (b) => [...document.querySelectorAll(`${b} .ss-pill`)].filter(vis).map((e) => ({ t: e.textContent.trim(), on: e.getAttribute("aria-pressed") === "true" }));
+        return { who: pills("#ss-who-opts"), rival: vis(document.getElementById("ss-rival")) ? pills("#ss-rival-opts") : null, go: document.getElementById("go").textContent.trim(), rows: [...document.querySelectorAll("#ss-card .ss-row")].filter(vis).map((e) => e.querySelector(".ss-l")?.textContent.trim()) };
+      });
+      const pick = (p, box, re) => p.evaluate(([b, r]) => { const e = [...document.querySelectorAll(`${b} .ss-pill`)].find((x) => x.offsetParent !== null && new RegExp(r, "i").test(x.textContent)); if (!e) return null; e.click(); return e.textContent.trim(); }, [box, re]);
+      // Every pill and the button can be brought on screen and is the thing under the finger there.
+      const usable = (p) => p.evaluate(async () => {
+        const bad = [];
+        const els = [...document.querySelectorAll("#ss-card .ss-pill, #ss-card #go, #go")].filter((e) => e.offsetParent !== null);
+        for (const e of new Set(els)) {
+          e.scrollIntoView({ block: "center" });
+          await new Promise((r) => setTimeout(r, 60));
+          const r = e.getBoundingClientRect();
+          const inside = r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!inside) bad.push(`"${e.textContent.trim().slice(0, 24)}" can't be brought whole on screen`);
+          else if (!(top === e || e.contains(top) || top?.contains(e))) bad.push(`"${e.textContent.trim().slice(0, 24)}" is covered by ${top?.id || top?.className || top?.tagName}`);
+        }
+        const card = document.getElementById("ss-card").getBoundingClientRect();
+        if (card.left < -1 || card.right > innerWidth + 1) bad.push(`the card is wider than the screen (${Math.round(card.left)}..${Math.round(card.right)} of ${innerWidth})`);
+        if (document.documentElement.scrollWidth > innerWidth + 2) bad.push(`the page scrolls sideways (${document.documentElement.scrollWidth} of ${innerWidth})`);
+        return { n: new Set(els).size, bad };
+      });
+      const shot = async (p, name) => {
+        if (BROWSER !== "chromium") return;
+        const path = `look-who-${name}.jpg`;
+        if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+      };
+      const problems = [];
+      // 1. The plain card at three sizes: opens on You with Set sail, whole card usable, with each choice picked too.
+      for (const [w, h, phone] of [[1280, 720, false], [390, 844, true], [360, 740, true]]) {
+        const { ctx, p, has } = await open(w, h, phone);
+        try {
+          if (!has) { if (w === 1280) throw new SkipCheck('the plain card has no "Who steers" row (#489 not deployed)'); problems.push(`${w}x${h}: no Who steers row`); continue; }
+          const a = await state(p);
+          const you = a.who.find((x) => x.on)?.t;
+          if (you !== "You" || a.go !== "Set sail") problems.push(`${w}x${h}: opened on "${you}" with "${a.go}"`);
+          const u1 = await usable(p);
+          await p.evaluate(() => scrollTo(0, 0));
+          await shot(p, `you-${w}x${h}`);
+          const auto = await pick(p, "#ss-who-opts", "autopilot");
+          await p.waitForTimeout(600);
+          const b = await state(p);
+          const u2 = await usable(p);
+          const other = b.rival ? await pick(p, "#ss-rival-opts", "another") : null;
+          await p.waitForTimeout(600);
+          const c = await state(p);
+          const u3 = await usable(p);
+          await p.evaluate(() => scrollTo(0, 0));
+          await shot(p, `race-${w}x${h}`);
+          for (const [k, u] of [["You", u1], ["autopilot", u2], ["another boat", u3]]) if (u.bad.length) problems.push(`${w}x${h} with ${k}: ${u.bad.join("; ")}`);
+          out.push(`${w}x${h}: opens on "${you}" / "${a.go}", who ${a.who.map((x) => x.t).join(" | ")}; "${auto}" gives "${b.go}", race against ${b.rival ? b.rival.map((x) => x.t).join(" | ") : "(no row)"}; "${other}" gives "${c.go}"; ${u1.n}/${u2.n}/${u3.n} controls ${u1.bad.length + u2.bad.length + u3.bad.length ? "NOT all usable" : "all usable"}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      // 2. The autopilot, then "Watch her go": her voyage, in Real time.
+      {
+        const { ctx, p } = await open(1280, 720, false);
+        try {
+          await pick(p, "#ss-who-opts", "autopilot");
+          await p.waitForFunction(() => /watch her go/i.test(document.getElementById("go").textContent), null, { timeout: 20_000 }).catch(() => {});
+          const go = await p.evaluate(() => document.getElementById("go").textContent.trim());
+          if (!/watch her go/i.test(go)) problems.push(`with the autopilot the button says "${go}", not "Watch her go"`);
+          await p.evaluate(() => document.getElementById("go").click());
+          await p.waitForURL(/[?&]watch=/, { timeout: MIN }).catch(() => {});
+          await p.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error), null, { timeout: 5 * MIN }).catch(() => {});
+          const a = await p.evaluate(() => ({ url: location.search, err: window.__helm?.error ?? null, watch: !!window.__helm?.watch, view: window.__helm?.view, pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, hour: window.__helm?.hour }));
+          await p.waitForTimeout(8000);
+          const h2 = await p.evaluate(() => window.__helm?.hour);
+          if (!/watch=/.test(a.url) || !a.watch || a.err) problems.push(`"Watch her go" didn't open her voyage: ${JSON.stringify(a)}`);
+          else if (a.pressed !== "rt") problems.push(`her voyage opened at "${a.pressed}", not Real time`);
+          else if (!(h2 > a.hour && h2 - a.hour < 0.05)) problems.push(`her voyage in Real time went hour ${a.hour} to ${h2} in 8 s`);
+          await shot(p, "watching");
+          out.push(`"${go}" opened ${a.url} (view ${a.view}) at "${a.pressed}", ${(((h2 ?? 0) - (a.hour ?? 0)) * 3600).toFixed(0)} s of voyage in 8 s`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      // 3. Another boat, then "Start the race": the race page.
+      {
+        const { ctx, p } = await open(1280, 720, false);
+        try {
+          await pick(p, "#ss-who-opts", "autopilot");
+          await p.waitForFunction(() => document.getElementById("ss-rival").offsetParent !== null && document.querySelector("#ss-rival-opts .ss-pill"), null, { timeout: 20_000 }).catch(() => {});
+          const other = await pick(p, "#ss-rival-opts", "another");
+          await p.waitForFunction(() => /start the race/i.test(document.getElementById("go").textContent), null, { timeout: 20_000 }).catch(() => {});
+          const s = await state(p);
+          const against = await p.evaluate(() => { const e = document.getElementById("ss-against"); return e && e.offsetParent !== null ? document.getElementById("ss-against-name").textContent.trim() : null; });
+          if (!/start the race/i.test(s.go)) problems.push(`with "${other}" the button says "${s.go}", not "Start the race"`);
+          await p.evaluate(() => document.getElementById("go").click());
+          await p.waitForURL(/[?&]race=/, { timeout: MIN }).catch(() => {});
+          await p.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN }).catch(() => {});
+          const a = await p.evaluate(() => ({ url: location.search, err: window.__helm?.error ?? null, ready: !!window.__helm?.ready, lead: document.getElementById("c-lead")?.textContent.trim() ?? null, day: document.getElementById("day")?.textContent.trim() ?? null }));
+          if (!/race=/.test(a.url) || !a.ready || a.err) problems.push(`"Start the race" didn't open the race: ${JSON.stringify(a)}`);
+          await shot(p, "racing");
+          out.push(`"${other}" (against ${against}) "${s.go}" opened ${a.url}: ${a.day}, "${a.lead}"`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      // 4. A first crossing with You still starts as before.
+      {
+        const { ctx, p } = await open(1280, 720, false);
+        try {
+          const a = await state(p);
+          await p.evaluate(() => document.getElementById("go").click());
+          const started = await p.waitForFunction(() => window.__helm && ((window.__helm.ready && document.getElementById("start").offsetParent === null) || window.__helm.error) && !window.__helm.busy, null, { timeout: 8 * MIN }).then(() => true, () => false);
+          const b = await p.evaluate(() => ({ url: location.search, err: window.__helm?.error ?? null, sailing: !!window.__helm?.ready && typeof window.__helm?.status?.day === "number", view: window.__helm?.view, card: (() => { const e = document.getElementById("start"); return !!e && !e.hidden && e.offsetParent !== null; })(), day: document.getElementById("day")?.textContent.trim() ?? null }));
+          if (!started || b.err || !b.sailing || b.card || /watch=|race=/.test(b.url)) problems.push(`Set sail with You didn't start a crossing: ${JSON.stringify(b)}`);
+          out.push(`You + "${a.go}": sailing ${b.sailing}, ${b.day}, view ${b.view}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`WHO ${BROWSER}: ${out.join(" || ")}`);
+      must(!problems.length, `${problems.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
     },
   },
   "look-marks": {
