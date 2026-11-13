@@ -50,7 +50,7 @@ test("the toast and the stars say what happened, in plain words", () => {
 
 test("the debrief says plainly how the autopilot fared", () => {
   const s = starsText({ stars: 3, closest_km: 640, end_lon: -66.6, battery_low: 0.23, sailing: true }, SANDY, { stars: 0, closest_km: 16.2, end_lon: -70.5, battery_low: 0.14, sailing: true });
-  assert.equal(s.ghost, "The ghost held its usual route and passed 16 km from the storm's centre.");
+  assert.equal(s.ghost, "The ghost, on its usual route, passed 16 km from the centre.");
 });
 
 test("the result card's challenge headline says whether she was still sailing, not who won", async () => {
@@ -65,7 +65,7 @@ test("no stars: a short word beside the outlines, and the why line says what ear
   const s = starsText({ stars: 0, closest_km: 125, end_lon: -69.3, battery_low: 0.6, sailing: true }, SANDY);
   assert.equal(s.stars, "☆☆☆");
   assert.equal(s.none, "No stars this time");
-  assert.match(s.why, /^Closest to the storm's centre: 125 km\. ★ needs [\d,]+ km\.$/);
+  assert.match(s.why, /^Closest to the storm's centre: 125 km\. Stay at least [\d,]+ km from the storm's centre to earn a star\.$/);
 });
 
 test("a challenge with a goal is one story: no Gulf Stream call, route check or chase; a crossing gets them all", () => {
@@ -78,4 +78,11 @@ test("a challenge with a goal is one story: no Gulf Stream call, route check or 
     assert.equal(callAllowed(kind, true), true, `${kind} in a goal challenge`);
     assert.equal(callAllowed(kind, false), true, `${kind} on a crossing`);
   }
+});
+
+test("the ghost's line only when its route differs from yours (Elena)", () => {
+  const me = { stars: 0, closest_km: 14.2, end_lon: -70, battery_low: 0.2, sailing: true };
+  assert.equal(starsText(me, SANDY, { ...me, closest_km: 13.9 }).ghost, "", "the same 14 km twice reads like a second result");
+  assert.equal(starsText(me, SANDY, { ...me, closest_km: 80 }).ghost, "The ghost, on its usual route, passed 80 km from the centre.");
+  assert.match(starsText({ ...me, stars: 1, closest_km: 260 }, SANDY).why, /Stay at least [\d,]+ km from the storm's centre to earn a second star\.$/);
 });

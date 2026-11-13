@@ -712,9 +712,17 @@ try {
       if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
       // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
-      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Watch a voyage.
-      const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
-      if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
+      // The story-first card: a headline, the standing in one line, then the ways on every ending has, in their one
+      // order (M3, helm/ending.ts): Play again bright, Change the boat, Race it, Leaderboard; quiet links under them.
+      const next = await page.evaluate(() => {
+        const seen = (sel) => [...document.querySelectorAll(sel)].filter((e) => !e.hidden && e.offsetParent).map((e) => ({ text: e.textContent, href: e.getAttribute("href") ?? "" }));
+        return { title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", ways: seen("#r-btns > *"), quiet: seen("#r-links > *") };
+      });
+      const ways = next.ways.map((w) => w.text).join(" | ");
+      if (!next.title || next.nums < 2 || next.nums > 3 || !next.head) fail(`helm results: ${JSON.stringify(next)}`);
+      if (ways !== "Play again | Change the boat | Race it | Leaderboard") fail(`helm results: the ways on are "${ways}"`);
+      if (!next.ways[3].href.startsWith("./leaderboard.html#") || !/who=autopilot&against=/.test(next.ways[2].href)) fail(`helm results: where the ways on lead: ${JSON.stringify(next.ways)}`);
+      if ([...next.ways, ...next.quiet].some((w) => /race\.html|voyage\.html/.test(w.href))) fail(`helm results: a way on leads to an old page: ${JSON.stringify([...next.ways, ...next.quiet])}`);
       await snap({ path: "test-output/helm-result.png" });
       log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
       // Start from a port (John hit "can't start from a port yet" when the page
@@ -864,7 +872,7 @@ try {
     // Practice's front door is the Set sail card too (M1 piece 3): ?practice opens it with Annapolis picked.
     await page.goto(`${URL}helm.html?quality=low&practice`);
     await page.waitForFunction(() => window.__setsail && document.querySelector("#ss-where-opts .ss-pill"), null, { timeout: 60000 });
-    const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("practice-end").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
+    const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("result").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
     if (!pc.start || !pc.course || pc.old || !/Annapolis/.test(pc.where ?? "")) fail(`?practice didn't open the Set sail card on Annapolis: ${JSON.stringify(pc)}`);
     log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once; ?practice opens the card on Annapolis");
     // Watch a voyage on the helm's own sailing screen (M2, R1): a recorded voyage plays with no simulator,
