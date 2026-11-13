@@ -1932,7 +1932,10 @@ const CHECKS = {
       await page.evaluate(() => document.getElementById("go").click());
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start");
-      const seen = (id) => page.evaluate((id) => { const e = document.getElementById(id); if (!e) return false; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 8 && r.height > 8 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight; }, id);
+      // The opening line ("Beat the autopilot to Portugal.") hides the instruments for a few seconds: wait it out.
+      await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      const seen = (id) => page.evaluate((id) => { const e = document.getElementById(id); if (!e) return false; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); let o = 1; for (let n = e; n && n.nodeType === 1; n = n.parentElement) { const c = getComputedStyle(n); if (c.display === "none" || c.visibility === "hidden") return false; o *= Number(c.opacity); } return o > 0.5 && cs.display !== "none" && cs.visibility !== "hidden" && r.width > 8 && r.height > 8 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight; }, id);
       const out = [];
       const bad = [];
       for (const [w, h, want] of [[1280, 720, "chart"], [1920, 1080, "chart"], [1000, 700, "button"], [390, 844, "button"]]) {
