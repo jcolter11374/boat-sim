@@ -8,6 +8,7 @@ import {
   continueLink,
   loadVoyage,
   madeBy,
+  offerWords,
   packVoyage,
   parseVoyage,
   saveVoyage,
@@ -154,6 +155,12 @@ test("a save from another simulator build is told apart; unknown builds are trie
   assert.equal(madeBy(v, "def456"), false);
   assert.equal(madeBy(v, ""), true);
   assert.equal(madeBy({ ...v, sim: "" }, "def456"), true);
+});
+
+test("the offer says where the voyage stands, in the helm's own day count", () => {
+  assert.equal(offerWords(packVoyage(now, WHEN)!), "Day 12 · 4,101 km to go · Kayak");
+  assert.equal(offerWords(packVoyage({ ...now, day: 0.4 }, WHEN)!), "The first day · 4,101 km to go · Kayak");
+  assert.equal(offerWords(packVoyage({ code: CODE, day: 50.9 }, WHEN)!), "Day 50"); // no words it doesn't have
 });
 
 test("the continue link carries only the code and the challenge, and says it is your own", () => {

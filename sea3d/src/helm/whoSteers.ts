@@ -19,10 +19,11 @@ export const WHO_WORDS = {
 } as const;
 
 /** The card's pick in a link: ?who=autopilot (and ?day=2020-06-01). Anything else is you, on the default day. */
-export function whoFromUrl(search: string): { who: Who; day: string } {
+export function whoFromUrl(search: string): { who: Who; day: string; against: string } {
   const p = new URLSearchParams(search);
   const day = p.get("day") ?? "";
-  return { who: p.get("who") === "autopilot" ? "autopilot" : "you", day: /^\d{4}-\d\d-\d\d$/.test(day) ? day : WATCH_DEFAULT_DAY };
+  const against = p.get("against") ?? "";
+  return { who: p.get("who") === "autopilot" ? "autopilot" : "you", day: /^\d{4}-\d\d-\d\d$/.test(day) ? day : WATCH_DEFAULT_DAY, against: (RACE_IDS as readonly string[]).includes(against) ? against : "" };
 }
 
 export interface WatchDay {
@@ -54,11 +55,64 @@ export function watchDay(days: WatchDay[], asked: string): WatchDay | null {
 }
 
 /** The card's own keys, dropped from a link that starts watching (the page's other switches, ?quality= and the like, are kept). */
-const CARD_KEYS = ["where", "when", "challenge", "course", "breeze", "boat", "practice", "go", "who", "day", "sail", "watch", "replay", "race", "launch"];
+const CARD_KEYS = ["where", "when", "challenge", "course", "breeze", "boat", "practice", "go", "who", "day", "against", "sail", "watch", "replay", "race", "launch"];
 /** The link that sets sail with the autopilot steering: this page, watching that voyage. */
 export function watchLink(search: string, file: string): string {
   const p = new URLSearchParams(search);
   for (const k of CARD_KEYS) p.delete(k);
   p.set("watch", file);
   return `helm.html?${p.toString()}`;
+}
+
+// ---------------------------------------------------------------- "Race against" (M2 piece R4)
+// Race it is the autopilot steering two different boats on the same sea, so it sits under the
+// autopilot pick: Nobody (you watch her alone) or Another boat (helm.html?race=<a>,<b>&launch=).
+
+/** Leo's words (m2-r2-words.md, R4). */
+export const RIVAL_WORDS = {
+  label: "Race against",
+  nobody: { pill: "Nobody", line: "Just her and the sea." },
+  boat: { pill: "Another boat", line: "Same sea, same launch day, each boat steered by its own autopilot. First to the finish wins.", after: "You can change speed and pause; both boats steer themselves." },
+  /** With you steering the row isn't a choice: it says who the rival is. */
+  you: "The ghost, the autopilot in a boat just like yours.",
+  against: "Against:",
+  picker: "The other boat",
+  pick: "Pick this boat",
+  same: "Pick a different boat. She can't race herself.",
+} as const;
+
+/** The boats a race can run (the race link's own ids, raceSource's RACE_BOATS). */
+export const RACE_IDS = ["kayak", "revc", "revb", "mine"] as const;
+export type RaceId = (typeof RACE_IDS)[number];
+/** The six launches a race can start on, in the race's own order (?launch=0..5). */
+export const RACE_DAYS = ["2020-04-01", "2020-04-15", "2020-05-01", "2020-05-15", "2020-06-01", "2020-06-15"];
+
+/** "1 Jun" for "2020-06-01". */
+export function dayLabel(day: string): string {
+  return `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`;
+}
+
+/** The card's boat (the boat radio's value) as a race id; null for a boat the race can't run (a stock yacht). */
+export function raceId(cardBoat: string): RaceId | null {
+  if (cardBoat === "") return "kayak";
+  return (RACE_IDS as readonly string[]).includes(cardBoat) ? (cardBoat as RaceId) : null;
+}
+
+/** A rival's name. A Randolph boat is always "(our model)" (John, B2). `mine` is the player's name for their saved design. */
+export function rivalName(id: string, mine: string | null): string {
+  return id === "revc" ? "Randolph Rev C5 (our model)" : id === "revb" ? "Randolph Rev B (our model)" : id === "mine" ? (mine ?? "Your boat") : "Our kayak";
+}
+
+/** The rival offered first: our model of the Randolph Rev C5, or our kayak when that is the boat on the card. */
+export function defaultRival(a: RaceId): RaceId {
+  return a === "revc" ? "kayak" : "revc";
+}
+
+/** The link that starts a race: this page, boat a against boat b, launched on `day` (the first launch if it isn't one of the six). */
+export function raceLink(search: string, a: RaceId, b: RaceId, day: string): string {
+  const p = new URLSearchParams(search);
+  for (const k of CARD_KEYS) p.delete(k);
+  p.set("race", `${a},${b}`);
+  p.set("launch", String(Math.max(0, RACE_DAYS.indexOf(day))));
+  return `helm.html?${p.toString()}`.replace("%2C", ",");
 }

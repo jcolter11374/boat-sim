@@ -12,7 +12,7 @@ import { PLAYABLE_STOCK, STOCK, type StockKey } from "../boats/specs";
 export interface PickerEntry {
   /** "kayak", a stock id, "mine" (the saved design) or "yard:<base>" (a Boatyard link). */
   id: string;
-  group: "Ours" | "Stock boats" | "Your designs";
+  group: "Ours" | "Stock boats" | "The Randolph team's boats" | "Your designs";
   name: string;
   /** One plain fact line. */
   fact: string;
@@ -40,7 +40,7 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     const name = nameOf(k);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
-  out.push({ id: "yard:revc", group: "Stock boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
+  out.push({ id: "yard:revc", group: "The Randolph team's boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
   if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === ""))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
   out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "pick a hull, sails or motors, batteries and electronics", href: "./boatyard.html" });
@@ -85,8 +85,17 @@ const CSS = `
 
 let root: HTMLElement | null = null;
 
+/** Another use of the same picker (the Set sail card's "The other boat"): its own title, rows and button. Nothing is saved as "my boat". */
+export interface PickerUse {
+  title: string;
+  button: string;
+  entries: PickerEntry[];
+  picked: string;
+  choose: (id: string) => void;
+}
+
 /** Open the picker (builds it the first time). */
-export function openBoatPicker(doc: Document = document): void {
+export function openBoatPicker(doc: Document = document, use?: PickerUse): void {
   // Fold any open More menu first (Ines).
   doc.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((d) => (d.open = false));
   if (!root) {
@@ -110,11 +119,11 @@ export function openBoatPicker(doc: Document = document): void {
   const mine = loadMyBoat();
   const card = doc.createElement("div");
   card.className = "card";
-  const h = Object.assign(doc.createElement("h2"), { id: "boatpick-h", textContent: "Your boat" });
+  const h = Object.assign(doc.createElement("h2"), { id: "boatpick-h", textContent: use?.title ?? "Your boat" });
   card.append(h);
   let group = "";
-  const picked = pickedId(mine);
-  for (const e of pickerEntries(mine)) {
+  const picked = use?.picked ?? pickedId(mine);
+  for (const e of use?.entries ?? pickerEntries(mine)) {
     if (e.group !== group) {
       group = e.group;
       card.append(Object.assign(doc.createElement("div"), { className: "gh", textContent: group }));
@@ -136,10 +145,10 @@ export function openBoatPicker(doc: Document = document): void {
   foot.className = "foot";
   const x = Object.assign(doc.createElement("button"), { type: "button", className: "x", textContent: "Close" });
   x.addEventListener("click", close);
-  const go = Object.assign(doc.createElement("button"), { type: "button", className: "go", textContent: "Sail this boat" });
+  const go = Object.assign(doc.createElement("button"), { type: "button", className: "go", textContent: use?.button ?? "Sail this boat" });
   go.addEventListener("click", () => {
     const v = card.querySelector<HTMLInputElement>('input[name="boatpick"]:checked')?.value;
-    if (v) choose(v);
+    if (v) (use?.choose ?? choose)(v);
     close();
   });
   foot.append(x, go);
