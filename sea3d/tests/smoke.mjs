@@ -887,6 +887,22 @@ try {
     await page.keyboard.press("Digit4");
     await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
+    // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
+    // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
+    await page.goto(`${URL}helm.html?quality=low&who=autopilot`);
+    await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Who steers row"));
+    const ws = await page.evaluate(() => ({
+      who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      day: document.querySelector('#ss-when-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      days: document.querySelectorAll("#ss-when-opts .ss-pill").length,
+      go: document.getElementById("go").textContent,
+      bad: /record|replay/i.test(document.getElementById("ss-card").innerText),
+    }));
+    if (ws.who !== "The autopilot" || ws.day !== "1 Jun 2020" || ws.days < 2 || ws.go !== "Set sail" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
+    await page.click("#go");
+    await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
+    if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
+    log.push("Who steers: the autopilot's Set sail opens her voyage on the sailing screen");
     // "Race it" on the same screen (M2, R3): two boats from the race's own simulator, boat B where the ghost
     // goes. It opens paused, as the race page does, with Real time first on the bar (T1).
     await page.goto(`${URL}helm.html?quality=low&race=kayak,revc`);
