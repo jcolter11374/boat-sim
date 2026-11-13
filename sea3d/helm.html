@@ -527,12 +527,21 @@
     #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr 2.2em; }
     #strip #keysbtn { grid-column: 5; grid-row: 1; margin-right: 0; }
   }
-  /* A phone: no room for nine icons, so the strip is as it was before the equipment cell (breakdowns are in the notes). */
-  @media (max-width: 480px) {
-    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
-    #strip #keysbtn { grid-column: auto; grid-row: auto; margin-right: 4px; }
+  /* A phone or a narrow window (under 760 px, where two rows cut cells off): three rows. The clock and the speed bar get the top row to themselves (they sat on top of the
+     order and heading cells in a shared row, and five cells were cut off); then order, heading, speed; then
+     battery, wind and the ghost; the keys button rides beside the clock. No room for nine equipment icons: breakdowns are in the notes. */
+  @media (max-width: 760px) {
+    :root { --strip-h: calc(var(--ui) * 12.67); }
+    #strip { grid-template-columns: 1.25fr 1fr 1fr 2.2em; grid-auto-rows: 4em; padding: 0 .5em 0 .9em; }
+    #strip .c-time { grid-column: 1 / 4; }
+    #strip #c-order, #strip #c-bat { border-left: 0; padding-left: 0; }
+    #strip #c-speed, #strip #c-lead { grid-column: 3 / -1; }
+    #strip #keysbtn { grid-column: 4; grid-row: 1; margin-right: 0; }
     #strip #c-eq { display: none; }
-    #notes { width: min(420px, calc(100vw - 24px)); top: calc(var(--bar, 0px) + 54px); }
+    #strip .cell { padding: 0 .6em; }
+    #strip .v { font-size: 1.25em; }
+    #strip .l { font-size: .78em; letter-spacing: .3px; }
+  }
     #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
     #mapbox:not(.big) { width: auto; padding: 4px; }
     #mapbox:not(.big) #film { margin-top: 0; }
