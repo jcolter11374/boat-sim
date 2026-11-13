@@ -1178,11 +1178,14 @@ const CHECKS = {
       // The question waits: it comes a minute in, or after the first call, whichever is first (#406, Leo).
       const asked = await askedWithin(90_000);
       must(asked, `"Sound on?" was never asked in the first 90 s after Set sail`);
-      const clicked = await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true, () => false);
+      // Pressed in the page: on a runner Playwright's own click could wait out the question's 20 s, and
+      // the "asked again" assertions below were then skipped. Now it lands, or the check fails saying so.
+      const clicked = await page.evaluate(() => { if (document.getElementById("soundask").hidden) return false; document.getElementById("soundno").click(); return true; });
+      must(clicked, `"Sound on?" showed but had closed again before "No thanks" could be pressed`);
       await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 });
       s = await soundState(page);
-      if (clicked) must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
-      out.push(`load: no AudioContext, button off; "Sound on?" asked within 90 s of Set sail, ${clicked ? '"No thanks" stored "off"' : "closed by itself"}`);
+      must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
+      out.push(`load: no AudioContext, button off; "Sound on?" asked within 90 s of Set sail, "No thanks" stored "off"`);
       // 2. Second visit after "No thanks": no question.
       await calmReload(page);
       await loaded();
@@ -1191,7 +1194,7 @@ const CHECKS = {
       await sailed();
       // The question would come up to a minute in (or after the first call): watch as long as step 1 allows before saying it didn't.
       const again = await askedWithin(90_000);
-      if (clicked) must(!again, `"Sound on?" was asked again after "No thanks"`);
+      must(!again, `"Sound on?" was asked again after "No thanks"`);
       s = await soundState(page);
       must(s.contexts === 0, `sound started after "No thanks" without N or the button (${s.contexts} AudioContext)`);
       out.push(`reload after "No thanks": not asked again in 90 s, still silent`);
