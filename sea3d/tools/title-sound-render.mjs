@@ -30,6 +30,8 @@ const SCENES = [
   // The title as a visitor hears it for a minute: the sea, and whatever the timeline brings.
   { name: "title-as-heard-kayak", rig: "small", length: 3.05, timeline: true },
   { name: "title-as-heard-yacht", rig: "shrouds", length: 9.4, timeline: true, seed: 777 },
+  // With the far gull allowed (?gulls=1): off on the live title until someone has heard it.
+  { name: "title-as-heard-kayak-gulls", rig: "small", length: 3.05, timeline: true, gulls: true },
   // The sea alone, for comparison (what the effects sit on).
   { name: "title-sea-only", rig: "small", length: 3.05 },
   // Each sound in turn over the sea, at known times (the chart labels them).
@@ -37,8 +39,8 @@ const SCENES = [
     name: "title-each-sound",
     rig: "small",
     length: 3.05,
-    seconds: 44,
-    moments: [[3, "buoy"], [10, "creak"], [15, "gull"], [21, "buoy"], [27, "hover:0"], [27.5, "hover:1"], [28, "hover:2"], [28.5, "hover:3"], [29, "hover:4"], [32, "press:0"], [35, "press:2"], [38, "creak"], [40, "gull"]],
+    seconds: 46,
+    moments: [[3, "buoy"], [10, "lap"], [15, "creak"], [21, "buoy"], [27, "hover:0"], [27.5, "hover:1"], [28, "hover:2"], [28.5, "hover:3"], [29, "hover:4"], [32, "press:0"], [35, "press:2"], [38, "lap"], [41, "gull"]],
   },
 ];
 
@@ -58,6 +60,8 @@ for (const s of SCENES) {
       sea.length = s.length;
       sea.attach(ctx, s.seed);
       const title = new window.T.TitleSound(sea, s.seed + 1);
+      title.scene.sails = s.rig === "shrouds";
+      title.scene.gulls = !!s.gulls;
       const dt = 1 / 30;
       for (let i = 1; i * dt < seconds - 0.05; i++) {
         const t = i * dt;

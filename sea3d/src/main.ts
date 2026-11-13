@@ -147,19 +147,20 @@ function buildBoats(q: Quality): void {
   }
 }
 
-// ---------- the title's sound: the hero's sea, a bell buoy, gulls, a rope, the menu's chime ----------
+// ---------- the title's sound: the hero's sea, a bell buoy, a rope or the hull's lap, the menu's chime ----------
 // (titleSound.ts.) Nothing plays until the visitor's first click or key (no autoplay); the
 // button on the menu and N turn it off and on, and that choice is remembered (the same one
 // as the helm's). It fades when the title goes: nothing here plays over the plain sea demo.
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 const titleSound = new TitleSound(sound);
+titleSound.scene.gulls = new URLSearchParams(location.search).get("gulls") === "1"; // off until someone has heard it (Elena)
 {
   const btn = document.getElementById("t-sound");
   sound.onChange = () => {
     if (!btn) return;
     btn.setAttribute("aria-pressed", String(sound.on));
-    btn.textContent = sound.on ? "Sound on" : "Sound off";
+    btn.textContent = sound.on ? "Sound: on" : "Sound: off"; // the state, not an order (Elena)
   };
   sound.onChange();
   btn?.addEventListener("click", () => sound.toggle());
@@ -213,6 +214,7 @@ function buildHero(q: Quality): void {
   hero = { spec, model, motion: newMotion(spec, heroPlace, clock.getElapsedTime()), wake, contact, place: heroPlace, tag: null! };
   sound.rig = rigFor(spec.key);
   sound.length = spec.length;
+  titleSound.scene.sails = sound.rig === "shrouds"; // ropes creak only on a boat that has them
   // A stock boat's detailed model loads on demand: swap it in when it arrives.
   if (spec.key.startsWith("stock_") && !hasDetailedStock(spec.key as StockKey)) {
     const k = spec.key as StockKey;

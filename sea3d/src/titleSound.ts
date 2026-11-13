@@ -1,9 +1,14 @@
 /**
  * What the title screen sounds like (Hana, 13 Nov 2026; John: "music and sound effects on
  * the title screen, nautical like"). On top of the sea itself (sound.ts, for the hero's
- * gentle sea): a bell buoy somewhere off in the haze, a gull or two, a rope creaking as she
- * rolls, and a soft chime when a menu choice is touched or chosen. Sparse and quiet: the sea
- * is the main thing, and a minute has a handful of these, never on a beat.
+ * gentle sea): a bell buoy somewhere off in the haze; a rope creaking as she rolls if she
+ * has sails, or water lapping her hull if she hasn't (our kayak has motors and no rigging);
+ * and a soft chime when a menu choice is touched or chosen. Sparse and quiet: the sea is
+ * the main thing, and a minute has a handful of these, never on a beat.
+ *
+ * A far gull is written but off (Elena, 13 Nov: nobody on the team can listen, a made-up
+ * gull is the likeliest to sound like a toy, and it says harbour, not open water).
+ * `?gulls=1` turns it on for whoever can hear it.
  *
  * Everything is made in code (oscillators and the sea's noise loops): no sound files, nothing
  * bought. Nothing tonal sits above about 2 kHz, as in sound.ts, so it can't grate. Real gulls
@@ -24,28 +29,36 @@ export const TONAL_CEILING_HZ = 2000;
  */
 export const TITLE_WEATHER: SeaWeather = { wind: 4.2, hs: 0.8, tp: 6.5, rain: 0, near: 9, stw: 0.6 };
 
-export type TitleEventKind = "buoy" | "creak" | "gull";
+export type TitleEventKind = "buoy" | "creak" | "lap" | "gull";
+
+/** What the title is showing and allowing: read each time a sound comes due, so it follows a change of boat. */
+export interface TitleScene {
+  /** The boat has sails and ropes (they creak); without, the water laps her hull instead. */
+  sails: boolean;
+  /** The far gull is allowed (off unless asked for). */
+  gulls: boolean;
+}
 
 /**
  * How often each sound comes (seconds): the first one after `first`, then a gap in `gap`,
  * both picked evenly at random. The buoy rings when a bigger swell rocks it; the rope creaks
- * on some rolls, not all; gulls are rare.
+ * (or the water laps) on some rolls, not all; gulls are rare.
  */
-export const GAPS: Record<TitleEventKind, { first: [number, number]; gap: [number, number] }> = {
+export const GAPS: Record<"buoy" | "creak" | "gull", { first: [number, number]; gap: [number, number] }> = {
   buoy: { first: [4, 9], gap: [11, 24] },
   creak: { first: [8, 15], gap: [14, 30] },
   gull: { first: [13, 22], gap: [28, 65] },
 };
 
 /** Peak levels (linear, before the master): all well under the sea's own events. */
-export const LEVELS = { buoy: 0.011, creak: 0.05, gull: 0.008, hover: 0.008, press: 0.011 } as const;
+export const LEVELS = { buoy: 0.011, creak: 0.05, lap: 0.07, gull: 0.008, hover: 0.006, press: 0.008 } as const;
 
 const pick = (rnd: () => number, [lo, hi]: [number, number]) => lo + rnd() * (hi - lo);
 
 /** Hands out the sounds that have come due as the title's clock runs. */
 export class TitleTimeline {
-  private next: Record<TitleEventKind, number>;
-  constructor(private rnd: () => number) {
+  private next: Record<"buoy" | "creak" | "gull", number>;
+  constructor(private rnd: () => number, private scene: TitleScene = { sails: false, gulls: false }) {
     this.next = { buoy: pick(rnd, GAPS.buoy.first), creak: pick(rnd, GAPS.creak.first), gull: pick(rnd, GAPS.gull.first) };
   }
   /** The kinds due at title time t (s), each then put off by its next gap. */
@@ -53,7 +66,10 @@ export class TitleTimeline {
     const out: TitleEventKind[] = [];
     for (const k of ["buoy", "creak", "gull"] as const) {
       if (t >= this.next[k]) {
-        out.push(k);
+        // The roll that would creak a rope laps water on a boat without one; a gull that
+        // isn't allowed stays silent (its turn still passes, so turning it on later is smooth).
+        if (k === "creak") out.push(this.scene.sails ? "creak" : "lap");
+        else if (k !== "gull" || this.scene.gulls) out.push(k);
         this.next[k] = t + pick(this.rnd, GAPS[k].gap);
       }
     }
@@ -62,8 +78,8 @@ export class TitleTimeline {
 }
 
 /** Every sound in the first `seconds` of a title visit with this seed (for tests and reviews). */
-export function timeline(seed: number, seconds: number, step = 1 / 30): { t: number; kind: TitleEventKind }[] {
-  const line = new TitleTimeline(seeded(seed));
+export function timeline(seed: number, seconds: number, scene: TitleScene = { sails: false, gulls: false }, step = 1 / 30): { t: number; kind: TitleEventKind }[] {
+  const line = new TitleTimeline(seeded(seed), scene);
   const out: { t: number; kind: TitleEventKind }[] = [];
   for (let t = step; t <= seconds; t += step) for (const kind of line.due(t)) out.push({ t: +t.toFixed(3), kind });
   return out;
@@ -124,6 +140,21 @@ export function creakPlan(rnd: () => number): { hz: [number, number]; ring: [num
   return { hz: [from, from * (1.25 + rnd() * 0.3)], ring: [560 + rnd() * 180, 1050 + rnd() * 250], pulls };
 }
 
+/**
+ * Water lapping the hull as she rolls: two or three soft slaps of water, each a little
+ * different in weight and colour (`hz`: where its body sits).
+ */
+export function lapPlan(rnd: () => number): { at: number; hz: number; level: number }[] {
+  const n = 2 + Math.floor(rnd() * 2);
+  const out: { at: number; hz: number; level: number }[] = [];
+  let t = 0;
+  for (let i = 0; i < n; i++) {
+    out.push({ at: +t.toFixed(3), hz: Math.round(380 + rnd() * 320), level: +(0.55 + 0.45 * rnd()).toFixed(3) });
+    t += 0.28 + rnd() * 0.3;
+  }
+  return out;
+}
+
 /** The menu's notes: a five-note sea-song scale on D (no half steps, so any order sits well). */
 export const CHIME_SCALE = [587.33, 659.26, 783.99, 880, 987.77];
 
@@ -155,11 +186,13 @@ export class TitleSound {
   private rnd: () => number;
   private t = 0;
   private lastHover = -1;
+  /** What the title is showing (the page sets `sails` when the boat changes) and allowing. */
+  readonly scene: TitleScene = { sails: false, gulls: false };
 
   /** sea: the page's OceanSound (this plays through its master). seed: for review renders. */
   constructor(private sea: OceanSound, seed?: number) {
     this.rnd = seed != null ? seeded(seed) : Math.random;
-    this.line = new TitleTimeline(this.rnd);
+    this.line = new TitleTimeline(this.rnd, this.scene);
   }
 
   /** Every frame while the title is up: the sea for the hero's weather, and whatever has come due. */
@@ -179,6 +212,7 @@ export class TitleSound {
     this.sea.note(kind);
     if (kind === "buoy") this.buoy(bus);
     else if (kind === "creak") this.creak(bus);
+    else if (kind === "lap") this.lap(bus);
     else this.gull(bus);
   }
 
@@ -236,6 +270,29 @@ export class TitleSound {
         o.start(t);
         o.stop(t + len * 1.6);
       }
+    }
+  }
+
+  private lap(bus: Bus): void {
+    const { ctx } = bus;
+    for (const l of lapPlan(this.rnd)) {
+      const t = ctx.currentTime + l.at;
+      // A slap of water: a short swell of noise around a few hundred Hz, with a darker tail.
+      const src = ctx.createBufferSource();
+      src.buffer = bus.noise.white;
+      src.playbackRate.value = 0.7 + this.rnd() * 0.5;
+      const f = ctx.createBiquadFilter();
+      f.type = "bandpass";
+      f.frequency.setValueAtTime(l.hz, t);
+      f.frequency.exponentialRampToValueAtTime(l.hz * 0.6, t + 0.4);
+      f.Q.value = 1.4;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(LEVELS.lap * l.level, t + 0.035);
+      g.gain.setTargetAtTime(0, t + 0.035, 0.09);
+      src.connect(f).connect(g).connect(bus.out);
+      src.start(t, this.rnd() * 5);
+      src.stop(t + 0.7);
     }
   }
 

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { beaufort, mixFor, seeded } from "../src/sound.ts";
-import { BUOY_HZ, BUOY_PARTIALS, CHIME_SCALE, GAPS, LEVELS, TITLE_WEATHER, TONAL_CEILING_HZ, buoyStrikes, chimeParts, creakPlan, gullCalls, startsAtFirstTouch, timeline } from "../src/titleSound.ts";
+import { BUOY_HZ, BUOY_PARTIALS, CHIME_SCALE, GAPS, LEVELS, TITLE_WEATHER, TONAL_CEILING_HZ, buoyStrikes, chimeParts, creakPlan, gullCalls, lapPlan, startsAtFirstTouch, timeline } from "../src/titleSound.ts";
 
 test("the title's sea is a gentle one: a light breeze, no whitecaps, no slamming, no rain", () => {
   const f = beaufort(TITLE_WEATHER.wind);
@@ -16,7 +16,7 @@ test("the title's sea is a gentle one: a light breeze, no whitecaps, no slamming
 
 test("the title's sounds are sparse: a handful a minute, never crowding, the first within 10 s", () => {
   for (const seed of [1, 7, 42, 2026, 99999]) {
-    const ev = timeline(seed, 300);
+    const ev = timeline(seed, 300, { sails: true, gulls: true });
     const perMin = ev.length / 5;
     assert.ok(perMin >= 4 && perMin <= 11, `seed ${seed}: ${perMin} a minute`);
     assert.ok(ev[0].t <= 10, `seed ${seed}: first sound at ${ev[0].t} s`);
@@ -32,6 +32,36 @@ test("the title's sounds are sparse: a handful a minute, never crowding, the fir
     // Gulls are the rarest, the buoy the commonest.
     const count = (k: string) => ev.filter((e) => e.kind === k).length;
     assert.ok(count("gull") < count("buoy"), `seed ${seed}: more gulls than bells`);
+  }
+});
+
+test("a boat without sails has no creaking rope: water laps her hull instead; a boat with sails creaks", () => {
+  for (const seed of [1, 7, 42]) {
+    const kayak = timeline(seed, 300, { sails: false, gulls: false });
+    const yacht = timeline(seed, 300, { sails: true, gulls: false });
+    assert.ok(!kayak.some((e) => e.kind === "creak") && kayak.some((e) => e.kind === "lap"), "kayak: laps, no creak");
+    assert.ok(yacht.some((e) => e.kind === "creak") && !yacht.some((e) => e.kind === "lap"), "yacht: creaks, no lap");
+    // The same moments, a different sound.
+    assert.deepEqual(kayak.map((e) => e.t), yacht.map((e) => e.t));
+  }
+  const rnd = seeded(5);
+  for (let i = 0; i < 100; i++) {
+    const l = lapPlan(rnd);
+    assert.ok(l.length >= 2 && l.length <= 3);
+    for (const x of l) assert.ok(x.hz >= 380 && x.hz <= 700 && x.level > 0.5 && x.level <= 1);
+    assert.ok(l[l.length - 1].at < 1.3, "a lap is short");
+  }
+});
+
+test("the gull is off unless asked for, and turning it on changes nothing else", () => {
+  for (const seed of [1, 7, 42]) {
+    const off = timeline(seed, 300);
+    const on = timeline(seed, 300, { sails: false, gulls: true });
+    assert.ok(!off.some((e) => e.kind === "gull"), "no gull by default");
+    assert.ok(on.some((e) => e.kind === "gull"));
+    assert.deepEqual(on.filter((e) => e.kind !== "gull"), off);
+    const perMin = off.length / 5;
+    assert.ok(perMin >= 3 && perMin <= 9, `seed ${seed}: ${perMin} a minute without gulls`);
   }
 });
 
@@ -90,6 +120,7 @@ test("the menu's chime: each choice its own note from a five-note scale; a press
   // narrow filters pass only a little of it.
   for (const k of ["buoy", "gull", "hover", "press"] as const) assert.ok(LEVELS[k] < 0.018, k);
   assert.ok(LEVELS.creak <= 0.06);
+  assert.ok(LEVELS.lap <= 0.08); // filtered noise: little of it gets through
 });
 
 test("the first click or key starts the sound, unless it's playing or the visitor turned it off", () => {
