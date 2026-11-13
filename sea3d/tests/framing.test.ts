@@ -125,3 +125,31 @@ test("the title hero on a phone held upright, menu across the bottom: the boat i
     }
   }
 });
+
+test("the sailing view slides the boat to a third on a wide window and keeps her near the middle on a phone", async () => {
+  const { slideRoom } = await import("../src/framing");
+  // The share of the frame's width the hull spans: our 3 m kayak from the default camera.
+  const across = (aspect: number, dist = 10.5) => 3.05 / (2 * dist * Math.tan((45 * Math.PI) / 360) * aspect);
+  assert.equal(slideRoom(across(1280 / 720)), 1, "a desktop window: the full slide");
+  assert.equal(slideRoom(across(1920 / 1080)), 1);
+  assert.equal(slideRoom(across(390 / 844)), 0, "a phone held upright: none");
+  assert.equal(slideRoom(across(360 / 740)), 0);
+  const mid = slideRoom(0.4);
+  assert.ok(mid > 0 && mid < 1, "in between it eases, never jumps");
+  assert.equal(slideRoom(NaN), 0);
+});
+
+test("on a phone the boat sits inside the band above the Set sail card, whatever the card's height", async () => {
+  const { bandLine } = await import("../src/framing");
+  // 390x844: the bar's foot at 40; the card's top at 311 (fresh) or 228 (a saved voyage's line makes it taller).
+  for (const cardTop of [311, 228, 180]) {
+    const line = bandLine(40, cardTop, false);
+    assert.equal(line, (40 + cardTop) / 2, "a small boat: the band's middle");
+    // Our kayak's hull stands about 45 px either side of her waterline there: whole, with air below.
+    assert.ok(line + 45 <= cardTop - 20, `air under the hull with the card at ${cardTop}`);
+    assert.ok(line - 45 >= 40);
+    const yacht = bandLine(40, cardTop, true);
+    assert.ok(yacht > line && yacht < cardTop, "a yacht sits lower, still above the card");
+  }
+  assert.equal(bandLine(40, 30, false), 40, "no band at all: never above the bar's foot");
+});

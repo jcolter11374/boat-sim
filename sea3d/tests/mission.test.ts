@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CALLS, briefing, callToast, goalChip, goalDays, starsText, type Goal } from "../src/helm/mission.ts";
+import { CALLS, briefing, callAllowed, callToast, goalChip, goalDays, starsText, type Goal } from "../src/helm/mission.ts";
 
 const START = "2012-10-22T12:00:00Z";
 const SANDY: Goal = {
@@ -66,4 +66,16 @@ test("no stars: a short word beside the outlines, and the why line says what ear
   assert.equal(s.stars, "☆☆☆");
   assert.equal(s.none, "No stars this time");
   assert.match(s.why, /^Closest to the storm's centre: 125 km\. ★ needs [\d,]+ km\.$/);
+});
+
+test("a challenge with a goal is one story: no Gulf Stream call, route check or chase; a crossing gets them all", () => {
+  for (const kind of ["stream", "route", "chase"]) {
+    assert.equal(callAllowed(kind, true), false, `${kind} in a goal challenge`);
+    assert.equal(callAllowed(kind, false), true, `${kind} on a crossing`);
+  }
+  // The challenge's own call, and the calls that guard the boat, ask everywhere.
+  for (const kind of ["mission", "gale", "waves", "night"]) {
+    assert.equal(callAllowed(kind, true), true, `${kind} in a goal challenge`);
+    assert.equal(callAllowed(kind, false), true, `${kind} on a crossing`);
+  }
 });

@@ -130,3 +130,14 @@ export function starsText(s: Stars, goal: Goal, ghost?: Stars): { stars: string;
     ghost: ghost && st ? `The ghost held its usual route and passed ${km(ghost.closest_km)} from the storm's centre.` : "",
   };
 }
+
+/**
+ * Whether a kind of "Your call" may come up. A challenge with a goal is one story with one big
+ * call (Elena, 13 Nov): there the Gulf Stream call, the navigator's route check and the first
+ * chase stay out, as cards and as notes. Storms and a flat battery still ask, as they threaten the
+ * boat. An ordinary crossing gets them all.
+ */
+const CROSSING_ONLY = new Set(["stream", "route", "chase"]);
+export function callAllowed(kind: string, inGoalChallenge: boolean): boolean {
+  return !(inGoalChallenge && CROSSING_ONLY.has(kind));
+}

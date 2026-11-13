@@ -668,8 +668,12 @@ try {
       const run0 = six.day;
       await page.waitForFunction((d) => window.__helm.status.day > d + 0.4 || window.__helm.clock === 0 || window.__helm.error, run0, { timeout: 240000 })
         .catch(() => fail(`helm: at 1 day a second the clock didn't move from day ${run0}`));
-      const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent }));
-      if (ran.err || (ran.clock === 0 ? ran.stop === "time" : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
+      // A "Your call" card (#391) is a reason to pause after a "time" run too; a bare pause isn't.
+      // The card shows once the picture reaches the call's moment, a second or two after the pause.
+      if (await page.evaluate(() => window.__helm.clock === 0 && window.__helm.lastStop === "time"))
+        await page.waitForFunction(() => !document.getElementById("decide").hidden, null, { timeout: 15000 }).catch(() => {});
+      const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent, card: !document.getElementById("decide").hidden }));
+      if (ran.err || (ran.clock === 0 ? ran.stop === "time" && !ran.card : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
       await page.evaluate(() => window.__helm.clock && document.getElementById("t-pause").click()); // pause, unless it paused itself
       await page.waitForFunction(() => window.__helm.clock === 0, null, { timeout: 10000 });
       await page.waitForTimeout(4000); // a run already under way lands
@@ -883,6 +887,68 @@ try {
     await page.keyboard.press("Digit4");
     await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
+    // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
+    // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
+    // On for everyone since 13 Nov (John): the plain card shows the row with "You" picked and Set sail unchanged.
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 60000 });
+    await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the plain Set sail card has no Who steers row"));
+    const plain = await page.evaluate(() => ({ who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent, go: document.getElementById("go").textContent }));
+    if (plain.who !== "You" || plain.go !== "Set sail") fail(`the plain Set sail card must open on You with Set sail: ${JSON.stringify(plain)}`);
+    await page.goto(`${URL}helm.html?quality=low&who=autopilot`);
+    await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Who steers row"));
+    const ws = await page.evaluate(() => ({
+      who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      day: document.querySelector('#ss-when-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      days: document.querySelectorAll("#ss-when-opts .ss-pill").length,
+      go: document.getElementById("go").textContent,
+      label: document.querySelector("#ss-when .ss-l").textContent,
+      bad: /record|replay/i.test(document.getElementById("ss-card").innerText),
+    }));
+    if (ws.who !== "The autopilot" || ws.day !== "1 Jun" || ws.label !== "Launch day, 2020" || ws.days < 2 || ws.go !== "Watch her go" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
+    await page.click("#go");
+    await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
+    if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
+    log.push("Who steers: the autopilot's Set sail opens her voyage on the sailing screen");
+    // "Race against" (M2, R4): with Another boat picked the card names the rival, "(our model)" on a Randolph
+    // boat (B2), and Set sail opens the race on this screen with both boats and the launch day in the link.
+    await page.goto(`${URL}helm.html?quality=low&who=autopilot&against=revc`);
+    await page.waitForFunction(() => document.querySelector("#ss-rival-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Race against row"));
+    const rr = await page.evaluate(() => ({
+      rival: document.querySelector('#ss-rival-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      against: document.getElementById("ss-against-name").textContent,
+      after: document.getElementById("ss-after").textContent,
+      go: document.getElementById("go").textContent,
+    }));
+    if (rr.go !== "Start the race" || rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
+    await page.click("#go");
+    await page.waitForURL(/race=kayak,revc&launch=4/, { timeout: 15000 }).catch(() => fail(`Set sail with another boat opened ${page.url()}`));
+    log.push("Race against: Set sail with another boat opens the race on the sailing screen");
+    // "Race it" on the same screen (M2, R3): two boats from the race's own simulator, boat B where the ghost
+    // goes. It opens paused, as the race page does, with Real time first on the bar (T1).
+    await page.goto(`${URL}helm.html?quality=low&race=kayak,revc`);
+    await page.waitForFunction(() => window.__helm?.ready || window.__helm?.error, null, { timeout: 240000 });
+    const rv = await page.evaluate(() => ({
+      err: window.__helm.error,
+      view: window.__helm.view,
+      clock: window.__helm.clock,
+      names: window.__helm.race?.names,
+      first: document.querySelector("#timebar .rate")?.textContent,
+      orders: getComputedStyle(document.getElementById("orders-tab")).display,
+      lead: getComputedStyle(document.getElementById("c-lead")).display,
+    }));
+    // Only "this copy has no simulator (or no race in it)" may pass quietly: any other error is a failure (Lena).
+    if (/^no (simulator files|race in the simulator)$/.test(rv.err ?? "")) log.push(`helm?race: no simulator to race on here (${rv.err})`);
+    else if (rv.err) fail(`helm?race failed to open: ${rv.err}`);
+    else {
+      // The second boat is on the water beside yours at the start, with her name above her (Elena).
+      await page.waitForFunction(() => window.__helm.rival?.shown, null, { timeout: 30000 }).catch(() => fail("the other boat in a race isn't on the water at the start"));
+      if (rv.view !== "race" || rv.clock !== 0 || rv.first !== "Real time" || rv.orders !== "none" || rv.lead === "none") fail(`helm?race didn't open the race on the sailing screen: ${JSON.stringify(rv)}`);
+      if (!/\(our model\)$/.test(rv.names?.[1] ?? "")) fail(`the Randolph boat in a race must be named as our model (B2): ${JSON.stringify(rv.names)}`);
+      await page.keyboard.press("Digit4");
+      await page.waitForFunction(() => window.__helm.hour > 12 && window.__helm.status?.ghost, null, { timeout: 120000 }).catch(() => fail("a race on the helm screen didn't sail on at a day a second"));
+      log.push(`helm?race: ${rv.names.join(" against ")} on the sailing screen`);
+    }
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);
@@ -908,6 +974,28 @@ try {
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
+    // Two tabs (M3, W5): the designs board opens first; Weather challenges is its own tab, lists the
+    // challenges from this site with "Not sailed yet" in a fresh browser, and a link can open it.
+    await page.waitForFunction(() => window.__leaderboard.challenges !== undefined, null, { timeout: 30000 }).catch(() => fail("leaderboard: the Weather challenges tab never drew"));
+    const tabs0 = await page.evaluate(() => ({ tab: window.__leaderboard.tab, designs: !document.getElementById("p-designs").hidden, ch: !document.getElementById("p-challenges").hidden }));
+    if (tabs0.tab !== "designs" || !tabs0.designs || tabs0.ch) fail(`leaderboard: it should open on Designs: ${JSON.stringify(tabs0)}`);
+    await page.click("#tab-challenges");
+    const tabs1 = await page.evaluate(() => ({
+      tab: window.__leaderboard.tab,
+      designs: !document.getElementById("p-designs").hidden,
+      hash: location.hash,
+      n: window.__leaderboard.challenges,
+      rows: document.querySelectorAll("#crows tr").length,
+      unsailed: [...document.querySelectorAll("#crows td.yours")].filter((t) => t.textContent === "Not sailed yet").length,
+      none: document.getElementById("cnone").textContent,
+      money: /[$£€]|price|cost/i.test(document.getElementById("p-challenges").innerText),
+    }));
+    if (tabs1.tab !== "challenges" || tabs1.designs || tabs1.hash !== "#challenges" || tabs1.rows !== tabs1.n || tabs1.unsailed !== tabs1.rows || tabs1.money || (tabs1.n === 0 && !/aren't on this copy/.test(tabs1.none)))
+      fail(`leaderboard: Weather challenges tab: ${JSON.stringify(tabs1)}`);
+    await page.click("#tab-designs");
+    log.push(`leaderboard tabs: Designs, and Weather challenges with ${tabs1.n} challenges`);
+    // The game's look (M3): the real sea and sky come up behind the board, after its words.
+    await page.waitForFunction(() => window.__leaderboard.sea?.frames > 0 && document.body.classList.contains("sea"), null, { timeout: 60000 }).catch(() => fail("leaderboard: no sea and sky behind the page"));
     await snap({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
     // Race view: with the simulator files it races our kayak against Rev C for a

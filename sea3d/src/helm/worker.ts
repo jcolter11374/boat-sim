@@ -232,7 +232,7 @@ except KeyError as err:
 json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
 `;
     } else if (m.type === "load") {
-      say("Sailing the shared game back to where it was...");
+      say(m.mine ? "Sailing back to where you left off..." : "Sailing the shared game back to where it was...");
       code = `
 m = json.loads(msg_json)
 if Game is None or not hasattr(Game, "load"):
@@ -267,6 +267,18 @@ json.dumps({"stopped": out["stopped"], "status": out["status"], **voyages()}, de
       code = `
 m = json.loads(msg_json)
 json.dumps(G.preview(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []), hours=m.get("hours", 24.0)) if hasattr(G, "preview") and G.mode == "hands_on" and not G.status()["over"] else None, default=_f)
+`;
+    } else if (m.type === "outlook") {
+      // Each order's stake against the ghost, from the forecast as issued. Older simulators: null.
+      code = `
+m = json.loads(msg_json)
+json.dumps(G.outlook(m["orders"], hours=m.get("hours", 48.0)) if hasattr(G, "outlook") and G.mode == "hands_on" and not G.status()["over"] else None, default=_f)
+`;
+    } else if (m.type === "best") {
+      // The route check: the heading the forecast favours for the next 2 days. Older simulators: null.
+      code = `
+m = json.loads(msg_json)
+json.dumps(G.best_heading(hours=m.get("hours", 48.0)) if hasattr(G, "best_heading") and G.mode == "hands_on" and not G.status()["over"] else None, default=_f)
 `;
     } else if (m.type === "forecast") {
       code = `json.dumps(G.forecast(hours=120), default=_f)`;

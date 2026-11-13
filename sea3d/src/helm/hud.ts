@@ -6,6 +6,8 @@
 // none of these letters is taken.
 // This file only shows and hides things; the game (src/helm.ts) says what's in them.
 
+import { raceLead } from "./raceWords";
+
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
 /** How long a toast stays, ms: an event 6 s, a breakdown or a warning 10 s (Leo's plan, item 6). */
@@ -207,7 +209,7 @@ export class Hud {
 
   /** A toast at the top. `sticky` ones (the reason the clock stopped) stay until it runs again.
    * Every toast also goes into the log in the big map. Returns the toast. */
-  toast(text: string, when: string, colour: string, opts: { warn?: boolean; sticky?: boolean } = {}): HTMLElement {
+  toast(text: string, when: string, colour: string, opts: { warn?: boolean; sticky?: boolean; hl?: string } = {}): HTMLElement {
     const el = document.createElement("div");
     el.className = "note";
     el.style.borderLeftColor = colour;
@@ -216,7 +218,14 @@ export class Hud {
     w.textContent = when;
     const t = document.createElement("div");
     t.className = "txt";
-    t.textContent = text;
+    // `hl`: the one part in the toast's colour (the number that matters); the rest stays white.
+    const at = opts.hl ? text.indexOf(opts.hl) : -1;
+    if (at >= 0) {
+      const n = document.createElement("b");
+      n.style.color = colour;
+      n.textContent = opts.hl!;
+      t.append(text.slice(0, at), n, text.slice(at + opts.hl!.length));
+    } else t.textContent = text;
     el.append(w, t);
     if (opts.sticky) el.dataset.sticky = "1";
     const box = $("notes");
@@ -271,9 +280,15 @@ export interface StripData {
 
 const POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 export const point = (deg: number): string => POINTS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-/** Arrows for where the wind blows TO, as on the forecast. */
-const ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
-const arrow = (deg: number): string => ARROWS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+
+/** The wind cell's last values: speed (kn), where it blows to (degrees), wave height (m). */
+const wind: { kn: number | null; to: number | null; hs: number | null; shown: string } = { kn: null, to: null, hs: null, shown: "" };
+
+/** A race's two boats, by name: the lead cell then says which is ahead (no "you", no ghost). */
+let racers: [string, string] | null = null;
+export function setRacers(names: [string, string] | null): void {
+  racers = names;
+}
 
 export function showStrip(d: StripData): void {
   if (d.order !== undefined) $("c-orderv").textContent = d.order;
@@ -304,14 +319,38 @@ export function showStrip(d: StripData): void {
     bar.style.width = `${b}%`;
     bar.style.background = b < 15 ? "var(--bad)" : b < 35 ? "var(--warn)" : "var(--good)";
   }
-  if (d.windKn !== undefined) $("c-windv").textContent = d.windKn == null ? "–" : `${d.windKn.toFixed(0)} kn ${d.windTo == null ? "" : arrow(d.windTo)}`;
-  // The label is uppercased by CSS; the unit sits in its own span so it stays "m", not "M" (Milo).
-  if (d.waves !== undefined) {
-    const l = $("c-wavel");
-    if (d.waves == null) l.textContent = "wind";
-    else l.replaceChildren(`waves ${d.waves.toFixed(1)} `, Object.assign(document.createElement("span"), { className: "u", textContent: "m" }));
+  // Wind and waves in one value, as on Watch a voyage: "35 kn NW · 10.5 m" over "wind · waves", the
+  // wind named by where it comes from (one format in every mode, Elena). The two arrive separately
+  // (the forecast row, then the live frame), so the cell is drawn from the last of each.
+  if (d.windKn !== undefined) wind.kn = d.windKn;
+  if (d.windTo !== undefined) wind.to = d.windTo;
+  if (d.waves !== undefined) wind.hs = d.waves;
+  if (d.windKn !== undefined || d.windTo !== undefined || d.waves !== undefined) {
+    const key = `${wind.kn?.toFixed(0)}|${wind.to == null ? "" : point(wind.to + 180)}|${wind.hs?.toFixed(1)}`;
+    if (key !== wind.shown) {
+      wind.shown = key;
+      const sub = (t: string) => Object.assign(document.createElement("span"), { className: "sub", textContent: t });
+      const v = $("c-windv");
+      if (wind.kn == null) v.textContent = "–";
+      else {
+        v.replaceChildren(wind.kn.toFixed(0), sub(` kn${wind.to == null ? "" : ` ${point(wind.to + 180)}`}`));
+        if (wind.hs != null) v.append(` · ${wind.hs.toFixed(1)}`, sub(" m"));
+      }
+      $("c-wavel").textContent = wind.hs == null ? "wind" : "wind · waves";
+    }
   }
-  if (d.lead !== undefined) {
+  if (d.lead !== undefined && racers) {
+    // A race: who is ahead and by how far, in the boats' own names (helm/raceWords.ts).
+    const c = raceLead(d.lead, racers);
+    const key = `${c.value}|${c.label}`;
+    const cell = $("c-lead");
+    if (cell.dataset.v !== key) {
+      cell.dataset.v = key;
+      $("c-leadv").replaceChildren(c.value, ...(c.unit ? [Object.assign(document.createElement("span"), { className: "sub", textContent: c.unit })] : []));
+      cell.querySelector(".l")!.textContent = c.label;
+      cell.classList.remove("ahead", "behind");
+    }
+  } else if (d.lead !== undefined) {
     const lead = $("c-lead");
     const km = Math.round(Math.abs(d.lead));
     $("c-leadv").textContent = km < 1 ? "level" : `${d.guess ? "~" : ""}${d.lead > 0 ? "+" : "−"}${km.toLocaleString()} km`;

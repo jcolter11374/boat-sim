@@ -1,7 +1,7 @@
 // The boat's local time under the UTC clock (src/replay/localtime.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { localTime, zoneAt } from "../src/replay/localtime";
+import { localTime, shortLocal, zoneAt, zoneLabel } from "../src/replay/localtime";
 
 const may = Date.parse("2026-05-01T12:01:00Z");
 const jan = Date.parse("2026-01-15T12:01:00Z");
@@ -20,4 +20,40 @@ test("the nautical zone at sea", () => {
 test("the island's clock in the Azores, Lisbon's near Portugal", () => {
   assert.equal(localTime(may, 38.47, -28.4), "12:01 PM local (UTC, AZOST)");
   assert.equal(localTime(may, 38.7, -9.3), "1:01 PM local (UTC+1, WEST)");
+});
+
+test("the strip's short zone label changes as the boat crosses zones (locked item S1)", () => {
+  // Leaving the Chesapeake: the shore's clock, then the sea zones one by one going east.
+  assert.equal(zoneLabel(36.9, -75.9, may), "EDT");
+  assert.equal(zoneLabel(36.65, -74.9, may), "UTC−5"); // just past the shore box: the nautical zone
+  assert.equal(zoneLabel(37, -67.6, may), "UTC−5");
+  assert.equal(zoneLabel(37, -67.4, may), "UTC−4"); // across 67.5°W
+  assert.equal(zoneLabel(38, -52.4, may), "UTC−3");
+  assert.equal(zoneLabel(39.5, -13.5, may), "UTC−1"); // the finish
+  assert.equal(zoneLabel(45, -3, may), "UTC");
+  assert.equal(zoneLabel(38.7, -9.3, may), "WEST"); // Lisbon's summer time
+  assert.equal(zoneLabel(38.98, -76.48, jan), "EST"); // Annapolis in winter
+  // The clock beside it moves with the zone: the same moment, an hour later one zone east.
+  assert.equal(shortLocal(may, 37, -67.6), "1 May 07:01");
+  assert.equal(shortLocal(may, 37, -67.4), "1 May 08:01");
+});
+
+test("the strip's zone and the map panel's line agree at the same place and moment", () => {
+  // Both come from zoneAt: the strip's short label must be the zone the panel's full line names.
+  for (const [lat, lon] of [[38.98, -76.48], [36.9, -75.9], [36.65, -74.94], [37, -60], [38.47, -28.4], [39.5, -13.5], [38.7, -9.3], [45, -3]]) {
+    for (const ms of [may, jan]) {
+      const z = zoneAt(lat, lon, ms);
+      const label = zoneLabel(lat, lon, ms);
+      const panel = localTime(ms, lat, lon);
+      const utc = `UTC${z.offset === 0 ? "" : (z.offset < 0 ? "−" : "+") + Math.abs(z.offset)}`;
+      assert.equal(label, z.zone ? z.name : utc);
+      assert.ok(panel.includes(`(${utc}, ${z.name})`), `${panel} names ${utc}, ${z.name}`);
+      // The hour shown is the hour of that zone.
+      const hh = new Date(ms + z.offset * 3600e3).getUTCHours();
+      assert.equal(shortLocal(ms, lat, lon).slice(-5, -3), String(hh).padStart(2, "0"));
+    }
+  }
+  // The drop, 100 km out from the Bay mouth, is just past the shore's box: the sea zone, not EDT.
+  assert.equal(zoneLabel(36.65, -74.94, Date.parse("2020-04-23T12:00:00Z")), "UTC−5");
+  assert.equal(localTime(Date.parse("2020-04-23T12:00:00Z"), 36.65, -74.94), "7:00 AM local (UTC−5, sea zone)");
 });

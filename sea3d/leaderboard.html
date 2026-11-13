@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bluewater: Design leaderboard</title>
+<title>Bluewater: Leaderboard</title>
 <style>
   :root { --bar: 40px; } /* the shared top bar (src/topbar.ts) */
   :root { --glass: rgba(10,22,38,.78); --line: rgba(160,200,255,.18); --ink: #e9f1fb; --dim: #9fb3c8;
@@ -11,6 +11,15 @@
   html { background: #0b1726; }
   body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse 1200px 700px at 30% 0%, #1d3b5c 0%, #0b1726 100%) no-repeat;
     color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* The game's look (M3): the real sea and sky behind the page (src/backdrop.ts), the words on glass.
+     Until the sea is drawn, and on a computer that can't draw it, the dark page above stays. */
+  #sea { position: fixed; inset: 0; z-index: 0; opacity: 0; transition: opacity 1.2s; }
+  #sea canvas { display: block; width: 100%; height: 100%; }
+  body.sea #sea { opacity: 1; }
+  body.sea { background: none; }
+  main, #credits { position: relative; z-index: 1; }
+  body.sea { --glass: rgba(8,18,32,.82); }
+  body.sea #credits { color: rgba(255,255,255,.85) !important; text-shadow: 0 1px 3px rgba(0,20,40,.7); }
   .glass { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
   a { color: #8ab4ff; }
@@ -18,8 +27,26 @@
   .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
   main { max-width: 1060px; margin: calc(var(--bar, 0px) + 24px) auto 40px; padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
   header { padding: 14px 18px; }
-  header h1 { margin: 0 0 2px; font-size: 22px; }
+  header h1 { margin: 0 0 2px; font: 800 28px/1.1 "Fraunces", Georgia, serif; } /* the game's heading face, as on the Set sail card */
   header nav { float: right; font-size: 13px; }
+  /* Two boards, one page (W5: weather challenges have their own tab). */
+  .panel { display: flex; flex-direction: column; gap: 12px; }
+  .panel[hidden] { display: none; }
+  #tabs { display: flex; gap: 6px; margin: 8px 0 8px; flex-wrap: wrap; }
+  #tabs button { font: 600 13.5px system-ui, sans-serif; color: var(--ink); padding: 6px 12px; border-radius: 9px; border: 1px solid var(--line); background: rgba(27,51,82,.55); cursor: pointer; }
+  #tabs button:hover { border-color: #8ab4ff; }
+  #tabs button:focus { outline: none; } #tabs button:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; }
+  #tabs button[aria-selected="true"] { border-color: var(--orange); background: rgba(255,138,42,.2); }
+  #cboard { padding: 6px 4px 10px; overflow-x: auto; }
+  #cboard thead th:nth-child(1) { width: 34%; } #cboard thead th:nth-child(2) { width: 27%; } #cboard thead th:nth-child(3) { width: 24%; } #cboard thead th:nth-child(4) { width: 15%; }
+  #cboard td .when, #cboard td .detail { display: block; font-size: 12px; color: var(--dim); }
+  #cboard td.yours { font-weight: 650; } #cboard tr:not(.tried) td.yours { font-weight: 400; color: var(--dim); }
+  #cboard tr.ahead td.yours { color: var(--good); }
+  #cboard a.sail { color: var(--ink); text-decoration: none; padding: 4px 10px; border: 1px solid var(--line); border-radius: 9px; white-space: nowrap; display: inline-block; }
+  #cboard a.sail:hover, #cboard a.sail:focus-visible { border-color: #8ab4ff; }
+  #cnone { padding: 10px 12px; } #cnone[hidden] { display: none; }
+  #ckept { padding: 10px 18px; }
+  @media (max-width: 560px) { #cboard thead th:nth-child(3), #cboard td.auto { display: none; } #cboard thead th:nth-child(1) { width: 36%; } #cboard thead th:nth-child(2) { width: 34%; } #cboard thead th:nth-child(4) { width: 30%; } #cboard td { padding: 9px 6px; } }
   #about { margin-top: 6px; }
   #about summary { cursor: pointer; color: var(--dim); font-size: 12px; }
   #facts { margin-top: 4px; }
@@ -75,12 +102,18 @@
 </style>
 </head>
 <body>
+<div id="sea" aria-hidden="true"></div>
 <main>
   <header class="glass">
-    <h1>Design leaderboard</h1>
-    <div class="muted">Which builds reach the finish most often, on the same launches with the same luck.</div>
+    <h1>Leaderboard</h1>
+    <div id="tabs" role="tablist" aria-label="Which leaderboard">
+      <button role="tab" id="tab-designs" aria-controls="p-designs" aria-selected="true">Designs</button>
+      <button role="tab" id="tab-challenges" aria-controls="p-challenges" aria-selected="false" tabindex="-1">Weather challenges</button>
+    </div>
+    <div class="muted" id="sub">Which builds reach the finish most often, on the same launches with the same luck.</div>
     <details id="about"><summary>About this leaderboard</summary><div id="facts" class="muted"></div></details>
   </header>
+  <div id="p-designs" class="panel" role="tabpanel" aria-labelledby="tab-designs">
   <div id="banner" class="glass banner"></div>
   <div id="you" class="glass" hidden></div>
   <section id="board" class="glass">
@@ -99,6 +132,17 @@
     <p><b>Show the statistics</b> adds the likely ranges and the <b>hidden year</b>: a separate year nobody tunes against. A build that does much worse there than on the main launches gets a warning: it may be tuned to the test.</p>
     <p><b>Randolph's boats</b> (Rev B, Rev C5) are our model of their team's designs, not their own results: the quiet "our model" tag by a name says so, and its <b>i</b> says more.</p>
   </section>
+  </div>
+  <div id="p-challenges" class="panel" role="tabpanel" aria-labelledby="tab-challenges" hidden>
+    <section id="cboard" class="glass">
+      <table>
+        <thead><tr><th>Challenge</th><th>Your best</th><th>The autopilot</th><th></th></tr></thead>
+        <tbody id="crows"></tbody>
+      </table>
+      <div id="cnone" class="muted" hidden></div>
+    </section>
+    <section id="ckept" class="glass muted"></section>
+  </div>
 </main>
 <div id="credits" style="max-width:1060px;margin:-28px auto 12px;padding:0 12px;text-align:right;font:10px/11px system-ui,sans-serif;color:rgba(255,255,255,.6)">Weather: Copernicus C3S ERA5 · Currents: Copernicus Marine · Land: Natural Earth · Ships: EMODnet, World Bank · <a style="color:inherit" href="https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Credits</a></div>
 <script type="module" src="./src/topbar.ts"></script>

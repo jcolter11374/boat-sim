@@ -236,7 +236,7 @@ POIS: list[Poi] = [
         ),
         80,
         "A river of warm water in the sea, flowing north-east. It averages about 6 km/h "
-        "and can run near 9 km/h, faster than the kayak's motors push it, and it carries "
+        "and can run near 9 km/h, faster than a small boat like this can go on her own, and it carries "
         "more water than all the world's rivers put together. Further north and east it "
         "slows to under 2 km/h.",
         "NOAA National Ocean Service",
@@ -437,7 +437,7 @@ TEASERS: dict[str, str] = {
     "halifax-explosion": "In 1917 a ship full of explosives blew up in Halifax harbour.",
     "sable-island": "Sable Island, a sandbar with wild horses, has wrecked over 350 ships.",
     "louisbourg": "France's fortress town of Louisbourg fell to the British twice.",
-    "gulf-stream": "The Gulf Stream, a warm river in the sea, runs faster than the kayak.",
+    "gulf-stream": "The Gulf Stream, a warm river in the sea, outruns small boats like this.",
     "andrea-doria": "The liner Andrea Doria sank near here in 1956 after a collision in fog.",
     "bermuda-triangle": "You're near Bermuda, a corner of the famous 'Triangle'.",
     "sargasso-sea": "The Sargasso Sea is the only sea with no coast.",
