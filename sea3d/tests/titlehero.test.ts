@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HERO_SEA, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "../src/titleHero";
+import { HERO_GLOW, HERO_SEA, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "../src/titleHero";
 import type { MyBoat } from "../src/myboat";
 
 const boat = (kind: MyBoat["kind"], base: string): MyBoat => ({ kind, base, hash: "", name: "x", choices: {}, saved: "" });
@@ -34,4 +34,9 @@ test("the menu counts as below the boat on short phones too, never on a desktop 
   assert.equal(cardBelowOf(card(12, 240, 348, 622), 360, 640), true);
   assert.equal(cardBelowOf(card(64, 160, 424, 600), 1280, 720), false); // desktop: the card is down the left
   assert.equal(cardBelowOf(card(42, 44, 402, 372), 844, 390), false); // a phone on its side
+});
+
+test("the title's glow is small and tight, so the low sun's light can't lie over the boat", () => {
+  assert.ok(HERO_GLOW.scale > 0 && HERO_GLOW.scale <= 0.5, "under half the usual strength, not off");
+  assert.ok(HERO_GLOW.radius <= 0.25, "tight (the usual radius is 0.55)");
 });
