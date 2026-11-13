@@ -1753,8 +1753,11 @@ const CHECKS = {
       must(!(await page.evaluate(() => window.__helm.error)), `Sandy's shadow didn't start: ${await page.evaluate(() => window.__helm.error)}`);
       must((await page.evaluate(() => window.__helm.challenge)) === "sandys-shadow", "the game isn't sailing Sandy's shadow");
       const asked = [];
-      for (let i = 0; i < 40; i++) {
+      for (let i = 0; i < 80; i++) {
         if (await page.evaluate(() => window.__helm.status?.over)) break;
+        // A call is asked once the picture reaches its moment: give it time to show before carrying on
+        // (pressing play first would skip it).
+        if (await page.evaluate(() => window.__helm.clock === 0)) await page.waitForFunction(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length, null, { timeout: 12_000 }).catch(() => {});
         if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) {
           asked.push(await page.evaluate(() => (document.getElementById("decide").innerText || "").split("\n")[0].slice(0, 110)));
           await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
@@ -1764,10 +1767,11 @@ const CHECKS = {
         await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.status?.over || window.__helm.error, null, { timeout: 4 * MIN }).catch(() => {});
         must(!(await page.evaluate(() => window.__helm.error)), "sailing failed");
       }
+      const end = await page.evaluate(() => `${window.__helm.status?.over ? `voyage over (${window.__helm.status?.outcome ?? "?"})` : "still sailing"} at day ${window.__helm.status?.day?.toFixed(1)}, last stop ${JSON.stringify(window.__helm.lastStop)}`);
       const r = await page.evaluate(() => ({ d: window.__helm.decisions.map((x) => ({ kind: x.kind, day: +x.day.toFixed(1) })), gulf: window.__gulf, over: !!window.__helm.status?.over, day: window.__helm.status?.day }));
       const mission = r.d.filter((x) => x.kind === "mission");
       const stream = r.d.filter((x) => /stream|gulf/i.test(x.kind));
-      must(mission.length === 1, `Sandy's big call was asked ${mission.length} times (decisions: ${JSON.stringify(r.d)})`);
+      must(mission.length === 1, `Sandy's big call was asked ${mission.length} times (decisions: ${JSON.stringify(r.d)}; asked: ${JSON.stringify(asked)}; ${end})`);
       must(!stream.length, `Sandy's shadow asked a Gulf Stream call: ${JSON.stringify(stream)}`);
       must(!r.gulf.length, `Sandy's shadow showed a Gulf Stream note: ${JSON.stringify(r.gulf.slice(0, 2))}`);
       return `one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
