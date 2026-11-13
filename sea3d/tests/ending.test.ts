@@ -30,7 +30,7 @@ test("no way on leads to the old race or replay pages", () => {
 
 test("Race it opens the Set sail card with the autopilot and another boat, on the same day", () => {
   const race = (raceId?: string | null) => waysOn("crossing", { search: "?quality=low&sail=1", raceId, day: "2020-06-01T12:00:00Z" }).main.find((w) => w.id === "race");
-  assert.equal(race("kayak")!.href, "./helm.html?quality=low&who=autopilot&against=revc&day=2020-06-01");
+  assert.equal(race("kayak")!.href, "./helm.html?who=autopilot&against=revc&day=2020-06-01&quality=low");
   assert.equal(race(undefined)!.href, race("kayak")!.href, "no boat named: our kayak");
   assert.match(race("revc")!.href!, /against=kayak/, "the Rev C5 can't race herself");
   assert.match(race("mine")!.href!, /against=revc/);

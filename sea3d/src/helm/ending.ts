@@ -6,6 +6,7 @@
 // A way on that makes no sense for a mode is left out, not hidden: a race's "Race it" is its
 // "Race again"; a watched voyage has no boat of yours to change.
 
+import { leaderboardLink, raceItLink } from "../results";
 import { RACE_IDS } from "./whoSteers";
 
 export type EndMode = "crossing" | "challenge" | "watch" | "race";
@@ -65,8 +66,6 @@ export function watchCardLink(search: string, day?: string): string {
   return `./helm.html?${p.toString()}`;
 }
 
-/** The leaderboard: a challenge's ending opens the weather challenges' own tab (W5), any other the design's own row. */
-const boardLink = (mode: EndMode, build?: string) => (mode === "challenge" ? "./leaderboard.html#challenges" : build ? `./leaderboard.html#${encodeURIComponent(build)}` : "./leaderboard.html");
 
 /**
  * The ways on from an ending: `main` are the card's buttons, in order, the first one the orange one;
@@ -74,10 +73,11 @@ const boardLink = (mode: EndMode, build?: string) => (mode === "challenge" ? "./
  */
 export function waysOn(mode: EndMode, c: WayCtx): { main: Way[]; quiet: Way[] } {
   const boat: Way = { id: "boat", label: "Change the boat", href: c.boatyard ?? "./boatyard.html" };
-  const board: Way = { id: "board", label: "Leaderboard", href: boardLink(mode, c.build) };
+  const board: Way = { id: "board", label: "Leaderboard", href: leaderboardLink({ build: c.build, challenge: mode === "challenge" ? "yes" : null }) };
   // Race it: your boat against another, on the card. Our model of the Rev C5 first, or our kayak when the Rev C5 is the boat sailed.
   const mine = c.raceId === undefined ? "kayak" : c.raceId;
-  const race: Way[] = mine ? [{ id: "race", label: "Race it", href: raceCardLink(c.search, mine === "revc" ? "kayak" : "revc", c.day) }] : [];
+  const raceHref = mine ? raceItLink({ boat: mine === "kayak" ? "" : mine, day: c.day, quality: new URLSearchParams(c.search).get("quality") }) : null;
+  const race: Way[] = raceHref ? [{ id: "race", label: "Race it", href: raceHref }] : [];
   const look: Way[] = c.canLook ? [{ id: "look", label: "Look around" }] : [];
   switch (mode) {
     case "crossing":
