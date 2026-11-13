@@ -1063,6 +1063,86 @@ const CHECKS = {
       return `${shots.length} looks: ${shots.join(", ")}`;
     },
   },
+  // Manual: looks at "Continue your voyage" (#462, #465) and at Race it on the sailing screen
+  // (#456, #469) on the live site, printed to the log like "look". Both need the simulator.
+  "look-continue-race": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const out = [];
+      const shot = async (name) => {
+        const path = `lcr-${BROWSER}-${name}.jpg`;
+        if (!(await jpeg(page, path))) return;
+        const b64 = readFileSync(path).toString("base64");
+        console.log(`LOOK-BEGIN ${path}`);
+        for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+        console.log(`LOOK-END ${path}`);
+      };
+      const ready = () => page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      // 1. Sail a crossing for a day or so, then leave: the title and the Set sail card offer it back.
+      await helmStart(page);
+      await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="6"]')?.click());
+      await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 1.5, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForTimeout(3000);
+      const left = await page.evaluate(() => ({ day: window.__helm.status?.day, saved: !!localStorage.getItem("boatsim.voyage.v1") }));
+      must(left.saved, `no crossing was saved in the browser after sailing to day ${left.day}`);
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      for (const [w, h, tag] of [[1280, 720, "1280"], [375, 667, "375"]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 20, null, { timeout: 2 * MIN }).catch(() => {});
+        await page.waitForTimeout(4000);
+        const t = await page.evaluate(() => { const a = document.getElementById("t-continue"); const c = document.getElementById("title"); return { shown: !!a && !a.hidden && a.offsetParent !== null, text: (a?.innerText ?? "").replace(/\s+/g, " "), scrolls: c.scrollHeight > c.clientHeight + 1 }; });
+        await shot(`title-${tag}`);
+        must(t.shown, `the title doesn't offer "Continue your voyage" at ${tag} after a crossing was left at day ${left.day}`);
+        out.push(`title ${tag}: "${t.text}"${t.scrolls ? " (the menu scrolls inside itself)" : ""}`);
+        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.waitForTimeout(3000);
+      const card = await page.evaluate(() => { const c = document.getElementById("ss-continue"); return { shown: !!c && !c.hidden, text: (c?.innerText ?? "").replace(/\s+/g, " ") }; });
+      await shot("card");
+      must(card.shown, "the Set sail card doesn't offer the saved crossing");
+      await page.click("#go", { noWaitAfter: true, timeout: 30_000 });
+      await page.waitForTimeout(1000);
+      const ask = await page.evaluate(() => { const a = document.getElementById("ss-ask"); return { shown: !!a && !a.hidden, text: (a?.innerText ?? "").replace(/\s+/g, " ") }; });
+      await shot("ask");
+      must(ask.shown, "Set sail didn't ask before a new crossing ends the saved one");
+      out.push(`card: "${card.text}"; ask: "${ask.text}"`);
+      await page.click("#ss-ask-keep", { noWaitAfter: true, timeout: 15_000 });
+      await page.waitForFunction(() => /continue=1/.test(location.search) && window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await ready();
+      await page.waitForTimeout(5000);
+      const back = await page.evaluate(() => ({ day: window.__helm.status?.day, err: window.__helm.error, clock: window.__helm.clock, rt: document.querySelector("#timebar .rate")?.dataset.rate }));
+      await shot("continued");
+      must(!back.err && Math.abs((back.day ?? 0) - left.day) < 0.5, `"Keep sailing" didn't come back where she was left: left day ${left.day}, back ${JSON.stringify(back)}`);
+      must(back.rt === "rt", `Real time isn't first on the speed bar after continuing (${back.rt})`);
+      out.push(`continued at day ${back.day?.toFixed(2)} (left at ${left.day?.toFixed(2)})`);
+      // 2. Race it on the sailing screen: our kayak against our model of the Rev C5, 1 May 2020.
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await page.goto(SITE + "helm.html?race=kayak,revc&launch=2&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await ready();
+      await page.waitForTimeout(5000);
+      const bar = () => page.evaluate(() => ({ view: window.__helm.view, day: window.__helm.status?.day, over: !!window.__helm.status?.over, err: window.__helm.error, shown: !document.getElementById("timebar").hidden, rates: [...document.querySelectorAll("#timebar .rate")].filter((e) => e.offsetParent).map((e) => e.dataset.rate + (e.getAttribute("aria-pressed") === "true" ? "*" : "")), strip: document.getElementById("strip").innerText.replace(/\s+/g, " ") }));
+      const r0 = await bar();
+      await shot("race-start");
+      must(!r0.err && r0.view === "race", `the race didn't open on the sailing screen: ${JSON.stringify(r0)}`);
+      must(r0.shown && r0.rates[0]?.startsWith("rt"), `Real time isn't first on the race's speed bar: ${JSON.stringify(r0.rates)}`);
+      await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="24"]')?.click());
+      await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 3 || window.__helm.status?.over, null, { timeout: 4 * MIN }).catch(() => {});
+      await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
+      await page.waitForTimeout(4000);
+      const r1 = await bar();
+      await shot("race-day3");
+      out.push(`race: opens (${r0.rates.join(" ")}), strip "${r0.strip.slice(0, 160)}"; later day ${r1.day?.toFixed(1)}, over ${r1.over}, strip "${r1.strip.slice(0, 160)}"`);
+      return out.join("; ");
+    },
+  },
   // #385 (Felix): sound waits for a click, "No thanks" is remembered, N and the speaker button
   // agree, cinematic with sound on is clean, and a remembered "on" returns at the first click,
   // never on load. Nobody can hear on a runner: this checks state and errors, not the sound.
