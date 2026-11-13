@@ -2934,10 +2934,13 @@ const CHECKS = {
       const problems = [];
       const PEARSON = JSON.stringify({ v: 1, kind: "stock", base: "stock_pearson31_2", hash: "", name: "Pearson 31-2 (our model)", choices: { base: "stock_pearson31_2" }, saved: "2026-11-13T09:00:00.000Z" });
       const osm = (p) => p.evaluate(() => { const e = document.getElementById("osm"); const r = e?.getBoundingClientRect(); return { here: !!e, shown: !!e && !e.hidden && e.offsetParent !== null && r.width > 0 && r.bottom <= innerHeight + 1, text: e?.textContent.trim() ?? "" }; });
-      for (const [boat, saved] of [["kayak", null], ["pearson", PEARSON]]) {
-        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+      for (const [boat, saved, w, h] of [["kayak", null, 1280, 720], ["pearson", PEARSON, 1280, 720], ["kayak", null, 390, 844], ["pearson", PEARSON, 390, 844]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block", ...(w < 500 && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}) });
         if (saved) await ctx.addInitScript((v) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", v); } catch {} }, saved);
         const p = await ctx.newPage();
+        const gl = [];
+        p.on("console", (m) => { const t = m.text(); if (m.type() === "error" || /shader|webgl|program|compile|GL_/i.test(t)) gl.push(`${m.type()}: ${t.slice(0, 200)}`); });
+        p.on("pageerror", (e) => gl.push(`pageerror: ${String(e.message).slice(0, 200)}`));
         try {
           await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
           await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
@@ -2945,7 +2948,7 @@ const CHECKS = {
           await p.waitForTimeout(12000);
           const name = await p.evaluate(() => document.getElementById("t-boatname")?.textContent.trim());
           const a = await osm(p);
-          const path = `live-${BROWSER}-${boat}-1280.jpg`;
+          const path = `live-${BROWSER}-${boat}-${w}.jpg`;
           if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
           if (!a.shown) problems.push(`${boat}: the OpenStreetMap credit isn't showing on the title (${JSON.stringify(a)})`);
           // Set sail: the title goes; the credit with it.
@@ -2956,7 +2959,8 @@ const CHECKS = {
           const url = new URL(p.url()).pathname.split("/").pop() || "index";
           const b = await osm(p).catch(() => ({ here: false, shown: false, text: "" }));
           if (b.shown) problems.push(`${boat}: after Set sail (${url}) the OpenStreetMap credit still shows: "${b.text}"`);
-          out.push(`${boat}: My boat "${name}"; title credit ${a.shown ? `shown "${a.text}"` : "NOT shown"}; after Set sail on ${url}: credit ${b.shown ? "STILL shown" : "gone"}`);
+          if (gl.length) problems.push(`${boat} ${w}: console ${gl.slice(0, 4).join(" / ")}`);
+          out.push(`${boat} ${w}: console ${gl.length ? gl.length + " errors" : "clean"}; My boat "${name}"; title credit ${a.shown ? `shown "${a.text}"` : "NOT shown"}; after Set sail on ${url}: credit ${b.shown ? "STILL shown" : "gone"}`);
         } finally { await ctx.close().catch(() => {}); }
       }
       console.log(`SHORE ${BROWSER}: ${out.join(" || ")}`);
