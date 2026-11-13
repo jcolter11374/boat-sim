@@ -789,7 +789,9 @@ const CHECKS = {
       });
       must(await page.locator("#panel").isVisible(), `"Just watch the sea" didn't bring the sea panel back`);
       const way = await page.locator("#sail").isVisible().catch(() => false);
-      const links = await page.evaluate(() => [...document.querySelectorAll("#topbar a.nav")].map((a) => ({ href: a.href, text: a.textContent.trim() })));
+      // The bar's own links plus the ones in its More menu (since #437 the bar shows three and keeps the rest under More).
+      const BAR = "#topbar a.nav, #topbar .more .menu a:not([target])";
+      const links = await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((a) => ({ href: a.href, text: (a.querySelector(".l") ?? a).textContent.trim() })), BAR);
       must(links.length >= 5, `the top bar has ${links.length} links: ${JSON.stringify(links)}`);
       const bad = [];
       // Each link in its own tab: leaving this page mid-load would abort its textures (console noise, not a fault).
@@ -797,7 +799,7 @@ const CHECKS = {
         const tab = await page.context().newPage();
         const r = await tab.goto(l.href, { waitUntil: "load", timeout: 2 * MIN }).catch((e) => ({ status: () => String(e).split("\n")[0] }));
         const st = r?.status?.() ?? "no response";
-        const bar = await tab.locator("#topbar a.nav").count().catch(() => 0);
+        const bar = await tab.locator(BAR).count().catch(() => 0);
         await tab.close().catch(() => {});
         if (st !== 200 || bar < 5) bad.push(`${l.text} (${l.href}): HTTP ${st}, ${bar} bar links`);
       }
@@ -1079,7 +1081,7 @@ const CHECKS = {
       must(s.contexts === 0, `an AudioContext existed on load, before any click (${s.contexts})`);
       must(!s.pressed, `the speaker button says on before any click`);
       await watchAsk();
-      await page.click("#go", { timeout: 15_000 });
+      await page.click("#go", { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await sailed();
       s = await soundState(page);
       must(s.contexts === 0, `clicking "Set sail" started sound without being asked (${s.contexts} AudioContext)`);
@@ -1095,7 +1097,7 @@ const CHECKS = {
       await calmReload(page);
       await loaded();
       await watchAsk();
-      await page.click("#go", { timeout: 15_000 });
+      await page.click("#go", { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await sailed();
       await page.waitForTimeout(2000);
       const again = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
@@ -1129,7 +1131,7 @@ const CHECKS = {
       s = await soundState(page);
       must(s.contexts === 0 && !s.pressed, `a remembered "on" started sound on load (${s.contexts} AudioContext, button ${s.pressed})`);
       await watchAsk();
-      await page.click("#go", { timeout: 15_000 });
+      await page.click("#go", { noWaitAfter: true, timeout: 30_000 }); // the busy page can hold a click past 15 s on a runner
       await page.waitForTimeout(1000);
       s = await soundState(page);
       must(s.contexts === 1 && s.pressed, `a remembered "on" didn't come back at the first click (${s.contexts} AudioContext, button ${s.pressed})`);
