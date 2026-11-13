@@ -9,6 +9,11 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc3dc;
     font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #17212b; }
   #app { position: fixed; inset: 0; }
+  /* The title is in the page from its first paint (John, 13 Nov: the sea demo's panel on a pale blue page
+     showed for seconds before it). Until the sea draws, a backdrop in the hero shot's own colours (sampled
+     from it: sky, the horizon at about a third down, the water darkening towards the lens), and the top bar's band. */
+  body.title { background: linear-gradient(#989691 0%, #a59895 22%, #9e8e94 34%, #826e6a 35%, #5e6571 60%, #0c1830 100%) fixed; }
+  body.title::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--bar, 0px); background: rgba(8,18,32,.82); }
   #panel { position: fixed; top: calc(var(--bar, 0px) + 12px); max-height: calc(100vh - var(--bar, 0px) - 80px); overflow-y: auto; left: 12px; background: rgba(255,255,255,.9);
     border-radius: 10px; padding: 10px 14px 12px; width: 300px; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
   #panel h1 { font-size: 16px; margin: 0 0 4px; }
@@ -109,11 +114,25 @@
   #build { display: flex; align-items: center; color: #17212b; border: 1px solid #b9c4cf; background: #fff; font-size: 13px; }
   #build:hover { border-color: #17212b; }
 </style>
+<style id="wordmark-early">/* The wordmark (src/wordmark.ts WORDMARK_CSS, kept identical by tests/titlefirst.test.ts) for the title's first paint; the top bar adds it again. */
+@font-face { font-family: "Fraunces"; src: url("./fonts/fraunces-latin-full-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+.bw-mark { position: relative; display: inline-block; font-family: "Fraunces", Georgia, serif; line-height: 1; letter-spacing: -0.01em; white-space: nowrap; }
+.bw-a { font-weight: 300; font-variation-settings: "SOFT" 50, "opsz" 144; }
+.bw-b { font-weight: 850; font-variation-settings: "SOFT" 50, "opsz" 144; }
+.bw-h { position: absolute; left: 0; right: -0.76em; top: 84%; height: 0.016em; min-height: 1px; background: currentColor; opacity: 0.6; }
+.bw-sun { position: absolute; width: 0.42em; height: 0.21em; border-radius: 0.42em 0.42em 0 0; background: var(--orange, #ff8a2a); right: -0.66em; top: calc(84% - 0.21em); }
+.bw-small .bw-sun { display: none; }
+.bw-small .bw-h { right: 0; opacity: 0.7; }
+.bw-small .bw-a { font-weight: 440; font-variation-settings: "SOFT" 50, "opsz" 24; }
+.bw-small .bw-b { font-variation-settings: "SOFT" 50, "opsz" 24; }
+.bw-on-photo { text-shadow: 0 1px 14px rgba(0, 25, 50, 0.38); }
+.bw-heading { font-family: "Fraunces", Georgia, serif; font-weight: 800; font-variation-settings: "SOFT" 50; text-transform: uppercase; letter-spacing: 0.09em; }
+</style>
 </head>
-<body>
+<body class="title">
 <div id="app"></div>
 <div id="tags"></div>
-<section id="title" hidden aria-labelledby="title-h">
+<section id="title" aria-labelledby="title-h">
   <h1 id="title-h"><span class="bw-mark bw-on-photo" aria-label="Bluewater"><span class="bw-a">Blue</span><span class="bw-b">water</span><span class="bw-h"></span><span class="bw-sun"></span></span></h1>
   <p class="tag">Design a small robot boat, then try to sail it across the Atlantic: from the Chesapeake Bay to a finish line off Portugal, on real weather.</p>
   <nav>
@@ -129,6 +148,16 @@
   <p class="fine">Free and open source. Our own simulator; the weather is real past weather.</p>
   <button type="button" id="t-sound" aria-pressed="false" title="The sea, a far bell buoy and a slow tune of our own, all made in code. Starts at your first click; N turns it off and on.">Sound: off</button>
 </section>
+<script>
+  // Before the first paint: the sea demo instead of the title for ?title=0 or "Just watch the sea" earlier
+  // in this tab (the same rule as title.ts shouldShowTitle, which takes over once the scripts have loaded).
+  try {
+    if (new URLSearchParams(location.search).get("title") === "0" || sessionStorage.getItem("boatsim.title.dismissed") === "1") {
+      document.getElementById("title").hidden = true;
+      document.body.classList.remove("title");
+    }
+  } catch (e) { /* private mode: the title shows, as title.ts would */ }
+</script>
 <div id="panel">
   <h1>Both boats on a live sea</h1>
   <p class="muted"><span class="key" style="background:#e8590c"></span>Our 3 m solar kayak and
