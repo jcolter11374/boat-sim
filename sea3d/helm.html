@@ -158,6 +158,10 @@
   #credtext[hidden] { display: none; }
   #credtext a { color: inherit; }
   body.at-wheel #credits { bottom: auto; top: calc(var(--bar, 0px) + 8px); }
+  /* Where the strip reaches the window's corner (a narrow or squarish window), its edge covered the
+     Credits link: there the link sits just above the strip (Elena). 7/4 and 1260 px: the strip is
+     93 units of --ui wide, and the link needs about 70 px beside it. */
+  @media (max-aspect-ratio: 7/4), (max-width: 1260px) { body.sailing:not(.at-wheel) #credits { bottom: calc(var(--edge) + var(--strip-h) + 4px); } }
   #practice-what[hidden], #practice-end[hidden] { display: none; }
   #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
   #prologuepick { display: block; margin: 6px 0; }
@@ -259,6 +263,7 @@
   #ss-why { margin: 6px 0 0; font-size: 12.5px; }
   .ss-after { font-size: 12px; margin: 6px 0 2px; }
   #ss-card #go { margin-top: 6px; }
+  #go[aria-disabled="true"] { opacity: .5; cursor: default; }
   /* A challenge's result inside #406's card (Elena, 12 Nov): the stars, why, the ghost and what really
      happened take the story's place; Try again replays the same challenge. */
   #r-stars .s-row { margin: 2px 0 6px; display: flex; align-items: baseline; gap: 10px; }
@@ -360,7 +365,7 @@
      the one Watch a voyage has (M2, one strip for every mode): the strip is 13 units wider to seat it,
      so the other cells keep their widths (the time cell must hold "Real time" on one line). */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.9fr 1.1fr .95fr .75fr .95fr 1fr max-content .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: 2.05fr 1.25fr .9fr .75fr .95fr 1.35fr max-content 1fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -417,6 +422,8 @@
   #keyhint { position: fixed; left: 50%; bottom: calc(var(--edge) + var(--strip-h) + 8px); transform: translateX(-50%); font: 500 var(--ui) system-ui, sans-serif;
     color: rgba(225,235,248,.9); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; z-index: 5; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
+  /* A touch screen has no keyboard: no key hint (Elena). */
+  @media (hover: none) and (pointer: coarse) { #keyhint { display: none; } }
   #timestate { display: none !important; } /* the pause shows on the strip's button; a stop says why in a toast */
   #clock { display: none !important; }
 
@@ -536,14 +543,17 @@
      battery, wind and the ghost; the keys button rides beside the clock. No room for nine equipment icons: breakdowns are in the notes. */
   @media (max-width: 760px) {
     :root { --strip-h: calc(var(--ui) * 12.67); }
-    #strip { grid-template-columns: 1.25fr 1fr 1fr 2.2em; grid-auto-rows: 4em; padding: 0 .5em 0 .9em; }
-    #strip .c-time { grid-column: 1 / 4; }
+    /* Ten equal columns: the clock row (with the keys button at its end), then 4 + 3 + 3 for order,
+       heading, speed, then 3 + 4 + 3 for battery, wind and waves, the ghost. */
+    #strip { grid-template-columns: repeat(10, 1fr); grid-auto-rows: 4em; padding: 0 .5em 0 .9em; }
+    #strip .c-time { grid-column: 1 / 10; }
+    #strip #keysbtn { grid-column: 10; grid-row: 1; margin-right: 0; justify-self: end; }
+    #strip #c-order { grid-column: span 4; } #strip #c-head, #strip #c-speed { grid-column: span 3; }
+    #strip #c-bat { grid-column: span 3; } #strip #c-wind { grid-column: span 4; } #strip #c-lead { grid-column: span 3; }
     #strip #c-order, #strip #c-bat { border-left: 0; padding-left: 0; }
-    #strip #c-speed, #strip #c-lead { grid-column: 3 / -1; }
-    #strip #keysbtn { grid-column: 4; grid-row: 1; margin-right: 0; }
     #strip #c-eq { display: none; }
-    #strip .cell { padding: 0 .6em; }
-    #strip .v { font-size: 1.25em; }
+    #strip .cell { padding: 0 .5em; }
+    #strip .v { font-size: 1.1em; }
     #strip .l { font-size: .78em; letter-spacing: .3px; }
   }
     #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
@@ -702,7 +712,9 @@
     <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
     <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-line muted" id="ss-course-line"></div><div class="ss-l">Wind</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
-    <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div></div>
+    <!-- Who steers (M2, R2): you, or the autopilot all the way (you watch her go). Hidden for Annapolis: practice is always you. -->
+    <div class="ss-row" id="ss-who" hidden><div class="ss-l">Who steers</div><div class="ss-opts" id="ss-who-opts"></div><div class="ss-line muted" id="ss-who-line"></div></div>
+    <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div><div class="ss-line muted" id="ss-when-line" hidden></div></div>
     <div class="ss-row" id="ss-ch" hidden><div class="ss-l">Weather challenge (optional)</div><div class="ss-opts" id="ss-ch-opts"></div><p id="ss-why" class="muted" hidden></p></div>
     <fieldset id="boats" hidden><legend>Your boat</legend>
       <label><input type="radio" name="boat" value="" checked> <b>Our kayak</b>: the 3 m solar drone, two small electric motors and no sail.</label>
@@ -711,7 +723,7 @@
     <p id="sharedmsg" class="muted" hidden></p>
     <button id="go" class="go big">Set sail</button>
     <span id="startmsg" class="muted"></span>
-    <p class="muted ss-after">You can change speed, pause, and take the wheel once you're at sea.</p>
+    <p class="muted ss-after" id="ss-after">You can change speed, pause, and take the wheel once you're at sea.</p>
     <!-- The card's sources (M1 piece 5): the launch day and challenge pills write these, and begin() reads them.
          Never shown: the card is the one place to pick (Elena, one-game plan). -->
     <div id="ss-sources" hidden>
