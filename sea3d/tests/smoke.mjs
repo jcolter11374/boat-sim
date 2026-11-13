@@ -887,6 +887,48 @@ try {
     await page.keyboard.press("Digit4");
     await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
+    // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
+    // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
+    // Until the parity check (R5) the row shows only with ?who= in the address (Elena).
+    await page.goto(`${URL}helm.html?quality=low`);
+    await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 60000 });
+    await page.waitForTimeout(1500);
+    if (await page.evaluate(() => !document.getElementById("ss-who").hidden)) fail("Who steers showed on the plain Set sail card before the parity check");
+    await page.goto(`${URL}helm.html?quality=low&who=autopilot`);
+    await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Who steers row"));
+    const ws = await page.evaluate(() => ({
+      who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      day: document.querySelector('#ss-when-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      days: document.querySelectorAll("#ss-when-opts .ss-pill").length,
+      go: document.getElementById("go").textContent,
+      bad: /record|replay/i.test(document.getElementById("ss-card").innerText),
+    }));
+    if (ws.who !== "The autopilot" || ws.day !== "1 Jun 2020" || ws.days < 2 || ws.go !== "Set sail" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
+    await page.click("#go");
+    await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
+    if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
+    log.push("Who steers: the autopilot's Set sail opens her voyage on the sailing screen");
+    // "Race it" on the same screen (M2, R3): two boats from the race's own simulator, boat B where the ghost
+    // goes. It opens paused, as the race page does, with Real time first on the bar (T1).
+    await page.goto(`${URL}helm.html?quality=low&race=kayak,revc`);
+    await page.waitForFunction(() => window.__helm?.ready || window.__helm?.error, null, { timeout: 240000 });
+    const rv = await page.evaluate(() => ({
+      err: window.__helm.error,
+      view: window.__helm.view,
+      clock: window.__helm.clock,
+      names: window.__helm.race?.names,
+      first: document.querySelector("#timebar .rate")?.textContent,
+      orders: getComputedStyle(document.getElementById("orders-tab")).display,
+      lead: getComputedStyle(document.getElementById("c-lead")).display,
+    }));
+    if (rv.err) log.push(`helm?race: no simulator to race on here (${rv.err})`);
+    else {
+      if (rv.view !== "race" || rv.clock !== 0 || rv.first !== "Real time" || rv.orders !== "none" || rv.lead === "none") fail(`helm?race didn't open the race on the sailing screen: ${JSON.stringify(rv)}`);
+      if (!/\(our model\)$/.test(rv.names?.[1] ?? "")) fail(`the Randolph boat in a race must be named as our model (B2): ${JSON.stringify(rv.names)}`);
+      await page.keyboard.press("Digit4");
+      await page.waitForFunction(() => window.__helm.hour > 12 && window.__helm.status?.ghost, null, { timeout: 120000 }).catch(() => fail("a race on the helm screen didn't sail on at a day a second"));
+      log.push(`helm?race: ${rv.names.join(" against ")} on the sailing screen`);
+    }
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);
