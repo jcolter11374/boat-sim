@@ -3702,6 +3702,8 @@ const BOAT_BLURB: Partial<Record<string, string>> = {
     "an 8.6 m ocean rowing boat with a crew of four: two row while two rest, day and night, and they tire over the weeks. In head winds and gales they put out a parachute anchor and wait. You steer; they row.",
   stock_dinghy14:
     "the 4.2 m dinghy people learn to sail in, here with nobody aboard and an autopilot on the tiller. A real one stays upright because its sailor leans out; with nobody to do that, a squall can knock it flat, and it stays over. Honest physics: see how far it gets.",
+  stock_beachcat16:
+    "the 5 m twin-hulled beach catamaran, here with nobody aboard and an autopilot steering. It's quick, but its crew normally hang out on wires to hold it down; with nobody there the autopilot sails it gently, and a squall can still flip it. A catamaran stays upside down.",
 };
 for (const k of PLAYABLE_STOCK) {
   const label = document.createElement("label");
