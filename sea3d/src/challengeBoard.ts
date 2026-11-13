@@ -15,7 +15,7 @@ export function boardTab(hash: string): BoardTab {
 export const CHALLENGE_BOARD_WORDS = {
   tabs: { designs: "Boats", challenges: "Weather challenges" },
   sub: {
-    designs: "Which builds reach the finish most often, on the same launches with the same luck.",
+    designs: "Which boats reach the finish most often, on the same launch days with the same dice for breakdowns.",
     challenges: "Your best try at each weather challenge, beside the autopilot's on the same weather. Three stars is the best.",
   },
   kept: "Your results are kept in this browser only. Nobody else sees them, and clearing the browser's data clears them.",
