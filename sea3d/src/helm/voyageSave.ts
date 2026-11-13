@@ -5,6 +5,7 @@
 //   saveVoyage(packVoyage({ code: await game.save(), challenge: "", boat: "Kayak", day: 12.4, toGoKm: 4100, rate: 6 }));
 //   const v = loadVoyage();            // null if none saved, or the saved one can't be used
 //   continueLink(v);                   // "helm.html?g=<code>&continue=1": opens it where it was left
+//   offerWords(v);                     // "Day 12 · 4,100 km to go · Kayak", under "Continue your voyage"
 //   clearVoyage();                     // when the voyage ends, or the player starts a new one
 //
 // What makes a crossing: its launch day, boat, seeds and every order so far. All of that is
@@ -178,6 +179,20 @@ export function worthSaving(day: number | null | undefined, over: boolean | null
  *  kindly instead of failing. Unknown on either side counts as a match: try it. */
 export function madeBy(v: SavedVoyage, sim: string | null | undefined): boolean {
   return !v.sim || !sim || v.sim === sim;
+}
+
+/** The offer's second line: where the saved voyage stands. "Day 12 · 4,100 km to go · Kayak"
+ *  (the day as the helm counts it: day 12.4 is day 12; before the first midnight, "The first day"). */
+export function offerWords(v: SavedVoyage): string {
+  const parts = [v.day < 1 ? "The first day" : `Day ${Math.floor(v.day)}`];
+  if (v.toGoKm !== null) parts.push(`${v.toGoKm.toLocaleString("en-US")} km to go`);
+  if (v.boat) parts.push(v.boat);
+  return parts.join(" · ");
+}
+
+/** The question before a new crossing ends the saved one: "End your voyage on day 12 and start a new one?" */
+export function endWords(v: SavedVoyage): string {
+  return `End your voyage on ${v.day < 1 ? "its first day" : `day ${Math.floor(v.day)}`} and start a new one?`;
 }
 
 /** The link that opens the saved voyage where it was left. `continue=1` tells the helm it is

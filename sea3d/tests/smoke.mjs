@@ -908,6 +908,19 @@ try {
     await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
     if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
     log.push("Who steers: the autopilot's Set sail opens her voyage on the sailing screen");
+    // "Race against" (M2, R4): with Another boat picked the card names the rival, "(our model)" on a Randolph
+    // boat (B2), and Set sail opens the race on this screen with both boats and the launch day in the link.
+    await page.goto(`${URL}helm.html?quality=low&who=autopilot&against=revc`);
+    await page.waitForFunction(() => document.querySelector("#ss-rival-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Race against row"));
+    const rr = await page.evaluate(() => ({
+      rival: document.querySelector('#ss-rival-opts .ss-pill[aria-pressed="true"]')?.textContent,
+      against: document.getElementById("ss-against-name").textContent,
+      after: document.getElementById("ss-after").textContent,
+    }));
+    if (rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
+    await page.click("#go");
+    await page.waitForURL(/race=kayak,revc&launch=4/, { timeout: 15000 }).catch(() => fail(`Set sail with another boat opened ${page.url()}`));
+    log.push("Race against: Set sail with another boat opens the race on the sailing screen");
     // "Race it" on the same screen (M2, R3): two boats from the race's own simulator, boat B where the ghost
     // goes. It opens paused, as the race page does, with Real time first on the bar (T1).
     await page.goto(`${URL}helm.html?quality=low&race=kayak,revc`);
@@ -921,8 +934,12 @@ try {
       orders: getComputedStyle(document.getElementById("orders-tab")).display,
       lead: getComputedStyle(document.getElementById("c-lead")).display,
     }));
-    if (rv.err) log.push(`helm?race: no simulator to race on here (${rv.err})`);
+    // Only "this copy has no simulator (or no race in it)" may pass quietly: any other error is a failure (Lena).
+    if (/^no (simulator files|race in the simulator)$/.test(rv.err ?? "")) log.push(`helm?race: no simulator to race on here (${rv.err})`);
+    else if (rv.err) fail(`helm?race failed to open: ${rv.err}`);
     else {
+      // The second boat is on the water beside yours at the start, with her name above her (Elena).
+      await page.waitForFunction(() => window.__helm.rival?.shown, null, { timeout: 30000 }).catch(() => fail("the other boat in a race isn't on the water at the start"));
       if (rv.view !== "race" || rv.clock !== 0 || rv.first !== "Real time" || rv.orders !== "none" || rv.lead === "none") fail(`helm?race didn't open the race on the sailing screen: ${JSON.stringify(rv)}`);
       if (!/\(our model\)$/.test(rv.names?.[1] ?? "")) fail(`the Randolph boat in a race must be named as our model (B2): ${JSON.stringify(rv.names)}`);
       await page.keyboard.press("Digit4");

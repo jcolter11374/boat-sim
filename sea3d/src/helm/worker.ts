@@ -232,7 +232,7 @@ except KeyError as err:
 json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
 `;
     } else if (m.type === "load") {
-      say("Sailing the shared game back to where it was...");
+      say(m.mine ? "Sailing back to where you left off..." : "Sailing the shared game back to where it was...");
       code = `
 m = json.loads(msg_json)
 if Game is None or not hasattr(Game, "load"):
