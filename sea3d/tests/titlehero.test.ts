@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "../src/titleHero";
+import { HERO_GLOW, HERO_LIGHT_LOW, HERO_LIGHT_SAILS, HERO_SEA, HERO_SEA_WARM, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec } from "../src/titleHero";
 import type { MyBoat } from "../src/myboat";
 
 const boat = (kind: MyBoat["kind"], base: string): MyBoat => ({ kind, base, hash: "", name: "x", choices: {}, saved: "" });
@@ -43,4 +43,13 @@ test("the title's glow is small and tight, so the low sun's light can't lie over
 
 test("the title's far water is warmed gently: some of the sky's colour, never all of it", () => {
   assert.ok(HERO_SEA_WARM > 0.2 && HERO_SEA_WARM <= 0.7);
+});
+
+test("a boat with sails is filmed towards the sun; a low boat without sails is lit on the side we see", () => {
+  for (const k of ["stock_pearson31_2", "stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7"]) assert.equal(heroLightFor(k), HERO_LIGHT_SAILS, k);
+  for (const k of ["kayak", "randolph", "stock_ocean_rower45"]) assert.equal(heroLightFor(k), HERO_LIGHT_LOW, k);
+  // Towards the sun but never straight into it; or the sun well behind the lens's shoulder.
+  assert.ok(HERO_LIGHT_SAILS.sunOff >= 25 && HERO_LIGHT_SAILS.sunOff <= 45 && HERO_LIGHT_SAILS.back === 1);
+  assert.ok(HERO_LIGHT_LOW.sunOff >= 100 && HERO_LIGHT_LOW.sunOff <= 150 && HERO_LIGHT_LOW.back === 0);
+  assert.ok(HERO_LIGHT_LOW.fill > HERO_LIGHT_SAILS.fill && HERO_LIGHT_LOW.env > HERO_LIGHT_SAILS.env);
 });
