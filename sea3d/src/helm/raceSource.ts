@@ -130,12 +130,14 @@ const UNFINISHED = new Set(["at_sea", "timeout", "goal"]);
 export function raceGone(b: RaceCardBoat): boolean {
   return b.outcome !== "arrived" && !UNFINISHED.has(b.outcome);
 }
-const onDay = (days: number) => `on day ${Math.max(1, Math.round(days))}`;
+/** One decimal, as the strip and the crossing's card give the day (Leo). */
+const onDay = (days: number) => `on day ${days.toFixed(1)}`;
+const afterDays = (days: number) => `still at sea after ${Math.round(days)} days`;
 
-/** What became of a boat, to follow her name: "finished in 61.2 days", "was lost on day 4", "never finished". */
+/** What became of a boat, to follow her name: "finished in 61.2 days", "was lost on day 3.9", "was still at sea after 150 days" (Leo's words). */
 export function raceFate(b: RaceCardBoat): string {
   if (b.outcome === "arrived") return `finished in ${b.days.toFixed(1)} days`;
-  if (UNFINISHED.has(b.outcome)) return "never finished";
+  if (UNFINISHED.has(b.outcome)) return `was ${afterDays(b.days)}`; // she was still sailing: not a failure
   return `${OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")} ${onDay(b.days)}`;
 }
 
@@ -154,7 +156,7 @@ export function raceHeadline(c: RaceCard, names: [string, string], only?: 0 | 1)
       ? `${names[w]} finished first, ${Math.abs(c.margin_days).toFixed(1)} days ahead.`
       : `${names[w]} ${raceFate(c.boats[w])}. ${names[l]} ${raceFate(c.boats[l])}.`;
   }
-  // Neither finished: a boat that was lost is the news; "never finished" comes second.
+  // Neither finished: a boat that was lost is the news; the one still at sea comes second.
   const first: 0 | 1 = raceGone(a) || !raceGone(b) ? 0 : 1;
   const second = (1 - first) as 0 | 1;
   return `${names[first]} ${raceFate(c.boats[first])}. ${names[second]} ${raceFate(c.boats[second])}.`;
@@ -163,8 +165,8 @@ export function raceHeadline(c: RaceCard, names: [string, string], only?: 0 | 1)
 /** The small line under a boat's days on the card. The race's time limit is not a result, so it says so. */
 export function raceLabel(b: RaceCardBoat, name: string): string {
   if (b.outcome === "arrived") return `${name}: finished`;
-  if (UNFINISHED.has(b.outcome)) return `${name}: still at sea when time ran out (${Math.round(b.days)} days)`;
-  return `${name}: ${OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")}`;
+  if (UNFINISHED.has(b.outcome)) return `${name}: ${afterDays(b.days)}`;
+  return `${name}: ${(OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")).replace(/^was /, "")} ${onDay(b.days)}`;
 }
 
 type Ask = { id: number; type: string; base?: string; hours?: number };

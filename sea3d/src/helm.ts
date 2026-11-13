@@ -2961,8 +2961,8 @@ async function raceFinish(): Promise<void> {
   boatDrawn(!raceGone(c.race.boats[followed ? 1 : 0]));
   const launched = new Date(utc(c.race.launch)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
   $("r-story").textContent = more
-    ? `${names[1]} is still racing. Launched ${launched} into the same weather with the same luck.`
-    : `${names[0]} against ${names[1]}, launched ${launched} into the same weather with the same luck. One race is one roll of the dice.`;
+    ? `${names[1]} is still sailing. Both boats launched on ${launched} into the same weather.` // her first mention on this card: the full name (B2)
+    : `${short(names[0])} against ${short(names[1])}, both launched on ${launched} into the same weather, with the same dice for breakdowns. One race is one roll of the dice.`;
   $("r-nums").replaceChildren(
     ...c.race.boats.slice(0, more ? 1 : 2).map((x, i) => {
       const d = document.createElement("div");

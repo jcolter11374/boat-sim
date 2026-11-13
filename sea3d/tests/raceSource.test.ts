@@ -119,19 +119,19 @@ const NAMES: [string, string] = ["Our kayak", "Randolph Rev B (our model)"];
 
 test("a race's headline gives the most important fact first, and the time limit is not a result", () => {
   const lostAndOut = cardOf({ outcome: "lost", days: 3.9 }, { outcome: "timeout", days: 150 });
-  assert.equal(raceHeadline(lostAndOut, NAMES), "Our kayak was lost on day 4. Randolph Rev B (our model) never finished.");
-  assert.equal(raceLabel(lostAndOut.boats[1], "Randolph Rev B"), "Randolph Rev B: still at sea when time ran out (150 days)");
-  assert.equal(raceLabel(lostAndOut.boats[0], "Our kayak"), "Our kayak: was lost");
+  assert.equal(raceHeadline(lostAndOut, NAMES), "Our kayak was lost on day 3.9. Randolph Rev B (our model) was still at sea after 150 days.");
+  assert.equal(raceLabel(lostAndOut.boats[1], "Randolph Rev B"), "Randolph Rev B: still at sea after 150 days");
+  assert.equal(raceLabel(lostAndOut.boats[0], "Our kayak"), "Our kayak: lost on day 3.9");
   // The lost boat is the news even when she is boat B.
-  assert.equal(raceHeadline(cardOf({ outcome: "timeout", days: 150 }, { outcome: "sunk", days: 12.4 }), NAMES), "Randolph Rev B (our model) sank on day 12. Our kayak never finished.");
+  assert.equal(raceHeadline(cardOf({ outcome: "timeout", days: 150 }, { outcome: "sunk", days: 12.4 }), NAMES), "Randolph Rev B (our model) sank on day 12.4. Our kayak was still at sea after 150 days.");
   assert.equal(raceHeadline(cardOf({}, {}, { winner: 1, margin_days: -10 }), NAMES), "Randolph Rev B (our model) finished first, 10.0 days ahead.");
-  assert.equal(raceHeadline(cardOf({}, { outcome: "lost", days: 20.2 }, { winner: 0 }), NAMES), "Our kayak finished in 70.0 days. Randolph Rev B (our model) was lost on day 20.");
+  assert.equal(raceHeadline(cardOf({}, { outcome: "lost", days: 20.2 }, { winner: 0 }), NAMES), "Our kayak finished in 70.0 days. Randolph Rev B (our model) was lost on day 20.2.");
   assert.equal(raceHeadline(cardOf({}, {}, { verdict: "draw" }), NAMES), "A draw: both finished within a day of each other.");
 });
 
 test("when your boat is lost and the other sails on, the ending tells only her fate, and she is not drawn sailing", () => {
   const c = cardOf({ outcome: "lost", days: 3.9 }, { outcome: "timeout", days: 150 });
-  assert.equal(raceHeadline(c, NAMES, 0), "Our kayak was lost on day 4.");
+  assert.equal(raceHeadline(c, NAMES, 0), "Our kayak was lost on day 3.9.");
   assert.equal(raceGone(c.boats[0]), true);
   assert.equal(raceGone(c.boats[1]), false, "still at sea is not gone");
   assert.equal(raceGone(cardOf({}, {}).boats[0]), false);
