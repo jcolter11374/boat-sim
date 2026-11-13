@@ -2180,6 +2180,35 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #473 (Rosa's second link): your boat finishes and the other was lost: one card, no Follow.
+  "race-won": {
+    path: "helm.html?race=kayak,revc&launch=0&quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), `the race didn't load: ${await page.evaluate(() => window.__helm.error)}`);
+      const card = () => page.evaluate(() => { const r = document.getElementById("result"); const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; return { up: vis(r), head: document.getElementById("r-head")?.textContent.trim() ?? "", story: document.getElementById("r-story")?.textContent.trim().replace(/\s+/g, " ") ?? "", btns: [...document.querySelectorAll("#result .rc-btns > *")].filter(vis).map((b) => b.textContent.trim()), links: [...document.querySelectorAll("#result #r-links > *")].filter(vis).map((b) => b.textContent.trim()), day: window.__helm.status?.day, when: document.getElementById("day")?.textContent.trim() + " " + (document.getElementById("c-date")?.textContent.trim() ?? "") }; });
+      const t0 = Date.now();
+      let c = await card();
+      while (!c.up && Date.now() - t0 < 20 * MIN) {
+        await page.evaluate(() => { if (window.__helm.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
+        await page.waitForTimeout(2500);
+        c = await card();
+      }
+      must(c.up, `no results card after 20 min at 4 days a second (day ${c.day?.toFixed(1)})`);
+      await page.waitForTimeout(3000);
+      c = await card();
+      console.log(`RACEWON ${BROWSER}: ${JSON.stringify(c)}`);
+      if (BROWSER === "chromium") {
+        const path = "look-race-won-card.jpg";
+        if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+      }
+      must(/finished/i.test(c.head), `the card doesn't say your boat finished: "${c.head}"`);
+      must(/lost/i.test(c.head + " " + c.story), `the card doesn't say the other boat was lost: "${c.head}" "${c.story}"`);
+      must(!c.btns.some((b) => /^Follow/.test(b)), `the card offers Follow though your boat finished: ${c.btns.join(" / ")}`);
+      must(c.btns.some((b) => /Race again/.test(b)), `no "Race again": ${c.btns.join(" / ")}`);
+      return `one card at day ${c.day?.toFixed(1)} (${Math.round((Date.now() - t0) / 1000)} s): "${c.head}" "${c.story}" [${c.btns.join(" / ")}], links ${c.links.join(" / ")}; strip "${c.when}"`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
