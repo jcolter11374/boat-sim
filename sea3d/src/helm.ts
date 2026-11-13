@@ -19,6 +19,7 @@ import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT
 import { Buoys } from "./helm/buoys";
 import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
+import { metresPerDegree } from "./land/shader";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
@@ -42,10 +43,10 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
-import { raceLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
+import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { outcomeLine } from "./replay/story";
-import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { RACE_BOATS, racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -53,6 +54,7 @@ import { VoyageKeeper } from "./helm/voyageKeeper";
 import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
+import { Rival, rivalOffset } from "./helm/rival";
 import { LIGHT_WIND_FROM, MEDAL_WORDS, ROBOT_SECS, clock as trialClock, ghostAt, medalFor, medalTime, readGhost, saveGhost, turnTrack, type Medal, type Track } from "./helm/trial";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type BestHeading, type Outlook, type Preview, type Status, type Stop } from "./helm/game";
@@ -65,10 +67,12 @@ import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/ch
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
-import { Hud, showStrip } from "./helm/hud";
+import { tapeItems, type TapeMark } from "./replay/skytape";
+import { Hud, setRacers, showStrip } from "./helm/hud";
+import { farBoatTag, raceLine, shortRacer } from "./helm/raceWords";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons } from "./cinema";
+import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
@@ -417,7 +421,7 @@ const page = {
   /** A watched voyage, whole (its length, boat and ending), once its file is in; the rows so far are game.boat. */
   watch: null as WatchInfo | null,
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
-  force: { wind: -1, hs: -1 },
+  force: { wind: -1, hs: -1, skyHours: 0 },
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
@@ -429,6 +433,8 @@ const page = {
   frames: 0,
   /** Where the lens has slid the boat (fractions of the screen; Leo's plan item 1). */
   third: [0, 0] as number[],
+  /** The sky guide when watching: the compass bearing the camera looks along, and whether it's tipped up (for tests). */
+  sky: null as { view: number; lookUp: boolean } | null,
   /** The voyage hour the picture shows, and the hour the simulator has reached (for tests). */
   hour: 0,
   simHour: 0,
@@ -459,6 +465,8 @@ const page = {
   practiceBay: false,
   /** The time-trial ghost: shown, and how far off (m). */
   ghost: { shown: false, m: 0 },
+  /** The other boat in a race, on the water: drawn or not, how far off she is (m), and her compass bearing from your boat. */
+  rival: { shown: false, m: 0, bearing: 0 },
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
@@ -486,6 +494,21 @@ const page = {
   get lastStop(): Stop | null {
     return this.stops.at(-1) ?? null;
   },
+};
+/** For pictures and reviews: the boat's on-screen box now, in pixels of the canvas (hull, mast and all). */
+(page as unknown as { boatBox: () => { w: number; h: number; x: number; y: number } | null }).boatBox = () => {
+  if (!model) return null;
+  const b = new THREE.Box3().setFromObject(model.root);
+  const lo = new THREE.Vector2(Infinity, Infinity);
+  const hi = new THREE.Vector2(-Infinity, -Infinity);
+  for (let i = 0; i < 8; i++) {
+    const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(camera);
+    lo.min(new THREE.Vector2(p.x, p.y));
+    hi.max(new THREE.Vector2(p.x, p.y));
+  }
+  const W = renderer.domElement.width;
+  const H = renderer.domElement.height;
+  return { w: Math.round(((hi.x - lo.x) / 2) * W), h: Math.round(((hi.y - lo.y) / 2) * H), x: Math.round(((lo.x + hi.x) / 4 + 0.5) * W), y: Math.round((0.5 - (lo.y + hi.y) / 4) * H) };
 };
 (window as unknown as { __helm: typeof page }).__helm = page;
 
@@ -672,6 +695,97 @@ async function shareLink(): Promise<void> {
   } finally {
     sharing = false;
   }
+}
+
+// ---------- sky guide when watching (decision L4): the compass strip along the top, "Look up at the sky", labels in the sky ----------
+const viewDir = new THREE.Vector3();
+const skyProj = new THREE.Vector3();
+let lastGuide = 0;
+const bearingOf = (v: THREE.Vector3): number => (THREE.MathUtils.radToDeg(Math.atan2(v.x, -v.z)) + 360) % 360;
+function skySpan(cls: string, text: string, x: number, colour = ""): HTMLSpanElement {
+  const e = document.createElement("span");
+  e.className = cls;
+  e.textContent = text;
+  e.style.left = `${x}px`;
+  if (colour) e.style.color = colour;
+  return e;
+}
+function skyGuide(sunEl: number, sunAz: number): void {
+  const on = page.ready && document.body.classList.contains("sailing");
+  for (const id of ["compass", "lookup", "skylabels"]) $(id).hidden = !on;
+  const now = performance.now();
+  if (!on || now - lastGuide < 50) return;
+  lastGuide = now;
+  viewDir.copy(controls.target).sub(camera.position);
+  const view = bearingOf(viewDir);
+  const night = sunEl < -6;
+  const polaris = atmos.starDirs.get("North Star (Polaris)");
+  const marks: TapeMark[] = [];
+  if (smoothYaw !== null) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
+  if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
+  if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
+  if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
+  $("tape").replaceChildren(...tapeItems(view, $("compass").clientWidth || 420, marks).map((i) => skySpan(i.cls, i.text, i.x, i.colour)));
+  // Labels in the sky itself.
+  const labels: HTMLSpanElement[] = [];
+  const tag = (dir: THREE.Vector3, text: string) => {
+    if (dir.y < 0.005) return; // below the horizon
+    skyProj.copy(camera.position).addScaledVector(dir, 1000).project(camera);
+    if (skyProj.z > 1 || Math.abs(skyProj.x) > 1 || Math.abs(skyProj.y) > 1) return;
+    const e = skySpan("", text, (skyProj.x * 0.5 + 0.5) * window.innerWidth);
+    e.style.top = `${(-skyProj.y * 0.5 + 0.5) * window.innerHeight}px`;
+    labels.push(e);
+  };
+  if (sunEl > 0) tag(atmos.sunDir, "Sun");
+  tag(atmos.moonDir, `Moon (${atmos.moonPhaseName})`);
+  if (night && polaris) tag(polaris, "North Star: due north");
+  const dubhe = atmos.starDirs.get("Dubhe");
+  if (night && dubhe) tag(dubhe, "Big Dipper");
+  const belt = atmos.starDirs.get("Alnilam");
+  if (night && belt) tag(belt, "Orion's belt");
+  $("skylabels").replaceChildren(...labels);
+  page.sky = { view, lookUp: lifted };
+}
+// Look up: the camera orbits the boat, so it can't tilt far above the horizon on its own. Raising the point it
+// looks at tips the view up about 20 degrees: horizon near the bottom, about 50 degrees up at the top.
+const LIFT = 3.5; // m
+let lifted = false;
+function setLookUp(on: boolean): void {
+  if (on === lifted || (on && (!SPECTATE || cine.on))) return;
+  lifted = on;
+  controls.target.y += on ? LIFT : -LIFT;
+  if (on) {
+    // Come down near the water and a little way back, so the view tilts up past the boat.
+    const off = camera.position.clone().sub(controls.target);
+    off.y = 0;
+    off.setLength(8);
+    camera.position.copy(controls.target).add(off);
+    camera.position.y = controls.target.y - LIFT + 0.4;
+  }
+  controls.maxDistance = on ? 80 : 60;
+  // Let the camera sit below the raised point (it still never goes under the water).
+  controls.maxPolarAngle = Math.PI * (on ? 0.8 : 0.495);
+  // A wider lens while looking up: from the horizon to about 50 degrees up.
+  camera.fov = on ? 62 : 45;
+  camera.updateProjectionMatrix();
+  $("lookup").setAttribute("aria-pressed", String(on));
+  $("lookup").textContent = on ? "\u2B07 Back to the boat" : "\u2B06 Look up at the sky";
+}
+$("lookup").addEventListener("click", () => setLookUp(!lifted));
+$("cinebtn").addEventListener("click", () => setLookUp(false), true); // the cinematic owns the lens
+
+/** A race (M2 piece S4): both boats by name on the strip's lead cell, the big map's key and its camera pick. A Randolph boat is "(our model)" (B2). */
+function raceLook(names: [string, string]): void {
+  setRacers(names);
+  $("c-lead").title = `${names[0]} against ${names[1]}`;
+  const key = document.querySelector<HTMLElement>("#mside .mleg");
+  if (key) {
+    const dash = (colour: string) => Object.assign(document.createElement("i"), { style: `background:${colour}` });
+    key.replaceChildren(dash("#ff8a2a"), names[0], document.createElement("br"), dash("#c8d4e6"), names[1]);
+  }
+  $("w-boat").textContent = shortRacer(names[0]);
+  $("w-ghost").textContent = shortRacer(names[1]);
+  $("r-map").setAttribute("aria-label", `The tracks of ${names[0]} and ${names[1]}`);
 }
 
 /** Watching a recorded voyage: the drawer is the compass alone, to read and not to turn, and the strip's cell says who steers. */
@@ -920,7 +1034,8 @@ function drawWhen(force = false): void {
   const r = rep();
   if (!st || !page.ready) return;
   const h = r ? Math.min(hour, lastHour(r)) : st.day * 24;
-  const ms = utc(st.boat.t) - st.day * 86400e3 + Math.round(h * 60) * 60e3; // to the minute
+  // From the voyage's own start: in a race the status's clock and its day can belong to different boats once one is out.
+  const ms = (r ? utc(r.start) : utc(st.boat.t) - st.day * 86400e3) + Math.round(h * 60) * 60e3; // to the minute
   const key = `${ms} ${whenHere}`;
   if (!force && key === whenDrawn) return;
   whenDrawn = key;
@@ -1004,8 +1119,8 @@ function showStatus(): void {
     : `${Math.round(toGo).toLocaleString()} km to the finish`;
   const about = est ? "About " : "";
   const other = page.race?.names[1];
-  $("lead").textContent = WATCH ? "" : other ? (Math.abs(lead) < 1 ? `Level with ${other}` : lead > 0 ? `${Math.round(lead)} km ahead of ${other}` : `${Math.round(-lead)} km behind ${other}`) : Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
-  $("lead").className = lead >= 0 ? "good" : "bad";
+  $("lead").textContent = WATCH ? "" : other ? raceLine(lead, page.race!.names) : Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
+  $("lead").className = other ? "" : lead >= 0 ? "good" : "bad"; // a race takes no side
   const socNow = est ? last?.soc ?? null : b.soc;
   const soc = socNow == null ? 0 : Math.round(socNow * 100);
   $("battext").textContent = socNow == null ? "Battery: no report yet" : est ? `Battery ${soc}% at last report` : `Battery ${soc}%`;
@@ -1074,6 +1189,12 @@ function newEvents(): void {
       // A race names each boat (the same thing to both is still one note, told with boat A's).
       if (SPECTATE) {
         const name = rep(who)?.boat ?? "";
+        // Never the same note twice (the log can name one thing two ways), and in a race one note at a time (Elena):
+        // the new one takes the old one's place, and fades after a few seconds like any other.
+        const told = `${who} ${describeEvent(e, name)}`;
+        if (lastNote[told] !== undefined && e.h - lastNote[told] < 6) continue;
+        lastNote[told] = e.h;
+        if (RACE) for (const old of Array.from($("notes").querySelectorAll<HTMLElement>(".note:not(.out)"))) hud.dropToast(old);
         note(describeEvent(e, name), `${RACE ? `${both ? "Both boats" : name} · ` : ""}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
         if (who === "boat" && hour - e.h < 3) moment(e);
         continue;
@@ -1544,6 +1665,25 @@ scene.add(buoys.group);
 // Time trials (Elena approved 12 Nov): your best run's ghost, the course you last sailed.
 const ghost = new Ghost();
 scene.add(ghost.group);
+// The other boat in a race, on the water while she is near enough to see (M2, R4).
+const rival = new Rival();
+scene.add(rival.group);
+let rivalTagDue = false;
+const rivalTagAt = new THREE.Vector3();
+/** Her name and how far off she is, above her: a small boat a few hundred metres off is hard to find in a seaway. */
+function placeRivalTag(): void {
+  rivalTagDue = false;
+  const tag = $("rivaltag");
+  const p = rival.tagPoint(rivalTagAt)?.project(camera);
+  const show = !!p && p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1;
+  tag.hidden = !show;
+  if (!show) return;
+  const m = page.rival.m;
+  tag.firstElementChild!.textContent = page.race?.names[1] ?? ""; // a player's own name for a design: text only
+  // Alongside at the start (the two launch from one spot) there is no distance worth giving.
+  tag.lastElementChild!.textContent = m < 30 ? "" : m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
+  tag.style.transform = `translate(${((p!.x + 1) / 2) * window.innerWidth}px, ${((1 - p!.y) / 2) * window.innerHeight}px) translate(-50%, -130%)`;
+}
 let ghostTrack: Track | null = null;
 let lastTrial: CourseKind | null = null;
 /** The wind direction of the run being sailed (ghosts are kept turned to a north wind). */
@@ -2013,6 +2153,11 @@ addEventListener("keydown", (e) => {
   }
   if (hud.key(e)) {
     e.preventDefault();
+    return;
+  }
+  if (!e.repeat && e.code === "KeyL" && SPECTATE) {
+    e.preventDefault();
+    setLookUp(!lifted);
     return;
   }
   if (!e.repeat && e.code === "KeyC") {
@@ -2721,6 +2866,7 @@ async function watchFinish(): Promise<void> {
   $("r-nums").replaceChildren(
     ...numbers(c, r.outcome === "arrived" ? way : way - left, way, 0)
       .slice(0, 2) // days at sea, km of the way: there's no ghost to stand against
+      .map((n, i) => (i === 0 ? { ...n, value: String(Math.round(r.days)) } : n)) // the headline's figure (whole days), not a second one
       .map((n) => {
         const d = document.createElement("div");
         d.className = "n";
@@ -2735,6 +2881,10 @@ async function watchFinish(): Promise<void> {
   $("r-next").replaceChildren();
   drawResultMap();
   $("again").textContent = "Watch again";
+  const sail = $<HTMLAnchorElement>("r-sail");
+  sail.href = sailLink(location.search, r.start);
+  sail.hidden = false;
+  hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
   document.body.classList.add("results");
   $("result").hidden = false;
@@ -2782,7 +2932,12 @@ async function raceFinish(): Promise<void> {
   $("r-next").replaceChildren();
   drawResultMap();
   $("again").textContent = "Race again";
-  $("result").classList.add("watched");
+  // "Change the boats" beside it: back to the Set sail card with the autopilot and this other boat picked.
+  const rb = (params.get("race") ?? "").split(",")[1] ?? "";
+  const changer = $<HTMLAnchorElement>("r-boat");
+  changer.textContent = "Change the boats";
+  changer.href = `./helm.html?who=autopilot&against=${(RACE_BOATS as readonly string[]).includes(rb) ? rb : "revc"}`;
+  $("result").classList.add("watched", "raced");
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle();
@@ -2790,6 +2945,7 @@ async function raceFinish(): Promise<void> {
 }
 
 async function finish(): Promise<void> {
+  if (SPECTATE) setLookUp(false);
   if (WATCH) return watchFinish();
   if (RACE) return raceFinish();
   const c = await game.result();
@@ -3251,12 +3407,7 @@ async function begin(): Promise<void> {
       page.status = await game.start(0, false, false);
       useBoat(game.boatBase);
       mode = "hands_on";
-      if (page.race) {
-        // The lead cell is against boat B, by name (a Randolph boat is "our model", B2).
-        const cell = $("c-lead");
-        cell.title = `${page.race.names[0]} against ${page.race.names[1]}`;
-        cell.querySelector(".l")!.textContent = "lead";
-      }
+      if (page.race) raceLook(page.race.names);
     } else {
       const pick = chosenBoat();
       const mine = loadMyBoat();
@@ -3289,7 +3440,7 @@ async function begin(): Promise<void> {
     if (WATCH) watchLook();
     document.body.classList.toggle("racing", RACE);
     const d = `Day ${page.status!.day.toFixed(1)}`;
-    if (RESUMED) note(`Your voyage, back where you left it on day ${page.status!.day.toFixed(1)}. Press play to carry on.`, d, TONE_COLOUR.info);
+    if (RESUMED) note(`Welcome back. It's day ${page.status!.day.toFixed(1)}, right where you left off. Press play to carry on.`, d, TONE_COLOUR.info);
     else if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
@@ -3482,7 +3633,12 @@ for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[na
 try {
   if (sessionStorage.getItem(LOST_KEY)) {
     sessionStorage.removeItem(LOST_KEY);
-    $("startmsg").textContent = "Your saved voyage couldn't be opened: the simulator has changed since you left it, and it would sail differently now. Set sail on a new one.";
+    // Said at the top of the card, in the box the saved voyage would have been offered in (Leo).
+    $("ss-continue-words").textContent = "Your saved voyage couldn't be opened. The game has been updated since you left, and she would sail differently now. Please set sail on a new one.";
+    $("ss-continue-go").hidden = true;
+    $("ss-continue-new").hidden = true;
+    $("ss-continue").hidden = false;
+    $("ss-continue").dataset.lost = "1";
   }
 } catch {
   // no storage: nothing to say
@@ -3491,7 +3647,7 @@ if (RESUMED) {
   // Your own voyage goes straight back to sea: there's nothing to pick. Any trouble opening it
   // brings the card back with why.
   $("start").hidden = true;
-  $("loadtext").textContent = "Sailing your voyage back to where you left it…";
+  $("loadtext").textContent = "Sailing back to where you left off…";
   $("loading").hidden = false;
   void challengesReady
     .finally(() => begin())
@@ -3639,12 +3795,20 @@ const cine = new Cinema({
     if (!r) return 0;
     const h = Math.min(hour, lastHour(r));
     const [la, lo] = positionAt(r, h);
-    return sunPosition(utc(r.start) + h * 3600e3, la, lo).el;
+    return sunPosition(utc(r.start) + (h + page.force.skyHours) * 3600e3, la, lo).el;
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
+  length: () => spec.length,
+  height: () => (model ? heightOf(model.root, model.root.position.y + spec.cgBelowWaterline) : 0),
+  speed: () => film.stw * KN,
+  moment: () => filmMoment(),
+  caption: () => {
+    const name = spec === KAYAK ? (loadMyBoat()?.name ?? "My kayak") : spec.name.replace(/\s*\(.*\)\s*$/, "");
+    return game.boat ? `${name} · Day ${Math.floor(hour / 24) + 1}` : name;
+  },
 });
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
@@ -3656,6 +3820,31 @@ Object.assign(page, {
   heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
   knockdown: () => ride?.knockdown ?? null,
 });
+/** What the frame loop last saw, for the film: speed through the water (m/s) and where. */
+const film = { stw: 0, lat: NaN, lon: NaN };
+
+/** What's happening now, for picking the film's sequence (cinema.ts). */
+function filmMoment(): Moment {
+  const r = game.boat;
+  // The clock stops while filming, so a knockdown in the last six hours still counts.
+  const recentKnockdown = !!r && r.events.some((e) => e.kind === "capsize" && e.h <= hour + 1e-6 && hour - e.h < 6);
+  const p = page.land.place ? PLACES[page.land.place] : undefined;
+  let land: Moment["land"] = null;
+  if (p && Number.isFinite(film.lat)) {
+    const { mx, my } = metresPerDegree(film.lat);
+    const x = (p.lon - film.lon) * mx;
+    const z = -(p.lat - film.lat) * my;
+    if (Math.hypot(x, z) < 40000) land = { bearing: (THREE.MathUtils.radToDeg(Math.atan2(x, -z)) + 360) % 360, name: p.name };
+  }
+  const sh = page.ships;
+  return {
+    storm,
+    knockdownAgo: clock.getElapsedTime() - kick.t,
+    recentKnockdown,
+    land,
+    ship: sh.nearest < 6000 ? { bearing: sh.bearing, km: sh.nearest / 1000 } : null,
+  };
+}
 
 // ---------- frame ----------
 const clock = new THREE.Clock();
@@ -4082,6 +4271,7 @@ renderer.setAnimationLoop(() => {
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
+  film.stw = stw;
   if (model) {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
@@ -4149,14 +4339,41 @@ renderer.setAnimationLoop(() => {
     ghost.hide();
     page.ghost.shown = false;
   }
-  const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
+  // A race: the other boat, her own model, where her track says she is (both tracks are cut at the clock's hour).
+  const her = RACE && watch === "boat" ? rep("ghost") : null;
+  const her0 = page.status?.ghost;
+  if (her && (her.h.length || her0) && page.race && modelsIn) {
+    if (!rival.built) {
+      const b = page.race.bases[1];
+      const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
+      const m = BUILDERS[rs.key](quality);
+      reflectable(m.root);
+      rival.set(m);
+    }
+    const hh = Math.min(h, lastHour(her));
+    // Before her first hour is logged (the race opens paused) she is at her reported start, as your boat is.
+    const [blat, blon] = her.h.length ? positionAt(her, hh) : [her0!.lat, her0!.lon];
+    const bh = (her.h.length ? angleAt(her, her.heading, hh) : her0!.heading) ?? 0;
+    const o = rivalOffset([lat, lon], [blat, blon], r ? (angleAt(r, r.heading, h) ?? 0) : 0);
+    const heel = her.heel ? (valueAt(her, her.heel, hh) ?? 0) : 0;
+    rival.update(o.dx, o.dz, heightAt(comps, o.dx, o.dz, t), THREE.MathUtils.degToRad(90 - bh), THREE.MathUtils.degToRad(heel), apparentFlow(wu, wv, her.h.length ? (valueAt(her, her.stw, hh) ?? 0) : 0, bh), dt, o.m);
+    page.rival = { shown: rival.group.visible, m: Math.round(o.m), bearing: Math.round((THREE.MathUtils.radToDeg(Math.atan2(o.dx, -o.dz)) + 360) % 360) };
+  } else {
+    rival.hide();
+    page.rival.shown = false;
+  }
+  rivalTagDue = true;
+  const ms = (r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3) + page.force.skyHours * 3600e3;
   const sp = sunPosition(ms, lat, lon);
+  film.lat = lat;
+  film.lon = lon;
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
   if (Number.isFinite(lat)) sea.setBay(inChesapeake(lat, lon));
   atmos.sprayFar = sprayVisibility(Math.hypot(wu, wv));
   atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.rain = clouds.rainShade;
   atmos.set(sp.el, sp.az, storm);
+  if (SPECTATE) skyGuide(sp.el, sp.az);
   showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient, r?.rain ? valueAt(r, r.rain, h) : null);
   clouds.setMoon(atmos.moonDir, atmos.moonlight);
@@ -4206,7 +4423,7 @@ renderer.setAnimationLoop(() => {
     const vis = proj.z < 1 && Math.abs(proj.x) < 1 && Math.abs(proj.y) < 1;
     ghostTag.hidden = !vis;
     if (vis) {
-      ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
+      ghostTag.textContent = page.race ? farBoatTag(page.race.names[watch === "boat" ? 1 : 0], km) : `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
       const half = ghostTag.offsetWidth / 2 + 8;
       ghostTag.style.left = `${THREE.MathUtils.clamp(((proj.x + 1) / 2) * window.innerWidth, half, window.innerWidth - half)}px`;
       ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
@@ -4221,6 +4438,7 @@ renderer.setAnimationLoop(() => {
   sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   page.mirror = mirror.strength;
   atmos.render();
+  if (rivalTagDue) placeRivalTag();
   if (chart && game.boat && !game.ghost) {
     // A watched voyage: the one boat's track so far.
     if (chartDirty) {
@@ -4278,6 +4496,8 @@ renderer.setAnimationLoop(() => {
 // the same choices, so a link (the title, the Boatyard's "Test it", Play again) opens the
 // card filled in, and ?go=1 sets sail at once.
 if (!shared && !PRACTICE && SS.when !== "calm") $<HTMLSelectElement>("launch").value = LAUNCH[SS.when];
+// ?who=you&day=<one of the six launch days>: the card opens on that day ("Sail it yourself" after watching her).
+if (!shared && !PRACTICE && params.get("who") === "you" && LAUNCH_DAYS.includes(params.get("day") ?? "")) $<HTMLSelectElement>("launch").value = String(LAUNCH_DAYS.indexOf(params.get("day")!));
 if (!shared && !PRACTICE && SS.boat && boatRow(SS.boat)) {
   boatRow(SS.boat)!.checked = true;
   powerFor(SS.boat);

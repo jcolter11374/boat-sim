@@ -68,7 +68,8 @@ import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
-import { Cinema, filmButtons } from "./cinema";
+import { tapeItems, type TapeMark } from "./replay/skytape";
+import { Cinema, filmButtons, heightOf } from "./cinema";
 import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { loadMyBoat } from "./myboat";
@@ -1170,7 +1171,24 @@ const cine = new Cinema({
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
   scale: () => viewScale,
+  length: () => SPEC[boatKey].length,
+  height: () => (model ? heightOf(model.root, model.root.position.y + SPEC[boatKey].cgBelowWaterline) : 0),
+  speed: () => filmStw * 1.94384,
+  moment: () => ({
+    storm,
+    knockdownAgo: Infinity,
+    recentKnockdown: !!rep && rep.events.some((e) => e.kind === "capsize" && e.h <= hour + 1e-6 && hour - e.h < 6),
+    land: null, // the place's own bearing comes through landmark()
+    ship: null,
+  }),
+  caption: () => {
+    const l = lanes[focus];
+    const name = l ? LABEL[l.key].replace(/\s*\(.*\)\s*$/, "") : "";
+    return rep ? [name, `Day ${Math.floor(hour / 24) + 1}`].filter(Boolean).join(" · ") : name;
+  },
 });
+/** The boat's speed through the water the loop last drew (m/s), for the film's pace. */
+let filmStw = 0;
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
@@ -1311,7 +1329,8 @@ renderer.setAnimationLoop(() => {
   // The live tracker's "now" moves on with the clock between feed reloads.
   if (tracked) advanceNow(tracked, liveClock.hour + (Date.now() - liveClock.at) / 3600e3);
   if (rep && playing) {
-    hour = Math.min(hour + dt * warp, endHour());
+    // Filming slows a fast replay to a minute a second, so the low sun holds through a shot (Leo).
+    hour = Math.min(hour + dt * (cine.on ? Math.min(warp, 1 / 60) : warp), endHour());
     if (hour >= endHour()) setPlaying(false);
   }
   if (rep) {
@@ -1400,6 +1419,7 @@ renderer.setAnimationLoop(() => {
       model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
     }
     const stw = Math.max(valueAt(rep, rep.stw, hour) ?? 0, 0);
+    filmStw = stw;
     if (model && contact) {
       // Foam where the hull meets the water, spray when the bow drops into a wave.
       model.root.updateMatrixWorld();
@@ -1741,8 +1761,6 @@ function setLookUp(on: boolean): void {
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
 guideBox.addEventListener("change", showGuide);
 showGuide();
-const CARD: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
-const RANGE = 75; // degrees either side of the view shown on the strip
 const viewDir = new THREE.Vector3();
 const proj = new THREE.Vector3();
 function bearingOf(v: THREE.Vector3): number {
@@ -1763,36 +1781,15 @@ function skyGuide(): void {
   lastGuide = now;
   viewDir.copy(controls.target).sub(camera.position);
   const view = bearingOf(viewDir);
-  // The compass strip (John's call L4): ticks every 5 degrees, and what's out there along it.
-  const W = $("compass").clientWidth || 420;
-  const px = W / (2 * RANGE);
-  const rel = (b: number) => ((b - view + 540) % 360) - 180;
-  const xOf = (b: number) => W / 2 + rel(b) * px;
-  const out: HTMLSpanElement[] = [];
-  for (let b = 0; b < 360; b += 5) {
-    if (Math.abs(rel(b)) > RANGE) continue;
-    const x = xOf(b);
-    out.push(span(b % 15 === 0 ? "tick big" : "tick", "", x));
-    // A label is drawn only where it fits whole: clear of the left edge, and of "VIEW" at the right (Elena).
-    if (b % 15 === 0 && x > 14 && x < W - 40) out.push(span(CARD[b] ? `lbl card${b === 0 ? " n" : ""}` : "lbl", CARD[b] ?? String(b), x));
-  }
+  // The compass strip (decision L4): ticks every 5 degrees, and what's out there along it (replay/skytape.ts).
   const night = sunEl < -6;
   const polaris = atmos.starDirs.get("North Star (Polaris)");
-  const marks: [number, string, string][] = [];
+  const marks: TapeMark[] = [];
   if (model) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw ?? 0) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
   if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
   if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
   if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
-  // Marks that would touch go up a row, so "bow" and "sun" never run together (Ines).
-  const shown = marks.filter(([b]) => Math.abs(rel(b)) <= RANGE).map(([b, text, colour]) => ({ x: xOf(b), half: text.length * 3.4 + 6, text, colour }));
-  shown.sort((a, c) => a.x - c.x);
-  const rowEnd = [-Infinity, -Infinity];
-  for (const m of shown) {
-    const row = m.x - m.half >= rowEnd[0] ? 0 : m.x - m.half >= rowEnd[1] ? 1 : 0;
-    rowEnd[row] = m.x + m.half;
-    const e = span(row ? "mk up" : "mk", m.text, m.x, m.colour);
-    out.push(e);
-  }
+  const out = tapeItems(view, $("compass").clientWidth || 420, marks).map((i) => span(i.cls, i.text, i.x, i.colour));
   $("tape").replaceChildren(...out);
 
   // Labels in the sky itself.

@@ -116,3 +116,13 @@ export function raceLink(search: string, a: RaceId, b: RaceId, day: string): str
   p.set("launch", String(Math.max(0, RACE_DAYS.indexOf(day))));
   return `helm.html?${p.toString()}`.replace("%2C", ",");
 }
+
+/** The link from a watched voyage's ending to sailing that day yourself: the Set sail card, You picked, the same launch day. */
+export function sailLink(search: string, start: string): string {
+  const p = new URLSearchParams(search);
+  for (const k of CARD_KEYS) p.delete(k);
+  p.set("who", "you");
+  const day = start.slice(0, 10);
+  if (/^\d{4}-\d\d-\d\d$/.test(day)) p.set("day", day);
+  return `helm.html?${p.toString()}`;
+}
