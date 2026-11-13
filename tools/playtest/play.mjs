@@ -2863,6 +2863,42 @@ const CHECKS = {
       return `frames ${out.join(", ")}`;
     },
   },
+  // #492 like-for-like: pick the Pearson 31 as My boat on the title (Change, then Sail this boat), reload, and
+  // shoot the title at 1280 on High; report what the My boat line and the top bar chip say.
+  "look-title-pearson": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      const browser = page.context().browser();
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+      const p = await ctx.newPage();
+      const words = () => p.evaluate(() => ({ line: document.getElementById("t-boatname")?.textContent.trim() ?? null, chip: document.getElementById("topbar-boat")?.textContent.trim() ?? null, saved: localStorage.getItem("boatsim.myboat.v1") }));
+      try {
+        await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 10, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForFunction(() => document.getElementById("t-change"), null, { timeout: MIN });
+        await p.evaluate(() => document.getElementById("t-change").click());
+        await p.waitForFunction(() => document.querySelector('#boatpick input[value="stock_pearson31_2"]'), null, { timeout: MIN }).catch(() => { throw new CheckFail("the boat picker has no Pearson 31"); });
+        const label = await p.evaluate(() => { const i = document.querySelector('#boatpick input[value="stock_pearson31_2"]'); i.click(); return i.closest("label")?.textContent.trim(); });
+        await p.evaluate(() => document.querySelector("#boatpick .go").click());
+        await p.waitForTimeout(1500);
+        const before = await words();
+        await p.waitForLoadState("networkidle").catch(() => {});
+        await p.reload({ waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForLoadState("networkidle").catch(() => {});
+        await p.waitForTimeout(10000);
+        const after = await words();
+        const path = "live-after-pearson-1280.jpg";
+        if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+        const r = `picker row "${label}"; right after picking: line "${before.line}", chip "${before.chip}"; after reload: line "${after.line}", chip "${after.chip}"; saved ${after.saved}`;
+        console.log(`PEARSON ${r}`);
+        must(!/stock_/.test(`${before.line} ${before.chip} ${after.line} ${after.chip}`), `a file name shows: ${r}`);
+        return r;
+      } finally { await ctx.close().catch(() => {}); }
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
