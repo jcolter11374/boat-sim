@@ -2363,6 +2363,65 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #482 (Sam): leave a crossing at speed without pausing, then Continue your voyage. It must come
+  // back within 0.05 of the day that was on screen and say "right where you left off"; if earlier,
+  // it must say "You left on day X, but the last save was on day Y" and never "right where you left off".
+  "continue-at-speed": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      const out = [];
+      const bad = [];
+      const notes = () => page.evaluate(() => (document.getElementById("notes")?.innerText ?? "").replace(/\s+/g, " ").trim());
+      for (const [label, rate] of [["6 h a second", "6"], ["4 days a second", "96"]]) {
+        await page.waitForLoadState("networkidle").catch(() => {});
+        await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await page.evaluate(() => { try { localStorage.removeItem("boatsim.voyage.v1"); } catch {} });
+        await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+        await page.evaluate(() => document.getElementById("go").click());
+        await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+        must(!(await page.evaluate(() => window.__helm.error)), `${label}: the crossing didn't start`);
+        // Run at this speed to about day 1.5, answering any call with its first choice.
+        const t0 = Date.now();
+        while (Date.now() - t0 < 5 * MIN) {
+          if (await page.evaluate(() => window.__helm.hour >= 36 && window.__helm.clock > 0)) break;
+          if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+          await page.evaluate((r) => { if (window.__helm.clock !== Number(r)) document.querySelector(`#timebar .rate[data-rate="${r}"]`)?.click(); }, rate);
+          await page.waitForTimeout(400);
+        }
+        // Leave without pausing: the day on screen at that moment, then straight to the title.
+        const left = await page.evaluate(() => ({ day: window.__helm.hour / 24, sim: window.__helm.status?.day, shown: document.getElementById("day")?.textContent.trim(), clock: window.__helm.clock }));
+        must(left.clock > 0, `${label}: the clock wasn't running when I left (day ${left.day.toFixed(2)}, a call may have stopped it)`);
+        await page.goto(SITE + "?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN });
+        await page.waitForTimeout(1500);
+        const offer = await page.evaluate(() => { const a = document.getElementById("t-continue"); return { shown: !!a && !a.hidden && a.offsetParent !== null, sub: document.getElementById("t-continue-sub")?.textContent.trim() ?? "" }; });
+        must(offer.shown, `${label}: after leaving at day ${left.day.toFixed(2)} the title has no "Continue your voyage"`);
+        await page.evaluate(() => document.getElementById("t-continue").click());
+        await page.waitForURL(/helm\.html\?.*continue=1/, { timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 10 * MIN });
+        must(!(await page.evaluate(() => window.__helm.error)), `${label}: continuing failed: ${await page.evaluate(() => window.__helm.error)}`);
+        await page.waitForFunction(() => /Welcome back/.test(document.getElementById("notes")?.innerText ?? ""), null, { timeout: 30_000 }).catch(() => {});
+        const back = await page.evaluate(() => ({ day: window.__helm.status?.day, shown: document.getElementById("day")?.textContent.trim(), clock: window.__helm.clock }));
+        const note = await notes();
+        const welcome = note.match(/Welcome back\.[^.]*(?:\.[^.]*)?\./)?.[0] ?? note.slice(0, 160);
+        const gap = back.day - left.day;
+        console.log(`LEAVE ${BROWSER} ${label}: left ${JSON.stringify(left)}; offer "${offer.sub}"; back ${JSON.stringify(back)}; note "${note.slice(0, 220)}"`);
+        const line = `${label}: left on day ${left.day.toFixed(2)} (strip "${left.shown}"), came back on day ${back.day.toFixed(2)} (${gap >= 0 ? "+" : ""}${gap.toFixed(2)}), note "${welcome}"`;
+        out.push(line);
+        if (Math.abs(gap) <= 0.05) {
+          if (!/right where you left off/.test(note)) bad.push(`${line}: on the same day, but the note doesn't say "right where you left off"`);
+        } else if (gap < 0) {
+          if (/right where you left off/.test(note)) bad.push(`${line}: came back ${(-gap).toFixed(2)} days EARLIER yet says "right where you left off"`);
+          else if (!/You left on day [\d.]+, but the last save was on day [\d.]+/.test(note)) bad.push(`${line}: came back earlier, and the note doesn't give the day left and the day saved`);
+          else bad.push(`${line}: came back ${(-gap).toFixed(2)} days earlier than the screen showed (the note says so honestly)`);
+        } else bad.push(`${line}: came back ${gap.toFixed(2)} days LATER than the screen showed`);
+        must(back.clock === 0, `${label}: the continued voyage isn't paused`);
+      }
+      must(!bad.length, bad.join(" | "));
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
