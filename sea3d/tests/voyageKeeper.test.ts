@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { VoyageKeeper, type VoyageState } from "../src/helm/voyageKeeper.ts";
+import { MAX_UNSAVED_H, MIN_ASK_MS, VoyageKeeper, type VoyageState } from "../src/helm/voyageKeeper.ts";
 import { REAL_TIME, VOYAGE_KEY, loadVoyage, packVoyage, saveVoyage } from "../src/helm/voyageSave.ts";
 import type { StorageLike } from "../src/myboat.ts";
 
@@ -136,4 +136,135 @@ test("one question at a time: a save still waiting on the simulator isn't asked 
   assert.equal(await first, true);
   void k.keep(); // and it can ask again afterwards
   assert.equal(asked, 2);
+});
+
+// ---- when it saves (Omar's live check, 13 Nov: a 15 s timer lost most of a day at 6 h a second) ----
+
+/** A keeper over a voyage the test moves along by hand; `asked` counts the simulator's codes. */
+function rig(start: Partial<VoyageState> = {}) {
+  const s = fakeStore();
+  const at = { st: { ...under, seen: under.day, orders: "auto", ...start } as VoyageState, asked: 0 };
+  const k = new VoyageKeeper(
+    () => at.st,
+    async () => (at.asked++, CODE),
+    s,
+  );
+  return { s, at, k };
+}
+
+test("the first look saves; a look with nothing new does not ask the simulator again", async () => {
+  const { at, k } = rig();
+  assert.equal(await k.look(0), true);
+  assert.equal(await k.look(10_000), false);
+  assert.equal(await k.look(600_000), false); // paused for ten minutes: still nothing new
+  assert.equal(at.asked, 1);
+});
+
+test("pausing the clock saves, and so does carrying on or changing speed", async () => {
+  const { s, at, k } = rig();
+  await k.look(0);
+  at.st = { ...at.st, rate: 0 };
+  assert.equal(await k.look(MIN_ASK_MS), true);
+  assert.equal(loadVoyage(s)!.rate, 0);
+  at.st = { ...at.st, rate: 24 };
+  assert.equal(await k.look(2 * MIN_ASK_MS), true);
+  assert.equal(loadVoyage(s)!.rate, 24);
+  at.st = { ...at.st, rate: REAL_TIME };
+  assert.equal(await k.look(3 * MIN_ASK_MS), true);
+  assert.equal(loadVoyage(s)!.rate, REAL_TIME);
+  assert.equal(at.asked, 4);
+});
+
+test("an order that goes is saved", async () => {
+  const { at, k } = rig();
+  await k.look(0);
+  at.st = { ...at.st, orders: "steer 090" };
+  assert.equal(await k.look(MIN_ASK_MS), true);
+  assert.equal(await k.look(2 * MIN_ASK_MS), false); // the same order: nothing new
+  assert.equal(at.asked, 2);
+});
+
+test("an hour of the voyage is the most that goes by between saves, when the two-second rule allows", async () => {
+  const { s, at, k } = rig({ day: 3 });
+  await k.look(0);
+  at.st = { ...at.st, day: 3 + (MAX_UNSAVED_H - 0.1) / 24 };
+  assert.equal(await k.look(60_000), false); // not an hour yet
+  at.st = { ...at.st, day: 3 + MAX_UNSAVED_H / 24 };
+  assert.equal(await k.look(120_000), true);
+  assert.equal(loadVoyage(s)!.day, Math.round((3 + MAX_UNSAVED_H / 24) * 100) / 100);
+});
+
+test("the simulator is never asked more than once every two seconds, at any speed", async () => {
+  // Four days a second, looked at twice a second for a minute.
+  const { at, k } = rig({ day: 1, rate: 96 });
+  for (let ms = 0; ms <= 60_000; ms += 500) {
+    at.st = { ...at.st, day: 1 + (96 * ms) / 1000 / 24, orders: `o${ms}` }; // an order every look, too
+    await k.look(ms);
+  }
+  assert.equal(at.asked, 60_000 / MIN_ASK_MS + 1);
+});
+
+test("a save that is due too soon is not lost: it goes at the next look that is allowed", async () => {
+  const { s, at, k } = rig();
+  await k.look(0);
+  at.st = { ...at.st, rate: 0 }; // paused half a second after a save
+  assert.equal(await k.look(500), false);
+  assert.equal(await k.look(MIN_ASK_MS), true);
+  assert.equal(loadVoyage(s)!.rate, 0);
+});
+
+test("how much can go unsaved: two seconds of play, so within the hour up to an hour a second", async () => {
+  for (const [rate, mostHours] of [[1 / 3600, MAX_UNSAVED_H], [1, 2], [6, 12], [24, 48], [96, 192]] as const) {
+    const { s, at, k } = rig({ day: 2, rate });
+    let worst = 0;
+    for (let ms = 0; ms <= 30_000; ms += 500) {
+      at.st = { ...at.st, day: 2 + (rate * ms) / 1000 / 24 };
+      worst = Math.max(worst, (at.st.day - (loadVoyage(s)?.day ?? 2)) * 24);
+      await k.look(ms);
+    }
+    assert.ok(worst <= mostHours + 0.3, `${rate} h/s: ${worst.toFixed(2)} h unsaved, at most ${mostHours}`); // 0.3: days are kept to two decimals
+  }
+});
+
+test("leaving the page writes at once, without the simulator: the code held, and the day on the screen", async () => {
+  const { s, at, k } = rig({ day: 0.81, seen: 0.8 });
+  await k.look(0);
+  assert.equal(loadVoyage(s)!.left, 0.8);
+  // Sailed on to day 1.56 and paused; the tab closes before the next save can finish.
+  at.st = { ...at.st, day: 1.6, seen: 1.56, rate: 0 };
+  const asked = at.asked;
+  assert.equal(k.leave(), true);
+  assert.equal(at.asked, asked); // nothing asked: a closing page doesn't wait
+  const v = loadVoyage(s)!;
+  assert.equal(v.code, CODE);
+  assert.equal(v.day, 0.81); // where the code will come back to
+  assert.equal(v.left, 1.56); // where the player was
+  assert.equal(v.rate, 0);
+});
+
+test("leaving with nothing saved yet writes nothing; leaving an ended voyage clears it", async () => {
+  const { s, at, k } = rig();
+  assert.equal(k.leave(), false);
+  assert.equal(s.data.size, 0);
+  await k.look(0);
+  at.st = { ...at.st, over: true };
+  assert.equal(k.leave(), false);
+  assert.equal(s.data.has(VOYAGE_KEY), false);
+});
+
+test("a storage that throws doesn't stop a look or a leave", async () => {
+  const broken: StorageLike = {
+    getItem: () => {
+      throw new Error("SecurityError");
+    },
+    setItem: () => {
+      throw new Error("QuotaExceededError");
+    },
+    removeItem: () => {
+      throw new Error("SecurityError");
+    },
+  };
+  const k = new VoyageKeeper(() => ({ ...under, seen: 3.4 }), async () => CODE, broken);
+  assert.equal(await k.look(0), true);
+  assert.equal(k.leave(), true);
 });
