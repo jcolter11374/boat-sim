@@ -316,8 +316,12 @@ export class OceanSound {
     }
   }
 
-  /** Start (from a click). Does nothing if Web Audio isn't there. */
-  enable(): void {
+  /**
+   * Start (from a click). Does nothing if Web Audio isn't there. remember = false: on for now,
+   * without recording it as the viewer's choice (the title starts at the first click; the
+   * helm still asks).
+   */
+  enable(remember = true): void {
     try {
       if (!this.ctx) {
         const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -331,7 +335,7 @@ export class OceanSound {
       this.on = true;
       this.muted = false;
       this.armed = false;
-      store("on");
+      if (remember) store("on");
     } catch {
       this.on = false;
     }
@@ -444,6 +448,22 @@ export class OceanSound {
   }
 
   private wobble: { d: GainNode; depth: number }[] | undefined;
+
+  /**
+   * For sounds made outside this class (the title's bell buoy, gulls and menu chime,
+   * titleSound.ts): the audio context, the master bus (through the shelf and limiter, not
+   * ducked), the far-off echo send, the noise loops and the random source. Null until sound
+   * has been built, or while it's off.
+   */
+  bus(): { ctx: BaseAudioContext; out: AudioNode; far: AudioNode; noise: Record<"white" | "pink" | "brown", AudioBuffer>; rnd: () => number } | null {
+    if (!this.live || !this.master || !this.echo || !this.bufs) return null;
+    return { ctx: this.ctx!, out: this.master, far: this.echo, noise: this.bufs, rnd: this.rnd };
+  }
+
+  /** Record a moment made outside this class in `played` (for the live checks). */
+  note(name: string): void {
+    this.mark(name);
+  }
 
   /** The audio clock, s. */
   private get now(): number {
