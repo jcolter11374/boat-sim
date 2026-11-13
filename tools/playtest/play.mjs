@@ -3232,6 +3232,52 @@ const CHECKS = {
     path: "helm.html?quality=low",
     run: async (page) => { globalThis.__M3_ONLY = ["watch", "race"]; try { return await CHECKS["m3-ends"].run(page); } finally { globalThis.__M3_ONLY = undefined; } },
   },
+  // #505: "Watch a voyage" and "Race it" in the top bar's More and the title's More open the Set sail card: the
+  // race one on "Start the race" with The autopilot and Another boat picked; the watch one on "Watch her go",
+  // which plays her voyage in Real time.
+  "menu-links": {
+    path: "",
+    run: async (page) => {
+      const out = [];
+      const bad = [];
+      await page.waitForFunction(() => document.getElementById("t-more"), null, { timeout: 2 * MIN }).catch(() => {});
+      await page.waitForTimeout(2000);
+      const links = await page.evaluate(() => {
+        const pick = (root) => Object.fromEntries([...(root?.querySelectorAll("a") ?? [])].filter((a) => /^(Watch a voyage|Race it)$/.test(a.textContent.trim())).map((a) => [a.textContent.trim(), a.getAttribute("href")]));
+        return { title: pick(document.getElementById("t-more")), bar: pick(document.getElementById("topbar")) };
+      });
+      out.push(`links ${JSON.stringify(links)}`);
+      const seen = new Map();
+      for (const [menu, l] of Object.entries(links)) for (const [name, href] of Object.entries(l)) { if (!seen.has(href)) seen.set(href, []); seen.get(href).push(`${menu} ${name}`); }
+      for (const n of ["Watch a voyage", "Race it"]) for (const m of ["title", "bar"]) if (!links[m][n]) bad.push(`no "${n}" in the ${m} More menu`);
+      for (const [href, who] of seen) {
+        const isRace = who.some((w) => /Race it/.test(w));
+        await page.goto(new URL(href, SITE).href, { waitUntil: "load", timeout: 2 * MIN });
+        const helm = await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 3 * MIN }).then(() => true, () => false);
+        if (!helm) { bad.push(`${who.join(", ")} (${href}) opened ${page.url()}, not the Set sail card`); continue; }
+        await page.waitForFunction((r) => (r ? /start the race/i : /watch her go/i).test(document.getElementById("go")?.textContent ?? ""), isRace, { timeout: 30_000 }).catch(() => {});
+        const c = await page.evaluate(() => ({ go: document.getElementById("go")?.textContent.trim(), card: !document.getElementById("start")?.hidden, who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent.trim() ?? null, rival: document.querySelector('#ss-rival-opts .ss-pill[aria-pressed="true"]')?.textContent.trim() ?? null, against: document.getElementById("ss-against-name")?.textContent.trim() ?? null }));
+        if (isRace) {
+          if (!(c.card && /start the race/i.test(c.go ?? "") && /autopilot/i.test(c.who ?? "") && /another/i.test(c.rival ?? ""))) bad.push(`${who.join(", ")}: card ${c.card}, "${c.go}", who "${c.who}", race against "${c.rival}"`);
+          out.push(`${who.join(" + ")} ${href}: "${c.go}", who "${c.who}", against "${c.rival}" (${c.against})`);
+        } else {
+          if (!(c.card && /watch her go/i.test(c.go ?? "") && /autopilot/i.test(c.who ?? ""))) { bad.push(`${who.join(", ")}: card ${c.card}, "${c.go}", who "${c.who}"`); continue; }
+          await page.evaluate(() => document.getElementById("go").click());
+          await page.waitForURL(/[?&]watch=/, { timeout: MIN }).catch(() => {});
+          await page.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error), null, { timeout: 5 * MIN }).catch(() => {});
+          const a = await page.evaluate(() => ({ url: location.search, rate: document.querySelector("#timebar .rate[aria-pressed=true]")?.dataset.rate ?? null, hour: window.__helm?.hour, err: window.__helm?.error ?? null }));
+          await page.waitForTimeout(10_000);
+          const h2 = await page.evaluate(() => window.__helm?.hour);
+          const moved = h2 > a.hour;
+          if (!/watch=/.test(a.url) || a.err || a.rate !== "rt" || !moved) bad.push(`${who.join(", ")}: Watch her go opened ${a.url} at "${a.rate}", hour ${a.hour} then ${h2}${a.err ? `, error ${a.err}` : ""}`);
+          out.push(`${who.join(" + ")} ${href}: "${c.go}" (who "${c.who}") then ${a.url} at "${a.rate}", ${((h2 - a.hour) * 3600).toFixed(1)} s of voyage in 10 s`);
+        }
+      }
+      console.log(`MENU ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
