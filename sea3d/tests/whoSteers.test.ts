@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { RACE_IDS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, raceLink, rivalName, sailLink, watchDay, watchDays, watchLink, whoFromUrl } from "../src/helm/whoSteers.ts";
+import { AUTO_DAYS, RACE_DAYS, RACE_IDS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, raceLink, rivalName, sailLink, watchDay, watchDays, watchLink, whoFromUrl } from "../src/helm/whoSteers.ts";
 import { RACE_BOATS, racePick } from "../src/helm/raceSource.ts";
-import { pickVoyage } from "../src/helm/watchSource.ts";
+import { WATCH_DEFAULT_DAY, pickVoyage } from "../src/helm/watchSource.ts";
 import type { IndexEntry } from "../src/replay/data.ts";
 
 const index = (JSON.parse(readFileSync("public/voyages/index.json", "utf8")) as { voyages: IndexEntry[] }).voyages;
@@ -82,4 +82,11 @@ test("a watched voyage's ending links to sailing that day yourself: the card, Yo
   assert.equal(link, "helm.html?quality=low&who=you&day=2020-04-15");
   const back = whoFromUrl(link.slice(link.indexOf("?")));
   assert.deepEqual([back.who, back.day], ["you", "2020-04-15"]);
+});
+
+test("the autopilot's Calm and Rough are days she sails and races, and Calm is the day watching has always opened on", () => {
+  assert.equal(AUTO_DAYS.calm, WATCH_DEFAULT_DAY);
+  assert.equal(AUTO_DAYS.rough, "2020-04-01");
+  for (const d of Object.values(AUTO_DAYS)) assert.ok(RACE_DAYS.includes(d), d);
+  assert.equal(RIVAL_WORDS.soon, "Racing another boat: watch mode only, for now");
 });

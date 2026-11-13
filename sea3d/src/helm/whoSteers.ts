@@ -82,7 +82,14 @@ export const RIVAL_WORDS = {
   picker: "The other boat",
   pick: "Pick this boat",
   same: "Pick a different boat. She can't race herself.",
+  /** With you steering (Elena): a race against another boat is only watched, for now. */
+  soon: "Racing another boat: watch mode only, for now",
 } as const;
+
+/** The launch day control's Calm and Rough with the autopilot steering (Elena: one control for every
+ *  steerer). Calm is the day Watch a voyage has always opened on (unchanged); Rough is the same 1 April
+ *  as yours. Her voyages and races launch on the six odds days, so 23 April isn't among them. */
+export const AUTO_DAYS = { calm: WATCH_DEFAULT_DAY, rough: "2020-04-01" } as const;
 
 /** The boats a race can run (the race link's own ids, raceSource's RACE_BOATS). */
 export const RACE_IDS = ["kayak", "revc", "revb", "mine"] as const;
