@@ -2772,7 +2772,8 @@ const CHECKS = {
           await p.evaluate(() => scrollTo(0, 0));
           await shot(p, `race-${w}x${h}`);
           for (const [k, u] of [["You", u1], ["autopilot", u2], ["another boat", u3]]) if (u.bad.length) problems.push(`${w}x${h} with ${k}: ${u.bad.join("; ")}`);
-          out.push(`${w}x${h}: opens on "${you}" / "${a.go}", who ${a.who.map((x) => x.t).join(" | ")}; "${auto}" gives "${b.go}", race against ${b.rival ? b.rival.map((x) => x.t).join(" | ") : "(no row)"}; "${other}" gives "${c.go}"; ${u1.n}/${u2.n}/${u3.n} controls ${u1.bad.length + u2.bad.length + u3.bad.length ? "NOT all usable" : "all usable"}`);
+          const days = await p.evaluate(() => [...document.querySelectorAll("#ss-when-opts .ss-pill")].filter((e) => e.offsetParent !== null).map((e) => e.textContent.trim().replace(/\s+/g, " ")));
+          out.push(`${w}x${h}: opens on "${you}" / "${a.go}", who ${a.who.map((x) => x.t).join(" | ")}; "${auto}" gives "${b.go}", race against ${b.rival ? b.rival.map((x) => x.t).join(" | ") : "(no row)"}; "${other}" gives "${c.go}"; days after both picks ${days.join(" | ")}; ${u1.n}/${u2.n}/${u3.n} controls ${u1.bad.length + u2.bad.length + u3.bad.length ? "NOT all usable" : "all usable"}`);
         } finally { await ctx.close().catch(() => {}); }
       }
       // 2. The autopilot, then "Watch her go": her voyage, in Real time.
@@ -2972,7 +2973,7 @@ const CHECKS = {
       if (BROWSER !== "chromium") throw new SkipCheck("frames are taken in Chromium only");
       const out = [];
       const problems = [];
-      const card = () => page.evaluate(() => { const r = document.getElementById("result"); const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; const box = r?.getBoundingClientRect(); return { up: vis(r), head: document.getElementById("r-head")?.textContent.trim() ?? "", story: (document.getElementById("r-story")?.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 160), btns: [...document.querySelectorAll("#result .rc-btns > *, #result button, #result a")].filter(vis).map((b) => b.textContent.trim().replace(/\s+/g, " ")).filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 8), box: box ? [Math.round(box.left), Math.round(box.top), Math.round(box.right), Math.round(box.bottom)] : null, win: [innerWidth, innerHeight], boat: window.__helm?.boatBox?.() ?? null }; });
+      const card = () => page.evaluate(() => { const r = document.getElementById("result"); const vis = (e) => !!e && !e.hidden && e.offsetParent !== null; const box = r?.getBoundingClientRect(); return { up: vis(r), head: document.getElementById("r-head")?.textContent.trim() ?? "", story: (document.getElementById("r-story")?.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 160), btns: [...document.querySelectorAll("#result .rc-btns > *, #result button, #result a")].filter(vis).map((b) => b.textContent.trim().replace(/\s+/g, " ")).filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 8), box: box ? [Math.round(box.left), Math.round(box.top), Math.round(box.right), Math.round(box.bottom)] : null, win: [innerWidth, innerHeight], boat: window.__helm?.boatBox?.() ?? null, what: (() => { const t = (r?.innerText ?? "").replace(/\s+/g, " "); const i = t.search(/what happened/i); return i < 0 ? "" : t.slice(i, i + 260); })() }; });
       const shoot = async (name) => {
         for (const [w, h] of [[1280, 720], [390, 844]]) {
           await page.setViewportSize({ width: w, height: h });
@@ -2983,7 +2984,7 @@ const CHECKS = {
           const inside = c.box && c.box[0] >= -1 && c.box[2] <= c.win[0] + 1;
           if (!c.up) problems.push(`${name} at ${w}: the card is not up`);
           else if (!inside) problems.push(`${name} at ${w}: the card is wider than the window ${JSON.stringify(c.box)}`);
-          out.push(`${name} ${w}x${h}: "${c.head}" "${c.story}" [${c.btns.join(" / ")}] card ${JSON.stringify(c.box)} boat ${JSON.stringify(c.boat)}`);
+          out.push(`${name} ${w}x${h}: "${c.head}" "${c.story}"${c.what ? ` WHAT "${c.what}"` : " (no What happened)"} [${c.btns.join(" / ")}] card ${JSON.stringify(c.box)} boat ${JSON.stringify(c.boat)}`);
         }
         await page.setViewportSize({ width: 1280, height: 720 });
       };
