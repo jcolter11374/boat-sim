@@ -239,6 +239,7 @@
   body.bare #compass, body.bare #lookup, body.bare #skylabels, body.cinema #compass, body.cinema #lookup, body.cinema #skylabels,
   body.results #compass, body.results #lookup, body.results #skylabels, body:has(#mapbox.big) #compass, body:has(#mapbox.big) #lookup { visibility: hidden !important; }
   @media (max-width: 899px) { #compass, #lookup { display: none !important; } body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + 54px); } }
+  body.racing.followed #c-lead, body.racing.followed #watch { display: none; } /* following the one boat left in a race */
   #result.raced #r-race { display: none; } /* you have just raced: "Change the boats" is the way on (Elena) */
   #result.watched #r-watch, #result.watched #r-day, #result.watched:not(.raced) #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
@@ -853,7 +854,7 @@
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a></div>
+    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a></div>
     <div class="rc-links" id="r-links"><a id="r-race" href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>

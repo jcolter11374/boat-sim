@@ -10,7 +10,7 @@
 // Pure apart from the worker it is handed: no DOM and no fetch here.
 
 import { lastHour, planAt, valueAt, type Replay } from "../replay/data";
-import type { BoatNow, Card, Status, Stop } from "./game";
+import { OUTCOME, type BoatNow, type Card, type Status, type Stop } from "./game";
 
 /** A boat in the race: Boatyard choices ({} is our kayak, {base: "revc"}, a whole design). */
 export type RaceChoices = Record<string, string>;
@@ -120,6 +120,51 @@ export function raceCard(c: RaceCard): Card & { race: RaceCard } {
   const side = (x: RaceCardBoat) => ({ outcome: x.outcome, days: x.days, battery_low: x.battery_low, breakdowns: x.breakdowns });
   const verdict: Card["verdict"] = c.winner === 0 ? "won" : c.winner === 1 ? "lost" : c.verdict === "draw" ? "draw" : "neither_finished";
   return { build: a.build ?? "", launch: c.launch, seed: c.seed ?? 0, breakdowns_on: c.breakdowns_on ?? true, boat: side(a), ghost: side(b), margin_days: c.margin_days, verdict, breakdowns_differ: c.breakdowns_differ, orders: [], race: c };
+}
+
+// ---------------------------------------------------------------- the ending's words (Elena's list, 13 Nov)
+
+/** Outcomes where the boat is simply still out there when the race's clock runs out: not a result. */
+const UNFINISHED = new Set(["at_sea", "timeout", "goal"]);
+/** Is she gone (sunk, lost, aground…), as against finished or still sailing? A lost boat is not drawn sailing on. */
+export function raceGone(b: RaceCardBoat): boolean {
+  return b.outcome !== "arrived" && !UNFINISHED.has(b.outcome);
+}
+const onDay = (days: number) => `on day ${Math.max(1, Math.round(days))}`;
+
+/** What became of a boat, to follow her name: "finished in 61.2 days", "was lost on day 4", "never finished". */
+export function raceFate(b: RaceCardBoat): string {
+  if (b.outcome === "arrived") return `finished in ${b.days.toFixed(1)} days`;
+  if (UNFINISHED.has(b.outcome)) return "never finished";
+  return `${OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")} ${onDay(b.days)}`;
+}
+
+/**
+ * The ending's headline, the most important fact first, in the boats' full names ("(our model)" stays: B2).
+ * `only`: the race is being told as far as that boat's end (the other is still racing on screen), so only her fate is given.
+ */
+export function raceHeadline(c: RaceCard, names: [string, string], only?: 0 | 1): string {
+  const [a, b] = c.boats;
+  if (only !== undefined) return `${names[only]} ${raceFate(c.boats[only])}.`;
+  if (c.verdict === "draw") return "A draw: both finished within a day of each other.";
+  const w = c.winner;
+  if (w === 0 || w === 1) {
+    const l = (1 - w) as 0 | 1;
+    return c.margin_days !== null && c.boats[l].outcome === "arrived"
+      ? `${names[w]} finished first, ${Math.abs(c.margin_days).toFixed(1)} days ahead.`
+      : `${names[w]} ${raceFate(c.boats[w])}. ${names[l]} ${raceFate(c.boats[l])}.`;
+  }
+  // Neither finished: a boat that was lost is the news; "never finished" comes second.
+  const first: 0 | 1 = raceGone(a) || !raceGone(b) ? 0 : 1;
+  const second = (1 - first) as 0 | 1;
+  return `${names[first]} ${raceFate(c.boats[first])}. ${names[second]} ${raceFate(c.boats[second])}.`;
+}
+
+/** The small line under a boat's days on the card. The race's time limit is not a result, so it says so. */
+export function raceLabel(b: RaceCardBoat, name: string): string {
+  if (b.outcome === "arrived") return `${name}: finished`;
+  if (UNFINISHED.has(b.outcome)) return `${name}: still at sea when time ran out (${Math.round(b.days)} days)`;
+  return `${name}: ${OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")}`;
 }
 
 type Ask = { id: number; type: string; base?: string; hours?: number };
