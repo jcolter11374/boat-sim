@@ -257,6 +257,7 @@
   #ss-why { margin: 6px 0 0; font-size: 12.5px; }
   .ss-after { font-size: 12px; margin: 6px 0 2px; }
   #ss-card #go { margin-top: 6px; }
+  #go[aria-disabled="true"] { opacity: .5; cursor: default; }
   /* A challenge's result inside #406's card (Elena, 12 Nov): the stars, why, the ghost and what really
      happened take the story's place; Try again replays the same challenge. */
   #r-stars .s-row { margin: 2px 0 6px; display: flex; align-items: baseline; gap: 10px; }
@@ -699,7 +700,9 @@
     <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
     <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-line muted" id="ss-course-line"></div><div class="ss-l">Wind</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
-    <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div></div>
+    <!-- Who steers (M2, R2): you, or the autopilot all the way (you watch her go). Hidden for Annapolis: practice is always you. -->
+    <div class="ss-row" id="ss-who" hidden><div class="ss-l">Who steers</div><div class="ss-opts" id="ss-who-opts"></div><div class="ss-line muted" id="ss-who-line"></div></div>
+    <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div><div class="ss-line muted" id="ss-when-line" hidden></div></div>
     <div class="ss-row" id="ss-ch" hidden><div class="ss-l">Weather challenge (optional)</div><div class="ss-opts" id="ss-ch-opts"></div><p id="ss-why" class="muted" hidden></p></div>
     <fieldset id="boats" hidden><legend>Your boat</legend>
       <label><input type="radio" name="boat" value="" checked> <b>Our kayak</b>: the 3 m solar drone, two small electric motors and no sail.</label>
@@ -708,7 +711,7 @@
     <p id="sharedmsg" class="muted" hidden></p>
     <button id="go" class="go big">Set sail</button>
     <span id="startmsg" class="muted"></span>
-    <p class="muted ss-after">You can change speed, pause, and take the wheel once you're at sea.</p>
+    <p class="muted ss-after" id="ss-after">You can change speed, pause, and take the wheel once you're at sea.</p>
     <!-- The card's sources (M1 piece 5): the launch day and challenge pills write these, and begin() reads them.
          Never shown: the card is the one place to pick (Elena, one-game plan). -->
     <div id="ss-sources" hidden>
