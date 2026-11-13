@@ -81,7 +81,17 @@ def test_the_first_status_has_the_weather_at_the_start(env):
     before = [(v.state.t, v.state.lat, v.state.lon, v.env) for v in r.boats]
     for boat in r.status()["boats"]:
         w = boat["weather"]
-        assert set(w) >= {"wind_u", "wind_v", "hs", "tp", "wave_dir", "current_u", "current_v", "ghi", "rain"}
+        assert set(w) >= {
+            "wind_u",
+            "wind_v",
+            "hs",
+            "tp",
+            "wave_dir",
+            "current_u",
+            "current_v",
+            "ghi",
+            "rain",
+        }
         assert json.loads(json.dumps(w)) == w
     # Looking is not sailing: nothing about either boat has moved.
     assert [(v.state.t, v.state.lat, v.state.lon, v.env) for v in r.boats] == before
