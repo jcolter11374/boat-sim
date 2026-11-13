@@ -1,7 +1,8 @@
 /**
  * The title hero (one-game plan, step 1; Elena, 12 Nov): the first frame of the game.
- * The player's own boat on the open sea at golden hour, backlit by a low sun, filmed
- * from a low chase boat on a long lens (cinema.ts titleShot), drifting slowly. No name
+ * The player's own boat on the open sea at golden hour, lit by a low sun off to one side
+ * of her (never straight behind: its glow bleached her, John 13 Nov), filmed from a low
+ * chase boat on a long lens (framing.ts titleShot), drifting slowly. No name
  * tags; the left of the screen is kept clear for the logo and the three choices.
  * These are the hero's choices; index.html (main.ts) draws it while the title shows.
  */
@@ -15,6 +16,11 @@ export const HERO_SUN = { el: 5, az: 255 };
 export const HERO_CLOUD = 0.3;
 /** The sky's pattern for the hero: a fixed day, so the first frame is the same every visit. */
 export const HERO_SKY_DAY = 20190;
+/**
+ * The glow round bright things on the title: under half the usual strength and a tight
+ * radius, so the low sun's light stays by the sun and nothing lies over the boat.
+ */
+export const HERO_GLOW = { scale: 0.45, radius: 0.2 };
 /** A gentle sea: low enough that the hull stays clear of the crests from a 1.5 m camera, big enough to move. */
 export const HERO_SEA: SeaState = { name: "Title", hs: 0.8, tp: 6.5, meanDirection: 0.3 };
 

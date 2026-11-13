@@ -27,7 +27,7 @@ import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
@@ -246,17 +246,20 @@ function heroMode(): void {
   controls.enabled = !on;
   if (on) {
     atmos.cloud = HERO_CLOUD;
+    atmos.setGlow(HERO_GLOW.scale, HERO_GLOW.radius); // small and tight: no veil over the boat
     atmos.set(HERO_SUN.el, HERO_SUN.az, 0, true);
     clouds.seed(HERO_SKY_DAY);
     heroPlace.yaw = titleHeading(atmos.sunDir);
     setSea("title", HERO_SEA);
-    // Backlit (Ines): the near side of the boat in her own shadow, her edges and sails lit
-    // by the sun behind her. Less fill from the sky dome and the sky's reflections.
+    // Lit from astern and to one side (Ines, 12 Nov; the sun moved off her 13 Nov): the near
+    // side of the boat in her own shadow, her edges and sails lit by the low sun. Less fill
+    // from the sky dome and the sky's reflections.
     setBacklight(atmos.sunDir, 1, atmos.sun.color);
     atmos.hemi.intensity *= 0.35;
     scene.environmentIntensity = 0.25;
   } else {
     atmos.cloud = 0;
+    atmos.setGlow();
     setBacklight(atmos.sunDir, 0);
     atmos.set(10, 330, 0, true);
     seaUniforms.uSeaSky.value.set(0, 0, 0, 0);

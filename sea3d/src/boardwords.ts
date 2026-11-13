@@ -8,12 +8,12 @@ const MONTHS: Record<string, string> = {
   Jul: "July", Aug: "August", Sep: "September", Oct: "October", Nov: "November", Dec: "December",
 };
 
-/** "2015-2019-AprJun-every7d-v1" -> "April to June launches every 7 days, 2015 to 2019". Unknown shapes come back as they are. */
+/** "2015-2019-AprJun-every7d-v1" -> "A launch day every 7 days, April to June, 2015 to 2019". Unknown shapes come back as they are. */
 export function launchSetWords(id: string): string {
   const m = /^(\d{4})-(\d{4})-([A-Z][a-z]{2})([A-Z][a-z]{2})-every(\d+)d-v\d+$/.exec(id);
   if (!m || !MONTHS[m[3]] || !MONTHS[m[4]]) return id;
   const years = m[1] === m[2] ? m[1] : `${m[1]} to ${m[2]}`;
-  return `${MONTHS[m[3]]} to ${MONTHS[m[4]]} launches every ${m[5]} days, ${years}`;
+  return `A launch day every ${m[5]} days, ${MONTHS[m[3]]} to ${MONTHS[m[4]]}, ${years}`;
 }
 
 /** The hidden check's year(s): "2021", or "2020 to 2021". */
@@ -41,7 +41,7 @@ const awayFromZero = (x: number) => `${x >= 0 ? "+" : "−"}${Math.max(1, Math.c
  *  be luck)", "Worse: 12 fewer finishes in 100"); the headline goes behind the cell's "i". */
 export function versusWords(v: Versus): { head: string; short: string; tone: "good" | "bad" | ""; detail: string } {
   const n = per100(v.gap);
-  const launches = (k: number) => `${k} launch${k === 1 ? "" : "es"}`;
+  const launches = (k: number) => `${k} launch day${k === 1 ? "" : "s"}`;
   const end = v.clear ? awayFromZero : signed;
   const detail =
     `Likely range ${end(v.ci95[0])} to ${end(v.ci95[1])} finishes per 100. ` +
@@ -49,7 +49,7 @@ export function versusWords(v: Versus): { head: string; short: string; tone: "go
   if (v.clear && n > 0) {
     const better = v.gap > 0;
     return {
-      head: `Clearly ${better ? "better" : "worse"}: about ${n} ${better ? "more" : "fewer"} finishes per 100 launches`,
+      head: `Clearly ${better ? "better" : "worse"}: about ${n} ${better ? "more" : "fewer"} finishes per 100 launch days`,
       short: `${better ? "Better" : "Worse"}: ${n} ${better ? "more" : "fewer"} finishes in 100`,
       tone: better ? "good" : "bad",
       detail,
@@ -57,9 +57,9 @@ export function versusWords(v: Versus): { head: string; short: string; tone: "go
   }
   // Not clear: we can't tell them apart, which isn't the same as equal (Ravi). "About
   // the same" only when the gap itself is small too.
-  if (n < 3) return { head: "About the same as our kayak on these launches", short: "Same as ours", tone: "", detail };
+  if (n < 3) return { head: "About the same as our kayak on these launch days", short: "Same as ours", tone: "", detail };
   return {
-    head: `Can't tell apart from our kayak on these launches: about ${n} ${v.gap > 0 ? "more" : "fewer"} per 100, which could be luck`,
+    head: `Can't tell apart from our kayak on these launch days: about ${n} ${v.gap > 0 ? "more" : "fewer"} per 100, which could be luck`,
     short: `Maybe ${v.gap > 0 ? "better" : "worse"} (could be luck)`,
     tone: "",
     detail,
@@ -81,7 +81,7 @@ export function bestHeadline(top: { label: string; finish_rate: number }[], grou
   const rates = top.map((r) => r.finish_rate).sort((a, b) => a - b);
   const mid = rates[Math.floor((rates.length - 1) / 2)];
   const pct = `${Math.round(mid * 100)}%`;
-  if (groups <= 1) return `Too close to call: every build finishes about ${pct} of the time.`;
+  if (groups <= 1) return `Too close to call: every boat finishes about ${pct} of the time.`;
   const first = top[0].label; // as the rows write it, capital O and all (Ines)
   if (top.length === 1) return `Best: ${first}, about ${pct} finish.`;
   const n = top.length - 1;
@@ -103,7 +103,7 @@ export function groupSummary(names: string[], best: boolean): string {
   const short = names.map((n) => n.replace(/, as built$/, ""));
   const n = short.length - 1;
   if (n <= 0) return names[0] ?? "";
-  if (best) return `${short[0]} and ${n} build${n === 1 ? "" : "s"} just as good`;
+  if (best) return `${short[0]} and ${n} boat${n === 1 ? "" : "s"} just as good`;
   if (short.length > 3) return `${short[0]} and ${n} more`;
   // "Randolph Rev C5 and Rev B": say the team's name once.
   const team = /^(Randolph )/.exec(short[0])?.[1];
