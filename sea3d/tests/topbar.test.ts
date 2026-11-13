@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { LINKS, boatChip, isCurrent, pageName } from "../src/topbar";
+import { LINKS, RACE_HREF, WATCH_HREF, boatChip, helmEntry, isCurrent, pageName } from "../src/topbar";
+import { raceItLink } from "../src/results";
+import { whoFromUrl } from "../src/helm/whoSteers";
+import { WATCH_DEFAULT_DAY } from "../src/helm/watchSource";
 import { pickedId, pickerEntries } from "../src/ui/boatPicker";
 import { shouldShowTitle } from "../src/title";
 
@@ -23,7 +26,8 @@ test("every page loads the top bar and reserves room for it", () => {
 
 test("the menu has every page, and every link points at a real page", () => {
   const names = pages.map((f) => f.replace(".html", "")).sort();
-  assert.deepEqual([...new Set(LINKS.map((l) => l.page))].sort(), names);
+  // The old Watch and Race pages stay on the site but no menu leads to them (M3: one sailing screen).
+  assert.deepEqual([...new Set(LINKS.map((l) => l.page))].sort(), names.filter((n) => n !== "voyage" && n !== "race"));
   // One-game step 1: Set sail, Boatyard, Practice up front; Watch a voyage, Race it, Leaderboard under More.
   assert.deepEqual(LINKS.slice(1).filter((l) => !l.more).map((l) => l.label), ["Set sail", "Boatyard", "Practice"]);
   assert.deepEqual(LINKS.filter((l) => l.more).map((l) => l.label), ["Watch a voyage", "Race it", "Leaderboard"]);
@@ -94,4 +98,32 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   assert.equal(pickedId(null), "kayak");
   assert.equal(pickedId({ kind: "stock", base: "stock_cruiser31", hash: "", name: "x", choices: {}, saved: "" }), "stock_cruiser31");
   assert.equal(pickedId({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {}, saved: "" }), "kayak");
+});
+
+test("Watch a voyage and Race it in every menu open the Set sail card, not the old pages (M3)", () => {
+  const by = (label: string) => LINKS.find((l) => l.label === label)!;
+  assert.equal(by("Watch a voyage").href, WATCH_HREF);
+  assert.equal(by("Race it").href, RACE_HREF);
+  for (const l of LINKS) assert.doesNotMatch(l.href, /voyage\.html|race\.html/, l.label);
+  // Watch: the autopilot on the usual day, nobody to race. Race: the autopilot against our model of the Rev C5.
+  assert.deepEqual(whoFromUrl(WATCH_HREF.split("?")[1]), { who: "autopilot", day: WATCH_DEFAULT_DAY, against: "" });
+  assert.deepEqual(whoFromUrl(RACE_HREF.split("?")[1]), { who: "autopilot", day: WATCH_DEFAULT_DAY, against: "revc" });
+  assert.equal(RACE_HREF, raceItLink()); // the same address the ending card's "Race it" uses
+  // The title screen's own More menu is plain HTML: the same two addresses.
+  const title = readFileSync(ROOT + "index.html", "utf8");
+  const more = title.slice(title.indexOf('id="t-more"'), title.indexOf("</details>", title.indexOf('id="t-more"')));
+  assert.ok(more.includes(`href="${WATCH_HREF}">Watch a voyage<`), "title: Watch a voyage");
+  assert.ok(more.includes(`href="${RACE_HREF.replace("&", "&amp;")}">Race it<`), "title: Race it");
+  assert.doesNotMatch(more, /voyage\.html|race\.html/);
+});
+
+test("the menu marks the one helm entry you are on", () => {
+  assert.equal(helmEntry(""), "");
+  assert.equal(helmEntry("?practice"), "practice");
+  assert.equal(helmEntry("?who=autopilot"), "watch");
+  assert.equal(helmEntry("?who=autopilot&against=revc&day=2020-05-01"), "race");
+  assert.equal(helmEntry("?who=you&against=revc"), "");
+  for (const [search, label] of [["", "Set sail"], ["?practice", "Practice"], ["?who=autopilot", "Watch a voyage"], ["?who=autopilot&against=revb", "Race it"]])
+    assert.deepEqual(LINKS.filter((l) => isCurrent(l, "helm", search)).map((l) => l.label), [label], search);
+  assert.deepEqual(LINKS.filter((l) => isCurrent(l, "leaderboard", "")).map((l) => l.label), ["Leaderboard"]);
 });
