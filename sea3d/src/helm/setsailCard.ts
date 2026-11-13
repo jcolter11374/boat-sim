@@ -8,6 +8,8 @@
 // startVoyage (window.__setsail.start), which reloads into practice with the choices.
 import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { onMyBoatChange, type MyBoat } from "../myboat";
+import type { IndexEntry } from "../replay/data";
+import { WHO_WORDS, watchDay, watchDays, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -63,6 +65,10 @@ export interface CardHooks {
   preview?: (where: SetSail["where"]) => void;
   /** Your best time on a course in a wind ("14:32"), or null before a first finish. */
   best?: (course: string, breeze: string) => string | null;
+  /** Who steers (M2, R2): the pick the page opens on, the voyages the autopilot has sailed, and how to go and watch one. */
+  who?: { who: Who; day: string };
+  voyages?: Promise<IndexEntry[]>;
+  watch?: (file: string) => void;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -94,6 +100,12 @@ export function mountSetSailCard(hooks: CardHooks): void {
   let breeze: string = at.breeze;
   let allChallenges = false;
   let allDays = false;
+  // Who steers: you (as always), or the autopilot all the way. The row shows once we know she has voyages to watch.
+  let who: Who = hooks.who?.who ?? "you";
+  let day = hooks.who?.day ?? "";
+  let sailed: IndexEntry[] = [];
+  /** The voyage Set sail opens with the autopilot steering; null with you steering, or when she hasn't sailed that day. */
+  let voyage: string | null = null;
   const launch = $<HTMLSelectElement>("launch");
   const challenge = $<HTMLSelectElement>("challenge");
   const more = $<HTMLDetailsElement>("more");
@@ -114,9 +126,20 @@ export function mountSetSailCard(hooks: CardHooks): void {
       where = k as SetSail["where"];
       draw();
     });
+    // Who steers: only for the crossing (practice is always you), and only when there are voyages to watch here.
+    const whoShown = where === "ocean" && !!hooks.watch && sailed.length > 0;
+    const auto = whoShown && who === "autopilot";
+    $("ss-who").hidden = !whoShown;
+    pills($("ss-who-opts"), (["you", "autopilot"] as const).map((k) => ({ key: k, label: WHO_WORDS[k].pill })), auto ? "autopilot" : "you", (k) => {
+      who = k as Who;
+      draw();
+    });
+    $("ss-who-line").textContent = WHO_WORDS[auto ? "autopilot" : "you"].line;
+    $("ss-after").textContent = WHO_WORDS[auto ? "autopilot" : "you"].after;
     // Annapolis: the course and the breeze instead of the boat, the day and the challenge.
     $("ss-course").hidden = !show.courseShown;
-    more.hidden = show.courseShown; // the crossing's options (how you steer, breakdowns) don't apply to practice
+    // The crossing's options (how you steer, breakdowns, the battery) don't apply to practice, or to a voyage the autopilot steers.
+    more.hidden = show.courseShown || auto;
     pills($("ss-course-opts"), SET_SAIL.course.map((o) => ({ key: o.key, label: o.label })), course, (k) => {
       course = k;
       draw();
@@ -129,6 +152,13 @@ export function mountSetSailCard(hooks: CardHooks): void {
     });
     // Launch day: Calm, Rough, or another day from the full list.
     $("ss-when").hidden = !show.whenShown;
+    // With the autopilot: the days she has sailed, as plain dates (no hint of how each ends: finding out is the point).
+    const days = auto ? watchDays(sailed, checkedBoat()?.value ?? "") : [];
+    const on = auto ? watchDay(days, day) : null;
+    voyage = on?.file ?? null;
+    $("ss-when-line").hidden = !auto || !!on;
+    $("ss-when-line").textContent = auto && !on ? WHO_WORDS.none : "";
+    $("go").toggleAttribute("aria-disabled", auto && !on);
     const lv = launch.value;
     const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : lv;
     // "Pick a day…" opens the other launch days as pills of their own, like the challenges' "More…"
@@ -137,7 +167,12 @@ export function mountSetSailCard(hooks: CardHooks): void {
       .filter((o) => o.value !== "2020-04-23" && o.value !== "0")
       .map((o) => ({ key: o.value, label: (o.textContent ?? "").replace(/:.*$/, "").replace(/ 2020$/, "").replace(/(\d+) (\w{3})\w*/, "$1 $2") }));
     const showDays = allDays || (named !== "calm" && named !== "rough");
-    pills(
+    if (auto)
+      pills($("ss-when-opts"), days.map((d) => ({ key: d.day, label: `${d.label} ${d.year}` })), on?.day ?? "", (k) => {
+        day = k;
+        draw();
+      });
+    else pills(
       $("ss-when-opts"),
       [
         { key: "calm", label: CARD_WORDS.when.calm[0], sub: CARD_WORDS.when.calm[1] },
@@ -157,7 +192,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
       },
     );
     // Weather challenge (optional): None, then each challenge; the one-line why under it.
-    $("ss-ch").hidden = where !== "ocean" || challenge.options.length < 2;
+    $("ss-ch").hidden = where !== "ocean" || auto || challenge.options.length < 2;
     // None and the first three, then "More…" for the rest (Leo: "None · Gentle June · … · …"), so the card stays short.
     const all = Array.from(challenge.options).map((o) => ({ key: o.value, label: o.value ? o.textContent!.replace(/^(\d+\.|Bonus:)\s*/, "").replace(/\s*\(.*\)$/, "") : "None" }));
     const picked = all.findIndex((o) => o.key === challenge.value);
@@ -209,6 +244,12 @@ export function mountSetSailCard(hooks: CardHooks): void {
   $("go").addEventListener(
     "click",
     (e) => {
+      // With the autopilot steering, Set sail opens her voyage of that day on this same screen.
+      if (where === "ocean" && who === "autopilot" && hooks.watch && sailed.length > 0) {
+        e.stopImmediatePropagation();
+        if (voyage) hooks.watch(voyage);
+        return;
+      }
       if (where !== "annapolis") return;
       e.stopImmediatePropagation();
       void hooks.start({ ...hooks.current(), where: "annapolis", course: course as SetSail["course"], breeze: breeze as SetSail["breeze"], challenge: "" });
@@ -251,4 +292,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
   document.getElementById("boats")?.addEventListener("change", draw);
   draw();
   void hooks.challengesReady.then(draw);
+  void hooks.voyages?.then((v) => {
+    sailed = v;
+    draw();
+  });
 }

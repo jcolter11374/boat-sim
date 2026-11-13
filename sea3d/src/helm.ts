@@ -43,6 +43,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
+import { watchLink, whoFromUrl } from "./helm/whoSteers";
 import { outcomeLine } from "./replay/story";
 import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
@@ -61,7 +62,7 @@ import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/ca
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
-import { localTime, shortLocal } from "./replay/localtime";
+import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
@@ -316,7 +317,7 @@ async function loadWatched(): Promise<Replay> {
   if (file) return loadReplay(".", file.replace(/^\.\//, ""));
   const base = params.get("data") ?? "./voyages";
   const v = pickVoyage(params.get("watch") ?? "", await loadIndex(base));
-  if (!v) throw new Error("there are no recorded voyages on this copy of the site");
+  if (!v) throw new Error("there are no voyages to watch on this copy of the site");
   return loadReplay(base, v.file);
 }
 // "Race it" on this same screen (M2, R3): helm.html?race=<a>,<b>&launch=<0..5>. Two boats, the same
@@ -910,8 +911,8 @@ function drawWhen(force = false): void {
   $("day").textContent = day;
   $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
   $("local").textContent = localTime(ms, whenHere[0], whenHere[1]);
-  // The strip's date beside the day: local, short; UTC on hover.
-  $("c-date").textContent = shortLocal(ms, whenHere[0], whenHere[1]);
+  // The strip's date beside the day: the boat's local time and its zone, short; UTC on hover.
+  $("c-date").textContent = `${shortLocal(ms, whenHere[0], whenHere[1])} ${zoneLabel(whenHere[0], whenHere[1], ms)}`; // the zone too: locked item S1
   $("c-date").title = $("when").textContent ?? "";
   drawGoal(ms);
 }
@@ -4293,7 +4294,20 @@ const bestFor = (course: string, breeze: string): string | null => {
   const t = readBest(bestKey(course, breeze as Breeze));
   return t == null ? null : trialClock(t);
 };
-if (!shared) mountSetSailCard({ current: currentSetSail, start: startVoyage, challengesReady, preview: previewBoat, best: bestFor });
+if (!shared) mountSetSailCard({
+    current: currentSetSail,
+    start: startVoyage,
+    challengesReady,
+    preview: previewBoat,
+    best: bestFor,
+    // Who steers (M2, R2): with the autopilot, Set sail opens her voyage of that day on this screen (?watch=).
+    // Only with ?who= in the address for now (Elena): the row goes on for everyone, and the menu's "Watch a
+    // voyage" moves here, once the watched screen has everything the old one has (R5: the compass strip and
+    // "Look up at the sky" (L4), the story notes, the points of interest, the cinematic).
+    ...(params.has("who")
+      ? { who: whoFromUrl(location.search), voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []), watch: (file: string) => location.assign(watchLink(location.search, file)) }
+      : {}),
+  });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
 // the crossing must not begin() here, among the Bay's marks, so it reloads into a voyage page.
 if (!shared && PRACTICE)
