@@ -117,13 +117,46 @@ export function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
+// ---------------------------------------------------------------- the ways on (M3 piece L4)
+// Every ending offers Leaderboard and Race it. These say where each one leads, so the results
+// card (helm/ending.ts) and any other page ask one place. Neither leads to the old pages.
+
+const RACE_BOATS = ["kayak", "revc", "revb", "mine"];
+
+/**
+ * Where "Leaderboard" leads from an ending. A weather challenge has its own tab (John, W5), so
+ * its ending opens that tab; any other ending opens the designs board at this build's row.
+ */
+export function leaderboardLink(from: { build?: string | null; challenge?: string | null } = {}): string {
+  if (from.challenge) return "./leaderboard.html#challenges";
+  return from.build ? `./leaderboard.html#${encodeURIComponent(from.build)}` : "./leaderboard.html";
+}
+
+/**
+ * Where "Race it" leads from an ending: the Set sail card with the autopilot steering and another
+ * boat picked, so the player sees who she races and presses "Start the race". `boat` is the card's
+ * own boat value ("" our kayak, "revc", "revb", "mine"); `against` picks the rival (left out, the
+ * card's usual one); `day` keeps the launch day just sailed. Null for a boat a race can't run
+ * (a stock yacht): that ending leaves "Race it" out.
+ */
+export function raceItLink(from: { boat?: string | null; against?: string | null; day?: string | null; quality?: string | null } = {}): string | null {
+  const mine = from.boat ? from.boat : "kayak";
+  if (!RACE_BOATS.includes(mine)) return null;
+  const rival = from.against && RACE_BOATS.includes(from.against) && from.against !== mine ? from.against : mine === "revc" ? "kayak" : "revc";
+  const p = new URLSearchParams({ who: "autopilot", against: rival });
+  const day = (from.day ?? "").slice(0, 10);
+  if (/^\d{4}-\d\d-\d\d$/.test(day)) p.set("day", day);
+  if (from.quality && /^(low|medium|high|ultra)$/.test(from.quality)) p.set("quality", from.quality);
+  return `./helm.html?${p.toString()}`;
+}
+
 /** The ways on from Results. `boatyard` is the link that reopens this design
  *  (the remembered "my boat", myboat.ts myBoatYardLink, when there is one). */
 export function nextLinks(build: string, boatyard = "./boatyard.html"): { label: string; href: string }[] {
   return [
     { label: "Back to the Boatyard", href: boatyard },
-    { label: "Race it", href: "./race.html" },
-    { label: "Leaderboard", href: `./leaderboard.html#${encodeURIComponent(build)}` },
+    { label: "Race it", href: raceItLink() ?? "./helm.html" },
+    { label: "Leaderboard", href: leaderboardLink({ build }) },
   ];
 }
 

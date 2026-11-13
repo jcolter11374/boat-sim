@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boardDay, nextLinks, ordinal, standing, standingText, type Board, type Grid } from "../src/results";
+import { boardDay, leaderboardLink, nextLinks, raceItLink, ordinal, standing, standingText, type Board, type Grid } from "../src/results";
 
 const row = (design: string, finish_rate: number, tier: number) => ({
   tier,
@@ -97,8 +97,26 @@ test("ordinals", () => {
 test("the ways on: back to the Boatyard, race it, the build's leaderboard row", () => {
   assert.deepEqual(nextLinks("revc-drive.wing"), [
     { label: "Back to the Boatyard", href: "./boatyard.html" },
-    { label: "Race it", href: "./race.html" },
+    { label: "Race it", href: "./helm.html?who=autopilot&against=revc" },
     { label: "Leaderboard", href: "./leaderboard.html#revc-drive.wing" },
   ]);
   assert.equal(nextLinks("k-p25", "./boatyard.html#base=revc&rudder=single")[0].href, "./boatyard.html#base=revc&rudder=single");
+});
+
+test("Leaderboard from an ending: a challenge opens its own tab, anything else the build's row", () => {
+  assert.equal(leaderboardLink({ build: "k-p25", challenge: "sandys-shadow" }), "./leaderboard.html#challenges");
+  assert.equal(leaderboardLink({ build: "revc-drive.wing" }), "./leaderboard.html#revc-drive.wing");
+  assert.equal(leaderboardLink({ build: "a b" }), "./leaderboard.html#a%20b");
+  assert.equal(leaderboardLink(), "./leaderboard.html");
+});
+
+test("Race it from an ending: the Set sail card with a rival picked, never the old race page", () => {
+  assert.equal(raceItLink(), "./helm.html?who=autopilot&against=revc");
+  assert.equal(raceItLink({ boat: "", day: "2020-05-01T12:00" }), "./helm.html?who=autopilot&against=revc&day=2020-05-01");
+  assert.equal(raceItLink({ boat: "revc" }), "./helm.html?who=autopilot&against=kayak");
+  assert.equal(raceItLink({ boat: "mine", against: "revb", quality: "low" }), "./helm.html?who=autopilot&against=revb&quality=low");
+  assert.equal(raceItLink({ boat: "revb", against: "revb" }), "./helm.html?who=autopilot&against=revc"); // she can't race herself
+  assert.equal(raceItLink({ boat: "stock_cruiser31" }), null); // a stock yacht can't race: leave the button out
+  assert.equal(raceItLink({ day: "soon", quality: "<x>" }), "./helm.html?who=autopilot&against=revc");
+  for (const l of [raceItLink(), raceItLink({ boat: "revc" })]) assert.doesNotMatch(l!, /race\.html|voyage\.html/);
 });
