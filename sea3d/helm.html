@@ -183,7 +183,6 @@
   #r-medal .result-next:empty { display: none; }
   #result .rc-mid[hidden], #r-calls[hidden], #r-details[hidden], #r-info[hidden], #r-stars[hidden] { display: none; }
   /* A phone: the results card sits at the bottom and leaves the boat a band above it, as the Set sail card does (Elena); it scrolls inside itself first. */
-  @media (max-width: 699px) { #result { align-items: flex-end; padding: 0 12px 12px; } #result .rc { max-height: calc(100dvh - var(--bar, 0px) - 180px); } }
   #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
   .practice-note { font-size: 12px; opacity: .75; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
@@ -399,6 +398,14 @@
   .rc-links button { all: unset; color: var(--dim); cursor: pointer; }
   .rc-links button:hover, .rc-links button:focus-visible { color: var(--ink); text-decoration: underline; }
   .rc-links [hidden], .rc-btns [hidden], #r-back[hidden] { display: none; }
+  /* On a phone (M3, E5): the card at the bottom with the boat whole in the band above it (Elena). A long card
+     (a challenge's stars and story) scrolls inside, and its buttons stay on its bottom edge, so the headline,
+     the award and the first button are all on screen without scrolling. After #result's own rules, so it wins. */
+  @media (max-width: 699px) {
+    #result { align-items: flex-end; padding: 0 12px 12px; }
+    #result .rc { max-height: calc(100dvh - var(--bar, 0px) - 180px); }
+    #result .rc-btns { position: sticky; bottom: -16px; z-index: 1; margin: 0 -26px -16px; padding: 18px 26px 16px; background: linear-gradient(rgba(11,21,35,0), rgb(11,21,35) 14px); }
+  }
   /* Looking around after a watched voyage: the one way back to its ending card. */
   #r-back { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + var(--strip-h, 62px) + 12px); z-index: 6; font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px;
     color: var(--ink); background: rgba(10,18,30,.62); border: 1px solid rgba(255,255,255,.22); backdrop-filter: blur(8px); cursor: pointer; }
