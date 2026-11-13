@@ -257,3 +257,14 @@ export function slideRoom(across: number): number {
   if (!Number.isFinite(across)) return 0;
   return Math.min(1, Math.max(0, (0.5 - across) / 0.2));
 }
+
+/**
+ * On a phone, where the boat's waterline sits (px from the top) in the band of sea between the bar's foot and
+ * the Set sail card's top. A small boat sits at the band's middle: her hull and mast are whole inside it, with
+ * air below her before the card. A yacht's mast stands tall above her waterline, so she sits lower, 70% down,
+ * and her masthead clears the bar.
+ */
+export function bandLine(top: number, bottom: number, tall: boolean): number {
+  const h = Math.max(bottom - top, 0);
+  return top + (tall ? 0.7 : 0.5) * h;
+}
