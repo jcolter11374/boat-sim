@@ -46,9 +46,10 @@ import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
+import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
-import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -2858,7 +2859,6 @@ function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
   // A challenge: the stars tell its story (whether she came through, not who won), and it has its own day.
   const ch = !!m && !!c.stars;
   $("result").classList.toggle("mission", ch);
-  $("again").textContent = ch ? "Try again" : "Play again";
   if (ch) $("r-story").textContent = "";
   if (!m || !c.stars) return;
   const t = starsText(c.stars, m.goal, c.ghost_stars);
@@ -2930,18 +2930,41 @@ async function watchFinish(): Promise<void> {
   $("r-calls").hidden = true;
   $("r-next").replaceChildren();
   drawResultMap();
-  $("again").textContent = "Watch again";
-  const sail = $<HTMLAnchorElement>("r-sail");
-  sail.href = sailLink(location.search, r.start);
-  sail.hidden = false;
-  $("r-look").hidden = false;
-  $("r-postcard").hidden = false; // as the old Watch a voyage ended: the picture on screen, the map and what happened
+  // Save postcard as the old Watch a voyage ended: the picture on screen, the map and what happened.
+  showWays("watch", { sailHref: sailLink(location.search, r.start), day: r.start, raceId: "kayak", canLook: true });
   hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle();
   $("again").focus({ preventScroll: true });
+}
+
+/** The card's buttons and links by what they do (helm/ending.ts). */
+const WAY_EL: Record<WayId, string> = { again: "again", follow: "r-follow", sail: "r-sail", boat: "r-boat", race: "r-race", board: "r-board", day: "r-day", postcard: "r-postcard", look: "r-look", watch: "r-watch" };
+/** The boat sailed, as the race knows her: our kayak, a Randolph model, the player's own design; null for one the race can't run. */
+function myRaceId(): string | null {
+  const b = loadMyBoat();
+  if (!b) return "kayak";
+  if (b.kind !== "yard") return null;
+  return b.hash ? "mine" : ["kayak", "revc", "revb"].includes(b.base) ? b.base : null;
+}
+/** The ways on from this ending, the same ones in the same order on every card (M3): buttons first, the quiet links under them. */
+function showWays(mode: EndMode, ctx: Omit<WayCtx, "search">): void {
+  const w = waysOn(mode, { search: location.search, ...ctx });
+  for (const id of Object.values(WAY_EL)) $(id).hidden = true;
+  const place = (row: HTMLElement, ways: typeof w.main, button: boolean) => {
+    for (const x of ways) {
+      const el = $(WAY_EL[x.id]);
+      el.textContent = x.label; // a player's own name for a design can be in it: text only
+      if (x.href && el instanceof HTMLAnchorElement) el.href = x.href;
+      el.classList.toggle("btn", button && el instanceof HTMLAnchorElement);
+      el.hidden = false;
+      row.append(el);
+    }
+  };
+  place($("r-btns"), w.main, true);
+  place($("r-links"), w.quiet, false);
 }
 
 /** The race's results and its boats' names in the race's own order (A, B), kept when the player follows the other boat on. */
@@ -3020,15 +3043,8 @@ async function raceFinish(): Promise<void> {
   $("r-calls").hidden = true;
   $("r-next").replaceChildren();
   drawResultMap();
-  $("again").textContent = "Race again";
-  const follow = $<HTMLButtonElement>("r-follow");
-  follow.hidden = !more;
-  follow.textContent = `Follow ${short(names[1])} to the end`; // a player's own name for a design: text only
-  // "Change the boats" beside it: back to the Set sail card with the autopilot and this other boat picked.
-  const rb = (params.get("race") ?? "").split(",")[1] ?? "";
-  const changer = $<HTMLAnchorElement>("r-boat");
-  changer.textContent = "Change the boats";
-  changer.href = `./helm.html?who=autopilot&against=${(RACE_BOATS as readonly string[]).includes(rb) ? rb : "revc"}`;
+  // "Follow her to the end" when she is still sailing; "Change the boats" goes back to the Set sail card with the autopilot and this other boat picked.
+  showWays("race", { rival: (params.get("race") ?? "").split(",")[1] ?? "", followName: more ? short(names[1]) : undefined });
   $("result").classList.add("watched", "raced");
   document.body.classList.add("results");
   $("result").hidden = false;
@@ -3173,8 +3189,7 @@ async function finish(): Promise<void> {
   $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
   $("r-notes").textContent = bits.join(" ");
   const mine = loadMyBoat();
-  if (mine) $<HTMLAnchorElement>("r-boat").href = `./${myBoatYardLink(mine)}`;
-  $<HTMLAnchorElement>("r-board").href = `./leaderboard.html#${encodeURIComponent(c.build)}`;
+  showWays(mi && (c as Card & { stars?: Stars }).stars ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch });
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle(); // a soft knock, and the sea drops to half under the card

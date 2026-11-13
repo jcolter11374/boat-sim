@@ -712,9 +712,17 @@ try {
       if (await page.locator("#result").isHidden()) fail("helm: the results card isn't shown");
       // Results, "where this leaves you" (one-game step 3): a standing line and the three ways on.
       await page.waitForFunction(() => window.__helm.standing, null, { timeout: 30000 }).catch(() => fail("helm: the results card never said where the build stands"));
-      // The story-first card: a headline, the standing in one line, Play again bright, and Race it · Leaderboard · Watch a voyage.
-      const next = await page.evaluate(() => ({ title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", links: [...document.querySelectorAll("#r-links a")].map((a) => a.getAttribute("href")) }));
-      if (!next.title || next.nums < 2 || next.nums > 3 || !next.head || next.links.length !== 3 || !next.links[1].startsWith("./leaderboard.html#")) fail(`helm results: ${JSON.stringify(next)}`);
+      // The story-first card: a headline, the standing in one line, then the ways on every ending has, in their one
+      // order (M3, helm/ending.ts): Play again bright, Change the boat, Race it, Leaderboard; quiet links under them.
+      const next = await page.evaluate(() => {
+        const seen = (sel) => [...document.querySelectorAll(sel)].filter((e) => !e.hidden && e.offsetParent).map((e) => ({ text: e.textContent, href: e.getAttribute("href") ?? "" }));
+        return { title: document.querySelector("#r-head")?.textContent ?? "", nums: document.querySelectorAll("#r-nums .n").length, head: document.querySelector("#r-next .standing")?.textContent ?? "", ways: seen("#r-btns > *"), quiet: seen("#r-links > *") };
+      });
+      const ways = next.ways.map((w) => w.text).join(" | ");
+      if (!next.title || next.nums < 2 || next.nums > 3 || !next.head) fail(`helm results: ${JSON.stringify(next)}`);
+      if (ways !== "Play again | Change the boat | Race it | Leaderboard") fail(`helm results: the ways on are "${ways}"`);
+      if (!next.ways[3].href.startsWith("./leaderboard.html#") || !/who=autopilot&against=/.test(next.ways[2].href)) fail(`helm results: where the ways on lead: ${JSON.stringify(next.ways)}`);
+      if ([...next.ways, ...next.quiet].some((w) => /race\.html|voyage\.html/.test(w.href))) fail(`helm results: a way on leads to an old page: ${JSON.stringify([...next.ways, ...next.quiet])}`);
       await snap({ path: "test-output/helm-result.png" });
       log.push(`helm sailed to day ${six.day.toFixed(2)} (${six.stop}), ${local}, then ${hops} hops to the card (${card.verdict}: ${card.boat.outcome} day ${card.boat.days.toFixed(1)}, ghost ${card.ghost.outcome} day ${card.ghost.days.toFixed(1)}); ${next.head}`);
       // Start from a port (John hit "can't start from a port yet" when the page
