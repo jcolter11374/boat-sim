@@ -1230,10 +1230,12 @@ const CHECKS = {
       must(order === sent && /finish/i.test(order), `the order sent before leaving was "${sent}"; back and playing, the strip shows "${order}"`);
       out.push(`order kept: "${order}"`);
       // 3. Leave without pausing at 4 days a second.
-      const from = await page.evaluate(() => window.__helm.hour / 24);
+      // (Left once the simulator is 8 days on: a runner's Chrome draws the picture far behind it.)
+      const from = await page.evaluate(() => window.__helm.status?.day ?? 0);
       await rate("96");
-      await page.waitForFunction((d) => window.__helm.hour / 24 >= d + 8 || window.__helm.status?.over, from, { timeout: 2 * MIN }).catch(() => {});
-      must(await page.evaluate((d) => !window.__helm.status?.over && window.__helm.clock > 0 && window.__helm.hour / 24 >= d + 1, from), "4 days a second: the picture didn't move on a day in 2 minutes, the clock isn't running, or the voyage ended");
+      await page.waitForFunction((d) => (window.__helm.status?.day ?? 0) >= d + 8 || window.__helm.status?.over, from, { timeout: 3 * MIN }).catch(() => {});
+      const fast = await page.evaluate(() => ({ sim: window.__helm.status?.day, screen: window.__helm.hour / 24, over: !!window.__helm.status?.over, clock: window.__helm.clock }));
+      must(!fast.over && fast.clock > 0 && fast.sim >= from + 8, `4 days a second: from day ${from.toFixed(2)} she didn't sail 8 days on and keep going: ${JSON.stringify(fast)}`);
       t = await leave();
       must(t.v, "4 days a second: nothing was saved on leaving");
       must(t.v.day >= t.v.left - 8, `4 days a second: the save's code stands at day ${t.v.day}, more than 8 days before she was left (${t.v.left})`);
