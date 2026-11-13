@@ -6,7 +6,7 @@
  * that needs the Boatyard to build it first (the Randolph Rev C5, a new design) is a link
  * there instead. Names a player typed are only ever set as text.
  */
-import { clearMyBoat, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
+import { REVB_AS_BUILT, clearMyBoat, isRevbAsBuilt, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
 import { PLAYABLE_STOCK, STOCK, isStock, playerName, type StockKey } from "../boats/specs";
 import { ABOUT } from "../boats/about";
 
@@ -43,7 +43,8 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
   out.push({ id: "yard:revc", group: "The Randolph team's boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
-  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === ""))
+  out.push({ id: "revb", group: "The Randolph team's boats", name: REVB_AS_BUILT.name, fact: "their earlier 1.5 m wing-sail robot boat, as built: wind only, no motor" });
+  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === "") && !isRevbAsBuilt(mine))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
   out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "pick a hull, sails or motors, batteries and electronics", href: "./boatyard.html" });
   return out;
@@ -52,6 +53,7 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
 /** Which row stands for the boat saved now. */
 export function pickedId(mine: MyBoat | null): string {
   if (!mine || (mine.kind === "yard" && mine.base === "kayak" && mine.hash === "")) return "kayak";
+  if (isRevbAsBuilt(mine)) return "revb";
   return mine.kind === "stock" ? mine.base : "mine";
 }
 
@@ -60,6 +62,10 @@ export function choose(id: string): void {
   if (id === "mine") return; // already saved
   if (id === "kayak") {
     clearMyBoat(); // no boat saved = Our kayak, everywhere
+    return;
+  }
+  if (id === "revb") {
+    saveMyBoat({ ...REVB_AS_BUILT });
     return;
   }
   const k = id as StockKey;
