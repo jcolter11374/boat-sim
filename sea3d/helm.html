@@ -230,7 +230,8 @@
   body.bare #compass, body.bare #lookup, body.bare #skylabels, body.cinema #compass, body.cinema #lookup, body.cinema #skylabels,
   body.results #compass, body.results #lookup, body.results #skylabels, body:has(#mapbox.big) #compass, body:has(#mapbox.big) #lookup { visibility: hidden !important; }
   @media (max-width: 899px) { #compass, #lookup { display: none !important; } body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + 54px); } }
-  #result.watched #r-watch, #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
+  #result.raced #r-race { display: none; } /* you have just raced: "Change the boats" is the way on (Elena) */
+  #result.watched #r-watch, #result.watched #r-day, #result.watched:not(.raced) #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -464,6 +465,11 @@
   #keylist:not([hidden]) { display: flex; gap: 22px; }
   #keylist .kg { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
   #keylist kbd { font: 600 11px system-ui, sans-serif; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--hud-line); background: rgba(255,255,255,.06); text-align: center; white-space: nowrap; justify-self: start; min-width: 14px; }
+  /* The other boat's tag in a race: small, in the HUD's glass, and out of the way of clicks. */
+  #rivaltag { position: fixed; left: 0; top: 0; z-index: 4; pointer-events: none; white-space: nowrap; padding: 3px 8px; border-radius: 8px; font: 600 12px system-ui, sans-serif;
+    color: var(--ink); background: rgba(8,18,32,.72); border: 1px solid var(--hud-line, rgba(160,200,255,.2)); }
+  #rivaltag span { margin-left: 6px; font-weight: 400; color: var(--dim); font-variant-numeric: tabular-nums; }
+  body.bare #rivaltag, body.results #rivaltag, body.arriving #rivaltag, body:not(.sailing) #rivaltag { display: none; }
   #keyhint { position: fixed; left: 50%; bottom: calc(var(--edge) + var(--strip-h) + 8px); transform: translateX(-50%); font: 500 var(--ui) system-ui, sans-serif;
     color: rgba(225,235,248,.9); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; z-index: 5; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
@@ -737,6 +743,8 @@
 </section>
 
 <div id="notes" aria-live="polite"></div>
+<!-- The other boat in a race: her name and how far off she is, above her on the water (M2, R4). -->
+<div id="rivaltag" hidden><b></b><span></span></div>
 
 <div id="practice-what" class="glass" hidden></div>
 <div id="practice-end" class="overlay" hidden><div class="card glass">
@@ -837,7 +845,7 @@
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
     <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a></div>
-    <div class="rc-links" id="r-links"><a href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
+    <div class="rc-links" id="r-links"><a id="r-race" href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>

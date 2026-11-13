@@ -934,8 +934,12 @@ try {
       orders: getComputedStyle(document.getElementById("orders-tab")).display,
       lead: getComputedStyle(document.getElementById("c-lead")).display,
     }));
-    if (rv.err) log.push(`helm?race: no simulator to race on here (${rv.err})`);
+    // Only "this copy has no simulator (or no race in it)" may pass quietly: any other error is a failure (Lena).
+    if (/^no (simulator files|race in the simulator)$/.test(rv.err ?? "")) log.push(`helm?race: no simulator to race on here (${rv.err})`);
+    else if (rv.err) fail(`helm?race failed to open: ${rv.err}`);
     else {
+      // The second boat is on the water beside yours at the start, with her name above her (Elena).
+      await page.waitForFunction(() => window.__helm.rival?.shown, null, { timeout: 30000 }).catch(() => fail("the other boat in a race isn't on the water at the start"));
       if (rv.view !== "race" || rv.clock !== 0 || rv.first !== "Real time" || rv.orders !== "none" || rv.lead === "none") fail(`helm?race didn't open the race on the sailing screen: ${JSON.stringify(rv)}`);
       if (!/\(our model\)$/.test(rv.names?.[1] ?? "")) fail(`the Randolph boat in a race must be named as our model (B2): ${JSON.stringify(rv.names)}`);
       await page.keyboard.press("Digit4");
