@@ -58,6 +58,8 @@ import { CALLS, HONEST, briefing, callToast, goalChip, missionHead, starsText, t
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
+import { equipmentParts } from "./replay/equipment";
+import { equipmentIcons } from "./replay/hud";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
@@ -3372,6 +3374,7 @@ renderer.setAnimationLoop(() => {
       FOAM_LAMP_UNIFORMS.uFoamLamp.value.set(lampW.x, lampW.y, lampW.z, FOAM_AT_NIGHT * NAV_NIGHT.value);
       FOAM_LAMP_UNIFORMS.uFoamLampR.value = 1.5 * Math.max(1, spec.length / KAYAK.length);
     }
+    const failedNow = r ? failuresAt(r, h) : new Map<string, string>();
     model.gear.update(
       {
         speed: stw / spec.cruiseSpeed,
@@ -3379,10 +3382,12 @@ renderer.setAnimationLoop(() => {
         sun: r ? (valueAt(r, r.ghi, h) ?? 0) / 1000 : 0.5,
         comms: r ? commsAt(r, h) ?? "" : "",
         flow: apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)),
-        failed: r ? failuresAt(r, h) : new Map(),
+        failed: failedNow,
       },
       t,
     );
+    // The strip's equipment cell (the same icons as Watch a voyage): the watched boat's parts at the shown hour.
+    equipmentIcons(equipmentParts(spec.key, r ? commsAt(r, h) : null, failedNow), true, "", false);
     model.rig?.update(dt, {
       flow: apparentFlow(wu, wv, stw, 90 - THREE.MathUtils.radToDeg(smoothYaw)),
       plan: wheelNow ? wheelNow.plan : r ? planAt(r, h) : null,

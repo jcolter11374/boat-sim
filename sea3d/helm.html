@@ -328,7 +328,7 @@
      The world gets the screen: one instrument strip at the bottom, the orders in a drawer on the left,
      a corner map top right, toasts top centre. Everything else is one key or one click away. */
   :root { --hud: rgba(8,16,28,.46); --hud-solid: rgba(8,16,28,.82); --hud-line: rgba(200,220,245,.14);
-    --strip-w: min(calc(var(--ui) * 80), calc(100vw - 16px)); --strip-h: calc(var(--ui) * 4.83); --edge: 10px; --strip-bg: rgba(10,18,28,.62); }
+    --strip-w: min(calc(var(--ui) * 93), calc(100vw - 16px)); --strip-h: calc(var(--ui) * 4.83); --edge: 10px; --strip-bg: rgba(10,18,28,.62); }
   .hud { background: var(--hud); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); border-radius: 10px; }
   .num, #strip .v, #wheel .w-cell b, #wheel-goal { font-variant-numeric: tabular-nums; }
   button.x { background: none; border: 0; padding: 0 4px; font-size: 18px; line-height: 1; color: var(--dim); }
@@ -341,9 +341,11 @@
   body.sailing #topbar { transition: transform .35s ease; }
   body.no-bar-anim #topbar { transition: none !important; }
 
-  /* The strip: six instruments, translucent, borderless, numbers that don't jitter. */
+  /* The strip: the instruments, translucent, borderless, numbers that don't jitter. The equipment cell is
+     the one Watch a voyage has (M2, one strip for every mode): the strip is 13 units wider to seat it,
+     so the other cells keep their widths (the time cell must hold "Real time" on one line). */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 1.8fr 1.1fr .95fr .75fr .95fr 1fr .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: 1.9fr 1.1fr .95fr .75fr .95fr 1fr max-content .9fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -357,6 +359,16 @@
   #strip .c-order .v::after { content: " ▸"; color: var(--orange); font-size: .76em; }
   #strip .c-order[aria-expanded="true"] .v::after { content: " ◂"; }
   #c-lead.ahead .v { color: var(--good); } #c-lead.behind .v { color: #ff8a7a; }
+  #eq { display: flex; gap: .15em; align-items: center; height: 1.63em; }
+  #eq .part { width: .9em; height: .9em; color: rgba(233,241,251,.55); flex: none; display: inline-flex; }
+  #eq .part svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #eq .part.bad { color: var(--bad); filter: drop-shadow(0 0 3px rgba(255,93,93,.8)); }
+  #eq .part.pulse { animation: eqpulse .9s ease-in-out 1; }
+  @keyframes eqpulse { 50% { transform: scale(1.45); } }
+  @media (prefers-reduced-motion: reduce) { #eq .part.pulse { animation: none; } }
+  /* Broken parts: a red dot with the count on the cell, and it stays (as on Watch a voyage). */
+  #strip #c-eq .l[data-bad]::after { content: attr(data-bad); display: inline-block; vertical-align: 1px; margin-left: .45em; min-width: 1.45em; height: 1.45em; padding: 0 .3em; box-sizing: border-box; letter-spacing: 0;
+    border-radius: 999px; background: var(--bad); color: #fff; font: 700 .8em/1.8em system-ui, sans-serif; text-align: center; }
   #strip .meter { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; width: 100%; }
   #strip .meter[hidden] { display: none; }
   #strip .meter i { display: block; height: 100%; width: 100%; background: var(--good); transition: width .4s; }
@@ -498,6 +510,16 @@
     #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; grid-auto-rows: 4em; align-content: center; }
     #strip #c-bat { border-left: 0; padding-left: 0; }
     #keysbtn { justify-self: end; margin-right: 4px; }
+    /* Nine things in two rows of four: the keys button rides in the top row's own narrow column, and
+       the equipment icons wrap to two lines when a phone's column is too narrow for nine in a row. */
+    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr 2.2em; }
+    #strip #keysbtn { grid-column: 5; grid-row: 1; margin-right: 0; }
+  }
+  /* A phone: no room for nine icons, so the strip is as it was before the equipment cell (breakdowns are in the notes). */
+  @media (max-width: 480px) {
+    #strip { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
+    #strip #keysbtn { grid-column: auto; grid-row: auto; margin-right: 4px; }
+    #strip #c-eq { display: none; }
     #notes { width: min(420px, calc(100vw - 24px)); top: calc(var(--bar, 0px) + 54px); }
     #mapbox:not(.big) #chart, #mapbox:not(.big) .mhead { display: none; }
     #mapbox:not(.big) { width: auto; padding: 4px; }
@@ -545,6 +567,7 @@
   <div class="cell" id="c-speed"><span class="v" id="c-speedv">–</span><span class="l">speed</span></div>
   <div class="cell" id="c-bat"><span class="v" id="c-batv">–</span><span class="l" id="c-batl">battery</span><span class="meter"><i id="c-batbar"></i></span></div>
   <button class="cell" id="c-wind" aria-controls="fcbox" aria-expanded="false" title="The 5-day forecast (F)"><span class="v" id="c-windv">–</span><span class="l" id="c-wavel">wind</span></button>
+  <div class="cell" id="c-eq"><div id="eq"></div><span class="l">equipment</span></div>
   <div class="cell" id="c-lead"><span class="v" id="c-leadv">level</span><span class="l">vs the ghost</span></div>
   <button id="keysbtn" aria-expanded="false" aria-controls="keylist" title="All the keys (?)">?</button>
 </section>
