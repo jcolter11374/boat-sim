@@ -2934,7 +2934,9 @@ const CHECKS = {
       const problems = [];
       const PEARSON = JSON.stringify({ v: 1, kind: "stock", base: "stock_pearson31_2", hash: "", name: "Pearson 31-2 (our model)", choices: { base: "stock_pearson31_2" }, saved: "2026-11-13T09:00:00.000Z" });
       const osm = (p) => p.evaluate(() => { const e = document.getElementById("osm"); const r = e?.getBoundingClientRect(); return { here: !!e, shown: !!e && !e.hidden && e.offsetParent !== null && r.width > 0 && r.bottom <= innerHeight + 1, text: e?.textContent.trim() ?? "" }; });
-      for (const [boat, saved, w, h] of [["kayak", null, 1280, 720], ["pearson", PEARSON, 1280, 720], ["kayak", null, 390, 844], ["pearson", PEARSON, 390, 844]]) {
+      const REVC = JSON.stringify({ v: 1, kind: "yard", base: "revc", hash: "#base=revc", name: "Randolph Rev C5 (our model)", choices: { base: "revc" }, saved: "2026-11-13T09:00:00.000Z" });
+      const BOATS = [["kayak", null], ["pearson", PEARSON], ["revc", REVC]];
+      for (const [boat, saved, w, h] of [1280, 390].flatMap((w) => BOATS.map(([b, v]) => [b, v, w, w === 1280 ? 720 : 844]))) {
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block", ...(w < 500 && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}) });
         if (saved) await ctx.addInitScript((v) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", v); } catch {} }, saved);
         const p = await ctx.newPage();
@@ -2946,7 +2948,7 @@ const CHECKS = {
           await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
           await p.waitForLoadState("networkidle").catch(() => {});
           await p.waitForTimeout(12000);
-          const name = await p.evaluate(() => document.getElementById("t-boatname")?.textContent.trim());
+          const name = await p.evaluate(() => `${document.getElementById("t-boatname")?.textContent.trim()} (hero ${window.__sea3d?.hero})`);
           const a = await osm(p);
           const path = `live-${BROWSER}-${boat}-${w}.jpg`;
           if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
