@@ -3136,6 +3136,43 @@ const CHECKS = {
       return `${sum}; ${out.join("; ")}`;
     },
   },
+  // #504: the top bar's boat chip shows the whole name at 360 and 390 (Our kayak, and the Pearson), and the
+  // title's My boat line says the same.
+  "look-chip": {
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const bad = [];
+      const PEARSON = JSON.stringify({ v: 1, kind: "stock", base: "stock_pearson31_2", hash: "", name: "Pearson 31-2 (our model)", choices: { base: "stock_pearson31_2" }, saved: "2026-11-13T09:00:00.000Z" });
+      for (const [boat, saved, want] of [["kayak", null, "Our kayak"], ["pearson", PEARSON, "Pearson 31-2 (our model)"]]) {
+        for (const [w, h] of [[390, 844], [360, 740]]) {
+          const ctx = await browser.newContext({ viewport: { width: w, height: h }, ...(BROWSER === "chromium" ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}), serviceWorkers: "block" });
+          if (saved) await ctx.addInitScript((v) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", v); } catch {} }, saved);
+          const p = await ctx.newPage();
+          try {
+            await p.goto(SITE + "?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+            await p.waitForFunction(() => document.getElementById("topbar-boat") && document.getElementById("t-boatname"), null, { timeout: 2 * MIN }).catch(() => {});
+            await p.waitForTimeout(3000);
+            const m = await p.evaluate(() => {
+              const chip = document.getElementById("topbar-boat");
+              const r = chip?.getBoundingClientRect();
+              const cut = chip ? [chip, ...chip.querySelectorAll("*")].some((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== "visible") : null;
+              return { chip: chip?.innerText.trim().replace(/\s+/g, " ") ?? null, box: r ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null, inside: !!r && r.left >= -1 && r.right <= innerWidth + 1, cut, line: document.getElementById("t-boatname")?.textContent.trim() ?? null, bar: [...document.querySelectorAll("#topbar a, #topbar summary, #topbar button")].filter((e) => e.offsetParent !== null).map((e) => e.innerText.trim().replace(/\s+/g, " ")).filter(Boolean) };
+            });
+            if (BROWSER === "chromium") { const path = `look-chip-${boat}-${w}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } }
+            if (!m.chip || !m.chip.includes(want) || /…|\.\.\./.test(m.chip) || m.cut) bad.push(`${boat} at ${w}: chip "${m.chip}"${m.cut ? " (cut off)" : ""}`);
+            if (!m.inside) bad.push(`${boat} at ${w}: chip runs off the screen ${JSON.stringify(m.box)}`);
+            if (m.line !== want) bad.push(`${boat} at ${w}: title line "${m.line}"`);
+            out.push(`${boat} ${w}x${h}: chip "${m.chip}" ${JSON.stringify(m.box)}${m.cut ? " CUT" : ""}; title line "${m.line}"; bar ${m.bar.join(" / ")}`);
+          } finally { await ctx.close().catch(() => {}); }
+        }
+      }
+      console.log(`CHIP ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
