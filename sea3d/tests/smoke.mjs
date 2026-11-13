@@ -974,6 +974,26 @@ try {
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
+    // Two tabs (M3, W5): the designs board opens first; Weather challenges is its own tab, lists the
+    // challenges from this site with "Not sailed yet" in a fresh browser, and a link can open it.
+    await page.waitForFunction(() => window.__leaderboard.challenges !== undefined, null, { timeout: 30000 }).catch(() => fail("leaderboard: the Weather challenges tab never drew"));
+    const tabs0 = await page.evaluate(() => ({ tab: window.__leaderboard.tab, designs: !document.getElementById("p-designs").hidden, ch: !document.getElementById("p-challenges").hidden }));
+    if (tabs0.tab !== "designs" || !tabs0.designs || tabs0.ch) fail(`leaderboard: it should open on Designs: ${JSON.stringify(tabs0)}`);
+    await page.click("#tab-challenges");
+    const tabs1 = await page.evaluate(() => ({
+      tab: window.__leaderboard.tab,
+      designs: !document.getElementById("p-designs").hidden,
+      hash: location.hash,
+      n: window.__leaderboard.challenges,
+      rows: document.querySelectorAll("#crows tr").length,
+      unsailed: [...document.querySelectorAll("#crows td.yours")].filter((t) => t.textContent === "Not sailed yet").length,
+      none: document.getElementById("cnone").textContent,
+      money: /[$£€]|price|cost/i.test(document.getElementById("p-challenges").innerText),
+    }));
+    if (tabs1.tab !== "challenges" || tabs1.designs || tabs1.hash !== "#challenges" || tabs1.rows !== tabs1.n || tabs1.unsailed !== tabs1.rows || tabs1.money || (tabs1.n === 0 && !/aren't on this copy/.test(tabs1.none)))
+      fail(`leaderboard: Weather challenges tab: ${JSON.stringify(tabs1)}`);
+    await page.click("#tab-designs");
+    log.push(`leaderboard tabs: Designs, and Weather challenges with ${tabs1.n} challenges`);
     // The game's look (M3): the real sea and sky come up behind the board, after its words.
     await page.waitForFunction(() => window.__leaderboard.sea?.frames > 0 && document.body.classList.contains("sea"), null, { timeout: 60000 }).catch(() => fail("leaderboard: no sea and sky behind the page"));
     await snap({ path: "test-output/leaderboard.png", fullPage: true });
