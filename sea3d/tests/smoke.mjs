@@ -889,11 +889,12 @@ try {
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
     // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
     // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
-    // Until the parity check (R5) the row shows only with ?who= in the address (Elena).
+    // On for everyone since 13 Nov (John): the plain card shows the row with "You" picked and Set sail unchanged.
     await page.goto(`${URL}helm.html?quality=low`);
     await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 60000 });
-    await page.waitForTimeout(1500);
-    if (await page.evaluate(() => !document.getElementById("ss-who").hidden)) fail("Who steers showed on the plain Set sail card before the parity check");
+    await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the plain Set sail card has no Who steers row"));
+    const plain = await page.evaluate(() => ({ who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent, go: document.getElementById("go").textContent }));
+    if (plain.who !== "You" || plain.go !== "Set sail") fail(`the plain Set sail card must open on You with Set sail: ${JSON.stringify(plain)}`);
     await page.goto(`${URL}helm.html?quality=low&who=autopilot`);
     await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the Set sail card has no Who steers row"));
     const ws = await page.evaluate(() => ({

@@ -4694,12 +4694,11 @@ if (!shared) mountSetSailCard({
     preview: previewBoat,
     best: bestFor,
     // Who steers (M2, R2): with the autopilot, Set sail opens her voyage of that day on this screen (?watch=).
-    // Only with ?who= in the address for now (Elena): the row goes on for everyone, and the menu's "Watch a
-    // voyage" moves here, once the watched screen has everything the old one has (R5: the compass strip and
-    // "Look up at the sky" (L4), the story notes, the points of interest, the cinematic).
-    ...(params.has("who")
-      ? { who: whoFromUrl(location.search), voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []), watch: (file: string) => location.assign(watchLink(location.search, file)), race: (a: RaceId, b: RaceId, day: string) => location.assign(raceLink(location.search, a, b, day)) }
-      : {}),
+    // On for everyone (John, 13 Nov: "shove everything out the door now"); ?who=autopilot still opens the card on her.
+    who: whoFromUrl(location.search),
+    voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []),
+    watch: (file: string) => location.assign(watchLink(location.search, file)),
+    race: (a: RaceId, b: RaceId, day: string) => location.assign(raceLink(location.search, a, b, day)),
   });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
 // the crossing must not begin() here, among the Bay's marks, so it reloads into a voyage page.
