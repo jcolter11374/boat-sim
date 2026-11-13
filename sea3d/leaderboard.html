@@ -11,6 +11,15 @@
   html { background: #0b1726; }
   body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse 1200px 700px at 30% 0%, #1d3b5c 0%, #0b1726 100%) no-repeat;
     color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* The game's look (M3): the real sea and sky behind the page (src/backdrop.ts), the words on glass.
+     Until the sea is drawn, and on a computer that can't draw it, the dark page above stays. */
+  #sea { position: fixed; inset: 0; z-index: 0; opacity: 0; transition: opacity 1.2s; }
+  #sea canvas { display: block; width: 100%; height: 100%; }
+  body.sea #sea { opacity: 1; }
+  body.sea { background: none; }
+  main, #credits { position: relative; z-index: 1; }
+  body.sea { --glass: rgba(8,18,32,.82); }
+  body.sea #credits { color: rgba(255,255,255,.85) !important; text-shadow: 0 1px 3px rgba(0,20,40,.7); }
   .glass { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
   a { color: #8ab4ff; }
@@ -18,7 +27,7 @@
   .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
   main { max-width: 1060px; margin: calc(var(--bar, 0px) + 24px) auto 40px; padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
   header { padding: 14px 18px; }
-  header h1 { margin: 0 0 2px; font-size: 22px; }
+  header h1 { margin: 0 0 2px; font: 800 28px/1.1 "Fraunces", Georgia, serif; } /* the game's heading face, as on the Set sail card */
   header nav { float: right; font-size: 13px; }
   #about { margin-top: 6px; }
   #about summary { cursor: pointer; color: var(--dim); font-size: 12px; }
@@ -75,6 +84,7 @@
 </style>
 </head>
 <body>
+<div id="sea" aria-hidden="true"></div>
 <main>
   <header class="glass">
     <h1>Design leaderboard</h1>

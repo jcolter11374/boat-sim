@@ -974,6 +974,8 @@ try {
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);
+    // The game's look (M3): the real sea and sky come up behind the board, after its words.
+    await page.waitForFunction(() => window.__leaderboard.sea?.frames > 0 && document.body.classList.contains("sea"), null, { timeout: 60000 }).catch(() => fail("leaderboard: no sea and sky behind the page"));
     await snap({ path: "test-output/leaderboard.png", fullPage: true });
     log.push(`leaderboard ${lb0.error ? "not published yet" : `${lb0.rows} designs`}, sample ${lb.rows} rows in ${Math.max(...lb.tiers)} tiers`);
     // Race view: with the simulator files it races our kayak against Rev C for a
