@@ -228,8 +228,9 @@ const wasBad = new Set<string>();
 /**
  * Draw the equipment icons. Returns the parts that have just broken (were working at the last call),
  * so the page can make a moment of it; `quiet` (a jump in time, a new voyage) breaks nothing new.
+ * `opensLog`: the cell is a button that opens the log (Watch a voyage), so its hint says so.
  */
-export function equipmentIcons(parts: Part[], quiet = false, note = ""): Part[] {
+export function equipmentIcons(parts: Part[], quiet = false, note = "", opensLog = true): Part[] {
   const box = $("eq");
   const key = parts.map((p) => `${p.key}:${p.name}:${p.bad ? 1 : 0}`).join("|") + note;
   const fresh = quiet ? [] : parts.filter((p) => p.bad && !wasBad.has(p.key));
@@ -259,7 +260,8 @@ export function equipmentIcons(parts: Part[], quiet = false, note = ""): Part[] 
     else delete lab.dataset.bad;
   }
   if (cell) {
-    cell.title = bad.length ? `Not working: ${bad.map((p) => p.name).join(", ")}. Click for the log.` : "Equipment: hover an icon for its name, click for the log";
+    // The helm's cell opens nothing (opensLog false): its breakdowns are in the notes.
+    cell.title = bad.length ? `Not working: ${bad.map((p) => p.name).join(", ")}.${opensLog ? " Click for the log." : ""}` : `Equipment: hover an icon for its name${opensLog ? ", click for the log" : ""}`;
   }
   const l = box.nextElementSibling;
   if (l) l.textContent = note || "equipment";

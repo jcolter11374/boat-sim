@@ -34,7 +34,6 @@ import {
   describeEvent,
   distanceKm,
   failuresAt,
-  PART_NAME,
   isNotable,
   lastHour,
   loadIndex,
@@ -73,6 +72,7 @@ import { Cinema, filmButtons } from "./cinema";
 import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { loadMyBoat } from "./myboat";
+import { equipmentParts } from "./replay/equipment";
 import { VoyageHud, equipmentIcons, type Part } from "./replay/hud";
 import { focusBoat, type Focus } from "./focus";
 
@@ -1817,28 +1817,9 @@ function skyGuide(): void {
 }
 
 // ---------- equipment card ----------
-/** The parts each boat shows on the card, in order. "comms" is the satellite radio's live state. */
-const EQUIPMENT: Record<BoatKey, string[]> = {
-  kayak: ["thruster_port", "thruster_starboard", "rudder", "electronics_main", "electronics_safe", "comms", "beacon", "leak", "entangled"],
-  randolph: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak", "entangled"],
-  stock_cruiser31: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
-  stock_dinghy14: ["sail", "rudder", "electronics_main", "comms", "beacon"],
-  stock_beachcat16: ["sail", "rudder", "electronics_main", "comms", "beacon"],
-  stock_sail_drone7: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
-  stock_ocean_rower45: ["rudder", "electronics_main", "comms", "beacon", "leak"],
-  stock_pearson31_2: ["sail", "rudder", "electronics_main", "comms", "beacon", "leak"],
-};
-/** The parts as icons; true for the parts that have just broken. */
+/** The parts as icons (src/replay/equipment.ts, shared with the helm's strip); returns the parts that have just broken. */
 function equipment(r: Replay, failed: Map<string, string>, quiet: boolean): Part[] {
-  const comms = commsAt(r, hour);
-  const parts = EQUIPMENT[boatKey].map((p): Part => {
-    if (p === "comms") return { key: p, name: PART_NAME.comms_silent, bad: failed.has("comms_silent") || comms === "beacon" || comms === "silent" };
-    if (p === "leak") return { key: p, name: PART_NAME.leak_main_tub, bad: failed.has("leak_main_tub") || failed.has("leak_safe_tub") };
-    if (p === "entangled") return { key: p, name: failed.has(p) ? "Snagged" : "No snags", bad: failed.has(p) };
-    const name = p === "beacon" && boatKey === "randolph" ? "Backup tracker" : p === "sail" && isStock(boatKey) ? "Sails" : (PART_NAME[p] ?? p);
-    return { key: p, name, bad: failed.has(p) };
-  });
-  return equipmentIcons(parts, quiet);
+  return equipmentIcons(equipmentParts(boatKey, commsAt(r, hour), failed), quiet);
 }
 
 /** A strip number with its unit in small type (text only, no markup from data). */
