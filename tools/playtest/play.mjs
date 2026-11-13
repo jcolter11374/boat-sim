@@ -779,6 +779,8 @@ const CHECKS = {
       must(await page.locator("#title").isVisible(), "the title menu didn't show on a first visit");
       const menu = await page.evaluate(() => [...document.querySelectorAll("#title a, #title button")].filter((e) => e.offsetParent).map((e) => e.textContent.trim().split("\n")[0]));
       await page.screenshot({ path: `play-${BROWSER}-title.png` }).catch(() => {});
+      // "Just watch the sea" lives under More since the one-front-door title (#437): open it first.
+      if (await page.locator("#t-more").count()) await page.click("#t-more summary", { timeout: 10_000 }).catch(() => {});
       await page.click("#t-sea", { noWaitAfter: true, timeout: 10_000 }).catch(() => {
         throw new CheckFail(`couldn't click "Just watch the sea"`);
       });
@@ -1081,13 +1083,14 @@ const CHECKS = {
       await sailed();
       s = await soundState(page);
       must(s.contexts === 0, `clicking "Set sail" started sound without being asked (${s.contexts} AudioContext)`);
-      const asked = await page.evaluate(() => !document.getElementById("soundask").hidden || window.__askedSound);
-      must(asked, `"Sound on?" was never asked after Set sail`);
+      // The question waits: it comes a minute in, or after the first call, whichever is first (#406, Leo).
+      const asked = await page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: 90_000 }).then(() => true).catch(() => false);
+      must(asked, `"Sound on?" was never asked in the first 90 s after Set sail`);
       const clicked = await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true, () => false);
       await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 });
       s = await soundState(page);
       if (clicked) must(s.stored === "off", `"No thanks" wasn't remembered (stored ${JSON.stringify(s.stored)})`);
-      out.push(`load: no AudioContext, button off; "Sound on?" asked after Set sail, ${clicked ? '"No thanks" stored "off"' : "closed by itself"}`);
+      out.push(`load: no AudioContext, button off; "Sound on?" asked within 90 s of Set sail, ${clicked ? '"No thanks" stored "off"' : "closed by itself"}`);
       // 2. Second visit after "No thanks": no question.
       await calmReload(page);
       await loaded();
