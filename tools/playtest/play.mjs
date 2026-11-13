@@ -2832,6 +2832,37 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #492 (title glare): the title on live at 1280x720 and a 390x844 phone, High and Low, for the before/after
+  // picture John asked for. Frames live-after-<size>[-low].jpg.
+  "look-title-glare": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("looks are taken in Chromium only");
+      const browser = page.context().browser();
+      const out = [];
+      for (const [tag, vp, extra] of [["1280", { width: 1280, height: 720 }, {}], ["390", { width: 390, height: 844 }, { isMobile: true, hasTouch: true }]]) {
+        for (const q of ["high", "low"]) {
+          const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: 2, ...extra, serviceWorkers: "block" });
+          const p = await ctx.newPage();
+          await p.goto(SITE + `?quality=${q}`, { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.waitForLoadState("networkidle").catch(() => {});
+          await p.waitForTimeout(8000);
+          const path = `live-after-${tag}${q === "low" ? "-low" : ""}.jpg`;
+          if (await jpeg(p, path)) {
+            const b64 = readFileSync(path).toString("base64");
+            console.log(`LOOK-BEGIN ${path}`);
+            for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000));
+            console.log(`LOOK-END ${path}`);
+            out.push(path);
+          }
+          await ctx.close().catch(() => {});
+        }
+      }
+      return `frames ${out.join(", ")}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
