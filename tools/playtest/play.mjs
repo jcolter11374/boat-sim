@@ -1086,8 +1086,15 @@ const CHECKS = {
       await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 1.5, null, { timeout: 3 * MIN }).catch(() => {});
       await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
       await page.waitForTimeout(3000);
-      const left = await page.evaluate(() => ({ day: window.__helm.status?.day, saved: !!localStorage.getItem("boatsim.voyage.v1") }));
-      must(left.saved, `no crossing was saved in the browser after sailing to day ${left.day}`);
+      const savedDay = () => page.evaluate(() => { try { return JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null")?.day ?? null; } catch { return null; } });
+      const left = { day: await page.evaluate(() => window.__helm.status?.day), savedAtPause: await savedDay() };
+      // The save runs on a 15 s timer (voyageKeeper.ts), so at speed it trails the boat. Paused,
+      // the next save catches up: wait for that, so "where she was left" is one known day.
+      await page.waitForFunction((d) => { try { return Math.abs((JSON.parse(localStorage.getItem("boatsim.voyage.v1") ?? "null")?.day ?? -9) - d) < 0.05; } catch { return false; } }, left.day, { timeout: 40_000 }).catch(() => {});
+      left.saved = await savedDay();
+      must(left.saved !== null, `no crossing was saved in the browser after sailing to day ${left.day}`);
+      must(Math.abs(left.saved - left.day) < 0.05, `paused at day ${left.day?.toFixed(2)} for 40 s, but the save still says day ${left.saved?.toFixed(2)}`);
+      out.push(`paused at day ${left.day?.toFixed(2)}; the save said day ${left.savedAtPause === null ? "nothing" : left.savedAtPause.toFixed(2)} at that moment, and day ${left.saved.toFixed(2)} within 40 s`);
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
       for (const [w, h, tag] of [[1280, 720, "1280"], [375, 667, "375"]]) {
         await page.setViewportSize({ width: w, height: h });
@@ -1119,7 +1126,7 @@ const CHECKS = {
       await page.waitForTimeout(5000);
       const back = await page.evaluate(() => ({ day: window.__helm.status?.day, err: window.__helm.error, clock: window.__helm.clock, rt: document.querySelector("#timebar .rate")?.dataset.rate }));
       await shot("continued");
-      must(!back.err && Math.abs((back.day ?? 0) - left.day) < 0.5, `"Keep sailing" didn't come back where she was left: left day ${left.day}, back ${JSON.stringify(back)}`);
+      must(!back.err && Math.abs((back.day ?? 0) - left.day) < 0.1, `"Keep sailing" didn't come back where she was left: left day ${left.day}, back ${JSON.stringify(back)}`);
       must(back.rt === "rt", `Real time isn't first on the speed bar after continuing (${back.rt})`);
       out.push(`continued at day ${back.day?.toFixed(2)} (left at ${left.day?.toFixed(2)})`);
       // 2. Race it on the sailing screen: our kayak against our model of the Rev C5, 1 May 2020.
