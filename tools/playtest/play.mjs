@@ -2060,6 +2060,64 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #474: after playing fast, the big map's side panel must read the same moment as the strip
+  // (wind, waves, battery), on a crossing, on helm.html?watch= and on ?race=.
+  "helm-readings": {
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      const out = [];
+      const bad = [];
+      const one = async (name, start) => {
+        await start();
+        must(!(await page.evaluate(() => window.__helm.error)), `${name}: didn't start: ${await page.evaluate(() => window.__helm.error)}`);
+        await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
+        // A minute at a day a second, answering any call with its first choice.
+        const fast = () => page.evaluate(() => { if (!window.__helm.status?.over && window.__helm.clock !== 24) document.querySelector('#timebar .rate[data-rate="24"]')?.click(); });
+        const t0 = Date.now();
+        while (Date.now() - t0 < 60_000) {
+          if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+          await fast();
+          await page.waitForTimeout(2000);
+        }
+        await page.evaluate(() => { if (window.__helm.clock !== 0) document.getElementById("t-pause")?.click(); });
+        await page.waitForFunction(() => window.__helm.clock === 0, null, { timeout: 30_000 }).catch(() => {});
+        await page.waitForTimeout(4000); // the picture catches up with the clock
+        await page.evaluate(() => { if (!document.getElementById("mapbox").classList.contains("big")) (document.getElementById("chart").offsetParent ? document.getElementById("chart") : document.getElementById("mapbtn")).click(); });
+        await page.waitForFunction(() => document.getElementById("mapbox").classList.contains("big"), null, { timeout: 15_000 }).catch(() => {});
+        await page.waitForTimeout(2500);
+        const t = await page.evaluate(() => { const g = (id) => document.getElementById(id)?.textContent.trim().replace(/\s+/g, " ") ?? ""; return { big: document.getElementById("mapbox").classList.contains("big"), day: window.__helm.status?.day, wind: g("c-windv"), bat: g("c-batv"), pBat: g("battext"), pWeather: g("weather"), when: g("when") }; });
+        if (BROWSER === "chromium") {
+          const path = `look-readings-${name}.jpg`;
+          if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+        }
+        const num = (s, re) => { const m = s.match(re); return m ? Number(m[1]) : null; };
+        const strip = { kn: num(t.wind, /(\d+(?:\.\d+)?)\s*kn/), hs: num(t.wind, /(\d+(?:\.\d+)?)\s*m\b/), bat: num(t.bat, /(\d+)\s*%/) };
+        const panel = { kn: num(t.pWeather, /(\d+(?:\.\d+)?)\s*kn/), hs: num(t.pWeather, /(\d+(?:\.\d+)?)\s*m\b/), bat: num(t.pBat, /(\d+)\s*%/) };
+        const diff = [];
+        if (strip.kn != null && panel.kn != null && Math.abs(strip.kn - panel.kn) > 1) diff.push(`wind ${strip.kn} kn on the strip, ${panel.kn} kn on the panel`);
+        if (strip.hs != null && panel.hs != null && Math.abs(strip.hs - panel.hs) > 0.11) diff.push(`waves ${strip.hs} m on the strip, ${panel.hs} m on the panel`);
+        if (strip.bat != null && panel.bat != null && Math.abs(strip.bat - panel.bat) > 1) diff.push(`battery ${strip.bat}% on the strip, ${panel.bat}% on the panel`);
+        const unread = Object.keys(strip).filter((k) => strip[k] == null || panel[k] == null);
+        const line = `${name} at day ${t.day?.toFixed(1)}${t.big ? "" : " (the big map didn't open)"}: strip "${t.wind}", "${t.bat}"; panel "${t.pWeather}", "${t.pBat}"${unread.length ? `; couldn't compare ${unread.join(", ")}` : ""}`;
+        out.push(line);
+        if (diff.length) bad.push(`${name} at day ${t.day?.toFixed(1)}: ${diff.join("; ")} (strip "${t.wind}", "${t.bat}"; panel "${t.pWeather}", "${t.pBat}")`);
+      };
+      await one("crossing", async () => {
+        await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+        await page.evaluate(() => document.getElementById("go").click());
+        await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      });
+      for (const [name, q] of [["watch", "watch=2020-04-15"], ["race", "race=kayak,revb"]]) {
+        await one(name, async () => {
+          await page.waitForLoadState("networkidle").catch(() => {});
+          await page.goto(SITE + `helm.html?${q}&quality=low`, { waitUntil: "load", timeout: 2 * MIN });
+          await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN });
+        });
+      }
+      must(!bad.length, `the map panel and the strip disagree: ${bad.join(" | ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
