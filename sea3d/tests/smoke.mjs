@@ -872,7 +872,7 @@ try {
     // Practice's front door is the Set sail card too (M1 piece 3): ?practice opens it with Annapolis picked.
     await page.goto(`${URL}helm.html?quality=low&practice`);
     await page.waitForFunction(() => window.__setsail && document.querySelector("#ss-where-opts .ss-pill"), null, { timeout: 60000 });
-    const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("practice-end").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
+    const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("result").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
     if (!pc.start || !pc.course || pc.old || !/Annapolis/.test(pc.where ?? "")) fail(`?practice didn't open the Set sail card on Annapolis: ${JSON.stringify(pc)}`);
     log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once; ?practice opens the card on Annapolis");
     // Watch a voyage on the helm's own sailing screen (M2, R1): a recorded voyage plays with no simulator,
