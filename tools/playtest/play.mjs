@@ -2316,7 +2316,7 @@ const CHECKS = {
       await page.waitForFunction(() => !document.body.classList.contains("goal"), null, { timeout: 40_000 }).catch(() => {});
       const bad = [];
       const out = [];
-      for (const [w, h] of [[1280, 720], [1920, 1080], [1400, 900], [1024, 700], [390, 844]]) {
+      for (const [w, h] of [[1280, 720], [1100, 700], [1920, 1080], [1400, 900], [1024, 700], [390, 844]]) {
         await page.setViewportSize({ width: w, height: h });
         await page.waitForTimeout(2000);
         const r = await page.evaluate(() => {
@@ -2340,6 +2340,14 @@ const CHECKS = {
             const over = pts.filter((p) => p && p !== e && !e.contains(p) && !p.contains(e));
             if (over.length) out.push(`${t} is covered by ${over[0].id ? "#" + over[0].id : over[0].className ? "." + String(over[0].className).split(" ")[0] : over[0].tagName.toLowerCase()} ("${(over[0].textContent || "").trim().slice(0, 16)}")`);
             if (cs.textOverflow === "ellipsis" && e.scrollWidth > e.clientWidth + 1) out.push(`${t} is cut off`);
+          }
+          // No speed button wraps onto a second line (Maya).
+          for (const bt of strip.querySelectorAll("#timebar .rate")) {
+            if (!bt.offsetParent) continue;
+            const range = document.createRange();
+            range.selectNodeContents(bt);
+            const lines = new Set([...range.getClientRects()].map((q) => Math.round(q.top))).size;
+            if (lines > 1) out.push(`the "${bt.textContent.trim()}" button wraps onto ${lines} lines`);
           }
           const day = document.getElementById("day");
           return { n, out: [...new Set(out)].slice(0, 8), day: day?.textContent.trim() ?? "" };
