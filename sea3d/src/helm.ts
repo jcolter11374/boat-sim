@@ -45,8 +45,9 @@ import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, las
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
+import { statusAtPicture } from "./helm/readings";
 import { outcomeLine } from "./replay/story";
-import { RACE_BOATS, racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -467,6 +468,8 @@ const page = {
   ghost: { shown: false, m: 0 },
   /** The other boat in a race, on the water: drawn or not, how far off she is (m), and her compass bearing from your boat. */
   rival: { shown: false, m: 0, bearing: 0 },
+  /** In a race: the player chose "Follow <the other boat> to the end", so she now sails in your boat's place. */
+  followed: false,
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
@@ -1098,6 +1101,19 @@ function showStatus(): void {
   // Its toast comes with the failure itself (newEvents): one toast, not two (Leo, Elena).
   if (s.no_link && !linkCut) lockOrders(s.no_link, false);
   showTrimChip(page.status ?? s);
+  showReadings(s);
+  showSailOrders();
+  showOrder();
+}
+
+/** The panel's and the dial's readings, at the moment the picture shows (helm/readings.ts): drawn with each status, and again as the picture plays on. */
+let readAt = -1;
+/** The wave height the strip shows: the sea as drawn at the picture's hour (the sea-state files' wind sea and swells together, where they reach). */
+let seaHs: number | null = null;
+function showReadings(raw: Status): void {
+  readAt = hour;
+  // In base mode the page shows what base knows, not the picture's truth.
+  const s = hidden() ? raw : statusAtPicture(raw, game.boat, game.ghost, hour);
   const b = s.boat;
   const finish = (game.boat?.course.target ?? [39.5, -13.5]) as [number, number];
   const est = hidden() ? s.base?.estimate : undefined;
@@ -1127,7 +1143,8 @@ function showStatus(): void {
   $("batbar").style.width = `${soc}%`;
   $("batbar").style.background = soc < 15 ? "var(--bad)" : soc < 35 ? "var(--warn)" : "var(--good)";
   $("speed").textContent = est ? " · speed unknown" : ` · ${(b.stw * KN).toFixed(1)} kn through the water`;
-  const w = s.weather;
+  // One wave height on the screen: the strip's, when it has one.
+  const w = s.weather && !hidden() && seaHs != null ? { ...s.weather, hs: seaHs } : s.weather;
   let windTo: number | null = null;
   let kn = 0;
   if (w) {
@@ -1158,11 +1175,9 @@ function showStatus(): void {
     const w = s.base.waiting;
     $("baseline").textContent = `Base last heard from the boat on day ${last.toFixed(1)}.${w.length ? ` Order on its way: it reaches the boat on day ${dayOf(w[0].due).toFixed(1)}.` : ""}`;
   } else $("baseline").textContent = "";
-  showSailOrders();
   $("sailline").hidden = !s.sailing;
   if (s.sailing) $("sailline").textContent = sailText(s);
   $("ghostline").textContent = WATCH ? "" : `${other ?? "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
-  showOrder();
 }
 
 // ---------- notes ----------
@@ -1411,7 +1426,10 @@ function applyPending(all = false): void {
   if (changed) showStatus();
 }
 
+/** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
+let rateAtEnd = 0;
 function setRate(r: number, drain = false): void {
+  if (rate > 0) rateAtEnd = rate; // the speed the clock last ran at
   easeUpAt = null;
   drainRate = drain && rate > 0 ? rate : 0;
   if (r > 0) {
@@ -2892,9 +2910,46 @@ async function watchFinish(): Promise<void> {
   $("again").focus({ preventScroll: true });
 }
 
+/** The race's results and its boats' names in the race's own order (A, B), kept when the player follows the other boat on. */
+let raceKept: { card: Card & { race: RaceCard }; names: [string, string] } | null = null;
+
+let boatGone = false;
+/** Your boat is hidden or shown with her wake and foam: a boat that was lost is not drawn sailing on (Elena). */
+function boatDrawn(on: boolean): void {
+  boatGone = !on; // hideStandIn, each frame, shows or hides her with her wake and foam
+}
+
+/**
+ * "Follow <the other boat> to the end": your boat's race is over, hers isn't. She takes your boat's place on
+ * the screen (the camera, the strip, the track that sets how far the picture runs) and the clock runs on
+ * at the speed you had, to her last row, where the full results come up.
+ */
+function followRival(): void {
+  if (!raceKept || !game.boat || !game.ghost || !page.race) return;
+  [game.boat, game.ghost] = [game.ghost, game.boat];
+  swapSides(page.status, shown); // usually the one object: swapped once, not twice
+  page.race = { names: [page.race.names[1], page.race.names[0]], bases: [page.race.bases[1], page.race.bases[0]], launch: page.race.launch };
+  page.followed = true;
+  raceLook(page.race.names);
+  // The race is down to one boat: the lead cell goes (there is nobody left to lead).
+  document.body.classList.add("followed");
+  useBoat(page.race.bases[0]);
+  boatDrawn(true);
+  rival.set(null); // built again as the boat left behind (drawn only while her own track runs)
+  $("result").hidden = true;
+  $("result").classList.remove("watched", "raced");
+  document.body.classList.remove("results");
+  page.card = null;
+  shownTo = lastHour(game.boat);
+  finishing = true;
+  chartDirty = true;
+  showStatus();
+  setRate(rateAtEnd > 0 ? rateAtEnd : REAL_TIME);
+}
+
 /** A race's ending: who finished first, in the boats' own names; each boat's days; both tracks. */
 async function raceFinish(): Promise<void> {
-  const c = (await game.result()) as Card & { race: RaceCard };
+  const c = raceKept?.card ?? ((await game.result()) as Card & { race: RaceCard });
   clearTimeout(soundAskTimer);
   soundAsked = true;
   $("soundask").hidden = true;
@@ -2902,29 +2957,29 @@ async function raceFinish(): Promise<void> {
   chartDirty = true;
   await new Promise((ok) => setTimeout(ok, 2000));
   page.card = c;
-  const names = page.race?.names ?? [c.race.boats[0].name, c.race.boats[1].name];
-  const win = c.race.winner;
+  // The names in the race's own order (A, B), whichever boat the picture has followed.
+  const names: [string, string] = raceKept?.names ?? page.race?.names ?? [c.race.boats[0].name, c.race.boats[1].name];
+  const followed = !!raceKept;
+  raceKept = { card: c, names };
   // The headline keeps the full names: a Randolph boat is always "(our model)" there (John, B2). The small labels under it are short.
   const short = (n: string) => n.replace(/\s*\(our model\)$/, "");
-  const lost = (i: number) => OUTCOME[c.race.boats[i].outcome] ?? c.race.boats[i].outcome.replace(/_/g, " ");
-  $("r-head").textContent =
-    c.race.verdict === "draw"
-      ? "A draw: both finished within a day of each other."
-      : win === null
-        ? "Neither boat finished."
-        : c.race.margin_days !== null
-          ? `${names[win]} finished first, ${Math.abs(c.race.margin_days).toFixed(1)} days ahead.`
-          : `${names[win]} finished. ${names[1 - win]} ${lost(1 - win)}.`;
+  // Your boat's race ended first and the other sails on: stop here and say so, and offer to follow her to the end (Elena).
+  const more = !followed && !!game.boat && !!game.ghost && lastHour(game.ghost) > lastHour(game.boat) + 1;
+  $("r-head").textContent = raceHeadline(c.race, names, more ? 0 : undefined);
+  // A boat that was lost is not drawn sailing on behind the card.
+  boatDrawn(!raceGone(c.race.boats[followed ? 1 : 0]));
   const launched = new Date(utc(c.race.launch)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-  $("r-story").textContent = `${names[0]} against ${names[1]}, launched ${launched} into the same weather with the same luck. One race is one roll of the dice.`;
+  $("r-story").textContent = more
+    ? `${names[1]} is still sailing. Both boats launched on ${launched} into the same weather.` // her first mention on this card: the full name (B2)
+    : `${names[0]} against ${names[1]}, both launched on ${launched} into the same weather, with the same dice for breakdowns. One race is one roll of the dice.`;
   $("r-nums").replaceChildren(
-    ...c.race.boats.map((x, i) => {
+    ...c.race.boats.slice(0, more ? 1 : 2).map((x, i) => {
       const d = document.createElement("div");
       d.className = "n";
       const b = document.createElement("b");
       b.textContent = x.days.toFixed(1);
       b.append(Object.assign(document.createElement("small"), { textContent: "days" }));
-      d.append(b, Object.assign(document.createElement("span"), { textContent: `${short(names[i])}: ${x.outcome === "arrived" ? "finished" : lost(i)}` }));
+      d.append(b, Object.assign(document.createElement("span"), { textContent: raceLabel(x, short(names[i])) }));
       return d;
     }),
   );
@@ -2932,6 +2987,9 @@ async function raceFinish(): Promise<void> {
   $("r-next").replaceChildren();
   drawResultMap();
   $("again").textContent = "Race again";
+  const follow = $<HTMLButtonElement>("r-follow");
+  follow.hidden = !more;
+  follow.textContent = `Follow ${short(names[1])} to the end`; // a player's own name for a design: text only
   // "Change the boats" beside it: back to the Set sail card with the autopilot and this other boat picked.
   const rb = (params.get("race") ?? "").split(",")[1] ?? "";
   const changer = $<HTMLAnchorElement>("r-boat");
@@ -3687,6 +3745,7 @@ function again(sameDay: boolean): void {
   } else location.reload();
 }
 $("again").addEventListener("click", () => again(true));
+$("r-follow").addEventListener("click", followRival);
 $("r-day").addEventListener("click", () => again(false));
 $("r-info").addEventListener("click", () => {
   const t = $("r-caveat");
@@ -3852,6 +3911,7 @@ const bowW = new THREE.Vector3();
 let last = 0;
 let smoothYaw: number | null = null;
 let stripAt = -1;
+let panelAt = 0;
 let storm = 0;
 let rigHeave = 0;
 const ghostTag = $("ghosttag");
@@ -4043,7 +4103,7 @@ function hideStandIn(): void {
   if (!model) return;
   const card = !page.ready && !$("start").hidden;
   const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : true;
-  const show = !card || real;
+  const show = (!card || real) && !boatGone;
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
@@ -4342,7 +4402,8 @@ renderer.setAnimationLoop(() => {
   // A race: the other boat, her own model, where her track says she is (both tracks are cut at the clock's hour).
   const her = RACE && watch === "boat" ? rep("ghost") : null;
   const her0 = page.status?.ghost;
-  if (her && (her.h.length || her0) && page.race && modelsIn) {
+  // Once the picture is past her last row she has finished or is gone, so she is no longer drawn.
+  if (her && (her.h.length ? !page.status?.over || h <= lastHour(her) + 1e-6 : !!her0) && page.race && modelsIn) {
     if (!rival.built) {
       const b = page.race.bases[1];
       const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
@@ -4428,6 +4489,8 @@ renderer.setAnimationLoop(() => {
       ghostTag.style.left = `${THREE.MathUtils.clamp(((proj.x + 1) / 2) * window.innerWidth, half, window.innerWidth - half)}px`;
       ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
       if (km < 1) ghostTag.hidden = true; // the strip says "level"
+      // In a race: the other boat's own tag is over her while she is near, and a boat whose race is over has no tag.
+      if (RACE && (!$("rivaltag").hidden || (!!page.status?.over && h > lastHour(other) + 1e-6))) ghostTag.hidden = true;
     }
   } else ghostTag.hidden = true;
   showOrderLine(hdg, comps, t);
@@ -4464,6 +4527,13 @@ renderer.setAnimationLoop(() => {
   }
   if (!(r && page.ready)) $("clock").textContent = "";
   else drawWhen();
+  // The panel and the dial read the picture too, twice a second while it moves (they used to wait for the next status,
+  // up to three days of voyage away after playing fast, and disagreed with the strip).
+  if (r && page.ready && !page.card && !wheel.on && t - panelAt > 0.5 && Math.abs(hour - readAt) > 1e-4) {
+    panelAt = t;
+    const st = shown ?? page.status;
+    if (st) showReadings(st);
+  }
   // The strip's instruments read the picture too, a few times a second (not in base mode: base only knows its reports).
   if (r && page.ready && t - stripAt > 0.25) {
     stripAt = t;
@@ -4473,7 +4543,10 @@ renderer.setAnimationLoop(() => {
       live.windKn = Math.hypot(wu, wv) * KN;
       live.windTo = (Math.atan2(wu, wv) * 180) / Math.PI;
     }
-    if (valueAt(r, r.hs, h) != null) live.waves = hs;
+    if (valueAt(r, r.hs, h) != null) {
+      live.waves = hs;
+      seaHs = hs; // the panel says the same figure (showReadings)
+    }
     if (!hidden()) {
       live.heading = wheelNow ? wheelNow.heading : hdg;
       live.speedKn = stw * KN;
