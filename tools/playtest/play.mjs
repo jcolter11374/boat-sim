@@ -3368,8 +3368,10 @@ const CHECKS = {
           const df = samples.at(-1).f - samples[0].f;
           const heaves = new Set(samples.map((x) => JSON.stringify(x.heave))).size;
           const same = shots.length === 2 && shots[0].equals(shots[1]);
-          if (df < 30) bad.push(`${tag}: only ${df} frames drawn in 35 s`);
-          if (gap >= 3000) bad.push(`${tag}: the sea stopped drawing for ${(gap / 1000).toFixed(1)} s`);
+          // Runners draw in software (0.1-0.6 frames a second), so this tests "not frozen", not smoothness.
+          if (df < 2) bad.push(`${tag}: only ${df} frames drawn in 35 s`);
+          if (heaves < 2) bad.push(`${tag}: the boat did not move`);
+          if (gap >= 15000) bad.push(`${tag}: the sea stopped drawing for ${(gap / 1000).toFixed(1)} s`);
           if (same) bad.push(`${tag}: the picture at the end is the same as at the start`);
           out.push(`${tag}: ${df} frames in 35 s (${(df / 35).toFixed(1)}/s), longest stall ${(gap / 1000).toFixed(1)} s, ${heaves} different heave readings, hero "${samples[0].hero}", picture ${same ? "UNCHANGED" : "changed"}`);
         } finally { await ctx.close().catch(() => {}); }
