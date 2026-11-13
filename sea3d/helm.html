@@ -162,27 +162,26 @@
      Credits link: there the link sits just above the strip (Elena). 7/4 and 1260 px: the strip is
      93 units of --ui wide, and the link needs about 70 px beside it. */
   @media (max-aspect-ratio: 7/4), (max-width: 1260px) { body.sailing:not(.at-wheel) #credits { bottom: calc(var(--edge) + var(--strip-h) + 4px); } }
-  #practice-what[hidden], #practice-end[hidden] { display: none; }
-  #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
+  #practice-what[hidden] { display: none; }
+  #prologue-end[hidden], #prologuepick[hidden] { display: none; }
   #prologuepick { display: block; margin: 6px 0; }
   #practice-courses .courses { display: flex; flex-direction: column; gap: 6px; }
   #practice-courses .courses button { width: 100%; margin: 0; text-align: left; padding: 7px 12px; }
   #practice-courses button small { display: block; font-weight: 400; font-size: 12px; opacity: .85; }
   #practice-courses small[data-best]:empty { display: none; }
-  #practice-result[hidden] { display: none; }
-  #practice-result .medal { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
-  #practice-result .medal-name { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
-  #practice-result .medal-disc { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
-  #practice-result .medal[data-medal="gold"] { --m1: #fff1b8; --m2: #d9a92a; --m3: #8c6410; }
-  #practice-result .medal[data-medal="silver"] { --m1: #ffffff; --m2: #b9c3cf; --m3: #6d7887; }
-  #practice-result .medal[data-medal="bronze"] { --m1: #ffd9b5; --m2: #b8713a; --m3: #6e3d17; }
-  #practice-result .medal[data-medal=""] { --m1: rgba(255,255,255,.5); --m2: rgba(255,255,255,.08); --m3: rgba(255,255,255,.25); }
-  #practice-end .crossing { display: inline-block; margin-top: 4px; color: rgba(255,255,255,.72); font-size: 13px; text-decoration: none; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,.22); }
-  #practice-end .crossing:hover, #practice-end .crossing:focus-visible { color: #fff; border-bottom-color: rgba(255,255,255,.6); }
-  #practice-result .result-time { font-size: 18px; font-weight: 600; margin: 0 0 2px; font-variant-numeric: tabular-nums; }
-  #practice-result .result-next { font-size: 13px; opacity: .8; margin: 0 0 12px; }
-  #practice-result .result-next:empty { display: none; }
-  #practice-end.trial #practice-sum { display: none; }
+  /* Practice's award on the one results card (M3): the medal, the time against your best, what the next medal needs. */
+  #r-medal[hidden] { display: none; }
+  #r-medal .medal { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
+  #r-medal .medal-name { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+  #r-medal .medal-disc { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  #r-medal .medal[data-medal="gold"] { --m1: #fff1b8; --m2: #d9a92a; --m3: #8c6410; }
+  #r-medal .medal[data-medal="silver"] { --m1: #ffffff; --m2: #b9c3cf; --m3: #6d7887; }
+  #r-medal .medal[data-medal="bronze"] { --m1: #ffd9b5; --m2: #b8713a; --m3: #6e3d17; }
+  #r-medal .medal[data-medal=""] { --m1: rgba(255,255,255,.5); --m2: rgba(255,255,255,.08); --m3: rgba(255,255,255,.25); }
+  #r-medal .result-time { font-size: 18px; font-weight: 600; margin: 0 0 2px; font-variant-numeric: tabular-nums; }
+  #r-medal .result-next { font-size: 13px; opacity: .8; margin: 0 0 12px; }
+  #r-medal .result-next:empty { display: none; }
+  #result .rc-mid[hidden], #r-calls[hidden], #r-details[hidden], #r-info[hidden] { display: none; }
   #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
   .practice-note { font-size: 12px; opacity: .75; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
@@ -780,17 +779,6 @@
 <div id="rivaltag" hidden><b></b><span></span></div>
 
 <div id="practice-what" class="glass" hidden></div>
-<div id="practice-end" class="overlay" hidden><div class="card glass">
-  <h1>Practice sailing</h1>
-  <p id="practice-sum"></p>
-  <div id="practice-result" hidden>
-    <div class="medal" data-medal=""><svg class="medal-disc" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="var(--m3)"/><circle cx="20" cy="20" r="16.5" fill="var(--m2)"/><circle cx="20" cy="20" r="15" fill="none" stroke="var(--m1)" stroke-width="0.8" opacity=".7"/><path d="M20 7 L22.6 17.4 L33 20 L22.6 22.6 L20 33 L17.4 22.6 L7 20 L17.4 17.4 Z" fill="var(--m1)"/><path d="M20 7 L22.6 17.4 L20 20 Z M33 20 L22.6 22.6 L20 20 Z M20 33 L17.4 22.6 L20 20 Z M7 20 L17.4 17.4 L20 20 Z" fill="var(--m3)" opacity=".55"/><circle cx="20" cy="20" r="1.6" fill="var(--m3)"/></svg><span class="medal-name"></span></div>
-    <p class="result-time"></p>
-    <p class="result-next"></p>
-    <p class="result-go"><button id="practice-ghost" class="go">Race your best run</button> <button id="practice-other">Another course</button></p>
-  </div>
-  <p><button id="practice-again" class="go">Another course</button> <a class="crossing" href="helm.html">Sail across the Atlantic</a></p>
-</div></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
   <h1>Four days later: the Bay mouth</h1>
   <p id="prologue-sum"></p>
@@ -874,12 +862,13 @@
     <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
     <p id="r-caveat" class="muted" hidden></p>
     <p id="r-story"></p>
+    <div id="r-medal" hidden><div class="medal" data-medal=""><svg class="medal-disc" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="var(--m3)"/><circle cx="20" cy="20" r="16.5" fill="var(--m2)"/><circle cx="20" cy="20" r="15" fill="none" stroke="var(--m1)" stroke-width="0.8" opacity=".7"/><path d="M20 7 L22.6 17.4 L33 20 L22.6 22.6 L20 33 L17.4 22.6 L7 20 L17.4 17.4 Z" fill="var(--m1)"/><path d="M20 7 L22.6 17.4 L20 20 Z M33 20 L22.6 22.6 L20 20 Z M20 33 L17.4 22.6 L20 20 Z M7 20 L17.4 17.4 L20 20 Z" fill="var(--m3)" opacity=".55"/><circle cx="20" cy="20" r="1.6" fill="var(--m3)"/></svg><span class="medal-name"></span></div><p class="result-time"></p><p class="result-next"></p></div>
     <div id="r-stars" hidden><p class="s-row"><span class="s-stars"></span> <span class="s-none"></span></p><p class="s-why"></p><p class="s-ghost"></p><p class="s-real"><b>What really happened.</b> <span class="s-text"></span> <a target="_blank" rel="noopener">Source</a></p></div>
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="rc-btns" id="r-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button></div>
-    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./helm.html?who=autopilot&amp;against=revc">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./helm.html?who=autopilot">Watch her go</a></div>
+    <div class="rc-btns" id="r-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button><button id="r-course" hidden>Another course</button></div>
+    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./helm.html?who=autopilot&amp;against=revc">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./helm.html?who=autopilot">Watch her go</a><a id="r-atlantic" href="./helm.html" hidden>Sail across the Atlantic</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>

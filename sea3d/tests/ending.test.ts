@@ -67,3 +67,10 @@ test("the card links keep the page's switches and drop the card's own picks", ()
   assert.equal(watchCardLink("?quality=low&sail=1", "2020-04-23"), "./helm.html?quality=low&who=autopilot&day=2020-04-23");
   assert.equal(watchCardLink("", "not a day"), "./helm.html?who=autopilot");
 });
+
+test("practice: the course again, another course, and the ocean crossing; no race or board (one practice yacht)", () => {
+  const w = waysOn("practice", { search: "?practice", again: "Race your best run" });
+  assert.deepEqual(w.main.map((x) => x.label), ["Race your best run", "Another course"]);
+  assert.deepEqual(w.quiet.map((x) => [x.label, x.href]), [["Sail across the Atlantic", "./helm.html"]]);
+  assert.deepEqual(ids(waysOn("practice", { search: "" }).main), ["course"], "a drill has no course to sail again");
+});

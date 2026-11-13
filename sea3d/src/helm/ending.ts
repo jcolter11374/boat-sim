@@ -4,14 +4,15 @@
 //   Play again · Change the boat · Race it · Leaderboard, then the mode's own extras as quiet links.
 //
 // A way on that makes no sense for a mode is left out, not hidden: a race's "Race it" is its
-// "Race again"; a watched voyage has no boat of yours to change.
+// "Race again"; a watched voyage has no boat of yours to change. Practice is sailed in the one practice
+// yacht and has no board: it offers the course again, another course, and the ocean crossing.
 
 import { leaderboardLink, raceItLink } from "../results";
 import { RACE_IDS } from "./whoSteers";
 
-export type EndMode = "crossing" | "challenge" | "watch" | "race";
+export type EndMode = "crossing" | "challenge" | "watch" | "race" | "practice";
 /** The card's buttons and links, by what they do. */
-export type WayId = "again" | "follow" | "sail" | "boat" | "race" | "board" | "day" | "postcard" | "look" | "watch";
+export type WayId = "again" | "follow" | "sail" | "boat" | "race" | "board" | "day" | "postcard" | "look" | "watch" | "course" | "atlantic";
 
 export interface Way {
   id: WayId;
@@ -36,6 +37,8 @@ export interface WayCtx {
   followName?: string;
   /** A watched voyage: the link that sails that day yourself. */
   sailHref?: string;
+  /** Practice: the same course again, worded "Race your best run" or "Try again"; left out when there's no course to sail again (a drill). */
+  again?: string;
   /** The finish scene is behind the card, or a voyage was watched: there is something to look around at. */
   canLook?: boolean;
 }
@@ -92,6 +95,11 @@ export function waysOn(mode: EndMode, c: WayCtx): { main: Way[]; quiet: Way[] } 
       return {
         main: [{ id: "again", label: "Watch again" }, ...(c.sailHref ? [{ id: "sail" as const, label: "Sail it yourself", href: c.sailHref }] : []), ...race, board],
         quiet: [{ id: "postcard", label: "Save postcard" }, ...look],
+      };
+    case "practice":
+      return {
+        main: [...(c.again ? [{ id: "again" as const, label: c.again }] : []), { id: "course", label: "Another course" }],
+        quiet: [{ id: "atlantic", label: "Sail across the Atlantic", href: "./helm.html" }],
       };
     case "race":
       return {

@@ -120,14 +120,16 @@ export function starsText(s: Stars, goal: Goal, ghost?: Stars): { stars: string;
   const st = goal.storm;
   let why = st ? `Closest to the storm's centre: ${km(s.closest_km)}.` : "";
   if (!s.sailing) why = `${why} She didn't make it to the end.`.trim();
-  else if (st && s.stars === 0) why += ` ★ needs ${km(st.clear_km)}.`;
-  else if (st && s.stars === 1) why += ` ★★ needs ${km(st.well_km)}.`;
+  // What the next star asks, in words a non-sailor reads at once (Elena), not "★ needs 250 km".
+  else if (st && s.stars === 0) why += ` Stay at least ${km(st.clear_km)} from the storm's centre to earn a star.`;
+  else if (st && s.stars === 1) why += ` Stay at least ${km(st.well_km)} from the storm's centre to earn a second star.`;
   else if (s.stars === 2 && goal.stars3) why += ` ★★★ needs you east of ${Math.abs(goal.stars3.east_of)}°W, battery never under ${Math.round(goal.stars3.battery_min * 100)}%.`;
   return {
     stars: "★".repeat(s.stars) + "☆".repeat(Math.max(0, 3 - s.stars)),
     none: s.stars === 0 ? "No stars this time" : "",
     why: why.trim(),
-    ghost: ghost && st ? `The ghost held its usual route and passed ${km(ghost.closest_km)} from the storm's centre.` : "",
+    // Only when the ghost's route differs from yours: with the autopilot sailing both, the same figure twice reads like a second result (Elena).
+    ghost: ghost && st && km(ghost.closest_km) !== km(s.closest_km) ? `The ghost, on its usual route, passed ${km(ghost.closest_km)} from the centre.` : "",
   };
 }
 
