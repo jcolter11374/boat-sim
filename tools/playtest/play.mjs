@@ -1773,6 +1773,85 @@ const CHECKS = {
       return `one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
     },
   },
+  // #462 (M3): "Continue your voyage". A crossing is saved in the browser and offered on the title and
+  // the Set sail card; practice and a watched voyage never create the offer; a fresh browser has none.
+  "continue-voyage": {
+    path: "?quality=low",
+    run: async (page) => {
+      const KEY = "boatsim.voyage.v1";
+      const saved = () => page.evaluate((k) => { try { return JSON.parse(localStorage.getItem(k) ?? "null"); } catch { return "unreadable"; } }, KEY);
+      const title = async () => {
+        await page.waitForLoadState("networkidle").catch(() => {});
+        await page.goto(SITE + "?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN });
+        await page.waitForTimeout(1500);
+        return page.evaluate(() => { const a = document.getElementById("t-continue"); return { has: !!a, shown: !!a && !a.hidden && a.offsetParent !== null, sub: document.getElementById("t-continue-sub")?.textContent.trim() ?? "", href: a?.getAttribute("href") ?? "", menu: [...document.querySelectorAll("#title nav > a, #title nav > details > summary")].filter((e) => e.offsetParent !== null).map((e) => e.firstChild?.textContent.trim()) }; });
+      };
+      const out = [];
+      // 1. A fresh browser: the title as before.
+      await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN });
+      let t = await title();
+      if (!t.has) throw new SkipCheck("this build has no Continue your voyage (#462 not deployed)");
+      must(!t.shown, `a fresh browser's title offers "Continue your voyage" (${t.sub})`);
+      must((await saved()) === null, "a fresh browser already has a saved voyage");
+      must(t.menu.join("/") === "Set sail/Boatyard/Practice/More", `the fresh title's menu changed: ${t.menu.join(" / ")}`);
+      out.push(`fresh title: ${t.menu.join(" / ")}, no offer`);
+      // 2. Practice never creates the offer.
+      await page.goto(SITE + "helm.html?practice&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await practiceTriangle(page);
+      must(await page.evaluate(() => !!window.__wheel?.on), "practice didn't start");
+      await page.waitForTimeout(20_000);
+      must((await saved()) === null, `practice saved a voyage: ${JSON.stringify(await saved()).slice(0, 120)}`);
+      // 3. A watched voyage never creates it either.
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.goto(SITE + "helm.html?watch=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && (window.__helm.watch || window.__helm.error || window.__helm.view !== "watch"), null, { timeout: 5 * MIN }).catch(() => {});
+      await page.waitForTimeout(20_000);
+      must((await saved()) === null, `a watched voyage saved a voyage: ${JSON.stringify(await saved()).slice(0, 120)}`);
+      t = await title();
+      must(!t.shown, `the title offers "Continue your voyage" after only practice and a watched voyage (${t.sub})`);
+      out.push("practice and ?watch= saved nothing; title still has no offer");
+      // 4. A crossing: sail a minute, leave, come back.
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      await page.evaluate(() => document.getElementById("go").click());
+      await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), "the crossing didn't start");
+      await page.waitForTimeout(60_000);
+      await page.waitForFunction((k) => !!localStorage.getItem(k), KEY, { timeout: 40_000 }).catch(() => {});
+      const left = await page.evaluate(() => ({ day: window.__helm.status?.day, clock: window.__helm.clock }));
+      const kept = await saved();
+      must(kept && kept !== "unreadable", `after a minute at sea nothing was saved (day ${left.day?.toFixed(2)})`);
+      t = await title();
+      must(t.shown, `back on the title there's no "Continue your voyage" (saved day ${kept.day})`);
+      must(/Day \d+|The first day/.test(t.sub) && /km to go/.test(t.sub), `the offer doesn't give the day and the km to go: "${t.sub}"`);
+      const keptNow = await saved();
+      out.push(`left at day ${left.day?.toFixed(2)}; title offers "Continue your voyage": "${t.sub}"`);
+      // The Set sail card offers it too.
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
+      const card = await page.evaluate(() => { const e = document.getElementById("ss-continue"); return { shown: !!e && !e.hidden && e.offsetParent !== null, words: e?.innerText.trim().replace(/\s+/g, " ") ?? "" }; });
+      must(card.shown, "the Set sail card doesn't offer the saved voyage");
+      out.push(`card: "${card.words.slice(0, 110)}"`);
+      // Open it from the title.
+      t = await title();
+      await page.evaluate(() => document.getElementById("t-continue").click());
+      await page.waitForURL(/helm\.html\?.*continue=1/, { timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 10 * MIN });
+      const back = await page.evaluate(() => ({ err: window.__helm.error, day: window.__helm.status?.day, clock: window.__helm.clock, first: document.querySelector("#timebar .rate")?.textContent.trim(), pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent.trim() ?? "none", card: (() => { const e = document.getElementById("start"); return !!e && !e.hidden && e.offsetParent !== null; })() }));
+      must(!back.err, `continuing failed: ${back.err}`);
+      must(!back.card, "continuing shows the Set sail card instead of the voyage");
+      must(Math.abs(back.day - keptNow.day) < 0.05, `the voyage came back at day ${back.day?.toFixed(2)}, but it was saved at day ${keptNow.day?.toFixed?.(2) ?? keptNow.day}`);
+      must(back.clock === 0, `the continued voyage isn't paused (clock ${back.clock} h/s)`);
+      must(back.first === "Real time", `Real time isn't first on the bar (${back.first})`);
+      await page.screenshot({ path: `play-${BROWSER}-continue.png` }).catch(() => {});
+      out.push(`continued at day ${back.day.toFixed(2)} (saved ${Number(keptNow.day).toFixed(2)}), paused, Real time first`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
