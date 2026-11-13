@@ -21,8 +21,38 @@ export const HERO_SKY_DAY = 20190;
  * radius, so the low sun's light stays by the sun and nothing lies over the boat.
  */
 export const HERO_GLOW = { scale: 0.45, radius: 0.2 };
-/** A gentle sea: low enough that the hull stays clear of the crests from a 1.5 m camera, big enough to move. */
-export const HERO_SEA: SeaState = { name: "Title", hs: 0.8, tp: 6.5, meanDirection: 0.3 };
+/** How much the far water takes of the sky's warm horizon colour (0..1; gentle). */
+export const HERO_SEA_WARM = 0.55;
+/**
+ * How the title lights a boat. sunOff: how far round from the lens's line the low sun stands
+ * (degrees; framing.ts titleShot). fill, env: how much of the sky dome's light and of the
+ * sky's reflections she keeps. back: the sun's edge light and the glow through sailcloth.
+ *
+ * A boat with sails is filmed towards the sun (30 degrees off it): her sails glow and she
+ * reads as a shape against the sky. A low boat with no sails has nothing to glow, and that
+ * way round her near side was in shadow: the orange kayak read as a dull brown shape on
+ * grey-black water (Elena, 13 Nov). So for those the sun stands over the lens's shoulder, at
+ * about three-quarters: the side we see catches the warm light, the deck reflects the sky.
+ */
+export interface HeroLight {
+  sunOff: number;
+  fill: number;
+  env: number;
+  back: number;
+  /** Warm light on the far ripples, between her and the horizon (0..1). */
+  glint: number;
+}
+export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0 };
+export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6 };
+export function heroLightFor(key: string): HeroLight {
+  return key === "kayak" || key === "randolph" || key === "stock_ocean_rower45" ? HERO_LIGHT_LOW : HERO_LIGHT_SAILS;
+}
+/**
+ * A calm evening in Annapolis Roads (the title's boat floats off the town, titleShore.ts):
+ * small ripples a quarter of a metre high, so the water lies flat and takes the sky's
+ * colours (Elena, 13 Nov; it was an open-sea swell of 0.8 m before the shore came).
+ */
+export const HERO_SEA: SeaState = { name: "Title", hs: 0.25, tp: 2.6, meanDirection: 0.3 };
 
 /** The boat the hero shows: the player's own; our kayak when they haven't chosen one. */
 export function heroSpec(mine: MyBoat | null): BoatSpec {

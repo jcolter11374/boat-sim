@@ -46,9 +46,11 @@ import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
+import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
+import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
-import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -1436,6 +1438,9 @@ function applyPending(all = false): void {
 /** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
 let rateAtEnd = 0;
 function setRate(r: number, drain = false): void {
+  // Your voyage is over and the picture is playing out to the results: a speed key (1 to 5, Space) can't start the
+  // clock again. It used to, and the run-out stopped where it was with no results card ever coming.
+  if (r > 0 && !SPECTATE && page.status?.over) return;
   if (rate > 0) rateAtEnd = rate; // the speed the clock last ran at
   easeUpAt = null;
   drainRate = drain && rate > 0 ? rate : 0;
@@ -1724,7 +1729,7 @@ function windFrom(fromDeg: number, kn: number): { u: number; v: number } {
   return { u: Math.sin(toward) * ms, v: Math.cos(toward) * ms };
 }
 async function practiceSpell(kind: CourseKind | "drill"): Promise<void> {
-  $("practice-end").hidden = true;
+  practiceCardShut();
   buoys.set([]);
   if (kind === "drill" || !depths?.known) {
     const kinds = [
@@ -1796,45 +1801,50 @@ function practiceEnded(r: WheelResult): void {
   practiceAt = null;
   buoys.set([]);
   ghost.set(null);
-  const card = $("practice-end");
-  card.classList.remove("trial");
-  $("practice-result").hidden = true;
+  $("r-medal").hidden = true;
+  let head = c ? `${c.name[0].toUpperCase()}${c.name.slice(1)} · ${BREEZES[practiceBreeze].kn} knots` : "Practice sailing";
   let text = wheelSummary(r, null).replace(/ (Sail a minute|Sail at least a minute|Your voyage waited|She keeps your trim|For the next).*$/, "");
+  let again: string | undefined;
   if (c) {
     const key = bestKey(c.kind, practiceBreeze);
     const pct = Math.round(r.share * 100);
-    if (r.aground) text = `Shallow water: her keel touched the bottom ${r.markTimes.length ? `after ${r.markTimes.length} of ${r.marks} marks` : "before the first mark"}, so this run ends here. Watch the depth at the top of the wheel panel and steer for deeper water. Try again?`;
+    const trial = c.kind === "triangle" || c.kind === "light";
+    if (r.aground) text = `Shallow water: her keel touched the bottom ${r.markTimes.length ? `after ${r.markTimes.length} of ${r.marks} marks` : "before the first mark"}, so this run ends here. Watch the depth at the top of the wheel panel and steer for deeper water.`;
     else if (!r.reached) text = `Handed back after ${runTime(r.seconds)}, with ${r.markTimes.length} of ${r.marks} marks. Try again?`;
     else if (c.kind === "triangle" || c.kind === "light") {
       const before = saveBest(key, r.seconds);
       if (r.track) saveGhost(key, turnTrack(r.track, -trialFrom));
-      showResult(c.kind, r.seconds, before);
-      text = `Finished ${c.name} in ${runTime(r.seconds)}, trimmed at ${pct}% of her best speed.`;
+      // The headline names the course and breeze, as the old practice card did; the medal and the time are said once, under it.
+      medalCard(c.kind, r.seconds, before);
+      head = `${c.kind === "triangle" ? "The triangle" : "Thomas Point Light"} · ${BREEZES[practiceBreeze].kn} knots`;
+      text = `Trimmed at ${pct}% of her best speed.`;
+      // The first run has no ghost to race yet (Leo): "Try again"; after that, "Race your best run".
+      again = before == null ? "Try again" : "Race your best run";
     } else {
       const before = saveBest(key, r.seconds);
       const pb = before == null ? "Your first time on this course in this breeze." : r.seconds < before ? `A new best (it was ${runTime(before)})!` : `Your best: ${runTime(before)}.`;
       text = `Finished ${c.name} in ${runTime(r.seconds)} of boat time, trimmed at ${pct}% of her best speed. ${pb}`;
     }
+    // A time trial that didn't finish: the same course again (the course and wind are picked on the Set sail card, M1 piece 3).
+    if (trial && !again) again = "Try again";
   }
-  $("practice-sum").textContent = text;
-  if (c) practiceCard();
-  // The course and wind are picked on the Set sail card (M1 piece 3), so the end card only
-  // offers the same course again or the card ("Another course"), a drill included.
-  const retry = !card.classList.contains("trial") && (c?.kind === "triangle" || c?.kind === "light");
-  if (retry) {
-    $("practice-ghost").textContent = "Try again";
-    $("practice-result").hidden = false;
-    // Only the buttons: no medal or time for a run that didn't finish (style, as .medal sets its own display).
-    for (const el of Array.from($("practice-result").children)) (el as HTMLElement).style.display = el.classList.contains("result-go") ? "" : "none";
-  } else for (const el of Array.from($("practice-result").children)) (el as HTMLElement).style.display = "";
-  $("practice-again").hidden = retry || card.classList.contains("trial");
-  card.hidden = false;
+  // The one results card (M3): practice's headline, story and medal; no ocean chart, calls or details.
+  $("r-head").textContent = head;
+  $("r-story").textContent = text;
+  for (const id of ["r-stars", "r-calls", "r-details", "r-info", "r-caveat"]) $(id).hidden = true;
+  $("result").querySelector<HTMLElement>(".rc-mid")!.hidden = true;
+  $("r-next").replaceChildren();
+  showWays("practice", { again });
+  $("result").classList.add("practised");
+  document.body.classList.add("results");
+  $("result").hidden = false;
   $("practice-what").hidden = true;
+  $((again ? "again" : "r-course")).focus({ preventScroll: true });
 }
-/** A time trial's result: the medal, the time against your best, and what the next medal needs. */
-function showResult(kind: "triangle" | "light", secs: number, before: number | null): void {
+/** A time trial's medal on the card, the time against your best and what the next medal needs. */
+function medalCard(kind: "triangle" | "light", secs: number, before: number | null): void {
   const medal = medalFor(secs, kind, practiceBreeze);
-  const box = $("practice-result");
+  const box = $("r-medal");
   const m = box.querySelector<HTMLElement>(".medal")!;
   m.dataset.medal = medal ?? "";
   m.querySelector(".medal-name")!.textContent = medal ? MEDAL_WORDS[medal] : "Finished";
@@ -1843,21 +1853,17 @@ function showResult(kind: "triangle" | "light", secs: number, before: number | n
   box.querySelector(".result-time")!.textContent = `${trialClock(secs)} · ${vs}`;
   const up: Medal | null = medal === "gold" ? null : medal === "silver" ? "gold" : medal === "bronze" ? "silver" : "bronze";
   box.querySelector(".result-next")!.textContent = up ? `${MEDAL_WORDS[up]}: under ${trialClock(medalTime(up, kind, practiceBreeze))}` : secs < ROBOT_SECS[kind][practiceBreeze] ? `Faster than the autopilot (${trialClock(ROBOT_SECS[kind][practiceBreeze])})` : `The autopilot: ${trialClock(ROBOT_SECS[kind][practiceBreeze])}. Beat it?`;
-  // The first run has no ghost to race yet (Leo): "Try again"; after that, "Race your best run".
-  $("practice-ghost").textContent = before == null ? "Try again" : "Race your best run";
   box.hidden = false;
-  $("practice-end").classList.add("trial");
-  $("practice-end").querySelector("h1")!.textContent = `${kind === "triangle" ? "The triangle" : "Thomas Point Light"} · ${BREEZES[practiceBreeze].kn} knots`;
 }
-/** The end card's heading for a run that isn't a time trial (the course itself is picked on the Set sail card). */
-function practiceCard(): void {
-  if (!$("practice-end").classList.contains("trial")) $("practice-end").querySelector("h1")!.textContent = "Practice sailing";
+/** The results card closes: practice sails again, or goes back to the Set sail card. */
+function practiceCardShut(): void {
+  $("result").hidden = true;
+  $("result").classList.remove("practised");
+  document.body.classList.remove("results");
 }
 /** Back to the Set sail card, Annapolis still picked with the course and breeze you last sailed (M1 piece 3). */
 function practiceToCard(): void {
-  $("practice-end").hidden = true;
-  $("practice-result").hidden = true;
-  $("practice-end").classList.remove("trial");
+  practiceCardShut();
   $("start").hidden = false;
 }
 if (PRACTICE) {
@@ -1866,10 +1872,8 @@ if (PRACTICE) {
   // unless a link already chose (?go=1 with a course).
   $("start").hidden = params.get("go") === "1" && !!SS.course;
   useBoat("stock_cruiser31");
-  // Both "Another course" buttons go back to the card; "Race your best run" sails the same course again.
-  $("practice-again").addEventListener("click", practiceToCard);
-  $("practice-ghost").addEventListener("click", () => void (lastTrial && practiceSpell(lastTrial)));
-  $("practice-other").addEventListener("click", practiceToCard);
+  // "Another course" goes back to the Set sail card; "Race your best run" (or "Try again") sails the same course again.
+  $("r-course").addEventListener("click", practiceToCard);
   void depthsReady.then((d) => {
     page.practiceBay = d.known;
     if (d.known) {
@@ -2858,7 +2862,6 @@ function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
   // A challenge: the stars tell its story (whether she came through, not who won), and it has its own day.
   const ch = !!m && !!c.stars;
   $("result").classList.toggle("mission", ch);
-  $("again").textContent = ch ? "Try again" : "Play again";
   if (ch) $("r-story").textContent = "";
   if (!m || !c.stars) return;
   const t = starsText(c.stars, m.goal, c.ghost_stars);
@@ -2930,18 +2933,41 @@ async function watchFinish(): Promise<void> {
   $("r-calls").hidden = true;
   $("r-next").replaceChildren();
   drawResultMap();
-  $("again").textContent = "Watch again";
-  const sail = $<HTMLAnchorElement>("r-sail");
-  sail.href = sailLink(location.search, r.start);
-  sail.hidden = false;
-  $("r-look").hidden = false;
-  $("r-postcard").hidden = false; // as the old Watch a voyage ended: the picture on screen, the map and what happened
+  // Save postcard as the old Watch a voyage ended: the picture on screen, the map and what happened.
+  showWays("watch", { sailHref: sailLink(location.search, r.start), day: r.start, raceId: "kayak", canLook: true });
   hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle();
   $("again").focus({ preventScroll: true });
+}
+
+/** The card's buttons and links by what they do (helm/ending.ts). */
+const WAY_EL: Record<WayId, string> = { course: "r-course", atlantic: "r-atlantic", again: "again", follow: "r-follow", sail: "r-sail", boat: "r-boat", race: "r-race", board: "r-board", day: "r-day", postcard: "r-postcard", look: "r-look", watch: "r-watch" };
+/** The boat sailed, as the race knows her: our kayak, a Randolph model, the player's own design; null for one the race can't run. */
+function myRaceId(): string | null {
+  const b = loadMyBoat();
+  if (!b) return "kayak";
+  if (b.kind !== "yard") return null;
+  return b.hash ? "mine" : ["kayak", "revc", "revb"].includes(b.base) ? b.base : null;
+}
+/** The ways on from this ending, the same ones in the same order on every card (M3): buttons first, the quiet links under them. */
+function showWays(mode: EndMode, ctx: Omit<WayCtx, "search">): void {
+  const w = waysOn(mode, { search: location.search, ...ctx });
+  for (const id of Object.values(WAY_EL)) $(id).hidden = true;
+  const place = (row: HTMLElement, ways: typeof w.main, button: boolean) => {
+    for (const x of ways) {
+      const el = $(WAY_EL[x.id]);
+      el.textContent = x.label; // a player's own name for a design can be in it: text only
+      if (x.href && el instanceof HTMLAnchorElement) el.href = x.href;
+      el.classList.toggle("btn", button && el instanceof HTMLAnchorElement);
+      el.hidden = false;
+      row.append(el);
+    }
+  };
+  place($("r-btns"), w.main, true);
+  place($("r-links"), w.quiet, false);
 }
 
 /** The race's results and its boats' names in the race's own order (A, B), kept when the player follows the other boat on. */
@@ -3020,15 +3046,8 @@ async function raceFinish(): Promise<void> {
   $("r-calls").hidden = true;
   $("r-next").replaceChildren();
   drawResultMap();
-  $("again").textContent = "Race again";
-  const follow = $<HTMLButtonElement>("r-follow");
-  follow.hidden = !more;
-  follow.textContent = `Follow ${short(names[1])} to the end`; // a player's own name for a design: text only
-  // "Change the boats" beside it: back to the Set sail card with the autopilot and this other boat picked.
-  const rb = (params.get("race") ?? "").split(",")[1] ?? "";
-  const changer = $<HTMLAnchorElement>("r-boat");
-  changer.textContent = "Change the boats";
-  changer.href = `./helm.html?who=autopilot&against=${(RACE_BOATS as readonly string[]).includes(rb) ? rb : "revc"}`;
+  // "Follow her to the end" when she is still sailing; "Change the boats" goes back to the Set sail card with the autopilot and this other boat picked.
+  showWays("race", { rival: (params.get("race") ?? "").split(",")[1] ?? "", followName: more ? short(names[1]) : undefined });
   $("result").classList.add("watched", "raced");
   document.body.classList.add("results");
   $("result").hidden = false;
@@ -3173,8 +3192,13 @@ async function finish(): Promise<void> {
   $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
   $("r-notes").textContent = bits.join(" ");
   const mine = loadMyBoat();
-  if (mine) $<HTMLAnchorElement>("r-boat").href = `./${myBoatYardLink(mine)}`;
-  $<HTMLAnchorElement>("r-board").href = `./leaderboard.html#${encodeURIComponent(c.build)}`;
+  // A weather challenge's try is kept in this browser for the leaderboard's challenges tab (Rosa's helm/challengeBest.ts). Not a shared voyage: that try was someone else's.
+  if (ch && !THEIRS) {
+    const st = c as Card & { stars?: Stars; ghost_stars?: Stars };
+    const run = (x: Card["boat"], s?: Stars) => ({ stars: s ? s.stars : null, finished: x.outcome === "arrived" || x.outcome === "goal", days: x.days });
+    saveChallengeRun(ch.id, run(me, st.stars), { boat: $("ss-boatname").textContent ?? "", autopilot: run(gh, st.ghost_stars) });
+  }
+  showWays(ch ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch });
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle(); // a soft knock, and the sea drops to half under the card
@@ -3277,15 +3301,27 @@ function drawResultMap(): void {
     const W = cv.width / dpr;
     const H = cv.height / dpr;
     const [ex, ey] = m.xy(...(lastFix(game.boat!) ?? pts[0]));
+    const [fx, fy] = m.xy(target[0], target[1]);
+    const finishOff = !(fx >= 0 && fx <= W && fy >= 0 && fy <= H);
+    const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
+    g.font = "600 11px system-ui, sans-serif";
+    // Where the "km to the finish" words sit in the top-right corner, so the end's own label keeps clear of them (Elena: text on text).
+    const finishBox = finishOff ? { x0: W - 22 - g.measureText(`${left} km to the finish`).width, x1: W, y0: 4, y1: 24 } : null;
     // Where it ended, named (Ines): "Went silent", "Caught in fishing gear"...
     const end = page.card?.boat;
     if (end && end.outcome !== "arrived" && end.ending?.headline) {
       g.font = "600 11px system-ui, sans-serif";
       g.textAlign = ex > W * 0.6 ? "right" : "left";
+      g.textBaseline = "alphabetic"; // the finish words below set "middle" on this same canvas
       g.fillStyle = "rgba(255,200,150,.95)";
       // A challenge met reads "Still sailing", as the headline does (Ines: one story, not "Made it").
       const word = mission() && end.outcome === "goal" ? "Still sailing" : end.ending.headline;
-      const [lx, ly] = [ex + (ex > W * 0.6 ? -10 : 10), ey < 24 ? ey + 18 : ey - 10];
+      const lx = ex + (ex > W * 0.6 ? -10 : 10);
+      const tw = g.measureText(word).width;
+      const [x0, x1] = ex > W * 0.6 ? [lx - tw, lx] : [lx, lx + tw];
+      const hits = (y: number) => !!finishBox && x1 > finishBox.x0 && x0 < finishBox.x1 && y > finishBox.y0 && y - 11 < finishBox.y1;
+      // Above the end marker, or below it when there's no room above or the finish's words are there.
+      const ly = ey < 24 || hits(ey - 10) ? ey + 18 : ey - 10;
       // A dark halo, so a track line under the label never runs through the words (Ines).
       g.strokeStyle = "rgba(8,18,32,.9)";
       g.lineWidth = 3;
@@ -3293,8 +3329,7 @@ function drawResultMap(): void {
       g.strokeText(word, lx, ly);
       g.fillText(word, lx, ly);
     }
-    const [fx, fy] = m.xy(target[0], target[1]);
-    if (fx >= 0 && fx <= W && fy >= 0 && fy <= H) return;
+    if (!finishOff) return;
     // The finish, off the frame: in the top-right corner, "4,728 km to the finish ▶", the arrow
     // pointing its way, clear of the end marker (Ines, Leo).
     const ang = Math.atan2(fy - ey, fx - ex);
@@ -3315,7 +3350,6 @@ function drawResultMap(): void {
     g.textAlign = "right";
     g.textBaseline = "middle";
     g.fillStyle = "rgba(235,242,250,.92)";
-    const left = Math.round(game.status?.boat.km_to_finish ?? 0).toLocaleString("en-US");
     g.fillText(`${left} km to the finish`, ax - 10, ay);
     // The race's start line runs through the frame without its words on a small map: name it.
     const west = game.boat!.course.west_line as [number, number][];
@@ -3784,7 +3818,7 @@ function again(sameDay: boolean): void {
     location.replace(u.href);
   } else location.reload();
 }
-$("again").addEventListener("click", () => again(true));
+$("again").addEventListener("click", () => (PRACTICE ? void (lastTrial && practiceSpell(lastTrial)) : again(true)));
 $("r-follow").addEventListener("click", followRival);
 $("r-day").addEventListener("click", () => again(false));
 $("r-info").addEventListener("click", () => {
@@ -4643,7 +4677,6 @@ async function startVoyage(s: SetSail): Promise<void> {
   history.replaceState(null, "", `helm.html${withChoices(location.search, s)}`);
   if (PRACTICE) {
     practiceBreeze = s.breeze;
-    practiceCard();
     await depthsReady;
     await practiceSpell(s.course || "triangle");
     return;

@@ -178,7 +178,7 @@ export const TITLE: Look = { az: 180 - TITLE_SUN_OFF, f: 0.25, H: 0.3, B: 0, fov
  *  third down the screen; nearly centred across; a fifth wider lens; half the narrow width. */
 export const TITLE_PHONE: Look = { ...TITLE, fov: 34, f: 0.5, H: 0.42, x: 0.15, keepH: true };
 export const TITLE_LOOP_S = 20;
-export function titleShot(host: FramingHost & Required<Pick<FramingHost, "sunDir">>, t: number, cardRight = 0.33, cardBelow = false): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
+export function titleShot(host: FramingHost & Required<Pick<FramingHost, "sunDir">>, t: number, cardRight = 0.33, cardBelow = false, sunOff = TITLE_SUN_OFF): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
   const yaw = host.yaw();
   const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
   const sd = host.sunDir();
@@ -189,7 +189,7 @@ export function titleShot(host: FramingHost & Required<Pick<FramingHost, "sunDir
   // A phone held upright has its menu across the bottom (Jonas; cardBelow): the boat goes in
   // the upper half, near the middle across, bigger in the narrow frame, wider lens for sky and sea.
   const phone = cardBelow;
-  const T = phone ? TITLE_PHONE : TITLE;
+  const T: Look = { ...(phone ? TITLE_PHONE : TITLE), az: 180 - sunOff };
   const w = (2 * Math.PI * t) / TITLE_LOOP_S;
   const look: Look = { ...T, f: T.f * (1 + 0.04 * (0.5 - 0.5 * Math.cos(w))), az: T.az + 0.6 * Math.sin(w) };
   // Whichever side puts the bow to the left of the screen, towards the card; then the boat
@@ -240,8 +240,8 @@ export function titleShot(host: FramingHost & Required<Pick<FramingHost, "sunDir
  * The boat's yaw for the title: side-on to the lens (which stands TITLE_SUN_OFF round from the
  * sun's line), bow to the left of the screen, so the sun rakes along her from astern.
  */
-export function titleHeading(sunDir: THREE.Vector3): number {
-  return Math.atan2(-sunDir.z, sunDir.x) + ((70 + TITLE_SUN_OFF + 5) * Math.PI) / 180;
+export function titleHeading(sunDir: THREE.Vector3, sunOff = TITLE_SUN_OFF): number {
+  return Math.atan2(-sunDir.z, sunDir.x) + ((70 + sunOff + 5) * Math.PI) / 180;
 }
 
 const tallness = new WeakMap<THREE.Object3D, number>();

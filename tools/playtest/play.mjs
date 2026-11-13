@@ -726,7 +726,7 @@ const CHECKS = {
         links: [...document.querySelectorAll("#r-next .next a, #result .rc-btns a, #result .rc-links a")].map((a) => ({ text: a.textContent, href: a.getAttribute("href") })),
       }));
       must(next.head.trim(), "the standing line is empty");
-      for (const want of [/boatyard/, /race/, /leaderboard/]) must(next.links.some((l) => want.test(l.href ?? "")), `no ${want.source} link among the ways on: ${JSON.stringify(next.links)}`);
+      for (const want of [/boatyard/, /race|against=/, /leaderboard/]) must(next.links.some((l) => want.test(l.href ?? "")), `no ${want.source} link among the ways on: ${JSON.stringify(next.links)}`);
       await page.screenshot({ path: `play-${BROWSER}-results-card.png` }).catch(() => {});
       // Follow the leaderboard link like a player: the board loads.
       const lb = next.links.find((l) => /leaderboard/.test(l.href));
