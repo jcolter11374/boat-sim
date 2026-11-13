@@ -72,19 +72,27 @@ const CSS = `
 body.title #topbar .nav, body.title #topbar .more { display: none; }
 #topbar #topbar-chip { margin-left: auto; display: flex; min-width: 0; }
 #topbar .boat { cursor: pointer; font-family: inherit; background: none; white-space: nowrap; padding: 5px 10px; border: 1px solid rgba(160,200,255,.25); border-radius: 999px;
-  font-weight: 600; font-size: 12.5px; color: #dbe6f5; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  font-weight: 600; font-size: 12.5px; color: #dbe6f5; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
 #topbar .boat:hover { border-color: #8ab4ff; }
 #topbar .boat b { color: #ffb072; font-weight: 650; }
 @media (max-width: 760px) {
   #topbar .nav, #topbar .more summary { padding: 7px 6px; }
-  #topbar .more .menu { position: fixed; left: auto; right: 6px; top: calc(var(--bar, 40px) + 4px); } /* the bar is the containing block (backdrop-filter): its right edge */ #topbar .brand .bw-mark { font-size: 20px; } #topbar .boat .p { display: none; } #topbar .boat { max-width: 130px; }
+  #topbar .more .menu { position: fixed; left: auto; right: 6px; top: calc(var(--bar, 40px) + 4px); } /* the bar is the containing block (backdrop-filter): its right edge */ #topbar .brand .bw-mark { font-size: 20px; } #topbar .boat .p { display: none; } #topbar .boat { max-width: 200px; }
 }
 @media (max-width: 480px) {
   #topbar { padding: 0 6px; font-size: 12.5px; } #topbar .brand { margin-right: 4px; } #topbar .brand .bw-mark { font-size: 17px; }
-  #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 40vw; padding: 5px 8px; }
+  #topbar .nav, #topbar .more summary { padding: 7px 3px; }
+  /* The chip never gives up the boat's name: it keeps its width and a long name ("Pearson 31-2 (our model)")
+     goes onto two short lines inside the bar, so "our model" stays visible (B2, Elena). */
+  #topbar #topbar-chip { flex: none; min-width: auto; }
+  #topbar .boat { max-width: 34vw; padding: 3px 9px; white-space: normal; line-height: 1.1; text-align: center; font-size: 12px; border-radius: 14px; }
   /* Phones: the same words as on a desktop, so Practice moves into More; the chip shows the boat's name (Elena). */
   #topbar .nav.ph-more { display: none; } #topbar .more .menu a.ph { display: block; }
 }
+/* The narrowest phones: Boatyard joins Practice in More, so the boat chip keeps her whole name, "our model"
+   and all (B2; the chip itself opens the boat picker, which leads to the Boatyard). */
+#topbar .more .menu a.ph2 { display: none; }
+@media (max-width: 400px) { #topbar .nav.ph-more2 { display: none; } #topbar .more .menu a.ph2 { display: block; } }
 `;
 
 /** Which page we're on, from the file name ("index" for the site root). */
@@ -132,12 +140,12 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   bar.innerHTML =
     `<a class="brand" href="./" title="Bluewater: design a boat, then sail it across the Atlantic">${MARK_SMALL}</a>` +
     top
-      .map((l) => `<a class="nav${l.search === "practice" ? " ph-more" : ""}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
+      .map((l) => `<a class="nav${l.search === "practice" ? " ph-more" : l.page === "boatyard" ? " ph-more2" : ""}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
       .join("") +
     `<details class="more${moreHere ? " cur" : ""}"><summary>More</summary><div class="menu">` +
     top
-      .filter((l) => l.search === "practice")
-      .map((l) => `<a class="ph" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`)
+      .filter((l) => l.search === "practice" || l.page === "boatyard")
+      .map((l) => `<a class="${l.page === "boatyard" ? "ph2" : "ph"}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`)
       .join("") +
     more.map((l) => `<a href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`).join("") +
     `<a href="${CREDITS}" target="_blank" rel="noopener">Credits</a></div></details>` +
