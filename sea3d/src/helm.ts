@@ -59,7 +59,7 @@ import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/ca
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
-import { localTime, shortLocal } from "./replay/localtime";
+import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { Hud, showStrip } from "./helm/hud";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
@@ -874,8 +874,8 @@ function drawWhen(force = false): void {
   $("day").textContent = day;
   $("when").textContent = new Date(ms).toUTCString().slice(5, 22) + " UTC";
   $("local").textContent = localTime(ms, whenHere[0], whenHere[1]);
-  // The strip's date beside the day: local, short; UTC on hover.
-  $("c-date").textContent = shortLocal(ms, whenHere[0], whenHere[1]);
+  // The strip's date beside the day: the boat's local time and its zone, short; UTC on hover.
+  $("c-date").textContent = `${shortLocal(ms, whenHere[0], whenHere[1])} ${zoneLabel(whenHere[0], whenHere[1], ms)}`; // the zone too: locked item S1
   $("c-date").title = $("when").textContent ?? "";
   drawGoal(ms);
 }
