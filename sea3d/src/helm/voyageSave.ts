@@ -5,6 +5,7 @@
 //   saveVoyage(packVoyage({ code: await game.save(), challenge: "", boat: "Kayak", day: 12.4, toGoKm: 4100, rate: 6 }));
 //   const v = loadVoyage();            // null if none saved, or the saved one can't be used
 //   continueLink(v);                   // "helm.html?g=<code>&continue=1": opens it where it was left
+//   welcomeBack(12.4, v.left);         // the note on coming back; never claims more than is true
 //   offerWords(v);                     // "Day 12 · 4,100 km to go · Kayak", under "Continue your voyage"
 //   clearVoyage();                     // when the voyage ends, or the player starts a new one
 //
@@ -40,6 +41,9 @@ export interface SavedVoyage {
   boat: string;
   /** Voyage day when saved, for the offer's words only. */
   day: number;
+  /** The voyage day that was on the screen when the page was last written to, for the
+   *  welcome-back words only (see welcomeBack); null if not known (an older save). */
+  left: number | null;
   /** Km left to the finish when saved, for the offer's words only; null if not known. */
   toGoKm: number | null;
   /** The speed the clock was at: hours of voyage per second, REAL_TIME, or 0 for paused. */
@@ -57,6 +61,7 @@ export interface VoyageNow {
   challenge?: string | null;
   boat?: string | null;
   day: number;
+  left?: number | null;
   toGoKm?: number | null;
   rate?: number | typeof REAL_TIME | null;
   sim?: string | null;
@@ -83,6 +88,7 @@ export function packVoyage(n: VoyageNow, now: Date = new Date()): SavedVoyage | 
     challenge,
     boat: typeof n.boat === "string" ? n.boat.trim().slice(0, 60) : "",
     day: Math.round(n.day * 100) / 100,
+    left: finite(n.left) && n.left >= 0 ? Math.round(n.left * 100) / 100 : null,
     toGoKm: finite(n.toGoKm) && n.toGoKm >= 0 ? Math.round(n.toGoKm) : null,
     rate: okRate(n.rate) ? n.rate : 0,
     sim: typeof n.sim === "string" ? n.sim.slice(0, 80) : "",
@@ -113,6 +119,7 @@ export function parseVoyage(raw: string | null | undefined): SavedVoyage | null 
     challenge: r.challenge,
     boat: typeof r.boat === "string" ? r.boat.slice(0, 60) : "",
     day: r.day,
+    left: finite(r.left) && r.left >= 0 ? r.left : null,
     toGoKm: finite(r.toGoKm) && r.toGoKm >= 0 ? r.toGoKm : null,
     rate: okRate(r.rate) ? r.rate : 0,
     sim: typeof r.sim === "string" ? r.sim.slice(0, 80) : "",
@@ -181,18 +188,45 @@ export function madeBy(v: SavedVoyage, sim: string | null | undefined): boolean 
   return !v.sim || !sim || v.sim === sim;
 }
 
+/** The day the voyage comes back on: the day that was on the screen when it was left, or the
+ *  save's own day if that is earlier (or the save doesn't say). */
+export function standsAt(v: SavedVoyage): number {
+  return v.left !== null ? Math.min(v.left, v.day) : v.day;
+}
+
 /** The offer's second line: where the saved voyage stands. "Day 12 · 4,100 km to go · Kayak"
  *  (the day as the helm counts it: day 12.4 is day 12; before the first midnight, "The first day"). */
 export function offerWords(v: SavedVoyage): string {
-  const parts = [v.day < 1 ? "The first day" : `Day ${Math.floor(v.day)}`];
+  const day = standsAt(v);
+  const parts = [day < 1 ? "The first day" : `Day ${Math.floor(day)}`];
   if (v.toGoKm !== null) parts.push(`${v.toGoKm.toLocaleString("en-US")} km to go`);
   if (v.boat) parts.push(v.boat);
   return parts.join(" · ");
 }
 
+/** How far behind the day you left on a voyage may come back and still be "right where you
+ *  left off": about an hour. */
+const BEHIND_OK_DAYS = 0.05;
+/** How far ahead: the simulator runs a little ahead of the picture, so a voyage comes back
+ *  where the simulator had got to. Half a day reads as the same place; more does not. */
+const AHEAD_OK_DAYS = 0.5;
+
+/** The note when a saved voyage comes back, on day `day`. It says "right where you left off"
+ *  only when that is true: `left` is the day that was on the screen when the page was left
+ *  (null if the save doesn't say). A voyage that comes back earlier than it was left (the
+ *  last save was a little before) says so. */
+export function welcomeBack(day: number, left: number | null): string {
+  const d = day.toFixed(1);
+  if (left !== null && left - day > BEHIND_OK_DAYS && left.toFixed(1) !== d)
+    return `Welcome back. Your voyage was last saved on day ${d}, a little before you left on day ${left.toFixed(1)}. Press play to carry on from there.`;
+  if (left !== null && day - left <= AHEAD_OK_DAYS) return `Welcome back. It's day ${d}, right where you left off. Press play to carry on.`;
+  return `Welcome back. It's day ${d}. Press play to carry on.`;
+}
+
 /** The question before a new crossing ends the saved one: "End your voyage on day 12 and start a new one?" */
 export function endWords(v: SavedVoyage): string {
-  return `End your voyage on ${v.day < 1 ? "its first day" : `day ${Math.floor(v.day)}`} and start a new one?`;
+  const day = standsAt(v);
+  return `End your voyage on ${day < 1 ? "its first day" : `day ${Math.floor(day)}`} and start a new one?`;
 }
 
 /** The link that opens the saved voyage where it was left. `continue=1` tells the helm it is

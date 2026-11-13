@@ -10,6 +10,7 @@ import {
   loadVoyage,
   madeBy,
   offerWords,
+  welcomeBack,
   packVoyage,
   parseVoyage,
   saveVoyage,
@@ -50,6 +51,7 @@ test("a voyage packs to a versioned record, rounded, with the real time it was s
     challenge: "",
     boat: "Kayak",
     day: 12.44,
+    left: null,
     toGoKm: 4101,
     rate: 6,
     sim: "abc123",
@@ -162,6 +164,38 @@ test("the offer says where the voyage stands, in the helm's own day count", () =
   assert.equal(offerWords(packVoyage(now, WHEN)!), "Day 12 · 4,101 km to go · Kayak");
   assert.equal(offerWords(packVoyage({ ...now, day: 0.4 }, WHEN)!), "The first day · 4,101 km to go · Kayak");
   assert.equal(offerWords(packVoyage({ code: CODE, day: 50.9 }, WHEN)!), "Day 50"); // no words it doesn't have
+});
+
+test("the day on the screen when the page was left rides with the save, and an older save without it still loads", () => {
+  const v = packVoyage({ ...now, left: 12.3149 }, WHEN)!;
+  assert.equal(v.left, 12.31);
+  assert.equal(parseVoyage(JSON.stringify(v))!.left, 12.31);
+  const old = { ...v } as Record<string, unknown>;
+  delete old.left;
+  assert.equal(parseVoyage(JSON.stringify(old))!.left, null);
+  assert.equal(parseVoyage(JSON.stringify({ ...v, left: "soon" }))!.left, null);
+  assert.equal(packVoyage({ ...now, left: -1 }, WHEN)!.left, null);
+});
+
+test("the offer names the day the voyage comes back on, not where the simulator had run ahead to", () => {
+  // Left with day 11.9 on the screen; the simulator's code was at day 12.44.
+  assert.equal(offerWords(packVoyage({ ...now, left: 11.9 }, WHEN)!), "Day 11 · 4,101 km to go · Kayak");
+  assert.equal(endWords(packVoyage({ ...now, left: 11.9 }, WHEN)!), "End your voyage on day 11 and start a new one?");
+  // A save from before the page was left: it comes back on the save's day.
+  assert.equal(offerWords(packVoyage({ ...now, left: 14 }, WHEN)!), "Day 12 · 4,101 km to go · Kayak");
+});
+
+test("welcome back says 'right where you left off' only when that is true", () => {
+  // Back on the day it was left, or a little ahead (the simulator runs ahead of the picture).
+  assert.equal(welcomeBack(1.56, 1.56), "Welcome back. It's day 1.6, right where you left off. Press play to carry on.");
+  assert.equal(welcomeBack(1.8, 1.56), "Welcome back. It's day 1.8, right where you left off. Press play to carry on.");
+  // Omar's case: left on day 1.56, the last save was day 0.81.
+  assert.equal(welcomeBack(0.81, 1.56), "Welcome back. Your voyage was last saved on day 0.8, a little before you left on day 1.6. Press play to carry on from there.");
+  // Within the hour, or the same day to one decimal: no fuss.
+  assert.match(welcomeBack(1.52, 1.56), /right where you left off/);
+  // Well ahead of what was on the screen, or a save that doesn't say: just the day.
+  assert.equal(welcomeBack(5, 3), "Welcome back. It's day 5.0. Press play to carry on.");
+  assert.equal(welcomeBack(5, null), "Welcome back. It's day 5.0. Press play to carry on.");
 });
 
 test("the question before a new crossing ends the saved one names its day", () => {
