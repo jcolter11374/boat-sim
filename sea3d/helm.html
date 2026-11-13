@@ -178,6 +178,9 @@
   #trimchip.lost { background: rgba(255,138,42,.2); border-color: #ff8a2a; color: #ffe6d2; }
   #trimchip[hidden] { display: none; }
   /* While at the wheel the voyage controls wait. */
+  /* Watching a recorded voyage (M2, R1): nothing to steer and no ghost, so the orders and the lead cell go; Jonas's S1 dresses the rest. */
+  body.watching #orders, body.watching #orders-tab, body.watching #c-lead, body.watching #c-order { display: none; }
+  #result.watched #r-day, #result.watched #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
