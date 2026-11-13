@@ -1994,6 +1994,9 @@ const CHECKS = {
         await page.waitForFunction(() => document.body.classList.contains("cinema"), null, { timeout: 15_000 }).catch(() => {
           throw new CheckFail(`${name}: C didn't start the cinematic`);
         });
+        // The clock is read once the film is on: at 4 days a second the moment between the key and the film is hours long.
+        const hIn = await page.evaluate(hourOf);
+        const tIn = Date.now();
         await page.waitForTimeout(4000); // the panels fade
         const inside = await shown();
         const still = Object.entries(inside).filter(([id, o]) => id !== "topbar" && o != null && o > 0.05 && before[id] > 0.05).map(([id, o]) => `#${id} (${o})`);
@@ -2010,7 +2013,9 @@ const CHECKS = {
         must((await page.evaluate(soundOf)) === s0, `${name}: a second N didn't put the sound back`);
         await page.waitForTimeout(6000);
         const h1 = await page.evaluate(hourOf);
-        must(h1 - h0 >= -1e-6 && h1 - h0 <= maxHours, `${name}: the clock went from hour ${h0.toFixed(3)} to ${h1.toFixed(3)} in about 12 s of film (C4)`);
+        const secs = (Date.now() - tIn) / 1000;
+        console.log(`CINEMA ${BROWSER} ${name}: hour ${h0.toFixed(3)} before C, ${hIn.toFixed(3)} as the film began, ${h1.toFixed(3)} after ${secs.toFixed(1)} s of film; ${JSON.stringify(await page.evaluate(() => ({ warp: window.__replay?.warp, playing: window.__replay?.playing, clock: window.__helm?.clock })))}`);
+        must(h1 - hIn >= -1e-6 && h1 - hIn <= maxHours, `${name}: the clock went from hour ${hIn.toFixed(3)} to ${h1.toFixed(3)} in ${secs.toFixed(1)} s of film (C4); it stood at ${h0.toFixed(3)} just before C`);
         await jpegLog(page, `cinema-${name}`);
         await page.keyboard.press("Escape");
         await page.waitForFunction(() => !document.body.classList.contains("cinema"), null, { timeout: 15_000 }).catch(() => {
@@ -2020,7 +2025,7 @@ const CHECKS = {
         const after = await shown();
         const lost = Object.entries(before).filter(([id, o]) => o > 0.05 && !(after[id] > 0.05)).map(([id]) => `#${id}`);
         must(!lost.length, `${name}: after leaving the film these didn't come back: ${lost.join(", ")}`);
-        return `${name}: hidden while filming (${Object.entries(before).filter(([, o]) => o > 0.05).map(([id]) => id).join(", ")}), N toggles sound, clock moved ${((h1 - h0) * 60).toFixed(1)} min in ~12 s, Esc leaves and they come back`;
+        return `${name}: hidden while filming (${Object.entries(before).filter(([, o]) => o > 0.05).map(([id]) => id).join(", ")}), N toggles sound, clock moved ${((h1 - hIn) * 60).toFixed(1)} min in ${secs.toFixed(0)} s of film, Esc leaves and they come back`;
       };
       const jpegLog = async (p, name) => {
         const path = `look-${name}.jpg`;
