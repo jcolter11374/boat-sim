@@ -668,8 +668,12 @@ try {
       const run0 = six.day;
       await page.waitForFunction((d) => window.__helm.status.day > d + 0.4 || window.__helm.clock === 0 || window.__helm.error, run0, { timeout: 240000 })
         .catch(() => fail(`helm: at 1 day a second the clock didn't move from day ${run0}`));
-      const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent }));
-      if (ran.err || (ran.clock === 0 ? ran.stop === "time" : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
+      // A "Your call" card (#391) is a reason to pause after a "time" run too; a bare pause isn't.
+      // The card shows once the picture reaches the call's moment, a second or two after the pause.
+      if (await page.evaluate(() => window.__helm.clock === 0 && window.__helm.lastStop === "time"))
+        await page.waitForFunction(() => !document.getElementById("decide").hidden, null, { timeout: 15000 }).catch(() => {});
+      const ran = await page.evaluate(() => ({ day: window.__helm.status.day, clock: window.__helm.clock, stop: window.__helm.lastStop, err: window.__helm.error, state: document.getElementById("timestate").textContent, card: !document.getElementById("decide").hidden }));
+      if (ran.err || (ran.clock === 0 ? ran.stop === "time" && !ran.card : !/day a second/.test(ran.state))) fail(`helm clock: ${JSON.stringify(ran)}`);
       await page.evaluate(() => window.__helm.clock && document.getElementById("t-pause").click()); // pause, unless it paused itself
       await page.waitForFunction(() => window.__helm.clock === 0, null, { timeout: 10000 });
       await page.waitForTimeout(4000); // a run already under way lands
@@ -863,6 +867,26 @@ try {
     const pc = await page.evaluate(() => ({ start: !document.getElementById("start").hidden, course: !document.getElementById("ss-course").hidden, old: !document.getElementById("practice-end").hidden, where: document.querySelector("#ss-where-opts .ss-pill[aria-pressed=true]")?.firstChild?.textContent }));
     if (!pc.start || !pc.course || pc.old || !/Annapolis/.test(pc.where ?? "")) fail(`?practice didn't open the Set sail card on Annapolis: ${JSON.stringify(pc)}`);
     log.push("Set sail links: a rough start filled in; Annapolis practice at the wheel at once; ?practice opens the card on Annapolis");
+    // Watch a voyage on the helm's own sailing screen (M2, R1): a recorded voyage plays with no simulator,
+    // opens in real time (John, T2) with Real time first on the bar (T1), and there is nothing to steer.
+    await page.goto(`${URL}helm.html?quality=low&watch=2020-06-01`);
+    await page.waitForFunction(() => window.__helm?.ready || window.__helm?.error, null, { timeout: 60000 });
+    const wv = await page.evaluate(() => ({
+      err: window.__helm.error,
+      view: window.__helm.view,
+      clock: window.__helm.clock,
+      name: window.__helm.watch?.name,
+      first: document.querySelector("#timebar .rate")?.textContent,
+      pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent,
+      orders: getComputedStyle(document.getElementById("orders-tab")).display,
+      start: !document.getElementById("start").hidden,
+    }));
+    if (wv.err || wv.view !== "watch" || wv.start || wv.name !== "Our kayak") fail(`helm?watch didn't open the recorded voyage: ${JSON.stringify(wv)}`);
+    if (Math.abs(wv.clock - 1 / 3600) > 1e-9 || wv.first !== "Real time" || wv.pressed !== "Real time") fail(`a watched voyage must open in real time, Real time first on the bar: ${JSON.stringify(wv)}`);
+    if (wv.orders !== "none") fail("a watched voyage showed the orders drawer");
+    await page.keyboard.press("Digit4");
+    await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
+    log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
     // Design leaderboard: the published board if there is one, else it says so; the
     // sample board (public/leaderboard-sample, labelled as such) draws tiers and verdicts.
     await page.goto(`${URL}leaderboard.html`);
