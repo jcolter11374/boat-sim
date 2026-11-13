@@ -124,6 +124,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("ss-ask-keep").addEventListener("click", () => location.assign(`./${continueLink(kept)}`));
     $("ss-ask-new").addEventListener("click", () => {
       endIt = true;
+      $("go").classList.remove("asked");
       clearVoyage();
       $("ss-continue").hidden = true;
       $("go").click();
@@ -277,6 +278,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
         $("ss-ask-q").textContent = endWords(kept);
         for (const id of ["ss-continue-words", "ss-continue-go", "ss-continue-new"]) $(id).hidden = true;
         $("ss-ask").hidden = false;
+        $("go").classList.add("asked"); // already pressed: "Keep sailing" is the one bright button now (Leo)
         $("ss-continue").scrollIntoView({ block: "nearest" });
         $("ss-ask-keep").focus();
         return;
