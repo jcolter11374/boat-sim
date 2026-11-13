@@ -42,7 +42,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
-import { raceLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
+import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { outcomeLine } from "./replay/story";
 import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
@@ -65,6 +65,7 @@ import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/ch
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
+import { tapeItems, type TapeMark } from "./replay/skytape";
 import { Hud, showStrip } from "./helm/hud";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
@@ -429,6 +430,8 @@ const page = {
   frames: 0,
   /** Where the lens has slid the boat (fractions of the screen; Leo's plan item 1). */
   third: [0, 0] as number[],
+  /** The sky guide when watching: the compass bearing the camera looks along, and whether it's tipped up (for tests). */
+  sky: null as { view: number; lookUp: boolean } | null,
   /** The voyage hour the picture shows, and the hour the simulator has reached (for tests). */
   hour: 0,
   simHour: 0,
@@ -673,6 +676,83 @@ async function shareLink(): Promise<void> {
     sharing = false;
   }
 }
+
+// ---------- sky guide when watching (decision L4): the compass strip along the top, "Look up at the sky", labels in the sky ----------
+const viewDir = new THREE.Vector3();
+const skyProj = new THREE.Vector3();
+let lastGuide = 0;
+const bearingOf = (v: THREE.Vector3): number => (THREE.MathUtils.radToDeg(Math.atan2(v.x, -v.z)) + 360) % 360;
+function skySpan(cls: string, text: string, x: number, colour = ""): HTMLSpanElement {
+  const e = document.createElement("span");
+  e.className = cls;
+  e.textContent = text;
+  e.style.left = `${x}px`;
+  if (colour) e.style.color = colour;
+  return e;
+}
+function skyGuide(sunEl: number, sunAz: number): void {
+  const on = page.ready && document.body.classList.contains("sailing");
+  for (const id of ["compass", "lookup", "skylabels"]) $(id).hidden = !on;
+  const now = performance.now();
+  if (!on || now - lastGuide < 50) return;
+  lastGuide = now;
+  viewDir.copy(controls.target).sub(camera.position);
+  const view = bearingOf(viewDir);
+  const night = sunEl < -6;
+  const polaris = atmos.starDirs.get("North Star (Polaris)");
+  const marks: TapeMark[] = [];
+  if (smoothYaw !== null) marks.push([(90 - THREE.MathUtils.radToDeg(smoothYaw) + 360) % 360, "\u25B2 bow", "#ff8a2a"]);
+  if (sunEl > -1) marks.push([sunAz, "\u2600 sun", "#ffd166"]);
+  if (atmos.moonEl > -1) marks.push([bearingOf(atmos.moonDir), "\u263E moon", "#cfe0ff"]);
+  if (night && polaris && polaris.y > 0) marks.push([bearingOf(polaris), "\u2605 North Star", "#ffffff"]);
+  $("tape").replaceChildren(...tapeItems(view, $("compass").clientWidth || 420, marks).map((i) => skySpan(i.cls, i.text, i.x, i.colour)));
+  // Labels in the sky itself.
+  const labels: HTMLSpanElement[] = [];
+  const tag = (dir: THREE.Vector3, text: string) => {
+    if (dir.y < 0.005) return; // below the horizon
+    skyProj.copy(camera.position).addScaledVector(dir, 1000).project(camera);
+    if (skyProj.z > 1 || Math.abs(skyProj.x) > 1 || Math.abs(skyProj.y) > 1) return;
+    const e = skySpan("", text, (skyProj.x * 0.5 + 0.5) * window.innerWidth);
+    e.style.top = `${(-skyProj.y * 0.5 + 0.5) * window.innerHeight}px`;
+    labels.push(e);
+  };
+  if (sunEl > 0) tag(atmos.sunDir, "Sun");
+  tag(atmos.moonDir, `Moon (${atmos.moonPhaseName})`);
+  if (night && polaris) tag(polaris, "North Star: due north");
+  const dubhe = atmos.starDirs.get("Dubhe");
+  if (night && dubhe) tag(dubhe, "Big Dipper");
+  const belt = atmos.starDirs.get("Alnilam");
+  if (night && belt) tag(belt, "Orion's belt");
+  $("skylabels").replaceChildren(...labels);
+  page.sky = { view, lookUp: lifted };
+}
+// Look up: the camera orbits the boat, so it can't tilt far above the horizon on its own. Raising the point it
+// looks at tips the view up about 20 degrees: horizon near the bottom, about 50 degrees up at the top.
+const LIFT = 3.5; // m
+let lifted = false;
+function setLookUp(on: boolean): void {
+  if (on === lifted || (on && (!SPECTATE || cine.on))) return;
+  lifted = on;
+  controls.target.y += on ? LIFT : -LIFT;
+  if (on) {
+    // Come down near the water and a little way back, so the view tilts up past the boat.
+    const off = camera.position.clone().sub(controls.target);
+    off.y = 0;
+    off.setLength(8);
+    camera.position.copy(controls.target).add(off);
+    camera.position.y = controls.target.y - LIFT + 0.4;
+  }
+  controls.maxDistance = on ? 80 : 60;
+  // Let the camera sit below the raised point (it still never goes under the water).
+  controls.maxPolarAngle = Math.PI * (on ? 0.8 : 0.495);
+  // A wider lens while looking up: from the horizon to about 50 degrees up.
+  camera.fov = on ? 62 : 45;
+  camera.updateProjectionMatrix();
+  $("lookup").setAttribute("aria-pressed", String(on));
+  $("lookup").textContent = on ? "\u2B07 Back to the boat" : "\u2B06 Look up at the sky";
+}
+$("lookup").addEventListener("click", () => setLookUp(!lifted));
+$("cinebtn").addEventListener("click", () => setLookUp(false), true); // the cinematic owns the lens
 
 /** Watching a recorded voyage: the drawer is the compass alone, to read and not to turn, and the strip's cell says who steers. */
 function watchLook(): void {
@@ -2015,6 +2095,11 @@ addEventListener("keydown", (e) => {
     e.preventDefault();
     return;
   }
+  if (!e.repeat && e.code === "KeyL" && SPECTATE) {
+    e.preventDefault();
+    setLookUp(!lifted);
+    return;
+  }
   if (!e.repeat && e.code === "KeyC") {
     e.preventDefault();
     $("cinebtn").click();
@@ -2721,6 +2806,7 @@ async function watchFinish(): Promise<void> {
   $("r-nums").replaceChildren(
     ...numbers(c, r.outcome === "arrived" ? way : way - left, way, 0)
       .slice(0, 2) // days at sea, km of the way: there's no ghost to stand against
+      .map((n, i) => (i === 0 ? { ...n, value: String(Math.round(r.days)) } : n)) // the headline's figure (whole days), not a second one
       .map((n) => {
         const d = document.createElement("div");
         d.className = "n";
@@ -2735,6 +2821,10 @@ async function watchFinish(): Promise<void> {
   $("r-next").replaceChildren();
   drawResultMap();
   $("again").textContent = "Watch again";
+  const sail = $<HTMLAnchorElement>("r-sail");
+  sail.href = sailLink(location.search, r.start);
+  sail.hidden = false;
+  hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
   document.body.classList.add("results");
   $("result").hidden = false;
@@ -2790,6 +2880,7 @@ async function raceFinish(): Promise<void> {
 }
 
 async function finish(): Promise<void> {
+  if (SPECTATE) setLookUp(false);
   if (WATCH) return watchFinish();
   if (RACE) return raceFinish();
   const c = await game.result();
@@ -4157,6 +4248,7 @@ renderer.setAnimationLoop(() => {
   atmos.cloud = clouds.cover; // last frame's, which is close enough
   atmos.rain = clouds.rainShade;
   atmos.set(sp.el, sp.az, storm);
+  if (SPECTATE) skyGuide(sp.el, sp.az);
   showWreck(lat, lon);
   clouds.update(t, dt, camera, cloudFromSun(r ? valueAt(r, r.ghi, h) : null, sp.el), storm, fogChance(lat, lon, Math.hypot(wu, wv) * KN, ms / 86400e3), wu, -wv, atmos.sunDir, atmos.fog.color, atmos.ambient, r?.rain ? valueAt(r, r.rain, h) : null);
   clouds.setMoon(atmos.moonDir, atmos.moonlight);
