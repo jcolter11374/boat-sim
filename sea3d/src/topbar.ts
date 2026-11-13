@@ -22,6 +22,19 @@ export interface BarLink {
   title: string;
 }
 
+/** "Watch a voyage": the Set sail card with The autopilot picked, on the usual day. */
+export const WATCH_HREF = "./helm.html?who=autopilot";
+/** "Race it": the same card with Another boat picked (results.ts raceItLink() gives the same address; a test holds them together). */
+export const RACE_HREF = "./helm.html?who=autopilot&against=revc";
+
+/** Which of the helm page's menu entries an address is: "practice", "watch", "race", or "" for Set sail. */
+export function helmEntry(search: string): string {
+  const p = new URLSearchParams(search);
+  if (p.has("practice")) return "practice";
+  if (p.get("who") === "autopilot") return p.get("against") ? "race" : "watch";
+  return "";
+}
+
 /** The menu (one-game plan, step 1): Set sail, Boatyard and Practice, then the rest under More.
  *  `more` links sit in the More menu. Practice is the helm page with ?practice. */
 export const LINKS: (BarLink & { more?: boolean; search?: string })[] = [
@@ -29,18 +42,20 @@ export const LINKS: (BarLink & { more?: boolean; search?: string })[] = [
   { page: "helm", href: "./helm.html", label: "Set sail", short: "Sail", title: "Cross the Atlantic in your boat, on real weather" },
   { page: "boatyard", href: "./boatyard.html", label: "Boatyard", short: "Build", title: "Build your own boat, part by part, and see if she'd make it" },
   { page: "helm", search: "practice", href: "./helm.html?practice", label: "Practice", short: "Practice", title: "Learn to steer on the Annapolis course" },
-  { page: "voyage", more: true, href: "./voyage.html", label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail, and watch her go." },
-  { page: "race", more: true, href: "./race.html", label: "Race it", short: "Race", title: "Two boats, the same weather: who gets there first?" },
+  // Watch and Race are the Set sail card with the autopilot steering (M3): one sailing screen, not the old
+  // voyage.html and race.html, which stay on the site but are no longer in any menu.
+  { page: "helm", search: "watch", more: true, href: WATCH_HREF, label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail, and watch her go." },
+  { page: "helm", search: "race", more: true, href: RACE_HREF, label: "Race it", short: "Race", title: "Two boats, the same weather: who gets there first?" },
   { page: "leaderboard", more: true, href: "./leaderboard.html", label: "Leaderboard", short: "Board", title: "Which designs reach the finish most often" },
 ];
 /** Credits, last in the More menu. */
 const CREDITS = "https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md";
 
-/** Is this link the page we're on? Practice and Set sail share helm.html. */
+/** Is this link the page we're on? Set sail, Practice, Watch a voyage and Race it share helm.html. */
 export function isCurrent(l: { page: string; search?: string }, here: string, search: string): boolean {
   if (l.page !== here) return false;
-  const practice = new URLSearchParams(search).has("practice");
-  return l.search === "practice" ? practice : !practice;
+  if (l.page !== "helm") return true;
+  return helmEntry(search) === (l.search ?? "");
 }
 
 const CSS = `

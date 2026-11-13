@@ -17,6 +17,7 @@ import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
 import { buildStock, type StockRig } from "./stock";
+import { holdWidth } from "./wire";
 
 export interface BoatModel {
   spec: BoatSpec;
@@ -195,6 +196,9 @@ export function buildKayak(quality: Quality): BoatModel {
     const black = kit.std(0x222426);
     const aftDeck = deckY(3.0, 0.11);
     kit.cyl(g, black, 0.012, 3.0, aftDeck, aftDeck + 0.06, 0.11);
+    // The whip is 10 mm across: under a pixel on the title's long lens, so it broke up and its top
+    // came and went as she moved (John, 13 Nov). Held to at least a pixel, like the yachts' stays.
+    holdWidth(white, 0.005);
     kit.cyl(g, white, 0.005, 3.0, aftDeck + 0.06, aftDeck + 0.95, 0.11);
     kit.cyl(g, black, 0.008, 3.0, aftDeck, aftDeck + 0.2, -0.11);
     kit.cyl(g, kit.std(0xffffff, { emissive: 0xfff3c4, emissiveIntensity: 0.6 }), 0.022, 3.0, aftDeck + 0.2, aftDeck + 0.25, -0.11);
@@ -326,6 +330,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     const dark = kit.std(0x26292c);
     const spar = kit.std(0x2a2d31, { metalness: 0.4 });
     const glass = kit.std(0xd6d3bd, { roughness: 0.5 }); // pultruded fibreglass (Rev C3)
+    holdWidth(glass, 0.006); // its 12 mm rods and stern pole: a fine unbroken line at any range
     kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
     kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
     // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.
