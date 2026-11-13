@@ -32,8 +32,18 @@ export function farBoatTag(name: string, km: number): string {
   return `${shortRacer(name)} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
 }
 
-/** The big map's line: which boat is ahead of which, by full name. */
+/**
+ * A name for the big map's side panel, under its key: "Rev C5". The key right above carries the full name once,
+ * "Randolph Rev C5 (our model)" (B2); repeating it on every line made the panel hard to read. Only for the panel:
+ * the strip and the tag over the far boat stand alone, so they keep "(our model)".
+ */
+export function bareRacer(name: string): string {
+  return shortRacer(name).replace(/\s*\(our model\)$/i, "");
+}
+
+/** The big map's line: which boat is ahead of which, in the panel's short names. */
 export function raceLine(leadKm: number, names: [string, string]): string {
   const c = raceLead(leadKm, names);
-  return c.leader === null ? `${names[0]} and ${names[1]} are level` : `${names[c.leader]} is ${c.value} km ahead of ${names[1 - c.leader]}`;
+  const [a, b] = [bareRacer(names[0]), bareRacer(names[1])];
+  return c.leader === null ? `${a} and ${b} are level` : `${[a, b][c.leader]} is ${c.value} km ahead of ${[a, b][1 - c.leader]}`;
 }

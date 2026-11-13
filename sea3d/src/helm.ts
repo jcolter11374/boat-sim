@@ -70,7 +70,8 @@ import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
 import { Hud, setRacers, showStrip } from "./helm/hud";
-import { farBoatTag, raceLine, shortRacer } from "./helm/raceWords";
+import { bareRacer, farBoatTag, raceLine } from "./helm/raceWords";
+import { slideRoom } from "./framing";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
 import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
@@ -786,8 +787,9 @@ function raceLook(names: [string, string]): void {
     const dash = (colour: string) => Object.assign(document.createElement("i"), { style: `background:${colour}` });
     key.replaceChildren(dash("#ff8a2a"), names[0], document.createElement("br"), dash("#c8d4e6"), names[1]);
   }
-  $("w-boat").textContent = shortRacer(names[0]);
-  $("w-ghost").textContent = shortRacer(names[1]);
+  // The key above them carries the full names ("(our model)" on a Randolph boat, B2); after it the panel uses the short ones.
+  $("w-boat").textContent = bareRacer(names[0]);
+  $("w-ghost").textContent = bareRacer(names[1]);
   $("r-map").setAttribute("aria-label", `The tracks of ${names[0]} and ${names[1]}`);
 }
 
@@ -1152,7 +1154,8 @@ function showReadings(raw: Status): void {
     windTo = (Math.atan2(w.wind_u, w.wind_v) * 180) / Math.PI;
     const from = compassWord(windTo + 180);
     const cur = Math.hypot(w.current_u, w.current_v) * KN;
-    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`;
+    // No current to speak of has no direction: leave it out rather than say "0.0 kn southward".
+    $("weather").textContent = `Wind ${kn.toFixed(0)} kn from the ${from} · waves ${w.hs.toFixed(1)} m${cur < 0.05 ? "" : ` · current ${cur.toFixed(1)} kn ${compassWord((Math.atan2(w.current_u, w.current_v) * 180) / Math.PI)}ward`}`;
   }
   compass.set({ heading: est ? last?.hdg ?? b.heading : b.heading, finish: fb, windTo, windKn: kn });
   // The race with the ghost; in base mode, also what base knows (the picture's numbers would be the truth).
@@ -1177,7 +1180,7 @@ function showReadings(raw: Status): void {
   } else $("baseline").textContent = "";
   $("sailline").hidden = !s.sailing;
   if (s.sailing) $("sailline").textContent = sailText(s);
-  $("ghostline").textContent = WATCH ? "" : `${other ?? "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
+  $("ghostline").textContent = WATCH ? "" : `${other ? bareRacer(other) : "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
 }
 
 // ---------- notes ----------
@@ -4133,7 +4136,11 @@ function frameBoat(dt: number): void {
     // How much of the frame's height the boat takes (a hull stands about a third of its length tall, mast aside).
     const fill = (spec.length * 0.35) / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
     const room = THREE.MathUtils.clamp((0.45 - fill) / 0.25, 0, 1);
-    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room : 0;
+    // On a narrow window (a phone held upright) the boat already spans much of the width: sliding her aside
+    // pushed her off the edge and under the "History nearby" tab. There she stays whole, near the middle.
+    const across = spec.length / (2 * camera.position.distanceTo(controls.target) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+    const roomX = slideRoom(across);
+    tx = Math.abs(side) > 0.02 && ahead.z < 1 ? Math.sign(side) * 0.14 * room * roomX : 0;
     // A call's card on the right third: the boat goes to the left third, the sea she's choosing about beyond her.
     if (!$("decide").hidden && $("decide").classList.contains("withmap")) tx = 0.17 * room;
     ty = -0.1 * room;
