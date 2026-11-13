@@ -1438,6 +1438,9 @@ function applyPending(all = false): void {
 /** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
 let rateAtEnd = 0;
 function setRate(r: number, drain = false): void {
+  // Your voyage is over and the picture is playing out to the results: a speed key (1 to 5, Space) can't start the
+  // clock again. It used to, and the run-out stopped where it was with no results card ever coming.
+  if (r > 0 && !SPECTATE && page.status?.over) return;
   if (rate > 0) rateAtEnd = rate; // the speed the clock last ran at
   easeUpAt = null;
   drainRate = drain && rate > 0 ? rate : 0;
