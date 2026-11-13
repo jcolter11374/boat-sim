@@ -208,6 +208,14 @@ stored in git. Resampled by us.
   code; any public copy keeps this notice.
   Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
   work, with the OpenStreetMap / Overture credit on the page's credit line.
+- The title's skyline (`sea3d/public/title-skyline.bin`, built by
+  `sea3d/tools/title-skyline.py`; this one small file IS stored in git): the
+  outline of the Annapolis shore seen from one spot on the water, worked out
+  from the terrain, land cover and buildings above. It contains information
+  from OpenStreetMap and Overture Maps Foundation and, as a derived database,
+  is under the ODbL 1.0, separate from this repo's MIT code; terrain from AWS
+  Terrain Tiles (sources above). Shown on the title screen as a produced work,
+  with "© OpenStreetMap contributors" on the page's credit line.
 
 ## Yesteryear (font)
 

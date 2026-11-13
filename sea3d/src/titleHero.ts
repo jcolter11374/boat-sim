@@ -41,14 +41,20 @@ export interface HeroLight {
   back: number;
   /** Warm light on the far ripples, between her and the horizon (0..1). */
   glint: number;
+  /** The lens's height above the water (m). A low boat is filmed from a little higher, so she sits on the water below the horizon and the far shore stands clear above her, not on the line of her deck (Elena, 13 Nov). */
+  camH: number;
 }
-export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0 };
-export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6 };
+export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0, camH: 1.5 };
+export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6, camH: 1.9 };
 export function heroLightFor(key: string): HeroLight {
   return key === "kayak" || key === "randolph" || key === "stock_ocean_rower45" ? HERO_LIGHT_LOW : HERO_LIGHT_SAILS;
 }
-/** A gentle sea: low enough that the hull stays clear of the crests from a 1.5 m camera, big enough to move. */
-export const HERO_SEA: SeaState = { name: "Title", hs: 0.8, tp: 6.5, meanDirection: 0.3 };
+/**
+ * A calm evening in Annapolis Roads (the title's boat floats off the town, titleShore.ts):
+ * small ripples a quarter of a metre high, so the water lies flat and takes the sky's
+ * colours (Elena, 13 Nov; it was an open-sea swell of 0.8 m before the shore came).
+ */
+export const HERO_SEA: SeaState = { name: "Title", hs: 0.25, tp: 2.6, meanDirection: 0.3 };
 
 /** The boat the hero shows: the player's own; our kayak when they haven't chosen one. */
 export function heroSpec(mine: MyBoat | null): BoatSpec {
