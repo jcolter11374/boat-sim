@@ -3173,6 +3173,32 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // L5 (Rosa): leaderboard.html#challenges opens the Weather challenges tab; the board's "Race it" opens the Set
+  // sail card ready on "Start the race". (Known and parked: the phone's "Against our kayak" column runs off.)
+  "board-raceit": {
+    path: "leaderboard.html#challenges",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 2 * MIN }).catch(() => {});
+      await page.waitForTimeout(2000);
+      const a = await page.evaluate(() => ({ tab: document.getElementById("tab-challenges")?.getAttribute("aria-selected"), panel: !document.getElementById("p-challenges")?.hidden, rows: document.querySelectorAll("#crows tr").length, race: [...document.querySelectorAll("a")].filter((e) => e.offsetParent !== null && /race it/i.test(e.textContent)).map((e) => ({ t: e.textContent.trim(), href: e.getAttribute("href") })) }));
+      must(a.tab === "true" && a.panel, `#challenges didn't open the Weather challenges tab (${JSON.stringify(a)})`);
+      // Race it may sit on the Boats tab.
+      let links = a.race;
+      if (!links.length) {
+        await page.evaluate(() => document.getElementById("tab-designs")?.click());
+        await page.waitForTimeout(1500);
+        links = await page.evaluate(() => [...document.querySelectorAll("a")].filter((e) => e.offsetParent !== null && /race it/i.test(e.textContent)).map((e) => ({ t: e.textContent.trim(), href: e.getAttribute("href") })));
+      }
+      must(links.length, "no Race it link on either tab");
+      await page.goto(new URL(links[0].href, SITE + "leaderboard.html").href, { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 3 * MIN });
+      await page.waitForFunction(() => /start the race/i.test(document.getElementById("go")?.textContent ?? ""), null, { timeout: 30_000 }).catch(() => {});
+      const b = await page.evaluate(() => ({ url: location.search, go: document.getElementById("go")?.textContent.trim(), card: !document.getElementById("start")?.hidden, against: document.getElementById("ss-against-name")?.textContent.trim() ?? null }));
+      if (BROWSER === "chromium") { const path = "look-board-raceit.jpg"; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } }
+      must(b.card && /start the race/i.test(b.go ?? ""), `Race it (${links[0].href}) opened ${b.url} with "${b.go}" (card ${b.card})`);
+      return `#challenges opens the Weather challenges tab (${a.rows} rows); "${links[0].t}" ${links[0].href} opened the card on "${b.go}" against ${b.against}`;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
