@@ -27,7 +27,7 @@ import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, hasDetailedKayak, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
+import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
@@ -3702,7 +3702,7 @@ for (const k of PLAYABLE_STOCK) {
   input.name = "boat";
   input.value = k;
   const b = document.createElement("b");
-  b.textContent = STOCK[k].name.replace(/^\w/, (c) => c.toUpperCase());
+  b.textContent = playerName(k);
   label.append(input, " ", b, `: ${BOAT_BLURB[k] ?? "a ready-made boat, sailed as it comes."}`);
   $("boats").append(label);
 }
@@ -3738,7 +3738,7 @@ function powerFor(pick: string): void {
 /** The boat a new game sails becomes "my boat" (unless it already is), so the other pages carry it on. */
 function rememberBoat(pick: string, mine: MyBoat | null): void {
   if (pick === MINE || (mine && rowFor(mine) === pick)) return;
-  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: STOCK[pick].name.replace(/^\w/, (c) => c.toUpperCase()), choices: { base: pick } });
+  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: playerName(pick), choices: { base: pick } });
   else saveMyBoat({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {} });
 }
 powerFor(chosenBoat());

@@ -7,7 +7,7 @@
  * there instead. Names a player typed are only ever set as text.
  */
 import { clearMyBoat, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
-import { PLAYABLE_STOCK, STOCK, isStock, type StockKey } from "../boats/specs";
+import { PLAYABLE_STOCK, STOCK, isStock, playerName, type StockKey } from "../boats/specs";
 import { ABOUT } from "../boats/about";
 
 export interface PickerEntry {
@@ -27,10 +27,7 @@ const STOCK_FACT: Partial<Record<StockKey, string>> = {
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small engine",
 };
 
-const capital = (s: string) => s.replace(/^\w/, (c) => c.toUpperCase());
-/** The names a player sees (Leo's glossary): metric, and the cruiser is "Cruiser 31" as on the wheel. */
-const NAME: Partial<Record<StockKey, string>> = { stock_pearson31_2: "Pearson 31-2 (our model)", stock_cruiser31: "Cruiser 31" };
-const nameOf = (k: StockKey) => NAME[k] ?? capital(STOCK[k].name);
+const nameOf = playerName;
 
 /** The picker's rows, in order, for the boat saved now (or none). */
 export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
