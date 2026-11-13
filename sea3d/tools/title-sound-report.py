@@ -35,10 +35,22 @@ for name, info in levels.items():
     f, t, s = spectrogram(x, rate, nperseg=2048, noverlap=1536)
     fig, ax = plt.subplots(figsize=(13, 4.6), dpi=110)
     keep = f <= 5000
-    ax.pcolormesh(t, f[keep], 10 * np.log10(s[keep] + 1e-14), vmin=-125, vmax=-60, cmap="magma", shading="auto")
+    ax.pcolormesh(
+        t,
+        f[keep],
+        10 * np.log10(s[keep] + 1e-14),
+        vmin=-125,
+        vmax=-60,
+        cmap="magma",
+        shading="auto",
+    )
     ax.axhline(2000, color="w", lw=0.8, ls="--")
     ax.text(0.3, 2060, "2 kHz: nothing tonal above this line", color="w", fontsize=8)
-    marks = [(m[0], m[1]) for m in info["moments"]] if info.get("moments") else [(p["t"], p["name"]) for p in info["played"]]
+    marks = (
+        [(m[0], m[1]) for m in info["moments"]]
+        if info.get("moments")
+        else [(p["t"], p["name"]) for p in info["played"]]
+    )
     for at, what in marks:
         ax.axvline(at, color="c", lw=0.6, alpha=0.7)
         ax.text(at + 0.15, 4600, what, color="c", fontsize=8, rotation=90, va="top")
