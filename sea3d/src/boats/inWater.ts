@@ -23,6 +23,8 @@ export interface InWaterLook {
   /** Low only: the sea under the hull as a plane, height y (m) at world (x, z), rising
    *  gx, gz metres per metre east and north. */
   plane?: { x: number; z: number; y: number; gx: number; gz: number };
+  /** Lite only: how dark the wet band and the wet line go, 0..1 (1: as on Low). */
+  strength?: number;
 }
 
 const PARS = /* glsl */ `
@@ -44,6 +46,7 @@ float iwNoise(vec2 p) {
 
 const PARS_LITE = /* glsl */ `
 uniform float uWetH;
+uniform float uWetK;
 uniform float uWetLight;
 uniform float uSeaRough;
 uniform vec3 uWaterTint;
@@ -130,8 +133,8 @@ const BODY_LITE = /* glsl */ `
     gl_FragColor.rgb = mix(under, water, k);
   } else {
     float band = uWetH + 0.09 * uSeaRough;
-    gl_FragColor.rgb *= mix(1.0, 0.45, 1.0 - smoothstep(0.6 * band, band, h));
-    gl_FragColor.rgb *= 1.0 - 0.6 * (1.0 - smoothstep(0.012, 0.045, h)) * 0.87;
+    gl_FragColor.rgb *= mix(1.0, 1.0 - 0.55 * uWetK, 1.0 - smoothstep(0.6 * band, band, h));
+    gl_FragColor.rgb *= 1.0 - 0.6 * uWetK * (1.0 - smoothstep(0.012, 0.045, h)) * 0.87;
   }
 }
 `;
@@ -142,9 +145,10 @@ const TINT = new THREE.Color(0x0b3a52); // GUESS: about the sea's own colour loo
  * Teach every lit material under `root` where the water is. Returns the uniforms to
  * drive each frame. Materials are patched once (a flag stops a second patch).
  */
-export function putInWater(root: THREE.Object3D, lite = false): { update(look: InWaterLook): void } {
+export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySet<THREE.Material>): { update(look: InWaterLook): void } {
   const u = {
     uWetH: { value: 0.05 },
+    uWetK: { value: 1 },
     uWetFoam: { value: 0.5 },
     uWetLight: { value: 1 },
     uSeaRough: { value: 0 },
@@ -160,7 +164,7 @@ export function putInWater(root: THREE.Object3D, lite = false): { update(look: I
     for (const m of mats) {
       const std = m as THREE.MeshStandardMaterial;
       if (!std || !(std.isMeshStandardMaterial || (m as THREE.MeshLambertMaterial).isMeshLambertMaterial || (m as THREE.MeshPhongMaterial).isMeshPhongMaterial)) continue;
-      if (m.userData.inWater) continue;
+      if (m.userData.inWater || (only && !only.has(m))) continue;
       m.userData.inWater = true;
       const prev = m.onBeforeCompile.bind(m);
       m.onBeforeCompile = (sh, r) => {
@@ -193,6 +197,7 @@ export function putInWater(root: THREE.Object3D, lite = false): { update(look: I
       u.uWetFoam.value = look.foam;
       u.uWetLight.value = look.light;
       u.uSeaRough.value = look.rough ?? 0;
+      u.uWetK.value = look.strength ?? 1;
       const pl = look.plane;
       if (pl) {
         u.uSeaPlane.value.set(pl.x, pl.z, pl.gx, pl.gz);
@@ -200,4 +205,33 @@ export function putInWater(root: THREE.Object3D, lite = false): { update(look: I
       }
     },
   };
+}
+
+/**
+ * The title's boat only (Elena, 13 Nov: the Rev C5's white hull met the sea in a hard, clean
+ * edge). The parts of her that reach down to within `reach` m of the water (waterY, in her
+ * root's frame; she must stand unturned at the origin) get their own copies of their materials,
+ * so the light look above (putInWater lite, only these) is hers alone: the demo boats share the
+ * detailed model's materials and keep their own look, and the shared full hook cost the title a
+ * freeze (#511). A material with a hook already (wire.ts) stays shared: a copy would lose it.
+ * Returns the copies, to dispose with the boat.
+ */
+export function ownWetMaterials(root: THREE.Object3D, waterY: number, reach = 0.2): THREE.Material[] {
+  root.updateMatrixWorld(true);
+  const copies = new Map<THREE.Material, THREE.Material>();
+  const box = new THREE.Box3();
+  const own = (m: THREE.Material): THREE.Material => {
+    const lit = (m as THREE.MeshStandardMaterial).isMeshStandardMaterial || (m as THREE.MeshLambertMaterial).isMeshLambertMaterial || (m as THREE.MeshPhongMaterial).isMeshPhongMaterial;
+    if (!lit || m.userData.inWater || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return m;
+    let c = copies.get(m);
+    if (!c) copies.set(m, (c = m.clone()));
+    return c;
+  };
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || /^(sail|batten)/.test(o.name)) return;
+    if (box.setFromObject(mesh).min.y > waterY + reach) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material);
+  });
+  return [...copies.values()];
 }
