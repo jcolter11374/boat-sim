@@ -58,6 +58,23 @@ fetch seastate-data seastate 'seastate_*'
 fetch land-data land 'pico_*' 'baymouth_*' 'lisbon_*' 'annapolis*' 'bay_*'
 # Weather challenges for the helm page's picker (challenges.yml).
 fetch challenge-data challenges 'challenge*'
+# The list itself (challenges.json: names, goals, debriefs) is written from this
+# commit, so a goal added in code reaches the page without republishing the
+# release (Sandy's goal sat unpublished for two days). Only challenges the
+# release already lists are kept: one without its weather bundle couldn't be played.
+if [ -f sea3d/public/challenges/challenges.json ]; then
+  python3 -m boatsim.oceandata.challenges catalog --out sea3d/public/challenges/challenges.fresh.json
+  python3 - <<'PY'
+import json
+d = "sea3d/public/challenges/"
+have = {c["id"] for c in json.load(open(d + "challenges.json"))["challenges"]}
+fresh = json.load(open(d + "challenges.fresh.json"))
+fresh["challenges"] = [c for c in fresh["challenges"] if c["id"] in have]
+json.dump(fresh, open(d + "challenges.json", "w"))
+print("  challenges.json from this commit:", len(fresh["challenges"]), "challenges")
+PY
+  rm -f sea3d/public/challenges/challenges.fresh.json
+fi
 # Today's weather (forecast.yml, display only).
 fetch forecast-data forecast 'forecast_*'
 # The design leaderboard, published only when fair (leaderboard.yml).
