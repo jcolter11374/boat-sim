@@ -17,7 +17,7 @@ import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
 import { buildStock, type StockRig } from "./stock";
-import { holdWidth } from "./wire";
+import { holdThinParts, holdWidth } from "./wire";
 
 export interface BoatModel {
   spec: BoatSpec;
@@ -77,6 +77,8 @@ export async function loadDetailedModels(base = "./models"): Promise<boolean> {
   [kayakDetailed, randolphDetailed] = await Promise.all([loadOne(base, "kayak"), loadOne(base, "randolph")]);
   if (kayakDetailed) applyFinishes(kayakDetailed, "kayak");
   if (randolphDetailed) applyFinishes(randolphDetailed, "randolph"); // generic finishes: their materials are theirs to say
+  // Their aerials and thin rods: a whole line at any range, not dashes (holdThinParts).
+  for (const m of [kayakDetailed, randolphDetailed]) if (m) holdThinParts(m);
   return kayakDetailed !== null || randolphDetailed !== null;
 }
 export const hasDetailedKayak = () => kayakDetailed !== null;
