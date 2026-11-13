@@ -1849,6 +1849,12 @@ const CHECKS = {
       await page.waitForFunction(() => document.getElementById("challenge")?.value === "sandys-shadow", null, { timeout: MIN }).catch(() => {
         throw new CheckFail("the link didn't pick Sandy's shadow on the card");
       });
+      // The live challenge list: nine challenges, and Sandy's shadow carries its goal (#483).
+      const cat = await page.evaluate(async () => { try { const r = await fetch("./challenges/challenges.json", { cache: "no-store" }); const j = await r.json(); const list = Array.isArray(j) ? j : (j.challenges ?? Object.values(j)); const sandy = list.find((c) => c.id === "sandys-shadow"); return { status: r.status, n: list.length, ids: list.map((c) => c.id), goal: sandy?.goal ?? null }; } catch (e) { return { error: String(e) }; } });
+      console.log(`SANDY ${BROWSER} catalogue: ${JSON.stringify(cat)}`);
+      must(!cat.error, `the live challenge list couldn't be read: ${cat.error}`);
+      must(cat.goal, `the live challenge list has no goal on sandys-shadow (${cat.n} challenges)`);
+      must(cat.n === 9, `the live challenge list has ${cat.n} challenges, not 9: ${cat.ids.join(", ")}`);
       await page.evaluate(() => document.getElementById("go").click());
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       must(!(await page.evaluate(() => window.__helm.error)), `Sandy's shadow didn't start: ${await page.evaluate(() => window.__helm.error)}`);
@@ -1893,7 +1899,7 @@ const CHECKS = {
       must(mission.length === 1, `Sandy's big call was asked ${mission.length} times (decisions: ${JSON.stringify(r.d)}; asked: ${JSON.stringify(asked)}; ${end})`);
       must(!stream.length, `Sandy's shadow asked a Gulf Stream call: ${JSON.stringify(stream)}`);
       must(!r.gulf.length, `Sandy's shadow showed a Gulf Stream note: ${JSON.stringify(r.gulf.slice(0, 2))}`);
-      return `${facts}; one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
+      return `live list: 9 challenges, Sandy's goal ${JSON.stringify(cat.goal).slice(0, 120)}; ${facts}; one big call on day ${mission[0].day}; no Gulf Stream call or note; decisions ${r.d.map((x) => `${x.kind}@${x.day}`).join(", ")}; ${r.over ? "voyage over" : "still sailing"} at day ${r.day?.toFixed(1)}`;
     },
   },
   // #462 (M3): "Continue your voyage". A crossing is saved in the browser and offered on the title and
