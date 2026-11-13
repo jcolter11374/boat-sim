@@ -10,7 +10,7 @@ import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
-import { RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
+import { AUTO_DAYS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -185,6 +185,9 @@ export function mountSetSailCard(hooks: CardHooks): void {
         rival = k as typeof rival;
         draw();
       });
+    // With you steering, racing another boat isn't there yet: one quiet line says where it is (Elena).
+    $("ss-rival-soon").hidden = auto;
+    $("ss-rival-soon").textContent = RIVAL_WORDS.soon;
     $("ss-rival-line").textContent = !auto ? RIVAL_WORDS.you : against && against === mine ? RIVAL_WORDS.same : RIVAL_WORDS[racing ? "boat" : "nobody"].line;
     $("ss-against").hidden = !racing;
     $("ss-against-name").textContent = against ? rivalName(against, mineName()) : ""; // a player's own name for a design: text only
@@ -226,11 +229,35 @@ export function mountSetSailCard(hooks: CardHooks): void {
       .filter((o) => o.value !== "2020-04-23" && o.value !== "0")
       .map((o) => ({ key: o.value, label: (o.textContent ?? "").replace(/:.*$/, "").replace(/ 2020$/, "").replace(/(\d+) (\w{3})\w*/, "$1 $2") }));
     const showDays = allDays || (named !== "calm" && named !== "rough");
-    if (auto)
-      pills($("ss-when-opts"), days.map((d) => ({ key: d.day, label: d.label })), on?.day ?? "", (k) => {
-        day = k;
-        draw();
-      });
+    if (auto) {
+      // The same control as with you steering (Elena): Calm, Rough, then "Pick a day…" for the rest.
+      // Her calm day is the day Watch a voyage has always opened on; her rough day is the same 1 April.
+      const has = (d: string) => days.some((x) => x.day === d);
+      const at = on?.day ?? "";
+      const nameOf = (d: string) => (d === AUTO_DAYS.calm ? "calm" : d === AUTO_DAYS.rough ? "rough" : d);
+      const rest = days.filter((d) => d.day !== AUTO_DAYS.calm && d.day !== AUTO_DAYS.rough).map((d) => ({ key: d.day, label: d.label }));
+      const open = allDays || (at !== AUTO_DAYS.calm && at !== AUTO_DAYS.rough) || (!has(AUTO_DAYS.calm) && !has(AUTO_DAYS.rough));
+      pills(
+        $("ss-when-opts"),
+        days.length
+          ? [
+              ...(has(AUTO_DAYS.calm) ? [{ key: "calm", label: CARD_WORDS.when.calm[0], sub: dayLabel(AUTO_DAYS.calm) }] : []),
+              ...(has(AUTO_DAYS.rough) ? [{ key: "rough", label: CARD_WORDS.when.rough[0], sub: dayLabel(AUTO_DAYS.rough) }] : []),
+              ...(open ? rest : rest.length ? [{ key: "\u2026", label: "Pick a day\u2026" }] : []),
+            ]
+          : [],
+        nameOf(at),
+        (k) => {
+          if (k === "\u2026") {
+            allDays = true;
+            draw();
+            return;
+          }
+          day = k === "calm" ? AUTO_DAYS.calm : k === "rough" ? AUTO_DAYS.rough : k;
+          draw();
+        },
+      );
+    }
     else pills(
       $("ss-when-opts"),
       [

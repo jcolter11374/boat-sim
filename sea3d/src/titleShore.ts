@@ -39,7 +39,7 @@ export interface ShoreLight {
 
 /** Land in its own shadow against the light, and land the low sun shines on (linear). */
 const SHADE = new THREE.Color(0.012, 0.014, 0.02);
-const LIT = new THREE.Color(0.05, 0.06, 0.035);
+const LIT = new THREE.Color(0.045, 0.05, 0.045);
 
 /**
  * The strip: two vertices (foot, top) for each bearing that has land, joined to the next
@@ -73,8 +73,9 @@ export function shoreStrip(data: Uint16Array, sunAz: number, light: ShoreLight):
     // Lit where the sun is behind the lens, in its own shadow where we look towards the sun.
     const facing = -(dx * sunH.x + dz * sunH.y);
     const lit = THREE.MathUtils.smoothstep(facing, -0.2, 0.7);
-    c.copy(LIT).lerp(warm.copy(LIT).multiply(light.sun), 0.5).lerp(SHADE, 1 - lit);
-    const clear = shoreClear(d);
+    c.copy(LIT).lerp(warm.copy(LIT).multiply(light.sun), 0.3).lerp(SHADE, 1 - lit);
+    // The lit side gets more haze still: in full light a bare outline read as a sandbar close by, not a far shore (Elena).
+    const clear = shoreClear(d) * (1 - 0.45 * lit);
     const at = position.length / 3;
     for (const [yy, mist] of [
       [-0.8, 0.82], // a little more haze along the water
