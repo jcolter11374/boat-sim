@@ -3330,6 +3330,11 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  "m3-practice-challenge": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => { globalThis.__M3_ONLY = ["practice", "challenge"]; try { return await CHECKS["m3-ends"].run(page); } finally { globalThis.__M3_ONLY = undefined; } },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
