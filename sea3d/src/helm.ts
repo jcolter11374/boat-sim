@@ -66,7 +66,8 @@ import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead,
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
-import { Hud, showStrip } from "./helm/hud";
+import { Hud, setRacers, showStrip } from "./helm/hud";
+import { farBoatTag, raceLine, shortRacer } from "./helm/raceWords";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
 import { Cinema, filmButtons } from "./cinema";
@@ -754,6 +755,20 @@ function setLookUp(on: boolean): void {
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
 $("cinebtn").addEventListener("click", () => setLookUp(false), true); // the cinematic owns the lens
 
+/** A race (M2 piece S4): both boats by name on the strip's lead cell, the big map's key and its camera pick. A Randolph boat is "(our model)" (B2). */
+function raceLook(names: [string, string]): void {
+  setRacers(names);
+  $("c-lead").title = `${names[0]} against ${names[1]}`;
+  const key = document.querySelector<HTMLElement>("#mside .mleg");
+  if (key) {
+    const dash = (colour: string) => Object.assign(document.createElement("i"), { style: `background:${colour}` });
+    key.replaceChildren(dash("#ff8a2a"), names[0], document.createElement("br"), dash("#c8d4e6"), names[1]);
+  }
+  $("w-boat").textContent = shortRacer(names[0]);
+  $("w-ghost").textContent = shortRacer(names[1]);
+  $("r-map").setAttribute("aria-label", `The tracks of ${names[0]} and ${names[1]}`);
+}
+
 /** Watching a recorded voyage: the drawer is the compass alone, to read and not to turn, and the strip's cell says who steers. */
 function watchLook(): void {
   const orders = $("orders");
@@ -1000,7 +1015,8 @@ function drawWhen(force = false): void {
   const r = rep();
   if (!st || !page.ready) return;
   const h = r ? Math.min(hour, lastHour(r)) : st.day * 24;
-  const ms = utc(st.boat.t) - st.day * 86400e3 + Math.round(h * 60) * 60e3; // to the minute
+  // From the voyage's own start: in a race the status's clock and its day can belong to different boats once one is out.
+  const ms = (r ? utc(r.start) : utc(st.boat.t) - st.day * 86400e3) + Math.round(h * 60) * 60e3; // to the minute
   const key = `${ms} ${whenHere}`;
   if (!force && key === whenDrawn) return;
   whenDrawn = key;
@@ -1084,8 +1100,8 @@ function showStatus(): void {
     : `${Math.round(toGo).toLocaleString()} km to the finish`;
   const about = est ? "About " : "";
   const other = page.race?.names[1];
-  $("lead").textContent = WATCH ? "" : other ? (Math.abs(lead) < 1 ? `Level with ${other}` : lead > 0 ? `${Math.round(lead)} km ahead of ${other}` : `${Math.round(-lead)} km behind ${other}`) : Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
-  $("lead").className = lead >= 0 ? "good" : "bad";
+  $("lead").textContent = WATCH ? "" : other ? raceLine(lead, page.race!.names) : Math.abs(lead) < 1 ? "Level with the autopilot ghost" : lead > 0 ? `${about}${Math.round(lead)} km ahead of the ghost` : `${about}${Math.round(-lead)} km behind the ghost`;
+  $("lead").className = other ? "" : lead >= 0 ? "good" : "bad"; // a race takes no side
   const socNow = est ? last?.soc ?? null : b.soc;
   const soc = socNow == null ? 0 : Math.round(socNow * 100);
   $("battext").textContent = socNow == null ? "Battery: no report yet" : est ? `Battery ${soc}% at last report` : `Battery ${soc}%`;
@@ -3342,12 +3358,7 @@ async function begin(): Promise<void> {
       page.status = await game.start(0, false, false);
       useBoat(game.boatBase);
       mode = "hands_on";
-      if (page.race) {
-        // The lead cell is against boat B, by name (a Randolph boat is "our model", B2).
-        const cell = $("c-lead");
-        cell.title = `${page.race.names[0]} against ${page.race.names[1]}`;
-        cell.querySelector(".l")!.textContent = "lead";
-      }
+      if (page.race) raceLook(page.race.names);
     } else {
       const pick = chosenBoat();
       const mine = loadMyBoat();
@@ -4303,7 +4314,7 @@ renderer.setAnimationLoop(() => {
     const vis = proj.z < 1 && Math.abs(proj.x) < 1 && Math.abs(proj.y) < 1;
     ghostTag.hidden = !vis;
     if (vis) {
-      ghostTag.textContent = `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
+      ghostTag.textContent = page.race ? farBoatTag(page.race.names[watch === "boat" ? 1 : 0], km) : `${watch === "boat" ? "Ghost" : "You"} · ${km < 1 ? "alongside" : `${km.toFixed(0)} km`}`;
       const half = ghostTag.offsetWidth / 2 + 8;
       ghostTag.style.left = `${THREE.MathUtils.clamp(((proj.x + 1) / 2) * window.innerWidth, half, window.innerWidth - half)}px`;
       ghostTag.style.top = `${((1 - proj.y) / 2) * window.innerHeight}px`;
