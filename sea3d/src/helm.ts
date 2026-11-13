@@ -4218,6 +4218,16 @@ function frameBoat(dt: number): void {
     // A yacht's mast stands tall above her waterline: set her lower in the band so the masthead clears the bar.
     // On a phone the band is from the bar to the card's top (taller cards, e.g. practice's course line, leave less).
     const band = phoneBand();
+    // The results card on a phone is tall and leaves a short band: step the camera back until she fits it
+    // (her hull, or a yacht's mast, at most about 60% of the band's height and 80% of the width).
+    if (phoneResults && phone && smoothYaw !== null) {
+      const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const tall = spec.length > 5 ? spec.length * 1.3 : spec.length * 0.45;
+      const need = Math.max((tall * window.innerHeight) / (0.6 * Math.max(band.bottom - band.top, 60)), spec.length / 0.8 / camera.aspect) / (2 * tan);
+      const off = camera.position.clone().sub(controls.target);
+      const d = off.length();
+      if (d > 0.01 && d < need * 0.98) camera.position.copy(controls.target).add(off.multiplyScalar((d + (need - d) * Math.min(1, dt * 2)) / d));
+    }
     // One rule for every boat and every card height (a saved voyage's line, a race row, practice's course line make the
     // card taller): her waterline sits a set way down the band, so she is whole inside it with air between her and the card.
     const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
