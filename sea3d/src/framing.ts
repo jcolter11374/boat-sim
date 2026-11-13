@@ -247,3 +247,13 @@ export function heightOf(root: THREE.Object3D, waterY: number): number {
   }
   return h;
 }
+
+/**
+ * How far the sailing view may slide the boat off-centre (1 = the full slide to a third, 0 = not at all),
+ * from the share of the frame's width her hull spans. On a wide window she spans a sixth and slides freely;
+ * on a phone held upright she spans half or more, and sliding her put her bow or stern off the edge.
+ */
+export function slideRoom(across: number): number {
+  if (!Number.isFinite(across)) return 0;
+  return Math.min(1, Math.max(0, (0.5 - across) / 0.2));
+}

@@ -108,6 +108,8 @@ export interface ShotDef {
   roll?: boolean;
   /** Locked off: no hand-held drift (the heel shot, so the heel reads true). */
   locked?: boolean;
+  /** Framed by the hull: a boat with no mast doesn't stand back to fit its aerial (which may leave the top of the frame). */
+  hull?: boolean;
 }
 
 const L = (az: number, f: number, H: number, B: number, fov: number, aim?: [number, number]): Look => ({ az, f, H, B, fov, aim });
@@ -130,9 +132,13 @@ export const SHOTS: Record<ShotKind, ShotDef> = {
   panels: { ref: "bow", from: L(130, 1.5, 0.75, 0.0, 45, [-0.15, 0.4]), to: L(105, 1.5, 0.75, 0.0, 45, [0.15, 0.4]), len: [4, 6] },
   sterndetail: { ref: "bow", from: L(150, 1.4, 0.3, 0.05, 42, [-0.5, 0.1]), to: L(146, 1.5, 0.3, 0.05, 42, [-0.5, 0.1]), len: [4, 6], low: true },
   bowdetail: { ref: "bow", from: L(38, 1.4, 0.3, 0.05, 42, [0.45, 0.2]), to: L(44, 1.5, 0.3, 0.05, 42, [0.45, 0.2]), len: [4, 6], low: true },
-  light: { ref: "bow", from: C(120, 0.55, 0.3, 1.5, 36, [-0.1, 0.3]), to: C(110, 0.6, 0.3, 1.5, 36, [-0.1, 0.3]), len: [6, 8], low: true },
+  // Nearer the middle than the other shots (x): this close, on the full third her stern and aerial were cut by the
+  // frame's edge as the film opened (Elena, 13 Nov).
+  light: { ref: "bow", from: { ...C(120, 0.55, 0.3, 1.5, 36, [-0.1, 0.3]), x: 0.22 }, to: { ...C(110, 0.6, 0.3, 1.5, 36, [-0.1, 0.3]), x: 0.22 }, len: [6, 8], low: true },
   // Night's third shot (Elena, 13 Nov): from astern, low, her stern lamp and her shape against the horizon's glow.
-  sternlight: { ref: "bow", from: C(160, 0.4, 0.4, 1.2, 34, [-0.3, 0.3]), to: C(168, 0.44, 0.4, 1.2, 34, [-0.3, 0.3]), len: [6, 8], low: true },
+  // Framed by the hull (Elena, 13 Nov): fitting the kayak's aerial stood the camera so far back she was a fifth of
+  // the width under two-thirds of empty sky. A third closer now, the horizon on the upper third, her shape across it.
+  sternlight: { ref: "bow", from: C(160, 0.24, 0.25, 1.2, 34, [-0.3, 0.3]), to: C(168, 0.22, 0.25, 1.2, 34, [-0.3, 0.3]), len: [6, 8], low: true, hull: true },
   drone: { ref: "bow", from: L(128, 0.4, 0.45, -0.05, 40), to: L(150, 0.12, 0.9, -0.3, 46), len: [8, 10] },
   stormlow: { ref: "bow", from: C(42, 0.4, 0.33, 2, 32), to: C(48, 0.44, 0.33, 2, 32), len: [4, 6], low: true, roll: true },
   heel: { ref: "bow", from: C(90, 0.5, 0.33, 2.2, 30), to: C(90, 0.6, 0.33, 2.2, 30), len: [6, 7], locked: true },
@@ -630,7 +636,9 @@ export class Cinema {
     const len = this.length();
     const side = this.seq?.side ?? 1;
     const ref = def.ref === "bow" ? this.refDir(def.ref, bow) : threeQuarter(this.refDir(def.ref, bow), bow, look.az, side);
-    const c = compose(this.anchor, bow, ref, side, len, camera.aspect, look, roll, this.host.height?.() ?? 0);
+    const height = this.host.height?.() ?? 0;
+    // A yacht (taller than she's long) is always framed by her mast; a hull shot ignores a small boat's aerial.
+    const c = compose(this.anchor, bow, ref, side, len, camera.aspect, look, roll, def.hull && height <= len ? 0 : height);
     // Above the water under it, always, and high enough that no crest between hides the
     // boat: waves may rise into the foreground, but the boat stays in view.
     // (A crest may hide the hull for a moment; the camera climbs at most 1.5 m to see over it, so it stays low: Ines, 12 Nov.)
