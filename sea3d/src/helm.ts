@@ -47,6 +47,7 @@ import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/w
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { outcomeLine } from "./replay/story";
+import { drawPostcard, savePng } from "./replay/postcard";
 import { RACE_BOATS, raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
@@ -2865,6 +2866,16 @@ function drawStars(c: Card & { stars?: Stars; ghost_stars?: Stars }): void {
 }
 
 /** A watched voyage's ending: what became of her, the days and the distance, and her track. No race, so no verdict. */
+// The watched voyage's postcard (R5: the old Watch a voyage had it): the view now, the ending's map, and how it ended. Saved on the player's own device.
+$("r-postcard").addEventListener("click", () => {
+  const r = game.boat;
+  if (!WATCH || !r) return;
+  const launched = new Date(utc(r.start)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const map = $<HTMLCanvasElement>("r-map");
+  const card = drawPostcard(renderer.domElement, map.hidden ? null : map, { boat: page.watch?.name ?? "The boat", launched, outcome: outcomeLine(r), guess: "", finished: r.outcome === "arrived" });
+  savePng(card, `postcard_${(page.watch?.name ?? "boat").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}_${r.start.slice(0, 10)}.png`);
+});
+
 async function watchFinish(): Promise<void> {
   const c = await game.result(); // the whole voyage is game.boat now
   clearTimeout(soundAskTimer);
@@ -2902,6 +2913,7 @@ async function watchFinish(): Promise<void> {
   const sail = $<HTMLAnchorElement>("r-sail");
   sail.href = sailLink(location.search, r.start);
   sail.hidden = false;
+  $("r-postcard").hidden = false; // as the old Watch a voyage ended: the picture on screen, the map and what happened
   hud.orders(false); // the compass drawer would sit half under the card
   $("result").classList.add("watched");
   document.body.classList.add("results");
