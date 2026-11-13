@@ -50,6 +50,7 @@ Owner: Sam.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import math
 import zlib
@@ -91,6 +92,8 @@ SILENCE_WARN_TOTAL_D = 12  # GUESS: 3 days before the 15-in-total limit
 TRACK_STRIDE_H = 6.0
 UNTIL_CAP_H = 72.0  # "until something happens" stops by this at the latest (Maya, 11 Nov)
 MODES = ("hands_on", "base")
+TRIM_HOURS = 4.0  # a "Take the wheel" spell counts for one watch (Rosa, Theo, Sam: 11 Nov)
+TRIM_BELOW = 0.10  # GUESS (Theo): a clumsy spell costs at most this much below the autopilot
 AUTO = "auto"  # hands-on order: let the ghost's own autopilot sail the boat (#327)
 ORDER_EVERY = timedelta(hours=24)  # "Real base station": one order a day
 COMPASS_LEG_M = 2_000_000.0  # GUESS: a compass order is a waypoint this far along the bearing
@@ -101,6 +104,13 @@ LOOKAHEAD_DAYS = 4.0  # base's forecast looks 3 days ahead; keep it inside the b
 SHARED_LOSS_DAYS = 15.0  # both boats gone this early, the same way: nobody could steer round it
 PASS_MARGIN_KM = 1.0  # a lead change counts once the other boat is this far clear (Maya, 11 Nov)
 PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 11 Nov)
+# A pass only stops the clock when the lead has swung by this much: the old
+# leader's best margin plus the new leader's margin. Smaller passes are a quiet
+# note (status "last_pass"). Leo's play, 12 Nov: a 1 km pass stopping the clock
+# felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
+PASS_STOP_SWING_KM = 25.0
+OUTLOOK_HOURS = 48.0
+TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
 def day_seed(start: datetime) -> int:
@@ -225,6 +235,30 @@ def _iso(t: datetime) -> str:
     return t.isoformat(timespec="minutes")
 
 
+class Trimmed:
+    """The player's autopilot, plus how well the crew trims this watch.
+
+    Whoever steers (the player's helm or, on "auto", the ghost's own autopilot),
+    each Command carries trim_share while a "Take the wheel" spell's watch lasts,
+    and nothing at all otherwise, so with no spell the voyage is unchanged."""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.share: float | None = None
+        self.until: datetime | None = None
+
+    def update(self, sensors, mission, t: datetime):
+        cmd = self.inner.update(sensors, mission, t)
+        if self.share is not None and self.until is not None and t < self.until:
+            return replace(cmd, trim_share=self.share)
+        return cmd
+
+    def __getattr__(self, name):  # on_message_received and the like
+        if name == "inner" or name.startswith("__"):  # inner unset under copy; dunders stay ours
+            raise AttributeError(name)
+        return getattr(self.inner, name)
+
+
 def _no_breakdowns(c):
     c.vessel.hazards = replace(c.vessel.hazards, enabled=False, failures_enabled=False)
 
@@ -255,8 +289,18 @@ class Game:
         self.launch_index, self.day, self.challenge = launch_index, day, challenge
         self.choices = choices
         self.design = catalog.design_for(choices)
+        self.goal: dict | None = None
         if challenge is not None:
+            from boatsim.oceandata.challenges import by_id
+
             self.start, self.seed = challenge_start(env, challenge)
+            # A mission (Sandy's shadow): the voyage ends at the deadline, outcome "goal"
+            # if still sailing (Rosa and Ravi's seam, 12 Nov).
+            self.goal = by_id(challenge).goal_record()
+            if self.goal and self.goal.get("until"):
+                until = datetime.fromisoformat(self.goal["until"].replace("Z", ""))
+                max_days = min(max_days, (until - self.start).total_seconds() / 86400.0)
+                self.max_days = max_days
         elif day is not None:
             self.start = datetime.fromisoformat(day).replace(hour=12)
             # Any April to June noon inside the bundle; a voyage that later
@@ -304,6 +348,12 @@ class Game:
             # so a game with no orders sails exactly the ghost's voyage (#327).
             self.base = HoldCoursePolicy()  # no route corrections once the player steers
             self._auto = (mine.autopilot, mine.base)
+            mine.autopilot = self._trim = Trimmed(mine.autopilot)
+        self.trim_gain_m = 0.0  # distance helm spells gained (or lost) through the water
+        self.watch_gain_m = 0.0  # the same, for the latest watch only
+        # The polar was built with this factor baked in (vessel/vpp.py); a spell's
+        # share is clamped to within TRIM_BELOW of it, up to the crew's best.
+        self.autopilot_factor = float(self.design.vpp.get("autopilot_factor", 1.0))
         ghost = standard_components(self.design, env, env, seed=self.seed, land=land)
         if not breakdowns:
             _no_breakdowns(mine)
@@ -327,6 +377,9 @@ class Game:
         )
         self.orders: list[dict] = []
         self.left_data: set[int] = set()
+        self.storm_closest: dict[int, float] = {}
+        if self.goal:
+            self._update_goal()  # at the drop
         # Who is ahead, with hysteresis: None while level (as at the drop), then
         # "me" or "ghost" once that boat is PASS_MARGIN_KM clear. The first
         # leader is taken quietly (both boats start on top of each other, so
@@ -334,6 +387,10 @@ class Game:
         # leader after that is a pass.
         self.leader: str | None = None
         self.last_pass: str | None = None
+        # The current leader's best margin (km) since it took the lead, and the
+        # latest pass: who, when, how big the swing was, and whether it stopped.
+        self.lead_best_km = 0.0
+        self.pass_note: dict | None = None
         self.close_armed = self._land_km() > LAND_CLOSE_KM
         self.last_close = False
         self._events_seen = 0  # mine's log events already looked at (_step)
@@ -349,6 +406,7 @@ class Game:
         power: float,
         sails: str | None = None,
         engine: bool | None = None,
+        trim: float | None = None,
     ) -> dict:
         """heading: degrees, "finish", "route" or "auto"; power: 0 to 1 of full
         drive power. "auto" (hands on only, where every game starts) hands the
@@ -358,6 +416,11 @@ class Game:
         sail plans (status "sailing"["plans"]), and engine True/False if it has
         one ("sailing"["has_engine"]); None lets the boat decide.
 
+        trim (hands on, sailboats only): the share of the boat's best speed the
+        player sailed at in a "Take the wheel" spell. For the next TRIM_HOURS the
+        boat sails at that share instead of its autopilot's (clamped to
+        [autopilot_factor - TRIM_BELOW, 1]). None leaves a running watch alone.
+
         Hands on: takes effect now. Real base station: sent now if a day has
         passed since the last order (else refused, "accepted": False), and it
         reaches the boat at the boat's next mailbox check ("arrives")."""
@@ -365,8 +428,21 @@ class Game:
         t = v.state.t
         if (sails is not None or engine is not None) and not self.sailboat:
             raise ValueError("this boat has no sails or engine to order")
+        share = self._check_trim(trim)
+        cut = self.link_lost()
+        if cut is not None:
+            # The boat is unmanned: "hands on" is a perfect link, not a person aboard,
+            # so a dead link means no orders in any mode (Maya, 12 Nov).
+            return {
+                "t": _iso(t),
+                "min": round((t - self.start).total_seconds() / 60),
+                "heading": heading,
+                "power": power,
+                "accepted": False,
+                "no_link": cut,
+            }
         if heading == AUTO:
-            return self._order_auto(t, sails, engine)
+            return self._set_trim(self._order_auto(t, sails, engine), share, t)
         check = HelmAutopilot(self.finish, sail_plans=self.sail_plans, has_engine=self.has_engine)
         check.set_order(heading, power, sails, engine)  # same validation in both modes
         heading, power = check.heading, check.power
@@ -380,10 +456,10 @@ class Game:
             o["sails"], o["engine"] = sails, engine
         if self.mode == "hands_on":
             self.helm.set_order(heading, power, sails, engine)
-            v.c.autopilot, v.c.base = self.helm, self.base
+            self._trim.inner, v.c.base = self.helm, self.base
             o["accepted"] = True
             self.orders.append(o)
-            return o
+            return self._set_trim(o, share, t)
         last = self.orders[-1]["t"] if self.orders else None
         if last is not None and t - datetime.fromisoformat(last) < ORDER_EVERY:
             nxt = datetime.fromisoformat(last) + ORDER_EVERY
@@ -392,10 +468,228 @@ class Game:
         self.orders.append(o)
         return o
 
+    def link_lost(self) -> str | None:
+        """Why orders can no longer reach the boat, or None while they can. The
+        Iridium modem lives in the main electronics box (vessel/kayak.py
+        iridium_ok), so once that box has died, or Iridium has gone silent for
+        good, nothing from base gets through. A flat battery is not a lost
+        link: the boat hears its mailbox again once the sun recharges it."""
+        damage = getattr(self.mine.state, "damage", None) or {}
+        if damage.get("electronics_main"):
+            return "main_box"
+        if damage.get("comms_silent"):
+            return "comms_silent"
+        return None
+
+    def preview(
+        self,
+        heading: float | str,
+        power: float,
+        sails: str | None = None,
+        engine: bool | None = None,
+        hours: float = 24.0,
+    ) -> dict:
+        """What an order would do, without doing it (#330): a copy of your boat
+        sails on with it for `hours` in today's forecast (the one base would get
+        now, as forecast() shows, never the true weather: the ghost only ever
+        sees forecasts, so the preview gives the player no peek it doesn't get),
+        and is thrown away. Issuing a forecast is pure (its errors come from the
+        seed and the issue time), so the game's own forecasts don't change.
+        Breakdowns and knockdowns are off in the copy, so the preview neither
+        spends nor shows the voyage's dice. Hands on only. Returns the copy's
+        mean speed through the water (m/s), battery change (0-1), km made
+        towards the finish, and the hours it actually sailed (shorter if it
+        finished, ran aground or reached the end of the weather)."""
+        if self.mode != "hands_on":
+            raise ValueError("a preview is for hands-on games")
+        if heading == AUTO and (sails is not None or engine is not None):
+            raise ValueError("on auto the autopilot sets the sails and engine")
+        v = self.mine
+        c = v.c
+        # Share what is read-only and big (the weather, the land); copy the rest.
+        memo = {id(x): x for x in (c.env, c.forecast, c.land) if x is not None}
+        if heading == AUTO:
+            steer, base = copy.deepcopy(self._auto, memo)
+        else:
+            steer = copy.deepcopy(self.helm, memo)
+            steer.set_order(heading, power, sails, engine)
+            base = copy.deepcopy(self.base, memo)
+        return self._sail_copy(v, steer, base, hours, memo)
+
+    def _sail_copy(self, v: Voyage, steer, base, hours: float, memo: dict) -> dict:
+        """Sail a throw-away copy of voyage `v` for `hours` in the forecast issued
+        now (never the truth), steered by `steer` with `base`, breakdowns off."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        c = v.c
+        memo = {**memo, **{id(x): x for x in (c.env, c.forecast, c.land) if x is not None}}
+        w = copy.deepcopy(v, memo)
+        w.c.env = c.forecast.issue(v.state.t)  # the copy sails in the forecast, not the truth
+        _no_breakdowns(w.c)
+        # A wrapper round the steerer (a running trim, #350) stays, with the new steerer inside it.
+        if hasattr(w.c.autopilot, "inner"):
+            w.c.autopilot.inner = steer
+        else:
+            w.c.autopilot = steer
+        w.c.base = base
+        t0, soc0, km0 = w.state.t, w.state.soc, self._km_to_finish(w)
+        stw, n = 0.0, 0
+        end = t0 + timedelta(hours=hours)
+        # The line it sails, a point every TRACK_EVERY_H, for a call's map (Rosa's cards).
+        track = [[round(w.state.lat, 3), round(w.state.lon, 3)]]
+        next_pt = t0 + timedelta(hours=TRACK_EVERY_H)
+        # What the line costs, at the same points in the same forecast: the roughest sea
+        # and strongest wind on it, and the lowest battery (Elena: a call needs a trade-off).
+        sea = {"hs_max": 0.0, "wind_max": 0.0, "soc_min": float(w.state.soc)}
+
+        def cost() -> None:
+            e = w.c.env.sample(w.state.t, w.state.lat, w.state.lon)
+            sea["hs_max"] = max(sea["hs_max"], float(e.hs))
+            sea["wind_max"] = max(sea["wind_max"], float(math.hypot(e.wind_u, e.wind_v)))
+
+        try:
+            cost()
+            while not w.done and w.state.t < end:
+                w.step()
+                stw += w.state.speed_through_water
+                n += 1
+                sea["soc_min"] = min(sea["soc_min"], float(w.state.soc))
+                if w.state.t >= next_pt:
+                    track.append([round(w.state.lat, 3), round(w.state.lon, 3)])
+                    cost()
+                    next_pt += timedelta(hours=TRACK_EVERY_H)
+        except OutsideCoverage:  # the forecast ran past the end of the weather: a shorter preview
+            pass
+        last = [round(w.state.lat, 3), round(w.state.lon, 3)]
+        return {
+            "hours": (w.state.t - t0).total_seconds() / 3600,
+            "stw": stw / n if n else 0.0,
+            "soc": float(w.state.soc - soc0),
+            "km": km0 - self._km_to_finish(w),
+            "outcome": self._outcome(w) if w.done else "at_sea",
+            "track": track if track[-1] == last else [*track, last],
+            **sea,
+        }
+
+    def outlook(self, orders: list[dict], hours: float = OUTLOOK_HOURS) -> dict:
+        """Each order's honest stake against the ghost, for a "Your call" card
+        (helm decisions plan, Leo and Rosa, 12 Nov): a copy of your boat sails
+        each order, and a copy of the ghost sails its autopilot, for `hours` in
+        the forecast issued now (the one the autopilot plans with; never the
+        true weather), breakdowns off. orders: [{"heading", "power"}, ...]
+        (heading may be "auto"). Returns the ghost's km and, for each order, km
+        made towards the finish and the forecast lead over the ghost then
+        (negative: behind). A forecast, so it can be wrong; the card says so."""
+        g = self.ghost
+        memo = {id(x): x for x in (g.c.env, g.c.forecast, g.c.land) if x is not None}
+        ghost = self._sail_copy(
+            g, copy.deepcopy(g.c.autopilot, memo), copy.deepcopy(g.c.base, memo), hours, memo
+        )
+        lead = self.lead_km()
+        out = []
+        for o in orders:
+            p = self.preview(o["heading"], float(o.get("power", self._cruise())), hours=hours)
+            out.append({**o, **p, "lead_km": lead + p["km"] - ghost["km"]})
+        res = {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+        tracks = [p.get("track") or [] for p in [ghost, *out]]
+        res["current"] = self._current_grid([pt for tr in tracks for pt in tr])
+        return res
+
+    def _current_grid(self, pts: list, step: float = 0.25, pad: float = 0.75) -> dict | None:
+        """The forecast's surface current now, on a grid round the call's lines (Rosa's call
+        map draws the Gulf Stream from it): {lat0, lon0, step, nlat, nlon, u, v}, rows south
+        to north, m/s east and north, 0 outside the weather. Display only."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        v = self.mine
+        pts = [*pts, [v.state.lat, v.state.lon]]
+        if not pts:
+            return None
+        lat0 = math.floor((min(p[0] for p in pts) - pad) / step) * step
+        lon0 = math.floor((min(p[1] for p in pts) - pad) / step) * step
+        nlat = min(40, int((max(p[0] for p in pts) + pad - lat0) / step) + 1)
+        nlon = min(60, int((max(p[1] for p in pts) + pad - lon0) / step) + 1)
+        issued = v.c.forecast.issue(v.state.t)
+        us, vs = [], []
+        for i in range(nlat):
+            for j in range(nlon):
+                try:
+                    e = issued.sample(v.state.t, lat0 + i * step, lon0 + j * step)
+                    cu, cv = float(e.current_u), float(e.current_v)
+                except OutsideCoverage:
+                    cu = cv = 0.0
+                if not (math.isfinite(cu) and math.isfinite(cv)):
+                    cu = cv = 0.0
+                us.append(round(cu, 2))
+                vs.append(round(cv, 2))
+        return {
+            "lat0": lat0,
+            "lon0": lon0,
+            "step": step,
+            "nlat": nlat,
+            "nlon": nlon,
+            "u": us,
+            "v": vs,
+        }
+
+    def best_heading(
+        self, hours: float = OUTLOOK_HOURS, fan=(-30, -20, -10, 0, 10, 20, 30)
+    ) -> dict:
+        """The route check (plan #10): the heading the forecast favours for the
+        next `hours`, from a fan around where the boat points now, at the power
+        in use. Returns the boat's heading now, the best heading, and the km
+        each makes towards the finish (forecast, breakdowns off)."""
+        now = self.mine.state.heading
+        power = self._cruise() if self.on_auto else self.helm.power
+        made = {}
+        for d in fan:
+            h = round(now + d) % 360
+            made[h] = self.preview(h, power, hours=hours)["km"]
+        best = max(made, key=made.get)
+        return {
+            "heading": now,
+            "best": best,
+            "km": made,
+            "gain_km": made[best] - made[round(now) % 360],
+        }
+
     @property
     def on_auto(self) -> bool:
         """True while the player's boat is sailed by the ghost's own autopilot."""
-        return self.mode == "hands_on" and self.mine.c.autopilot is self._auto[0]
+        return self.mode == "hands_on" and self._trim.inner is self._auto[0]
+
+    def _check_trim(self, trim: float | None) -> float | None:
+        if trim is None:
+            return None
+        if self.mode != "hands_on":
+            raise ValueError("a helm spell's trim is a hands-on order")
+        if not self.sailboat:
+            raise ValueError("only a boat with sails takes a helm spell's trim")
+        trim = float(trim)
+        if not math.isfinite(trim):
+            raise ValueError("trim is a share of the boat's best speed, 0 to 1")
+        # Clamped here, not only on the page: a share link can carry anything.
+        return min(1.0, max(self.autopilot_factor - TRIM_BELOW, trim))
+
+    def _set_trim(self, o: dict, share: float | None, t: datetime) -> dict:
+        """Start a watch at `share` from `t` (an order that carries a spell's trim)."""
+        if share is not None:
+            self._trim.share, self._trim.until = share, t + timedelta(hours=TRIM_HOURS)
+            self.watch_gain_m = 0.0
+            o["trim"], o["trim_until"] = share, _iso(self._trim.until)
+        return o
+
+    def trim_status(self) -> dict | None:
+        """The running watch's trim, or None (no spell, or its watch is over)."""
+        tr = getattr(self, "_trim", None)
+        if tr is None or tr.share is None or self.mine.state.t >= tr.until:
+            return None
+        return {
+            "share": tr.share,
+            "until": _iso(tr.until),
+            "factor": self.autopilot_factor,
+            "gain_km": self.watch_gain_m / 1000.0,  # this watch so far
+        }
 
     def _cruise(self) -> float:
         prop = self.design.propulsion
@@ -408,7 +702,7 @@ class Game:
             raise ValueError("auto is a hands-on order; from base, send the route instead")
         if sails is not None or engine is not None:
             raise ValueError("on auto the autopilot sets the sails and engine")
-        self.mine.c.autopilot, self.mine.c.base = self._auto
+        self._trim.inner, self.mine.c.base = self._auto
         o = {
             "t": _iso(t),
             "min": round((t - self.start).total_seconds() / 60),
@@ -484,15 +778,61 @@ class Game:
     def _outcome(self, v: Voyage) -> str:
         if id(v) in self.left_data:
             return "left_data_box"
-        return v.log.outcome.value if v.done else "at_sea"
+        out = v.log.outcome.value if v.done else "at_sea"
+        if out == Outcome.TIMEOUT.value and getattr(self, "goal", None):
+            return "goal"  # still sailing at the mission's deadline
+        return out
+
+    def _storm_km(self, v: Voyage) -> float | None:
+        """km from `v` to the mission's storm centre now, or None (no storm, or
+        outside its track)."""
+        st = (getattr(self, "goal", None) or {}).get("storm")
+        if not st:
+            return None
+        from boatsim.oceandata.challenges import storm_at
+
+        c = storm_at(st["track"], v.state.t)
+        return None if c is None else distance_m(v.state.lat, v.state.lon, *c) / 1000.0
+
+    def _update_goal(self) -> None:
+        """The closest each boat has come to the storm so far (hourly track, every step)."""
+        for v in (self.mine, self.ghost):
+            d = self._storm_km(v)
+            if d is not None and d < self.storm_closest.get(id(v), float("inf")):
+                self.storm_closest[id(v)] = d
+
+    def goal_status(self) -> dict | None:
+        """status()["goal"]: the storm now and closest so far (km), and days to the deadline."""
+        if not getattr(self, "goal", None):
+            return None
+        v = self.mine
+        until = self.start + timedelta(days=self.max_days)
+        closest = self.storm_closest.get(id(v))
+        return {
+            "storm_km": self._storm_km(v),
+            "closest_km": closest,
+            "ghost_closest_km": self.storm_closest.get(id(self.ghost)),
+            "days_left": max(0.0, (until - v.state.t).total_seconds() / 86400.0),
+        }
 
     def _step(self) -> None:
+        tr = self.trim_status()
         self._advance(self.mine)
+        if tr is not None and not getattr(self.mine.state, "engine_on", False):
+            # What the watch's trim was worth this step, through the water: sail
+            # speed is share / autopilot_factor of what the autopilot would make.
+            s = self.mine.state
+            ratio = 1.0 - self.autopilot_factor / tr["share"]
+            gain = s.speed_through_water * self.mine.dt.total_seconds() * ratio
+            self.trim_gain_m += gain
+            self.watch_gain_m += gain
         self._advance(self.ghost, self.mine.state.t)
         self.last_pass = self._update_leader()
         self.last_close = self._update_close()
         self._hear_beacon()
         self.last_silence = self._update_silence()
+        if getattr(self, "goal", None):
+            self._update_goal()
 
     def _hear_beacon(self) -> None:
         """Real base station mode: hand base the beacon positions that got
@@ -561,20 +901,32 @@ class Game:
 
     def _update_leader(self) -> str | None:
         """'ghost_passed' or 'passed_ghost' on the step the leader changes, else
-        None. A lead of a few metres flips back and forth with every wave, so a
+        None (pass_note says whether it is big enough to stop the clock). A lead of a few metres flips back and forth with every wave, so a
         pass needs the other boat PASS_MARGIN_KM clear, none counts in the
         first PASS_QUIET_H after the drop (1 May 2020: a 2 m swing 20 minutes in),
         and the first boat to get clear of the other is not a pass."""
         if self.mine.state.t < self.start + timedelta(hours=PASS_QUIET_H):
             return None
         lead = self.lead_km()
+        mine = lead if self.leader == "me" else -lead
+        if self.leader is not None and mine > self.lead_best_km:
+            self.lead_best_km = mine
         now = "me" if lead > PASS_MARGIN_KM else "ghost" if lead < -PASS_MARGIN_KM else None
         if now is None or now == self.leader:
             return None
         first, self.leader = self.leader is None, now
+        swing, self.lead_best_km = self.lead_best_km + abs(lead), abs(lead)
         if first:
             return None
-        return "ghost_passed" if now == "ghost" else "passed_ghost"
+        kind = "ghost_passed" if now == "ghost" else "passed_ghost"
+        self.pass_note = {
+            "kind": kind,
+            "day": (self.mine.state.t - self.start).total_seconds() / 86400.0,
+            "lead_km": lead,
+            "swing_km": swing,
+            "stopped": swing >= PASS_STOP_SWING_KM,
+        }
+        return kind
 
     def run(
         self,
@@ -596,7 +948,9 @@ class Game:
         Stop reasons: time, battery, wind, land, breakdown, silence,
         ghost_passed, passed_ghost, order_arrived (Real base station mode), over. A pass
         means the lead changed hands by more than PASS_MARGIN_KM, after the
-        first PASS_QUIET_H (see _update_leader). "land" fires on entering
+        first PASS_QUIET_H (see _update_leader); it stops the clock only when
+        the lead swung by PASS_STOP_SWING_KM or more, and smaller ones are
+        status()["last_pass"] notes. "land" fires on entering
         land_within_km, and also the first time the boat closes inside
         LAND_CLOSE_KM (see _update_close), so a start near land still warns.
         "silence" warns before the race's silence limits disqualify the boat
@@ -648,7 +1002,7 @@ class Game:
                 near = now_near
             if stopped is None and silence and self.last_silence:
                 stopped = self.last_silence
-            if stopped is None and ghost_passes and self.last_pass:
+            if stopped is None and ghost_passes and self.last_pass and self.pass_note["stopped"]:
                 stopped = self.last_pass
         return {"stopped": stopped, "status": self.status(), "track": self.track(since=t0)}
 
@@ -675,6 +1029,10 @@ class Game:
             "boat": self._boat(v),
             "ghost": self._boat(self.ghost),
             "lead_km": self.lead_km(),
+            "last_pass": self.pass_note,
+            "goal": self.goal_status(),
+            # None while orders can reach the boat; else why not ("main_box", "comms_silent").
+            "no_link": self.link_lost(),
             "mode": self.mode,
             "show_true_position": True,
             "order": (
@@ -685,6 +1043,10 @@ class Game:
             "power_w": (self._cruise() if self.on_auto else self.helm.power) * self.max_drive_w,
             "sailboat": self.sailboat,
             "silence": self.silence(),
+            "trim": self.trim_status(),  # a helm spell's watch, or None
+            # Every watch so far (km through the water, + = gained): the page keeps
+            # showing the last watch's number after it ends by diffing this.
+            "trim_gain_km": getattr(self, "trim_gain_m", 0.0) / 1000.0,
         }
         if self.sailboat:
             st, tac = v.state, self.helm.tactician
@@ -849,6 +1211,38 @@ class Game:
             "shared_loss": shared,  # both lost early to the same thing: not the player's doing
             "note": note,
             "orders": self.orders,
+            # Helm spells (Rosa): how many watches a spell set, and what they were
+            # worth through the water against the autopilot's own trim (km, + = gained).
+            "trim_watches": sum("trim" in o for o in self.orders),
+            "trim_gain_km": getattr(self, "trim_gain_m", 0.0) / 1000.0,
+            **self._stars(),
+        }
+
+    def _stars(self) -> dict:
+        """A mission's stars, yours and the ghost's ({"stars", "ghost_stars"}, Rosa), from Ravi's
+        judge (boatsim.sandbox.stars.judge(rows, outcome, track, rule)). The storm track and the
+        thresholds come from the goal (challenges.goal_record), so the page, the judge and the
+        CI check use the same numbers. No goal, or no judge yet: nothing, and the page shows none."""
+        goal = getattr(self, "goal", None)
+        if not goal or not goal.get("storm"):
+            return {}
+        try:
+            from boatsim.sandbox.stars import StormStars, judge, storm_track_from
+        except ImportError:
+            return {}
+        st, s3 = goal["storm"], goal.get("stars3", {})
+        track = storm_track_from(st["track"])
+        rule = StormStars(
+            storm=str(st.get("name", "")).upper(),
+            season=track[0][0].year if track else 0,
+            goal_km=float(st["clear_km"]),
+            clear_km=float(st["well_km"]),
+            east_of=float(s3.get("east_of", 180.0)),
+            soc_min=float(s3.get("battery_min", 1.0)),
+        )
+        return {
+            "stars": judge(self.mine.log.rows, self._outcome(self.mine), track, rule),
+            "ghost_stars": judge(self.ghost.log.rows, self._outcome(self.ghost), track, rule),
         }
 
     # ------------------------------------------------------- save and resume
@@ -869,7 +1263,13 @@ class Game:
             "d": self.max_days,
             "o": [
                 [o["min"], o["heading"], o["power"]]
-                + ([o["sails"], o["engine"]] if "sails" in o else [])
+                + (
+                    [o.get("sails"), o.get("engine"), o["trim"]]
+                    if "trim" in o
+                    else [o["sails"], o["engine"]]
+                    if "sails" in o
+                    else []
+                )
                 for o in self.orders
             ],
             "at": round((self.mine.state.t - self.start).total_seconds() / 60),
@@ -908,7 +1308,8 @@ class Game:
             )
             for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))
-                g.order(heading, power, *sail_orders[:2])
+                sails, engine, trim = (*sail_orders[:3], None, None, None)[:3]
+                g.order(heading, power, sails, engine, trim)
             g._advance_to(g.start + timedelta(minutes=p["at"]))
         except (KeyError, TypeError, IndexError, AttributeError) as err:
             # Valid JSON, but not a game this page can rebuild (a mangled link).

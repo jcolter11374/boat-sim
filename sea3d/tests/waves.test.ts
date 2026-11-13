@@ -56,17 +56,29 @@ test("frequencies follow the JONSWAP spectrum: mean frequency and peak", () => {
   assert.equal(JONSWAP_GAMMA, 3.3);
 });
 
-test("directions spread around the mean as cos^2s with s = 10", () => {
+test("directions spread as cos^2s, s = 10 at the peak and broader for shorter waves (Mitsuyasu)", () => {
   const sea = { ...SEA_STATES.gale, meanDirection: 1.0 };
   const comps = components(sea, 48);
   const sx = comps.reduce((a, c) => a + Math.cos(c.direction), 0);
   const sz = comps.reduce((a, c) => a + Math.sin(c.direction), 0);
   const mean = Math.atan2(sz, sx);
-  assert.ok(Math.abs(mean - 1.0) < 0.02, `mean direction ${mean}`);
-  // circular spread sqrt(2 (1 - R)); for cos^2s(d/2), R = s / (s + 1)
+  assert.ok(Math.abs(mean - 1.0) < 0.05, `mean direction ${mean}`);
+  // Each component's own s by its frequency; for cos^2s(d/2) the mean resultant R = s / (s + 1).
+  const fp = 1 / sea.tp;
+  const sOf = (c: (typeof comps)[number]) => {
+    const r = 1 / Math.sqrt((2 * Math.PI * c.wavelength) / G) / fp; // f / fp, deep water
+    return Math.max(1, SPREAD_S * (r <= 1 ? r ** 5 : r ** -2.5));
+  };
+  const want = comps.reduce((a, c) => a + sOf(c) / (sOf(c) + 1), 0) / comps.length;
   const R = Math.hypot(sx, sz) / comps.length;
-  const want = Math.sqrt(2 * (1 - SPREAD_S / (SPREAD_S + 1)));
-  assert.ok(Math.abs(Math.sqrt(2 * (1 - R)) / want - 1) < 0.1, `spread ${Math.sqrt(2 * (1 - R))} vs ${want}`);
+  assert.ok(Math.abs(R / want - 1) < 0.1, `mean resultant ${R} vs ${want}`);
+  // short-crested: the short waves fan out much more than those near the peak
+  const off = (c: (typeof comps)[number]) => Math.abs(Math.atan2(Math.sin(c.direction - 1), Math.cos(c.direction - 1)));
+  const near = comps.filter((c) => sOf(c) > 5);
+  const short = comps.filter((c) => sOf(c) < 3);
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  assert.ok(near.length >= 4 && short.length >= 4, `${near.length} near the peak, ${short.length} short`);
+  assert.ok(avg(short.map(off)) > 1.5 * avg(near.map(off)), `${avg(short.map(off))} vs ${avg(near.map(off))}`);
 });
 
 test("compass 'coming from' turns into the direction of travel", () => {
@@ -234,4 +246,24 @@ test("the sea shader moves the water exactly as displace() does", () => {
       }
     }
   }
+});
+
+test("flow: the sea moves past the boat by exactly the distance sailed", () => {
+  const a = new Sea(SEA_STATES.moderate);
+  const b = new Sea(SEA_STATES.moderate);
+  a.advance(0);
+  b.advance(0);
+  // b's boat sails 3.7 m east and 1.2 m south: b's sea at a point is a's sea 3.7 m east, 1.2 m south of it.
+  b.flow(3.7, 1.2);
+  const ca = a.advance(1 / 60);
+  const cb = b.advance(1 / 60);
+  for (const [x, z] of [[0, 0], [5, -3], [40, 22]]) {
+    const ya = displace(ca, x + 3.7, z + 1.2, 1 / 60)[1];
+    const yb = displace(cb, x, z, 1 / 60)[1];
+    assert.ok(Math.abs(ya - yb) < 1e-9, `${x},${z}: ${ya} vs ${yb}`);
+  }
+  // No flow: the same sea as before this change, bit for bit.
+  const c = new Sea(SEA_STATES.moderate);
+  c.advance(0);
+  assert.deepEqual(c.advance(1 / 60), ca);
 });

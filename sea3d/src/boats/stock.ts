@@ -13,10 +13,14 @@
 
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
+import { addCockpitLight } from "./nightlook";
+import { applyStockFinishes } from "./finishes";
+import { DACRON, clotheSails, tickSails } from "./sailcloth";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { holdWires } from "./wire";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
-import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, SAIL_DRONE, STOCK, type StockKey } from "./specs";
+import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, PEARSON, SAIL_DRONE, STOCK, type StockKey } from "./specs";
 
 /** The Blender file each one is built into (sea3d.yml). */
 const FILE: Record<StockKey, string> = {
@@ -25,6 +29,7 @@ const FILE: Record<StockKey, string> = {
   stock_beachcat16: "stock_beachcat",
   stock_sail_drone7: "stock_drone",
   stock_ocean_rower45: "stock_rower",
+  stock_pearson31_2: "stock_pearson",
 };
 
 /** Sail sizes for each plan, as fractions of full (configs' vpp.plans). Anything
@@ -40,6 +45,12 @@ const PLANS: Record<StockKey, Record<string, { main: number; jib: number }>> = {
   stock_beachcat16: { full: { main: 1, jib: 1 }, main_only: { main: 1, jib: 0 } },
   stock_sail_drone7: {},
   stock_ocean_rower45: {},
+  stock_pearson31_2: {
+    full: { main: 1, jib: 1 },
+    reef1: { main: 0.82, jib: 0.7 },
+    reef2: { main: 0.64, jib: 0.45 },
+    storm: { main: 0.45, jib: 0.18 },
+  },
 };
 
 // ---------------------------------------------------------------- hull shapes ----
@@ -54,6 +65,16 @@ const CRUISER_FORM: HullForm = {
   hb: (s) => (s <= 0.56 ? 1.6 * pos(1 - (1 - s / 0.56) ** 2) ** 0.62 : 1.6 - (1.6 - 1.32) * ((s - 0.56) / 0.44) ** 2),
   kz: (s) => 0.62 * pos(1 - s / 0.2) ** 2 + 0.36 * pos((s - 0.72) / 0.28) ** 1.8,
   dz: (s) => 1.5 - 0.28 * s + 0.12 * pos(1 - s / 0.15) ** 2,
+};
+// Randolph's Pearson 31-2: raked bow overhang, short counter, fullest just aft of the middle.
+const PEARSON_FORM: HullForm = {
+  L: 9.39,
+  n: 2.1,
+  crown: 0.06,
+  wl: PEARSON.waterline,
+  hb: (s) => (s <= 0.55 ? 1.645 * pos(1 - (1 - s / 0.55) ** 2) ** 0.6 : 1.645 - (1.645 - 1.22) * ((s - 0.55) / 0.45) ** 2),
+  kz: (s) => 1.3 * pos(1 - s / 0.25) ** 2 + 0.75 * pos((s - 0.68) / 0.32) ** 1.6,
+  dz: (s) => 1.62 - 0.3 * s + 0.14 * pos(1 - s / 0.18) ** 2,
 };
 const DINGHY_FORM: HullForm = {
   L: 4.2,
@@ -115,6 +136,8 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
               for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat.side = THREE.DoubleSide;
             }
           });
+          applyStockFinishes(g, key); // gelcoat, bottom paint, non-skid (shared by every copy)
+          holdWires(g); // stays and lifelines stay a fine unbroken line at any distance
           detailed.set(key, g);
           return true;
         } catch {
@@ -191,6 +214,7 @@ export class StockRig {
 
   update(dt: number, s: RigState): void {
     this.t += dt;
+    tickSails(dt);
     const plan = s.plan ?? "full";
     const size = PLANS[this.key][plan] ?? { main: 0, jib: 0 };
     this.shown.plan = plan;
@@ -245,14 +269,45 @@ export class StockRig {
 }
 
 // ----------------------------------------------------------- drawn-in-code boats ----
-const SAIL = 0xf4f2ea;
-function triangle(kit: Kit, parent: THREE.Object3D, name: string, a: number[], b: number[], c: number[]): THREE.Mesh {
+const SAIL = DACRON;
+/** A sail between three corners (builder frame) with camber, as blender/build_stock.py sail():
+ * the chord bellies out to builder +z, deepest about 40% back, flatter towards the head.
+ * UVs: u luff (0) to leech (1), v foot (0) to head (1), for the sailcloth's seams and luff. */
+function triangle(kit: Kit, parent: THREE.Object3D, name: string, a: number[], b: number[], c: number[], depth = 0.07): THREE.Mesh {
+  const [tack, head, clew] = [a, b, c].map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+  const nrm = new THREE.Vector3().crossVectors(head.clone().sub(tack), clew.clone().sub(tack)).normalize();
+  if (nrm.z < 0) nrm.negate();
+  const n = 12;
+  const m = 8;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const luff = tack.clone().lerp(head, t);
+    const leech = clew.clone().lerp(head, t);
+    const chord = luff.distanceTo(leech);
+    for (let j = 0; j <= m; j++) {
+      const u = j / m;
+      const bulge = Math.sin(Math.PI * u ** 0.8) * depth * chord * (1 - 0.55 * t);
+      const p = luff.clone().lerp(leech, u).addScaledVector(nrm, bulge);
+      pos.push(p.x, p.y, p.z);
+      uv.push(u, t);
+    }
+  }
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < m; j++) {
+      const k = i * (m + 1) + j;
+      idx.push(k, k + 1, k + m + 2, k, k + m + 2, k + m + 1);
+    }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute([...a, ...b, ...c], 3));
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
   geo.computeVertexNormals();
-  const m = kit.mesh(geo, kit.std(SAIL, { roughness: 0.75 }), parent);
-  m.name = name;
-  return m;
+  const mesh = kit.mesh(geo, kit.std(SAIL, { roughness: 0.8, side: THREE.DoubleSide }), parent);
+  mesh.name = name;
+  return mesh;
 }
 function pivot(parent: THREE.Object3D, name: string, x: number, y: number, z = 0): THREE.Group {
   const p = new THREE.Group();
@@ -282,6 +337,29 @@ function drawCruiser(kit: Kit, g: THREE.Group): void {
   const bow = [0.18, deckY(f, 0.18) + 0.05, 0];
   const jp = pivot(g, "jib_pivot", bow[0], bow[1]);
   triangle(kit, jp, "sail_jib", [0.12, 0.37, 0], [3.35 - 0.25 - bow[0], ym + 11.5 - bow[1], 0], [4.77, deckY(f, 4.95) + 0.55 - bow[1], 0]);
+}
+
+function drawPearson(kit: Kit, g: THREE.Group): void {
+  const f = PEARSON_FORM;
+  const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.02, side: THREE.DoubleSide }));
+  kit.mesh(kit.hull(f, { top: 0xf6f5f0, deck: 0xe9e6dd, bottom: 0x2b3a55, boot: 0x1a2a4a }), hullMat, g);
+  const bottom = kit.std(0x2b3a55);
+  kit.mesh(kit.foil(1.65, 0.85, 3.55, 4.05, 0.2, -1.1, 0.12), bottom, g);
+  const rp = pivot(g, "rudder_pivot", 8.2, 0.42);
+  kit.mesh(kit.foil(0.62, 0.36, 8.08, 8.24, 0.42, -0.95, 0.12), bottom, rp).position.set(-8.2, -0.42, 0);
+  const cab = kit.std(0xf2f1ec);
+  kit.box(g, cab, 2.55, 6.2, deckY(f, 4.4) - 0.02, deckY(f, 3.25) + 0.46, -1.05, 1.05);
+  const alu = kit.std(0xc9ced3, { metalness: 0.7, roughness: 0.3 });
+  const mx = 4.06;
+  const ym = deckY(f, mx) + 0.44;
+  const mh = f.wl + 14.11 - ym;
+  kit.cyl(g, alu, 0.075, mx, ym, ym + mh);
+  const mp = pivot(g, "main_pivot", mx, ym);
+  kit.rod(mp, alu, 0.05, [0.09, 1.15, 0], [3.66, 1.15, 0]);
+  triangle(kit, mp, "sail_main", [0.1, 1.2, 0], [0.08, 12.37, 0], [3.58, 1.2, 0]);
+  const bow = [0.16, deckY(f, 0.16) + 0.05, 0];
+  const jp = pivot(g, "jib_pivot", bow[0], bow[1]);
+  triangle(kit, jp, "sail_jib", [0.14, 0.35, 0], [mx - 0.25 - bow[0], ym + mh - 0.9 - bow[1], 0], [5.27 - bow[0], deckY(f, 5.4) + 0.55 - bow[1], 0]);
 }
 
 function drawDinghy(kit: Kit, g: THREE.Group): void {
@@ -371,6 +449,7 @@ const DRAW: Record<StockKey, (kit: Kit, g: THREE.Group) => void> = {
   stock_beachcat16: drawCat,
   stock_sail_drone7: drawDrone,
   stock_ocean_rower45: drawRower,
+  stock_pearson31_2: drawPearson,
 };
 const FORM: Record<StockKey, HullForm> = {
   stock_cruiser31: CRUISER_FORM,
@@ -378,11 +457,12 @@ const FORM: Record<StockKey, HullForm> = {
   stock_beachcat16: CAT_HULL,
   stock_sail_drone7: DRONE_FORM,
   stock_ocean_rower45: ROWER_FORM,
+  stock_pearson31_2: PEARSON_FORM,
 };
 /** Name tag height above the waterline: the masthead (the drone's wing tip, the rower's light pole). */
 /** Where the masthead lantern stands along the boat (builder x, m from the bow): the mast (the drone's sensor mast, the rower's light pole). */
-const LANTERN_X: Record<StockKey, number> = { stock_cruiser31: 3.35, stock_dinghy14: 1.05, stock_beachcat16: 1.45, stock_sail_drone7: 2.6, stock_ocean_rower45: 7.7 };
-const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5, stock_sail_drone7: 5.8, stock_ocean_rower45: 2.4 };
+const LANTERN_X: Record<StockKey, number> = { stock_cruiser31: 3.35, stock_dinghy14: 1.05, stock_beachcat16: 1.45, stock_sail_drone7: 2.6, stock_ocean_rower45: 7.7, stock_pearson31_2: 4.06 };
+const MAST_TOP: Record<StockKey, number> = { stock_cruiser31: 13.9, stock_dinghy14: 4.8, stock_beachcat16: 8.5, stock_sail_drone7: 5.8, stock_ocean_rower45: 2.4, stock_pearson31_2: 14.11 };
 
 /** A stock boat as a BoatModel (boats/model.ts), with its rig. */
 export function buildStock(key: StockKey, quality: Quality) {
@@ -398,6 +478,13 @@ export function buildStock(key: StockKey, quality: Quality) {
   const model = detailed.get(key);
   if (model) g.add(model.clone(true));
   else DRAW[key](kit, g);
+  // Sailcloth, one material per sail on this copy (each has its own luff flutter).
+  clotheSails(g, quality);
+  const sailMats: THREE.Material[] = [];
+  g.traverse((o) => {
+    const mat = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (mat && !Array.isArray(mat) && mat.userData.sailcloth) sailMats.push(mat);
+  });
   const rig = new StockRig(key, g);
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   // Navigation lights: a tricolour lantern at the masthead (or the rower's light pole).
@@ -411,6 +498,8 @@ export function buildStock(key: StockKey, quality: Quality) {
   } else at = V(LANTERN_X[key], MAST_TOP[key] + form.wl, key === "stock_ocean_rower45" ? 0.25 : 0);
   addNavLights(g, "tricolour", at);
   const deck = form.dz(0.5) + 0.3;
+  // A faint warm cockpit lamp, so the crew's end of the boat shows at night (nightlook.ts).
+  if (key === "stock_cruiser31" || key === "stock_pearson31_2") addCockpitLight(g, V(form.L * 0.78, deck + 0.8, 0), Math.max(3, spec.length * 0.45));
   const gear = new Gear(g, {
     props: [],
     light: V(spec.length * 0.98, deck + 0.4, 0),
@@ -444,6 +533,7 @@ export function buildStock(key: StockKey, quality: Quality) {
     dispose: () => {
       gear.dispose();
       kit.dispose();
+      for (const m of sailMats) m.dispose();
       disposeNavLights(root);
     },
   };

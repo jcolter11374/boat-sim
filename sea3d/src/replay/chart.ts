@@ -27,7 +27,7 @@ export interface TrackColours {
   beacon: string;
   glow: string;
 }
-export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45", TrackColours> = {
+export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser31" | "stock_dinghy14" | "stock_beachcat16" | "stock_sail_drone7" | "stock_ocean_rower45" | "stock_pearson31_2", TrackColours> = {
   kayak: { main: "#ff8a2a", beacon: "#9cc8ff", glow: "rgba(255,140,40,0.9)" },
   randolph: { main: "#2ec4b6", beacon: "#b4f0ea", glow: "rgba(46,196,182,0.9)" },
   randolph_c: { main: "#b78cff", beacon: "#e0d0ff", glow: "rgba(183,140,255,0.9)" },
@@ -36,6 +36,7 @@ export const TRACK: Record<"kayak" | "randolph" | "randolph_c" | "stock_cruiser3
   stock_beachcat16: { main: "#ff5d6c", beacon: "#ffc4ca", glow: "rgba(255,93,108,0.9)" },
   stock_sail_drone7: { main: "#f2d03d", beacon: "#fff2b8", glow: "rgba(242,208,61,0.9)" },
   stock_ocean_rower45: { main: "#5aa9e6", beacon: "#d4ecff", glow: "rgba(90,169,230,0.9)" },
+  stock_pearson31_2: { main: "#7ad37a", beacon: "#d2f2d2", glow: "rgba(122,211,122,0.9)" },
 };
 const SILENT = "#8a94a3";
 const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
@@ -43,11 +44,15 @@ const WRECK_COLOUR = "#c9a46b"; // pois.ts KIND_COLOUR.wreck
 interface ChartLane {
   rep: Replay;
   colours: TrackColours;
+  /** Stretches to draw brighter, as hour ranges from the voyage start (the helm's
+   * hand-trimmed watches, Rosa). Unset everywhere else. */
+  bright?: [number, number][];
 }
 
 export class Chart {
   private readonly g: CanvasRenderingContext2D;
   private base: HTMLCanvasElement | null = null;
+  private tint: HTMLCanvasElement | null = null;
   private w = 0;
   private h = 0;
   private dpr = 1;
@@ -55,6 +60,10 @@ export class Chart {
   private lanes: ChartLane[] = [];
   private wrecks: [number, number][] = [];
   private focus = 0;
+  /** The part of the ocean shown: the whole crossing by default; the results card frames the track sailed. */
+  private view = { ...VIEW };
+  /** Draw a thin line from the followed boat to the finish (the helm's corner map, F3). */
+  toFinish = false;
   /** The live tracker's forecast: middle path and spread (lat, lon, radius km). */
   private ghost: { median: [number, number][]; spread: [number, number, number][] } | null = null;
 
@@ -64,6 +73,12 @@ export class Chart {
     private readonly bounds: LandBounds,
   ) {
     this.g = canvas.getContext("2d")!;
+  }
+
+  /** Frame a box of the ocean (degrees) instead of the whole crossing. */
+  setView(v: { lonMin: number; lonMax: number; latMin: number; latMax: number }): void {
+    this.view = { ...v };
+    this.base = null;
   }
 
   /** Shipwrecks to mark (lat, lon), with the chart's wreck sign. */
@@ -122,18 +137,23 @@ export class Chart {
 
   /** Canvas pixels for a lat, lon. */
   xy(lat: number, lon: number): [number, number] {
-    const sx = this.w / ((VIEW.lonMax - VIEW.lonMin) * COS);
-    const sy = this.h / (VIEW.latMax - VIEW.latMin);
+    const sx = this.w / ((this.view.lonMax - this.view.lonMin) * COS);
+    const sy = this.h / (this.view.latMax - this.view.latMin);
     const s = Math.min(sx, sy);
-    const ox = (this.w - (VIEW.lonMax - VIEW.lonMin) * COS * s) / 2;
-    const oy = (this.h - (VIEW.latMax - VIEW.latMin) * s) / 2;
-    return [ox + (lon - VIEW.lonMin) * COS * s, oy + (VIEW.latMax - lat) * s];
+    const ox = (this.w - (this.view.lonMax - this.view.lonMin) * COS * s) / 2;
+    const oy = (this.h - (this.view.latMax - this.view.latMin) * s) / 2;
+    return [ox + (lon - this.view.lonMin) * COS * s, oy + (this.view.latMax - lat) * s];
   }
 
   private kmToPx(km: number): number {
     const [, y0] = this.xy(40, -30);
     const [, y1] = this.xy(40 + km / 111.2, -30);
     return Math.abs(y1 - y0);
+  }
+
+  /** A corner map (the helm's, under 300 px): lines and tracks only, no words (Leo's plan, item 5). */
+  private get small(): boolean {
+    return this.w < 300;
   }
 
   private resize(): void {
@@ -148,6 +168,31 @@ export class Chart {
       this.canvas.height = Math.round(h * this.dpr);
       this.base = null;
     }
+  }
+
+  /** The land mask in the chart's land colour, made once: the base is redrawn on every
+   *  new voyage, and reading pixels back from a canvas the graphics card holds made the
+   *  page wait for the card (about 3 s on software graphics while the simulator starts).
+   *  This canvas is kept in ordinary memory (willReadFrequently), so the read is quick. */
+  private tinted(): HTMLCanvasElement {
+    if (this.tint) return this.tint;
+    const tint = document.createElement("canvas");
+    tint.width = this.land.naturalWidth;
+    tint.height = this.land.naturalHeight;
+    const tg = tint.getContext("2d", { willReadFrequently: true })!;
+    tg.drawImage(this.land, 0, 0);
+    const px = tg.getImageData(0, 0, tint.width, tint.height);
+    for (let i = 0; i < px.data.length; i += 4) {
+      const on = px.data[i] > 127;
+      px.data[i] = 64;
+      px.data[i + 1] = 92;
+      px.data[i + 2] = 86;
+      px.data[i + 3] = on ? 255 : 0;
+    }
+    tg.putImageData(px, 0, 0);
+    // Keep it only once the land picture has loaded, so an early draw can't fix an empty mask.
+    if (tint.width > 0) this.tint = tint;
+    return tint;
   }
 
   /** Static layer: sea, land, grid, course marks. */
@@ -169,47 +214,48 @@ export class Chart {
     g.font = "10px system-ui, sans-serif";
     g.fillStyle = "rgba(160,190,230,0.45)";
     for (let lon = -80; lon <= 0; lon += 10) {
-      const [x0, y0] = this.xy(VIEW.latMin, lon);
-      const [x1, y1] = this.xy(VIEW.latMax, lon);
+      const [x0, y0] = this.xy(this.view.latMin, lon);
+      const [x1, y1] = this.xy(this.view.latMax, lon);
       g.beginPath();
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      if (lon > -80) g.fillText(`${-lon}°W`, x1 + 3, y1 + 11);
     }
     for (let lat = 30; lat <= 50; lat += 10) {
-      const [x0, y0] = this.xy(lat, VIEW.lonMin);
-      const [x1, y1] = this.xy(lat, VIEW.lonMax);
+      const [x0, y0] = this.xy(lat, this.view.lonMin);
+      const [x1, y1] = this.xy(lat, this.view.lonMax);
       g.beginPath();
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
       g.stroke();
-      g.fillText(`${lat}°N`, x0 + 3, y0 - 3);
     }
 
     // Land, tinted.
     const b = this.bounds;
     const [lx0, ly0] = this.xy(b.lat_max, b.lon_min);
     const [lx1, ly1] = this.xy(b.lat_min, b.lon_max);
-    const tint = document.createElement("canvas");
-    tint.width = this.land.naturalWidth;
-    tint.height = this.land.naturalHeight;
-    const tg = tint.getContext("2d")!;
-    tg.drawImage(this.land, 0, 0);
-    const px = tg.getImageData(0, 0, tint.width, tint.height);
-    for (let i = 0; i < px.data.length; i += 4) {
-      const on = px.data[i] > 127;
-      px.data[i] = 64;
-      px.data[i + 1] = 92;
-      px.data[i + 2] = 86;
-      px.data[i + 3] = on ? 255 : 0;
-    }
-    tg.putImageData(px, 0, 0);
+    const tint = this.tinted();
     g.imageSmoothingEnabled = true;
     g.shadowColor = "rgba(120,200,255,0.35)";
     g.shadowBlur = 6;
     g.drawImage(tint, lx0, ly0, lx1 - lx0, ly1 - ly0);
     g.shadowBlur = 0;
+
+    // Grid labels over the land, so the coast never hides half of one (audit A5: the helm's
+    // chart showed "W" alone where Nova Scotia covered "60°"). A label that would hang off
+    // the chart's edge is left out rather than cut.
+    g.font = "10px system-ui, sans-serif";
+    g.fillStyle = "rgba(160,190,230,0.55)";
+    for (let lon = -70; !this.small && lon <= 0; lon += 10) {
+      const [x1, y1] = this.xy(this.view.latMax, lon);
+      const label = `${-lon}°W`;
+      const lx = x1 + 3;
+      if (lx >= 2 && lx + g.measureText(label).width <= this.w - 2) g.fillText(label, lx, Math.max(y1, 0) + 11);
+    }
+    for (let lat = 30; !this.small && lat <= 50; lat += 10) {
+      const [x0, y0] = this.xy(lat, this.view.lonMin);
+      if (y0 - 3 >= 10 && y0 - 3 <= this.h - 2) g.fillText(`${lat}°N`, Math.max(x0, 0) + 3, y0 - 3);
+    }
 
     // Shipwrecks: a small version of the sea chart's wreck sign (a hull line with masts).
     g.strokeStyle = WRECK_COLOUR;
@@ -245,7 +291,7 @@ export class Chart {
         const [x, y] = this.xy(la, lo);
         g.fillStyle = colour;
         g.font = "600 10px system-ui, sans-serif";
-        g.fillText(label, x + 5, y - 5);
+        if (!this.small) g.fillText(label, x + 5, y - 5);
       };
       line(rep.course.west_line, "rgba(255,255,255,0.7)", "RACE START LINE", 1);
       line(rep.course.east_line, "rgba(255,255,255,0.7)", "FINISH LINE", 5);
@@ -256,7 +302,7 @@ export class Chart {
         g.arc(x, y, 2.5, 0, Math.PI * 2);
         g.fill();
         g.font = "10px system-ui, sans-serif";
-        g.fillText("drop", x - 26, y + 3);
+        if (!this.small) g.fillText("drop", x - 26, y + 3);
       }
     }
     return c;
@@ -289,7 +335,22 @@ export class Chart {
     g.stroke();
     g.fillStyle = "#3ddc97";
     g.font = "600 10px system-ui, sans-serif";
-    g.fillText("TARGET", tx + rr + 5, ty + 3);
+    if (!this.small) g.fillText("TARGET", tx + rr + 5, ty + 3);
+
+    // A thin line from the boat to the finish (F3), so progress is something you can see.
+    if (this.toFinish && this.lanes[this.focus]) {
+      const [la, lo] = positionAt(this.lanes[this.focus].rep, hour);
+      const [bx, by] = this.xy(la, lo);
+      g.save();
+      g.strokeStyle = "rgba(61,220,151,0.45)";
+      g.lineWidth = 1;
+      g.setLineDash([2, 3]);
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.lineTo(tx, ty);
+      g.stroke();
+      g.restore();
+    }
 
     this.drawGhost();
     // Other boats first, the one the close-up follows on top.
@@ -298,7 +359,7 @@ export class Chart {
     for (const k of order) this.drawLane(this.lanes[k], hour, now, k === this.focus);
   }
 
-  private drawLane({ rep, colours }: ChartLane, hour: number, now: number, focused: boolean): void {
+  private drawLane({ rep, colours, bright }: ChartLane, hour: number, now: number, focused: boolean): void {
     const g = this.g;
     // Track so far, with a glow.
     const [i] = locate(rep.h, hour);
@@ -342,6 +403,40 @@ export class Chart {
     }
     if (colour) g.stroke();
     g.restore();
+
+    // Bright stretches (hand-trimmed watches), up to now; silent stretches stay dashed.
+    if (bright?.length) {
+      g.save();
+      g.lineJoin = "round";
+      g.lineCap = "round";
+      g.strokeStyle = "#ffe2b8";
+      g.shadowColor = colours.glow;
+      g.shadowBlur = 14;
+      g.lineWidth = (focused ? 2 : 1.6) + 1.5;
+      for (const [a, b0] of bright) {
+        const b = Math.min(b0, hour);
+        if (!(b > a)) continue;
+        const pts: [number, number][] = [];
+        const add = (h: number) => {
+          const [la, lo] = positionAt(rep, h);
+          if (Number.isFinite(la)) pts.push(this.xy(la, lo));
+        };
+        add(a);
+        for (let k = 0; k < rep.h.length; k++) {
+          if (rep.h[k] <= a || rep.h[k] >= b) continue;
+          const ir = rep.iridium_ok?.[k];
+          if (ir != null && !ir && !rep.beacon_ok?.[k]) continue; // silent: leave the dashes alone
+          add(rep.h[k]);
+        }
+        add(b);
+        if (pts.length < 2) continue;
+        g.beginPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (const p of pts.slice(1)) g.lineTo(p[0], p[1]);
+        g.stroke();
+      }
+      g.restore();
+    }
 
     // Event markers up to now.
     for (const e of rep.events) {

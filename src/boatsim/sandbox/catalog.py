@@ -463,7 +463,11 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
         changes.append(("hull", "mass_kg", round(base.hull["mass_kg"] + d_kg, 3)))
     # Leave out changes that set what the base already has, so the default build
     # is the design file untouched.
-    return tuple((s, k, v) for s, k, v in changes if getattr(base, s).get(k, _MISSING) != v)
+    return tuple(
+        (s, k, v)
+        for s, k, v in changes
+        if getattr(base, s).get(k, KEY_DEFAULTS.get((s, k), _MISSING)) != v
+    )
 
 
 _MISSING = object()
@@ -500,6 +504,7 @@ STOCK_BASES = {
     name: f"configs/{name}.yaml"
     for name in (
         "stock_cruiser31",
+        "stock_pearson31_2",  # Randolph and Becky's own boat (our model)
         "stock_dinghy14",
         "stock_beachcat16",
         "stock_sail_drone7",
@@ -641,6 +646,68 @@ RSLOT_NAMES = {
     "paint": "Antifouling",
     "spares": "Spares",
 }
+# What a player reads for a change from the planned build (or Randolph's as built):
+# the one name map for builds (Leo's words: quality audit item 9,
+# /mnt/project-files/simulator/gameplay/finish-layer-copy.md). Names never show a
+# slot name or an option id ("Drive: hybrid", "solar-300"); a test fails if one does.
+# Kayak options and Randolph's share the table (their slot ids don't clash).
+CHANGE_NAMES = {
+    ("thr", "one-t200"): "one motor",
+    ("sol", "solar-200"): "smaller panels",
+    ("sol", "solar-300"): "bigger panels",
+    ("bat", "one-50ah"): "one battery",
+    ("bat", "two-100ah"): "bigger batteries",
+    ("mppt", "one-mppt"): "one charge controller",
+    ("brain", "one-box"): "no backup autopilot",
+    ("beacon", "none"): "no backup beacon",
+    ("ais", "dy-ait1500"): "another AIS",
+    ("ais", "none"): "hidden from ships (no AIS)",
+    ("radar", "davis-echomaster"): "cheaper radar reflector",
+    ("lead", "lead-50-scrap"): "scrap-lead keel",
+    ("lead", "lead-40"): "lighter keel (40 kg)",
+    ("paint", "none"): "no bottom paint",
+    ("spares", "spares-no-pixhawk"): "fewer spares",
+    ("spares", "none"): "no spares",
+    # added: "Our kayak + wing sail and motors" (Ines: not to be confused with wing sail only)
+    ("drive", "hybrid"): "wing sail and motors",
+    ("drive", "wing-sail"): "wing sail only (no motors)",
+    ("material", "fibreglass"): "fibreglass hull",
+    ("material", "carbon"): "carbon hull",
+    ("material", "plywood-epoxy"): "plywood hull",
+    ("material", "aluminium"): "aluminium hull",
+    # Randolph's boats
+    ("drive", "wing-thruster"): "small motor",  # added
+    ("brain", "two-box"): "backup autopilot",  # added
+    ("rudder", "twin"): "two rudders",
+    ("rudder", "single"): "one rudder",
+    ("rsol", "deck-60w"): "bigger panel",
+    ("rbat", "lfp-384wh"): "bigger battery",
+    ("keel", "bulb-9kg"): "heavier keel",
+    ("keel", "bulb-8kg"): "lighter keel",
+    ("tracker", "none"): "no backup tracker",
+}
+# Things added go after a "+" ("Our kayak + wing sail"); everything else after a comma.
+ADDED = {("drive", "hybrid"), ("drive", "wing-thruster"), ("brain", "two-box")}
+# Two changes that read as one phrase.
+MERGED = {
+    frozenset({("sol", "solar-300"), ("bat", "two-100ah")}): "bigger panels and batteries",
+    frozenset({("rsol", "deck-60w"), ("rbat", "lfp-384wh")}): "bigger panels and battery",
+    frozenset({("brain", "one-box"), ("beacon", "none")}): "no backup autopilot or beacon",
+}
+# A hull shape replaces the boat's name.
+SHAPE_NAMES = {
+    "cat": "Catamaran version",
+    "semisub": "Semi-submerged version",
+    "board": "Surfboard version",
+}
+
+
+def cruise_name(w: int, alone: bool = True) -> str:
+    """The kayak's motor setting in words (the planned build cruises at 25 W)."""
+    words = f"motors turned {'down' if w < DEFAULT_CRUISE_W else 'up'}"
+    return f"{words} ({w} W)" if alone else words
+
+
 RSLOTS = {b: {k: v for k, v in _rslots(b).items() if v} for b in ("revc", "revb")}
 RDEFAULTS = {
     b: {
@@ -679,14 +746,37 @@ SPARE_SLOT = {
     "none": Option(basis="as the boat comes: one autopilot"),
     "spare-autopilot": SPARE_BOX,
 }
+# The tactician (autonomy/sailing.py, #279): software in the autopilot that beats
+# upwind and gybes downwind on the boat's own polar instead of pointing at the
+# next waypoint. Design key electronics.tactician (default true). The ids are
+# shared with the Randolph bases, which Sam offers it on (their yamls have it
+# off). Software only, so no weight, power or price; it needs the wind's
+# direction, which the sim takes from the true wind.
+TACTICIAN_SLOT = {
+    "on": Option(
+        (("electronics", "tactician", True),),
+        basis="software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat "
+        "without a wind sensor would need a small masthead wind vane (GUESS)",
+    ),
+    "off": Option(
+        (("electronics", "tactician", False),),
+        est=True,
+        basis="steers straight for the next waypoint, clamped out of the no-go zone",
+    ),
+}
+# What a design key means when its file doesn't set it, so a default option that
+# sets the same value leaves the design file untouched (design_changes).
+KEY_DEFAULTS = {("electronics", "tactician"): True}
 # The stock boats steered by an autopilot box that can fail. The rower is steered
-# by its crew and the joke fleet's boxes are trackers, so they have no slot.
+# by its crew and the joke fleet's boxes are trackers, so they have no slot. All
+# four sail, so each can switch its tactician off.
 STOCK_SLOTS = {
-    b: {"spare": SPARE_SLOT}
+    b: {"spare": SPARE_SLOT, "tactician": TACTICIAN_SLOT}
     for b in ("stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7")
 }
-STOCK_SLOT_NAMES = {"spare": "Spare autopilot"}
-STOCK_DEFAULTS = {b: {"spare": "none"} for b in STOCK_SLOTS}
+STOCK_SLOT_NAMES = {"spare": "Spare autopilot", "tactician": "Sailing tactician"}
+# As each yaml comes: none of them sets electronics.tactician, so it's on.
+STOCK_DEFAULTS = {b: {"spare": "none", "tactician": "on"} for b in STOCK_SLOTS}
 
 
 def base_of(choices: dict | None) -> str:

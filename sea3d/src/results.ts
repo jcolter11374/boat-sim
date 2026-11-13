@@ -73,20 +73,23 @@ export function standingText(s: Standing): { head: string; detail: string } {
   if (s.kind === "board") {
     const r = s.row;
     const when = boardDay(s.made);
-    const on = when ? `On the board of ${when}` : "On the leaderboard (board date unknown)";
+    const on = when ? `On the board of ${when}` : "On the leaderboard";
     const rate = `It finishes ${pct(r.finish_rate)} of ${r.launches} launches.`;
     const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
     if (s.tiers <= 1)
       return {
-        head: `${on}: all ${s.of} boats are in one group, which these launches can't tell apart. ${rate}`,
+        head: `${on}: all ${s.of} builds are in one group, which these launches can't tell apart. ${rate}`,
         detail: range,
       };
     const others = s.inTier - 1;
-    const group = `${s.tier === 1 ? "the top" : `the ${ordinal(s.tier)}`} of ${s.tiers} groups`;
-    const with_ = others === 0 ? "on its own there" : `with ${others} other boat${others === 1 ? "" : "s"} it can't be told apart from`;
+    // The leaderboard's tier names (Milo, 12 Nov): Best, Good, Long shot. No place: builds in
+    // one group can't be told apart, so "2nd of 8" would contradict it.
+    const tier = s.tier === 1 ? "Best" : s.tier === s.tiers ? "Long shot" : "Good";
+    const builds = `${others} build${others === 1 ? "" : "s"}`;
+    const with_ = others === 0 ? "" : s.tier === 1 ? ` (with ${builds} just as good)` : ` (with ${builds} like it)`;
     return {
-      head: `${on}: in ${group}, ${with_}. ${rate}`,
-      detail: `${ordinal(s.rank)} of ${s.of} by finish rate. ${range}`,
+      head: `${on}: ${tier} group, about ${pct(r.finish_rate)} finish${with_}.`,
+      detail: `Tested on ${r.launches} launches. ${range}`,
     };
   }
   if (s.kind === "odds") {
@@ -97,7 +100,7 @@ export function standingText(s: Standing): { head: string; detail: string } {
       detail: `Likely range ${pct(o.low95)} to ${pct(o.high95)}. One voyage is one roll of the dice; these odds are the better guide.`,
     };
   }
-  return { head: "No odds for this boat yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
+  return { head: "No odds for this build yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

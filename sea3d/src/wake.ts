@@ -5,6 +5,7 @@
 // floating dots. Cosmetic; driven by the logged speed through the water.
 
 import * as THREE from "three";
+import { FOAM_LAMP_GLSL, FOAM_LAMP_UNIFORMS } from "./boats/navlights";
 import type { Quality } from "./boats/parts";
 import { toWorld, type Placement } from "./standin";
 import { displace, type WaveComponent } from "./waves";
@@ -12,7 +13,7 @@ import { displace, type WaveComponent } from "./waves";
 const ALONG: Record<Quality, number> = { low: 20, high: 32 };
 const ACROSS = 7; // vertices across the strip
 const LIFE = 9; // s for foam to fade away
-const SPREAD = 0.22; // how fast the wake widens, m per m run
+const SPREAD = 0.28; // how fast the strip widens, m per m run: its edges (x 1.25) at Kelvin's 19.5 deg
 
 const vert = /* glsl */ `
   attribute vec2 aUV; // x: 0 at the stern .. 1 at the far end; y: -1 port edge .. 1 starboard edge
@@ -26,11 +27,13 @@ const vert = /* glsl */ `
   }
 `;
 const frag = /* glsl */ `
+  ${FOAM_LAMP_GLSL}
   uniform float uOdo;   // water distance run, m
   uniform float uLen;   // strip length, m
   uniform float uI;     // strength 0..1
   uniform float uLight;
   uniform float uTime;
+  uniform float uBeam;  // hull beam, m
   varying vec2 vUV;
   varying vec3 vW;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -52,43 +55,58 @@ const frag = /* glsl */ `
       }
     return vec2(d1, d2);
   }
-  // Sea foam is a lace: thin white walls between bubbles, with dark holes
-  // that open up as it ages. Two scales of cells, the walls where the nearest
-  // two points are almost the same distance away.
-  float lace(vec2 q, float age) {
-    // Warped, so the bubbles are irregular, not a honeycomb.
-    // Two octaves: a broad swirl, then a finer wobble that bends each bubble wall.
-    q += (vec2(vnoise(q * 0.9), vnoise(q * 0.9 + 9.2)) - 0.5) * 1.6;
-    q += (vec2(vnoise(q * 3.1 + 4.4), vnoise(q * 3.1 + 1.7)) - 0.5) * 0.55;
-    vec2 c1 = cells(q * 3.6);
-    vec2 c2 = cells(q * 8.5 + 3.1 + (vec2(vnoise(q * 6.0), vnoise(q * 6.0 + 2.3)) - 0.5) * 0.8);
-    float w = mix(0.35, 0.07, age); // fresh foam is nearly solid; old foam is thin threads
-    float l1 = 1.0 - smoothstep(0.0, w, c1.y - c1.x);
-    float l2 = 1.0 - smoothstep(0.0, w * 0.8, c2.y - c2.x);
-    float speck = 0.55 + 0.45 * vnoise(q * 14.0); // threads break and thin out
-    return max(l1, 0.6 * l2) * speck;
+  // Churned foam: soft white blobs with ragged dark holes that open up as it ages (Elena:
+  // a broad pale band that breaks up, not fine white hairs). Warped fractal noise, cut at a
+  // level that rises with age.
+  float fbm(vec2 q) {
+    float f = 0.0, amp = 0.5;
+    for (int i = 0; i < 4; i++) { f += amp * vnoise(q); q = q * 2.03 + 1.7; amp *= 0.5; }
+    return f / 0.9375;
+  }
+  float lumps(vec2 q, float age) {
+    q += (vec2(vnoise(q * 0.8), vnoise(q * 0.8 + 9.2)) - 0.5) * 1.4;
+    float f = fbm(q * 2.2);
+    float cut = mix(0.38, 0.62, age);
+    return smoothstep(cut, cut + mix(0.2, 0.1, age), f);
   }
   void main() {
     // Pattern fixed to the water: a parcel d metres aft left the stern (odo - d) metres ago.
     float d = vUV.x * uLen;
     vec2 q = vec2(uOdo - d, vUV.y * (0.6 + d * ${SPREAD.toFixed(2)}));
     float age = vUV.x;                                   // 0 fresh .. 1 old
-    // Big patches, so the foam breaks up into islands as it spreads.
-    float n = vnoise(q * vec2(1.6, 3.0)) * 0.6 + vnoise(q * vec2(4.5, 7.0) + uTime * 0.1) * 0.4;
-    float centre = (1.0 - smoothstep(0.1, 0.8, abs(vUV.y))) * (1.0 - smoothstep(0.0, 0.6, age));
-    float edges = smoothstep(0.55, 0.85, abs(vUV.y)) * (1.0 - smoothstep(0.92, 1.0, abs(vUV.y))) * (1.0 - smoothstep(0.1, 1.0, age));
-    float body = max(centre, 0.75 * edges);
-    float patches = smoothstep(0.75 - 0.55 * body, 0.95 - 0.3 * body, n + 0.25 * body);
-    float foam = lace(q + vec2(0.0, uTime * 0.02), age) * patches * body;
-    // Fresh foam under the stern is a churned white mass.
-    float fresh = (1.0 - smoothstep(0.0, 0.22, age)) * (1.0 - smoothstep(0.25, 0.75, abs(vUV.y)));
-    foam = max(foam, fresh * smoothstep(0.25, 0.6, lace(q * 1.3 + 5.7, 0.0) + 0.3 * n));
-    float a = foam * uI;
-    a *= smoothstep(0.0, 0.04, age);                     // soft start under the stern
-    // Bubbles just under the surface turn the water a pale turquoise around the foam.
-    float bub = centre * (0.4 + 0.6 * patches) * uI * 0.22;
-    vec3 col = mix(vec3(0.35, 0.75, 0.78), vec3(0.95, 0.97, 1.0), clamp(a / max(a + bub, 1e-3), 0.0, 1.0));
-    gl_FragColor = vec4(col * uLight, clamp(max(a, bub), 0.0, 0.9));
+    float across = abs(vUV.y);
+    // The turbulent wake straight behind the hull stays about the hull's width (as a
+    // share of the widening strip it narrows aft) and fades; the hull's own waves run
+    // off in a V at the strip's edges (Kelvin's 19.5 deg) and fade with distance (Ines).
+    float centreW = 0.7 * (0.5 * uBeam) / (1.25 * (0.42 * uBeam + d * ${SPREAD.toFixed(2)}));
+    float wob = (vnoise(q * vec2(0.3, 0.8) + 11.0) - 0.5) * 0.35; // no straight sides
+    float centre = (1.0 - smoothstep(0.3, 1.4, across / max(centreW, 0.05) + wob)) * (1.0 - smoothstep(0.0, 0.9, age));
+    float arms = exp(-pow((across + 0.6 * wob * 0.3 - 0.8) / 0.07, 2.0)) * (1.0 - smoothstep(0.0, 0.65, age)) * 0.7;
+    float body = max(centre, arms);
+    // Streaky, turbulent foam: noise stretched along the flow, thinning with age.
+    float st = vnoise(vec2(q.x * 0.45, q.y * 4.5) + 3.0) * 0.5 + vnoise(vec2(q.x * 1.1, q.y * 9.0) + uTime * 0.05) * 0.3 + vnoise(q * 3.0) * 0.2;
+    float isl = st;
+    float churn = body;
+    // Broken, never a solid sheet: about a third of the churned band is white near the stern,
+    // thinning to wisps aft (Ines: no pale slab behind the transom).
+    float foam = body * smoothstep(0.5 + 0.12 * age, 0.66 + 0.14 * age, st + 0.08 * (1.0 - age)) * (1.0 - 0.5 * age);
+    // Fresh foam under the stern is a churned white mass, the hull's width.
+    float fresh = (1.0 - smoothstep(0.0, 0.08, age)) * (1.0 - smoothstep(0.4, 1.1, across / max(centreW, 0.05) + wob));
+    foam = max(foam, 0.8 * fresh * lumps(q * 1.3 + 5.7, 0.55) * smoothstep(0.45, 0.7, st));
+#ifdef WAKE_LITE
+    // Low: one soft trail fading aft, not scattered flecks (Elena: "scraps of paper" at
+    // Low's size); a gentle streak keeps it from reading as a painted stripe.
+    foam = body * (0.55 + 0.45 * st) * (1.0 - smoothstep(0.0, 0.85, age)) * 0.55;
+#endif
+    float a = foam * uI * smoothstep(0.0, 0.04, age);   // soft start under the stern
+    // Bubbles just under the surface make the whole band a pale, milky turquoise.
+    float milk = centre * uI * 0.07 * (1.0 - 0.7 * age) * smoothstep(0.45, 0.8, isl);
+    vec3 col = mix(vec3(0.55, 0.78, 0.8), vec3(0.86, 0.9, 0.91), clamp(a / max(a + milk, 1e-3), 0.0, 1.0));
+    // Never a hard-edged strip: fade out well inside its sides and ease in under the stern.
+    float alpha = clamp(max(0.85 * a, milk), 0.0, 0.85) * (1.0 - smoothstep(0.82, 0.98, across)) * smoothstep(0.0, 0.06, age);
+    gl_FragColor = vec4(col * (uLight + 0.45 * foamLamp(vW)), alpha * mix(0.6, 1.0, smoothstep(0.1, 0.4, uLight))); // faint at night (Ines)
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -131,7 +149,8 @@ export class Wake {
     const mat = new THREE.ShaderMaterial({
       vertexShader: vert,
       fragmentShader: frag,
-      uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 } },
+      defines: quality === "low" ? { WAKE_LITE: "" } : {},
+      uniforms: { uOdo: { value: 0 }, uLen: { value: 1 }, uI: { value: 0 }, uLight: { value: 1 }, uTime: { value: 0 }, uBeam: { value: beam }, ...FOAM_LAMP_UNIFORMS },
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -147,6 +166,17 @@ export class Wake {
     this.points.material.uniforms.uLight.value = l;
   }
 
+  /** The drawn water's height under a point, if the page hands over the sea's own
+   *  (Sea.surfaceAt); otherwise the big waves' height near enough. */
+  surface: ((comps: WaveComponent[], x: number, z: number, t: number) => number) | null = null;
+
+  /** Wake strength 0..1.3 by the hull's Froude number (speed / sqrt(g L)): a thin trail at a
+   *  kayak's 2 kt (Fn 0.16), a broad foamy one near hull speed (Sam's checklist 5). */
+  private strength(speed: number): number {
+    const fn = speed / Math.sqrt(9.81 * Math.max(2 * Math.abs(this.sternX), 0.5));
+    return Math.min(1.3, Math.max(0, (fn - 0.05) / 0.3));
+  }
+
   reset(): void {
     this.odo = 0;
     this.lastT = -1;
@@ -158,18 +188,19 @@ export class Wake {
     this.lastT = t;
     // The strip is as long as the water runs in the foam's lifetime (at least a boat's width).
     const len = Math.max(speed * LIFE, this.beam * 1.5);
+    const k = this.strength(speed);
     const pos = this.points.geometry.attributes.position.array as Float32Array;
     const uv = this.points.geometry.attributes.aUV.array as Float32Array;
     for (let i = 0; i <= this.nAlong; i++) {
       const u = uv[i * ACROSS * 2];
       const d = u * len;
-      const hw = this.beam * 0.42 + d * SPREAD;
+      const hw = 1.25 * (this.beam * 0.42 + d * SPREAD) * (0.45 + 0.55 * Math.min(1, k)); // a margin past the band, so its ragged edge never meets the strip's
       for (let j = 0; j < ACROSS; j++) {
         const k = i * ACROSS + j;
         const [x, z] = toWorld(this.sternX - d, uv[k * 2 + 1] * hw, place);
         // Height of the wave crossing this point (close enough for a foam sheet; the exact
         // inverse in heightAt costs several times more and this runs ~200 times a frame).
-        const y = displace(comps, x, z, t)[1];
+        const y = this.surface ? this.surface(comps, x, z, t) : displace(comps, x, z, t)[1];
         pos[k * 3] = x;
         pos[k * 3 + 1] = y + 0.02;
         pos[k * 3 + 2] = z;
@@ -180,7 +211,7 @@ export class Wake {
     un.uOdo.value = this.odo;
     un.uLen.value = len;
     un.uTime.value = t;
-    un.uI.value = THREE.MathUtils.clamp(speed / Math.max(this.speed, 0.3), 0, 1.3);
+    un.uI.value = this.strength(speed);
   }
 
   dispose(): void {

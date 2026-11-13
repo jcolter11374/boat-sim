@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The detailed Blender boats (sea3d/blender/build_*.py) as .glb files in
+# The detailed Blender boats and landmarks (sea3d/blender/build_*.py) as .glb files in
 # sea3d/public/models, with Blender as a headless Python module (bpy 4.2, which
 # needs Python 3.11). Shared by the Pages deploy (sea3d.yml) and the pre-release
 # playtest, so a PR that changes a boat script plays the boats it will deploy.
@@ -13,4 +13,5 @@ python -m pip install -q bpy==4.2.0 pillow numpy
 python blender/build_kayak.py public/models/kayak.glb
 python blender/build_randolph.py public/models/randolph.glb
 for s in cat semisub board; do python blender/build_shapes.py $s public/models/shape_$s.glb; done
-for b in cruiser dinghy beachcat drone rower; do python blender/build_stock.py $b public/models/stock_$b.glb; done
+for b in cruiser dinghy beachcat drone rower pearson; do python blender/build_stock.py $b public/models/stock_$b.glb; done
+python blender/build_landmarks.py thomaspoint public/models/landmark_thomaspoint.glb

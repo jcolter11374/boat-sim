@@ -153,7 +153,11 @@ export const PAGES = [
     drawing: () => (window.__sea3d?.frames ?? 0) > 10,
     frames: () => window.__sea3d.frames,
     // The sea selector rebuilds the sea at the new wave height.
-    act: async (page, o) => page.selectOption("#sea", "gale", o),
+    // The title screen (if this deploy has one) hides the sea panel until "Just watch the sea".
+    act: async (page, o) => {
+      if (await page.locator("#t-sea").isVisible()) await page.click("#t-sea", o);
+      return page.selectOption("#sea", "gale", o);
+    },
     responded: () => Math.abs(window.__sea3d.hs - 5) < 1e-6,
   },
   {
@@ -184,7 +188,14 @@ export const PAGES = [
     drawing: () => window.__yard?.ready && window.__yard.frames > 10 && !window.__yard.error,
     frames: () => window.__yard.frames,
     // A part swap changes the totals and the share link.
-    act: async (page, o) => page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click(o),
+    act: async (page, o) => {
+      // Slots are one line each until opened (Boatyard M5).
+      // Sections fold as well (Elena): open Power first, if this build has folding sections.
+      const power = page.locator('.slot[data-group="Power"] h3');
+      if ((await power.count()) && (await power.getAttribute("aria-expanded")) !== "true") await power.click(o);
+      if ((await page.locator('.sl-head[data-slot="bat"]').getAttribute("aria-expanded")) !== "true") await page.locator('.sl-head[data-slot="bat"]').click(o);
+      return page.locator('.opt[data-slot="bat"][data-opt="two-100ah"]').click(o);
+    },
     responded: () => window.__yard.share.includes("bat=two-100ah"),
   },
   {

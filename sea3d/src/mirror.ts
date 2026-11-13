@@ -16,7 +16,17 @@ export const MIRROR_LAYER = 1;
 
 /** Put an object and everything under it in the sea's mirror. */
 export function reflectable(o: THREE.Object3D): void {
-  o.traverse((c) => c.layers.enable(MIRROR_LAYER));
+  o.traverse((c) => {
+    // Hair-thin parts (an antenna, a stay) alias into dashes in the small mirror: leave them out.
+    const g = (c as THREE.Mesh).geometry;
+    if ((c as THREE.Mesh).isMesh && g) {
+      if (!g.boundingBox) g.computeBoundingBox();
+      const d = g.boundingBox!.getSize(new THREE.Vector3()).multiply(c.getWorldScale(new THREE.Vector3()));
+      const [a, b] = [d.x, d.y, d.z].sort((x, y) => x - y);
+      if (a < 0.03 && b < 0.03) return;
+    }
+    c.layers.enable(MIRROR_LAYER);
+  });
 }
 
 /** How strongly a sea of this height (m) mirrors: fully in a flat calm, a third at 0.4 m, gone by 0.6 m. */
@@ -35,6 +45,9 @@ export class Mirror {
   private readonly clear = new THREE.Color();
   /** 0 (off) .. 1 (a mirror calm), for the sea shader. */
   strength = 0;
+  /** Height (m) of the mirror plane: the water at the focused boat, so its reflection meets
+   *  its waterline (Ines r5: a plane at y = 0 left a gap under a boat on a swell). */
+  level = 0;
   /** Passes drawn (for tests). */
   frames = 0;
 
@@ -51,9 +64,10 @@ export class Mirror {
   }
 
   /** Draw the mirror for this frame (before the scene itself), for a sea of height hs (m). */
-  update(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, hs: number): void {
+  update(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, hs: number, level = 0): void {
     this.strength = mirrorStrength(hs);
-    if (this.strength < 0.02 || camera.position.y <= 0) {
+    this.level = level;
+    if (this.strength < 0.02 || camera.position.y <= level) {
       this.strength = 0;
       return;
     }
@@ -61,12 +75,12 @@ export class Mirror {
     scene.traverse((o) => {
       if ((o as THREE.Light).isLight) o.layers.enable(MIRROR_LAYER);
     });
-    // The camera mirrored in the plane y = 0 (three's Reflector, for a fixed horizontal plane).
+    // The camera mirrored in the plane y = level (three's Reflector, for a fixed horizontal plane).
     const c = this.cam;
     camera.updateMatrixWorld();
-    c.position.copy(camera.position).setY(-camera.position.y);
+    c.position.copy(camera.position).setY(2 * level - camera.position.y);
     const look = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).add(camera.position);
-    look.y = -look.y;
+    look.y = 2 * level - look.y;
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
     c.up.set(up.x, -up.y, up.z);
     c.lookAt(look);
@@ -76,7 +90,7 @@ export class Mirror {
     this.textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
     this.textureMatrix.multiply(c.projectionMatrix).multiply(c.matrixWorldInverse);
     // Oblique near plane at the sea surface, so nothing below the water (keels) is mirrored.
-    this.plane.set(new THREE.Vector3(0, 1, 0), 0).applyMatrix4(c.matrixWorldInverse);
+    this.plane.set(new THREE.Vector3(0, 1, 0), -level).applyMatrix4(c.matrixWorldInverse);
     this.clip.set(this.plane.normal.x, this.plane.normal.y, this.plane.normal.z, this.plane.constant);
     const p = c.projectionMatrix.elements;
     this.q.set((Math.sign(this.clip.x) + p[8]) / p[0], (Math.sign(this.clip.y) + p[9]) / p[5], -1, (1 + p[10]) / p[14]);
