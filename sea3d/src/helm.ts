@@ -45,7 +45,7 @@ import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { outcomeLine } from "./replay/story";
-import { racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { RACE_BOATS, racePick, raceWorker, type RaceCard, type RaceInfo } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -53,6 +53,7 @@ import { VoyageKeeper } from "./helm/voyageKeeper";
 import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
+import { Rival, rivalOffset } from "./helm/rival";
 import { LIGHT_WIND_FROM, MEDAL_WORDS, ROBOT_SECS, clock as trialClock, ghostAt, medalFor, medalTime, readGhost, saveGhost, turnTrack, type Medal, type Track } from "./helm/trial";
 import { COUNTS_AFTER_S, WheelSession, canTakeWheel, summary as wheelSummary, type WheelFrame, type WheelResult } from "./helm/wheelSession";
 import { HelmGame, OUTCOME, airtimeText, stopText, type Card, type ForecastRow, type Heading, type Mode, type OrderResult, type BestHeading, type Outlook, type Preview, type Status, type Stop } from "./helm/game";
@@ -463,6 +464,8 @@ const page = {
   practiceBay: false,
   /** The time-trial ghost: shown, and how far off (m). */
   ghost: { shown: false, m: 0 },
+  /** The other boat in a race, on the water: drawn or not, how far off she is (m), and her compass bearing from your boat. */
+  rival: { shown: false, m: 0, bearing: 0 },
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
@@ -1170,6 +1173,12 @@ function newEvents(): void {
       // A race names each boat (the same thing to both is still one note, told with boat A's).
       if (SPECTATE) {
         const name = rep(who)?.boat ?? "";
+        // Never the same note twice (the log can name one thing two ways), and in a race one note at a time (Elena):
+        // the new one takes the old one's place, and fades after a few seconds like any other.
+        const told = `${who} ${describeEvent(e, name)}`;
+        if (lastNote[told] !== undefined && e.h - lastNote[told] < 6) continue;
+        lastNote[told] = e.h;
+        if (RACE) for (const old of Array.from($("notes").querySelectorAll<HTMLElement>(".note:not(.out)"))) hud.dropToast(old);
         note(describeEvent(e, name), `${RACE ? `${both ? "Both boats" : name} · ` : ""}Day ${(e.h / 24).toFixed(1)}`, TONE_COLOUR[toneOf(e)]);
         if (who === "boat" && hour - e.h < 3) moment(e);
         continue;
@@ -1640,6 +1649,25 @@ scene.add(buoys.group);
 // Time trials (Elena approved 12 Nov): your best run's ghost, the course you last sailed.
 const ghost = new Ghost();
 scene.add(ghost.group);
+// The other boat in a race, on the water while she is near enough to see (M2, R4).
+const rival = new Rival();
+scene.add(rival.group);
+let rivalTagDue = false;
+const rivalTagAt = new THREE.Vector3();
+/** Her name and how far off she is, above her: a small boat a few hundred metres off is hard to find in a seaway. */
+function placeRivalTag(): void {
+  rivalTagDue = false;
+  const tag = $("rivaltag");
+  const p = rival.tagPoint(rivalTagAt)?.project(camera);
+  const show = !!p && p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1;
+  tag.hidden = !show;
+  if (!show) return;
+  const m = page.rival.m;
+  tag.firstElementChild!.textContent = page.race?.names[1] ?? ""; // a player's own name for a design: text only
+  // Alongside at the start (the two launch from one spot) there is no distance worth giving.
+  tag.lastElementChild!.textContent = m < 30 ? "" : m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
+  tag.style.transform = `translate(${((p!.x + 1) / 2) * window.innerWidth}px, ${((1 - p!.y) / 2) * window.innerHeight}px) translate(-50%, -130%)`;
+}
 let ghostTrack: Track | null = null;
 let lastTrial: CourseKind | null = null;
 /** The wind direction of the run being sailed (ghosts are kept turned to a north wind). */
@@ -2888,7 +2916,12 @@ async function raceFinish(): Promise<void> {
   $("r-next").replaceChildren();
   drawResultMap();
   $("again").textContent = "Race again";
-  $("result").classList.add("watched");
+  // "Change the boats" beside it: back to the Set sail card with the autopilot and this other boat picked.
+  const rb = (params.get("race") ?? "").split(",")[1] ?? "";
+  const changer = $<HTMLAnchorElement>("r-boat");
+  changer.textContent = "Change the boats";
+  changer.href = `./helm.html?who=autopilot&against=${(RACE_BOATS as readonly string[]).includes(rb) ? rb : "revc"}`;
+  $("result").classList.add("watched", "raced");
   document.body.classList.add("results");
   $("result").hidden = false;
   sound.settle();
@@ -4256,6 +4289,30 @@ renderer.setAnimationLoop(() => {
     ghost.hide();
     page.ghost.shown = false;
   }
+  // A race: the other boat, her own model, where her track says she is (both tracks are cut at the clock's hour).
+  const her = RACE && watch === "boat" ? rep("ghost") : null;
+  const her0 = page.status?.ghost;
+  if (her && (her.h.length || her0) && page.race && modelsIn) {
+    if (!rival.built) {
+      const b = page.race.bases[1];
+      const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
+      const m = BUILDERS[rs.key](quality);
+      reflectable(m.root);
+      rival.set(m);
+    }
+    const hh = Math.min(h, lastHour(her));
+    // Before her first hour is logged (the race opens paused) she is at her reported start, as your boat is.
+    const [blat, blon] = her.h.length ? positionAt(her, hh) : [her0!.lat, her0!.lon];
+    const bh = (her.h.length ? angleAt(her, her.heading, hh) : her0!.heading) ?? 0;
+    const o = rivalOffset([lat, lon], [blat, blon], r ? (angleAt(r, r.heading, h) ?? 0) : 0);
+    const heel = her.heel ? (valueAt(her, her.heel, hh) ?? 0) : 0;
+    rival.update(o.dx, o.dz, heightAt(comps, o.dx, o.dz, t), THREE.MathUtils.degToRad(90 - bh), THREE.MathUtils.degToRad(heel), apparentFlow(wu, wv, her.h.length ? (valueAt(her, her.stw, hh) ?? 0) : 0, bh), dt, o.m);
+    page.rival = { shown: rival.group.visible, m: Math.round(o.m), bearing: Math.round((THREE.MathUtils.radToDeg(Math.atan2(o.dx, -o.dz)) + 360) % 360) };
+  } else {
+    rival.hide();
+    page.rival.shown = false;
+  }
+  rivalTagDue = true;
   const ms = r ? utc(r.start) + h * 3600e3 : Date.UTC(2020, 3, 1, 14) + PRACTICE_SHIFT_H * 3600e3;
   const sp = sunPosition(ms, lat, lon);
   if (Number.isFinite(lat)) atmos.setCelestial(ms, lat, lon);
@@ -4329,6 +4386,7 @@ renderer.setAnimationLoop(() => {
   sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   page.mirror = mirror.strength;
   atmos.render();
+  if (rivalTagDue) placeRivalTag();
   if (chart && game.boat && !game.ghost) {
     // A watched voyage: the one boat's track so far.
     if (chartDirty) {
@@ -4386,6 +4444,8 @@ renderer.setAnimationLoop(() => {
 // the same choices, so a link (the title, the Boatyard's "Test it", Play again) opens the
 // card filled in, and ?go=1 sets sail at once.
 if (!shared && !PRACTICE && SS.when !== "calm") $<HTMLSelectElement>("launch").value = LAUNCH[SS.when];
+// ?who=you&day=<one of the six launch days>: the card opens on that day ("Sail it yourself" after watching her).
+if (!shared && !PRACTICE && params.get("who") === "you" && LAUNCH_DAYS.includes(params.get("day") ?? "")) $<HTMLSelectElement>("launch").value = String(LAUNCH_DAYS.indexOf(params.get("day")!));
 if (!shared && !PRACTICE && SS.boat && boatRow(SS.boat)) {
   boatRow(SS.boat)!.checked = true;
   powerFor(SS.boat);
