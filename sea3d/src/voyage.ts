@@ -67,7 +67,7 @@ import { drawPostcard, savePng } from "./replay/postcard";
 import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import { advanceNow, FEED_BASE, feedToReplay, loadFeed, reportAgeH, reportAt, type Tracked } from "./replay/feed";
-import { localTime, shortLocal } from "./replay/localtime";
+import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { Cinema, filmButtons } from "./cinema";
 import { OceanSound, rigFor } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
@@ -1879,7 +1879,7 @@ function hud(r: Replay, stw: number, hs: number): boolean {
   const ms = utc(r.start) + hour * 3600e3;
   const local = localTime(ms, plat, plon, warp < 1 / 60);
   $("w-local").textContent = local;
-  $("w-date").textContent = Number.isFinite(plat) ? shortLocal(ms, plat, plon) : fmtDate(r, hour);
+  $("w-date").textContent = Number.isFinite(plat) ? `${shortLocal(ms, plat, plon)} ${zoneLabel(plat, plon, ms)}` : fmtDate(r, hour); // the zone too: locked item S1
   $("c-day").title = `${fmtDate(r, hour)}\n${local}`;
   if (document.activeElement !== scrub) {
     scrub.value = String(hour);
