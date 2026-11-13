@@ -268,9 +268,18 @@ const CHECKS = {
       if (!p.over) {
         must(/paused/i.test(p.state), `paused but the time bar says "${p.state}"`);
         // The reason's note appears once the picture has played on to the moment it stopped (#341), so give it time.
+        // A "Your call" card is a reason too: since #391 the battery stop can carry one (the
+        // Gulf Stream, a night call) and the card, not a note, says why the clock stopped.
         if (p.stop !== "time") {
-          const why = await page.waitForFunction(() => [...document.querySelectorAll("#notes .note .txt")].map((e) => e.textContent).find((t) => /^Paused:/.test(t)), null, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => "");
-          must(why, `paused for "${p.stop}" with no "Paused: ..." reason in the notes after 30 s (latest note "${p.note}")`);
+          const why = await page
+            .waitForFunction(() => {
+              const card = document.getElementById("decide");
+              if (card && !card.hidden) return `Your call: ${document.getElementById("decidetext")?.textContent ?? ""}`;
+              return [...document.querySelectorAll("#notes .note .txt")].map((e) => e.textContent).find((t) => /^Paused:/.test(t));
+            }, null, { timeout: 30_000 })
+            .then((h) => h.jsonValue())
+            .catch(() => "");
+          must(why, `paused for "${p.stop}" with no "Paused: ..." reason or "Your call" card after 30 s (latest note "${p.note}")`);
           p.note = why;
         }
       }

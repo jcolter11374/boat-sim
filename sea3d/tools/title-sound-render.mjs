@@ -17,7 +17,7 @@ const RATE = 44100;
 mkdirSync(out, { recursive: true });
 
 const bundle = await build({
-  stdin: { contents: 'export * from "./src/sound"; export * from "./src/titleSound";', resolveDir: ".", loader: "ts" },
+  stdin: { contents: 'export * from "./src/sound"; export * from "./src/titleSound"; export * from "./src/titleMusic";', resolveDir: ".", loader: "ts" },
   bundle: true,
   format: "iife",
   globalName: "T",
@@ -32,6 +32,11 @@ const SCENES = [
   { name: "title-as-heard-yacht", rig: "shrouds", length: 9.4, timeline: true, seed: 777 },
   // With the far gull allowed (?gulls=1): off on the live title until someone has heard it.
   { name: "title-as-heard-kayak-gulls", rig: "small", length: 3.05, timeline: true, gulls: true },
+  // The whole title: the sea, its sounds and the air, once round (pad, the tune, then the sea alone).
+  { name: "title-with-music-kayak", rig: "small", length: 3.05, timeline: true, music: true, seconds: 100 },
+  // The air over the sea with nothing else, to measure it against the sea alone (same seed).
+  { name: "title-music-and-sea", rig: "small", length: 3.05, music: true, seconds: 100 },
+  { name: "title-sea-only-100s", rig: "small", length: 3.05, seconds: 100 },
   // The sea alone, for comparison (what the effects sit on).
   { name: "title-sea-only", rig: "small", length: 3.05 },
   // Each sound in turn over the sea, at known times (the chart labels them).
@@ -62,12 +67,14 @@ for (const s of SCENES) {
       const title = new window.T.TitleSound(sea, s.seed + 1);
       title.scene.sails = s.rig === "shrouds";
       title.scene.gulls = !!s.gulls;
+      const music = s.music ? new window.T.TitleMusic(sea) : null;
       const dt = 1 / 30;
       for (let i = 1; i * dt < seconds - 0.05; i++) {
         const t = i * dt;
         void ctx.suspend(t).then(() => {
           if (s.timeline) title.update(dt);
           else sea.update(dt, window.T.TITLE_WEATHER);
+          music?.update();
           for (const [at, what] of s.moments ?? []) {
             if (Math.abs(t - at) < dt / 2) {
               const [kind, arg] = what.split(":");

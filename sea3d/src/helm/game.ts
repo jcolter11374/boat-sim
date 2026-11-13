@@ -91,6 +91,29 @@ export interface Preview {
   /** km made towards the finish (negative: further away). */
   km: number;
   outcome: string;
+  /** The line it sails, [lat, lon] every 3 h (newer simulators). */
+  track?: [number, number][];
+  /** What the line costs in the same forecast: roughest sea (m), strongest wind (m/s), lowest battery (0-1). */
+  hs_max?: number;
+  wind_max?: number;
+  soc_min?: number;
+}
+/** Each order's stake against the ghost, from the forecast as issued (sandbox/helm.py Game.outlook). */
+import type { CurrentGrid } from "./callmap";
+export interface Outlook {
+  hours: number;
+  lead_now_km: number;
+  ghost: Preview;
+  orders: (Preview & { heading: Heading; power?: number; lead_km: number })[];
+  /** The forecast's surface current round the lines, for the call map (newer simulators). */
+  current?: CurrentGrid | null;
+}
+/** sandbox/helm.py Game.best_heading: km towards the finish for a fan of headings round the bow. */
+export interface BestHeading {
+  heading: number;
+  best: number;
+  km: Record<string, number>;
+  gain_km: number;
 }
 export interface ForecastRow {
   t: string;
@@ -277,6 +300,16 @@ export class HelmGame {
   preview(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, hours = 24): Promise<Preview | null> {
     const extra = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
     return this.ask<Preview | null>({ type: "preview", heading, power, hours, ...extra });
+  }
+
+  /** What each order would do against the ghost over the next `hours`, or null where the simulator can't say. */
+  outlook(orders: { heading: Heading; power?: number }[], hours = 48): Promise<Outlook | null> {
+    return this.ask<Outlook | null>({ type: "outlook", orders, hours });
+  }
+
+  /** The route check (plan #10): the fixed heading the forecast favours for the next `hours`. */
+  bestHeading(hours = 48): Promise<BestHeading | null> {
+    return this.ask<BestHeading | null>({ type: "best", hours });
   }
 
   forecast(): Promise<ForecastRow[]> {

@@ -109,7 +109,8 @@ PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 
 # note (status "last_pass"). Leo's play, 12 Nov: a 1 km pass stopping the clock
 # felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
 PASS_STOP_SWING_KM = 25.0
-OUTLOOK_HOURS = 48.0  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
+OUTLOOK_HOURS = 48.0
+TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
 def day_seed(start: datetime) -> int:
@@ -534,19 +535,40 @@ class Game:
         t0, soc0, km0 = w.state.t, w.state.soc, self._km_to_finish(w)
         stw, n = 0.0, 0
         end = t0 + timedelta(hours=hours)
+        # The line it sails, a point every TRACK_EVERY_H, for a call's map (Rosa's cards).
+        track = [[round(w.state.lat, 3), round(w.state.lon, 3)]]
+        next_pt = t0 + timedelta(hours=TRACK_EVERY_H)
+        # What the line costs, at the same points in the same forecast: the roughest sea
+        # and strongest wind on it, and the lowest battery (Elena: a call needs a trade-off).
+        sea = {"hs_max": 0.0, "wind_max": 0.0, "soc_min": float(w.state.soc)}
+
+        def cost() -> None:
+            e = w.c.env.sample(w.state.t, w.state.lat, w.state.lon)
+            sea["hs_max"] = max(sea["hs_max"], float(e.hs))
+            sea["wind_max"] = max(sea["wind_max"], float(math.hypot(e.wind_u, e.wind_v)))
+
         try:
+            cost()
             while not w.done and w.state.t < end:
                 w.step()
                 stw += w.state.speed_through_water
                 n += 1
+                sea["soc_min"] = min(sea["soc_min"], float(w.state.soc))
+                if w.state.t >= next_pt:
+                    track.append([round(w.state.lat, 3), round(w.state.lon, 3)])
+                    cost()
+                    next_pt += timedelta(hours=TRACK_EVERY_H)
         except OutsideCoverage:  # the forecast ran past the end of the weather: a shorter preview
             pass
+        last = [round(w.state.lat, 3), round(w.state.lon, 3)]
         return {
             "hours": (w.state.t - t0).total_seconds() / 3600,
             "stw": stw / n if n else 0.0,
             "soc": float(w.state.soc - soc0),
             "km": km0 - self._km_to_finish(w),
             "outcome": self._outcome(w) if w.done else "at_sea",
+            "track": track if track[-1] == last else [*track, last],
+            **sea,
         }
 
     def outlook(self, orders: list[dict], hours: float = OUTLOOK_HOURS) -> dict:
@@ -568,7 +590,47 @@ class Game:
         for o in orders:
             p = self.preview(o["heading"], float(o.get("power", self._cruise())), hours=hours)
             out.append({**o, **p, "lead_km": lead + p["km"] - ghost["km"]})
-        return {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+        res = {"hours": ghost["hours"], "lead_now_km": lead, "ghost": ghost, "orders": out}
+        tracks = [p.get("track") or [] for p in [ghost, *out]]
+        res["current"] = self._current_grid([pt for tr in tracks for pt in tr])
+        return res
+
+    def _current_grid(self, pts: list, step: float = 0.25, pad: float = 0.75) -> dict | None:
+        """The forecast's surface current now, on a grid round the call's lines (Rosa's call
+        map draws the Gulf Stream from it): {lat0, lon0, step, nlat, nlon, u, v}, rows south
+        to north, m/s east and north, 0 outside the weather. Display only."""
+        from boatsim.oceandata.grid import OutsideCoverage
+
+        v = self.mine
+        pts = [*pts, [v.state.lat, v.state.lon]]
+        if not pts:
+            return None
+        lat0 = math.floor((min(p[0] for p in pts) - pad) / step) * step
+        lon0 = math.floor((min(p[1] for p in pts) - pad) / step) * step
+        nlat = min(40, int((max(p[0] for p in pts) + pad - lat0) / step) + 1)
+        nlon = min(60, int((max(p[1] for p in pts) + pad - lon0) / step) + 1)
+        issued = v.c.forecast.issue(v.state.t)
+        us, vs = [], []
+        for i in range(nlat):
+            for j in range(nlon):
+                try:
+                    e = issued.sample(v.state.t, lat0 + i * step, lon0 + j * step)
+                    cu, cv = float(e.current_u), float(e.current_v)
+                except OutsideCoverage:
+                    cu = cv = 0.0
+                if not (math.isfinite(cu) and math.isfinite(cv)):
+                    cu = cv = 0.0
+                us.append(round(cu, 2))
+                vs.append(round(cv, 2))
+        return {
+            "lat0": lat0,
+            "lon0": lon0,
+            "step": step,
+            "nlat": nlat,
+            "nlon": nlon,
+            "u": us,
+            "v": vs,
+        }
 
     def best_heading(
         self, hours: float = OUTLOOK_HOURS, fan=(-30, -20, -10, 0, 10, 20, 30)
