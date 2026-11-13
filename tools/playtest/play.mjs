@@ -2726,7 +2726,8 @@ const CHECKS = {
       // Every pill and the button can be brought on screen and is the thing under the finger there.
       const usable = (p) => p.evaluate(async () => {
         const bad = [];
-        const els = [...document.querySelectorAll("#ss-card .ss-pill, #ss-card #go, #go")].filter((e) => e.offsetParent !== null);
+        // Pills inside a closed "More options" are not offered until it opens: leave them out.
+        const els = [...document.querySelectorAll("#ss-card .ss-pill, #ss-card #go, #go")].filter((e) => e.offsetParent !== null && !e.closest("details:not([open])"));
         for (const e of new Set(els)) {
           e.scrollIntoView({ block: "center" });
           await new Promise((r) => setTimeout(r, 60));
