@@ -3278,6 +3278,52 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #508: the page opens on the title from its first paint, never the sea demo's "Both boats on a live sea"
+  // panel; #507: the title boat's whip aerial. Samples what shows every 200 ms from the start, takes an early
+  // and a settled frame, at 1280 and 390.
+  "title-opens": {
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const bad = [];
+      for (const [w, h, tag] of [[1280, 720, "1280"], [390, 844, "390"]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        await ctx.addInitScript(() => {
+          window.__opens = [];
+          const t0 = performance.now();
+          const look = () => {
+            if (!document.body) return;
+            const vis = (id) => { const e = document.getElementById(id); return !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden" && getComputedStyle(e).display !== "none"; };
+            window.__opens.push({ t: Math.round(performance.now() - t0), title: vis("title"), panel: vis("panel"), cls: document.body.classList.contains("title") });
+          };
+          document.addEventListener("DOMContentLoaded", look);
+          const iv = setInterval(() => { look(); if (performance.now() - t0 > 15000) clearInterval(iv); }, 200);
+        });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE, { waitUntil: "domcontentloaded", timeout: 2 * MIN });
+          await p.waitForTimeout(800);
+          for (const [when, wait] of [["early", 0], ["settled", 14000]]) {
+            if (wait) { await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 30, null, { timeout: 3 * MIN }).catch(() => {}); await p.waitForTimeout(wait); }
+            const path = `look-opens-${BROWSER}-${tag}-${when}.jpg`;
+            if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); }
+          }
+          const samples = await p.evaluate(() => window.__opens ?? []);
+          const first = samples[0];
+          const panelAt = samples.filter((x) => x.panel).map((x) => x.t);
+          const noTitle = samples.filter((x) => !x.title).map((x) => x.t);
+          if (!first?.title || !first?.cls) bad.push(`${tag}: at first look (${first?.t} ms) title ${first?.title}, body.title ${first?.cls}`);
+          if (panelAt.length) bad.push(`${tag}: the demo panel showed at ${panelAt.slice(0, 5).join(", ")} ms`);
+          if (noTitle.length) bad.push(`${tag}: no title at ${noTitle.slice(0, 5).join(", ")} ms`);
+          out.push(`${tag}: ${samples.length} samples over ${samples.at(-1)?.t ?? 0} ms; first at ${first?.t} ms title ${first?.title}; panel ${panelAt.length ? "SHOWN" : "never"}; title missing ${noTitle.length} times`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`OPENS ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
