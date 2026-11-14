@@ -178,7 +178,9 @@ export const PAGES = [
   {
     name: "helm",
     path: "helm.html?quality=low",
-    drawing: () => (window.__helm?.frames ?? 0) > 10,
+    // Behind the Set sail card her boat waits for her shaders (#596), longer on software drawing: the picture
+    // is read once she's shown (older deploys have no flag).
+    drawing: () => (window.__helm?.frames ?? 0) > 10 && window.__helm.boatShown !== false,
     frames: () => window.__helm.frames,
     // "Take the helm": the game starts loading (busy), starts, or says why not.
     act: async (page, o) => page.click("#go", o),

@@ -176,6 +176,28 @@ function deepenSky(m: THREE.ShaderMaterial): void {
     );
 }
 
+/** Whether this graphics "card" is software drawing on the processor (no graphics card): ?gl=full draws everything anyway (slow; for screenshots). */
+function softwareGpu(gpu: string): boolean {
+  return /swiftshader|llvmpipe|software|basic render/i.test(gpu) && new URLSearchParams(location.search).get("gl") !== "full";
+}
+
+/**
+ * Software drawing, asked before a page makes its renderer (which must choose its smoothing of
+ * edges then): from a throwaway context, let go at once.
+ */
+export function softwareGraphics(): boolean {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    if (!gl) return false;
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return softwareGpu(gpu);
+  } catch {
+    return false;
+  }
+}
+
 export class Atmosphere {
   readonly sky = new Sky();
   readonly sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
@@ -267,7 +289,7 @@ export class Atmosphere {
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
     const gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
     // ?gl=full draws everything even on software graphics (slow; for screenshots).
-    this.software = /swiftshader|llvmpipe|software|basic render/i.test(gpu) && new URLSearchParams(location.search).get("gl") !== "full";
+    this.software = softwareGpu(gpu);
     this.sky.scale.setScalar(HORIZON * 3);
     deepenSky(this.sky.material);
     const su = this.sky.material.uniforms;
@@ -280,6 +302,16 @@ export class Atmosphere {
     // Real topsides mirror the dark water below and the bright haze at the horizon.
     this.envScene.add(this.envSea);
     this.pmrem = new THREE.PMREMGenerator(renderer);
+    // Each re-light (pmrem.fromScene) makes a new background material for the cube faces and throws
+    // it away after, and three throws away its shader with it: so every re-light built that shader
+    // again, and on software graphics the first sailing frames waited on it (Omar's speed list, rank
+    // 12). A twin that is never seen (nothing to draw) keeps the shader alive between re-lights.
+    const keep = new THREE.Mesh(
+      new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([], 3)),
+      new THREE.MeshBasicMaterial({ name: "PMREM.Background", side: THREE.BackSide, depthWrite: false, depthTest: false }),
+    );
+    keep.frustumCulled = false;
+    this.envScene.add(keep);
 
     // Stars, placed on the sky's own sphere (equator and pole): setCelestial()
     // turns the whole sphere to the right time and place. Faint ones at random

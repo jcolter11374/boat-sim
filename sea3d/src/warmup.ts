@@ -68,65 +68,99 @@ export function startWhenBuilt(
         }
         setTimeout(next, 0);
       };
-      // Then draw each visible thing once, into a 2-pixel corner of the picture, a few per task: a
-      // graphics driver still sets each shader up for drawing on its first use (in software
-      // graphics that was most of the freeze left, 1 to 3 s, in one task at the first frame).
-      // Reading a pixel back after each draw makes it finish there, so its cost is its own task's.
+      // Then draw each visible thing once, a few per task (drawEach).
       const things: THREE.Object3D[] = [];
       scene.traverseVisible((o) => {
-        if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) things.push(o);
+        if (drawable(o)) things.push(o);
       });
-      const shown = things.map((o) => o.visible);
-      const gl = renderer.getContext();
       let at = 0;
-      const px = new Uint8Array(4);
       const draw = (): void => {
         if (started) return;
-        const t0 = performance.now();
-        const prevT = renderer.getRenderTarget();
-        const prevShadow = renderer.shadowMap.autoUpdate;
-        const vp = renderer.getViewport(new V4()), sc = renderer.getScissor(new V4()), test = renderer.getScissorTest();
-        const t = target();
-        const tSc = t?.scissor.clone(), tTest = t?.scissorTest;
-        try {
-          if (t) {
-            t.scissor.set(0, 0, 2, 2); // a target draws to its own scissor, not the renderer's
-            t.scissorTest = true;
-          }
-          renderer.setRenderTarget(t);
-          renderer.shadowMap.autoUpdate = false;
-          renderer.setScissorTest(true);
-          renderer.setScissor(0, 0, 2, 2);
-          for (const o of things) o.visible = false;
-          while (at < things.length && performance.now() - t0 < 30) {
-            const o = things[at++];
-            o.visible = true;
-            renderer.render(scene, camera);
-            o.visible = false;
-            renderer.setRenderTarget(null); // the screen's 8-bit pixel reads back the same everywhere
-            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-            renderer.setRenderTarget(t);
-          }
-        } catch {
-          at = things.length;
-        } finally {
-          things.forEach((o, i) => (o.visible = shown[i]));
-          if (t) {
-            t.scissor.copy(tSc!);
-            t.scissorTest = tTest!;
-          }
-          renderer.setScissor(sc);
-          renderer.setViewport(vp);
-          renderer.setScissorTest(test);
-          renderer.shadowMap.autoUpdate = prevShadow;
-          renderer.setRenderTarget(prevT);
-        }
+        at = drawEach(renderer, scene, camera, things, target(), at);
         if (at >= things.length) return go();
         setTimeout(draw, 0);
       };
       next();
     }, 0),
   );
+}
+
+const drawable = (o: THREE.Object3D): boolean =>
+  !!((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite);
+const px = new Uint8Array(4);
+
+/**
+ * Draw each of these things once, alone, into a 2-pixel corner of the picture `target` (null: the
+ * screen), from `from` on, for about `budgetMs`: a graphics driver still sets each shader up for
+ * drawing on its first use (in software graphics most of a page's start-up freeze, 1 to 3 s in one
+ * task). A pixel read back after each draw makes it finish there, so its cost lands in this task.
+ * Things hidden, or inside something hidden, are drawn too (shown just for their draw). Returns
+ * where to carry on.
+ */
+export function drawEach(
+  renderer: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  things: THREE.Object3D[],
+  target: THREE.WebGLRenderTarget | null,
+  from = 0,
+  budgetMs = 30,
+): number {
+  const t0 = performance.now();
+  const gl = renderer.getContext();
+  const prevT = renderer.getRenderTarget();
+  const prevShadow = renderer.shadowMap.autoUpdate;
+  const vp = renderer.getViewport(new V4()), sc = renderer.getScissor(new V4()), test = renderer.getScissorTest();
+  const tSc = target?.scissor.clone(), tTest = target?.scissorTest;
+  const saved = new Map<THREE.Object3D, boolean>();
+  const show = (o: THREE.Object3D, v: boolean): void => {
+    if (!saved.has(o)) saved.set(o, o.visible);
+    o.visible = v;
+  };
+  let at = from;
+  try {
+    if (target) {
+      target.scissor.set(0, 0, 2, 2); // a target draws to its own scissor, not the renderer's
+      target.scissorTest = true;
+    }
+    renderer.shadowMap.autoUpdate = false;
+    renderer.setScissorTest(true);
+    renderer.setScissor(0, 0, 2, 2);
+    scene.traverse((o) => {
+      if (drawable(o)) show(o, false);
+    });
+    while (at < things.length && (at === from || performance.now() - t0 < budgetMs)) {
+      const o = things[at++];
+      let root = o;
+      while (root.parent) root = root.parent;
+      if (root !== scene) continue; // not (or no longer) in the scene
+      const opened: THREE.Object3D[] = [];
+      for (let q: THREE.Object3D | null = o; q && q !== scene; q = q.parent)
+        if (!q.visible || q === o) {
+          show(q, true);
+          opened.push(q);
+        }
+      renderer.setRenderTarget(target);
+      renderer.render(scene, camera);
+      for (const q of opened) q.visible = false;
+      renderer.setRenderTarget(null); // the screen's 8-bit pixel reads back the same everywhere
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    }
+  } catch {
+    at = things.length;
+  } finally {
+    for (const [o, v] of saved) o.visible = v;
+    if (target) {
+      target.scissor.copy(tSc!);
+      target.scissorTest = tTest!;
+    }
+    renderer.setScissor(sc);
+    renderer.setViewport(vp);
+    renderer.setScissorTest(test);
+    renderer.shadowMap.autoUpdate = prevShadow;
+    renderer.setRenderTarget(prevT);
+  }
+  return at;
 }
 
 /** Build the scene's shaders for another picture it is drawn into too (the calm-water reflection). */

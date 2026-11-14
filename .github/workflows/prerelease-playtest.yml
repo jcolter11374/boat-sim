@@ -118,6 +118,12 @@ jobs:
           timeout 120 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Quick smoke (pages open, animate, Real time on every speed bar)
         run: npm run test:quick
+      # Counts, not times (runners vary about threefold): shader programs built after Set sail
+      # (0), programs built on the title, sailing screen and a replay, and draw calls per frame
+      # at Low, against sea3d/tests/speed-baseline.json. About a minute. The failure says which
+      # count went up and how to update the baseline when that's intended.
+      - name: Speed guard (shader and draw counts against the baseline)
+        run: npm run test:speed
   # The full suite: nightly on main and on a hand dispatch, not on pull requests.
   smoke:
     needs: build

@@ -3,6 +3,7 @@
 // view and the chart can read them the way the voyage page does.
 
 import type { Replay } from "../replay/data";
+import { WARM_NAME } from "./prefetch";
 
 export type Heading = number | "finish" | "route" | "auto";
 export type Mode = "hands_on" | "base";
@@ -197,7 +198,8 @@ export class HelmGame {
 
   constructor(
     private readonly base: string,
-    make: () => Worker = () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }),
+    // Named so it starts loading the simulator the moment it runs (helm/worker.ts).
+    make: () => Worker = () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module", name: WARM_NAME + base }),
   ) {
     this.worker = make();
     this.worker.onmessage = (ev: MessageEvent<Reply>) => {
@@ -275,8 +277,21 @@ export class HelmGame {
    *  ("my boat"); left out, it's our kayak. `startPort`: a port id
    *  from ports.json to start from instead of the usual drop. `launch` is an index into
    *  the six odds launches, or an April to June day ("2020-04-23", noon UTC). */
-  async start(launch: number | string, safe: boolean, breakdowns: boolean, mode: Mode = "hands_on", challenge?: { id: string; bundle?: string }, boat?: string | Record<string, string | number>, startPort?: string): Promise<Status> {
-    const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay }>({
+  /** start()'s first order went with the new game (hands on only): the page needn't send it again. */
+  firstOrderSent = false;
+
+  async start(
+    launch: number | string,
+    safe: boolean,
+    breakdowns: boolean,
+    mode: Mode = "hands_on",
+    challenge?: { id: string; bundle?: string },
+    boat?: string | Record<string, string | number>,
+    startPort?: string,
+    first?: { heading: Heading; power: number; sails?: string | null; engine?: boolean | null },
+  ): Promise<Status> {
+    const order = first && { heading: first.heading, power: first.power, ...(first.sails != null || first.engine != null ? { sails: first.sails ?? null, engine: first.engine ?? null } : {}) };
+    const v = await this.ask<{ launches: string[]; status: Status; boat: Replay; ghost: Replay; first_order?: OrderResult | null }>({
       type: "new",
       ...(typeof launch === "string" ? { day: launch, launch: 0 } : { launch }),
       safe,
@@ -286,8 +301,10 @@ export class HelmGame {
       bundle: challenge?.bundle,
       choices: typeof boat === "string" ? { base: boat } : boat && Object.keys(boat).length ? boat : undefined,
       start_port: startPort || undefined,
+      order,
     });
     this.launches = v.launches;
+    this.firstOrderSent = !!v.first_order;
     this.take(v);
     return v.status;
   }
