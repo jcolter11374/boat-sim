@@ -4964,6 +4964,39 @@ const CHECKS = {
       return res;
     },
   },
+  // #584: "Today at the drop point" on the Set sail card: ocean + you steer only, fresh forecast only.
+  "card-today": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const out = [], bad = [];
+      const read = () => page.evaluate(() => { const e = document.getElementById("ss-today"); return { has: !!e, shown: !!e && !e.hidden && e.getClientRects().length > 0, text: (e?.textContent || "").replace(/\s+/g, " ").trim() }; });
+      const open = async (q) => {
+        await page.goto(SITE + "helm.html" + q, { waitUntil: "load", timeout: 2 * MIN });
+        await page.waitForFunction(() => document.querySelector("#go") && window.__helm && window.__helm.frames > 3, null, { timeout: 3 * MIN }).catch(() => {});
+        await page.waitForTimeout(5000); // the forecast files load after the card
+      };
+      await open("");
+      let r = await read();
+      if (!r.has) throw new SkipCheck("this build has no #ss-today (#584 not deployed)");
+      out.push(`ocean, you: ${r.shown ? `"${r.text}"` : "hidden"}`);
+      if (r.shown) {
+        if (!/wind \d+ kn/.test(r.text)) bad.push(`no "wind N kn" in "${r.text}"`);
+        if (!/NOAA.*\d\d:\d\d UTC/.test(r.text)) bad.push(`no NOAA issue time in UTC in "${r.text}"`);
+        const t = r.text.match(/(\d\d):(\d\d) UTC/);
+        if (t) out.push(`issued ${t[0]}, now ${new Date().toISOString().slice(11, 16)} UTC`);
+      } else out.push("hidden on the default card: no fresh forecast on the site? (unverified)");
+      const shots = [];
+      if (BROWSER === "chromium") { const path = "look-card-today-chromium.jpg"; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); shots.push("card"); } }
+      // Autopilot steers: by the pill, then by the address.
+      const pill = page.locator("#ss-who-opts button", { hasText: /autopilot/i }).first();
+      if (await pill.count()) { await pill.click(); await page.waitForTimeout(800); r = await read(); out.push(`autopilot pill: ${r.shown ? "SHOWN" : "hidden"}`); if (r.shown) bad.push("shown with the autopilot steering (pill)"); }
+      await open("?who=autopilot"); r = await read(); out.push(`?who=autopilot: ${r.shown ? "SHOWN" : "hidden"}`); if (r.shown) bad.push("shown with ?who=autopilot");
+      await open("?where=annapolis"); r = await read(); out.push(`?where=annapolis: ${r.shown ? "SHOWN" : "hidden"}`); if (r.shown) bad.push("shown on Annapolis");
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
