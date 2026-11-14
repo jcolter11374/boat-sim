@@ -148,6 +148,44 @@
     "stock_pearson31_2-tactician.off"
    ],
    "commit": "0d7bd2e"
+  },
+  {
+   "builds": [
+    "k-p25-thr.two-t500",
+    "stock_cruiser31",
+    "stock_cruiser31-cloth.laminate",
+    "stock_cruiser31-drogue.jordan",
+    "stock_cruiser31-drogue.para",
+    "stock_cruiser31-hydro.pod600",
+    "stock_cruiser31-kbat.lfp",
+    "stock_cruiser31-keel.shoal",
+    "stock_cruiser31-ksol.600w",
+    "stock_cruiser31-reef.inmast",
+    "stock_cruiser31-reef.slab3",
+    "stock_cruiser31-rig.solent",
+    "stock_cruiser31-spare.spare-autopilot",
+    "stock_cruiser31-storm.storm",
+    "stock_cruiser31-tactician.off",
+    "stock_cruiser31-vane.hydrovane",
+    "stock_cruiser31-vane.monitor",
+    "stock_pearson31_2",
+    "stock_pearson31_2-cloth.laminate",
+    "stock_pearson31_2-drogue.jordan",
+    "stock_pearson31_2-drogue.para",
+    "stock_pearson31_2-hydro.pod600",
+    "stock_pearson31_2-kbat.lfp",
+    "stock_pearson31_2-keel.wing",
+    "stock_pearson31_2-ksol.600w",
+    "stock_pearson31_2-reef.inmast",
+    "stock_pearson31_2-reef.slab3",
+    "stock_pearson31_2-rig.cutter",
+    "stock_pearson31_2-spare.spare-autopilot",
+    "stock_pearson31_2-storm.storm",
+    "stock_pearson31_2-tactician.off",
+    "stock_pearson31_2-vane.hydrovane",
+    "stock_pearson31_2-vane.monitor"
+   ],
+   "commit": "78c3d13"
   }
  ],
  "builds": [
@@ -669,8 +707,62 @@
     "cruise_w": 25
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 86,
+    "odds": 0.86,
+    "low95": 0.779,
+    "high95": 0.915,
+    "within_150": 86,
+    "median_days": 52.0,
+    "odds_unknown_10": 0.779,
+    "endings": {
+     "arrived": 86,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 8,
+     "taken or snagged by fishermen [near land]": 2,
+     "still at sea": 2,
+     "stuck inverted or keel lost [open ocean]": 1,
+     "disqualified: silent too long": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "k-p25-thr.two-t500/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "arrived",
+     "days": 58.48
+    },
+    {
+     "file": "k-p25-thr.two-t500/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 55.28
+    },
+    {
+     "file": "k-p25-thr.two-t500/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "k-p25-thr.two-t500/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "arrived",
+     "days": 52.31
+    },
+    {
+     "file": "k-p25-thr.two-t500/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 51.24
+    },
+    {
+     "file": "k-p25-thr.two-t500/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 49.99
+    }
+   ]
   },
   {
    "id": "k-p25-sol.solar-200",
@@ -3451,20 +3543,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.2,
-    "odds_unknown_10": 0.235,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
     "endings": {
      "still at sea": 40,
-     "arrived": 27,
+     "arrived": 26,
      "ran aground before the finish": 16,
      "taken or snagged by fishermen [near land]": 10,
      "disqualified: silent too long": 6,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -3472,7 +3565,7 @@
      "file": "stock_pearson31_2-rig.cutter/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 127.5
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-rig.cutter/2020-04-15.json",
@@ -3529,20 +3622,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.2,
-    "odds_unknown_10": 0.235,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
     "endings": {
      "still at sea": 40,
-     "arrived": 27,
+     "arrived": 26,
      "ran aground before the finish": 16,
      "taken or snagged by fishermen [near land]": 10,
      "disqualified: silent too long": 6,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -3550,7 +3644,7 @@
      "file": "stock_pearson31_2-cloth.laminate/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 127.5
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-cloth.laminate/2020-04-15.json",
@@ -3607,20 +3701,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.2,
-    "odds_unknown_10": 0.235,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
     "endings": {
      "still at sea": 40,
-     "arrived": 27,
+     "arrived": 26,
      "ran aground before the finish": 16,
      "taken or snagged by fishermen [near land]": 10,
      "disqualified: silent too long": 6,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -3628,7 +3723,7 @@
      "file": "stock_pearson31_2-reef.slab3/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 127.5
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-reef.slab3/2020-04-15.json",
@@ -3685,20 +3780,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.2,
-    "odds_unknown_10": 0.235,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
     "endings": {
      "still at sea": 40,
-     "arrived": 27,
+     "arrived": 26,
      "ran aground before the finish": 16,
      "taken or snagged by fishermen [near land]": 10,
      "disqualified: silent too long": 6,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -3706,7 +3802,7 @@
      "file": "stock_pearson31_2-reef.inmast/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 127.5
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-reef.inmast/2020-04-15.json",
@@ -3763,20 +3859,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.2,
-    "odds_unknown_10": 0.235,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
     "endings": {
      "still at sea": 40,
-     "arrived": 27,
+     "arrived": 26,
      "ran aground before the finish": 16,
      "taken or snagged by fishermen [near land]": 10,
      "disqualified: silent too long": 6,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -3784,7 +3881,7 @@
      "file": "stock_pearson31_2-storm.storm/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 127.5
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-storm.storm/2020-04-15.json",
@@ -3850,11 +3947,12 @@
     "odds_unknown_10": 0.297,
     "endings": {
      "arrived": 34,
-     "still at sea": 26,
+     "still at sea": 25,
      "ran aground before the finish": 14,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 12,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 11,
      "taken or snagged by fishermen [near land]": 8,
      "disqualified: silent too long": 4,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 2,
      "ship strike": 1,
      "both electronics boxes dead: silent and uncontrolled [near land]": 1
     }
@@ -3864,7 +3962,7 @@
      "file": "stock_pearson31_2-spare.spare-autopilot/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 71.69
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-spare.spare-autopilot/2020-04-15.json",
@@ -3921,20 +4019,21 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 27,
-    "odds": 0.27,
-    "low95": 0.193,
-    "high95": 0.364,
-    "within_150": 27,
-    "median_days": 109.2,
-    "odds_unknown_10": 0.235,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
     "endings": {
      "still at sea": 40,
-     "arrived": 27,
+     "arrived": 26,
      "ran aground before the finish": 16,
      "taken or snagged by fishermen [near land]": 10,
      "disqualified: silent too long": 6,
-     "electronics box dead: silent and uncontrolled [open ocean]": 1
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -3942,7 +4041,7 @@
      "file": "stock_pearson31_2-tactician.off/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 127.5
+     "days": 18.42
     },
     {
      "file": "stock_pearson31_2-tactician.off/2020-04-15.json",
@@ -3997,8 +4096,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 23,
+    "odds": 0.23,
+    "low95": 0.158,
+    "high95": 0.322,
+    "within_150": 23,
+    "median_days": 104.2,
+    "odds_unknown_10": 0.201,
+    "endings": {
+     "still at sea": 43,
+     "arrived": 23,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 11,
+     "disqualified: silent too long": 4,
+     "electronics box dead: silent and uncontrolled [open ocean]": 2,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-keel.wing/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-keel.wing/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-keel.wing/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 149.0
+    },
+    {
+     "file": "stock_pearson31_2-keel.wing/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.53
+    },
+    {
+     "file": "stock_pearson31_2-keel.wing/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-keel.wing/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.1
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-drogue.jordan",
@@ -4021,8 +4175,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 26,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-drogue.jordan/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-drogue.jordan/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-drogue.jordan/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-drogue.jordan/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-drogue.jordan/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-drogue.jordan/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-drogue.para",
@@ -4045,8 +4254,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 26,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-drogue.para/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-drogue.para/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-drogue.para/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-drogue.para/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-drogue.para/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-drogue.para/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-vane.hydrovane",
@@ -4069,8 +4333,64 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 45,
+    "odds": 0.45,
+    "low95": 0.356,
+    "high95": 0.548,
+    "within_150": 45,
+    "median_days": 109.4,
+    "odds_unknown_10": 0.391,
+    "endings": {
+     "arrived": 45,
+     "still at sea": 20,
+     "ran aground before the finish": 19,
+     "taken or snagged by fishermen [near land]": 7,
+     "disqualified: silent too long": 5,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 2,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "left the weather box": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-vane.hydrovane/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-vane.hydrovane/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 113.3
+    },
+    {
+     "file": "stock_pearson31_2-vane.hydrovane/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 69.75
+    },
+    {
+     "file": "stock_pearson31_2-vane.hydrovane/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-vane.hydrovane/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 28.56
+    },
+    {
+     "file": "stock_pearson31_2-vane.hydrovane/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-vane.monitor",
@@ -4093,8 +4413,64 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 109.4,
+    "odds_unknown_10": 0.252,
+    "endings": {
+     "still at sea": 30,
+     "arrived": 29,
+     "ran aground before the finish": 21,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 4,
+     "left the weather box": 3,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 2,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-vane.monitor/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-vane.monitor/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-vane.monitor/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 69.75
+    },
+    {
+     "file": "stock_pearson31_2-vane.monitor/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-vane.monitor/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 28.56
+    },
+    {
+     "file": "stock_pearson31_2-vane.monitor/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-ksol.600w",
@@ -4117,8 +4493,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 109.4,
+    "odds_unknown_10": 0.252,
+    "endings": {
+     "still at sea": 36,
+     "arrived": 29,
+     "ran aground before the finish": 17,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 5,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 2,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-ksol.600w/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_pearson31_2-ksol.600w/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-ksol.600w/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-ksol.600w/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-ksol.600w/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-ksol.600w/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-kbat.lfp",
@@ -4141,8 +4572,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 38,
+     "arrived": 27,
+     "ran aground before the finish": 17,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 5,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 2,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-kbat.lfp/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_pearson31_2-kbat.lfp/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-kbat.lfp/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-kbat.lfp/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-kbat.lfp/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-kbat.lfp/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_pearson31_2-hydro.pod600",
@@ -4165,8 +4651,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 108.8,
+    "odds_unknown_10": 0.226,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 26,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-hydro.pod600/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_pearson31_2-hydro.pod600/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-hydro.pod600/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-hydro.pod600/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-hydro.pod600/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-hydro.pod600/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
   },
   {
    "id": "stock_cruiser31",
@@ -4217,8 +4758,8 @@
     {
      "file": "stock_cruiser31/2020-04-15.json",
      "start": "2020-04-15T12:00",
-     "outcome": "arrived",
-     "days": 16.7
+     "outcome": "lost",
+     "days": 4.23
     },
     {
      "file": "stock_cruiser31/2020-05-01.json",
@@ -4269,27 +4810,28 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 106.8,
-    "odds_unknown_10": 0.253,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
     "endings": {
      "still at sea": 39,
-     "arrived": 29,
+     "arrived": 28,
      "ran aground before the finish": 18,
      "taken or snagged by fishermen [near land]": 8,
-     "disqualified: silent too long": 6
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "stock_cruiser31-rig.solent/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-rig.solent/2020-04-15.json",
@@ -4346,27 +4888,28 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 106.8,
-    "odds_unknown_10": 0.253,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
     "endings": {
      "still at sea": 39,
-     "arrived": 29,
+     "arrived": 28,
      "ran aground before the finish": 18,
      "taken or snagged by fishermen [near land]": 8,
-     "disqualified: silent too long": 6
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "stock_cruiser31-cloth.laminate/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-cloth.laminate/2020-04-15.json",
@@ -4423,27 +4966,28 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 106.8,
-    "odds_unknown_10": 0.253,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
     "endings": {
      "still at sea": 39,
-     "arrived": 29,
+     "arrived": 28,
      "ran aground before the finish": 18,
      "taken or snagged by fishermen [near land]": 8,
-     "disqualified: silent too long": 6
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "stock_cruiser31-reef.slab3/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-reef.slab3/2020-04-15.json",
@@ -4500,27 +5044,28 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 106.8,
-    "odds_unknown_10": 0.253,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
     "endings": {
      "still at sea": 39,
-     "arrived": 29,
+     "arrived": 28,
      "ran aground before the finish": 18,
      "taken or snagged by fishermen [near land]": 8,
-     "disqualified: silent too long": 6
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "stock_cruiser31-reef.inmast/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-reef.inmast/2020-04-15.json",
@@ -4577,27 +5122,28 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 106.8,
-    "odds_unknown_10": 0.253,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
     "endings": {
      "still at sea": 39,
-     "arrived": 29,
+     "arrived": 28,
      "ran aground before the finish": 18,
      "taken or snagged by fishermen [near land]": 8,
-     "disqualified: silent too long": 6
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "stock_cruiser31-storm.storm/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-storm.storm/2020-04-15.json",
@@ -4665,10 +5211,11 @@
      "arrived": 36,
      "still at sea": 22,
      "ran aground before the finish": 17,
-     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 9,
      "taken or snagged by fishermen [near land]": 8,
      "disqualified: silent too long": 5,
-     "both electronics boxes dead: silent and uncontrolled [near land]": 2
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
@@ -4676,7 +5223,7 @@
      "file": "stock_cruiser31-spare.spare-autopilot/2020-04-01.json",
      "start": "2020-04-01T12:00",
      "outcome": "lost",
-     "days": 71.69
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-spare.spare-autopilot/2020-04-15.json",
@@ -4733,27 +5280,28 @@
    "current": false,
    "odds": {
     "voyages": 100,
-    "finished": 29,
-    "odds": 0.29,
-    "low95": 0.21,
-    "high95": 0.385,
-    "within_150": 29,
-    "median_days": 106.8,
-    "odds_unknown_10": 0.253,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
     "endings": {
      "still at sea": 39,
-     "arrived": 29,
+     "arrived": 28,
      "ran aground before the finish": 18,
      "taken or snagged by fishermen [near land]": 8,
-     "disqualified: silent too long": 6
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
     }
    },
    "replays": [
     {
      "file": "stock_cruiser31-tactician.off/2020-04-01.json",
      "start": "2020-04-01T12:00",
-     "outcome": "timeout",
-     "days": 150.0
+     "outcome": "lost",
+     "days": 18.42
     },
     {
      "file": "stock_cruiser31-tactician.off/2020-04-15.json",
@@ -4808,8 +5356,62 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 101.6,
+    "odds_unknown_10": 0.236,
+    "endings": {
+     "still at sea": 37,
+     "arrived": 27,
+     "ran aground before the finish": 23,
+     "disqualified: silent too long": 6,
+     "taken or snagged by fishermen [near land]": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-keel.shoal/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_cruiser31-keel.shoal/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-keel.shoal/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-keel.shoal/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 14.06
+    },
+    {
+     "file": "stock_cruiser31-keel.shoal/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-keel.shoal/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.08
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-drogue.jordan",
@@ -4832,8 +5434,62 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 28,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-drogue.jordan/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-drogue.jordan/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-drogue.jordan/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-drogue.jordan/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-drogue.jordan/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-drogue.jordan/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-drogue.para",
@@ -4856,8 +5512,62 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 28,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-drogue.para/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-drogue.para/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-drogue.para/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-drogue.para/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-drogue.para/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-drogue.para/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-vane.hydrovane",
@@ -4880,8 +5590,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 41,
+    "odds": 0.41,
+    "low95": 0.319,
+    "high95": 0.508,
+    "within_150": 41,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.357,
+    "endings": {
+     "arrived": 41,
+     "still at sea": 33,
+     "ran aground before the finish": 15,
+     "taken or snagged by fishermen [near land]": 5,
+     "disqualified: silent too long": 4,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-vane.hydrovane/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-vane.hydrovane/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 124.53
+    },
+    {
+     "file": "stock_cruiser31-vane.hydrovane/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-vane.hydrovane/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-vane.hydrovane/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 28.56
+    },
+    {
+     "file": "stock_cruiser31-vane.hydrovane/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-vane.monitor",
@@ -4904,8 +5669,64 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 36,
+     "arrived": 29,
+     "ran aground before the finish": 24,
+     "taken or snagged by fishermen [near land]": 5,
+     "disqualified: silent too long": 3,
+     "left the weather box": 1,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-vane.monitor/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-vane.monitor/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-vane.monitor/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-vane.monitor/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-vane.monitor/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 28.56
+    },
+    {
+     "file": "stock_cruiser31-vane.monitor/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-ksol.600w",
@@ -4928,8 +5749,63 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 38,
+     "arrived": 27,
+     "ran aground before the finish": 22,
+     "taken or snagged by fishermen [near land]": 7,
+     "disqualified: silent too long": 4,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1,
+     "electronics box dead: silent and uncontrolled [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-ksol.600w/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_cruiser31-ksol.600w/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-ksol.600w/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-ksol.600w/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-ksol.600w/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-ksol.600w/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-kbat.lfp",
@@ -4952,8 +5828,62 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 26,
+    "odds": 0.26,
+    "low95": 0.184,
+    "high95": 0.354,
+    "within_150": 26,
+    "median_days": 104.0,
+    "odds_unknown_10": 0.227,
+    "endings": {
+     "still at sea": 38,
+     "arrived": 26,
+     "ran aground before the finish": 23,
+     "taken or snagged by fishermen [near land]": 7,
+     "disqualified: silent too long": 5,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-kbat.lfp/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_cruiser31-kbat.lfp/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-kbat.lfp/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-kbat.lfp/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-kbat.lfp/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-kbat.lfp/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "stock_cruiser31-hydro.pod600",
@@ -4976,8 +5906,62 @@
     "tactician": "on"
    },
    "current": false,
-   "odds": null,
-   "replays": []
+   "odds": {
+    "voyages": 100,
+    "finished": 28,
+    "odds": 0.28,
+    "low95": 0.201,
+    "high95": 0.375,
+    "within_150": 28,
+    "median_days": 104.1,
+    "odds_unknown_10": 0.244,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 28,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6,
+     "rolled by a breaking wave: dismasted and flooded [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-hydro.pod600/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 18.42
+    },
+    {
+     "file": "stock_cruiser31-hydro.pod600/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-hydro.pod600/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-hydro.pod600/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-hydro.pod600/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-hydro.pod600/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
   },
   {
    "id": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none",
