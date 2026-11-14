@@ -4703,10 +4703,9 @@ const CHECKS = {
   // still come, and does the picture stall waiting on the simulator (hour still, clock running, no card)?
   "fast-crossing": {
     manual: true,
-    path: "",
+    path: "helm.html?who=you&day=2020-04-15&quality=low",
     run: async (page) => {
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.goto(SITE + "helm.html?who=you&day=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy && window.__helm.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
       await page.evaluate(() => document.getElementById("go")?.click());
       await page.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
