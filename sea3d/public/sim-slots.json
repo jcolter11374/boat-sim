@@ -1415,6 +1415,7 @@
     {
      "id": "drogue",
      "name": "Drogue or sea anchor",
+     "note": "The odds don't yet count a keelboat being rolled by a breaking wave, so for now they show what a drogue costs (a slow drift in big seas), not what it saves.",
      "opts": [
       {
        "id": "none",
@@ -1887,6 +1888,7 @@
     {
      "id": "drogue",
      "name": "Drogue or sea anchor",
+     "note": "The odds don't yet count a keelboat being rolled by a breaking wave, so for now they show what a drogue costs (a slow drift in big seas), not what it saves.",
      "opts": [
       {
        "id": "none",

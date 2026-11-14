@@ -356,6 +356,7 @@ function drawSlots(): void {
       body.className = "sl-body";
       body.id = `sl-body-${slot.id}`;
       for (const o of shown) body.append(optionButton(slot, o));
+      if (slot.note) body.append(Object.assign(document.createElement("p"), { className: "muted sl-note", textContent: slot.note }));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;

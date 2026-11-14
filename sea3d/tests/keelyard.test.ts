@@ -59,3 +59,11 @@ test("a sail part moves the quick odds once the grid has tested it", () => {
   // A part the grid hasn't tested says so rather than guess.
   assert.equal(m.odds({ ...plan, picks: { ...plan.picks, cloth: "laminate" } })!.p, null);
 });
+
+test("the drogue slot says what the odds don't count yet (Maya, #526)", () => {
+  for (const key of KEEL_KEYS) {
+    const c = keelCatalog(key, sim, kayak)!;
+    assert.match(c.slots.find((s) => s.id === "drogue")!.note ?? "", /rolled by a breaking wave/);
+    assert.equal(c.slots.find((s) => s.id === "keel")!.note, undefined);
+  }
+});
