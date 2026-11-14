@@ -4696,6 +4696,60 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #569 (Rosa): steering, the simulator runs at most 24 voyage hours between looks for a call. Play a
+  // 15 April crossing at 4 days a second, answering each call with option 1: do gale and chase calls
+  // still come, and does the picture stall waiting on the simulator (hour still, clock running, no card)?
+  "fast-crossing": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(SITE + "helm.html?who=you&day=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+      await page.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy && window.__helm.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.evaluate(() => document.getElementById("go")?.click());
+      await page.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
+      const calls = [], stalls = [];
+      let last = null, stillSince = null, resumeAt = 0;
+      const t0 = Date.now();
+      await page.keyboard.press("5");
+      let end = "";
+      while (Date.now() - t0 < 30 * MIN) {
+        const st = await page.evaluate(() => {
+          const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden";
+          const h = window.__helm;
+          return { hour: h.hour, clock: h.clock, busy: !!h.busy, open: vis(document.getElementById("decide")), text: (document.getElementById("decidetext")?.textContent || "").slice(0, 70), card: !!h.card, over: !!h.status?.over, result: vis(document.getElementById("result")) };
+        });
+        const now = Date.now();
+        if (st.over || st.result) { end = `ended day ${(st.hour / 24).toFixed(1)}${st.result ? " (results card)" : ""}`; break; }
+        if (st.open) {
+          calls.push(`d${(st.hour / 24).toFixed(2)} ${st.text}`);
+          await page.evaluate(() => document.querySelector("#decidebtns button")?.click());
+          await page.waitForTimeout(800);
+          await page.keyboard.press("5");
+          resumeAt = Date.now() + 1500; stillSince = null; last = null;
+          continue;
+        }
+        if (st.card || st.clock === 0) {
+          // A pause note: carry on at 4 days a second.
+          await page.keyboard.press("5"); await page.waitForTimeout(300);
+          resumeAt = Date.now() + 1500; stillSince = null; last = null;
+          continue;
+        }
+        if (now > resumeAt && last && Math.abs(st.hour - last.hour) < 0.01) { stillSince ??= last.at; }
+        else if (stillSince) { const ms = now - stillSince; if (ms >= 1000) stalls.push(`d${(st.hour / 24).toFixed(2)} ${(ms / 1000).toFixed(1)}s${st.busy ? " busy" : ""}`); stillSince = null; }
+        last = { hour: st.hour, at: now };
+        await page.waitForTimeout(250);
+      }
+      const secs = Math.round((Date.now() - t0) / 1000);
+      const dec = await page.evaluate(() => JSON.stringify((window.__helm.decisions || []).map((d) => [d.kind, Math.round(d.day * 100) / 100])));
+      const total = stalls.reduce((a, x) => a + parseFloat(x.split(" ")[1]), 0);
+      const kinds = await page.evaluate(() => (window.__helm.decisions || []).map((d) => d.kind));
+      const res = `${end || "still sailing after 30 min"} in ${secs} s; calls ${calls.length}: ${calls.join(" | ")}; decisions ${dec}; stalls of 1 s or more: ${stalls.length} totalling ${total.toFixed(1)} s (${stalls.slice(0, 12).join(", ")})`;
+      console.log(`FAST ${BROWSER}: ${res}`);
+      must(kinds.some((k) => /gale|storm|wave/.test(k)) || calls.some((c) => /gale|waves/i.test(c)), `no gale call at 4 days a second: ${res}`);
+      return res;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
