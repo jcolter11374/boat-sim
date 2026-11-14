@@ -45,7 +45,7 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
-import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
+import { RACE_DAYS, raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
 import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
@@ -55,7 +55,7 @@ import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlig
 import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
-import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, seasonCell, seasonWords, swapSides, type RaceCard, type RaceInfo, type SeasonRun, type SeasonVerdict } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -3214,6 +3214,57 @@ function followRival(): void {
   setRate(rateAtEnd > 0 ? rateAtEnd : REAL_TIME);
 }
 
+/** "Race all 6 launch days" (from the old race page): the same two boats from every launch day, kept for this race. */
+let season: { rows: SeasonRun[]; verdict: SeasonVerdict | null; running: boolean } | null = null;
+/** The season part of a race's results card: a button, then each launch day as it is sailed, then the verdict in plain words. */
+function seasonOffer(names: [string, string]): void {
+  const part = Object.assign(document.createElement("div"), { id: "r-season" });
+  $("r-next").append(part);
+  const draw = () => {
+    part.replaceChildren();
+    if (!season) {
+      const go = Object.assign(document.createElement("button"), { id: "r-seasonbtn", textContent: "Race all 6 launch days" });
+      go.title = "Both boats sail from every launch day, 1 April to 15 June 2020, with the same dice for breakdowns.";
+      go.addEventListener("click", () => void runSeason(draw));
+      part.append(go, Object.assign(document.createElement("p"), { className: "muted", textContent: "One race is one roll of the dice; six launch days show which boat is better. Takes a few minutes." }));
+      return;
+    }
+    const t = document.createElement("table");
+    const tr = (cells: string[], th = false) => {
+      const r = document.createElement("tr");
+      for (const c of cells) r.append(Object.assign(document.createElement(th ? "th" : "td"), { textContent: c })); // a player's own name for a design: text only
+      t.append(r);
+    };
+    const short = (n: string) => n.replace(/\s*\(our model\)$/, "");
+    tr(["Launch day", short(names[0]), short(names[1])], true);
+    const day = (iso: string) => new Date(utc(iso)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+    for (const r of season.rows) tr([day(r.a.start), seasonCell(r.a), seasonCell(r.b)]);
+    part.append(t);
+    const p = (text: string, muted = false) => part.append(Object.assign(document.createElement("p"), { className: muted ? "muted" : "", textContent: text }));
+    if (season.verdict) for (const line of seasonWords(season.verdict, names)) p(line);
+    else if (season.running) p(`Racing launch day ${season.rows.length + 1} of ${RACE_DAYS.length}, both boats to the end...`, true);
+    else p("The season stopped before the end.", true);
+  };
+  draw();
+}
+async function runSeason(draw: () => void): Promise<void> {
+  if (season) return;
+  season = { rows: [], verdict: null, running: true };
+  draw();
+  try {
+    for (let i = 0; i < RACE_DAYS.length; i++) {
+      season.rows.push(await game.raceSeasonLaunch<SeasonRun>(i));
+      draw();
+    }
+    season.verdict = await game.raceSeasonVerdict<SeasonVerdict>();
+  } catch (e) {
+    console.warn("season", e);
+  }
+  season.running = false;
+  (page as unknown as { season: unknown }).season = season.verdict ? { rows: season.rows.length, finished: season.verdict.finished } : null;
+  draw();
+}
+
 /** A race's ending: who finished first, in the boats' own names; each boat's days; both tracks. */
 async function raceFinish(): Promise<void> {
   const c = raceKept?.card ?? ((await game.result()) as Card & { race: RaceCard });
@@ -3241,6 +3292,7 @@ async function raceFinish(): Promise<void> {
     : `${names[0]} against ${names[1]}, both launched on ${launched} into the same weather, with the same dice for breakdowns. One race is one roll of the dice.`;
   const nums = c.race.boats.slice(0, more ? 1 : 2).map((x, k) => ({ value: x.days.toFixed(1), unit: "days", label: raceLabel(x, short(names[k])) }));
   $("r-next").replaceChildren();
+  if (!more) seasonOffer(names);
   // "Follow her to the end" when she is still sailing; "Change the boats" goes back to the Set sail card with the autopilot and this other boat picked.
   // What happened (E4): the lead, what broke, the knockdowns or the roughest sea, from both boats' own logs.
   const [ra, rb] = followed ? [game.ghost, game.boat] : [game.boat, game.ghost]; // the race's own order (A, B)
