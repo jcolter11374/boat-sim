@@ -95,6 +95,7 @@ import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
+import { intoTarget, startWhenBuilt } from "./warmup";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -291,6 +292,18 @@ function buildBoat(): void {
 // material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
 const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
 deckLight.name = "deck_light";
+// The light itself stays in the scene, always: three builds every shader for the lights it can see,
+// so a light that came and went with the boat (hidden behind the Set sail card, shown when she sails)
+// rebuilt every shader each time, a freeze of a second or more (Omar's speed list, 14 Nov). It follows
+// deckLamp, which rides on the boat, and is dark while she is hidden, and by day.
+scene.add(deckLight);
+const deckLamp = new THREE.Object3D();
+deckLamp.name = "deck_lamp";
+/** Whether o and all it hangs from are shown, in the scene. */
+const shownInScene = (o: THREE.Object3D | null): boolean => {
+  for (; o; o = o.parent) if (!o.visible) return false; else if (o === scene) return true;
+  return false;
+};
 /** Candela at full night, and the lamp's light on the foam right beside it (falling away
  *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
@@ -304,7 +317,7 @@ const MASTHEAD_LAMP_M = 5;
 let deckYacht = false;
 function placeDeckLight(): void {
   if (!model) return;
-  deckLight.removeFromParent();
+  deckLamp.removeFromParent();
   const nav = model.root.getObjectByName("nav_lights");
   const lamp = nav?.children[0];
   // On a yacht the lantern is at the masthead, 12 m+ up: there it floodlit the sail like a searchlight
@@ -313,15 +326,15 @@ function placeDeckLight(): void {
   const up = lamp ? model.root.worldToLocal(lamp.getWorldPosition(new THREE.Vector3())).y : 0;
   deckYacht = !!(nav && lamp && up > MASTHEAD_LAMP_M);
   if (deckYacht) {
-    deckLight.position.set(0, up * 0.1, 0);
-    model.root.add(deckLight);
+    deckLamp.position.set(0, up * 0.1, 0);
+    model.root.add(deckLamp);
   } else if (nav && lamp) {
-    deckLight.position.copy(lamp.position);
-    nav.add(deckLight);
+    deckLamp.position.copy(lamp.position);
+    nav.add(deckLamp);
   } else {
     const box = new THREE.Box3().setFromObject(model.root);
-    deckLight.position.set(0, box.max.y + 0.1, 0);
-    model.root.add(deckLight);
+    deckLamp.position.set(0, box.max.y + 0.1, 0);
+    model.root.add(deckLamp);
   }
   deckLight.distance = deckYacht ? YACHT_DECK_REACH_M : 6 * Math.max(1, spec.length / KAYAK.length);
 }
@@ -4878,7 +4891,8 @@ function warmShaders(): void {
   if (warmRoot && warmRootLeft === 0 && warmRootPrograms.every((pr) => pr.isReady())) warmedRoots.add(warmRoot);
   if (!warmQueue.length) warmed = true;
 }
-renderer.setAnimationLoop(() => {
+// Drawing starts once the shaders are built, after the page has painted (warmup.ts).
+startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if ((!warmed || !boatWarm()) && warmWanted()) warmShaders();
   const t = clock.getElapsedTime();
   // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
@@ -5022,8 +5036,9 @@ renderer.setAnimationLoop(() => {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
+    deckLamp.getWorldPosition(deckLight.position);
+    deckLight.intensity = shownInScene(deckLamp) ? DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2) : 0;
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
@@ -5299,7 +5314,7 @@ renderer.setAnimationLoop(() => {
   page.frames++;
   page.hour = hour;
   page.simHour = shownTo;
-});
+}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
 
 // ---------- Set sail (the one-game plan, step 1; Rosa) ----------
 // One entry for every way to start: the ocean crossing, Annapolis practice, a weather
