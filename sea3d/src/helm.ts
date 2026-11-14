@@ -45,7 +45,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { runOutStep, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -73,6 +73,7 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
+import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -1361,7 +1362,7 @@ function flash(kind: "spray" | "alarm"): void {
 
 /** Play at an hour a second: during a moment, and over the last hours before the end. */
 function slowNow(t: number): boolean {
-  return t < slowUntil || (finishing && shownTo - hour < 3) || (!!foresee && hour >= foresee.from && hour < foresee.h);
+  return t < slowUntil || (finishing && shownTo - hour < 3) || inStretch(foresee, hour);
 }
 
 // ---------- running time ----------
@@ -1537,6 +1538,8 @@ async function clockRun(): Promise<void> {
     } else if (stopped !== "time" && !(SPECTATE && stopped === "over")) {
       setRate(0, true);
       const d = `Day ${game.status!.day.toFixed(1)}`;
+      // The end has its own slow last hours (slowNow); every other stop gets them here.
+      if (stopped !== "over") foresee = { ...stopStretch(game.status!.day * 24), look: null };
       if (stopped === "breakdown") {
         const e = game.boat!.events.filter(isNotable).at(-1);
         const cut = e ? linkCutBy(e) : null;
@@ -2455,7 +2458,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     }
   }
   // A night that could run the battery flat.
-  if (fc && motors && st.boat.soc < 0.35 && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= MIN_CALL_GAP_H) {
+  if (fc && motors && st.boat.soc < nightLine(power) && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= (lastCallKind === "push" ? NIGHT_AFTER_PUSH_H : MIN_CALL_GAP_H)) {
     if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
       asked.night = h;
       return {
@@ -2464,6 +2467,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         choices: [
           { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
+          // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
+          { label: "Hand her back to the autopilot (what the ghost does)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
         ],
       };
     }
@@ -2543,6 +2548,9 @@ const calls: Call[] = [];
 const ROUTE_GAIN_DAYS = 0.25; // a quarter of a day on the ghost over the 4-day look
 const ROUTE_MIN_TURN = 10; // degrees: smaller is not a different line
 let lastCallH = -Infinity; // the first call of a voyage is never held back
+let lastCallKind = ""; // the night call may follow a push sooner than the usual gap (helm/powerCall.ts)
+/** The forecast gain (days) of the last push you said "stay" to: only a clearly better one asks again. */
+let pushTurnedDown: number | null = null;
 let routeLookedH = -Infinity;
 let callCount = 0;
 /** Hours of quiet before the next route check: 72 to 120, fixed by the voyage and the call count. */
@@ -2596,9 +2604,15 @@ function maybeRouteCheck(st: Status): boolean {
     const b: BestHeading | null = await game.bestHeading().catch(() => null);
     if (!b || seq !== decisionSeq) return resume();
     const mine: { heading: Heading; power: number } = { heading: order, power };
-    const o = await game.outlook([{ heading: b.best, power }, mine, { heading: "auto" }], LOOK_H).catch(() => null);
+    // The same look asks about power too (M5, D2): more of it, where there is battery to spend.
+    const more = quiet ? pushOrders(order, order === "auto" ? 0 : power, st.boat.soc, !st.sailboat && st.power_w > 0) : [];
+    // On the autopilot "your order" and "the autopilot" are one forecast sail, not two.
+    const onAuto = order === "auto";
+    const o = await game.outlook([{ heading: b.best, power }, mine, ...(onAuto ? [] : [{ heading: "auto" as Heading }]), ...more], LOOK_H).catch(() => null);
     if (!o || seq !== decisionSeq) return resume();
-    const [best, now, auto] = o.orders;
+    const [best, now] = o.orders;
+    const auto = onAuto ? now : o.orders[2];
+    const pushed = o.orders.slice(onAuto ? 2 : 3);
     const turn = Math.abs(((b.best - b.heading + 540) % 360) - 180);
     const gainKm = best.lead_km - now.lead_km;
     const pace = o.hours > 0 ? (o.ghost.km / o.hours) * 24 : 0;
@@ -2619,6 +2633,7 @@ function maybeRouteCheck(st: Status): boolean {
     if (chase) {
       chaseAsked = true;
       lastCallH = h;
+      lastCallKind = "chase";
       callCount++;
       page.decisions.push({ kind: "chase", day: st.day });
       // Relative words, not a compass point (Leo): "south-east" reads as "away from Portugal".
@@ -2644,13 +2659,46 @@ function maybeRouteCheck(st: Status): boolean {
       return;
     }
     if (!quiet) return resume(); // an early look that found no chase: nothing to say
+    // No route call: is more power a real trade? (helm/powerCall.ts)
+    const offer = ask ? null : pickPush(now, pushed, pace);
+    const push = offer && worthAskingAgain(offer.gainDays, pushTurnedDown) ? offer : null;
+    if (push) {
+      lastCallH = h;
+      lastCallKind = "push";
+      callCount++;
+      page.decisions.push({ kind: "push", day: st.day });
+      const words = pushCard(order, power, st.boat.soc, push.push);
+      const to = { heading: pushHeading(order), power: push.push.power ?? power };
+      const d: Decision = {
+        kind: "push",
+        text: words.text,
+        choices: [
+          { label: words.push, title: words.pushTitle, order: to, act: () => {
+            // What it bought, told when the forecast's 4 days are up, as the chase does.
+            pushTurnedDown = null;
+            if (streamCall) alsoCalled(words.did);
+            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
+            return setOrder(to.heading, to.power);
+          } },
+          { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
+        ],
+      };
+      const view: Outlook = { ...o, orders: [push.push, now] };
+      askAt(() => showDecision(d, view, [true, true]));
+      return;
+    }
     if (better && !ask) {
       // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
       const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} over ${orderWords(order)} for the next 4 days (${timeChange(gainKm, pace)}), in no worse seas. Change it in Orders.`;
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
+    } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
+      // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
+      const text = `Navigator's note: the forecast favours the autopilot over your order for the next 4 days (${timeChange(auto.lead_km - now.lead_km, pace)}). Hand her back in Orders.`;
+      whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     if (!ask) return resume();
     lastCallH = h;
+    lastCallKind = "route";
     callCount++;
     page.decisions.push({ kind: "route", day: st.day });
     const price = [rougher ? `rougher seas (waves to ${best.hs_max!.toFixed(1)} m, not ${now.hs_max!.toFixed(1)})` : "", drains ? `a lower battery (down to ${Math.round(best.soc_min! * 100)}%)` : ""].filter(Boolean).join(" and ");
@@ -2715,7 +2763,9 @@ function maybeDecide(force = false): boolean {
   const d = decisionDue(st, lastForecast);
   if (!d) return maybeRouteCheck(st);
   const callBefore = lastCallH;
+  const kindBefore = lastCallKind;
   lastCallH = st.day * 24;
+  lastCallKind = d.kind;
   callCount++;
   // The Stream may come out as only a note (Elena's rule), so it looks first with the clock
   // running and pauses only for a card; a storm always asks, so it pauses now.
@@ -2746,6 +2796,7 @@ function maybeDecide(force = false): boolean {
       const quiet = o ? notWorthAsking(d, o, has) : null;
       if (quiet) {
         lastCallH = callBefore; // no call was made: the cadence guard doesn't count it
+        lastCallKind = kindBefore;
         page.decisions.at(-1)!.asked = false;
         whenAt(h, () => note(quiet, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
         return;
@@ -2833,7 +2884,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       const shown = o!.orders.filter((_, j) => has[j]);
       // One tag in race terms, worded as a forecast so it can honestly be wrong (Maya, Leo).
       const pace = o!.hours > 0 ? (o!.ghost.km / o!.hours) * 24 : 0;
-      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves", d.kind === "chase" && i === 0)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves", (d.kind === "chase" || d.kind === "push") && i === 0)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
     const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
@@ -4422,7 +4473,7 @@ renderer.setAnimationLoop(() => {
   if (tickClock(dt)) {
     // the clock moved the picture on
   } else if (drainRate > 0 && hour < shownTo) {
-    hour = Math.min(shownTo, hour + dt * (slowNow(t) ? Math.min(drainRate, 1) : drainRate));
+    hour = drainStep(drainRate, dt, hour, shownTo, slowNow(t), foresee?.from);
     if (hour >= shownTo) drainRate = 0;
   } else if (hopPlay && hour < shownTo) {
     const span = Math.max(shownTo - hour, 1);

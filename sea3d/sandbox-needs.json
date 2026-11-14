@@ -1,7 +1,7 @@
 {
   "note": "What the pages ask of the in-browser simulator (boatsim.zip). sea3d.yml packs the zip from the page's own commit and, before it deploys, runs `python -m boatsim.sandbox check-page`: it fails if the zip can't do any of these (capabilities come from boatsim/sandbox/caps.py). Add a page feature here when a page starts calling something new in the simulator; tests/sandbox.test.ts checks every \"NO_...\" error a worker raises is listed under codes.",
   "features": {
-    "helm": ["helm", "helm.ports", "helm.challenges", "helm.mode.hands_on", "helm.mode.base", "helm.share", "helm.sail_orders", "helm.forecast", "helm.until_cap", "helm.breakdowns"],
+    "helm": ["helm", "helm.ports", "helm.challenges", "helm.mode.hands_on", "helm.mode.base", "helm.share", "helm.sail_orders", "helm.forecast", "helm.until_cap", "helm.breakdowns", "helm.weather_parts"],
     "race": ["race", "helm.breakdowns"],
     "yard": ["yard"]
   },
