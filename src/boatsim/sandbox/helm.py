@@ -28,9 +28,12 @@ Fairness (design note, Maya's calls of 11 Nov 2026):
 * Same build, launch, weather and seed for both boats, so each step's
   breakdown dice are the same whatever either boat does (#110, #112).
   Breakdowns are on by default; `breakdowns=False` turns them off for both.
-* The ghost is the full autopilot with safe mode and the base station's
-  route corrections, exactly as in the odds runs: `run_voyage` gives the
-  same voyage for the same launch.
+* The ghost is the full autopilot with safe mode and the base station, on
+  the game's autopilot policy (autonomy/policy.py GAME_POLICY: it sails
+  sensibly, so that beating it takes a decision; M5). An odds run on the same
+  policy gives the same voyage for the same launch; the odds themselves are
+  still on ODDS_POLICY until they are regridded, so the ghost on the 1st and
+  15th is no longer the Boatyard's replay of that day.
 * The ghost moves in step with the player's clock, so nothing it does is
   visible before the player gets there.
 * "Hands on" starts on "auto": the player's boat is sailed by the ghost's
@@ -58,6 +61,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from boatsim.autonomy.helm import HelmAutopilot, OrderMission, sail_orders_for
+from boatsim.autonomy.policy import GAME_POLICY, ODDS_POLICY
+from boatsim.autonomy.policy import policy as policy_for
 from boatsim.autonomy.sailing import tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
@@ -116,7 +121,8 @@ TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  
 def day_seed(start: datetime) -> int:
     """The seed for a launch day. The 1st and 15th keep the grid's and the
     replays' seeds (year * 1000 + place among the year's 24 launches), so the
-    ghost on those days is exactly the Boatyard's voyage. Every other day gets
+    ghost on those days is the Boatyard's voyage when both are on the same
+    autopilot policy (autonomy/policy.py). Every other day gets
     year * 1000 + 100 + day of the year, clear of those."""
     for t, seed in launches(start.year):
         if t == start:
@@ -276,8 +282,15 @@ class Game:
         day: str | None = None,
         challenge: str | None = None,
         start_port: str | None = None,
+        policy: int | None = None,
     ):
         from boatsim.runner.land import default_land
+
+        # Which autopilot policy both boats' autopilots sail by (autonomy/policy.py).
+        # None: the game's own. A saved game carries the one it was sailed with.
+        # self.policy ends up as the one in force: a boat with a sail stays on the
+        # odds' policy whatever is asked for (runner/simulate.py).
+        asked = policy_for(GAME_POLICY if policy is None else policy).version
 
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
@@ -321,7 +334,8 @@ class Game:
         land = default_land()
         self.breakdowns = breakdowns
 
-        mine = standard_components(self.design, env, env, seed=self.seed, land=land)
+        mine = standard_components(self.design, env, env, seed=self.seed, land=land, policy=asked)
+        self.policy = mine.policy
         prop = self.design.propulsion
         self.finish = (mine.finish.lat, mine.finish.lon)
         # A boat with a polar (the stock sailboats) also takes sail and engine
@@ -354,7 +368,9 @@ class Game:
         # The polar was built with this factor baked in (vessel/vpp.py); a spell's
         # share is clamped to within TRIM_BELOW of it, up to the crew's best.
         self.autopilot_factor = float(self.design.vpp.get("autopilot_factor", 1.0))
-        ghost = standard_components(self.design, env, env, seed=self.seed, land=land)
+        ghost = standard_components(
+            self.design, env, env, seed=self.seed, land=land, policy=self.policy
+        )
         if not breakdowns:
             _no_breakdowns(mine)
             _no_breakdowns(ghost)
@@ -1208,6 +1224,7 @@ class Game:
             "challenge": self.challenge,
             "start_port": self.start_port,
             "seed": self.seed,
+            "autopilot_policy": getattr(self, "policy", None),  # QA's stand-in games have none
             "breakdowns_on": self.breakdowns,
             "mode": self.mode,
             "boat": me,
@@ -1284,6 +1301,8 @@ class Game:
         }
         if self.start_port:
             payload["sp"] = self.start_port  # only when set, so other codes stay as they were
+        if self.policy != ODDS_POLICY:
+            payload["ap"] = self.policy  # games saved before policy 2 carry none and stay on 1
         raw = zlib.compress(json.dumps(payload, separators=(",", ":")).encode(), 9)
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -1312,6 +1331,7 @@ class Game:
                 breakdowns=p["b"],
                 max_days=p["d"],
                 mode=p["m"],
+                policy=p.get("ap", ODDS_POLICY),  # older codes: the autopilot they were sailed with
             )
             for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))

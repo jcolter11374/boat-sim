@@ -78,6 +78,10 @@ class KayakState(BoatState):
     fouling_frac: float = 0.0
     electronics_on: bool = True
     knockdowns: int = 0  # total so far this voyage
+    # A windvane's setting (M4 wave 3): her heading minus the direction the wind
+    # comes from (deg, -180..180) when the autopilot last steered. With the
+    # autopilot dead the vane holds that angle. None: not set yet.
+    vane_twa: float | None = None
     days_open_ocean: float = 0.0  # offshore days; counted only with wear-out on (#118)
 
     @property
@@ -290,6 +294,11 @@ class KayakVessel:
         # differential thrust): it starts as if the rudder were gone, so it needs
         # both thrusters to steer.
         self.has_rudder = bool(design.propulsion.get("rudder", True))
+        # A windvane (keelboats, M4 wave 3; electronics.windvane): steers by the wind
+        # with no electricity, so the boat keeps sailing at its last angle to the
+        # wind when the autopilot is dead or the battery flat. A Hydrovane has its
+        # own rudder, so it also steers when the main rudder has failed (PBO).
+        self.windvane = str(e.get("windvane") or "") if self.sail is not None else ""
 
     def initial_state(self, t, lat: float, lon: float) -> KayakState:
         cap = self.battery.capacity_wh
@@ -405,6 +414,7 @@ class KayakVessel:
         calm = we == 0.0 and wn == 0.0
         wind_to = math.degrees(math.atan2(we, wn))
         wind_from = (wind_to + 180.0) % 360.0
+        ap = False  # the autopilot steering (sailing designs)
         if self.sail is not None:
             # A sailboat steers with its rudder alone: it needs the autopilot powered
             # and the rudder working. It can't point into the wind (sail_heading).
@@ -416,8 +426,10 @@ class KayakVessel:
             # it drifts. A second box (the kayak's safe box, a spare autopilot) takes
             # over the steering when the main one dies.
             ap = on and brain
-            steering = ap and not state.damage.get("rudder")
-            sailing = ap and not state.damage.get("sail") and not calm
+            steers = ap or bool(self.windvane)
+            own_rudder = self.windvane == "hydrovane"
+            steering = steers and (own_rudder or not state.damage.get("rudder"))
+            sailing = steers and not state.damage.get("sail") and not calm
             # Hybrid (wing plus thrusters): with the motors pushing it holds its
             # course even upwind, motoring where a sailboat would tack, and the
             # wing adds whatever drive it can at that heading (best_alpha picks
@@ -439,6 +451,10 @@ class KayakVessel:
         feather = False
         if motoring:
             heading = cmd.heading % 360.0
+            feather = tws > self.sail.storm_wind_ms
+        elif steering and self.sail is not None and not ap and state.vane_twa is not None:
+            # The windvane alone: she holds the angle to the wind she was last set on.
+            heading = (wind_from + state.vane_twa) % 360.0
             feather = tws > self.sail.storm_wind_ms
         elif steering and self.sail is not None:
             heading, feather = S.sail_heading(self.sail, cmd.heading, wind_from, state.heading, tws)
@@ -495,6 +511,11 @@ class KayakVessel:
             hotel_w=es.hotel_w,
             fouling_frac=foul,
             electronics_on=on_next,
+            vane_twa=(
+                (heading - wind_from + 180.0) % 360.0 - 180.0
+                if self.windvane and self.sail is not None and ap and steering and not calm
+                else state.vane_twa
+            ),
         )
         # One fixed block of dice per step, so the stream stays in step across
         # runs whose paths differ (hazards.SLOT).
