@@ -88,9 +88,14 @@ const EMBER = new THREE.Color(0.85, 0.32, 0.3); // the break after the sun has g
 /** Under a full deck the sky meets the sea at this share of the haze colour (shader hzC). */
 export const HORIZON_DECK = 1.0;
 
+/** How much brighter the deck is drawn, against the haze, after dark (the haze itself drops to a clear night's: atmosphere.ts STORM_NIGHT). */
+export const DECK_NIGHT_LIFT = 2.2;
 export function skyColours(haze: THREE.Color, sunEl: number, storm: number, cover: number) {
   const lum = Math.max(0.2126 * haze.r + 0.7152 * haze.g + 0.0722 * haze.b, 0.003);
-  const steel = STEEL.clone().multiplyScalar(lum * 1.4);
+  // After dark the far mist is no brighter than the deck (no twilight lights it), so the deck keeps
+  // nearly its old tone while the mist darkens to meet it (Elena, 14 Nov: no pale stripe on the horizon).
+  const dark = 1 - SM(sunEl, -12, -4);
+  const steel = STEEL.clone().multiplyScalar(lum * 1.4 * (1 + DECK_NIGHT_LIFT * dark));
   const belly = steel.clone().multiplyScalar(0.42);
   const deck = Math.max(SM(storm, 0.15, 0.7), SM(cover, 0.55, 0.95));
   const brk_amount = deck * SM(sunEl, -6, -0.5) * (1 - 0.6 * SM(sunEl, 14, 35));

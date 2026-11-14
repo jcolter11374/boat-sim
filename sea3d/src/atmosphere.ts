@@ -39,8 +39,10 @@ export function compassToScene(elDeg: number, azDeg: number, out = new THREE.Vec
 
 const DAY_HAZE = new THREE.Color(0xabc3d7);
 const DUSK_HAZE = new THREE.Color(0xd8a58a);
-const NIGHT_HAZE = new THREE.Color(0x0a1424);
-const STORM_HAZE = new THREE.Color(0x7d8a94);
+export const NIGHT_HAZE = new THREE.Color(0x0a1424);
+export const STORM_HAZE = new THREE.Color(0x7d8a94);
+/** The storm haze's brightness after dark, as a share of its daytime grey: about a clear night's haze. */
+export const STORM_NIGHT = 0.06;
 const NOON_SUN = new THREE.Color(0xfff1dc);
 const LOW_SUN = new THREE.Color(0xff9a5a);
 const MOON = new THREE.Color(0x9fb6e8);
@@ -414,7 +416,10 @@ export class Atmosphere {
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
     // A blow or a full overcast turns the haze cold grey quickly (Hana): at force 8 the dusk's
     // orange is gone from the murk and stays only in the break under the deck, towards the sun.
-    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(0.25 + 0.75 * day), Math.max(smooth(storm, 0, 0.6), 0.85 * overcast));
+    // After dark under cloud there is no twilight left to light the far mist: at a quarter of the grey
+    // it stood out as a pale stripe on the horizon, ten times the clear night's haze (Elena, 14 Nov).
+    // Now it goes about as dark as a clear night's, so the horizon sits within a shade of the deck.
+    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(STORM_NIGHT + (1 - STORM_NIGHT) * day), Math.max(smooth(storm, 0, 0.6), 0.85 * overcast));
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = this.horizon * (0.9 - 0.77 * storm);
     // Spindrift in a severe gale closes the view in further (storm.ts sprayVisibility).
