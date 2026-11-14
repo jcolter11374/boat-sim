@@ -3537,9 +3537,9 @@ const CHECKS = {
         await p.waitForTimeout(5000);
         shots.push(await emit(p, "setsail-2"));
         // Let her sail a few days at 4 days a second, then look again.
-        await p.click('button[data-x="96"]', { timeout: 5000 }).catch(() => {});
+        await p.keyboard.press("5");
         await p.waitForFunction((d0) => (window.__helm?.status?.day ?? 0) > (d0 ?? 0) + 2 || window.__helm?.status?.over, a.day, { timeout: 4 * MIN }).catch(() => {});
-        await p.click('button[data-x="1"]', { timeout: 5000 }).catch(() => {});
+        await p.keyboard.press("1");
         await p.waitForTimeout(4000);
         const b = await st();
         shots.push(await emit(p, "later"));
