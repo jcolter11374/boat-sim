@@ -8,6 +8,7 @@ import {
   WHITE,
   bearingTo,
   drawnLighthouse,
+  drawnTower,
   flashAt,
   offsetOf,
   planLandmarks,
@@ -69,4 +70,40 @@ test("the drawn stand-in has a lamp at the light's height", () => {
   const lamp = g.getObjectByName("lamp");
   assert.ok(lamp);
   assert.equal(lamp!.position.y, 13);
+});
+
+const roca = LANDMARKS.find((l) => l.key === "cabodaroca")!;
+
+test("Cabo da Roca light stands on its cliff, in sight of the finish scene", async () => {
+  const { ARRIVAL_AT, CABO_DA_ROCA } = await import("../src/helm/arrivalShot");
+  assert.deepEqual([roca.lat, roca.lon], [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]);
+  assert.ok((roca.base ?? 0) + roca.light!.focal > 150 && (roca.base ?? 0) + roca.light!.focal < 175, "about 164 m above the sea");
+  const o = offsetOf(roca, ARRIVAL_AT[0], ARRIVAL_AT[1]);
+  const km = Math.hypot(o.x, o.z) / 1000;
+  assert.ok(km > 5 && km < 9, `${km} km: near enough for the cliff to stand up, far enough to be on the horizon`);
+  assert.ok(km < LANDMARK_KM, "so the light is loaded");
+  const b = bearingTo(roca, ARRIVAL_AT[0], ARRIVAL_AT[1]);
+  assert.ok(b > 30 && b < 70, `to the north-east, as for a boat coming in from the Atlantic (${b})`);
+  // The stand-in: a tower with its lamp at the focal height.
+  let lamp = -1;
+  drawnTower(roca.light!.focal).traverse((x) => {
+    if (x.name === "lamp") lamp = x.position.y;
+  });
+  assert.equal(lamp, roca.light!.focal);
+});
+
+test("a group flashing light: four flashes close together, then dark until the period ends", () => {
+  const l = roca.light!;
+  assert.equal(l.group, 4);
+  let flashes = 0;
+  let was = false;
+  for (let t = 0; t < l.period; t += 0.01) {
+    const on = flashAt(l, t) > 0;
+    if (on && !was) flashes++;
+    was = on;
+  }
+  assert.equal(flashes, 4);
+  assert.equal(flashAt(l, 3 * l.gap! + l.flash + 0.5), 0, "dark after the fourth");
+  assert.equal(flashAt(l, l.period - 0.5), 0);
+  assert.ok(flashAt(l, l.period + 0.25) > 0.9, "and round again");
 });

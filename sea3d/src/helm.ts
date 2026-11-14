@@ -48,6 +48,7 @@ import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/w
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
+import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
@@ -79,7 +80,7 @@ import { bareRacer, farBoatTag, raceLine } from "./helm/raceWords";
 import { bandLine, slideRoom } from "./framing";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
+import { Cinema, filmButtons, heightOf, type CinemaHost, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
@@ -147,6 +148,10 @@ const spot = (params.get("spot") ?? "").split(",").map(Number);
 const SPOT: [number, number] | null = spot.length === 2 && spot.every(Number.isFinite) ? [spot[0], spot[1]] : null;
 /** After a finish at the Lisbon line: the scene moves to the coast the line points at. */
 let arrival: [number, number] | null = null;
+/** Seconds into the finish scene's shot, and whether it is held still (reduced motion). */
+let arrivalT = 0;
+let arrivalStill = false;
+let arrivalHeld: [number, number] | null = null;
 const bands = new RainBands();
 scene.add(bands.mesh);
 // Other ships, where the real traffic is (loaded in the background; none until it is).
@@ -491,6 +496,10 @@ const page = {
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
   arrival: false,
+  /** The finish scene's shot: where the cape and the boat sit across the frame, -1 left .. 1 right (for tests). */
+  arrivalShot: null as { cape: number; boat: number } | null,
+  /** Play the finish scene now, as after a crossing of `days`, for `seconds` (for pictures and tests). */
+  arrive: (days = 59.3, seconds = ARRIVAL_S) => arrivalScene({ boat: { days }, margin_days: null } as Card, seconds),
   /** "arrival" while the finish scene plays, before the results card (for tests). */
   scene: "",
   /** Look the given compass bearing past the boat (for pictures and tests). */
@@ -3184,7 +3193,7 @@ async function finish(): Promise<void> {
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
   if (me.outcome === "arrived" && finishesOffLisbon()) {
     showArrival();
-    bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
+    bits.push("Behind this card: the arrival, off Cabo da Roca, west of Lisbon: the lighthouse on its cliff (the westernmost point of mainland Europe) and the Sintra hills behind. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   // #335: the browser sails on a lighter weather file than the full runs behind the voyage replays.
   $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
@@ -3373,23 +3382,24 @@ function lastFix(r: Replay): [number, number] | null {
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
 function showArrival(): void {
-  const L = PLACES.lisbon;
-  if (!arrival) aimAt(L.look);
-  arrival = [L.lat, L.lon];
+  if (!arrival) aimAt(bearing(ARRIVAL_AT, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]));
+  arrival = [ARRIVAL_AT[0], ARRIVAL_AT[1]];
   page.arrival = true;
 }
 
 /** The finish scene: the view cuts to the coast the finish points at, the camera
  *  swings slowly round the boat, and a banner says so. The results follow after a
  *  few seconds, or at once on a click or key. */
-async function arrivalScene(c: Card): Promise<void> {
+async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
   showArrival();
   page.scene = "arrival";
   const ahead = c.margin_days !== null && c.margin_days > 0;
   $("arrivehead").textContent = `You made it, after ${c.boat.days.toFixed(1)} days at sea${ahead ? `, ${c.margin_days!.toFixed(1)} days ahead of the ghost` : ""}!`;
-  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  controls.autoRotate = !still;
-  controls.autoRotateSpeed = 0.5;
+  // The scene's own shot (the frame loop runs it): held still for reduced motion.
+  arrivalStill = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  arrivalT = 0;
+  arrivalHeld = null;
+  const hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
   const banner = $("arrive");
   banner.hidden = false;
   document.body.classList.add("arriving"); // the panels step aside for the view
@@ -3400,14 +3410,18 @@ async function arrivalScene(c: Card): Promise<void> {
       $("arrivego").removeEventListener("click", end);
       done();
     };
-    const timer = setTimeout(end, 8000);
+    const timer = setTimeout(end, seconds * 1000);
     addEventListener("keydown", end);
     $("arrivego").addEventListener("click", end);
   });
   banner.hidden = true;
   document.body.classList.remove("arriving");
-  controls.autoRotate = false;
   page.scene = "";
+  // Back to the hand camera where it was, looking the same way: the coast stays behind the card.
+  camera.fov = hand.fov;
+  camera.updateProjectionMatrix();
+  camera.position.copy(controls.target).add(hand.off);
+  controls.update();
 }
 
 function finishesOffLisbon(): boolean {
@@ -3921,7 +3935,8 @@ function knownLanes(): { rep: Replay; colours: { main: string; beacon: string; g
 }
 
 // ---------- cinematic mode and sound ----------
-const cine = new Cinema({
+/** What a composed shot needs to know about the page and its boat (the film, and the finish scene). */
+const filmHost: CinemaHost = {
   camera,
   controls,
   water: (x, z) => heightAt(live.advance(last), x, z, last),
@@ -3946,7 +3961,8 @@ const cine = new Cinema({
     const name = spec === KAYAK ? (loadMyBoat()?.name ?? "My kayak") : spec.name.replace(/\s*\(.*\)\s*$/, "");
     return game.boat ? `${name} · Day ${Math.floor(hour / 24) + 1}` : name;
   },
-});
+};
+const cine = new Cinema(filmHost);
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
@@ -4200,7 +4216,7 @@ function frameBoat(dt: number): void {
   const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
   // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
   // the horizon lower, never dead centre (Ines).
-  const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on;
+  const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on && page.scene !== "arrival"; // the finish scene composes its own frame
   let tx = 0;
   let ty = 0;
   if (want && smoothYaw !== null) {
@@ -4236,7 +4252,7 @@ function frameBoat(dt: number): void {
   // The results card on a phone keeps the same rule: the boat whole in the band above it (Elena).
   // At the finish too: on a phone the card covers the arrival's view, so she sits in the band above it.
   const phoneResults = !$("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on;
-  if ((!page.ready && !$("start").hidden) || phoneResults) {
+  if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults)) {
     // Her waterline, where she is: the world's middle on the crossing, off Annapolis on a practice page.
     here0.set(controls.target.x, 0, controls.target.z).project(camera); // includes the lens's current slide, so this settles on the target
     const phone = window.innerWidth < 700;
@@ -4570,7 +4586,19 @@ renderer.setAnimationLoop(() => {
   sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target), stw, apparent: feel ? Math.hypot(feel.x, feel.z) : undefined, luff: (wheelNow as { luff?: number } | null)?.luff });
   wheelCamera(dt, t);
   markPointer();
-  if (!cine.update(dt)) controls.update();
+  if (page.scene === "arrival" && arrival) {
+    // The finish scene's own shot: past the boat to Cabo da Roca (helm/arrivalShot.ts).
+    arrivalT += dt;
+    const s = arrivalShot(filmHost, bearing(arrival, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]), arrivalStill ? 0 : arrivalT, arrivalHeld ?? undefined);
+    arrivalHeld = s.held;
+    camera.position.copy(s.pos);
+    camera.quaternion.copy(s.quat);
+    if (camera.fov !== s.fov) {
+      camera.fov = s.fov;
+      camera.updateProjectionMatrix();
+    }
+    page.arrivalShot = { cape: s.cape, boat: s.boat };
+  } else if (!cine.update(dt)) controls.update();
   frameBoat(dt);
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
