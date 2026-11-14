@@ -46,7 +46,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -74,7 +74,7 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -389,6 +389,8 @@ const done = (): boolean => voyageDone(!!page.status?.over, SPECTATE, hour, show
 let watch: "boat" | "ghost" = "boat";
 let busy = false;
 let order: Heading = "auto"; // every game starts on the ghost's own autopilot (#327)
+/** The power before a "Push" call raised it, to put back when she is handed back to the autopilot. */
+let powerBeforePush: number | null = null;
 let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
@@ -460,6 +462,8 @@ const page = {
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
   force: { wind: -1, hs: -1, skyHours: 0, failed: [] as string[] },
   busy: false,
+  /** A "Your call" card is on its way: the clock is stopped and the picture is playing on to it. */
+  callComing: false,
   stops: [] as Stop[],
   card: null as Card | null,
   /** Whether each boat crossed the race's start line, for the results card. */
@@ -665,6 +669,12 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     return;
   }
   order = h;
+  // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
+  p = powerAfter(h, p, powerBeforePush);
+  if (h === "auto" && powerBeforePush !== null) {
+    powerBeforePush = null;
+    $<HTMLInputElement>("power").value = String(Math.round(p * 100));
+  }
   power = p;
   if (mode === "base" && page.ready) {
     // From base an order is a satellite message, one a day: draft it, then send.
@@ -1363,6 +1373,7 @@ function openMiddle(): number {
   return Math.max(0, r.right) / innerWidth;
 }
 let knockCut: Focus | null = null;
+const lampAt = new THREE.Vector3();
 const propAt: THREE.Vector3[] = [];
 function cutToKnockdown(k: KnockdownTiming, now: number): void {
   if (knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
@@ -1404,6 +1415,7 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
   if (busy || !page.ready || page.status?.over) return;
   setRate(0); // a skip pauses the clock: you see where it got to
   ++decisionSeq; // a look under way is for a moment that is gone
+  setCallComing(false);
   looking = false;
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
@@ -1519,7 +1531,31 @@ function applyPending(all = false): void {
 
 /** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
 let rateAtEnd = 0;
+/** A call is decided and its card is waiting for the picture to reach its moment. Until the card
+ * is up, ▶ or a speed cannot carry on past it (Nina, 14 Nov: at 4 days a second a quick press
+ * lost 8 of 11 calls with no word). The press picks the speed to carry on at after the call. */
+let callComing = false;
+function setCallComing(on: boolean): void {
+  callComing = on;
+  page.callComing = on;
+  showClock();
+}
+/** A speed the player pressed (▶, a speed button, Space or 1 to 5). With a "Your call" card up it
+ * cannot carry on past the card ("Time is paused until you choose"): a quick second press as the
+ * card appeared used to hide it with no choice made. The speed is kept for after the call. */
+function playerRate(r: number): void {
+  if (r > 0 && !$("decide").hidden) {
+    lastRate = r;
+    return;
+  }
+  setRate(r);
+}
 function setRate(r: number, drain = false): void {
+  if (r > 0 && callComing) {
+    lastRate = r;
+    if (!drainRate) drainRate = r; // paused by hand before the card: the picture plays on to it
+    return;
+  }
   // Your voyage is over and the picture is playing out to the results: a speed key (1 to 5, Space) can't start the
   // clock again. It used to, and the run-out stopped where it was with no results card ever coming.
   if (r > 0 && !SPECTATE && page.status?.over) return;
@@ -1550,12 +1586,12 @@ function showClock(): void {
   pause.textContent = rate === 0 ? "▶" : "❚❚";
   pause.title = rate === 0 ? "Carry on (space bar)" : "Pause (space bar)";
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && rateOf(b) === rate));
-  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
+  $("timestate").textContent = rate === 0 && callComing ? "Paused: your call is coming up" : rate === 0 && !$("decide").hidden ? "Paused: make your call" : rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
 }
 
 /** One short run of the simulator, ahead of the picture. */
 async function clockRun(): Promise<void> {
-  const hours = Math.min(72, Math.max(1, rate * 1.5));
+  const hours = runHours(rate, !SPECTATE);
   try {
     const stopped = await game.run({ ...(armed ?? untilOptions()), hours });
     page.stops.push(stopped);
@@ -1633,8 +1669,8 @@ function tickClock(dt: number): boolean {
   return true;
 }
 
-for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(rateOf(b)));
-$("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => playerRate(rateOf(b)));
+$("t-pause").addEventListener("click", () => playerRate(rate ? 0 : lastRate));
 // Keys, so it feels like steering rather than filling in a form (Leo's review): Space
 // pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
 const SPEED_KEYS: Record<string, number> = { Digit1: REAL_TIME, Digit2: 1, Digit3: 6, Digit4: 24, Digit5: 96, Numpad1: REAL_TIME, Numpad2: 1, Numpad3: 6, Numpad4: 24, Numpad5: 96 };
@@ -2286,8 +2322,8 @@ addEventListener("keydown", (e) => {
   const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
-    setRate(rate ? 0 : lastRate);
-  } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
+    playerRate(rate ? 0 : lastRate);
+  } else if (SPEED_KEYS[e.code]) playerRate(SPEED_KEYS[e.code]);
   else if (e.key === "?" || e.code === "KeyK") {
     hideKeyHint();
     hud.keys();
@@ -2368,7 +2404,8 @@ const compassOf = (east: number, north: number): number => ((Math.atan2(east, no
 const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 /** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
-let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number } | null = null;
+/** now: the whole opening when told alone, before "she's now ... the ghost" (the push's words, Elena). */
+let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number; now?: string } | null = null;
 /** A later call made before the Stream's three days were up, so its debrief credits both (Leo). */
 const alsoCalled = (what: string) => streamCall?.later.push(what);
 /** The challenge's call, once made: which, and when (voyage hours), for the toast two days on. */
@@ -2493,16 +2530,17 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   }
   // A night that could run the battery flat.
   if (fc && motors && st.boat.soc < nightLine(power) && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= (lastCallKind === "push" ? NIGHT_AFTER_PUSH_H : MIN_CALL_GAP_H)) {
-    if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
+    const dark = ahead.find((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5);
+    if (dark) {
       asked.night = h;
       return {
         kind: "night",
-        text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
+        text: `${nightOpener(st.boat.soc, dark.ah)} At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
         choices: [
           { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
           // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
-          { label: "Hand her back to the autopilot (what the ghost does)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
+          { label: "Hand her back to the autopilot (same as the ghost)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
         ],
       };
     }
@@ -2516,7 +2554,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     const later = streamCall.later;
     const also = later.length ? ` You also ${later.length > 1 ? `${later.slice(0, -1).join(", ")} and ${later[later.length - 1]}` : later[0]}.` : "";
     const span = `${Math.round((streamCall.after ?? 72) / 24)} days`;
-    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : `${streamCall.chose}: ${where} after ${span}.`;
+    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : streamCall.now ? `${streamCall.now}: she's now ${where}.` : `${streamCall.chose}: ${where} after ${span}.`;
     // White on the strip's glass, with the colour on the number only (Elena).
     const num = Math.abs(km) < 1 ? undefined : `${Math.abs(km).toLocaleString()} km`;
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn, num));
@@ -2562,7 +2600,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
             return setOrder(Math.round(toFinish));
           },
         },
-        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: "Let the autopilot decide (same as the ghost)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
   }
@@ -2622,6 +2660,7 @@ function maybeRouteCheck(st: Status): boolean {
   routeLookedH = h;
   looking = true; // the simulator waits; the clock runs on (no "Paused" for a look)
   const seq = ++decisionSeq;
+  setCallComing(false); // a card still on its way is for a moment this look replaces
   const resume = () => {
     if (seq === decisionSeq) looking = false;
   };
@@ -2630,8 +2669,11 @@ function maybeRouteCheck(st: Status): boolean {
     if (seq !== decisionSeq) return;
     looking = false;
     setRate(0, true);
+    setCallComing(true);
     whenAt(h, () => {
-      if (seq === decisionSeq && rate === 0 && !game.status?.over) show();
+      if (seq !== decisionSeq) return; // a later question has taken its place
+      setCallComing(false);
+      if (rate === 0 && !game.status?.over) show();
     });
   };
   (async () => {
@@ -2685,7 +2727,7 @@ function maybeRouteCheck(st: Status): boolean {
             streamCall = { h, chose: `Since you bent ${deg}° ${side}`, since: `Since you bent ${deg}° ${side}`, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(b.best);
           }, order: { heading: b.best, power } },
-          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (what the ghost does)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
+          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (same as the ghost)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
         ],
       };
       const view: Outlook = { ...o, orders: [best, auto] };
@@ -2710,8 +2752,9 @@ function maybeRouteCheck(st: Status): boolean {
           { label: words.push, title: words.pushTitle, order: to, act: () => {
             // What it bought, told when the forecast's 4 days are up, as the chase does.
             pushTurnedDown = null;
+            powerBeforePush ??= power;
             if (streamCall) alsoCalled(words.did);
-            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
+            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, now: words.ago, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(to.heading, to.power);
           } },
           { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
@@ -2727,7 +2770,7 @@ function maybeRouteCheck(st: Status): boolean {
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
       // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
-      const text = `Navigator's note: the forecast favours the autopilot over your order for the next 4 days (${timeChange(auto.lead_km - now.lead_km, pace)}). Hand her back in Orders.`;
+      const text = handBackNote(auto.lead_km - now.lead_km);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     if (!ask) return resume();
@@ -2743,8 +2786,8 @@ function maybeRouteCheck(st: Status): boolean {
       text: `Navigator's check: the forecast says ${fmtDeg(b.best)} would gain on ${orderWords(order)} over the next 4 days, but through ${price}.`,
       choices: [
         { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
-        { label: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
-        { label: "Let the autopilot decide (what the ghost does)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: "Let the autopilot decide (same as the ghost)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
     const picks = order === "auto" || same ? [0, 1] : [0, 1, 2];
@@ -2804,14 +2847,19 @@ function maybeDecide(force = false): boolean {
   // The Stream may come out as only a note (Elena's rule), so it looks first with the clock
   // running and pauses only for a card; a storm always asks, so it pauses now.
   const stream = d.kind === "stream";
-  if (stream) looking = true;
-  else setRate(0, true);
+  if (stream) {
+    looking = true;
+    setCallComing(false);
+  } else {
+    setRate(0, true);
+    setCallComing(true);
+  }
   page.decisions.push({ kind: d.kind, day: st.day });
   // See it coming (Rosa): over the last half day before the call the picture slows to an hour
   // a second and the camera turns toward the problem, so the pause lands on a picture of it.
   foresee = { from: st.day * 24 - 12, h: st.day * 24, look: d.look ?? null };
-  // Asked once the picture gets there, so the question and the view agree. Carrying on
-  // before then skips it; a later question replaces it.
+  // Asked once the picture gets there, so the question and the view agree. The clock cannot
+  // carry on before then (callComing); a later question replaces it.
   const seq = ++decisionSeq;
   // Each option's stake against the ghost in 2 days, from the forecast as issued (never the
   // truth), while the picture catches up. An older simulator, or a failure: no stakes.
@@ -2836,15 +2884,20 @@ function maybeDecide(force = false): boolean {
         return;
       }
       setRate(0, true);
+      setCallComing(true);
       whenAt(h, () => {
-        if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, o, has);
+        if (seq !== decisionSeq) return;
+        setCallComing(false);
+        if (rate === 0 && !game.status?.over) showDecision(d, o, has);
       });
     });
     return true;
   }
   whenAt(h, async () => {
     const o = await stakes;
-    if (seq !== decisionSeq || rate !== 0 || game.status?.over) return;
+    if (seq !== decisionSeq) return;
+    setCallComing(false);
+    if (rate !== 0 || game.status?.over) return;
     showDecision(d, o, has);
   });
   return true;
@@ -2941,6 +2994,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     box.append(b);
   }
   $("decide").hidden = false;
+  showClock();
   // On the right, it sits 12 px under the chart, whatever the chart's size (Ines).
   const chartBox = document.getElementById("mapbox")?.getBoundingClientRect();
   $("decide").style.top = withMap && chartBox && chartBox.height > 0 ? `${Math.round(chartBox.bottom + 12)}px` : "";
@@ -4113,6 +4167,11 @@ const filmHost: CinemaHost = {
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
+  lampSide: () => {
+    if (!model) return 0;
+    const z = model.root.worldToLocal(deckLight.getWorldPosition(lampAt)).z; // the boat's +z is to port
+    return Math.abs(z) < 0.03 ? 0 : z < 0 ? 1 : -1;
+  },
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
   length: () => spec.length,

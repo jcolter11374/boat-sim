@@ -122,7 +122,7 @@ test("Race it from an ending: the Set sail card with a rival picked, never the o
 });
 
 test("the muted line where a game's result sits beside the odds: only on the game's newer autopilot", () => {
-  const line = "The autopilot in the game sails smarter than the one behind these odds and the recorded voyages.";
+  const line = "These odds and the recorded voyages use a simpler autopilot than the one you sail with, so your boat may do better than they show.";
   assert.equal(autopilotNote(2, true), line);
   assert.equal(autopilotNote(2, false), ""); // no odds shown: nothing to set it beside
   assert.equal(autopilotNote(1, true), ""); // a boat with a sail, or an older saved game: the same autopilot as the odds
