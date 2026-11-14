@@ -72,6 +72,11 @@ def pack(out: Path, root: Path = Path("."), commit: str | None = None) -> int:
         for name in PACK_FILES:
             z.write(root / name, name)
             n += 1
+        # The keelboats' sail and keel parts' polars (vessel/keelboat.py VARIANTS);
+        # one the page asks for that isn't here is built in the browser (~1 min).
+        for f in sorted((root / "configs/polars/variants").glob("*.json")):
+            z.write(f, f.relative_to(root).as_posix())
+            n += 1
     out.with_name("boatsim.json").write_text(build)
     return n
 

@@ -1232,10 +1232,160 @@
   "stock_cruiser31": {
    "design": "configs/stock_cruiser31.yaml",
    "defaults": {
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
     "spare": "none",
     "tactician": "on"
    },
    "slots": [
+    {
+     "id": "rig",
+     "name": "Rig",
+     "opts": [
+      {
+       "id": "genoa",
+       "effect": "wired",
+       "est": false,
+       "basis": "ORC certificate 038800017LU; Beneteau sail plan",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Fractional sloop, genoa (as built)",
+       "d": "The 28.9 m² overlapping genoa Beneteau fitted."
+      },
+      {
+       "id": "solent",
+       "effect": "wired",
+       "est": false,
+       "basis": "Beneteau sail plan: Solent 21 m² (boat-specs.com)",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.jib_m2"
+       ],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Solent jib",
+       "d": "Beneteau's smaller non-overlapping jib, 21 m²: less sail in light air, easier in a blow."
+      }
+     ]
+    },
+    {
+     "id": "cloth",
+     "name": "Sail cloth",
+     "opts": [
+      {
+       "id": "dacron",
+       "effect": "wired",
+       "est": false,
+       "basis": "the cruising sails these boats were sold with",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Woven polyester, Dacron (as built)",
+       "d": "Tough and long-lived; it stretches, so the sails get fuller as the wind rises."
+      },
+      {
+       "id": "laminate",
+       "effect": "wired",
+       "est": true,
+       "basis": "sailmakers' cloth data; the speed and damage figures are our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.cl_max",
+        "hazards.p_part"
+       ],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Laminate",
+       "d": "Film and fibres glued in layers: holds its shape, a little faster, but it delaminates and tears sooner."
+      }
+     ]
+    },
+    {
+     "id": "reef",
+     "name": "Reefing",
+     "opts": [
+      {
+       "id": "slab2",
+       "effect": "wired",
+       "est": false,
+       "basis": "standard on both boats",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Slab reefing, two reefs (as built)",
+       "d": "Two rows of reef points in the mainsail."
+      },
+      {
+       "id": "slab3",
+       "effect": "wired",
+       "est": true,
+       "basis": "a standard sailmaker option; its size is our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.plans"
+       ],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Slab reefing, three reefs",
+       "d": "A third, deep reef: a smaller main for a gale."
+      },
+      {
+       "id": "inmast",
+       "effect": "wired",
+       "est": true,
+       "basis": "Selden in-mast furling; area and jamming are our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.disp_kg",
+        "vpp.main_m2",
+        "vpp.plans",
+        "hazards.p_part",
+        "hull.mass_kg"
+       ],
+       "kg": 8.0,
+       "cost": 0.0,
+       "n": "In-mast furling",
+       "d": "The mainsail rolls up inside the mast to any size; no battens, so it is smaller, and it can jam."
+      }
+     ]
+    },
+    {
+     "id": "storm",
+     "name": "Storm sails",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "No storm sails (as built)",
+       "d": "Deepest reef, then sails down and run off before a gale."
+      },
+      {
+       "id": "storm",
+       "effect": "wired",
+       "est": true,
+       "basis": "World Sailing Offshore Special Regulations 4.26: storm jib 5 % of I², trysail 17.5 % of P x E; the gale limit is our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.disp_kg",
+        "vpp.plans",
+        "sail.storm_wind_ms",
+        "hull.mass_kg"
+       ],
+       "kg": 10.0,
+       "cost": 0.0,
+       "n": "Storm jib and trysail",
+       "d": "Two small, very strong sails at the racing rules' sizes, so she keeps sailing in a gale."
+      }
+     ]
+    },
     {
      "id": "spare",
      "name": "Spare autopilot",
@@ -1253,7 +1403,7 @@
        "id": "spare-autopilot",
        "effect": "wired",
        "est": true,
-       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
        "sim": [
         "hazards.electronics_boxes",
         "electronics.hotel_load_wh_per_day",
@@ -1272,7 +1422,7 @@
        "id": "on",
        "effect": "wired",
        "est": false,
-       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "basis": "software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
        "sim": [
         "electronics.tactician"
        ],
@@ -1318,7 +1468,7 @@
        "id": "spare-autopilot",
        "effect": "wired",
        "est": true,
-       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
        "sim": [
         "hazards.electronics_boxes",
         "electronics.hotel_load_wh_per_day",
@@ -1337,7 +1487,7 @@
        "id": "on",
        "effect": "wired",
        "est": false,
-       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "basis": "software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
        "sim": [
         "electronics.tactician"
        ],
@@ -1383,7 +1533,7 @@
        "id": "spare-autopilot",
        "effect": "wired",
        "est": true,
-       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
        "sim": [
         "hazards.electronics_boxes",
         "electronics.hotel_load_wh_per_day",
@@ -1402,7 +1552,7 @@
        "id": "on",
        "effect": "wired",
        "est": false,
-       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "basis": "software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
        "sim": [
         "electronics.tactician"
        ],
@@ -1448,7 +1598,7 @@
        "id": "spare-autopilot",
        "effect": "wired",
        "est": true,
-       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
        "sim": [
         "hazards.electronics_boxes",
         "electronics.hotel_load_wh_per_day",
@@ -1467,7 +1617,226 @@
        "id": "on",
        "effect": "wired",
        "est": false,
-       "basis": "software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "basis": "software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "off",
+       "effect": "wired",
+       "est": true,
+       "basis": "steers straight for the next waypoint, clamped out of the no-go zone",
+       "sim": [
+        "electronics.tactician"
+       ],
+       "kg": 0.0,
+       "cost": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "stock_pearson31_2": {
+   "design": "configs/stock_pearson31_2.yaml",
+   "defaults": {
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "slots": [
+    {
+     "id": "rig",
+     "name": "Rig",
+     "opts": [
+      {
+       "id": "sloop",
+       "effect": "wired",
+       "est": false,
+       "basis": "Pearson spec sheet; genoa from goodoldboat sail data",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Masthead sloop, 135 % genoa (as built)",
+       "d": "One big headsail on a roller, as Pearson built her."
+      },
+      {
+       "id": "cutter",
+       "effect": "wired",
+       "est": true,
+       "basis": "inner forestay kits (Selden); sizes our GUESS from Pearson's rig",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.disp_kg",
+        "vpp.jib_m2",
+        "vpp.plans",
+        "hazards.p_part",
+        "hull.mass_kg"
+       ],
+       "kg": 12.0,
+       "cost": 0.0,
+       "n": "Cutter: yankee and staysail",
+       "d": "An inner forestay and a small staysail under a high-cut yankee: in a blow she sails on the staysail alone, low and strong."
+      }
+     ]
+    },
+    {
+     "id": "cloth",
+     "name": "Sail cloth",
+     "opts": [
+      {
+       "id": "dacron",
+       "effect": "wired",
+       "est": false,
+       "basis": "the cruising sails these boats were sold with",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Woven polyester, Dacron (as built)",
+       "d": "Tough and long-lived; it stretches, so the sails get fuller as the wind rises."
+      },
+      {
+       "id": "laminate",
+       "effect": "wired",
+       "est": true,
+       "basis": "sailmakers' cloth data; the speed and damage figures are our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.cl_max",
+        "hazards.p_part"
+       ],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Laminate",
+       "d": "Film and fibres glued in layers: holds its shape, a little faster, but it delaminates and tears sooner."
+      }
+     ]
+    },
+    {
+     "id": "reef",
+     "name": "Reefing",
+     "opts": [
+      {
+       "id": "slab2",
+       "effect": "wired",
+       "est": false,
+       "basis": "standard on both boats",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Slab reefing, two reefs (as built)",
+       "d": "Two rows of reef points in the mainsail."
+      },
+      {
+       "id": "slab3",
+       "effect": "wired",
+       "est": true,
+       "basis": "a standard sailmaker option; its size is our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.plans"
+       ],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "Slab reefing, three reefs",
+       "d": "A third, deep reef: a smaller main for a gale."
+      },
+      {
+       "id": "inmast",
+       "effect": "wired",
+       "est": true,
+       "basis": "Selden in-mast furling; area and jamming are our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.disp_kg",
+        "vpp.main_m2",
+        "vpp.plans",
+        "hazards.p_part",
+        "hull.mass_kg"
+       ],
+       "kg": 8.0,
+       "cost": 0.0,
+       "n": "In-mast furling",
+       "d": "The mainsail rolls up inside the mast to any size; no battens, so it is smaller, and it can jam."
+      }
+     ]
+    },
+    {
+     "id": "storm",
+     "name": "Storm sails",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0,
+       "n": "No storm sails (as built)",
+       "d": "Deepest reef, then sails down and run off before a gale."
+      },
+      {
+       "id": "storm",
+       "effect": "wired",
+       "est": true,
+       "basis": "World Sailing Offshore Special Regulations 4.26: storm jib 5 % of I², trysail 17.5 % of P x E; the gale limit is our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.disp_kg",
+        "vpp.plans",
+        "sail.storm_wind_ms",
+        "hull.mass_kg"
+       ],
+       "kg": 10.0,
+       "cost": 0.0,
+       "n": "Storm jib and trysail",
+       "d": "Two small, very strong sails at the racing rules' sizes, so she keeps sailing in a gale."
+      }
+     ]
+    },
+    {
+     "id": "spare",
+     "name": "Spare autopilot",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as the boat comes: one autopilot",
+       "sim": [],
+       "kg": 0.0,
+       "cost": 0.0
+      },
+      {
+       "id": "spare-autopilot",
+       "effect": "wired",
+       "est": true,
+       "basis": "parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
+       "sim": [
+        "hazards.electronics_boxes",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 0.4,
+       "cost": 83.0
+      }
+     ]
+    },
+    {
+     "id": "tactician",
+     "name": "Sailing tactician",
+     "opts": [
+      {
+       "id": "on",
+       "effect": "wired",
+       "est": false,
+       "basis": "software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat without a wind sensor would need a small masthead wind vane (GUESS)",
        "sim": [
         "electronics.tactician"
        ],

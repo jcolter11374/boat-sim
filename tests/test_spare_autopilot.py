@@ -13,7 +13,13 @@ from boatsim.sandbox import catalog as C
 from boatsim.types import Command, EnvState
 from boatsim.vessel import make_vessel
 
-SPARE_BASES = ("stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7")
+SPARE_BASES = (
+    "stock_cruiser31",
+    "stock_pearson31_2",
+    "stock_dinghy14",
+    "stock_beachcat16",
+    "stock_sail_drone7",
+)
 
 
 @pytest.mark.parametrize("base", SPARE_BASES)

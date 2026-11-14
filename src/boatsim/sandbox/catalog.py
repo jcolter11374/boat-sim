@@ -23,7 +23,8 @@ masses and part names stay in Sam's file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 
 from boatsim.config import Design, load_design, patched_design
 
@@ -48,6 +49,11 @@ class Option:
     kg: float = 0.0  # weight against the default option (catalog), for the mass link
     hotel_wh: float = 0.0  # extra daily energy (Wh/day) for parts with no catalog figure
     cost: float = 0.0  # price against the default option, USD (parts list), for the page
+    # Keelboat sail parts: (knob, value) pairs the sail composer (_sail_changes) turns
+    # into the vpp block (a variant polar), the rig's damage odds and the storm limit.
+    sail: tuple = ()
+    n: str = ""  # the part's name, for the page (stock boats' slots)
+    d: str = ""  # one line on what it is, for the page
 
 
 def _thr(n: int, kg: float = 0.0) -> Option:
@@ -447,6 +453,8 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
             if isinstance(val, dict):  # merge into the design's table (e.g. p_part)
                 val = {**getattr(base, sec).get(key, {}), **val}
             changes.append((sec, key, val))
+    if which in KEELBOATS:
+        changes.extend(_sail_changes(which, picked, base))
     if cruise is not None:
         changes.append(("propulsion", "cruise_drive_w", cruise))
     if which == "kayak":
@@ -685,9 +693,24 @@ CHANGE_NAMES = {
     ("keel", "bulb-9kg"): "heavier keel",
     ("keel", "bulb-8kg"): "lighter keel",
     ("tracker", "none"): "no backup tracker",
+    # The keelboats (M4 wave 1), and the stock boats' two older slots
+    ("rig", "cutter"): "cutter rig",
+    ("rig", "solent"): "Solent jib",
+    ("cloth", "laminate"): "laminate sails",
+    ("reef", "slab3"): "a third reef",
+    ("reef", "inmast"): "in-mast furling",
+    ("storm", "storm"): "storm sails",
+    ("spare", "spare-autopilot"): "spare autopilot",
+    ("tactician", "off"): "no sailing tactician",
 }
 # Things added go after a "+" ("Our kayak + wing sail"); everything else after a comma.
-ADDED = {("drive", "hybrid"), ("drive", "wing-thruster"), ("brain", "two-box")}
+ADDED = {
+    ("drive", "hybrid"),
+    ("drive", "wing-thruster"),
+    ("brain", "two-box"),
+    ("storm", "storm"),
+    ("spare", "spare-autopilot"),
+}
 # Two changes that read as one phrase.
 MERGED = {
     frozenset({("sol", "solar-300"), ("bat", "two-100ah")}): "bigger panels and batteries",
@@ -737,7 +760,7 @@ RDEFAULTS = {
 SPARE_BOX = Option(
     (("hazards", "electronics_boxes", 2),),
     est=True,
-    basis="parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+    basis="parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
     kg=0.4,
     hotel_wh=4.0,
     cost=83.0,
@@ -755,7 +778,7 @@ SPARE_SLOT = {
 TACTICIAN_SLOT = {
     "on": Option(
         (("electronics", "tactician", True),),
-        basis="software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat "
+        basis="software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat "
         "without a wind sensor would need a small masthead wind vane (GUESS)",
     ),
     "off": Option(
@@ -777,6 +800,218 @@ STOCK_SLOTS = {
 STOCK_SLOT_NAMES = {"spare": "Spare autopilot", "tactician": "Sailing tactician"}
 # As each yaml comes: none of them sets electronics.tactician, so it's on.
 STOCK_DEFAULTS = {b: {"spare": "none", "tactician": "on"} for b in STOCK_SLOTS}
+
+
+# --- Keelboats: sails and rigs (M4 wave 1) -------------------------------------
+# The two keelboats (stock_pearson31_2, stock_cruiser31) sail from a polar our VPP
+# works out (vessel/vpp.py). A sail part changes the VPP's inputs, so the composer
+# below writes a new vpp block and points vpp.polar_file at its own polar
+# (configs/polars/variants/<boat>-<fingerprint>.json, built on first use). The as
+# built pick in every slot leaves the yaml untouched.
+#
+# Sources: Pearson rig I 42.5, J 12.8, P 36.8, E 12.0 ft (pearsonyachts.org);
+# First 31.7 I 11.87, J 3.44, P 10.80, E 3.90 m and its Solent jib, 21 m2
+# (boat-specs.com, Beneteau's figures); storm sails at the World Sailing Offshore
+# Special Regulations 4.26 limits: storm jib 5 % of I^2, trysail 17.5 % of P x E.
+FT = 0.3048
+RIGS = {  # I, J, P, E in metres
+    "stock_pearson31_2": (42.5 * FT, 12.8 * FT, 36.8 * FT, 12.0 * FT),
+    "stock_cruiser31": (11.87, 3.44, 10.80, 3.90),
+}
+STORM_JIB = 0.05  # x I^2 (OSR 4.26)
+TRYSAIL = 0.175  # x P x E (OSR 4.26)
+# GUESS: a cutter on the Pearson: a 100 % high-cut yankee (0.9 of the foretriangle)
+# plus a staysail on an inner forestay at 0.8 I, tacked at 0.55 J.
+CUTTER_YANKEE = 0.9
+CUTTER_STAYSAIL = 0.9 * 0.8 * 0.55
+SOLENT_M2 = 21.0  # Beneteau: the First 31.7's Solent jib
+LAMINATE_CL = 1.04  # GUESS: a laminate sail keeps its designed shape as the wind rises
+# GUESS: per-knockdown damage to the rig and sails, against the as-built rig.
+SAIL_DAMAGE = {"cutter": 0.8, "laminate": 1.5, "inmast": 1.3}
+STORM_SAILS_WIND_MS = 30  # GUESS: under storm sails she sails on to about 60 kn
+# GUESS: an in-mast furling main has no battens or roach: 12 % less area, and it
+# reefs to any size (six plans here, standing in for "any").
+INMAST_AREA = 0.88
+INMAST_PLANS = ((1.0, 1.0), (0.85, 0.82), (0.72, 0.66), (0.6, 0.5), (0.5, 0.36), (0.4, 0.18))
+SLAB3 = ("reef3", 0.5, 0.3)  # GUESS: a third reef, with the genoa rolled further
+SAIL_KG = {"cutter": 12.0, "inmast": 8.0, "storm": 10.0}  # GUESS: added weight
+
+
+def _sail_part(
+    n: str, d: str, basis: str, sail: tuple = (), est: bool = True, kg: float = 0.0
+) -> Option:
+    return Option(sail=sail, est=est and bool(sail), basis=basis, n=n, d=d, kg=kg)
+
+
+def _keel_sails(boat: str) -> dict[str, dict[str, Option]]:
+    pearson = boat == "stock_pearson31_2"
+    rig = (
+        {
+            "sloop": _sail_part(
+                "Masthead sloop, 135 % genoa (as built)",
+                "One big headsail on a roller, as Pearson built her.",
+                "Pearson spec sheet; genoa from goodoldboat sail data",
+            ),
+            "cutter": _sail_part(
+                "Cutter: yankee and staysail",
+                "An inner forestay and a small staysail under a high-cut yankee: "
+                "in a blow she sails on the staysail alone, low and strong.",
+                "inner forestay kits (Selden); sizes our GUESS from Pearson's rig",
+                (("rig", "cutter"),),
+                kg=SAIL_KG["cutter"],
+            ),
+        }
+        if pearson
+        else {
+            "genoa": _sail_part(
+                "Fractional sloop, genoa (as built)",
+                "The 28.9 m² overlapping genoa Beneteau fitted.",
+                "ORC certificate 038800017LU; Beneteau sail plan",
+            ),
+            "solent": _sail_part(
+                "Solent jib",
+                "Beneteau's smaller non-overlapping jib, 21 m²: less sail in light air, "
+                "easier in a blow.",
+                "Beneteau sail plan: Solent 21 m² (boat-specs.com)",
+                (("rig", "solent"),),
+                est=False,
+            ),
+        }
+    )
+    return {
+        "rig": rig,
+        "cloth": {
+            "dacron": _sail_part(
+                "Woven polyester, Dacron (as built)",
+                "Tough and long-lived; it stretches, so the sails get fuller as the wind rises.",
+                "the cruising sails these boats were sold with",
+            ),
+            "laminate": _sail_part(
+                "Laminate",
+                "Film and fibres glued in layers: holds its shape, a little faster, "
+                "but it delaminates and tears sooner.",
+                "sailmakers' cloth data; the speed and damage figures are our GUESS",
+                (("cloth", "laminate"),),
+            ),
+        },
+        "reef": {
+            "slab2": _sail_part(
+                "Slab reefing, two reefs (as built)",
+                "Two rows of reef points in the mainsail.",
+                "standard on both boats",
+            ),
+            "slab3": _sail_part(
+                "Slab reefing, three reefs",
+                "A third, deep reef: a smaller main for a gale.",
+                "a standard sailmaker option; its size is our GUESS",
+                (("reef", "slab3"),),
+            ),
+            "inmast": _sail_part(
+                "In-mast furling",
+                "The mainsail rolls up inside the mast to any size; no battens, so it is "
+                "smaller, and it can jam.",
+                "Selden in-mast furling; area and jamming are our GUESS",
+                (("reef", "inmast"),),
+                kg=SAIL_KG["inmast"],
+            ),
+        },
+        "storm": {
+            "none": _sail_part(
+                "No storm sails (as built)",
+                "Deepest reef, then sails down and run off before a gale.",
+                "as built",
+            ),
+            "storm": _sail_part(
+                "Storm jib and trysail",
+                "Two small, very strong sails at the racing rules' sizes, so she keeps "
+                "sailing in a gale.",
+                "World Sailing Offshore Special Regulations 4.26: storm jib 5 % of I², "
+                "trysail 17.5 % of P x E; the gale limit is our GUESS",
+                (("storm", "storm"),),
+                kg=SAIL_KG["storm"],
+            ),
+        },
+    }
+
+
+KEEL_SAIL_DEFAULTS = {
+    "stock_pearson31_2": {"rig": "sloop", "cloth": "dacron", "reef": "slab2", "storm": "none"},
+    "stock_cruiser31": {"rig": "genoa", "cloth": "dacron", "reef": "slab2", "storm": "none"},
+}
+KEEL_SAIL_NAMES = {"rig": "Rig", "cloth": "Sail cloth", "reef": "Reefing", "storm": "Storm sails"}
+
+
+def _sail_changes(boat: str, picked: dict, design: Design) -> tuple:
+    """(section, key, value) changes a keelboat's sail parts make, from its yaml."""
+    knobs = dict(k for slot, opt in picked.items() for k in slots_for(boat)[slot][opt].sail)
+    if not knobs:
+        return ()
+    v = dict(design.vpp)
+    i, j, p, e = RIGS[boat]
+    plans = [(q["name"], q["main"], q["jib"]) for q in v["plans"]]
+    if knobs.get("reef") == "slab3":
+        plans.insert(-1, SLAB3)
+    elif knobs.get("reef") == "inmast":
+        v["main_m2"] = round(v["main_m2"] * INMAST_AREA, 3)
+        names = ("full", *(f"furl{n}" for n in range(1, len(INMAST_PLANS) - 1)), "storm")
+        plans = [(nm, m, jb) for nm, (m, jb) in zip(names, INMAST_PLANS)]
+    if knobs.get("rig") == "cutter":
+        fore = 0.5 * i * j
+        yankee, stay = CUTTER_YANKEE * fore, CUTTER_STAYSAIL * fore
+        v["jib_m2"] = round(yankee + stay, 3)
+        share = stay / (yankee + stay)
+
+        def cut(jib: float) -> float:
+            """The sloop's headsail share as the cutter carries it: the yankee rolls
+            away first (gone by the sloop's half genoa), then the staysail alone,
+            then a reefed staysail for the deepest plan (GUESS)."""
+            if jib >= 0.99:
+                return 1.0
+            if jib > 0.5:
+                return round(share + (1 - share) * (jib - 0.5) / 0.5, 3)
+            return round(share if jib > 0.25 else 0.6 * share, 3)
+
+        plans = [(nm, m, cut(jb)) for nm, m, jb in plans]
+    elif knobs.get("rig") == "solent":
+        v["jib_m2"] = SOLENT_M2
+    if knobs.get("storm") == "storm":
+        plans[-1] = (
+            "storm",
+            round(min(TRYSAIL * p * e / v["main_m2"], 1.0), 3),
+            round(min(STORM_JIB * i * i / v["jib_m2"], 1.0), 3),
+        )
+    if knobs.get("cloth") == "laminate":
+        v["cl_max"] = round(v["cl_max"] * LAMINATE_CL, 4)
+    kg = sum(SAIL_KG.get(val, 0.0) for val in knobs.values())
+    if kg:
+        v["disp_kg"] = round(v["disp_kg"] + kg, 1)
+    v["plans"] = [{"name": nm, "main": m, "jib": jb} for nm, m, jb in plans]
+    from boatsim.vessel.keelboat import variant_name
+
+    stem = Path(design.vpp["polar_file"]).stem
+    v["polar_file"] = variant_name(replace(design, vpp=v), stem)
+    out = [("vpp", "polar_file", v["polar_file"])]
+    out += [("vpp", k, v[k]) for k in v if v[k] != design.vpp.get(k) and k != "polar_file"]
+    damage = 1.0
+    for val in knobs.values():
+        damage *= SAIL_DAMAGE.get(val, 1.0)
+    if damage != 1.0:
+        sail = round(design.hazards["p_part"]["sail"] * damage, 9)
+        out.append(("hazards", "p_part", {**design.hazards["p_part"], "sail": sail}))
+    if knobs.get("storm") == "storm":
+        out.append(("sail", "storm_wind_ms", STORM_SAILS_WIND_MS))
+    return tuple(out)
+
+
+# The keelboats' sail parts (M4 wave 1). The Pearson had no slots before.
+KEELBOATS = ("stock_pearson31_2", "stock_cruiser31")
+for _b in KEELBOATS:
+    STOCK_SLOTS[_b] = {
+        **_keel_sails(_b),
+        **STOCK_SLOTS.get(_b, {"spare": SPARE_SLOT, "tactician": TACTICIAN_SLOT}),
+    }
+    STOCK_DEFAULTS[_b] = {**KEEL_SAIL_DEFAULTS[_b], "spare": "none", "tactician": "on"}
+STOCK_SLOT_NAMES.update(KEEL_SAIL_NAMES)
 
 
 def base_of(choices: dict | None) -> str:
@@ -837,6 +1072,21 @@ GRID: tuple[dict, ...] = (
             {"tracker": "none"},
         )
     ),
+    # The keelboats (M4 wave 1): as built, then each sail part on its own.
+    *(
+        {"base": b, **g}
+        for b in KEELBOATS
+        for g in (
+            {},
+            {"rig": "cutter" if b == "stock_pearson31_2" else "solent"},
+            {"cloth": "laminate"},
+            {"reef": "slab3"},
+            {"reef": "inmast"},
+            {"storm": "storm"},
+            {"spare": "spare-autopilot"},
+            {"tactician": "off"},
+        )
+    ),
     {  # everything cheapest
         "thr": "one-t200",
         "sol": "solar-200",
@@ -860,6 +1110,7 @@ def matters(slot: str, opt: str, base: str = "kayak") -> bool:
         or o.kg != d.kg
         or (o.wh or 0) != (d.wh or 0)
         or o.hotel_wh != d.hotel_wh
+        or o.sail != d.sail
     )
 
 
@@ -880,7 +1131,7 @@ def nearest(choices: dict | None) -> tuple[str, bool]:
     base = base_of(choices)
     picked, cruise = normalise(choices)
     want = grid_id(choices)
-    if base in STOCK_BASES:
+    if base in STOCK_BASES and base not in KEELBOATS:
         return want, False  # not in the odds grid
 
     def dist(g):
@@ -892,7 +1143,7 @@ def nearest(choices: dict | None) -> tuple[str, bool]:
             for s in slots_for(base)
             if p[s] != picked[s] and (matters(s, p[s], base) or matters(s, picked[s], base))
         )
-        return (0, slots, abs(c - cruise))
+        return (0, slots, abs((c or 0) - (cruise or 0)))
 
     best = min(GRID, key=dist)
     return grid_id(best), grid_id(best) == want
@@ -962,6 +1213,18 @@ def base_table() -> dict[str, dict]:
     }
 
 
+def _sail_sim(boat: str, slot: str, opt: str) -> list[str]:
+    """The design fields a keelboat sail part sets on its own (for the page's "sim")."""
+    o = slots_for(boat)[slot][opt]
+    if not o.sail:
+        return []
+    from boatsim.config import load_design
+
+    picked = {**defaults_for(boat), slot: opt}
+    keys = [f"{s}.{k}" for s, k, _ in _sail_changes(boat, picked, load_design(BASES[boat]))]
+    return [k for k in keys if k != "hull.mass_kg"]
+
+
 def stock_table() -> dict[str, dict]:
     """The stock bases with parts to add (sim-slots.json "stock"): per base its
     design file, defaults and slots in slot_table()'s shape, each option with its
@@ -981,10 +1244,12 @@ def stock_table() -> dict[str, dict]:
                             "est": o.est,
                             "basis": o.basis,
                             "sim": [f"{s}.{k}" for s, k, _ in o.changes]
+                            + _sail_sim(b, slot, oid)
                             + (["electronics.hotel_load_wh_per_day"] if o.hotel_wh else [])
                             + (["hull.mass_kg"] if o.kg else []),
                             "kg": o.kg,
                             "cost": o.cost,
+                            **({"n": o.n, "d": o.d} if o.n else {}),
                         }
                         for oid, o in opts.items()
                     ],

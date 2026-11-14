@@ -243,11 +243,32 @@ class Polar:
         return float(np.interp(tws_ms / KNOT, self.tws, b))
 
 
+VARIANTS = "polars/variants"  # sail and keel parts' polars, named <boat>-<fingerprint>.json
+
+
+def variant_name(design: Design, stem: str) -> str:
+    """Where the polar for this design's vpp block lives (a part changed it)."""
+    from boatsim.vessel.vpp import fingerprint
+
+    return f"{VARIANTS}/{stem}-{fingerprint(design.vpp)}.json"
+
+
 def polar_path(design: Design, base: Path | None = None) -> Path:
     name = design.vpp["polar_file"]
     for root in (base, Path("configs"), CONFIGS):
         if root is not None and (Path(root) / name).exists():
             return Path(root) / name
+    if name.startswith(VARIANTS + "/"):
+        # A part's polar no one has saved yet: build it (the name is its fingerprint,
+        # so it can't be stale) where the configs are, else beside this run.
+        from boatsim.vessel.vpp import build_polar
+
+        src = f"boatsim.vessel.vpp on {design.name} with Boatyard parts: all GUESS inputs"
+        for root in (CONFIGS, Path("configs"), Path(".")):
+            try:
+                return build_polar(design.vpp, Path(root) / name, src)
+            except OSError:
+                continue
     raise FileNotFoundError(f"polar {name} for {design.name}: run python -m boatsim.vessel.vpp")
 
 
