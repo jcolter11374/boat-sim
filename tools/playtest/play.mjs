@@ -4468,6 +4468,86 @@ const CHECKS = {
       return rows.join("; ");
     },
   },
+  // #559/#560 phone sheets (orders, "Your call") and #561 motor-stops shot, at 390x844 and 360x740:
+  // boat whole above the sheet, no strip number cut, sheet not over the strip. Frames look-phone-<browser>-<w>-*.jpg.
+  "phone-sheets": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-phone-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const look = (p, sheetSel) => p.evaluate((sel) => {
+        const k = window.devicePixelRatio || 1;
+        const b = window.__helm?.boatBox?.() ?? null;
+        const boat = b ? { x: b.x / k, y: b.y / k, w: b.w / k, h: b.h / k } : null;
+        const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden";
+        const sheet = document.querySelector(sel);
+        const sr = vis(sheet) ? sheet.getBoundingClientRect() : null;
+        const strip = document.getElementById("strip")?.getBoundingClientRect();
+        const cut = [];
+        for (const e of document.querySelectorAll("#strip *, " + sel + " *")) {
+          if (!vis(e)) continue;
+          const cs = getComputedStyle(e);
+          if (cs.textOverflow === "ellipsis" && e.scrollWidth > e.clientWidth + 1 && e.textContent.trim()) cut.push(e.textContent.trim().slice(0, 24));
+        }
+        const over = sr && strip ? Math.max(0, Math.min(sr.bottom, strip.bottom) - Math.max(sr.top, strip.top)) * (sr.left < strip.right && sr.right > strip.left ? 1 : 0) : 0;
+        const top = document.getElementById("topbar")?.getBoundingClientRect().bottom ?? 0;
+        const boatOk = boat ? boat.y >= top - 2 && boat.y + boat.h <= (sr ? sr.top : strip?.top ?? innerHeight) + 2 && boat.x >= 0 && boat.x + boat.w <= innerWidth : null;
+        return { sheet: sr ? [sr.left, sr.top, sr.right, sr.bottom].map(Math.round) : null, strip: strip ? [Math.round(strip.top), Math.round(strip.bottom)] : null, boat: boat ? [boat.x, boat.y, boat.x + boat.w, boat.y + boat.h].map(Math.round) : null, boatOk, cut, over: Math.round(over) };
+      }, sheetSel);
+      for (const [w, h] of [[390, 844], [360, 740]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        try {
+          await p.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy && window.__helm.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.waitForTimeout(4000);
+          // Orders: open them if they aren't.
+          if (!(await p.evaluate(() => { const o = document.getElementById("orders"); return !!o && !o.hidden && o.getClientRects().length > 0 && !document.body.classList.contains("orders-closed"); }))) await p.evaluate(() => document.getElementById("orders-tab")?.click());
+          await p.waitForTimeout(1500);
+          const o = await look(p, "#orders");
+          shots.push(await emit(p, `${w}-orders`));
+          if (!o.sheet) bad.push(`${w}: the orders sheet didn't open`);
+          if (o.boatOk === false) bad.push(`${w} orders: boat ${JSON.stringify(o.boat)} not whole above the sheet ${JSON.stringify(o.sheet)}`);
+          if (o.cut.length) bad.push(`${w} orders: cut off ${o.cut.join(" | ")}`);
+          if (o.over > 2) bad.push(`${w} orders: sheet overlaps the strip by ${o.over} px`);
+          out.push(`${w} orders: sheet ${JSON.stringify(o.sheet)}, strip ${JSON.stringify(o.strip)}, boat ${JSON.stringify(o.boat)} ${o.boatOk ? "in view" : "NOT in view"}, cut ${o.cut.length ? o.cut.join("|") : "none"}, overlap ${o.over}`);
+          await p.evaluate(() => document.getElementById("orders-x")?.click());
+          // A "Your call": run at a day a second until one comes (up to 4 min).
+          await p.keyboard.press("4");
+          await p.waitForFunction(() => { const d = document.getElementById("decide"); return d && !d.hidden && d.getClientRects().length > 0; }, null, { timeout: 4 * MIN }).catch(() => {});
+          await p.waitForTimeout(2000);
+          const d = await look(p, "#decide");
+          shots.push(await emit(p, `${w}-call`));
+          if (!d.sheet) out.push(`${w} call: none came in 4 min`);
+          else {
+            if (d.boatOk === false) bad.push(`${w} call: boat ${JSON.stringify(d.boat)} not whole above the sheet ${JSON.stringify(d.sheet)}`);
+            if (d.cut.length) bad.push(`${w} call: cut off ${d.cut.join(" | ")}`);
+            if (d.over > 2) bad.push(`${w} call: sheet overlaps the strip by ${d.over} px`);
+            out.push(`${w} call: sheet ${JSON.stringify(d.sheet)}, boat ${JSON.stringify(d.boat)} ${d.boatOk ? "in view" : "NOT in view"}, cut ${d.cut.length ? d.cut.join("|") : "none"}, overlap ${d.over}`);
+          }
+          // #561 motor-stops shot, when the page has a way to force it.
+          const forced = await p.evaluate(() => { const f = window.__helm?.force; if (!f) return "no __helm.force"; try { if (typeof f.failed === "function") { f.failed("one_motor"); return "force.failed(one_motor)"; } if (typeof f === "function") { f("one_motor"); return "force(one_motor)"; } return `force has ${Object.keys(f).join(",")}`; } catch (e) { return `force threw ${e}`; } });
+          await p.waitForTimeout(2500);
+          shots.push(await emit(p, `${w}-motor-a`));
+          await p.waitForTimeout(3000);
+          shots.push(await emit(p, `${w}-motor-b`));
+          const m = await look(p, "#decide");
+          out.push(`${w} motor shot: ${forced}; boat ${JSON.stringify(m.boat)} ${m.boatOk ? "in view" : "NOT in view"}`);
+          if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`PHONE ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
