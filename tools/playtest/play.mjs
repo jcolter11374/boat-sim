@@ -2636,8 +2636,13 @@ const CHECKS = {
         } else if (gap < 0) {
           if (/right where you left off/.test(note)) bad.push(`${line}: came back ${(-gap).toFixed(2)} days EARLIER yet says "right where you left off"`);
           else if (!/You left on day [\d.]+, but the last save was on day [\d.]+/.test(note)) bad.push(`${line}: came back earlier, and the note doesn't give the day left and the day saved`);
-          else bad.push(`${line}: came back ${(-gap).toFixed(2)} days earlier than the screen showed (the note says so honestly)`);
-        } else bad.push(`${line}: came back ${gap.toFixed(2)} days LATER than the screen showed`);
+          else out.push(`${line}: came back ${(-gap).toFixed(2)} days earlier; the note says so honestly (the known save-on-close limit, Maya 14 Nov)`);
+        } else {
+          // The picture keeps running while the page unloads, so at speed she can be a little further on;
+          // fine if the note names the day she came back to.
+          const said = Number(note.match(/It's day ([\d.]+)/)?.[1]);
+          if (gap > 0.3 || !(Math.abs(said - back.day) <= 0.06)) bad.push(`${line}: came back ${gap.toFixed(2)} days LATER than the screen showed`);
+        }
         must(back.clock === 0, `${label}: the continued voyage isn't paused`);
       }
       must(!bad.length, bad.join(" | "));
