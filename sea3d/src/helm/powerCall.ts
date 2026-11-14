@@ -61,13 +61,17 @@ export function worthAskingAgain(gainDays: number, turnedDown: number | null): b
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+/** Under this the motors stop to keep the electronics and the radio going (autonomy/safemode.py
+ * hold_below_soc), so a forecast low under it is said as "the 15% where her motors stop". */
+export const MOTORS_STOP_SOC = 0.15;
+const lowWords = (x: number) => (x < MOTORS_STOP_SOC ? "the 15% where her motors stop" : pct(x));
 
 /** The card's words (Elena's ruling, 14 Nov: plain, no "would gain on"). One sentence of what the
  * forecast says, with the price in it; the options' forecast tags carry the numbers. `ago`: what
  * the note four days later opens with, before "she's now N km ahead of the ghost". */
 export function pushCard(order: Heading, power: number, soc: number, push: Staked): { text: string; push: string; pushTitle: string; stay: string; did: string; ago: string } {
   const to = pct(push.power ?? 0);
-  const low = pct(push.soc_min ?? 0);
+  const low = lowWords(push.soc_min ?? 0);
   const faster = order === "auto" ? "pull ahead of the autopilot" : `go faster than at your ${pct(power)}`;
   return {
     text: `Navigator's check: the battery is at ${pct(soc)}. At ${to} power she'd ${faster} over the next 4 days, but the battery would drop to ${low}.`,

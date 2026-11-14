@@ -74,7 +74,8 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { START_H, knockdownNote } from "./helm/roughStart";
+import { MOTORS_STOP_SOC, NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -1248,6 +1249,14 @@ function note(text: string, when: string, colour: string, hl?: string): void {
   hud.toast(text, when, colour, { warn: colour === TONE_COLOUR.warn || colour === TONE_COLOUR.bad, sticky: /^Paused:/.test(text), hl });
 }
 
+/** A knockdown in the first hours, told as "just after the drop" (Elena, 14 Nov; helm/roughStart.ts). */
+function knockedAtStart(e: ReplayEvent, who: "boat" | "ghost"): string | null {
+  const m = e.kind === "capsize" && e.h <= START_H ? /(\d+) knockdown\(s\), Hs ([\d.]+) m/.exec(e.detail) : null;
+  if (!m) return null;
+  const lost = !!rep(who)?.events.some((x) => x.kind === "lost" && Math.abs(x.h - e.h) < 1e-6);
+  return knockdownNote(e.h, Number(m[1]), m[2], lost);
+}
+
 function newEvents(): void {
   // Only what the picture has got to: the simulator runs ahead of it.
   const seen = (who: "boat" | "ghost") => rep(who)?.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6) ?? [];
@@ -1277,7 +1286,7 @@ function newEvents(): void {
       }
       const cut = who === "boat" ? linkCutBy(e) : null;
       if (cut && pausedFor.has(e.h)) continue; // the pause's own note tells it
-      const text = cut ? NO_LINK_WORDS[cut] : describeEvent(e, who === "boat" ? "your boat" : "the ghost");
+      const text = cut ? NO_LINK_WORDS[cut] : knockedAtStart(e, who) ?? describeEvent(e, who === "boat" ? "your boat" : "the ghost");
       // The log can name one failure twice (the part, then what it means): one note is enough.
       const key = `${who} ${text}`;
       if (lastNote[key] !== undefined && e.h - lastNote[key] < 6) continue;
@@ -2373,7 +2382,9 @@ function untilOptions(): Record<string, number | boolean> {
   // Only the 20% reserve stops the clock: a big drop is a note that doesn't pause (batteryNote;
   // Leo, Rosa, 12 Nov: a stop with nothing to choose becomes a toast).
   if (soc > 0.2) o.soc_below = 0.2;
-  if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
+  // Not within 36 h of a storm call either: "the wind is getting up" a day after a card about the
+  // same blow was one stop too many (Rosa's feel write-up, Maya's pick 8, 14 Nov).
+  if (wind < 15 && (st?.day ?? 0) * 24 - asked.gale >= STORM_QUIET_H) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
   // A challenge's big call: stop the clock on its day, so it's asked then and not days later.
   const m = mission();
   if (st && m?.goal.call_day != null && !asked.mission && st.day < m.goal.call_day) o.hours = Math.max(0.5, (m.goal.call_day - st.day) * 24);
@@ -2400,6 +2411,8 @@ type Choice = {
 type Decision = { kind: string; text: string; choices: Choice[]; look?: number; intro?: string };
 /** Compass bearing (deg) of a vector given as east and north parts. */
 const compassOf = (east: number, north: number): number => ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+/** Hours after a storm call with no "wind is getting up" stop. */
+const STORM_QUIET_H = 36;
 const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 /** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
@@ -2609,6 +2622,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
 let decisionSeq = 0;
 /** The calls made when the clock stopped, for the results card. */
 const calls: Call[] = [];
+/** "Your call" cards put up this voyage: none, and the results don't tell you off for not calling. */
+let cardsShown = 0;
 
 /** Stop the clock and ask, when a decision is due. */
 // ---------- the route check (#10, the fallback call) ----------
@@ -2929,7 +2944,10 @@ function costWords(p: Preview, all: Preview[], waves = false, meaning = false): 
     out.push(`worst waves ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
   const soc = all.map((x) => x.soc_min ?? 1);
   if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08)
-    out.push(`battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
+    // Under 15% the motors stop, so "down to 0%" read as a bug (Rosa's feel write-up, 14 Nov): name the 15% instead.
+    out.push(p.soc_min < MOTORS_STOP_SOC
+      ? `battery down to the 15% where her motors stop to save the radio${meaning ? ", so a cloudy spell could leave her drifting" : ""}`
+      : `battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
   return out.length ? ` · ${out.join(" · ")}` : "";
 }
 
@@ -2985,7 +3003,8 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       page.outlook = null;
       drawDecisionMap = null;
       // For the results card's "your calls": what was chosen, and the lead on the ghost then.
-      if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km });
+      const ghost = c.order?.heading === "auto" || /same as the ghost/i.test(`${c.label} ${c.plain ?? ""}`);
+      if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km, ghost });
       await c.act();
       setRate(lastRate);
       if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
@@ -2993,6 +3012,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     box.append(b);
   }
   $("decide").hidden = false;
+  cardsShown++;
   showClock();
   // On the right, it sits 12 px under the chart, whatever the chart's size (Ines).
   const chartBox = document.getElementById("mapbox")?.getBoundingClientRect();
@@ -3288,7 +3308,7 @@ async function finish(): Promise<void> {
     .map((n) => (mi && n.unit === "km" ? { value: n.value, unit: "", label: "km sailed" } : n));
   // Your calls (hands on only: from base, orders go by satellite and aren't calls).
   $("r-calllist").replaceChildren(
-    ...callLines(calls, lead).map((t) => {
+    ...callLines(calls, lead, cardsShown > 0).map((t) => {
       const li = document.createElement("li");
       li.textContent = t;
       return li;

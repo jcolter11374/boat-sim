@@ -11,6 +11,7 @@ import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
 import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
+import { roughStartLine } from "./roughStart";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -266,6 +267,11 @@ export function mountSetSailCard(hooks: CardHooks): void {
         draw();
       },
     );
+    // A rough start is said before Set sail (Elena, 14 Nov): she may be knocked flat in the first hours.
+    const sailDay = auto ? (on?.day ?? null) : /^\d+$/.test(lv) ? (RACE_DAYS[Number(lv)] ?? null) : lv;
+    const rough = show.whenShown && where === "ocean" && !challenge.value ? roughStartLine(sailDay) : "";
+    $("ss-rough").hidden = !rough;
+    $("ss-rough").textContent = rough;
     // Weather challenge (optional): None, then each challenge; the one-line why under it.
     $("ss-ch").hidden = where !== "ocean" || auto || challenge.options.length < 2;
     // None and the first three, then "More…" for the rest (Leo: "None · Gentle June · … · …"), so the card stays short.

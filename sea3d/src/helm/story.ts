@@ -141,21 +141,25 @@ export interface Call {
   day: number;
   chose: string;
   lead: number;
+  /** The option was what the autopilot does, as it does for the ghost. */
+  ghost?: boolean;
 }
 
 /** "Day 2 · Rode the Gulf Stream · 120 km ahead of the ghost": what each call was worth, until the next one or the end. */
-export function callLines(calls: Call[], endLead: number): string[] {
-  if (!calls.length) return ["You let the autopilot sail. Next time, make a call when the clock stops."];
+export function callLines(calls: Call[], endLead: number, asked = true): string[] {
+  // No card ever came (the voyage ended first, or nothing was worth asking): no telling-off (Rosa's feel write-up, 14 Nov).
+  if (!calls.length) return [asked ? "You let the autopilot sail. Next time, make a call when the clock stops." : "No call came up before the voyage ended."];
   return calls.map((k, i) => {
     const gain = Math.round((i + 1 < calls.length ? calls[i + 1].lead : endLead) - k.lead);
-    const worth = Math.abs(gain) < 1 ? "level with the ghost" : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
+    // The ghost's own choice and no gap opened: say so, not "level", which read as "your call did nothing".
+    const worth = Math.abs(gain) < 1 ? (k.ghost ? "same as the ghost's choice" : "level with the ghost") : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
     return `Day ${d1(k.day)} · ${k.chose} · ${worth}`;
   });
 }
 
 /** A choice's button label, short: "Hold course: fastest, but…" -> "Held course". */
 export function callName(label: string): string {
-  const head = label.split(":")[0].trim();
+  const head = label.split(":")[0].replace(/\s*\(same as the ghost\)/i, "").trim();
   const past: [RegExp, string][] = [
     [/^Hold course/i, "Held course"],
     [/^Dodge (.*)/i, "Dodged $1"],

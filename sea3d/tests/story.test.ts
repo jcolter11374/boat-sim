@@ -68,6 +68,10 @@ test("each call says what it was worth until the next one", () => {
   );
   assert.deepEqual(lines, ["Day 2.0 · Took the route that rides the Stream · 120 km ahead of the ghost", "Day 9.0 · Dodged south-east (115°) · 40 km behind the ghost"]);
   assert.match(callLines([], 10)[0], /You let the autopilot sail/);
+  assert.deepEqual(callLines([], 10, false), ["No call came up before the voyage ended."]);
+  assert.deepEqual(callLines([{ day: 9.4, chose: "Stay on the autopilot", lead: 0, ghost: true }], 0), ["Day 9.4 · Stay on the autopilot · same as the ghost's choice"]);
+  assert.deepEqual(callLines([{ day: 9.4, chose: "Held course", lead: 0, ghost: true }], 50), ["Day 9.4 · Held course · 50 km ahead of the ghost"], "a gap opened: km, as before");
+  assert.equal(callName("Stay on the autopilot (same as the ghost)"), "Stay on the autopilot");
   assert.equal(callName("Hold course: fastest, but a knockdown is likelier"), "Held course");
   assert.equal(callName("Dodge south-east (115°): safer, but a longer way round"), "Dodged south-east (115°)");
 });

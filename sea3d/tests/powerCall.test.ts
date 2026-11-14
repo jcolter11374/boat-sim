@@ -42,6 +42,8 @@ test("the card says what the forecast says and what it costs, in plain words (El
   assert.equal(mine.push, "Push: 80% power");
   assert.equal(mine.stay, "Keep 30% power");
   assert.equal(mine.did, "pushed to 80% power");
+  // Under 15% the motors stop: the forecast's "0%" is said as that (Rosa's feel write-up, 14 Nov).
+  assert.equal(pushCard("auto", 0.25, 0.75, sail(40, 0.0, 0.8)).text, "Navigator's check: the battery is at 75%. At 80% power she'd pull ahead of the autopilot over the next 4 days, but the battery would drop to the 15% where her motors stop.");
 });
 
 test("the night call says \"night is coming\" only when it is, and the time otherwise", () => {
