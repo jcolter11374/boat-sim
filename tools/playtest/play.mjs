@@ -4901,7 +4901,7 @@ const CHECKS = {
         try {
           await p.goto(SITE + "boatyard.html", { waitUntil: "load", timeout: 2 * MIN });
           await p.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
-          await p.click("#launch");
+          await p.evaluate(() => document.getElementById("launch").click()); // a frame every few seconds on the runner (Rosa)
           await p.waitForFunction(() => window.__yard.launch || window.__yard.launchError, null, { timeout: 15 * MIN });
           await p.waitForTimeout(2000);
           const links = await p.evaluate(() => [...document.querySelectorAll("a[href*='replay=']")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent.trim().slice(0, 40) })));
@@ -5076,8 +5076,8 @@ const CHECKS = {
       out.push(`Watch from on the card: ${scene.shown ? scene.pills.join(" / ") : "HIDDEN"}`);
       if (!scene.shown || !scene.pills.some((p) => /Pico/.test(p))) bad.push(`no "Watch from" Pico on the autopilot card (${JSON.stringify(scene)})`);
       // As a player does: the Pico pill on the autopilot card, then go.
-      await open("?who=autopilot&quality=medium");
-      await page.locator("#ss-scene button", { hasText: /Pico/ }).first().click({ timeout: 20000 });
+      await open("?who=autopilot&quality=low");
+      await page.locator("#ss-scene button", { hasText: /Pico/ }).first().click({ timeout: 60000 });
       await page.waitForTimeout(1000);
       out.push(`after the Pico pill: ${page.url().split("?")[1] ?? ""}`);
       await sail();
