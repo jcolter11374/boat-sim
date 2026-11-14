@@ -10,7 +10,7 @@ import { Atmosphere, sunPosition } from "../atmosphere";
 import { Sea } from "../water";
 import { Clouds, cloudFromSun, fogChance } from "../clouds";
 import { Rain, rainFromRate } from "../rain";
-import { BUILDERS, type BoatModel } from "../boats/model";
+import { BUILDERS, hasDetailedRandolph, loadRandolphModel, type BoatModel } from "../boats/model";
 import { KAYAK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "../boats/specs";
 import { hasDetailedStock, loadStockModel } from "../boats/stock";
 import { apparentFlow, rudderFor } from "../boats/gear";
@@ -150,6 +150,8 @@ export class BoatView {
       this.scene.remove(this.contact.collar, this.contact.spray);
       this.contact.dispose();
     }
+    // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+    if (this.spec.key === "randolph" && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && this.spec.key === "randolph" && this.build());
     this.model = BUILDERS[this.spec.key](this.quality);
     this.repaint();
     this.contact = new Contact(this.model.form, this.spec, this.quality, this.model.root);
