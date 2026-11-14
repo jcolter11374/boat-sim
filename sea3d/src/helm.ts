@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { setRainOnSea } from "./rainRings";
 import { FOAM_LAMP_UNIFORMS, NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Atmosphere, sunPosition } from "./atmosphere";
+import { Atmosphere, softwareGraphics, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { forcedSea } from "./seaTest";
 import { seaUniforms } from "./seaSurface";
@@ -108,7 +108,9 @@ const KN = 1.94384;
 const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : iso + "Z");
 
 // ---------- 3D ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+// No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
+// times (as on the title, #608); graphics cards keep it.
+const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;

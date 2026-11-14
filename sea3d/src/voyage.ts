@@ -51,7 +51,7 @@ import type { Placement } from "./standin";
 import { Wake } from "./wake";
 import { ShortWaveRide } from "./boats/ride";
 import { Contact } from "./contact";
-import { Atmosphere, sunPosition } from "./atmosphere";
+import { Atmosphere, softwareGraphics, sunPosition } from "./atmosphere";
 import { forcedSea, seaTestFrom } from "./seaTest";
 import { moonEquatorial, moonPhase, toHorizon } from "./sky";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
@@ -119,7 +119,9 @@ const FEED = (() => {
 })();
 
 // ---------- renderer; sky, light and haze come from atmosphere.ts ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+// No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
+// times (as on the title, #608); graphics cards keep it.
+const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;

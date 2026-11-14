@@ -12,7 +12,7 @@ import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
 import { tidyCatalog } from "./yard/words";
 import { tierOf, type BoardTiers } from "./yard/tier";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Atmosphere } from "./atmosphere";
+import { Atmosphere, softwareGraphics } from "./atmosphere";
 import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
@@ -58,7 +58,9 @@ const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 // ---------- 3D: the kayak on a calm sea ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+// No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
+// times (as on the title, #608); graphics cards keep it.
+const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 $("app").appendChild(renderer.domElement);
 const scene = new THREE.Scene();
