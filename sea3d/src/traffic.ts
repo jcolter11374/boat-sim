@@ -239,6 +239,11 @@ export class Traffic {
     }
   }
 
+  /** False on land (by the traffic map's land cells); true when the map isn't loaded. */
+  water(lat: number, lon: number): boolean {
+    return !this.grid || densityAt(this.grid, lat, lon) > 0;
+  }
+
   /** For tests: a Traffic on a grid already in hand. */
   static from(grid: ShipGrid): Traffic {
     return new Traffic(grid);
