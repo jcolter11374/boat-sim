@@ -47,8 +47,8 @@ const pct = (a, p) => (a.length ? [...a].sort((x, y) => x - y)[Math.min(a.length
 const r1 = (x) => (x === null || x === undefined ? null : Math.round(x * 10) / 10);
 
 /** A fresh browser profile on `path`, with every download counted. */
-async function fresh(browser, site, path, viewport = { width: 1400, height: 900 }) {
-  const ctx = await browser.newContext({ viewport, serviceWorkers: "block" });
+async function fresh(browser, site, path, more = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: "block", ...more });
   const page = await ctx.newPage();
   await page.addInitScript(probe);
   const net = { files: [], inflight: 0, last: Date.now(), t0: Date.now(), errors: [] };
@@ -215,6 +215,39 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
     await ctx.close();
   }
 
+  // 2b. Title to sailing, as a visitor does it: `linger` ms on the title, then Set sail there,
+  //     then Set sail on the card. What the title had downloaded when they left it, and how long
+  //     from leaving the title to sailing. (Before the prefetch waited for intent, the title
+  //     fetched the simulator on every visit: this is what that bought, and what it cost.)
+  out.journeys = {};
+  // A phone is a touch screen with no mouse; only Chrome can pretend to be one here.
+  const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
+  const trips = [["quick", 1500, {}], ["lingering", 20_000, {}], ["never sails (30 s)", 30_000, {}]];
+  if (BROWSER === "chromium") trips.push(["phone, quick", 1500, phone], ["phone, never sails (30 s)", 30_000, phone]);
+  for (const [name, linger, more] of trips) {
+    const { ctx, page, net } = await fresh(browser, SITE, "", more);
+    try {
+      await when(page, () => window.__sea3d && window.__sea3d.frames >= 3);
+      await page.waitForTimeout(linger);
+      const j = { lingerMs: linger, titleKB: weigh(net, SITE).kB };
+      if (!/never/.test(name)) {
+        const left = Date.now();
+        await (more.hasTouch ? page.tap("#t-setsail", { noWaitAfter: true, timeout: 30_000 }) : page.click("#t-setsail", { noWaitAfter: true, timeout: 30_000 }));
+        await page.waitForFunction(() => /helm\.html/.test(location.pathname) && window.__helm && window.__helm.frames > 2 && !document.getElementById("go")?.disabled, null, { timeout: 3 * MIN, polling: 50 });
+        j.toCardMs = Date.now() - left;
+        await page.click("#go", { noWaitAfter: true, timeout: 30_000 });
+        const ok = await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: Number(process.env.SPEED_SIM_MS) || 8 * MIN, polling: 50 }).then(() => true).catch(() => false);
+        j.toSailingMs = ok ? Date.now() - left : null;
+        j.error = await page.evaluate(() => window.__helm.error || "");
+        j.wholeKB = weigh(net, SITE).kB;
+      }
+      out.journeys[name] = j;
+    } catch (e) {
+      out.journeys[name] = { error: String(e.message).split("\n")[0].slice(0, 160) };
+    }
+    await ctx.close();
+  }
+
   // 3. The other pages: when each is ready, and what it downloads.
   const others = [
     ["voyage", "voyage.html", () => window.__replay && (window.__replay.ready || window.__replay.error)],
@@ -239,5 +272,6 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
   const t = out.pages.title;
   const h = out.pages.helm;
   return `title: first sea frame ${t.firstSeaFrameMs} ms, ${t.toFirstFrame.kB} kB by then, ${t.whole.kB} kB in all; helm: Set sail ready ${h.setSailReadyMs} ms (${h.toCard.kB} kB), simulator start ${h.simulatorStartMs} ms${h.error ? ` (error: ${h.error})` : ""}, sailing in real time ${h.sailingRealTime?.frameMs.median} ms a frame, ${h.sailingRealTime?.drawCalls.median} draw calls, ${h.sailingRealTime?.triangles.median} triangles, ${h.sailingRealTime?.longTasks.count} long tasks in 30 s; ` +
-    others.map(([n]) => `${n} ${out.pages[n].readyMs} ms, ${out.pages[n].whole.kB} kB`).join("; ");
+    others.map(([n]) => `${n} ${out.pages[n].readyMs} ms, ${out.pages[n].whole.kB} kB`).join("; ") +
+    "; journeys: " + Object.entries(out.journeys).map(([n, j]) => `${n}: title ${j.titleKB} kB${j.toSailingMs !== undefined ? `, to sailing ${j.toSailingMs} ms` : ""}${j.error ? ` (${j.error})` : ""}`).join("; ");
 }
