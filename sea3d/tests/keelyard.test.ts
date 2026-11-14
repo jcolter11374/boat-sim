@@ -11,11 +11,11 @@ import type { GridBuild } from "../src/yard/launch";
 const sim = JSON.parse(readFileSync("public/sim-slots.json", "utf8")) as SimSlots;
 const kayak = withSim(JSON.parse(readFileSync("public/parts-catalog.json", "utf8")) as Catalog, sim);
 
-test("each keelboat starts as built, with her sails, rig, spare autopilot and tactician", () => {
+test("each keelboat starts as built, with her sails, rig, keel, drogue, spare autopilot and tactician", () => {
   for (const key of KEEL_KEYS) {
     const c = keelCatalog(key, sim, kayak)!;
     assert.ok(c, key);
-    assert.deepEqual(c.slots.map((s) => s.id), ["rig", "cloth", "reef", "storm", "spare", "tactician"]);
+    assert.deepEqual(c.slots.map((s) => s.id), ["rig", "cloth", "reef", "storm", "keel", "drogue", "spare", "tactician"]);
     const d = plannedDesign(c);
     assert.equal(d.base, key);
     assert.deepEqual(d.picks, sim.stock![key].defaults);

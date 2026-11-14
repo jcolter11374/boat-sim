@@ -107,6 +107,13 @@ class HazardParams:
     breaker_height_frac_of_hs: float = 0.25  # Randolph GUESS: Rayleigh scale of breakers
     beam_on_share: float = 0.25  # Randolph GUESS
     knockdown_scale: float = 1.0  # multiplier for Monte Carlo spread (Randolph: wave_capsize)
+    # A drogue or sea anchor (keelboats, M4 wave 2; sandbox/catalog.py DROGUES): streamed
+    # once Hs reaches drogue_hs_m (0: none aboard). While it is out, the share of breakers
+    # that catch the boat beam-on drops to drogue_beam_on_share, and the boat drifts at
+    # no more than drogue_kn through the water, sails down (vessel/keelboat.py).
+    drogue_hs_m: float = 0.0
+    drogue_beam_on_share: float = 0.25
+    drogue_kn: float = 0.0
     # Per-knockdown odds, at the reference wave height; scale with (Hs/ref)^2.
     damage_ref_hs_m: float = 3.0
     p_inverted_stuck: float = 4.0e-5  # GUESS: dome damaged or keel lost; FMEA 0.7 %/voyage
@@ -301,7 +308,13 @@ def knockdown_rate_per_hour(p: HazardParams, hs: float, tp: float, wind_speed: f
         p.critical_wave_frac_of_beam * p.hull_beam_m,
     )
     tall = math.exp(-2.0 * (hc / (p.breaker_height_frac_of_hs * hs)) ** 2)
-    return events_per_hour * tall * p.beam_on_share * p.knockdown_scale
+    share = p.drogue_beam_on_share if drogue_out(p, hs) else p.beam_on_share
+    return events_per_hour * tall * share * p.knockdown_scale
+
+
+def drogue_out(p: HazardParams, hs: float) -> bool:
+    """Whether the boat has its drogue or sea anchor streamed in waves of Hs `hs`."""
+    return p.drogue_hs_m > 0.0 and hs >= p.drogue_hs_m
 
 
 def damage_scale(p: HazardParams, hs: float) -> float:
