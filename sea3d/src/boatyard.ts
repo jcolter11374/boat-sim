@@ -46,6 +46,8 @@ import { STOCK_HULL } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
+import { myPaint, paintMine } from "./boats/paintApply";
+import { paintPicker } from "./ui/paintPicker";
 import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
 import { chanceFor, type Chance } from "./yard/chance";
 import { OddsModel } from "./yard/estimate";
@@ -130,6 +132,7 @@ function build(): void {
     scene.add(model.root);
     motion = new BoatMotion(base === "revc" ? RANDOLPH_REVC : RANDOLPH_REVB, place);
     rdress = new RandolphDress(model);
+    paintMine(model); // the player's paint on their copy of our model; looks only
     if (cat) redraw();
     return;
   }
@@ -141,6 +144,7 @@ function build(): void {
   contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, contact.collar, contact.spray);
   outfit = new Outfit(model);
+  outfit.setPaint(myPaint());
   outfit.onShapeLoaded = () => cat && redraw();
   outfit.setView(view);
   if (cat) redraw();
@@ -694,6 +698,20 @@ $<HTMLInputElement>("mb-name").addEventListener("keydown", (e) => {
   if (e.key === "Enter") saveMine();
 });
 onMyBoatChange(() => cat && drawMine());
+// Paint (looks only): swatches above "my boat"; a click repaints the boat on the stand at once.
+function drawPaint(): void {
+  document.getElementById("yard-paint")?.remove();
+  const p = paintPicker(base === "kayak" ? "kayak" : "randolph");
+  p.id = "yard-paint";
+  $("mine").before(p);
+}
+drawPaint();
+onMyBoatChange(() => {
+  if (outfit) {
+    outfit.setPaint(myPaint());
+    if (cat) redraw();
+  } else if (model) paintMine(model);
+});
 // "Your boat now" links here with a new hash: open that design without a reload.
 window.addEventListener("hashchange", () => {
   const b = baseFromHash(location.hash);
@@ -758,6 +776,7 @@ function setBase(b: BaseKey): void {
   base = b;
   if (view === "inside" && b !== "kayak") view = "afloat";
   build();
+  drawPaint();
   useBase("");
   fly = { p0: camera.position.clone(), p1: framePos(view), t0: controls.target.clone(), t1: frameTarget(view), k: 0 };
   setView(view);
