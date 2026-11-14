@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { TITLE_LOOP_S, titleHeading, titleShot } from "../src/framing";
-import { FINAL, OPENING, SEQUENCES, SHOTS, camHeight, finalShot, knockdownShot, motorShot, slideTo, openingShot, chooseSequence, compose, fitting, mixLook, shotsFor, sweepFor, type Moment, type ShotKind } from "../src/cinema";
+import { FINAL, OPENING, SEQUENCES, SHOTS, camHeight, finalShot, knockdownShot, motorShot, onDarkSide, slideTo, openingShot, chooseSequence, compose, fitting, mixLook, shotsFor, sweepFor, type Moment, type ShotKind } from "../src/cinema";
 
 const calm: Moment = { storm: 0, knockdownAgo: Infinity, land: null, ship: null };
 
@@ -118,6 +118,9 @@ test("the sequence fits the moment: five for launch", () => {
   assert.deepEqual(fitting({ ...calm, storm: 0.8 }, 40), ["storm", "passage"]);
   assert.ok(fitting(calm, 4).includes("golden"));
   assert.deepEqual(fitting(calm, -30), ["night"]);
+  // A low sun under an overcast is grey and flat, not golden: the passage instead (Elena, 14 Nov).
+  assert.ok(fitting(calm, 4, 0.2).includes("golden"));
+  assert.ok(!fitting(calm, 4, 0.9).includes("golden") && fitting(calm, 4, 0.9).includes("passage"));
   // Night is short and close, carried by the boat's own light.
   assert.deepEqual(shotsFor("night", null, () => 0), ["light", "alongside", "sternlight"]);
   // The helm's clock stops while filming: a knockdown in the last hours still gets its sequence.
@@ -425,6 +428,27 @@ test("a cut slid beside the orders panel: the boat's middle sits where asked acr
       camera.updateMatrixWorld();
       const mid = new THREE.Vector3(0, 0, 0).project(camera);
       assert.ok(Math.abs(mid.x - atX) < 0.04, `at ${atX} yaw ${yawDeg}: her middle at ${mid.x.toFixed(2)}`);
+    }
+  }
+});
+
+test("at night the alongside shot keeps to the side her lamp lights", () => {
+  for (const yawDeg of [0, 70, 200, 315]) {
+    const yaw = yawDeg * D2R;
+    const az = SHOTS.alongside.from.az;
+    // The two sides of the boat: one is dark for a starboard lamp, the other for a port lamp, never both.
+    for (const side of [1, -1]) {
+      assert.notEqual(onDarkSide(yaw, az, side, 1), onDarkSide(yaw, az, side, -1), `yaw ${yawDeg} side ${side}`);
+      assert.equal(onDarkSide(yaw, az, side, 0), false, "a lamp on her centreline lights both sides");
+    }
+    assert.notEqual(onDarkSide(yaw, az, 1, 1), onDarkSide(yaw, az, -1, 1), `yaw ${yawDeg}: exactly one side is dark`);
+    // And it agrees with where compose puts the camera: on the dark side means on the far side from a starboard lamp.
+    const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.1, 1e6);
+    const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+    for (const side of [1, -1]) {
+      const c = compose(new THREE.Vector3(), bow, bow, side, 3.05, camera.aspect, SHOTS.alongside.from);
+      const starboard = c.pos.x * bow.y - c.pos.z * bow.x;
+      assert.equal(onDarkSide(yaw, az, side, 1), starboard < 0, `yaw ${yawDeg} side ${side}`);
     }
   }
 });

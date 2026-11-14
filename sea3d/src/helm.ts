@@ -1373,6 +1373,7 @@ function openMiddle(): number {
   return Math.max(0, r.right) / innerWidth;
 }
 let knockCut: Focus | null = null;
+const lampAt = new THREE.Vector3();
 const propAt: THREE.Vector3[] = [];
 function cutToKnockdown(k: KnockdownTiming, now: number): void {
   if (knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
@@ -4166,6 +4167,11 @@ const filmHost: CinemaHost = {
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
+  lampSide: () => {
+    if (!model) return 0;
+    const z = model.root.worldToLocal(deckLight.getWorldPosition(lampAt)).z; // the boat's +z is to port
+    return Math.abs(z) < 0.03 ? 0 : z < 0 ? 1 : -1;
+  },
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
   length: () => spec.length,
