@@ -222,8 +222,9 @@ let boatKey: BoatKey = "kayak";
 let laneRev: Rev = "kayak";
 
 // ---------- sea and boat ----------
-// ?quality=low|high|ultra picks the starting look (the smoke test runs Low on software graphics).
-let look: Look = startLook($<HTMLSelectElement>("quality"));
+// ?quality=low|high|ultra picks the starting look; with none, Low without a graphics card, as the
+// title, the helm and the Boatyard do (at High, software graphics drew 407,000 triangles a frame here).
+let look: Look = startLook($<HTMLSelectElement>("quality"), atmos.software);
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
 // The land, town and boats mirrored in calm water.

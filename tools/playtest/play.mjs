@@ -1172,10 +1172,12 @@ const CHECKS = {
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await ready();
       await page.waitForTimeout(5000);
-      const bar = () => page.evaluate(() => ({ view: window.__helm.view, day: window.__helm.status?.day, over: !!window.__helm.status?.over, err: window.__helm.error, shown: !document.getElementById("timebar").hidden, rates: [...document.querySelectorAll("#timebar .rate")].filter((e) => e.offsetParent).map((e) => e.dataset.rate + (e.getAttribute("aria-pressed") === "true" ? "*" : "")), strip: document.getElementById("strip").innerText.replace(/\s+/g, " ") }));
+      const bar = () => page.evaluate(() => ({ race: !!window.__helm.race, day: window.__helm.status?.day, over: !!window.__helm.status?.over, err: window.__helm.error, shown: !document.getElementById("timebar").hidden, rates: [...document.querySelectorAll("#timebar .rate")].filter((e) => e.offsetParent).map((e) => e.dataset.rate + (e.getAttribute("aria-pressed") === "true" ? "*" : "")), strip: document.getElementById("strip").innerText.replace(/\s+/g, " ") }));
       const r0 = await bar();
       await shot("race-start");
-      must(!r0.err && r0.view === "race", `the race didn't open on the sailing screen: ${JSON.stringify(r0)}`);
+      // (__helm.view was the page's mode until #500 gave that name to a camera helper: the body's
+      // class says a race is on, and the strip's race cell shows it.)
+      must(!r0.err && r0.race && /level the two boats|ahead|behind/.test(r0.strip), `the race didn't open on the sailing screen: ${JSON.stringify(r0)}`);
       must(r0.shown && r0.rates[0]?.startsWith("rt"), `Real time isn't first on the race's speed bar: ${JSON.stringify(r0.rates)}`);
       await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="24"]')?.click());
       await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 3 || window.__helm.status?.over, null, { timeout: 4 * MIN }).catch(() => {});
