@@ -2621,7 +2621,10 @@ const CHECKS = {
         await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 10 * MIN });
         must(!(await page.evaluate(() => window.__helm.error)), `${label}: continuing failed: ${await page.evaluate(() => window.__helm.error)}`);
         await page.waitForFunction(() => /Welcome back/.test(document.getElementById("notes")?.innerText ?? ""), null, { timeout: 30_000 }).catch(() => {});
-        const back = await page.evaluate(() => ({ day: window.__helm.status?.day, shown: document.getElementById("day")?.textContent.trim(), clock: window.__helm.clock }));
+        // The picture's day on both sides (Sam: status.day is the simulator's, which runs ahead of the picture).
+        await page.waitForFunction(() => window.__helm.frames > 3 && Number.isFinite(window.__helm.hour), null, { timeout: 30_000 }).catch(() => {});
+        await page.waitForTimeout(500);
+        const back = await page.evaluate(() => ({ day: window.__helm.hour / 24, sim: window.__helm.status?.day, shown: document.getElementById("day")?.textContent.trim(), clock: window.__helm.clock }));
         const note = await notes();
         const welcome = note.match(/Welcome back\.[^.]*(?:\.[^.]*)?\./)?.[0] ?? note.slice(0, 160);
         const gap = back.day - left.day;
