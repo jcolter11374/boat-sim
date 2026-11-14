@@ -5297,18 +5297,22 @@ const CHECKS = {
       const emit = async (name) => { const path = `look-dusk-chromium-${name}.jpg`; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); } };
       // The sail can overshoot into the night, so first find the evening: step the sky forward
       // until the sun is a little up and going down (run 43641845553 started at -33 deg).
-      const sunAt = (x) => page.evaluate((v) => { window.__helm.force.skyHours = v; return window.__helm.cine.host.sunEl(); }, x);
+      // The sky takes a new hour on its next drawn frames, so wait for two before reading the sun.
+      const sunAt = async (x) => { const f0 = await page.evaluate((v) => { window.__helm.force.skyHours = v; return window.__helm.frames; }, x); await page.waitForFunction((f) => window.__helm.frames >= f + 2, f0, { timeout: 2 * MIN }).catch(() => {}); return page.evaluate(() => window.__helm.cine.host.sunEl()); };
+      const clearCard = async () => { for (let k = 0; k < 3; k++) { const on = await page.evaluate(() => { const d = document.getElementById("decide"); const v = !!d && !d.hidden && d.getClientRects().length > 0; if (v) document.querySelector("#decidebtns button")?.click(); return v; }); if (!on) break; await page.waitForTimeout(1500); } await page.evaluate(() => { if (window.__helm.clock !== 0) document.getElementById("t-pause")?.click(); }); };
+      await clearCard();
       let sh = 0;
-      for (let x = 0; x < 30; x += 0.25) { const a = await sunAt(x), b = await sunAt(x + 0.25); if (a > 1 && a < 15 && b < a) { sh = x; break; } }
+      for (let x = 0; x < 30; x += 0.5) { const a = await sunAt(x), b = await sunAt(x + 0.5); if (a > 1 && a < 15 && b < a) { sh = x; break; } }
       out.push(`evening at sky +${sh.toFixed(2)} h, sun ${(await sunAt(sh)).toFixed(1)}`);
       await page.waitForTimeout(5000);
       await emit("0-evening");
       for (const target of [-4, -8, -12, -25]) {
-        for (let i = 0; i < 400; i++) {
-          const el = await page.evaluate((x) => { window.__helm.force.skyHours = x; return window.__helm.cine.host.sunEl(); }, sh);
+        for (let i = 0; i < 200; i++) {
+          const el = await sunAt(sh);
           if (el <= target) break;
-          sh += 0.05;
+          sh += 0.1;
         }
+        await clearCard();
         await page.waitForTimeout(5000);
         const el = await page.evaluate(() => +window.__helm.cine.host.sunEl().toFixed(1));
         out.push(`sky +${sh.toFixed(2)} h: sun ${el}`);
@@ -5376,13 +5380,16 @@ const CHECKS = {
       const shot = async (name) => { const path = `look-ann614-${BROWSER}-${name}.jpg`; if (await jpeg(page, path)) send(path); };
       for (const q of ["low", "medium"]) {
         await page.goto(`${SITE}helm.html?where=annapolis&hour=10&quality=${q}`, { waitUntil: "load", timeout: 3 * MIN });
-        await page.waitForFunction(() => window.__helm?.ready && (window.__helm.frames ?? 0) > 3, null, { timeout: 5 * MIN }).catch(() => {});
+        await page.waitForFunction(() => document.querySelector("#go") && (window.__helm?.frames ?? 0) > 3, null, { timeout: 5 * MIN }).catch(() => {});
+        await page.evaluate(() => document.getElementById("go")?.click());
+        await page.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 10, null, { timeout: 5 * MIN }).catch(() => {});
+        out.push(`${q} sailing: ${await page.evaluate(() => { const c = document.getElementById("start"); return c && !c.hidden && c.getClientRects().length ? "card still up" : "card gone"; })}`);
         await page.waitForTimeout(5000);
         const ft = await page.evaluate(() => new Promise((res) => { const f = []; const t0 = performance.now(); const tick = (t) => { f.push(t); if (t - t0 < 20000) requestAnimationFrame(tick); else { const d = f.slice(1).map((x, i) => x - f[i]).sort((a, b) => a - b); res(d.length ? `${d.length} frames in 20 s, median ${Math.round(d[d.length >> 1])} ms, longest ${Math.round(d[d.length - 1])} ms` : "no frames"); } }; requestAnimationFrame(tick); }));
         out.push(`${q}: ${ft}`);
         if (q === "low") continue;
         const vw = page.viewportSize();
-        const cx = vw.width / 2, cy = vw.height / 2;
+        const cx = Math.round(vw.width * 0.6), cy = Math.round(vw.height * 0.55);
         const view = async () => page.evaluate(() => { const v = window.__helm?.camView?.(); if (!v) return "?"; const d = Math.hypot(...v.cam.map((c, i) => c - v.target[i])); return `cam ${v.cam.map((x) => Math.round(x)).join(",")}, ${Math.round(d)} m out`; }).catch(() => "?");
         await page.mouse.move(cx, cy);
         for (let i = 0; i < 30; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(80); }
