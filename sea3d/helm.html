@@ -42,7 +42,7 @@
   /* The clock (John, 11 Nov): time runs by itself once you set sail, at a speed you choose
      here, like a flight sim's time compression. It stops itself when something happens. */
   #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
-  #arrive { position: fixed; top: calc(var(--bar, 0px) + 60px); left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
+  #arrive { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 50%; /* high in the sky: the coast, the cape and the boat stay clear below it (M5) */ transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
     padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
   body.arriving #strip, body.arriving #orders, body.arriving #orders-tab, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
   body.arriving #keylist, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
@@ -870,7 +870,7 @@
 <div id="arrive" class="glass" role="status" hidden>
   <div class="t">Finish</div>
   <div id="arrivehead"></div>
-  <p>The finish circle is 330 km out to sea, too far to see land from. So this is a view of where the boat was headed, not where it is: Cascais, near Lisbon, with Cabo da Roca (Europe's westernmost point) and the Sintra hills to the north-west. The boat itself is still out at the finish.</p>
+  <p>The finish circle is 330 km out to sea, too far to see land. So this is where she was headed, not where she is: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse on the cliff and the Sintra hills behind.</p>
   <button id="arrivego">See the results</button>
 </div>
 <div id="goalcard" role="status" aria-live="polite" hidden>
