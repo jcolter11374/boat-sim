@@ -11,7 +11,7 @@ import { paintBoatName } from "./boatName";
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { nightLook } from "./nightlook";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { gltfLoader } from "../gltf";
 import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
@@ -63,7 +63,7 @@ async function loadOne(base: string, name: string): Promise<THREE.Group | null> 
   // for hosts that won't serve .glb files.
   for (const file of [`${name}.glb`, `${name}.json`]) {
     try {
-      return (await new GLTFLoader().loadAsync(`${base}/${file}`)).scene;
+      return (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
     } catch {
       // try the next one
     }
