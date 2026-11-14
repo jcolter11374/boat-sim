@@ -62,3 +62,5 @@ in my knockdown and gale proofs, but not by this exact script.
 - `MAX_MIN` sets the cap; hour targets far off start at a day a second (storm at hour 209.5 was still at 158 after 25 min).
 - The knockdown wait steps the page's own time until the knockdown's camera move ends, instead of waiting in real time.
 - storm now uses `gale` (a daylight gale found by the wind reading), since the roughest hour I had named is at night.
+- golden now also needs a fairly clear sky (cloud cover 0.5 or less, as the film's own rule after #576), so the sheet
+  shows a golden hour the film would really choose, not an overcast one.

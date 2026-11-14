@@ -64,7 +64,7 @@ for (;;) {
     const kn = h.cine.host.speed();
     const k = h.knockdown()?.start ?? null;
     const windKn = Number(/([\d.]+) kn/.exec(document.getElementById("c-windv")?.textContent ?? "")?.[1] ?? 0);
-    const there = (when === "gale" ? h.hour > 6 && windKn >= 27 && el > 10 : when === "day" ? h.hour >= 7 && el > 15 : when === "golden" ? h.hour > 6 && el > 1 && el < 6 : when === "night" ? h.hour > 6 && el < -12 : when === "after-knockdown" ? k != null : h.hour >= want) && kn > 0.3;
+    const there = (when === "gale" ? h.hour > 6 && windKn >= 27 && el > 10 : when === "day" ? h.hour >= 7 && el > 15 : when === "golden" ? h.hour > 6 && el > 1 && el < 6 && (h.cine.host.cloud?.() ?? 0) <= 0.5 : when === "night" ? h.hour > 6 && el < -12 : when === "after-knockdown" ? k != null : h.hour >= want) && kn > 0.3;
     if (there) { if (h.clock !== 0) document.getElementById("t-pause")?.click(); }
     else if (h.clock === 0 && !h.busy && !h.card) document.getElementById("t-pause")?.click();
     return { there, windKn, hour: h.hour, over: !!h.status?.over, el, kn, k, wind: document.getElementById("c-windv")?.textContent };
