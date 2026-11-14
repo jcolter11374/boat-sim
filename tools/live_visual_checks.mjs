@@ -153,9 +153,12 @@ export const PAGES = [
     drawing: () => (window.__sea3d?.frames ?? 0) > 10,
     frames: () => window.__sea3d.frames,
     // The sea selector rebuilds the sea at the new wave height.
-    // The title screen (if this deploy has one) hides the sea panel until "Just watch the sea".
+    // The title screen hides the sea panel until "Just watch the sea", which sits under the
+    // title's "More" (older deploys: straight on the title, or no title at all).
     act: async (page, o) => {
-      if (await page.locator("#t-sea").isVisible()) await page.click("#t-sea", o);
+      const sea = page.locator("#t-sea");
+      if ((await sea.count()) && !(await sea.isVisible()) && (await page.locator("#t-more summary").isVisible())) await page.click("#t-more summary", o);
+      if (await sea.isVisible()) await sea.click(o);
       return page.selectOption("#sea", "gale", o);
     },
     responded: () => Math.abs(window.__sea3d.hs - 5) < 1e-6,

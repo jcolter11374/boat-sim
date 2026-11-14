@@ -19,6 +19,18 @@ async function pickSource(page, id, value) {
   }, [id, value]);
 }
 
+/** Press Set sail as a player does. A game left afloat earlier in this test is a saved voyage
+ *  (Continue your voyage), so the card first asks whether to end it: read the question and
+ *  press "Start a new one". */
+async function setSail(page) {
+  await page.click("#go");
+  if (await page.isVisible("#ss-ask").catch(() => false)) {
+    const q = (await page.textContent("#ss-ask-q")).trim();
+    if (!/^End your voyage on (its first day|day \d+) and start a new one\?$/.test(q)) fail(`Set sail with a voyage at sea asks ${JSON.stringify(q)}`);
+    await page.click("#ss-ask-new");
+  }
+}
+
 const URL = "http://localhost:4173/";
 // Run vite directly (not via npx) so server.kill() stops the server itself.
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", "4173", "--strictPort"], { stdio: "inherit" });
@@ -106,12 +118,14 @@ try {
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
       barShown: [...document.querySelectorAll("#topbar a.nav, #topbar .more")].filter((a) => a.offsetParent).length,
-      more: [...document.querySelectorAll("#topbar .more .menu a")].map((a) => a.textContent),
+      // The menu's own links, and the ones that only show on a phone, where they leave the bar for More (topbar.ts .ph, .ph2).
+      more: [...document.querySelectorAll("#topbar .more .menu a:not(.ph):not(.ph2)")].map((a) => a.textContent),
+      morePhone: [...document.querySelectorAll("#topbar .more .menu a.ph, #topbar .more .menu a.ph2")].map((a) => a.textContent),
       setsail: document.getElementById("t-setsail").classList.contains("main"),
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
     // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is bare (Elena).
-    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.barH !== 40 || !ts.setsail)
+    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.morePhone.join() !== "Boatyard,Practice" || ts.barH !== 40 || !ts.setsail)
       fail(`title screen: ${JSON.stringify(ts)}`);
     // The chip opens the boat picker; picking the Pearson makes it my boat, and Our kayak puts it back.
     await page.click("#topbar-boat");
@@ -640,7 +654,9 @@ try {
     if ((await page.textContent("#go")).trim() !== "Set sail") fail(`helm: the start button says "${await page.textContent("#go")}"`);
     // The boat picker: our kayak and the stock boats cleared for play (the game below sails the kayak).
     const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
-    if (picks.join() !== ",stock_cruiser31,stock_pearson31_2") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
+    // The list the deploy holds the simulator to (sandbox-needs.json "bases", checked by check-page): the kayak is "".
+    const bases = JSON.parse(readFileSync(new globalThis.URL("../sandbox-needs.json", import.meta.url), "utf8")).bases.map((b) => (b === "kayak" ? "" : b));
+    if (bases.length < 3 || picks.join() !== bases.join()) fail(`helm: boat picker offers ${JSON.stringify(picks)}, sandbox-needs.json lists ${JSON.stringify(bases)}`);
     // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
     await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
       .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));
@@ -649,7 +665,7 @@ try {
     // 1 May 2020: in the planning runs both boats lose the same part on day 3.9 (#196),
     // so a whole game fits in the smoke test.
     await pickSource(page, "launch", "2"); // the card's own select (its pills write it; M1 piece 5)
-    await page.click("#go");
+    await setSail(page);
     await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
     const hm = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
     if (hm.ready) {
@@ -732,7 +748,7 @@ try {
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.ports >= 20, null, { timeout: 60000 });
       await page.evaluate(() => (document.getElementById("more").open = true)); // the port is under More options on the Set sail card
       await page.selectOption("#port", "baltimore");
-      await page.click("#go");
+      await setSail(page);
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const fromPort = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, msg: document.querySelector("#startmsg").textContent }));
       if (!fromPort.ready || fromPort.err) fail(`helm: can't start from Baltimore: ${JSON.stringify(fromPort)}`);
@@ -746,7 +762,7 @@ try {
         return { v: r?.value, text: r?.parentElement.textContent, tags: r?.parentElement.querySelectorAll("i").length };
       });
       if (mineRow.v !== "mine" || !mineRow.text.includes("Test <i>Rev C</i>") || mineRow.tags) fail(`helm: my boat isn't offered first: ${JSON.stringify(mineRow)}`);
-      await page.click("#go");
+      await setSail(page);
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const mg = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, sailing: window.__helm.sailing, clock: window.__helm.clock, lastStop: window.__helm.lastStop, msg: document.querySelector("#startmsg").textContent }));
       if (!mg.ready || mg.err || mg.sailing.base !== "revc" || mg.sailing.spec !== "randolph") fail(`helm: didn't sail my boat: ${JSON.stringify(mg)}`);
@@ -762,7 +778,7 @@ try {
         el.checked = true;
         el.dispatchEvent(new Event("change", { bubbles: true }));
       });
-      await page.click("#go");
+      await setSail(page);
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"));
       if (saved?.kind !== "stock" || saved.base !== "stock_cruiser31" || saved.choices.base !== "stock_cruiser31") fail(`helm: the boat sailed didn't become my boat: ${JSON.stringify(saved)}`);
@@ -795,7 +811,7 @@ try {
     } else {
       if (!chPicker) fail("helm: challenges.json is published but the picker is hidden");
       await pickSource(page, "challenge", chFile.id);
-      await page.click("#go");
+      await setSail(page);
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
       let ch = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, msg: document.querySelector("#startmsg").textContent }));
       // Published challenge files with a simulator that can't sail them is a live bug: the picker offers a game that won't start.
@@ -848,7 +864,7 @@ try {
       if (!hm.ready) {
         log.push(`Sea page -> helm: Spring gale preselected; no simulator to sail it (${hm.err})`);
       } else {
-        await page.click("#go");
+        await setSail(page);
         await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 240000 });
         const g = await page.evaluate(() => ({ ready: window.__helm.ready, err: window.__helm.error, id: window.__helm.challenge, t: window.__helm.status?.boat?.t }));
         if (!g.ready || g.err || g.id !== "spring-gale" || !g.t?.startsWith("2020-04-01")) fail(`helm from the Sea page didn't start Spring gale: ${JSON.stringify(g)}`);
@@ -887,12 +903,15 @@ try {
       name: window.__helm.watch?.name,
       first: document.querySelector("#timebar .rate")?.textContent,
       pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent,
-      orders: getComputedStyle(document.getElementById("orders-tab")).display,
+      // The drawer stays as a compass to read (#464): its tab says so, and nothing in it steers.
+      tab: document.querySelector("#orders-tab span")?.textContent,
+      steer: [...document.querySelectorAll("#orders > :not(h2):not(#dialrow), #dialrow .side button")].filter((e) => getComputedStyle(e).display !== "none").map((e) => e.id || e.tagName),
+      dial: getComputedStyle(document.getElementById("dial")).pointerEvents,
       start: !document.getElementById("start").hidden,
     }));
     if (wv.err || wv.view !== "watch" || wv.start || wv.name !== "Our kayak") fail(`helm?watch didn't open the recorded voyage: ${JSON.stringify(wv)}`);
     if (Math.abs(wv.clock - 1 / 3600) > 1e-9 || wv.first !== "Real time" || wv.pressed !== "Real time") fail(`a watched voyage must open in real time, Real time first on the bar: ${JSON.stringify(wv)}`);
-    if (wv.orders !== "none") fail("a watched voyage showed the orders drawer");
+    if (wv.tab !== "Compass" || wv.steer.length || wv.dial !== "none") fail(`a watched voyage's drawer should be a compass to read, with nothing to steer: ${JSON.stringify({ tab: wv.tab, steer: wv.steer, dial: wv.dial })}`);
     await page.keyboard.press("Digit4");
     await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
@@ -916,7 +935,7 @@ try {
       bad: /record|replay/i.test(document.getElementById("ss-card").innerText),
     }));
     if (ws.who !== "The autopilot" || ws.day !== "Usual1 Jun" || ws.label !== "Launch day, 2020" || ws.days < 2 || ws.go !== "Watch her go" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
-    await page.click("#go");
+    await setSail(page);
     await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
     if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
     log.push("Who steers: the autopilot's Set sail opens her voyage on the sailing screen");
@@ -931,7 +950,7 @@ try {
       go: document.getElementById("go").textContent,
     }));
     if (rr.go !== "Start the race" || rr.rival !== "Another boat" || rr.against !== "Randolph Rev C5 (our model)" || !/both boats steer themselves/.test(rr.after)) fail(`Race against: the card is wrong: ${JSON.stringify(rr)}`);
-    await page.click("#go");
+    await setSail(page);
     await page.waitForURL(/race=kayak,revc&launch=4/, { timeout: 15000 }).catch(() => fail(`Set sail with another boat opened ${page.url()}`));
     log.push("Race against: Set sail with another boat opens the race on the sailing screen");
     // "Race it" on the same screen (M2, R3): two boats from the race's own simulator, boat B where the ghost
@@ -1012,7 +1031,7 @@ try {
     // day from the same launch; without them (or with an older simulator) it says so.
     await page.goto(`${URL}race.html`);
     await page.selectOption("#launch", "4");
-    await page.click("#go");
+    await setSail(page);
     await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
     const rc0 = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, msg: document.querySelector("#msg").textContent }));
     if (rc0.ready) {
@@ -1037,7 +1056,7 @@ try {
       const selA = await page.evaluate(() => ({ v: document.getElementById("baseA").value, text: document.getElementById("baseA").selectedOptions[0]?.textContent }));
       if (selA.v !== "mine" || selA.text !== "My boat: One motor") fail(`race: my boat isn't boat A: ${JSON.stringify(selA)}`);
       await page.selectOption("#launch", "4");
-      await page.click("#go");
+      await setSail(page);
       await page.waitForFunction(() => window.__race && (window.__race.ready || window.__race.error), null, { timeout: 240000 });
       const rm = await page.evaluate(() => ({ ready: window.__race.ready, err: window.__race.error, names: window.__race.status?.boats.map((b) => b.name) }));
       if (!rm.ready || rm.err || rm.names?.[0] !== "One motor") fail(`race with my boat: ${JSON.stringify(rm)}`);
@@ -1056,6 +1075,8 @@ try {
   await browser.close();
   console.log(`OK (part ${PART}, ${Math.round((Date.now() - t0) / 1000)} s): ${log.join(", ")}${runA ? `; both boats afloat; sea vertices high ${vHigh}, low ${vLow}` : ""}`);
 } catch (e) {
-  fail(String(e));
+  // A bare "Timeout exceeded" doesn't say which wait it was: add the line of this file it came from.
+  const at = /smoke\.mjs:(\d+)/.exec(String(e?.stack ?? ""));
+  fail(`${String(e)}${at ? ` (smoke.mjs line ${at[1]})` : ""}`);
 }
 server.kill();
