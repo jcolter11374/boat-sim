@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HERO_SEA, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "../src/titleHero";
+import { HERO_GLOW, HERO_LIGHT_LOW, HERO_LIGHT_SAILS, HERO_SEA, HERO_SEA_WARM, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "../src/titleHero";
 import type { MyBoat } from "../src/myboat";
 
 const boat = (kind: MyBoat["kind"], base: string): MyBoat => ({ kind, base, hash: "", name: "x", choices: {}, saved: "" });
@@ -34,4 +34,35 @@ test("the menu counts as below the boat on short phones too, never on a desktop 
   assert.equal(cardBelowOf(card(12, 240, 348, 622), 360, 640), true);
   assert.equal(cardBelowOf(card(64, 160, 424, 600), 1280, 720), false); // desktop: the card is down the left
   assert.equal(cardBelowOf(card(42, 44, 402, 372), 844, 390), false); // a phone on its side
+});
+
+test("the title's glow is small and tight, so the low sun's light can't lie over the boat", () => {
+  assert.ok(HERO_GLOW.scale > 0 && HERO_GLOW.scale <= 0.5, "under half the usual strength, not off");
+  assert.ok(HERO_GLOW.radius <= 0.25, "tight (the usual radius is 0.55)");
+});
+
+test("the title's far water is warmed gently: some of the sky's colour, never all of it", () => {
+  assert.ok(HERO_SEA_WARM > 0.2 && HERO_SEA_WARM <= 0.7);
+});
+
+test("a boat with sails is filmed towards the sun; a low boat without sails is lit on the side we see", () => {
+  for (const k of ["stock_pearson31_2", "stock_cruiser31", "stock_dinghy14", "stock_beachcat16", "stock_sail_drone7"]) assert.equal(heroLightFor(k), HERO_LIGHT_SAILS, k);
+  for (const k of ["kayak", "randolph", "stock_ocean_rower45"]) assert.equal(heroLightFor(k), HERO_LIGHT_LOW, k);
+  // Towards the sun but never straight into it; or the sun well behind the lens's shoulder.
+  assert.ok(HERO_LIGHT_SAILS.sunOff >= 25 && HERO_LIGHT_SAILS.sunOff <= 45 && HERO_LIGHT_SAILS.back === 1);
+  assert.ok(HERO_LIGHT_LOW.sunOff >= 100 && HERO_LIGHT_LOW.sunOff <= 150 && HERO_LIGHT_LOW.back === 0);
+  // Warm light on the far ripples only where the sun is behind the lens, and gently.
+  assert.ok(HERO_LIGHT_SAILS.glint === 0 && HERO_LIGHT_LOW.glint > 0 && HERO_LIGHT_LOW.glint <= 0.8);
+  // A low boat is filmed from a little higher, so the far shore stands clear above her.
+  assert.ok(HERO_LIGHT_SAILS.camH === 1.5 && HERO_LIGHT_LOW.camH > 1.6 && HERO_LIGHT_LOW.camH <= 2.4);
+  assert.ok(HERO_LIGHT_LOW.fill > HERO_LIGHT_SAILS.fill && HERO_LIGHT_LOW.env > HERO_LIGHT_SAILS.env);
+});
+
+test("the title's white boats sit a touch deeper, with a soft wet line at the water; the others as before", () => {
+  const rev = heroWaterlineFor("randolph");
+  const kay = heroWaterlineFor("kayak");
+  assert.ok(rev.sink > 0 && rev.sink < 0.05, "a few cm deeper, not swamped (her draft is 9 cm)");
+  assert.ok(kay.sink > 0 && kay.sink < rev.sink, "the kayak too, but lighter");
+  assert.ok(kay.wet > 0 && kay.wet < rev.wet);
+  assert.deepEqual(heroWaterlineFor("stock_pearson31_2"), { sink: 0, wet: 0 });
 });

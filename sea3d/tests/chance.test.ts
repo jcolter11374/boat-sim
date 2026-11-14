@@ -13,10 +13,10 @@ test("a tested build shows its own odds, with the launches behind them", () => {
     tested: true,
     value: "78%",
     note: "Likely range 69% to 85%.",
-    about: "Tested on 100 launches, April to June, 2012 to 2021.",
+    about: "Tested on 100 launch days, April to June, 2012 to 2021.",
   });
-  assert.equal(chanceFor({ build: build(odds), exact: true }, { years: [2012, 2021] }).about, "Tested on 100 launches, 2012 to 2021.");
-  assert.equal(chanceFor({ build: build(odds), exact: true }, null).about, "Tested on 100 launches.");
+  assert.equal(chanceFor({ build: build(odds), exact: true }, { years: [2012, 2021] }).about, "Tested on 100 launch days, 2012 to 2021.");
+  assert.equal(chanceFor({ build: build(odds), exact: true }, null).about, "Tested on 100 launch days.");
 });
 
 test("a near miss never borrows the nearest build's odds", () => {

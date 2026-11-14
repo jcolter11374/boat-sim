@@ -13,7 +13,7 @@ import { tidyCatalog } from "./yard/words";
 import { tierOf, type BoardTiers } from "./yard/tier";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
 import { RANDOLPH_REVB, RANDOLPH_REVC } from "./motion";
@@ -41,9 +41,13 @@ import {
   type CatalogSlot,
   type Design,
 } from "./yard/design";
-import { BASE_LONG, baseFromHash, randolphCatalog, type BaseKey } from "./yard/bases";
+import { BASE_LONG, KEEL_KEYS, baseFromHash, isKeel, keelCatalog, randolphCatalog, type BaseKey } from "./yard/bases";
+import { STOCK_HULL } from "./boats/specs";
+import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
 import { RandolphDress } from "./yard/dressRandolph";
+import { myPaint, paintMine } from "./boats/paintApply";
+import { paintPicker } from "./ui/paintPicker";
 import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
 import { chanceFor, type Chance } from "./yard/chance";
 import { OddsModel } from "./yard/estimate";
@@ -84,8 +88,8 @@ let motion = new BoatMotion(KAYAK_V4, place);
 /** Which boat the design starts from (share links: #base=revc&...). */
 let base: BaseKey = baseFromHash(location.hash);
 let rdress: RandolphDress | null = null;
-/** Our model is smaller: the camera comes in closer round the Randolph boat. */
-const zoom = () => (base === "kayak" ? 1 : 0.5);
+/** Our model is smaller: the camera comes in closer round the Randolph boat, and stands back from a keelboat. */
+const zoom = () => (base === "kayak" ? 1 : isKeel(base) ? 3.1 : 0.5);
 let model: BoatModel | null = null;
 let contact: Contact | null = null;
 let sinkM = 0;
@@ -107,23 +111,42 @@ function build(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  if (isKeel(base)) {
+    // A keelboat (M4 wave 1): the helm's model of her, rocking on the same calm sea.
+    // Her sail parts don't change the drawing yet; the odds and the voyages show them.
+    const key = base;
+    controls.maxDistance = 70;
+    if (!hasDetailedStock(key)) void loadStockModel(key).then((ok) => ok && base === key && build());
+    model = BUILDERS[key](quality);
+    shadowsOn(model.root);
+    scene.add(model.root);
+    motion = new BoatMotion(STOCK_HULL[key], place);
+    if (cat) redraw();
+    return;
+  }
   if (base !== "kayak") {
     // Our model of the Randolph boat (their Rev B and Rev C share a hull shape in our model).
+    controls.maxDistance = 25;
+    // Her detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+    if (!hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && base !== "kayak" && !isKeel(base) && build());
     model = BUILDERS.randolph(quality);
     shadowsOn(model.root);
     scene.add(model.root);
     motion = new BoatMotion(base === "revc" ? RANDOLPH_REVC : RANDOLPH_REVB, place);
     rdress = new RandolphDress(model);
+    paintMine(model); // the player's paint on their copy of our model; looks only
     if (cat) redraw();
     return;
   }
   motion = new BoatMotion(KAYAK_V4, place);
+  controls.maxDistance = 25;
   model = BUILDERS.kayak(quality);
   shadowsOn(model.root);
   contact = new Contact(model.form, KAYAK, quality, model.root);
   contact.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, contact.collar, contact.spray);
   outfit = new Outfit(model);
+  outfit.setPaint(myPaint());
   outfit.onShapeLoaded = () => cat && redraw();
   outfit.setView(view);
   if (cat) redraw();
@@ -176,11 +199,12 @@ const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
 /** Slots by theme, in the order a builder thinks about them. Unknown slots go at the end. */
 const GROUPS: [string, string[]][] = [
-  ["Driving", ["thr", "drive", "rudder"]],
-  ["Power", ["sol", "rsol", "bat", "rbat", "mppt"]],
-  ["Brains and radio", ["brain", "sat", "beacon", "tracker"]],
+  ["Driving", ["thr", "drive", "rudder", "vane"]],
+  ["Sails and rig", ["rig", "cloth", "reef", "storm"]],
+  ["Power", ["sol", "rsol", "ksol", "bat", "rbat", "kbat", "mppt", "hydro"]],
+  ["Brains and radio", ["brain", "spare", "tactician", "sat", "beacon", "tracker"]],
   ["Being seen by ships", ["ais", "radar", "light"]],
-  ["Hull and keel", ["lead", "keel", "paint"]],
+  ["Hull and keel", ["lead", "keel", "paint", "drogue"]],
   ["Before launch", ["spares"]],
 ];
 
@@ -338,13 +362,14 @@ function drawSlots(): void {
       body.className = "sl-body";
       body.id = `sl-body-${slot.id}`;
       for (const o of shown) body.append(optionButton(slot, o));
+      if (slot.note) body.append(Object.assign(document.createElement("p"), { className: "muted sl-note", textContent: slot.note }));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;
       sl.append(head, body, hints);
       g.append(sl);
     }
-    if (g.querySelector(".sl") || title === "Driving") box.append(g); // no empty sections
+    if (g.querySelector(".sl") || (title === "Driving" && !isKeel(base))) box.append(g); // no empty sections
   }
 }
 
@@ -413,7 +438,8 @@ function choose(slot: string, id: string): void {
   if (changed) {
     // Show the swap: the view that shows that part best, and a flash on it.
     // (Taking the AIS out shows best on deck: its aerial goes.)
-    if (base !== "kayak") setView(slot === "rudder" || slot === "keel" || (slot === "drive" && id !== "wing") ? "lifted" : "afloat");
+    if (isKeel(base)) setView("afloat");
+    else if (base !== "kayak") setView(slot === "rudder" || slot === "keel" || (slot === "drive" && id !== "wing") ? "lifted" : "afloat");
     else setView(id === "none" && slot === "ais" ? "afloat" : (VIEW_FOR[slot] ?? "afloat"));
     outfit?.pulse(slot, clock.getElapsedTime());
   }
@@ -432,7 +458,11 @@ const R_FRAMES: Record<View, { pos: [number, number, number]; target: [number, n
   lifted: { pos: [-3.0, 1.0, 4.2], target: [0.0, 0.55, 0] },
 };
 /** A view's camera spot for the boat on show. */
-const frameOf = (v: View) => (base === "kayak" ? FRAMES : R_FRAMES)[v];
+// A keelboat is three times the kayak with a 14 m mast: the kayak's framings, further out and aimed up the rig.
+const K_FRAMES = Object.fromEntries(
+  (Object.entries(FRAMES) as [View, (typeof FRAMES)[View]][]).map(([v, f]) => [v, { pos: [f.pos[0] * 4.4, f.pos[1] * 4.4 + 2, f.pos[2] * 4.4] as [number, number, number], target: [0, v === "lifted" ? 4.5 : 4, 0] as [number, number, number] }]),
+) as typeof FRAMES;
+const frameOf = (v: View) => (base === "kayak" ? FRAMES : isKeel(base) ? K_FRAMES : R_FRAMES)[v];
 const frameTarget = (v: View) => new THREE.Vector3(...frameOf(v).target);
 const framePos = (v: View) => new THREE.Vector3(...frameOf(v).pos);
 camera.position.copy(framePos("afloat"));
@@ -480,6 +510,7 @@ function redraw(): void {
   // Their boat as built has no motor at all: no cruise setting to show.
   const cw = document.getElementById("cruise-wrap");
   if (cw) cw.hidden = sail && base !== "kayak";
+  if (cw && isKeel(base)) cw.hidden = true; // sails, with a diesel for calms: no cruise setting
   const cl = document.getElementById("cruise-label");
   if (cl)
     cl.textContent = sail
@@ -622,14 +653,14 @@ function drawDeltas(model: OddsModel | null): void {
 // sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
 // slow computer; without it, the page shows the precomputed voyages at once.
 void sandboxReady.then((inBrowser) => {
-  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see its simulated voyages";
+  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see how her voyages go";
   $("launch").title = inBrowser
     ? "The autopilot sails your design from 6 real spring 2020 start dates, in this browser, and sails the boat you started from on the same dates to compare"
     : "Shows the voyages our servers sailed for the closest tested build";
 });
 
 // ---------- my boat (remembered in this browser, carried to the other pages) ----------
-const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C5", revb: "Rev B" };
+const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C5", revb: "Rev B", stock_pearson31_2: "Pearson 31-2", stock_cruiser31: "First 31.7" };
 let nameTyped = false; // the player has typed a name: keep it while they change parts
 const defaultName = () => `My ${SHORT[base]}`;
 function drawMine(): void {
@@ -669,6 +700,20 @@ $<HTMLInputElement>("mb-name").addEventListener("keydown", (e) => {
   if (e.key === "Enter") saveMine();
 });
 onMyBoatChange(() => cat && drawMine());
+// Paint (looks only): swatches above "my boat"; a click repaints the boat on the stand at once.
+function drawPaint(): void {
+  document.getElementById("yard-paint")?.remove();
+  const p = paintPicker(base === "kayak" ? "kayak" : "randolph");
+  p.id = "yard-paint";
+  $("mine").before(p);
+}
+drawPaint();
+onMyBoatChange(() => {
+  if (outfit) {
+    outfit.setPaint(myPaint());
+    if (cat) redraw();
+  } else if (model) paintMine(model);
+});
 // "Your boat now" links here with a new hash: open that design without a reload.
 window.addEventListener("hashchange", () => {
   const b = baseFromHash(location.hash);
@@ -688,12 +733,16 @@ const INTRO: Record<BaseKey, string> = {
   kayak: "Build your own version of our kayak. Swap a part and watch the boat and its odds of finishing change.",
   revc: "Our model of the Randolph team's Rev C5: a 1.5 m self-righting boat with a rigid wing sail and two rudders. Swap a part and watch its odds change.",
   revb: "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder and an 8.2 kg keel.",
+  stock_pearson31_2: "Our model of Randolph and Becky's own boat, a 31 ft cruising yacht sailed by an autopilot. Change her sails and rig and watch her odds change.",
+  stock_cruiser31: "A Beneteau First 31.7, a 31 ft cruiser-racer sailed by an autopilot. Change her sails and rig and watch her odds change.",
 };
 /** Behind the intro's "i" (Leo): where the parts come from. No prices (John: no money in the game). */
 const INTRO_NOTE: Record<BaseKey, string> = {
   kayak: "The parts are real ones you can buy. A ~ before a number means it's our estimate: nobody has weighed or measured it yet.",
   revc: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
   revb: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
+  stock_pearson31_2: "From Pearson's published specs, not Randolph's measurements. Each sail part gets its own speed table from our sail program. ~ marks our estimates.",
+  stock_cruiser31: "From Beneteau's published specs and an ORC certificate. Each sail part gets its own speed table from our sail program. ~ marks our estimates.",
 };
 /** Switch the page to a boat's catalog and the design in the hash (or its as-built design). */
 function useBase(hash: string): void {
@@ -718,6 +767,8 @@ function useBase(hash: string): void {
   // The Randolph boat has no "see inside" yet (our model has no cut-away).
   const inside = document.querySelector<HTMLButtonElement>('#views button[data-view="inside"]');
   if (inside) inside.hidden = base !== "kayak";
+  const lifted = document.querySelector<HTMLButtonElement>('#views button[data-view="lifted"]');
+  if (lifted) lifted.hidden = false;
   document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.base === base)));
   drawSlots();
   redraw();
@@ -727,6 +778,7 @@ function setBase(b: BaseKey): void {
   base = b;
   if (view === "inside" && b !== "kayak") view = "afloat";
   build();
+  drawPaint();
   useBase("");
   fly = { p0: camera.position.clone(), p1: framePos(view), t0: controls.target.clone(), t1: frameTarget(view), k: 0 };
   setView(view);
@@ -796,7 +848,7 @@ $("launch").addEventListener("click", async () => {
     const onProgress = (text: string, done: number, total: number) =>
       say(done ? `The autopilot is sailing your design from ${total} real 2020 start dates: ${done} done so far.` : `${text} This takes a minute or two.`);
     r = await launcher.launch(design, summarise(cat, design), onProgress);
-    if (!r && base !== "kayak") {
+    if (!r && (base === "revc" || base === "revb")) {
       launcher = asBuilt[base];
       r = await launcher.launch(design, summarise(cat, design), onProgress);
     }
@@ -854,7 +906,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
     col.append(
       Object.assign(document.createElement("div"), { className: "muted", textContent: who }),
       Object.assign(document.createElement("div"), { className: "odds", textContent: res.odds ? oddsText(res.odds) : "?" }),
-      Object.assign(document.createElement("div"), { className: "muted", textContent: res.odds ? rangeText(res.odds) : "no odds for this build yet" }),
+      Object.assign(document.createElement("div"), { className: "muted", textContent: res.odds ? rangeText(res.odds) : "No odds for this boat yet." }),
     );
     grid.append(col);
   }
@@ -864,7 +916,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
   box.append(
     Object.assign(document.createElement("p"), {
       className: "muted",
-      textContent: `The same ${starts.length} launches, both builds. ${starts.length < 10 ? `${starts.length} voyages is a small sample; the odds line is the better guide.` : ""}`,
+      textContent: `The same ${starts.length} launch days, both boats. ${starts.length < 10 ? `${starts.length} voyages is a small sample; the odds line is the better guide.` : ""}`,
     }),
   );
   const t = document.createElement("table");
@@ -1029,6 +1081,10 @@ Promise.all([
     for (const k of ["revc", "revb"] as const) {
       const rc = randolphCatalog(k, sim, c);
       if (rc) catalogs.set(k, tidyCatalog(rc));
+    }
+    for (const k of KEEL_KEYS) {
+      const kc = keelCatalog(k, sim, c);
+      if (kc) catalogs.set(k, tidyCatalog(kc));
     }
     // Only offer the boats the slot table has.
     document.querySelectorAll<HTMLButtonElement>("#bases button").forEach((b) => (b.hidden = !catalogs.has(b.dataset.base as BaseKey)));

@@ -6,9 +6,10 @@
 // The simple surface follower (standin.ts) is kept as a fallback.
 
 import * as THREE from "three";
+import { ownWetMaterials } from "./boats/inWater";
 import { detailFor } from "./seaDetail";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BOATS, STOCK_HULL, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
@@ -23,13 +24,15 @@ import { mountSailLink } from "./sailLink";
 import { Clouds } from "./clouds";
 import { seaUniforms } from "./seaSurface";
 import { heightOf, titleHeading, titleShot } from "./framing";
+import { paintMine } from "./boats/paintApply";
 import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_SEA, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroSpec } from "./titleHero";
-import { prefetchHelm } from "./helm/prefetch";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
+import { prefetchHelmOnIntent } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
+import { TitleShore } from "./titleShore";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 
@@ -94,8 +97,13 @@ const clock = new THREE.Clock();
 // the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
 // the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
 let look: Look = startLook(qualitySelect, atmos.software);
-// The title screen's Take the helm: fetch its simulator at idle so Set sail is quick (F2).
-prefetchHelm(new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href);
+// The title screen's Set sail: fetch its simulator ahead so Set sail is quick (F2), once the
+// visitor shows they mean to sail, or after eight seconds on a desktop (helm/prefetch.ts).
+prefetchHelmOnIntent(
+  new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href,
+  [document.getElementById("t-setsail"), document.getElementById("t-continue")],
+  document.getElementById("title"),
+);
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
@@ -201,19 +209,31 @@ titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
 let hero: Boat | null = null;
 const heroOn = () => document.body.classList.contains("title");
 const heroPlace: Placement = { x: 0, z: 0, yaw: 0 };
+let heroSink = 0; // m: the title's boat sits this much deeper (heroWaterlineFor)
+let heroMats: THREE.Material[] = []; // her own copies of the materials at the water (ownWetMaterials)
 function buildHero(q: Quality): void {
   if (hero) {
     scene.remove(hero.model.root, hero.wake.points, hero.contact.collar, hero.contact.spray);
     hero.model.dispose();
     hero.wake.dispose();
     hero.contact.dispose();
+    for (const m of heroMats) m.dispose();
+    heroMats = [];
     hero = null;
   }
   if (!heroOn()) return;
   const spec = heroSpec(loadMyBoat());
   const model = BUILDERS[spec.key](q);
+  paintMine(model); // the player's own paint, looks only (boats/paintApply.ts)
   const contact = new Contact(model.form, spec, q);
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec.key !== "randolph";
+  // A white hull's wet line at the sea, hers alone (Elena; Lena: not the shared in-water hook).
+  const wl = heroWaterlineFor(spec.key);
+  heroSink = wl.sink;
+  if (wl.wet > 0) {
+    heroMats = ownWetMaterials(model.root, spec.cgBelowWaterline + heroSink);
+    contact.wetTitle(model.root, heroMats, wl.wet);
+  }
   const wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
@@ -221,22 +241,56 @@ function buildHero(q: Quality): void {
   sound.rig = rigFor(spec.key);
   sound.length = spec.length;
   titleSound.scene.sails = sound.rig === "shrouds"; // ropes creak only on a boat that has them
+  heroLight();
   // A stock boat's detailed model loads on demand: swap it in when it arrives.
   if (spec.key.startsWith("stock_") && !hasDetailedStock(spec.key as StockKey)) {
     const k = spec.key as StockKey;
     void loadStockModel(k).then((ok) => ok && hero?.spec.key === k && buildHero(quality));
   }
+  // So does the Randolph boat's (boats/model.ts).
+  if (spec.key === "randolph" && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && hero?.spec.key === "randolph" && buildHero(quality));
 }
 const clouds = new Clouds(quality);
 clouds.group.visible = false;
 scene.add(clouds.group);
 let heroWas = false;
+let demoStale = false; // the detailed models came while the title was up: the demo boats are built when it goes
+let heroL = heroLightFor("kayak");
+// The shore on the title's horizon (titleShore.ts): asked for once the title is drawing, never before.
+let shore: TitleShore | null = null;
+let shoreAsked = false;
+const osmCredit = document.getElementById("osm");
+function shoreShown(on: boolean): void {
+  if (shore) shore.mesh.visible = on;
+  if (osmCredit) osmCredit.hidden = !(on && shore);
+}
+/** The title's light for the boat it shows now (again whenever the boat changes). */
+function heroLight(): void {
+  if (!heroOn()) return;
+  heroL = heroLightFor(hero?.spec.key ?? "kayak");
+  // ?sunel=55 (or -18) shows the title's boat at noon or at night: for look reviews only.
+  const sunEl = new URLSearchParams(location.search).get("sunel");
+  atmos.set(sunEl !== null && Number.isFinite(Number(sunEl)) ? Number(sunEl) : HERO_SUN.el, HERO_SUN.az, 0, true);
+  // A boat with sails: lit from astern and to one side (Ines, 12 Nov; the sun moved off her
+  // 13 Nov), her near side in her own shadow, her edges and sails lit, little fill from the
+  // sky. A boat without: the sun over the lens's shoulder, on the side we see (heroLightFor).
+  heroPlace.yaw = titleHeading(atmos.sunDir, heroL.sunOff);
+  setBacklight(atmos.sunDir, heroL.back, atmos.sun.color);
+  atmos.hemi.intensity *= heroL.fill;
+  scene.environmentIntensity = heroL.env;
+}
 /** Into or out of the title: the hero's boat, sun, sky and sea; or the two demo boats as before. */
 function heroMode(): void {
   const on = heroOn();
   if (on === heroWas && (!on || hero)) return;
   heroWas = on;
   buildHero(quality);
+  // The demo's second boat is the Randolph boat: her detailed model is fetched when the demo is first seen.
+  if (!on && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && (heroOn() ? (demoStale = true) : buildBoats(quality)));
+  if (!on && demoStale) {
+    demoStale = false;
+    buildBoats(quality); // the detailed demo boats, now the title's boat is gone
+  }
   for (const b of boats) {
     b.model.root.visible = b.wake.points.visible = !on;
     b.contact.collar.visible = b.contact.spray.visible = !on;
@@ -244,23 +298,22 @@ function heroMode(): void {
   }
   clouds.group.visible = on;
   controls.enabled = !on;
+  shoreShown(on);
   if (on) {
     atmos.cloud = HERO_CLOUD;
-    atmos.set(HERO_SUN.el, HERO_SUN.az, 0, true);
+    atmos.setGlow(HERO_GLOW.scale, HERO_GLOW.radius); // small and tight: no veil over the boat
     clouds.seed(HERO_SKY_DAY);
-    heroPlace.yaw = titleHeading(atmos.sunDir);
     setSea("title", HERO_SEA);
-    // Backlit (Ines): the near side of the boat in her own shadow, her edges and sails lit
-    // by the sun behind her. Less fill from the sky dome and the sky's reflections.
-    setBacklight(atmos.sunDir, 1, atmos.sun.color);
-    atmos.hemi.intensity *= 0.35;
-    scene.environmentIntensity = 0.25;
+    heroLight();
   } else {
     atmos.cloud = 0;
+    atmos.setGlow();
     setBacklight(atmos.sunDir, 0);
     atmos.set(10, 330, 0, true);
     seaUniforms.uSeaSky.value.set(0, 0, 0, 0);
     seaUniforms.uSeaBreak.value.set(0, 0, 0, 0);
+    seaUniforms.uSeaWarm.value.set(0, 0, 0, 0);
+    seaUniforms.uSeaGlint.value.set(0, 0, 0, 0);
     camera.fov = 45;
     camera.updateProjectionMatrix();
     setSea(seaSelect.value);
@@ -370,9 +423,14 @@ window.addEventListener("resize", () => {
 
 setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
-loadDetailedModels().then((ok) => {
+const detailed = loadDetailedModels().then((ok) => {
   if (ok) {
-    buildBoats(quality);
+    // Under the title the two demo boats wait until it goes. Built now, they put their in-water look
+    // (the sea-wash loops, inWater.ts) on the detailed materials, which the title's boat shares with
+    // them (clones share materials), so each of her ten-odd shaders grew it too: about 0.45 s each to
+    // prepare on Direct3D, and the title froze for 4.5 s just after it first moved (John's PC).
+    if (heroOn()) demoStale = true;
+    else buildBoats(quality);
     heroWas = !heroOn();
     heroMode();
   }
@@ -434,7 +492,7 @@ const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) /
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
 let soundT = 0;
-renderer.setAnimationLoop(() => {
+const frame = (): void => {
   const t = clock.getElapsedTime();
   // The title's sound runs while the title is up, and fades out when it goes.
   if (document.body.classList.contains("title")) {
@@ -471,7 +529,7 @@ renderer.setAnimationLoop(() => {
     const b = hero;
     b.motion.advance(comps, t);
     const root = b.model.root;
-    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline, b.place.z);
+    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline - heroSink, b.place.z);
     root.rotation.set(b.motion.roll, b.place.yaw, b.motion.pitch, "YZX");
     b.model.animate(t);
     b.wake.update(comps, t, b.place);
@@ -485,12 +543,21 @@ renderer.setAnimationLoop(() => {
     });
     // The shot: titleShot's 20 s loop, the boat right of the menu, looking into the low sun.
     const card = document.getElementById("title");
-    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight));
+    const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight), heroL.sunOff, heroL.camH);
     camera.position.copy(shot.pos);
     camera.quaternion.copy(shot.quat);
     if (camera.fov !== shot.fov) {
       camera.fov = shot.fov;
       camera.updateProjectionMatrix();
+    }
+    if (!shoreAsked && status.frames > 3) {
+      shoreAsked = true;
+      void TitleShore.load(HERO_SUN.az, { sunDir: atmos.sunDir, sun: atmos.sun.color, haze: atmos.fog.color }).then((s) => {
+        if (!s) return;
+        shore = s;
+        scene.add(s.mesh);
+        shoreShown(heroOn());
+      });
     }
     const under = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < under) camera.position.y = under;
@@ -499,6 +566,9 @@ renderer.setAnimationLoop(() => {
     atmos.cloud = clouds.cover;
     clouds.seaSky(seaUniforms.uSeaSky.value);
     clouds.seaBreak(seaUniforms.uSeaBreak.value);
+    // The far water takes some of the sky's warm horizon; the near water stays cool and dark (Elena).
+    seaUniforms.uSeaWarm.value.set(atmos.fog.color.r, atmos.fog.color.g, atmos.fog.color.b, HERO_SEA_WARM);
+    seaUniforms.uSeaGlint.value.set(atmos.sun.color.r, atmos.sun.color.g, atmos.sun.color.b, heroL.glint);
     sea.setSun(atmos.glintDir, atmos.glintLight);
     atmos.render();
     status.frames++;
@@ -551,4 +621,7 @@ renderer.setAnimationLoop(() => {
   status.sea = seaKey;
   status.quality = quality;
   status.seaVertices = sea.vertexCount;
-});
+};
+// Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
+// in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => renderer.setAnimationLoop(frame));

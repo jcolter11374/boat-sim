@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HELM_PACKAGES, wheelFiles } from "../src/helm/prefetch";
+import { HELM_PACKAGES, mayPrefetch, wheelFiles } from "../src/helm/prefetch";
 
 test("wheelFiles lists each package's wheel after its dependencies, once", () => {
   const lock = {
@@ -24,4 +24,13 @@ test("the title screen warms the same Pyodide the workers load", async () => {
     const dir = readFileSync(new URL(`../src/${w}`, import.meta.url), "utf8").match(/PYODIDE_DIR\s*=\s*"([^"]+)"/)?.[1];
     assert.equal(dir, PYODIDE_DIR, `${w} loads another Pyodide than helm/prefetch.ts warms`);
   }
+});
+
+test("the simulator isn't fetched ahead on Save-Data, a slow link or mobile data; an unknown link is fine", () => {
+  assert.equal(mayPrefetch(undefined), true); // Safari, Firefox: the browser doesn't say
+  assert.equal(mayPrefetch({ effectiveType: "4g" }), true);
+  assert.equal(mayPrefetch({ effectiveType: "4g", type: "wifi" }), true);
+  assert.equal(mayPrefetch({ saveData: true, effectiveType: "4g" }), false);
+  for (const t of ["slow-2g", "2g", "3g"]) assert.equal(mayPrefetch({ effectiveType: t }), false, t);
+  assert.equal(mayPrefetch({ effectiveType: "4g", type: "cellular" }), false);
 });

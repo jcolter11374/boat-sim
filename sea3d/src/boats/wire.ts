@@ -57,3 +57,34 @@ export function holdWires(root: THREE.Object3D, name = "wire", radius = 0.004): 
     for (const x of mats) if (x.name === name) holdWidth(x, radius);
   });
 }
+
+/**
+ * Every hair-thin part of a model (both short sides under `under` m: an aerial, a rod, a stay) held to at
+ * least a pixel across. Each gets its own copy of its material, so thicker parts sharing it stay as they
+ * are. The Blender kayak's AIS whip tapers from 10 mm to 6 mm: on the title's long lens it broke into
+ * dashes and its top came and went (John, 13 Nov). At 1.1 px a slanted line still stair-stepped into
+ * dashes on a real graphics card; 1.8 px reads as one fine line. Returns how many parts it held.
+ */
+export function holdThinParts(root: THREE.Object3D, under = 0.03, px = 1.8): number {
+  let n = 0;
+  const box = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.geometry) return;
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    m.geometry.boundingBox!.getSize(box).multiply(m.getWorldScale(scale));
+    const [a, b] = [box.x, box.y, box.z].sort((x, y) => x - y);
+    if (a >= under || b >= under || a <= 0) return;
+    const radius = 0.3 * a; // about the radius at its thin end, for a tapered part
+    const own = (x: THREE.Material) => {
+      const c = x.clone();
+      holdWidth(c, radius, px);
+      return c;
+    };
+    m.material = Array.isArray(m.material) ? m.material.map(own) : own(m.material);
+    n++;
+  });
+  return n;
+}

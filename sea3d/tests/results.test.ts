@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boardDay, nextLinks, ordinal, standing, standingText, type Board, type Grid } from "../src/results";
+import { autopilotNote, boardDay, leaderboardLink, nextLinks, raceItLink, ordinal, standing, standingText, type Board, type Grid } from "../src/results";
 
 const row = (design: string, finish_rate: number, tier: number) => ({
   tier,
@@ -32,9 +32,9 @@ test("a build on a fair board: the group leads, with no place", () => {
   assert.equal(c.kind === "board" ? c.rank : 0, 2); // same rate as revb: same place
   const t = standingText(s);
   assert.equal(t.head, "On the board of 11 Nov: Good group, about 74% finish.");
-  assert.equal(t.detail, "Tested on 65 launches. Likely range 64% to 84%.");
+  assert.equal(t.detail, "Tested on 65 launch days. Likely range 64% to 84%.");
   const top = standingText(standing("revc", board(), grid));
-  assert.equal(top.head, "On the board of 11 Nov: Best group, about 74% finish (with 1 build just as good).");
+  assert.equal(top.head, "On the board of 11 Nov: Best group, about 74% finish (with 1 boat just as good).");
   assert.doesNotMatch(top.head + top.detail + t.detail, /\d(st|nd|rd|th) of \d/); // no place at all
 });
 
@@ -42,7 +42,7 @@ test("one group only: no place at all", () => {
   const b = board();
   b.summary!.rows = b.summary!.rows.map((r) => ({ ...r, tier: 1 }));
   const t = standingText(standing("k-p10", b, grid));
-  assert.equal(t.head, "On the board of 11 Nov: all 4 builds are in one group, which these launches can't tell apart. It finishes 50% of 65 launches.");
+  assert.equal(t.head, "On the board of 11 Nov: all 4 boats are in one group, which these launch days can't tell apart. It finishes on 50% of 65 launch days.");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th)/);
 });
 
@@ -74,7 +74,7 @@ test("off the board: the Boatyard's odds, with no place (another launch set)", (
   const s = standing("k-p15", board(), grid);
   assert.equal(s.kind, "odds");
   const t = standingText(s);
-  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launches (2012 to 2021).");
+  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launch days (2012 to 2021).");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th) of/);
   assert.equal(standing("k-p15", null, grid).kind, "odds");
 });
@@ -82,12 +82,12 @@ test("off the board: the Boatyard's odds, with no place (another launch set)", (
 test("no board and no odds: says so; a grid build without odds doesn't count", () => {
   assert.equal(standing("k-p20", board(), grid).kind, "none");
   assert.equal(standing("anything", null, null).kind, "none");
-  assert.equal(standingText({ kind: "none" }).head, "No odds for this build yet.");
+  assert.equal(standingText({ kind: "none" }).head, "No odds for this boat yet.");
 });
 
 test("odds without the years still read cleanly", () => {
   const t = standingText(standing("k-p15", null, { builds: grid.builds }));
-  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launches.");
+  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launch days.");
 });
 
 test("ordinals", () => {
@@ -97,8 +97,36 @@ test("ordinals", () => {
 test("the ways on: back to the Boatyard, race it, the build's leaderboard row", () => {
   assert.deepEqual(nextLinks("revc-drive.wing"), [
     { label: "Back to the Boatyard", href: "./boatyard.html" },
-    { label: "Race it", href: "./race.html" },
+    { label: "Race it", href: "./helm.html?who=autopilot&against=revc" },
     { label: "Leaderboard", href: "./leaderboard.html#revc-drive.wing" },
   ]);
   assert.equal(nextLinks("k-p25", "./boatyard.html#base=revc&rudder=single")[0].href, "./boatyard.html#base=revc&rudder=single");
+});
+
+test("Leaderboard from an ending: a challenge opens its own tab, anything else the build's row", () => {
+  assert.equal(leaderboardLink({ build: "k-p25", challenge: "sandys-shadow" }), "./leaderboard.html#challenges");
+  assert.equal(leaderboardLink({ build: "revc-drive.wing" }), "./leaderboard.html#revc-drive.wing");
+  assert.equal(leaderboardLink({ build: "a b" }), "./leaderboard.html#a%20b");
+  assert.equal(leaderboardLink(), "./leaderboard.html");
+});
+
+test("Race it from an ending: the Set sail card with a rival picked, never the old race page", () => {
+  assert.equal(raceItLink(), "./helm.html?who=autopilot&against=revc");
+  assert.equal(raceItLink({ boat: "", day: "2020-05-01T12:00" }), "./helm.html?who=autopilot&against=revc&day=2020-05-01");
+  assert.equal(raceItLink({ boat: "revc" }), "./helm.html?who=autopilot&against=kayak");
+  assert.equal(raceItLink({ boat: "mine", against: "revb", quality: "low" }), "./helm.html?who=autopilot&against=revb&quality=low");
+  assert.equal(raceItLink({ boat: "revb", against: "revb" }), "./helm.html?who=autopilot&against=revc"); // she can't race herself
+  assert.equal(raceItLink({ boat: "stock_cruiser31" }), null); // a stock yacht can't race: leave the button out
+  assert.equal(raceItLink({ day: "soon", quality: "<x>" }), "./helm.html?who=autopilot&against=revc");
+  for (const l of [raceItLink(), raceItLink({ boat: "revc" })]) assert.doesNotMatch(l!, /race\.html|voyage\.html/);
+});
+
+test("the muted line where a game's result sits beside the odds: only on the game's newer autopilot", () => {
+  const line = "The autopilot in the game sails smarter than the one behind these odds and the recorded voyages.";
+  assert.equal(autopilotNote(2, true), line);
+  assert.equal(autopilotNote(2, false), ""); // no odds shown: nothing to set it beside
+  assert.equal(autopilotNote(1, true), ""); // a boat with a sail, or an older saved game: the same autopilot as the odds
+  assert.equal(autopilotNote(undefined, true), ""); // an older simulator says nothing
+  assert.equal(autopilotNote(null, true), "");
+  assert.doesNotMatch(line, /[$£€]|ghost|policy/i);
 });

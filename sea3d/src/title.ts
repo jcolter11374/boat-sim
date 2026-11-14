@@ -49,8 +49,15 @@ export function mountTitle(): void {
 
   // "My boat: Our kayak · Change": the name is player data (textContent only); Change opens the picker.
   const name = document.getElementById("t-boatname")!;
+  const note = document.getElementById("t-boatnote");
   const draw = () => {
-    name.textContent = currentBoat()?.name ?? "Our kayak";
+    const b = currentBoat();
+    name.textContent = b?.name ?? "Our kayak";
+    // A renamed design on the Randolph boat: what it's built on, in a small muted note (B2, Elena).
+    if (note) {
+      note.textContent = b?.note ?? "";
+      note.hidden = !b?.note;
+    }
   };
   draw();
   onBoatChange(draw);

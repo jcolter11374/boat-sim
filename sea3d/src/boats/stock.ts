@@ -16,7 +16,7 @@ import * as THREE from "three";
 import { addCockpitLight } from "./nightlook";
 import { applyStockFinishes } from "./finishes";
 import { DACRON, clotheSails, tickSails } from "./sailcloth";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { gltfLoader } from "../gltf";
 import { holdWires } from "./wire";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
@@ -128,7 +128,7 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
     p = (async () => {
       for (const file of [`${FILE[key]}.glb`, `${FILE[key]}.json`]) {
         try {
-          const g = (await new GLTFLoader().loadAsync(`${base}/${file}`)).scene;
+          const g = (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
           g.traverse((o) => {
             const m = o as THREE.Mesh;
             if (m.isMesh && /^(sail|batten)/.test(o.name)) {
@@ -174,13 +174,21 @@ interface Piece {
 /** Sheets, reefs and steers a stock boat's model by name. */
 export class StockRig {
   /** What the rig is showing (for the smoke test). */
-  readonly shown = { boom: 0, main: 1, jib: 1, plan: "" };
+  readonly shown = { boom: 0, jibAngle: 0, main: 1, jib: 1, plan: "", tack: 0 };
   private readonly main: THREE.Object3D | null;
   private readonly jib: THREE.Object3D | null;
   private readonly mains: Piece[] = [];
   private readonly jibs: Piece[] = [];
   private readonly rudders: THREE.Object3D[] = [];
+  /** The headsail turns about its forestay (pivot frame: from the tack fitting up to the head), so its
+   * luff stays on the stay and the sail swings out to leeward clear of the mast. Turned about the
+   * upright instead, the head swung metres off the stay and the sail went through the mast (John, 13 Nov). */
+  private readonly jibAxis = new THREE.Vector3(0, 1, 0);
+  private readonly jibRest = new THREE.Quaternion();
   private boom = 0;
+  /** The side the sails belly to: +1 wind from port (boom out to starboard), -1 the other; 0 not set yet. */
+  private tack = 0;
+  private jibAng = 0;
   private t = 0;
 
   constructor(
@@ -205,6 +213,11 @@ export class StockRig {
     this.jib?.traverse((o) => {
       if (/^sail_jib/.test(o.name)) this.jibs.push(piece(o, false));
     });
+    if (this.jib) {
+      this.jibRest.copy(this.jib.quaternion);
+      const head = stayHead(this.jib);
+      if (head) this.jibAxis.copy(head).normalize();
+    }
     // The cat steers with a rudder on each hull; the gear turns the one called rudder_pivot.
     for (const n of ["rudder_pivot_s", "rudder_pivot_p"]) {
       const r = g.getObjectByName(n);
@@ -216,7 +229,10 @@ export class StockRig {
     this.t += dt;
     tickSails(dt);
     const plan = s.plan ?? "full";
-    const size = PLANS[this.key][plan] ?? { main: 0, jib: 0 };
+    // A reef this boat doesn't have (a 31 ft cruiser's "reef1" on a dinghy that has only "full") shows its
+    // own nearest: its full sail. Only "down" (or a boat with no sails) shows bare poles.
+    const plans = PLANS[this.key];
+    const size = plans[plan] ?? (plan === "down" ? undefined : Object.values(plans)[0]) ?? { main: 0, jib: 0 };
     this.shown.plan = plan;
     this.shown.main = size.main;
     this.shown.jib = size.jib;
@@ -232,21 +248,36 @@ export class StockRig {
     // starboard) puts the boom out to starboard: + about the builder y axis.
     const awaDeg = THREE.MathUtils.radToDeg(awa);
     let want = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(awaDeg / 2 - 10, 4, 80));
-    if (awaDeg < 28 && size.main > 0) want = THREE.MathUtils.degToRad(3) * Math.sin(this.t * 7); // head to wind: flogging
+    // The headsail sheets in to its own car: never closer than JIB_MIN to the centreline, so a
+    // genoa that overlaps the mast always passes it on the leeward side, flogging or not.
+    const jibWant = Math.max(want * 0.7, JIB_MIN);
+    const flogging = awaDeg < 28;
+    if (flogging && size.main > 0) want = THREE.MathUtils.degToRad(3) * Math.sin(this.t * 7); // head to wind: flogging
+    // Which side the sails belly out to. It changes only once the wind has filled them on the
+    // other side, never while she is head to wind. It used to follow the boom's sign, and the
+    // flogging boom wobbles across the middle every half second: the bellied sails flipped
+    // from one side of the mast to the other with it, so the genoa hid the mast, then didn't,
+    // and the mast broke up and came and went (John, 13 Nov: the Pearson on the title, which
+    // lies head to a light breeze, idleGear). Each boat keeps one tack there now.
     const side = s.flow.z >= 0 ? 1 : -1;
-    want *= side;
+    if (this.tack === 0 || (!flogging && speed >= 0.3 && side !== this.tack)) this.tack = side;
+    want *= this.tack;
+    this.shown.tack = this.tack;
     const d = want - this.boom;
     // A gybe (the boom crossing) is quick; trimming is slow.
     this.boom += d * Math.min(1, dt * (Math.abs(d) > 0.6 ? 2.5 : 0.8));
     this.shown.boom = this.boom;
+    const dj = this.tack * jibWant - this.jibAng;
+    this.jibAng += dj * Math.min(1, dt * (Math.abs(dj) > 0.3 ? 2.5 : 0.8));
+    this.shown.jibAngle = this.jibAng;
     if (this.main) {
       this.main.rotation.y = this.boom;
       // The sails are built bellied to port (builder +z); mirror them on the other tack.
-      this.main.scale.z = this.boom > 0 ? -1 : 1;
+      this.main.scale.z = this.tack > 0 ? -1 : 1;
     }
     if (this.jib) {
-      this.jib.rotation.y = this.boom * 0.7;
-      this.jib.scale.z = this.boom > 0 ? -1 : 1;
+      this.jib.quaternion.copy(this.jibRest).multiply(turn.setFromAxisAngle(this.jibAxis, this.jibAng));
+      this.jib.scale.z = this.tack > 0 ? -1 : 1;
     }
     for (const r of this.rudders) r.rotation.y = s.rudder;
   }
@@ -266,6 +297,31 @@ export class StockRig {
       }
     }
   }
+}
+
+const turn = new THREE.Quaternion();
+/** The headsail's closest sheeting angle, about its forestay (GUESS: a genoa on a 31-footer sheets
+ * to about 8-10 deg off the centreline close-hauled). */
+export const JIB_MIN = THREE.MathUtils.degToRad(8);
+
+/** The head of a headsail (its highest point) in its pivot's own frame; the pivot sits at the stay's foot,
+ * so the line from the pivot to the head is the forestay. Null when the pivot holds no sail. */
+function stayHead(pivot: THREE.Object3D): THREE.Vector3 | null {
+  pivot.updateMatrixWorld(true);
+  const toPivot = pivot.matrixWorld.clone().invert();
+  const v = new THREE.Vector3();
+  let best: THREE.Vector3 | null = null;
+  pivot.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !/^sail_jib/.test(o.name)) return;
+    const at = m.geometry.getAttribute("position");
+    const toLocal = toPivot.clone().multiply(m.matrixWorld);
+    for (let i = 0; i < at.count; i++) {
+      v.fromBufferAttribute(at, i).applyMatrix4(toLocal);
+      if (!best || v.y > best.y) best = v.clone();
+    }
+  });
+  return best && (best as THREE.Vector3).y > 0.1 ? best : null;
 }
 
 // ----------------------------------------------------------- drawn-in-code boats ----

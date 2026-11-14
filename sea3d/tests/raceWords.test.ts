@@ -30,7 +30,10 @@ test("the far boat's tag carries its name, never \"Ghost\" or \"You\"", () => {
 
 test("the big map's line says which boat is ahead of which, in the panel's short names", () => {
   assert.equal(raceLine(59.4, NAMES), "Our kayak is 59 km ahead of Rev C5");
-  assert.equal(raceLine(-12, NAMES), "Rev C5 is 12 km ahead of Our kayak");
+  assert.equal(raceLine(-12, NAMES), "Rev C5 is 12 km ahead of our kayak");
+  assert.equal(raceLine(3, ["Sea Biscuit", "Our kayak"]), "Sea Biscuit is 3 km ahead of our kayak");
+  assert.equal(raceLine(-3, ["Sea Biscuit", "Our kayak"]), "Our kayak is 3 km ahead of Sea Biscuit");
+  assert.equal(raceLine(0, [NAMES[1], NAMES[0]]), "Rev C5 and our kayak are level");
   assert.equal(raceLine(0.2, NAMES), "Our kayak and Rev C5 are level");
   // Only the panel drops it: the names that stand alone keep "(our model)" (B2).
   assert.equal(bareRacer(NAMES[1]), "Rev C5");

@@ -6,7 +6,7 @@
 // Display only: the boat's physics never sees them.
 
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { gltfLoader } from "../gltf";
 import { reflectable } from "../mirror";
 import { R_EARTH, metresPerDegree } from "./shader";
 import { nightOf } from "./town";
@@ -28,6 +28,10 @@ export interface Light {
   focal: number;
   /** Colour by bearing; white all round when empty. */
   sectors: Sector[];
+  /** A group flashing light: this many flashes each period (one when not set)... */
+  group?: number;
+  /** ...this many seconds from one flash of the group to the next. */
+  gap?: number;
 }
 
 export interface Landmark {
@@ -38,6 +42,12 @@ export interface Landmark {
   /** The model's file name in ./models, without ".glb". */
   file: string;
   light?: Light;
+  /** The ground it stands on, metres above the sea (a clifftop light); the light's focal height is above this. */
+  base?: number;
+  /** The drawn stand-in: "tower" for a masonry tower on land; the screwpile house when not set. */
+  kind?: "tower";
+  /** A major light seen from miles off: its glow is a sharp point with a small soft halo, not the near light's wide one. */
+  far?: boolean;
 }
 
 export const WHITE = 0xfff6e6;
@@ -63,6 +73,20 @@ export const LANDMARKS: Landmark[] = [
         { colour: WHITE, from: 202, to: 371 }, // through north to 011
       ],
     },
+  },
+  {
+    // Farol do Cabo da Roca (1772), on the cliff at the westernmost point of mainland Europe.
+    // NGA List of Lights, as given on Wikipedia's "Cabo da Roca Lighthouse" page (read 14 Nov 2026):
+    // Fl(4) W 18s, focal height 165 m, range 26 nautical miles, a 22 m square white tower with a red lantern.
+    key: "cabodaroca",
+    name: "Cabo da Roca lighthouse",
+    lat: 38.782,
+    lon: -9.4973,
+    file: "landmark_cabodaroca",
+    kind: "tower",
+    base: 113, // where our land's heights put the ground under it (the real cliff top is about 143 m: our 19 m grid rounds the edge off)
+    far: true,
+    light: { period: 18, flash: 0.4, group: 4, gap: 2.5, focal: 22, sectors: [] }, // GUESS: the list gives neither the flash's length nor the spacing inside the group
   },
 ];
 
@@ -94,8 +118,15 @@ export function sectorColour(light: Light, bearing: number): number | null {
 }
 
 /** How bright the flash is at time t (0..1): on for `flash` seconds every `period`, with a quick rise and fall like a turning lens. */
-export function flashAt(light: Pick<Light, "period" | "flash">, t: number): number {
-  const p = ((t % light.period) + light.period) % light.period;
+export function flashAt(light: Pick<Light, "period" | "flash" | "group" | "gap">, t: number): number {
+  let p = ((t % light.period) + light.period) % light.period;
+  // A group flashing light: the flashes come close together, then the dark for the rest of the period.
+  const n = light.group ?? 1;
+  const gap = light.gap ?? light.flash * 2;
+  if (n > 1) {
+    const i = Math.min(n - 1, Math.floor(p / gap));
+    p -= i * gap;
+  }
   if (p >= light.flash) return 0;
   return Math.sin((Math.PI * p) / light.flash) ** 0.5;
 }
@@ -116,6 +147,8 @@ export function planLandmarks(all: Landmark[], loaded: Set<string>, lat: number,
 }
 
 let glowTex: THREE.Texture | null = null;
+/** The soft round glow lights share (null where there's no page to draw it on). */
+export const glowTexture = (): THREE.Texture | null => glow();
 function glow(): THREE.Texture | null {
   if (glowTex) return glowTex;
   if (typeof document === "undefined") return null;
@@ -161,6 +194,28 @@ export function drawnLighthouse(focal: number): THREE.Group {
   return g;
 }
 
+/** A plain stand-in for a masonry light on land: a square white tower with a red lantern, the keepers' low white house at its foot. */
+export function drawnTower(focal: number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, 0);
+    g.add(mesh);
+    return mesh;
+  };
+  const white = mat(0xf2f0ea);
+  add(new THREE.BoxGeometry(34, 6, 12), white, 0, 3); // the house
+  add(new THREE.BoxGeometry(35, 1.2, 13), mat(0xa8452f), 0, 6.6); // its tiled roof
+  add(new THREE.BoxGeometry(6.5, focal - 2, 6.5), white, 0, (focal - 2) / 2); // the tower
+  add(new THREE.BoxGeometry(8, 0.6, 8), mat(0x8f8b84), 0, focal - 2); // the gallery
+  add(new THREE.CylinderGeometry(2.2, 2.2, 3.2, 10), mat(0xb5261e), 0, focal); // the red lantern
+  const lamp = add(new THREE.CylinderGeometry(0.6, 0.6, 1.2, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff8e0 }), 0, focal);
+  lamp.name = "lamp";
+  add(new THREE.ConeGeometry(2.4, 1.6, 10), mat(0xb5261e), 0, focal + 2.4);
+  return g;
+}
+
 /** Inside this (m) a landmark is drawn clear of the haze: the sea's fog is tuned for the horizon,
  * and at 1-2 km it washed a white lighthouse into the sky (a clear day shows it plainly). */
 export const CLEAR_M = 4000;
@@ -201,7 +256,7 @@ export class Landmarks {
     for (const s of this.shown.values()) {
       const { x, z } = offsetOf(s.lm, lat, lon);
       const d2 = x * x + z * z;
-      s.group.position.set(x, -d2 / (2 * R_EARTH), z); // down with the earth's curve, as the land is
+      s.group.position.set(x, (s.lm.base ?? 0) - d2 / (2 * R_EARTH), z); // down with the earth's curve, as the land is
       const near = d2 < CLEAR_M * CLEAR_M;
       if (s.near !== near) {
         s.near = near;
@@ -236,7 +291,7 @@ export class Landmarks {
     let model: THREE.Group | null = null;
     for (const f of [`${lm.file}.glb`, `${lm.file}.json`]) {
       try {
-        model = (await new GLTFLoader().loadAsync(`${this.base}/${f}`)).scene;
+        model = (await gltfLoader().loadAsync(`${this.base}/${f}`)).scene;
         break;
       } catch {
         // try the next one, then the drawn stand-in
@@ -246,7 +301,7 @@ export class Landmarks {
     if (this.gone) return;
     const group = new THREE.Group();
     group.name = `landmark-${lm.key}`;
-    group.add(model ?? drawnLighthouse(lm.light?.focal ?? 13));
+    group.add(model ?? (lm.kind === "tower" ? drawnTower(lm.light?.focal ?? 20) : drawnLighthouse(lm.light?.focal ?? 13)));
     let lamp: THREE.MeshStandardMaterial | null = null;
     group.traverse((o) => {
       const m = (o as THREE.Mesh).material;
@@ -260,7 +315,9 @@ export class Landmarks {
       const mat = new THREE.SpriteMaterial({ map: glow(), color: WHITE, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false, opacity: 0 });
       sprite = new THREE.Sprite(mat);
       sprite.position.set(0, lm.light.focal, 0);
-      sprite.scale.setScalar(0.07); // bigger than a yacht's masthead light (0.034), but at 0.09 the halo swamped the house and its tag
+      // Bigger than a yacht's masthead light (0.034), but at 0.09 the halo swamped the house and its tag.
+      // A far light is a point (Elena: a few pixels across through the finish scene's long lens).
+      sprite.scale.setScalar(lm.far ? 0.014 : 0.07);
       sprite.renderOrder = 30;
       sprite.visible = false;
       group.add(sprite);

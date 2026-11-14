@@ -23,7 +23,9 @@ masses and part names stay in Sam's file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
+from pathlib import Path
 
 from boatsim.config import Design, load_design, patched_design
 
@@ -47,7 +49,11 @@ class Option:
     wh: float | None = None  # brain/AIS daily energy (catalog), for the hotel load
     kg: float = 0.0  # weight against the default option (catalog), for the mass link
     hotel_wh: float = 0.0  # extra daily energy (Wh/day) for parts with no catalog figure
-    cost: float = 0.0  # price against the default option, USD (parts list), for the page
+    # Keelboat sail parts: (knob, value) pairs the sail composer (_sail_changes) turns
+    # into the vpp block (a variant polar), the rig's damage odds and the storm limit.
+    sail: tuple = ()
+    n: str = ""  # the part's name, for the page (stock boats' slots)
+    d: str = ""  # one line on what it is, for the page
 
 
 def _thr(n: int, kg: float = 0.0) -> Option:
@@ -56,6 +62,18 @@ def _thr(n: int, kg: float = 0.0) -> Option:
         basis="Blue Robotics T200 datasheet, 50 W burst each",
         kg=kg,
     )
+
+
+# Blue Robotics T500 (M4 wave 3): a bigger propeller for the same power budget, so
+# more thrust per watt at the kayak's 10-50 W. Datasheet: 114.5 mm propeller,
+# 6.0 kgf forward at 12 V full throttle for 202 W, 1157 g in air with its cable
+# (T200: 344 g). The efficiency is fitted to that point as the T200's is
+# (vessel/propulsion.py); using it at low power is the same GUESS.
+T500_DIAMETER_M = 0.1145
+T500_EFFICIENCY = round(
+    (6.0 * 9.80665) ** 1.5 / math.sqrt(2.0 * 1025.0 * math.pi * T500_DIAMETER_M**2 / 4.0) / 202.0, 3
+)
+T500_EXTRA_KG = 1.157 - 0.344  # each, against a T200
 
 
 def _no_effect(why: str) -> Option:
@@ -242,7 +260,22 @@ SHAPES = {
 }
 
 SLOTS: dict[str, dict[str, Option]] = {
-    "thr": {"two-t200": _thr(2), "one-t200": _thr(1, -0.45)},
+    "thr": {
+        "two-t200": _thr(2),
+        "one-t200": _thr(1, -0.45),
+        "two-t500": Option(
+            (
+                ("propulsion", "thruster_count", 2),
+                ("propulsion", "max_drive_w", 100),
+                ("propulsion", "thruster_diameter_m", T500_DIAMETER_M),
+                ("propulsion", "thruster_efficiency", T500_EFFICIENCY),
+            ),
+            est=True,
+            basis="Blue Robotics T500 datasheet (114.5 mm propeller, 6.0 kgf for 202 W at "
+            "12 V, 1157 g); same 50 W each; low-power efficiency our GUESS",
+            kg=round(2 * T500_EXTRA_KG, 3),
+        ),
+    },
     "sol": {
         "solar-250": Option((("power", "solar_wp", 250),), basis="panel datasheets"),
         "solar-200": Option((("power", "solar_wp", 200),), basis="panel datasheets", kg=-1.2),
@@ -447,6 +480,8 @@ def design_changes(choices: dict | None, base: Design | None = None) -> tuple:
             if isinstance(val, dict):  # merge into the design's table (e.g. p_part)
                 val = {**getattr(base, sec).get(key, {}), **val}
             changes.append((sec, key, val))
+    if which in KEELBOATS:
+        changes.extend(_sail_changes(which, picked, base))
     if cruise is not None:
         changes.append(("propulsion", "cruise_drive_w", cruise))
     if which == "kayak":
@@ -685,9 +720,39 @@ CHANGE_NAMES = {
     ("keel", "bulb-9kg"): "heavier keel",
     ("keel", "bulb-8kg"): "lighter keel",
     ("tracker", "none"): "no backup tracker",
+    # The keelboats (M4 wave 1), and the stock boats' two older slots
+    ("rig", "cutter"): "cutter rig",
+    ("rig", "solent"): "Solent jib",
+    ("cloth", "laminate"): "laminate sails",
+    ("reef", "slab3"): "a third reef",
+    ("reef", "inmast"): "in-mast furling",
+    ("storm", "storm"): "storm sails",
+    ("keel", "wing"): "wing keel",
+    ("keel", "shoal"): "shoal keel",
+    ("drogue", "jordan"): "Jordan series drogue",
+    ("drogue", "para"): "sea anchor",
+    ("vane", "hydrovane"): "Hydrovane",
+    ("vane", "monitor"): "Monitor windvane",
+    ("ksol", "600w"): "600 W solar",
+    ("kbat", "lfp"): "lithium battery",
+    ("hydro", "pod600"): "hydrogenerator",
+    ("thr", "two-t500"): "T500 motors",
+    ("spare", "spare-autopilot"): "spare autopilot",
+    ("tactician", "off"): "no sailing tactician",
 }
 # Things added go after a "+" ("Our kayak + wing sail"); everything else after a comma.
-ADDED = {("drive", "hybrid"), ("drive", "wing-thruster"), ("brain", "two-box")}
+ADDED = {
+    ("drive", "hybrid"),
+    ("drive", "wing-thruster"),
+    ("brain", "two-box"),
+    ("storm", "storm"),
+    ("drogue", "jordan"),
+    ("drogue", "para"),
+    ("vane", "hydrovane"),
+    ("vane", "monitor"),
+    ("hydro", "pod600"),
+    ("spare", "spare-autopilot"),
+}
 # Two changes that read as one phrase.
 MERGED = {
     frozenset({("sol", "solar-300"), ("bat", "two-100ah")}): "bigger panels and batteries",
@@ -729,18 +794,17 @@ RDEFAULTS = {
 # the boat drifts. The one part a player can add is a spare: a second electronics
 # box that takes over the steering when the first dies, as the kayak's safe box
 # does. Not fitted by default, so each stock boat as it comes is its yaml untouched.
-# Weight, power and price are the kayak's second box in the parts list
+# Weight and power are the kayak's second box in the parts list
 # (build-plan/parts-catalog.json "brain": two-box minus one-box): +0.4 kg,
-# +4 Wh/day (31 - 27), +$83 (333 - 250). On a big boat it would steer the same
+# +4 Wh/day (31 - 27). On a big boat it would steer the same
 # rudder drive; the radio and the Iridium modem stay on the first box, so after
 # a swap the boat is tracked by its backup tracker and gets no new route.
 SPARE_BOX = Option(
     (("hazards", "electronics_boxes", 2),),
     est=True,
-    basis="parts list: the safe-mode box (+0.4 kg, +4 Wh/day, +$83); box failure rates are GUESSes",
+    basis="parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
     kg=0.4,
     hotel_wh=4.0,
-    cost=83.0,
 )
 SPARE_SLOT = {
     "none": Option(basis="as the boat comes: one autopilot"),
@@ -755,7 +819,7 @@ SPARE_SLOT = {
 TACTICIAN_SLOT = {
     "on": Option(
         (("electronics", "tactician", True),),
-        basis="software only: 0 kg, 0 Wh, $0. It needs a wind-direction reading; a boat "
+        basis="software only: 0 kg, 0 Wh. It needs a wind-direction reading; a boat "
         "without a wind sensor would need a small masthead wind vane (GUESS)",
     ),
     "off": Option(
@@ -777,6 +841,483 @@ STOCK_SLOTS = {
 STOCK_SLOT_NAMES = {"spare": "Spare autopilot", "tactician": "Sailing tactician"}
 # As each yaml comes: none of them sets electronics.tactician, so it's on.
 STOCK_DEFAULTS = {b: {"spare": "none", "tactician": "on"} for b in STOCK_SLOTS}
+
+
+# --- Keelboats: sails and rigs (M4 wave 1) -------------------------------------
+# The two keelboats (stock_pearson31_2, stock_cruiser31) sail from a polar our VPP
+# works out (vessel/vpp.py). A sail part changes the VPP's inputs, so the composer
+# below writes a new vpp block and points vpp.polar_file at its own polar
+# (configs/polars/variants/<boat>-<fingerprint>.json, built on first use). The as
+# built pick in every slot leaves the yaml untouched.
+#
+# Sources: Pearson rig I 42.5, J 12.8, P 36.8, E 12.0 ft (pearsonyachts.org);
+# First 31.7 I 11.87, J 3.44, P 10.80, E 3.90 m and its Solent jib, 21 m2
+# (boat-specs.com, Beneteau's figures); storm sails at the World Sailing Offshore
+# Special Regulations 4.26 limits: storm jib 5 % of I^2, trysail 17.5 % of P x E.
+FT = 0.3048
+RIGS = {  # I, J, P, E in metres
+    "stock_pearson31_2": (42.5 * FT, 12.8 * FT, 36.8 * FT, 12.0 * FT),
+    "stock_cruiser31": (11.87, 3.44, 10.80, 3.90),
+}
+STORM_JIB = 0.05  # x I^2 (OSR 4.26)
+TRYSAIL = 0.175  # x P x E (OSR 4.26)
+# GUESS: a cutter on the Pearson: a 100 % high-cut yankee (0.9 of the foretriangle)
+# plus a staysail on an inner forestay at 0.8 I, tacked at 0.55 J.
+CUTTER_YANKEE = 0.9
+CUTTER_STAYSAIL = 0.9 * 0.8 * 0.55
+SOLENT_M2 = 21.0  # Beneteau: the First 31.7's Solent jib
+LAMINATE_CL = 1.04  # GUESS: a laminate sail keeps its designed shape as the wind rises
+# GUESS: per-knockdown damage to the rig and sails, against the as-built rig.
+SAIL_DAMAGE = {"cutter": 0.8, "laminate": 1.5, "inmast": 1.3}
+STORM_SAILS_WIND_MS = 30  # GUESS: under storm sails she sails on to about 60 kn
+# GUESS: an in-mast furling main has no battens or roach: 12 % less area, and it
+# reefs to any size (six plans here, standing in for "any").
+INMAST_AREA = 0.88
+INMAST_PLANS = ((1.0, 1.0), (0.85, 0.82), (0.72, 0.66), (0.6, 0.5), (0.5, 0.36), (0.4, 0.18))
+SLAB3 = ("reef3", 0.5, 0.3)  # GUESS: a third reef, with the genoa rolled further
+SAIL_KG = {"cutter": 12.0, "inmast": 8.0, "storm": 10.0}  # GUESS: added weight
+
+
+def _sail_part(
+    n: str, d: str, basis: str, sail: tuple = (), est: bool = True, kg: float = 0.0
+) -> Option:
+    return Option(sail=sail, est=est and bool(sail), basis=basis, n=n, d=d, kg=kg)
+
+
+def _keel_sails(boat: str) -> dict[str, dict[str, Option]]:
+    pearson = boat == "stock_pearson31_2"
+    rig = (
+        {
+            "sloop": _sail_part(
+                "Masthead sloop, 135 % genoa (as built)",
+                "One big headsail on a roller, as Pearson built her.",
+                "Pearson spec sheet; genoa from goodoldboat sail data",
+            ),
+            "cutter": _sail_part(
+                "Cutter: yankee and staysail",
+                "An inner forestay and a small staysail under a high-cut yankee: "
+                "in a blow she sails on the staysail alone, low and strong.",
+                "inner forestay kits (Selden); sizes our GUESS from Pearson's rig",
+                (("rig", "cutter"),),
+                kg=SAIL_KG["cutter"],
+            ),
+        }
+        if pearson
+        else {
+            "genoa": _sail_part(
+                "Fractional sloop, genoa (as built)",
+                "The 28.9 m² overlapping genoa Beneteau fitted.",
+                "ORC certificate 038800017LU; Beneteau sail plan",
+            ),
+            "solent": _sail_part(
+                "Solent jib",
+                "Beneteau's smaller non-overlapping jib, 21 m²: less sail in light air, "
+                "easier in a blow.",
+                "Beneteau sail plan: Solent 21 m² (boat-specs.com)",
+                (("rig", "solent"),),
+                est=False,
+            ),
+        }
+    )
+    return {
+        "rig": rig,
+        "cloth": {
+            "dacron": _sail_part(
+                "Woven polyester, Dacron (as built)",
+                "Tough and long-lived; it stretches, so the sails get fuller as the wind rises.",
+                "the cruising sails these boats were sold with",
+            ),
+            "laminate": _sail_part(
+                "Laminate",
+                "Film and fibres glued in layers: holds its shape, a little faster, "
+                "but it delaminates and tears sooner.",
+                "sailmakers' cloth data; the speed and damage figures are our GUESS",
+                (("cloth", "laminate"),),
+            ),
+        },
+        "reef": {
+            "slab2": _sail_part(
+                "Slab reefing, two reefs (as built)",
+                "Two rows of reef points in the mainsail.",
+                "standard on both boats",
+            ),
+            "slab3": _sail_part(
+                "Slab reefing, three reefs",
+                "A third, deep reef: a smaller main for a gale.",
+                "a standard sailmaker option; its size is our GUESS",
+                (("reef", "slab3"),),
+            ),
+            "inmast": _sail_part(
+                "In-mast furling",
+                "The mainsail rolls up inside the mast to any size; no battens, so it is "
+                "smaller, and it can jam.",
+                "Selden in-mast furling; area and jamming are our GUESS",
+                (("reef", "inmast"),),
+                kg=SAIL_KG["inmast"],
+            ),
+        },
+        "storm": {
+            "none": _sail_part(
+                "No storm sails (as built)",
+                "Deepest reef, then sails down and run off before a gale.",
+                "as built",
+            ),
+            "storm": _sail_part(
+                "Storm jib and trysail",
+                "Two small, very strong sails at the racing rules' sizes, so she keeps "
+                "sailing in a gale.",
+                "World Sailing Offshore Special Regulations 4.26: storm jib 5 % of I², "
+                "trysail 17.5 % of P x E; the gale limit is our GUESS",
+                (("storm", "storm"),),
+                kg=SAIL_KG["storm"],
+            ),
+        },
+    }
+
+
+KEEL_SAIL_DEFAULTS = {
+    "stock_pearson31_2": {"rig": "sloop", "cloth": "dacron", "reef": "slab2", "storm": "none"},
+    "stock_cruiser31": {"rig": "genoa", "cloth": "dacron", "reef": "slab2", "storm": "none"},
+}
+KEEL_SAIL_NAMES = {"rig": "Rig", "cloth": "Sail cloth", "reef": "Reefing", "storm": "Storm sails"}
+
+# Under the water (M4 wave 2). The builders' own shallow keels: Pearson's wing keel
+# (4.0 ft draft, 200 lb more lead; Pearson spec sheet) and Beneteau's shoal-draft
+# First 31.7 (1.45 m, same ballast; boat-specs.com). A shorter keel grips the water
+# less (less lift for its leeway) and carries its lead higher (less righting moment).
+# draft: the keel's published draft (m); plate: the wing's winglets work as end plates
+# (GUESS: 10 % more effective draft); gz: righting levers against the deep keel (GUESS:
+# the lead sits higher; the Pearson's extra 91 kg of lead wins some of it back).
+KEEL_DRAFT = {"stock_pearson31_2": 1.71, "stock_cruiser31": 1.90}  # deep keels (spec sheets)
+KEELS = {
+    "wing": {"draft": 1.22, "plate": 1.1, "gz": 0.95, "kg": 91.0},
+    "shoal": {"draft": 1.45, "plate": 1.0, "gz": 0.92, "kg": 0.0},
+}
+# A drogue or sea anchor, streamed when the waves reach DROGUE_HS_M: sails down, the
+# boat held end-on to the seas, so far fewer breakers catch her beam-on, but she
+# crawls downwind. The Jordan series drogue holds the stern to the seas (Jordan's
+# US Coast Guard report, 1985, DTIC ADA158907; sized by displacement: about 100 small
+# cones on a long line for a 10,000 lb boat); a parachute sea anchor holds the bow
+# (Para-Tech sizes it to displace about twice the boat: a 12 ft one for these boats,
+# Practical Sailor). Beam-on shares, drift speeds and weights are our GUESS.
+DROGUE_HS_M = 5.0  # GUESS: streamed when the significant wave height reaches 5 m
+DROGUES = {
+    "jordan": {"share": 0.03, "kn": 2.0, "kg": 20.0},  # GUESS: stern held to the seas
+    "para": {"share": 0.05, "kn": 1.0, "kg": 25.0},  # GUESS: yaws a little at the parachute
+}
+
+
+def _drogue(kind: str) -> tuple:
+    q = DROGUES[kind]
+    return (
+        ("hazards", "drogue_hs_m", DROGUE_HS_M),
+        ("hazards", "drogue_beam_on_share", q["share"]),
+        ("hazards", "drogue_kn", q["kn"]),
+    )
+
+
+def _under_water(boat: str) -> dict[str, dict[str, Option]]:
+    pearson = boat == "stock_pearson31_2"
+    keel = (
+        {
+            "deep": _sail_part(
+                "Deep fin keel, 5.6 ft (as built)",
+                "Pearson's deep elliptical fin.",
+                "Pearson spec sheet",
+            ),
+            "wing": _sail_part(
+                "Wing keel, 4.0 ft",
+                "Pearson's shoal keel with winglets at the tip and 200 lb more lead: "
+                "1.5 ft less draft, a little less grip and stiffness.",
+                "Pearson spec sheet (draft 4.0 ft, ballast 4,000 lb); lift and stability our GUESS",
+                (("keel", "wing"),),
+                kg=KEELS["wing"]["kg"],
+            ),
+        }
+        if pearson
+        else {
+            "deep": _sail_part(
+                "Deep keel, 1.90 m (as built)",
+                "Beneteau's deep-draft fin and bulb.",
+                "ORC certificate 038800017LU; boat-specs.com",
+            ),
+            "shoal": _sail_part(
+                "Shoal-draft keel, 1.45 m",
+                "Beneteau's own shallow version, same ballast: less grip upwind and "
+                "less stiffness.",
+                "boat-specs.com First 31.7 shoal draft (1.45 m, 1,025 kg ballast); lift "
+                "and stability our GUESS",
+                (("keel", "shoal"),),
+            ),
+        }
+    )
+    drogue = {
+        "none": Option(
+            basis="as built: in a big sea she runs off under bare poles",
+            n="None (as built)",
+            d="Sails down and run off before a big sea.",
+        ),
+        "jordan": Option(
+            _drogue("jordan"),
+            est=True,
+            basis="Jordan series drogue (US Coast Guard report, DTIC ADA158907), sized by "
+            "displacement; how much it helps is our GUESS",
+            kg=DROGUES["jordan"]["kg"],
+            n="Jordan series drogue",
+            d="A long line of small cones off the stern, streamed when waves reach 5 m: "
+            "holds her stern to the breakers at about 2 knots.",
+        ),
+        "para": Option(
+            _drogue("para"),
+            est=True,
+            basis="Para-Tech parachute sea anchor, 12 ft (sized to displace twice the boat, "
+            "Practical Sailor); how much it helps is our GUESS",
+            kg=DROGUES["para"]["kg"],
+            n="Parachute sea anchor",
+            d="A big parachute off the bow, set when waves reach 5 m: she lies head to "
+            "the seas and barely drifts.",
+        ),
+    }
+    return {"keel": keel, "drogue": drogue}
+
+
+KEEL_WATER_DEFAULTS = {"keel": "deep", "drogue": "none"}
+KEEL_WATER_NAMES = {"keel": "Keel", "drogue": "Drogue or sea anchor"}
+# A muted line under a slot on the page: what the odds don't count yet (Maya, #526).
+# The drogue had one until the keelboats' knockdown model counted rolls (M4).
+# Self-steering and power (M4 wave 3).
+# A windvane steers by the wind with no electricity (vessel/kayak.py windvane):
+# the autopilot then runs only under engine in calms, and if it dies she sails on
+# at her last angle to the wind instead of drifting. Hydrovane: its own rudder
+# (an emergency rudder, PBO), 37 kg in its average fit (Hydrovane specifications).
+# Monitor (Scanmar): a servo-pendulum working the boat's own rudder; its weight is
+# our GUESS. VANE_HOTEL_WH: GUESS, the 960 Wh/day less most of the autopilot's
+# ~30 W (stock_*.yaml electronics), which now steers only a fifth of the time.
+VANE_HOTEL_WH = 400.0
+VANE_KG = {"hydrovane": 37.0, "monitor": 25.0}
+# Solar: two 300 W rigid panels for the two 200 W ones (panel datasheets; the extra
+# weight is our GUESS). Battery: four Battle Born 100 Ah LiFePO4 (BB10012 datasheet:
+# 12.8 V, 31 lb each, 99 % efficient, charges down to 25 F) for the two 100 Ah
+# lead-acid (our GUESS: 30 kg each). Hydrogenerator: Watt&Sea POD 600 (maker: 120 W
+# at 5 knots, 600 W rated, 5 kg plus a 1.5 kg converter and 2.55 kg dump load); the
+# shape of its curve (cube of speed) and its 50 % efficiency are our GUESS.
+SOLAR_600_KG = 8.0
+LFP_WH = 4 * 12.8 * 100
+LFP_KG = round(4 * 31 * 0.4536 - 2 * 30.0, 2)
+HYDRO = {"w5": 120.0, "rated": 600.0, "eff": 0.5, "kg": 5.0 + 1.5 + 2.55}
+
+
+def _self_power(boat: str) -> dict[str, dict[str, Option]]:
+    vane = {
+        "autopilot": Option(
+            basis="as built: a below-deck autopilot steers all the time",
+            n="Electric autopilot (as built)",
+            d="Steers all the time on battery power; if it dies she drifts.",
+        ),
+        **{
+            k: Option(
+                (
+                    ("electronics", "windvane", k),
+                    ("electronics", "hotel_load_wh_per_day", VANE_HOTEL_WH),
+                ),
+                est=True,
+                kg=VANE_KG[k],
+                basis=b,
+                n=n,
+                d=d,
+            )
+            for k, n, d, b in (
+                (
+                    "hydrovane",
+                    "Hydrovane windvane",
+                    (
+                        "Steers by the wind on its own rudder, with no power: she keeps "
+                        "sailing if the autopilot dies, or even the main rudder."
+                    ),
+                    (
+                        "Hydrovane specifications (own rudder, 37 kg); PBO windvane guide "
+                        "(emergency rudder); power saved our GUESS"
+                    ),
+                ),
+                (
+                    "monitor",
+                    "Monitor windvane",
+                    (
+                        "A servo-pendulum vane working her own rudder, with no power: she "
+                        "keeps sailing if the autopilot dies."
+                    ),
+                    (
+                        "Scanmar Monitor (servo-pendulum, steers the main rudder); weight "
+                        "and power saved our GUESS"
+                    ),
+                ),
+            )
+        },
+    }
+    return {
+        "vane": vane,
+        "ksol": {
+            "400w": Option(
+                basis="as built: two 200 W panels",
+                n="400 W solar (as built)",
+                d="Two 200 W panels on a stern arch.",
+            ),
+            "600w": Option(
+                (
+                    ("power", "solar_wp", 600),
+                    ("power", "panels_w", {"panel_port": 300, "panel_stbd": 300}),
+                ),
+                est=True,
+                kg=SOLAR_600_KG,
+                basis="rigid 300 W panel datasheets; weight our GUESS",
+                n="600 W solar",
+                d="Two 300 W panels in place of the 200 W ones.",
+            ),
+        },
+        "kbat": {
+            "lead": Option(
+                basis="as built: two 100 Ah lead-acid",
+                n="2 x 100 Ah lead-acid (as built)",
+                d="A 2,400 Wh house bank.",
+            ),
+            "lfp": Option(
+                (
+                    ("power", "battery_wh", LFP_WH),
+                    ("power", "charge_eff", 0.99),
+                    ("power", "discharge_eff", 0.99),
+                    ("power", "min_charge_temp_c", -4),
+                ),
+                kg=LFP_KG,
+                basis="Battle Born BB10012 datasheet x 4 (12.8 V 100 Ah, 31 lb, 99 % "
+                "efficient, charges from 25 F); the lead-acid weight is our GUESS",
+                n="4 x 100 Ah LiFePO4",
+                d="Lithium: over twice the stored energy, lighter, and it takes a charge faster.",
+                est=True,
+            ),
+        },
+        "hydro": {
+            "none": Option(basis="as built: none", n="None (as built)", d="Sun and engine only."),
+            "pod600": Option(
+                (
+                    ("power", "hydro_w_at_5kn", HYDRO["w5"]),
+                    ("power", "hydro_rated_w", HYDRO["rated"]),
+                    ("power", "hydro_efficiency", HYDRO["eff"]),
+                ),
+                est=True,
+                kg=HYDRO["kg"],
+                basis="Watt&Sea POD 600 (maker: 120 W at 5 knots, 600 W rated, 9 kg with "
+                "converter and dump load); curve shape and drag our GUESS",
+                n="Watt&Sea POD 600 hydrogenerator",
+                d="A small propeller under the hull that charges from her speed, day and "
+                "night, for a little drag.",
+            ),
+        },
+    }
+
+
+KEEL_POWER_DEFAULTS = {"vane": "autopilot", "ksol": "400w", "kbat": "lead", "hydro": "none"}
+KEEL_POWER_NAMES = {
+    "vane": "Self-steering",
+    "ksol": "Solar panels",
+    "kbat": "Battery",
+    "hydro": "Hydrogenerator",
+}
+STOCK_SLOT_NOTES: dict[str, str] = {}  # the drogue's went when keelboats could be rolled
+
+
+def _sail_changes(boat: str, picked: dict, design: Design) -> tuple:
+    """(section, key, value) changes a keelboat's sail parts make, from its yaml."""
+    knobs = dict(k for slot, opt in picked.items() for k in slots_for(boat)[slot][opt].sail)
+    if not knobs:
+        return ()
+    v = dict(design.vpp)
+    i, j, p, e = RIGS[boat]
+    plans = [(q["name"], q["main"], q["jib"]) for q in v["plans"]]
+    if knobs.get("reef") == "slab3":
+        plans.insert(-1, SLAB3)
+    elif knobs.get("reef") == "inmast":
+        v["main_m2"] = round(v["main_m2"] * INMAST_AREA, 3)
+        names = ("full", *(f"furl{n}" for n in range(1, len(INMAST_PLANS) - 1)), "storm")
+        plans = [(nm, m, jb) for nm, (m, jb) in zip(names, INMAST_PLANS)]
+    if knobs.get("rig") == "cutter":
+        fore = 0.5 * i * j
+        yankee, stay = CUTTER_YANKEE * fore, CUTTER_STAYSAIL * fore
+        v["jib_m2"] = round(yankee + stay, 3)
+        share = stay / (yankee + stay)
+
+        def cut(jib: float) -> float:
+            """The sloop's headsail share as the cutter carries it: the yankee rolls
+            away first (gone by the sloop's half genoa), then the staysail alone,
+            then a reefed staysail for the deepest plan (GUESS)."""
+            if jib >= 0.99:
+                return 1.0
+            if jib > 0.5:
+                return round(share + (1 - share) * (jib - 0.5) / 0.5, 3)
+            return round(share if jib > 0.25 else 0.6 * share, 3)
+
+        plans = [(nm, m, cut(jb)) for nm, m, jb in plans]
+    elif knobs.get("rig") == "solent":
+        v["jib_m2"] = SOLENT_M2
+    if knobs.get("storm") == "storm":
+        plans[-1] = (
+            "storm",
+            round(min(TRYSAIL * p * e / v["main_m2"], 1.0), 3),
+            round(min(STORM_JIB * i * i / v["jib_m2"], 1.0), 3),
+        )
+    if knobs.get("cloth") == "laminate":
+        v["cl_max"] = round(v["cl_max"] * LAMINATE_CL, 4)
+    hull = {}
+    if knobs.get("keel") in KEELS:
+        k = KEELS[knobs["keel"]]
+        deep = KEEL_DRAFT[boat]
+        te = round(v["keel_te_m"] * k["draft"] / deep * k["plate"], 3)
+        grip = te / v["keel_te_m"]  # lift slope goes with effective draft (aspect), GUESS
+        v["clr_depth_m"] = round(v["clr_depth_m"] * k["draft"] / deep, 3)
+        v["keel_slope_area_m2"] = round(v["keel_slope_area_m2"] * grip, 3)
+        hull["keel_lift_slope_area_m2"] = round(design.hull["keel_lift_slope_area_m2"] * grip, 3)
+        v["keel_te_m"] = te
+        v["gz"] = {**v["gz"], "m": [round(m * k["gz"], 4) for m in v["gz"]["m"]]}
+    kg = sum(SAIL_KG.get(val, 0.0) + KEELS.get(val, {}).get("kg", 0.0) for val in knobs.values())
+    if kg:
+        v["disp_kg"] = round(v["disp_kg"] + kg, 1)
+    v["plans"] = [{"name": nm, "main": m, "jib": jb} for nm, m, jb in plans]
+    from boatsim.vessel.keelboat import variant_name
+
+    stem = Path(design.vpp["polar_file"]).stem
+    v["polar_file"] = variant_name(replace(design, vpp=v), stem)
+    out = [("vpp", "polar_file", v["polar_file"])]
+    out += [("vpp", k, v[k]) for k in v if v[k] != design.vpp.get(k) and k != "polar_file"]
+    out += [("hull", k, x) for k, x in hull.items()]
+    damage = 1.0
+    for val in knobs.values():
+        damage *= SAIL_DAMAGE.get(val, 1.0)
+    if damage != 1.0:
+        sail = round(design.hazards["p_part"]["sail"] * damage, 9)
+        out.append(("hazards", "p_part", {**design.hazards["p_part"], "sail": sail}))
+    if knobs.get("storm") == "storm":
+        out.append(("sail", "storm_wind_ms", STORM_SAILS_WIND_MS))
+    return tuple(out)
+
+
+# The keelboats' sail parts (M4 wave 1). The Pearson had no slots before.
+KEELBOATS = ("stock_pearson31_2", "stock_cruiser31")
+for _b in KEELBOATS:
+    STOCK_SLOTS[_b] = {
+        **_keel_sails(_b),
+        **_under_water(_b),
+        **_self_power(_b),
+        **STOCK_SLOTS.get(_b, {"spare": SPARE_SLOT, "tactician": TACTICIAN_SLOT}),
+    }
+    STOCK_DEFAULTS[_b] = {
+        **KEEL_SAIL_DEFAULTS[_b],
+        **KEEL_WATER_DEFAULTS,
+        **KEEL_POWER_DEFAULTS,
+        "spare": "none",
+        "tactician": "on",
+    }
+STOCK_SLOT_NAMES.update(KEEL_SAIL_NAMES)
+STOCK_SLOT_NAMES.update(KEEL_WATER_NAMES)
+STOCK_SLOT_NAMES.update(KEEL_POWER_NAMES)
 
 
 def base_of(choices: dict | None) -> str:
@@ -808,6 +1349,7 @@ GRID: tuple[dict, ...] = (
     {},  # the kayak as it stands, 25 W cruise
     *({"cruise_w": w} for w in (10, 15, 20, 30)),
     {"thr": "one-t200"},
+    {"thr": "two-t500"},  # M4 wave 3
     {"sol": "solar-200"},
     {"sol": "solar-300"},
     {"bat": "one-50ah"},
@@ -837,6 +1379,31 @@ GRID: tuple[dict, ...] = (
             {"tracker": "none"},
         )
     ),
+    # The keelboats (M4 waves 1 and 2): as built, then each part on its own.
+    *(
+        {"base": b, **g}
+        for b in KEELBOATS
+        for g in (
+            {},
+            {"rig": "cutter" if b == "stock_pearson31_2" else "solent"},
+            {"cloth": "laminate"},
+            {"reef": "slab3"},
+            {"reef": "inmast"},
+            {"storm": "storm"},
+            {"spare": "spare-autopilot"},
+            {"tactician": "off"},
+            # M4 wave 2: under the water
+            {"keel": "wing" if b == "stock_pearson31_2" else "shoal"},
+            {"drogue": "jordan"},
+            {"drogue": "para"},
+            # M4 wave 3: self-steering and power
+            {"vane": "hydrovane"},
+            {"vane": "monitor"},
+            {"ksol": "600w"},
+            {"kbat": "lfp"},
+            {"hydro": "pod600"},
+        )
+    ),
     {  # everything cheapest
         "thr": "one-t200",
         "sol": "solar-200",
@@ -860,6 +1427,7 @@ def matters(slot: str, opt: str, base: str = "kayak") -> bool:
         or o.kg != d.kg
         or (o.wh or 0) != (d.wh or 0)
         or o.hotel_wh != d.hotel_wh
+        or o.sail != d.sail
     )
 
 
@@ -880,7 +1448,7 @@ def nearest(choices: dict | None) -> tuple[str, bool]:
     base = base_of(choices)
     picked, cruise = normalise(choices)
     want = grid_id(choices)
-    if base in STOCK_BASES:
+    if base in STOCK_BASES and base not in KEELBOATS:
         return want, False  # not in the odds grid
 
     def dist(g):
@@ -892,7 +1460,7 @@ def nearest(choices: dict | None) -> tuple[str, bool]:
             for s in slots_for(base)
             if p[s] != picked[s] and (matters(s, p[s], base) or matters(s, picked[s], base))
         )
-        return (0, slots, abs(c - cruise))
+        return (0, slots, abs((c or 0) - (cruise or 0)))
 
     best = min(GRID, key=dist)
     return grid_id(best), grid_id(best) == want
@@ -962,6 +1530,18 @@ def base_table() -> dict[str, dict]:
     }
 
 
+def _sail_sim(boat: str, slot: str, opt: str) -> list[str]:
+    """The design fields a keelboat sail part sets on its own (for the page's "sim")."""
+    o = slots_for(boat)[slot][opt]
+    if not o.sail:
+        return []
+    from boatsim.config import load_design
+
+    picked = {**defaults_for(boat), slot: opt}
+    keys = [f"{s}.{k}" for s, k, _ in _sail_changes(boat, picked, load_design(BASES[boat]))]
+    return [k for k in keys if k != "hull.mass_kg"]
+
+
 def stock_table() -> dict[str, dict]:
     """The stock bases with parts to add (sim-slots.json "stock"): per base its
     design file, defaults and slots in slot_table()'s shape, each option with its
@@ -974,6 +1554,7 @@ def stock_table() -> dict[str, dict]:
                 {
                     "id": slot,
                     "name": STOCK_SLOT_NAMES[slot],
+                    **({"note": STOCK_SLOT_NOTES[slot]} if slot in STOCK_SLOT_NOTES else {}),
                     "opts": [
                         {
                             "id": oid,
@@ -981,10 +1562,11 @@ def stock_table() -> dict[str, dict]:
                             "est": o.est,
                             "basis": o.basis,
                             "sim": [f"{s}.{k}" for s, k, _ in o.changes]
+                            + _sail_sim(b, slot, oid)
                             + (["electronics.hotel_load_wh_per_day"] if o.hotel_wh else [])
                             + (["hull.mass_kg"] if o.kg else []),
                             "kg": o.kg,
-                            "cost": o.cost,
+                            **({"n": o.n, "d": o.d} if o.n else {}),
                         }
                         for oid, o in opts.items()
                     ],

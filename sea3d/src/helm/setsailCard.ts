@@ -10,7 +10,7 @@ import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
-import { RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
+import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -185,6 +185,9 @@ export function mountSetSailCard(hooks: CardHooks): void {
         rival = k as typeof rival;
         draw();
       });
+    // With you steering, racing another boat isn't there yet: one quiet line says where it is (Elena).
+    $("ss-rival-soon").hidden = auto;
+    $("ss-rival-soon").textContent = RIVAL_WORDS.soon;
     $("ss-rival-line").textContent = !auto ? RIVAL_WORDS.you : against && against === mine ? RIVAL_WORDS.same : RIVAL_WORDS[racing ? "boat" : "nobody"].line;
     $("ss-against").hidden = !racing;
     $("ss-against-name").textContent = against ? rivalName(against, mineName()) : ""; // a player's own name for a design: text only
@@ -214,6 +217,10 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("ss-when-line").hidden = !auto || !!on;
     $("ss-when-line").textContent = auto && !on ? WHO_WORDS.none : "";
     $("go").setAttribute("aria-disabled", String(auto && !voyage && !race));
+    // With the autopilot the days are all one year's: the year is said once, in the label, not on every pill (Elena).
+    $("ss-when").querySelector(".ss-l")!.textContent = auto && days.length ? `${WHO_WORDS.dayLabel}, ${days[0].year}` : WHO_WORDS.dayLabel;
+    // Watching her sail herself is not setting sail, and nor is a race: the button says what happens (Elena).
+    $("go").textContent = racing ? RIVAL_WORDS.boat.go : auto ? WHO_WORDS.autopilot.go : WHO_WORDS.go;
     const lv = launch.value;
     const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : lv;
     // "Pick a day…" opens the other launch days as pills of their own, like the challenges' "More…"
@@ -222,11 +229,24 @@ export function mountSetSailCard(hooks: CardHooks): void {
       .filter((o) => o.value !== "2020-04-23" && o.value !== "0")
       .map((o) => ({ key: o.value, label: (o.textContent ?? "").replace(/:.*$/, "").replace(/ 2020$/, "").replace(/(\d+) (\w{3})\w*/, "$1 $2") }));
     const showDays = allDays || (named !== "calm" && named !== "rough");
-    if (auto)
-      pills($("ss-when-opts"), days.map((d) => ({ key: d.day, label: `${d.label} ${d.year}` })), on?.day ?? "", (k) => {
-        day = k;
-        draw();
-      });
+    if (auto) {
+      // Named pills first, as with you steering, then her other days as plain dates (Elena): Usual (the day
+      // watching has always opened on), Calm, Rough, then the rest. Each named pill shows its date.
+      const kinds = (Object.keys(AUTO_DAYS) as (keyof typeof AUTO_DAYS)[]).filter((k) => days.some((x) => x.day === AUTO_DAYS[k]));
+      const isNamed = (d: string) => kinds.some((k) => AUTO_DAYS[k] === d);
+      pills(
+        $("ss-when-opts"),
+        [
+          ...kinds.map((k) => ({ key: AUTO_DAYS[k], label: AUTO_DAY_WORDS[k], sub: dayLabel(AUTO_DAYS[k]) })),
+          ...days.filter((d) => !isNamed(d.day)).map((d) => ({ key: d.day, label: d.label })),
+        ],
+        on?.day ?? "",
+        (k) => {
+          day = k;
+          draw();
+        },
+      );
+    }
     else pills(
       $("ss-when-opts"),
       [

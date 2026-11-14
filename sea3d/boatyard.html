@@ -60,7 +60,7 @@
   .hints { margin: 2px 2px 0; padding: 0; list-style: none; font-size: 12px; color: #ffd9b3; }
   .hints li::before { content: "\2192  "; color: var(--orange); }
   #cruise { width: 100%; accent-color: var(--orange); }
-  #sum { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; padding: 12px 16px 14px; }
+  #sum { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; padding: 12px 16px 14px; max-height: calc(100vh - var(--bar, 0px) - 50px); overflow-y: auto; }
   #sum h2 { margin: 0 0 8px; font-size: 15px; }
   .row { display: flex; justify-content: space-between; padding: 3px 0; font-variant-numeric: tabular-nums; }
   .row span:first-child { color: var(--dim); }
@@ -157,6 +157,9 @@
       <span class="randolph"><span class="muted">Randolph boats <span class="modeltag">(our model)</span></span>
       <button data-base="revc" aria-pressed="false" title="Our model of the Randolph team's Rev C5: a 1.5 m wing-sail boat" aria-label="Randolph Rev C5 (our model)">Rev C5</button>
       <button data-base="revb" aria-pressed="false" title="Our model of the Randolph team's earlier Rev B" aria-label="Randolph Rev B (our model)">Rev B</button></span>
+      <span class="randolph"><span class="muted">Sailboats</span>
+      <button data-base="stock_pearson31_2" aria-pressed="false" title="Our model of Randolph and Becky's own Pearson 31-2" aria-label="Pearson 31-2 (our model)">Pearson 31-2 <span class="modeltag">(our model)</span></button>
+      <button data-base="stock_cruiser31" aria-pressed="false" title="Our model of a Beneteau First 31.7" aria-label="Beneteau First 31.7 (our model)">Beneteau First 31.7 <span class="modeltag">(our model)</span></button></span>
     </div>
   </header>
   <p id="legend" class="muted" hidden>Green and red numbers on a part: how your odds of finishing would change if you picked it.</p>
@@ -189,7 +192,7 @@
     </div>
     <div class="muted" id="mb-line"></div>
   </div>
-  <p class="muted" style="margin:10px 0 0"><a href="./voyage.html">Watch a voyage &rarr;</a></p>
+  <p class="muted" style="margin:10px 0 0"><a href="./helm.html?who=autopilot">Watch a voyage &rarr;</a></p>
 </section>
 <div id="views" class="glass" role="group" aria-label="How to look at the boat">
   <button data-view="afloat" aria-pressed="true" title="The boat as it floats">On the water</button>

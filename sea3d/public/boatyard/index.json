@@ -3,7 +3,8 @@
  "slots": {
   "thr": [
    "two-t200",
-   "one-t200"
+   "one-t200",
+   "two-t500"
   ],
   "sol": [
    "solar-250",
@@ -126,6 +127,29 @@
   "note": "April to June launches every 10 days, real weather and currents, same seeds for every build; unknown failure off (odds_unknown_10 puts a 10% chance by day 60 back in). Microtransat finish on our target."
  },
  "commit": "ba1d298",
+ "regrids": [
+  {
+   "builds": [
+    "stock_cruiser31",
+    "stock_cruiser31-cloth.laminate",
+    "stock_cruiser31-reef.inmast",
+    "stock_cruiser31-reef.slab3",
+    "stock_cruiser31-rig.solent",
+    "stock_cruiser31-spare.spare-autopilot",
+    "stock_cruiser31-storm.storm",
+    "stock_cruiser31-tactician.off",
+    "stock_pearson31_2",
+    "stock_pearson31_2-cloth.laminate",
+    "stock_pearson31_2-reef.inmast",
+    "stock_pearson31_2-reef.slab3",
+    "stock_pearson31_2-rig.cutter",
+    "stock_pearson31_2-spare.spare-autopilot",
+    "stock_pearson31_2-storm.storm",
+    "stock_pearson31_2-tactician.off"
+   ],
+   "commit": "0d7bd2e"
+  }
+ ],
  "builds": [
   {
    "id": "k-p25",
@@ -620,6 +644,33 @@
      "days": 64.32
     }
    ]
+  },
+  {
+   "id": "k-p25-thr.two-t500",
+   "boat": "v4 kayak",
+   "label": "Our kayak, T500 motors",
+   "options": {
+    "thr": "two-t500",
+    "sol": "solar-250",
+    "bat": "two-50ah",
+    "mppt": "two-mppt",
+    "brain": "two-box",
+    "sat": "rockblock-9603n",
+    "beacon": "smartone-solar",
+    "ais": "emtrak-b921",
+    "radar": "echomax-230br",
+    "light": "hella-naviled-360",
+    "lead": "lead-50-new",
+    "paint": "micron-csc",
+    "drive": "solar-electric",
+    "material": "polyethylene",
+    "shape": "kayak",
+    "spares": "spares-full",
+    "cruise_w": 25
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
   },
   {
    "id": "k-p25-sol.solar-200",
@@ -2342,6 +2393,7 @@
    "id": "revc",
    "boat": "Randolph Rev C",
    "label": "Randolph Rev C5, as built",
+   "note": "Our model of the Randolph team's Rev C5, from their published design.",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2416,13 +2468,13 @@
      "outcome": "aground",
      "days": 1.17
     }
-   ],
-   "note": "Our model of the Randolph team's Rev C5, from their published design."
+   ]
   },
   {
    "id": "revc-drive.wing-thruster",
    "boat": "Randolph Rev C",
    "label": "Randolph Rev C5 + small motor",
+   "note": "Our model of the Randolph team's Rev C5, from their published design.",
    "options": {
     "base": "revc",
     "drive": "wing-thruster",
@@ -2495,13 +2547,13 @@
      "outcome": "aground",
      "days": 1.36
     }
-   ],
-   "note": "Our model of the Randolph team's Rev C5, from their published design."
+   ]
   },
   {
    "id": "revc-brain.two-box",
    "boat": "Randolph Rev C",
    "label": "Randolph Rev C5 + backup autopilot",
+   "note": "Our model of the Randolph team's Rev C5, from their published design.",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2576,13 +2628,13 @@
      "outcome": "aground",
      "days": 1.17
     }
-   ],
-   "note": "Our model of the Randolph team's Rev C5, from their published design."
+   ]
   },
   {
    "id": "revc-rudder.single",
    "boat": "Randolph Rev C",
    "label": "Randolph Rev C5, one rudder",
+   "note": "Our model of the Randolph team's Rev C5, from their published design.",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2657,13 +2709,13 @@
      "outcome": "aground",
      "days": 1.1
     }
-   ],
-   "note": "Our model of the Randolph team's Rev C5, from their published design."
+   ]
   },
   {
    "id": "revc-rsol.deck-60w-rbat.lfp-384wh",
    "boat": "Randolph Rev C",
    "label": "Randolph Rev C5, bigger panels and battery",
+   "note": "Our model of the Randolph team's Rev C5, from their published design.",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2737,13 +2789,13 @@
      "outcome": "aground",
      "days": 1.04
     }
-   ],
-   "note": "Our model of the Randolph team's Rev C5, from their published design."
+   ]
   },
   {
    "id": "revc-tracker.none",
    "boat": "Randolph Rev C",
    "label": "Randolph Rev C5, no backup tracker",
+   "note": "Our model of the Randolph team's Rev C5, from their published design.",
    "options": {
     "base": "revc",
     "drive": "wing",
@@ -2818,13 +2870,13 @@
      "outcome": "aground",
      "days": 1.17
     }
-   ],
-   "note": "Our model of the Randolph team's Rev C5, from their published design."
+   ]
   },
   {
    "id": "revb",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B, as built",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design.",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -2897,13 +2949,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
+   ]
   },
   {
    "id": "revb-drive.wing-thruster",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B + small motor",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design.",
    "options": {
     "base": "revb",
     "drive": "wing-thruster",
@@ -2976,13 +3028,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
+   ]
   },
   {
    "id": "revb-brain.two-box",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B + backup autopilot",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design.",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3056,13 +3108,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
+   ]
   },
   {
    "id": "revb-rudder.twin",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B, two rudders",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design.",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3136,13 +3188,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
+   ]
   },
   {
    "id": "revb-rsol.deck-60w-rbat.lfp-384wh",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B, bigger panels and battery",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design.",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3215,13 +3267,13 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
+   ]
   },
   {
    "id": "revb-tracker.none",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B, no backup tracker",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design.",
    "options": {
     "base": "revb",
     "drive": "wing",
@@ -3296,13 +3348,1642 @@
      "outcome": "lost",
      "days": 138.48
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design."
+   ]
+  },
+  {
+   "id": "stock_pearson31_2",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, as built",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 21.4,
+    "odds_unknown_10": 0.788,
+    "endings": {
+     "arrived": 84,
+     "ran aground before the finish": 6,
+     "flooded and sank": 3,
+     "taken or snagged by fishermen [near land]": 3,
+     "still at sea": 2,
+     "flooded: the bilge pump lost power": 2
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "aground",
+     "days": 27.4
+    },
+    {
+     "file": "stock_pearson31_2/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 17.69
+    },
+    {
+     "file": "stock_pearson31_2/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "arrived",
+     "days": 24.5
+    },
+    {
+     "file": "stock_pearson31_2/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 41.78
+    },
+    {
+     "file": "stock_pearson31_2/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 22.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-rig.cutter",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, cutter rig",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "cutter",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 27,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-rig.cutter/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-rig.cutter/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-rig.cutter/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-rig.cutter/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-rig.cutter/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-rig.cutter/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-cloth.laminate",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, laminate sails",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "laminate",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 27,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-cloth.laminate/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-cloth.laminate/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-cloth.laminate/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-cloth.laminate/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-cloth.laminate/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-cloth.laminate/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-reef.slab3",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, a third reef",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab3",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 27,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-reef.slab3/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-reef.slab3/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-reef.slab3/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-reef.slab3/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-reef.slab3/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-reef.slab3/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-reef.inmast",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, in-mast furling",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "inmast",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 27,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-reef.inmast/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-reef.inmast/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-reef.inmast/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-reef.inmast/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-reef.inmast/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-reef.inmast/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-storm.storm",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + storm sails",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "storm",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 27,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-storm.storm/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-storm.storm/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-storm.storm/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-storm.storm/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-storm.storm/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-storm.storm/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-spare.spare-autopilot",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + spare autopilot",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "spare-autopilot",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 34,
+    "odds": 0.34,
+    "low95": 0.255,
+    "high95": 0.437,
+    "within_150": 34,
+    "median_days": 98.6,
+    "odds_unknown_10": 0.297,
+    "endings": {
+     "arrived": 34,
+     "still at sea": 26,
+     "ran aground before the finish": 14,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 12,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 4,
+     "ship strike": 1,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-spare.spare-autopilot/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 71.69
+    },
+    {
+     "file": "stock_pearson31_2-spare.spare-autopilot/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-spare.spare-autopilot/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "stock_pearson31_2-spare.spare-autopilot/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-spare.spare-autopilot/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "arrived",
+     "days": 75.96
+    },
+    {
+     "file": "stock_pearson31_2-spare.spare-autopilot/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-tactician.off",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, no sailing tactician",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "off"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 27,
+    "odds": 0.27,
+    "low95": 0.193,
+    "high95": 0.364,
+    "within_150": 27,
+    "median_days": 109.2,
+    "odds_unknown_10": 0.235,
+    "endings": {
+     "still at sea": 40,
+     "arrived": 27,
+     "ran aground before the finish": 16,
+     "taken or snagged by fishermen [near land]": 10,
+     "disqualified: silent too long": 6,
+     "electronics box dead: silent and uncontrolled [open ocean]": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_pearson31_2-tactician.off/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 127.5
+    },
+    {
+     "file": "stock_pearson31_2-tactician.off/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "lost",
+     "days": 73.42
+    },
+    {
+     "file": "stock_pearson31_2-tactician.off/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-tactician.off/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "aground",
+     "days": 12.65
+    },
+    {
+     "file": "stock_pearson31_2-tactician.off/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_pearson31_2-tactician.off/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.19
+    }
+   ]
+  },
+  {
+   "id": "stock_pearson31_2-keel.wing",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, wing keel",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "wing",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-drogue.jordan",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + Jordan series drogue",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "jordan",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-drogue.para",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + sea anchor",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "para",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-vane.hydrovane",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + Hydrovane",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "hydrovane",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-vane.monitor",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + Monitor windvane",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "monitor",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-ksol.600w",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, 600 W solar",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "600w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-kbat.lfp",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2, lithium battery",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lfp",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_pearson31_2-hydro.pod600",
+   "boat": "Pearson 31-2",
+   "label": "Pearson 31-2 + hydrogenerator",
+   "note": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+   "options": {
+    "base": "stock_pearson31_2",
+    "rig": "sloop",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "pod600",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, as built",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 84,
+    "odds": 0.84,
+    "low95": 0.756,
+    "high95": 0.899,
+    "within_150": 84,
+    "median_days": 20.2,
+    "odds_unknown_10": 0.789,
+    "endings": {
+     "arrived": 84,
+     "ran aground before the finish": 5,
+     "taken or snagged by fishermen [near land]": 4,
+     "flooded and sank": 3,
+     "still at sea": 3,
+     "flooded: the bilge pump lost power": 1
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "aground",
+     "days": 28.58
+    },
+    {
+     "file": "stock_cruiser31/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "arrived",
+     "days": 16.7
+    },
+    {
+     "file": "stock_cruiser31/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "arrived",
+     "days": 22.42
+    },
+    {
+     "file": "stock_cruiser31/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 41.78
+    },
+    {
+     "file": "stock_cruiser31/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "arrived",
+     "days": 22.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-rig.solent",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, Solent jib",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "solent",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 29,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-rig.solent/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-rig.solent/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-rig.solent/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-rig.solent/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-rig.solent/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-rig.solent/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-cloth.laminate",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, laminate sails",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "laminate",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 29,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-cloth.laminate/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-cloth.laminate/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-cloth.laminate/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-cloth.laminate/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-cloth.laminate/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-cloth.laminate/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-reef.slab3",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, a third reef",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab3",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 29,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-reef.slab3/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-reef.slab3/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-reef.slab3/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-reef.slab3/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-reef.slab3/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-reef.slab3/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-reef.inmast",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, in-mast furling",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "inmast",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 29,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-reef.inmast/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-reef.inmast/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-reef.inmast/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-reef.inmast/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-reef.inmast/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-reef.inmast/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-storm.storm",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + storm sails",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "storm",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 29,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-storm.storm/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-storm.storm/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-storm.storm/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-storm.storm/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-storm.storm/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-storm.storm/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-spare.spare-autopilot",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + spare autopilot",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "spare-autopilot",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 36,
+    "odds": 0.36,
+    "low95": 0.273,
+    "high95": 0.458,
+    "within_150": 36,
+    "median_days": 99.4,
+    "odds_unknown_10": 0.314,
+    "endings": {
+     "arrived": 36,
+     "still at sea": 22,
+     "ran aground before the finish": 17,
+     "both electronics boxes dead: silent and uncontrolled [open ocean]": 10,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 5,
+     "both electronics boxes dead: silent and uncontrolled [near land]": 2
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-spare.spare-autopilot/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "lost",
+     "days": 71.69
+    },
+    {
+     "file": "stock_cruiser31-spare.spare-autopilot/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-spare.spare-autopilot/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "lost",
+     "days": 3.92
+    },
+    {
+     "file": "stock_cruiser31-spare.spare-autopilot/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-spare.spare-autopilot/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "lost",
+     "days": 32.26
+    },
+    {
+     "file": "stock_cruiser31-spare.spare-autopilot/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-tactician.off",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, no sailing tactician",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "off"
+   },
+   "current": false,
+   "odds": {
+    "voyages": 100,
+    "finished": 29,
+    "odds": 0.29,
+    "low95": 0.21,
+    "high95": 0.385,
+    "within_150": 29,
+    "median_days": 106.8,
+    "odds_unknown_10": 0.253,
+    "endings": {
+     "still at sea": 39,
+     "arrived": 29,
+     "ran aground before the finish": 18,
+     "taken or snagged by fishermen [near land]": 8,
+     "disqualified: silent too long": 6
+    }
+   },
+   "replays": [
+    {
+     "file": "stock_cruiser31-tactician.off/2020-04-01.json",
+     "start": "2020-04-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-tactician.off/2020-04-15.json",
+     "start": "2020-04-15T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-tactician.off/2020-05-01.json",
+     "start": "2020-05-01T12:00",
+     "outcome": "aground",
+     "days": 147.51
+    },
+    {
+     "file": "stock_cruiser31-tactician.off/2020-05-15.json",
+     "start": "2020-05-15T12:00",
+     "outcome": "lost",
+     "days": 28.14
+    },
+    {
+     "file": "stock_cruiser31-tactician.off/2020-06-01.json",
+     "start": "2020-06-01T12:00",
+     "outcome": "timeout",
+     "days": 150.0
+    },
+    {
+     "file": "stock_cruiser31-tactician.off/2020-06-15.json",
+     "start": "2020-06-15T12:00",
+     "outcome": "aground",
+     "days": 1.07
+    }
+   ]
+  },
+  {
+   "id": "stock_cruiser31-keel.shoal",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, shoal keel",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "shoal",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-drogue.jordan",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + Jordan series drogue",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "jordan",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-drogue.para",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + sea anchor",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "para",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-vane.hydrovane",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + Hydrovane",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "hydrovane",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-vane.monitor",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + Monitor windvane",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "monitor",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-ksol.600w",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, 600 W solar",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "600w",
+    "kbat": "lead",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-kbat.lfp",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7, lithium battery",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lfp",
+    "hydro": "none",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
+  },
+  {
+   "id": "stock_cruiser31-hydro.pod600",
+   "boat": "Beneteau First 31.7",
+   "label": "Beneteau First 31.7 + hydrogenerator",
+   "note": "Our model, from Beneteau's published specs and an ORC certificate.",
+   "options": {
+    "base": "stock_cruiser31",
+    "rig": "genoa",
+    "cloth": "dacron",
+    "reef": "slab2",
+    "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "pod600",
+    "spare": "none",
+    "tactician": "on"
+   },
+   "current": false,
+   "odds": null,
+   "replays": []
   },
   {
    "id": "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none",
    "boat": "v4 kayak",
    "label": "Our kayak, bare-bones build",
+   "note": "Every cheaper part at once: one motor, 200 W of panels, one battery, one charge controller, no backup autopilot, beacon or AIS, no bottom paint, motors at 15 W.",
    "options": {
     "thr": "one-t200",
     "sol": "solar-200",
@@ -3380,13 +5061,13 @@
      "outcome": "arrived",
      "days": 74.06
     }
-   ],
-   "note": "Every cheaper part at once: one motor, 200 W of panels, one battery, one charge controller, no backup autopilot, beacon or AIS, no bottom paint, motors at 15 W."
+   ]
   },
   {
    "id": "k-p25-shape.cat-over20",
    "boat": "v4 kayak",
    "label": "Catamaran version, best case",
+   "note": "If only 1 in 5 capsizes leaves it upside down for good. We don't know the real figure; 1 in 2 is our middle guess.",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -3465,13 +5146,13 @@
      "outcome": "arrived",
      "days": 65.84
     }
-   ],
-   "note": "If only 1 in 5 capsizes leaves it upside down for good. We don't know the real figure; 1 in 2 is our middle guess."
+   ]
   },
   {
    "id": "k-p25-shape.cat-over80",
    "boat": "v4 kayak",
    "label": "Catamaran version, worst case",
+   "note": "If 4 in 5 capsizes leave it upside down for good. We don't know the real figure; 1 in 2 is our middle guess.",
    "options": {
     "thr": "two-t200",
     "sol": "solar-250",
@@ -3549,13 +5230,13 @@
      "outcome": "arrived",
      "days": 65.84
     }
-   ],
-   "note": "If 4 in 5 capsizes leave it upside down for good. We don't know the real figure; 1 in 2 is our middle guess."
+   ]
   },
   {
    "id": "revb-spar",
    "boat": "Randolph Rev B",
    "label": "Randolph Rev B, stronger wing spar",
+   "note": "Our model of the Randolph team's earlier Rev B, from their published design. Our guess: a spar that takes a tenth of the damage.",
    "options": {
     "wing": "stronger spar"
    },
@@ -3617,8 +5298,7 @@
      "outcome": "timeout",
      "days": 150.0
     }
-   ],
-   "note": "Our model of the Randolph team's earlier Rev B, from their published design. Our guess: a spar that takes a tenth of the damage."
+   ]
   }
  ]
 }

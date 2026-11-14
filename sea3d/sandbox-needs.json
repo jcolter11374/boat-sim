@@ -5,7 +5,7 @@
     "race": ["race", "helm.breakdowns"],
     "yard": ["yard"]
   },
-  "bases": ["kayak", "stock_cruiser31", "stock_pearson31_2"],
+  "bases": ["kayak", "stock_cruiser31", "stock_pearson31_2", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14", "stock_beachcat16"],
   "codes": {
     "NO_HELM": "helm",
     "NO_PORTS": "helm.ports",

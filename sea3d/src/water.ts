@@ -636,7 +636,15 @@ outgoingLight *= 1.0 - 0.6 * washShade(vWPos.xz) * (1.0 - foamMask);
 if (uMirror > 0.001) {
   vec3 nWm = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec4 pc = uMirrorM * vec4(vWPos.x, uMirrorY, vWPos.z, 1.0);
-  vec2 uv = pc.xy / pc.w + nWm.xz * (0.1 + 0.25 * (1.0 - uMirror)); // the ripples break it up
+  // The ripples break it up: the image shifts on screen the way the surface tilts there
+  // (the normal against flat water's, in the camera's frame), not along the world's axes,
+  // which slid the whole reflection sideways with the boat's heading (Elena).
+  vec2 tilt = normal.xy - (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xy;
+  float pin = 1.0;
+#ifndef SEA_LITE
+  pin = washPin(vWPos.xz); // joined to a hull's waterline, freer further out
+#endif
+  vec2 uv = pc.xy / pc.w + tilt * (0.1 + 0.25 * (1.0 - uMirror)) * pin;
   // Three taps smeared up and down, as ripples stretch a reflection (Ines r5: not
   // mirror-crisp, no stair-stepped edge). The mirror clears to transparent black, so
   // un-premultiply or the edges go dark.
@@ -684,6 +692,27 @@ if (uSeaSky.w > 0.2) { // uniform branch: only under a deck
   gl_FragColor.rgb = mix(gl_FragColor.rgb, linearToOutputTexel(vec4(uSeaSky.rgb, 1.0)).rgb, hz * smoothstep(0.2, 0.8, uSeaSky.w));
 }
 #endif
+if (uSeaWarm.w > 0.0) { // uniform branch: the title only
+  // With the sun off to one side the water in frame mirrors a cooler part of the sky and read
+  // cold and grey-green (Elena, 13 Nov). Over the last few degrees below the horizon it picks
+  // up the sky's peach, keeping its own lights and darks; the foreground stays cool and dark.
+  vec3 Vt = normalize(vWPos - cameraPosition);
+  float farW = 1.0 - smoothstep(0.0, 0.11, -Vt.y);
+  vec3 warm = linearToOutputTexel(vec4(uSeaWarm.rgb, 1.0)).rgb;
+  const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+  vec3 tinted = warm * (dot(gl_FragColor.rgb, LUM) / max(dot(warm, LUM), 1e-3));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, mix(tinted, warm, 0.25), uSeaWarm.w * farW * farW);
+  if (uSeaGlint.w > 0.0) {
+    // With the sun behind the lens (a boat without sails) the far water read as one flat blue
+    // (Elena, 13 Nov): in the band between the boat and the horizon, and nowhere nearer, the
+    // lighter faces of the ripples take the low sun's warm light.
+    float band = smoothstep(0.002, 0.01, -Vt.y) * (1.0 - smoothstep(0.022, 0.05, -Vt.y));
+    float l = dot(gl_FragColor.rgb, LUM);
+    vec3 glint = linearToOutputTexel(vec4(uSeaGlint.rgb, 1.0)).rgb;
+    glint *= 1.15 * l / max(dot(glint, LUM), 1e-3);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, glint, uSeaGlint.w * band * smoothstep(0.30, 0.48, l));
+  }
+}
 `;
 
 export class Sea {
@@ -768,7 +797,7 @@ export class Sea {
         .replace("#include <fog_fragment>", "#include <fog_fragment>\n" + FRAG_HAZE)
         .replace("#include <lights_fragment_begin>", LIGHTS_NO_POINT);
     };
-    material.customProgramCacheKey = () => "boatsim-sea-v15-washlite";
+    material.customProgramCacheKey = () => "boatsim-sea-v16-pin";
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     this.mesh.renderOrder = 10; // after the hulls (and "See under the water" lets them show through)
     this.mesh.frustumCulled = false;

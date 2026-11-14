@@ -302,7 +302,14 @@ export class Chart {
         g.arc(x, y, 2.5, 0, Math.PI * 2);
         g.fill();
         g.font = "10px system-ui, sans-serif";
-        if (!this.small) g.fillText("drop", x - 26, y + 3);
+        if (!this.small) {
+          // Clear of its own marker and of the boat's ring when she is still at the drop: the word ends 13 px to the left.
+          g.save();
+          g.textAlign = "right";
+          g.textBaseline = "middle";
+          g.fillText("drop", x - 13, y);
+          g.restore();
+        }
       }
     }
     return c;
