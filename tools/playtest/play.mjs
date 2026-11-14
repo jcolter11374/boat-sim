@@ -4455,15 +4455,17 @@ const CHECKS = {
           const a = await get();
           await p.waitForTimeout(30_000);
           const b = await get();
+          const tag = `${url.includes("race=") ? "race" : "helm"}-${url.includes("cumulus=old") ? "old" : "new"}`;
+          if (!globalThis.__cumShot?.[tag]) { (globalThis.__cumShot ??= {})[tag] = 1; const path = `look-cumulus-${BROWSER}-${tag}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } }
           return ((b.f - a.f) / ((b.t - a.t) / 1000));
         } finally { await ctx.close().catch(() => {}); }
       };
-      for (const [scene, base, counter, sail] of [["title", "?", "sea", false], ["sailing", "helm.html?", "helm", true]]) {
-        for (const q of ["quality=low", ""]) {
+      for (const [scene, base, counter, sail] of [["sailing", "helm.html?", "helm", true], ["race", "helm.html?race=kayak,revc&launch=4&", "helm", true]]) {
+        for (const q of ["quality=medium"]) {
           const r = {};
           for (const v of ["old", "new", "old", "new"]) {
             const url = `${base}${[q, v === "old" ? "cumulus=old" : ""].filter(Boolean).join("&")}`;
-            (r[v] ??= []).push(await measure(url, counter, sail));
+            (r[v] ??= []).push(await measure(url.replace(/[?&]$/, ""), counter, sail));
           }
           const avg = (xs) => xs.reduce((x, y) => x + y, 0) / xs.length;
           rows.push(`${scene} ${q || "auto"}: old ${r.old.map((x) => x.toFixed(2)).join("/")} -> new ${r.new.map((x) => x.toFixed(2)).join("/")} fps (new/old ${(avg(r.new) / avg(r.old) * 100).toFixed(0)}%)`);
