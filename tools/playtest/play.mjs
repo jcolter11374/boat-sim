@@ -4997,6 +4997,29 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #587: dolphins, whales and seabirds. At the bay mouth (autopilot) a dolphin pod was about 1 km south-west locally.
+  wildlife: {
+    manual: true,
+    path: "helm.html?who=autopilot&place=baymouth&quality=medium",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForFunction(() => window.__helm && window.__helm.frames > 3, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.evaluate(() => document.getElementById("go")?.click());
+      await page.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && window.__helm.frames > 20, null, { timeout: 5 * MIN }).catch(() => {});
+      await page.waitForTimeout(8000);
+      const seen = [];
+      for (let i = 0; i < 4; i++) {
+        const w = await page.evaluate(() => { const x = window.__helm.wildlife; return x ? { ...x, nearest: Number.isFinite(x.nearest) ? Math.round(x.nearest) : null, bearing: Math.round(x.bearing ?? 0) } : null; });
+        seen.push(w);
+        if (BROWSER === "chromium") { const path = `look-wildlife-chromium-${i}.jpg`; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); } }
+        await page.waitForTimeout(5000);
+      }
+      const res = `wildlife ${seen.map((w) => JSON.stringify(w)).join(" ; ")}`;
+      must(seen.some((w) => w?.known), `the wildlife map didn't load (known false): ${res}`);
+      must(seen.some((w) => (w?.dolphins ?? 0) > 0), `no dolphins at the bay mouth: ${res}`);
+      return res;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
