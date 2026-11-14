@@ -278,6 +278,17 @@ export const KNOCKDOWN: Look = { ...C(90, 0.4, 0.3, 3, 30), B: 0.1, x: 0 };
 // height is planned for a cruiser and scaled down by camHeight(): 9 is about 3.4 m up for the
 // kayak, 7 m off.
 export const KNOCKDOWN_HULL: Look = { ...C(90, 0.46, 2, 9, 30), B: 0.1, x: 0 }; // H 2: tilted down past the horizon, the frame is all sea
+/**
+ * Turn a composed frame so the boat sits at `atX` across the screen (-1 left edge .. 1 right, 0 the
+ * middle) instead of dead centre: the middle of the open space beside a panel (Elena, 14 Nov).
+ */
+export function slideTo<T extends { quat: THREE.Quaternion; fov: number }>(shot: T, aspect: number, atX: number): T {
+  if (atX) {
+    const turn = Math.atan(atX * Math.tan((shot.fov * D2R) / 2) * aspect); // turning the lens left puts her right
+    shot.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn));
+  }
+  return shot;
+}
 export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
   const yaw = host.yaw();
   const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
@@ -297,6 +308,22 @@ export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vec
     }
   }
   const c = best!;
+  c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
+  return { pos: c.pos, quat: c.quat, fov: c.fov };
+}
+
+/**
+ * The helm's look at a motor that has just stopped (M5: a dead motor visibly stops): from
+ * above her quarter, astern, looking down on the stern and the water behind it, where each
+ * running motor leaves its churned trail (boats/propwash.ts) and the dead one's dies away.
+ * The height is planned for a cruiser and scaled down by camHeight(), as KNOCKDOWN_HULL's.
+ */
+export const MOTOR: Look = { ...C(152, 0.5, 2, 8, 30, [-0.4, 0]), B: 0.05, x: 0 };
+export function motorShot(host: FramingHost): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
+  const yaw = host.yaw();
+  const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+  const len = host.length?.() ?? 3.05 * (host.scale?.() ?? 1);
+  const c = compose(boatAt(host), bow, bow, 1, len, host.camera.aspect, MOTOR, 0, 0);
   c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
   return { pos: c.pos, quat: c.quat, fov: c.fov };
 }

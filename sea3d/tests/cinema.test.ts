@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { TITLE_LOOP_S, titleHeading, titleShot } from "../src/framing";
-import { FINAL, OPENING, SEQUENCES, SHOTS, camHeight, finalShot, knockdownShot, openingShot, chooseSequence, compose, fitting, mixLook, shotsFor, sweepFor, type Moment, type ShotKind } from "../src/cinema";
+import { FINAL, OPENING, SEQUENCES, SHOTS, camHeight, finalShot, knockdownShot, motorShot, slideTo, openingShot, chooseSequence, compose, fitting, mixLook, shotsFor, sweepFor, type Moment, type ShotKind } from "../src/cinema";
 
 const calm: Moment = { storm: 0, knockdownAgo: Infinity, land: null, ship: null };
 
@@ -397,6 +397,34 @@ test("the helm's knockdown cut: side on, from the side she is thrown towards, th
           assert.ok(Math.abs(s.x) < 0.95 && Math.abs(s.y) < 0.95 && s.z < 1, `${tag}: out of frame at ${s.x.toFixed(2)},${s.y.toFixed(2)}`);
         }
       }
+    }
+  }
+});
+
+test("a cut slid beside the orders panel: the boat's middle sits where asked across the screen", () => {
+  for (const atX of [0, 0.25, -0.3]) {
+    for (const yawDeg of [0, 140]) {
+      const yaw = yawDeg * D2R;
+      const camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 1e6);
+      const host = { camera, controls: { target: new THREE.Vector3() } as never, yaw: () => yaw, length: () => 3.05, height: () => 0.9, water: () => 0 };
+      for (const o of [slideTo(knockdownShot(host, 1), camera.aspect, atX), slideTo(motorShot(host), camera.aspect, atX)]) {
+        camera.position.copy(o.pos);
+        camera.quaternion.copy(o.quat);
+        camera.fov = o.fov;
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld();
+        const bow = new THREE.Vector3(Math.cos(yaw) * 1.525, 0, -Math.sin(yaw) * 1.525).project(camera);
+        const stern = new THREE.Vector3(-Math.cos(yaw) * 1.525, 0, Math.sin(yaw) * 1.525).project(camera);
+        for (const e of [bow, stern]) assert.ok(Math.abs(e.x) < 0.95 && Math.abs(e.y) < 0.95, `at ${atX} yaw ${yawDeg}: out of frame ${e.x.toFixed(2)},${e.y.toFixed(2)}`);
+      }
+      const k = slideTo(knockdownShot(host, 1), camera.aspect, atX);
+      camera.position.copy(k.pos);
+      camera.quaternion.copy(k.quat);
+      camera.fov = k.fov;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      const mid = new THREE.Vector3(0, 0, 0).project(camera);
+      assert.ok(Math.abs(mid.x - atX) < 0.04, `at ${atX} yaw ${yawDeg}: her middle at ${mid.x.toFixed(2)}`);
     }
   }
 });
