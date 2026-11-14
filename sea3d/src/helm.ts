@@ -4347,6 +4347,9 @@ function frameBoat(dt: number): void {
     const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
     ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
   }
+  // The finish scene is a cut to its own composed frame: no slide left over from the view before it
+  // (it eased out over the first seconds, so the horizon sank and the banner's measured spot was off).
+  if (page.scene === "arrival") third.x = third.y = 0;
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
   third.y += (ty - third.y) * k;
