@@ -157,6 +157,8 @@ export interface Card {
   build: string;
   launch: string;
   seed: number;
+  /** The numbered autopilot policy both boats' autopilots sailed by (simulator: autonomy/policy.py). 1, or absent: the one behind the odds. */
+  autopilot_policy?: number | null;
   breakdowns_on: boolean;
   boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
   ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };

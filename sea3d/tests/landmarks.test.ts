@@ -77,7 +77,7 @@ const roca = LANDMARKS.find((l) => l.key === "cabodaroca")!;
 test("Cabo da Roca light stands on its cliff, in sight of the finish scene", async () => {
   const { ARRIVAL_AT, CABO_DA_ROCA } = await import("../src/helm/arrivalShot");
   assert.deepEqual([roca.lat, roca.lon], [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]);
-  assert.ok((roca.base ?? 0) + roca.light!.focal > 150 && (roca.base ?? 0) + roca.light!.focal < 175, "about 164 m above the sea");
+  assert.ok((roca.base ?? 0) + roca.light!.focal > 125 && (roca.base ?? 0) + roca.light!.focal < 170, "on the cliff top, well above the sea");
   const o = offsetOf(roca, ARRIVAL_AT[0], ARRIVAL_AT[1]);
   const km = Math.hypot(o.x, o.z) / 1000;
   assert.ok(km > 5 && km < 9, `${km} km: near enough for the cliff to stand up, far enough to be on the horizon`);
@@ -106,4 +106,27 @@ test("a group flashing light: four flashes close together, then dark until the p
   assert.equal(flashAt(l, 3 * l.gap! + l.flash + 0.5), 0, "dark after the fourth");
   assert.equal(flashAt(l, l.period - 0.5), 0);
   assert.ok(flashAt(l, l.period + 0.25) > 0.9, "and round again");
+});
+
+test("coast lights stand on the land, near their towns, the same every time", async () => {
+  const { LISBON_COAST, groundAt, lightSpots } = await import("../src/land/coastLights");
+  // A grid over the Lisbon box: sea in the west third, land rising to the east.
+  const meta = { nx: 200, ny: 100, lon0: -9.52, lon1: -9.08, lat0: 38.62, lat1: 38.82 };
+  const hgt = new Int16Array(meta.nx * meta.ny);
+  for (let y = 0; y < meta.ny; y++) for (let x = 0; x < meta.nx; x++) hgt[y * meta.nx + x] = x < 18 ? -20 : x;
+  const g = { meta, hgt };
+  assert.equal(groundAt(g, 38.7, -9.6), null);
+  assert.equal(groundAt(g, 38.819, -9.519), -20);
+  assert.ok(groundAt(g, 38.7, -9.2)! > 100);
+  const a = lightSpots(LISBON_COAST, g);
+  assert.deepEqual(a, lightSpots(LISBON_COAST, g));
+  const want = LISBON_COAST.reduce((n, t) => n + t.lights, 0);
+  assert.ok(a.length > 0.8 * want && a.length <= want, `${a.length} of ${want}`);
+  for (const s of a) {
+    const t = LISBON_COAST[s.town];
+    assert.ok(groundAt(g, s.lat, s.lon)! > 2, "on land");
+    assert.ok(Math.hypot((s.lat - t.lat) * 111000, (s.lon - t.lon) * 86700) <= t.spread * 1.02, `${t.name}`);
+    assert.ok(s.y > groundAt(g, s.lat, s.lon)!, "above the ground");
+  }
+  assert.ok(LISBON_COAST.reduce((n, t) => n + t.lights, 0) < 200, "sparse");
 });

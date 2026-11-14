@@ -8,7 +8,8 @@ import * as THREE from "three";
 import type { Quality } from "../boats/parts";
 import { reflectable } from "../mirror";
 import { Island, type LandGrid } from "./island";
-import { Landmarks } from "./landmarks";
+import { Landmarks, glowTexture } from "./landmarks";
+import { CoastLights } from "./coastLights";
 import { PLACES, type Place } from "./place";
 import { CoastSquares, SQUARE_CREDIT } from "./squares";
 import { metresPerDegree } from "./shader";
@@ -105,6 +106,8 @@ export class NearbyLand {
   private squares: CoastSquares | null = null;
   /** Lighthouses and the like at their true spots (landmarks.ts). */
   private readonly landmarks = new Landmarks();
+  /** Town lights along the coast after dark (coastLights.ts). */
+  private readonly lights = new CoastLights();
   private tiles: Tile[] = [];
   private now: Loaded | null = null;
   private loading = false;
@@ -115,7 +118,7 @@ export class NearbyLand {
     private readonly base: string,
   ) {
     this.root.name = "nearby-land";
-    this.root.add(this.placeRoot, this.landmarks.root);
+    this.root.add(this.placeRoot, this.landmarks.root, this.lights.root);
   }
 
   /** Learn where the land files reach (their small meta files); none published means no land. */
@@ -172,6 +175,7 @@ export class NearbyLand {
     this.landmarks.update(lat, lon, t, a.sunEl);
     this.shown.landmarks = this.landmarks.count;
     const l = this.now;
+    this.lights.update(l ? (l.tile.place.land ?? l.tile.place.key) : "", l ? l.island.grid : null, lat, lon, a.sunEl, glowTexture());
     // The squares wait while a place loads: they leave a hole for its finer land, so they'd only be laid out twice.
     if (this.squares && !this.loading) {
       this.squares.update(lat, lon, l ? l.tile : null, t, a);
@@ -247,5 +251,6 @@ export class NearbyLand {
     this.drop();
     this.squares?.dispose();
     this.landmarks.dispose();
+    this.lights.dispose();
   }
 }

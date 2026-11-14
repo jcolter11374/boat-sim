@@ -42,14 +42,15 @@
   /* The clock (John, 11 Nov): time runs by itself once you set sail, at a speed you choose
      here, like a flight sim's time compression. It stops itself when something happens. */
   #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
-  #arrive { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 50%; /* high in the sky: the coast, the cape and the boat stay clear below it (M5) */ transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
-    padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
+  /* The finish banner: the page places it each time in the empty sky, clear of the cape, the lighthouse and the boat (helm/arrivalShot.ts bannerSpot). */
+  #arrive { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; width: min(430px, calc(100vw - 24px)); box-sizing: border-box;
+    padding: 10px 14px 12px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
   body.arriving #strip, body.arriving #orders, body.arriving #orders-tab, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
   body.arriving #keylist, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
   #arrive .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #3ddc97; }
-  #arrivehead { font-size: 20px; font-weight: 650; margin: 2px 0 6px; }
-  #arrive p { margin: 0 0 10px; font-size: 13px; color: var(--dim); }
-  @keyframes arrive-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  #arrivehead { font-size: 18px; font-weight: 650; margin: 1px 0 4px; }
+  #arrive p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.35; color: var(--dim); }
+  @keyframes arrive-in { from { opacity: 0; } to { opacity: 1; } }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
   #decide[hidden] { display: none; }
@@ -870,7 +871,7 @@
 <div id="arrive" class="glass" role="status" hidden>
   <div class="t">Finish</div>
   <div id="arrivehead"></div>
-  <p>The finish circle is 330 km out to sea, too far to see land. So this is where she was headed, not where she is: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse on the cliff and the Sintra hills behind.</p>
+  <p>The finish line is 330 km out to sea, too far to see land. Ahead is where she was headed: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse and the Sintra hills behind.</p>
   <button id="arrivego">See the results</button>
 </div>
 <div id="goalcard" role="status" aria-live="polite" hidden>

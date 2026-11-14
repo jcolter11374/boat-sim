@@ -30,7 +30,7 @@ import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
 import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
-import { prefetchHelm } from "./helm/prefetch";
+import { prefetchHelmOnIntent } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
@@ -97,8 +97,13 @@ const clock = new THREE.Clock();
 // the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
 // the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
 let look: Look = startLook(qualitySelect, atmos.software);
-// The title screen's Take the helm: fetch its simulator at idle so Set sail is quick (F2).
-prefetchHelm(new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href);
+// The title screen's Set sail: fetch its simulator ahead so Set sail is quick (F2), once the
+// visitor shows they mean to sail, or after eight seconds on a desktop (helm/prefetch.ts).
+prefetchHelmOnIntent(
+  new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href,
+  [document.getElementById("t-setsail"), document.getElementById("t-continue")],
+  document.getElementById("title"),
+);
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
