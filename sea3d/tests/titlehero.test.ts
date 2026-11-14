@@ -56,6 +56,9 @@ test("a boat with sails is filmed towards the sun; a low boat without sails is l
   // A low boat is filmed from a little higher, so the far shore stands clear above her.
   assert.ok(HERO_LIGHT_SAILS.camH === 1.5 && HERO_LIGHT_LOW.camH > 1.6 && HERO_LIGHT_LOW.camH <= 2.4);
   assert.ok(HERO_LIGHT_LOW.fill > HERO_LIGHT_SAILS.fill && HERO_LIGHT_LOW.env > HERO_LIGHT_SAILS.env);
+  // The dawn sun at 3 degrees barely lit the kayak's near side (a flat tomato red; Elena, 14 Nov): low boats get it stronger and less red; boats with sails keep the sky's own sun.
+  assert.ok(HERO_LIGHT_SAILS.sun === 1 && HERO_LIGHT_SAILS.sunWhite === 0);
+  assert.ok(HERO_LIGHT_LOW.sun > 2 && HERO_LIGHT_LOW.sun < 8 && HERO_LIGHT_LOW.sunWhite > 0 && HERO_LIGHT_LOW.sunWhite < 1);
 });
 
 test("the title's white boats sit a touch deeper, with a soft wet line at the water; the others as before", () => {
