@@ -4342,7 +4342,7 @@ const CHECKS = {
           await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
           const has = await p.evaluate(() => typeof window.__helm?.arrive === "function");
           if (!has) { bad.push(`${w}: no __helm.arrive()`); continue; }
-          await p.evaluate(() => window.__helm.arrive());
+          await p.evaluate(() => { window.__helm.arrive(); });
           for (const [i, ms] of [[1, 3000], [2, 6000], [3, 8000]]) { await p.waitForTimeout(ms); shots.push(await emit(p, `${w}-finish-${i}`)); }
           const a = await p.evaluate(() => { const e = document.getElementById("arrive"); return e ? { shown: e.getClientRects().length > 0, text: e.innerText.slice(0, 200) } : null; });
           const card = await p.evaluate(() => document.getElementById("result") && !document.getElementById("result").hidden ? document.getElementById("result").innerText.slice(0, 160) : "");
@@ -4394,7 +4394,7 @@ const CHECKS = {
             await p.keyboard.press("Space");
             await p.waitForTimeout(1500);
             now = await local(p);
-            await p.evaluate(() => window.__helm.arrive(59.3, 60));
+            await p.evaluate(() => { window.__helm.arrive(59.3, 60); });
             await p.waitForTimeout(3000);
             shots.push(await emit(p, `${w}-${label}-a`));
             const ban = await p.evaluate(() => ({ spot: window.__helm.arrivalBanner ?? null, text: document.getElementById("arrive")?.innerText.replace(/\s+/g, " ").slice(0, 90) ?? "" }));
