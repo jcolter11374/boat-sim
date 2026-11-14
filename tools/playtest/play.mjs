@@ -4649,11 +4649,13 @@ const CHECKS = {
           const d = document.getElementById("decide");
           return { day: window.__helm.hour / 24, open: vis(d), map: vis(document.getElementById("decidemap")), text: (document.getElementById("decidetext")?.textContent || "").slice(0, 120), poi: [...document.querySelectorAll(".poi-card")].map(vis), over: !!window.__helm.status?.over };
         });
-        let chase = null; const passed = [];
+        let chase = null, dockOpened = false; const passed = [];
         const t0 = Date.now();
         while (Date.now() - t0 < 25 * MIN) {
           const st = await state();
           if (st.over || st.day > 6) break;
+          // Maya: open the held history cards just before the chase (about day 1.47 on 15 April), so one is up when it asks.
+          if (!st.open && st.day >= 1.3 && !dockOpened) dockOpened = await p.evaluate(() => { const t = document.getElementById("poidock"); if (!t) return false; t.click(); return true; });
           if (st.open) {
             if (st.map && /Chase it|Take it/.test(st.text)) { chase = st; break; }
             passed.push(`d${st.day.toFixed(1)} "${st.text.slice(0, 40)}"`);
@@ -4662,7 +4664,7 @@ const CHECKS = {
           }
           await p.waitForTimeout(400);
         }
-        out.push(`calls on the way: ${passed.join("; ") || "none"}`);
+        out.push(`calls on the way: ${passed.join("; ") || "none"}; history tab ${dockOpened ? "opened" : "not seen"}`);
         out.push(`route looks: ${await p.evaluate(() => JSON.stringify((window.__helm.routeChecks || []).map((r) => [Math.round(r.day * 100) / 100, Math.round(r.gain), Math.round(r.turn), r.asked])))}`);
         if (!chase) { bad.push(`no "Chase it?" call with a map by day ${(await state()).day.toFixed(2)}`); }
         else {
