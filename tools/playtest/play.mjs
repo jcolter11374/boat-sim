@@ -4643,7 +4643,7 @@ const CHECKS = {
         must(lv === "1", `the card didn't open on 15 April (launch ${lv})`);
         await p.evaluate(() => document.getElementById("go")?.click());
         await p.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
-        await p.keyboard.press("3");
+        await p.keyboard.press("2"); // an hour a second: at 6 h a second the route looks can be overtaken
         const state = () => p.evaluate(() => {
           const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden";
           const d = document.getElementById("decide");
@@ -4651,9 +4651,9 @@ const CHECKS = {
         });
         let chase = null; const passed = [];
         const t0 = Date.now();
-        while (Date.now() - t0 < 12 * MIN) {
+        while (Date.now() - t0 < 25 * MIN) {
           const st = await state();
-          if (st.over || st.day > 9) break;
+          if (st.over || st.day > 6) break;
           if (st.open) {
             if (st.map && /Chase it|Take it/.test(st.text)) { chase = st; break; }
             passed.push(`d${st.day.toFixed(1)} "${st.text.slice(0, 40)}"`);
@@ -4663,6 +4663,7 @@ const CHECKS = {
           await p.waitForTimeout(400);
         }
         out.push(`calls on the way: ${passed.join("; ") || "none"}`);
+        out.push(`route looks: ${await p.evaluate(() => JSON.stringify((window.__helm.routeChecks || []).map((r) => [Math.round(r.day * 100) / 100, Math.round(r.gain), Math.round(r.turn), r.asked])))}`);
         if (!chase) { bad.push(`no "Chase it?" call with a map by day ${(await state()).day.toFixed(2)}`); }
         else {
           await p.waitForTimeout(1500);
