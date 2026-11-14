@@ -46,7 +46,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -1563,7 +1563,7 @@ function showClock(): void {
 
 /** One short run of the simulator, ahead of the picture. */
 async function clockRun(): Promise<void> {
-  const hours = Math.min(72, Math.max(1, rate * 1.5));
+  const hours = runHours(rate, !SPECTATE);
   try {
     const stopped = await game.run({ ...(armed ?? untilOptions()), hours });
     page.stops.push(stopped);
