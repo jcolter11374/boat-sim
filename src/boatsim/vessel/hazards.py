@@ -438,10 +438,13 @@ def sample_hazards(
         q_inv = min(p.p_inverted_stuck * scale, p.max_damage_p)
         q_inv = 1.0 - (1.0 - q_inv) * (1.0 - p.p_capsize_stays_over)
         if u[SLOT["knockdown_inverted"]] < 1.0 - (1.0 - q_inv) ** n:
+            # The sea that did it goes in the words, so the results card can say why
+            # (a 14 ft dinghy rolled in a near-gale on a "calm" launch day: Omar, #540).
+            sea = f"breaking seas, Hs {env.hs:.1f} m"
             why = (
-                "capsized and stayed upside down (not self-righting)"
+                f"capsized and stayed upside down (not self-righting; {sea})"
                 if p.p_capsize_stays_over
-                else (p.lost_why or "stuck inverted or keel lost")
+                else f"{p.lost_why or 'stuck inverted or keel lost'} ({sea})"
             )
             events.append(Event(t, EventKind.LOST, why))
             lost = True
