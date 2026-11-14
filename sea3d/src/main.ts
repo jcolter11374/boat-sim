@@ -17,7 +17,7 @@ import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
-import { Atmosphere } from "./atmosphere";
+import { Atmosphere, softwareGraphics } from "./atmosphere";
 import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type SeaState, type WaveComponent } from "./waves";
 import { mountSailLink } from "./sailLink";
@@ -75,7 +75,10 @@ $("motion-label").textContent = MOTION_LABEL;
 if (PHYSICS) $("motion-label").className = "muted";
 
 // ---------- renderer, sky, light ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+// No smoothing of edges (multisampling) on software graphics: it drew every pixel of the title
+// four times there, half of each frame (Omar's speed list, rank 13: the runner showed 0.7 fps).
+// Low already draws at half resolution there; graphics cards keep it.
+const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
