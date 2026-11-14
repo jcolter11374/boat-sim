@@ -77,6 +77,7 @@ import { loadMyBoat } from "./myboat";
 import { equipmentParts } from "./replay/equipment";
 import { VoyageHud, equipmentIcons, type Part } from "./replay/hud";
 import { focusBoat, type Focus } from "./focus";
+import { applyPaint, myPaint } from "./boats/paintApply";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -259,6 +260,17 @@ let drain: Drain | null = null;
 /** How much bigger than our 3 m kayak the shown boat is (cameras stand back by this much). */
 let viewScale = 1;
 let photoBoat = false; // the "low" test view (status.view)
+/** Is the boat on screen the player's own kind, on a voyage of her own (not the race against the Randolph boat)? No boat saved = our kayak. */
+function isMine(): boolean {
+  if (lanes.length > 1) return false;
+  const mine = loadMyBoat();
+  const key = !mine ? "kayak" : mine.base === "revb" ? "randolph" : mine.base === "revc" ? "randolph_c" : mine.base;
+  return laneRev === key;
+}
+/** The player's paint on their own boat (looks only); any other boat keeps her own colours. */
+function repaint(): void {
+  if (model) applyPaint(model.root, boatKey, isMine() ? myPaint() : null, model.form);
+}
 function buildBoat(q: Quality): void {
   setForecastLook(false); // materials can be shared with the next model: put them back first
   if (model) {
@@ -297,6 +309,7 @@ function buildBoat(q: Quality): void {
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   shadowsOn(model.root);
+  repaint();
   scene.add(model.root, wake.points);
   reflectable(model.root);
   wet = new Wetness(model.root);
@@ -853,6 +866,7 @@ function setFocus(i: number, force = false): void {
     boatKey = MODEL[laneRev];
     buildBoat(quality);
   }
+  repaint();
   if (isStock(boatKey) && !hasDetailedStock(boatKey)) {
     const k = boatKey;
     void loadStockModel(k).then((ok) => {

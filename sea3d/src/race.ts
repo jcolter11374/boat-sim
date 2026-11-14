@@ -334,12 +334,12 @@ function draw3d(): void {
   }
 }
 /** A new race: put each design's own boat in its view. */
-function boatsInViews(a: Choices, b: Choices): void {
+function boatsInViews(a: Choices, b: Choices, mineA = false): void {
   draw3d();
   if (!views) return;
   for (const [i, c] of [a, b].entries()) {
     const { spec, hull } = boatFor(c);
-    views[i].setBoat(spec, hull);
+    views[i].setBoat(spec, hull, i === 0 && mineA); // boat A is the player's own when they race "My boat"
   }
 }
 
@@ -392,7 +392,7 @@ async function startRace(): Promise<void> {
     page.ready = true;
     msg("Both boats are in the water. Sail on, or race the whole season.");
     drawAll();
-    boatsInViews(a, b);
+    boatsInViews(a, b, nameA !== null);
   } catch (e) {
     return fail(e);
   }

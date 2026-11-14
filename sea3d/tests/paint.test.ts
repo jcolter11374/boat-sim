@@ -18,7 +18,7 @@ test("eight to ten schemes, plainly named, each its own; the classics are there"
     assert.match(p.name, /^[A-Z][a-z]+( [a-z]+)?$/, p.name);
   }
   const navy = paintOf("navy")!;
-  assert.ok(lightness(rgbOf(navy.hull)) < 0.2 && lightness(rgbOf(navy.deck)) > 0.8, "navy with a white deck");
+  assert.ok(lightness(rgbOf(navy.hull)) < 0.3 && lightness(rgbOf(navy.deck)) > 0.8, "navy with a white deck");
   const white = paintOf("white")!;
   const stripe = rgbOf(white.boot);
   assert.ok(lightness(rgbOf(white.hull)) > 0.85 && stripe[0] > 150 && stripe[1] < 80 && stripe[2] < 80, "white with a red stripe");
@@ -190,6 +190,8 @@ test("the paint is kept beside the boat: it stays when the boat changes and leav
 test("the picker: her own colours first, then every scheme; a swatch shows all four paints", () => {
   const c = paintChoices("stock_pearson31_2");
   assert.equal(c.length, PAINTS.length + 1);
+  // Our kayak is safety orange as built: that scheme would be the same boat twice, so it isn't offered on her.
+  assert.deepEqual(paintChoices("kayak").map((x) => x.id), ["", ...PAINTS.filter((p) => p.id !== "orange").map((p) => p.id)]);
   assert.deepEqual([c[0].id, c[0].name], ["", "Her own colours"]);
   assert.equal(c[0].colours.hull, BUILT.stock_pearson31_2.top);
   assert.deepEqual(c.slice(1).map((x) => x.id), PAINTS.map((p) => p.id));

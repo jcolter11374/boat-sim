@@ -17,6 +17,7 @@ import { apparentFlow, rudderFor } from "../boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "../motion";
 import { Wake } from "../wake";
 import { Contact } from "../contact";
+import { applyPaint, myPaint } from "../boats/paintApply";
 import { heightAt, Sea as LiveSea } from "../waves";
 import type { Placement } from "../standin";
 
@@ -57,6 +58,7 @@ export class BoatView {
   private readonly place: Placement = { x: 0, z: 0, yaw: 0 };
   private motion: BoatMotion;
   private spec: BoatSpec = KAYAK;
+  private mine = false; // the player's own boat: she wears their paint (looks only)
   private model: BoatModel | null = null;
   private wake: Wake | null = null;
   private contact: Contact | null = null;
@@ -112,8 +114,9 @@ export class BoatView {
   }
 
   /** Put a boat in this view, with the camera stood back for its size. */
-  setBoat(spec: BoatSpec, hull: HullParams): void {
+  setBoat(spec: BoatSpec, hull: HullParams, mine = false): void {
     this.spec = spec;
+    this.mine = mine;
     this.shown.boat = spec.key;
     this.motion = new BoatMotion(hull, this.place);
     const k = THREE.MathUtils.clamp(spec.length / KAYAK.length, 0.6, 3.4);
@@ -126,6 +129,11 @@ export class BoatView {
       const key = spec.key;
       void loadStockModel(key).then((ok) => ok && this.spec.key === key && this.build());
     }
+  }
+
+  /** The player's paint on their own boat; every other boat keeps her own colours. */
+  repaint(): void {
+    if (this.model) applyPaint(this.model.root, this.spec.key, this.mine ? myPaint() : null, this.model.form);
   }
 
   /** Rebuild the boat (after the detailed models load). */
@@ -143,6 +151,7 @@ export class BoatView {
       this.contact.dispose();
     }
     this.model = BUILDERS[this.spec.key](this.quality);
+    this.repaint();
     this.contact = new Contact(this.model.form, this.spec, this.quality, this.model.root);
     this.contact.surface = (c, x, z, t) => this.sea.surfaceAt(c, x, z, t);
     this.contact.collar.visible = this.contact.spray.visible = !this.model.twinHull;
