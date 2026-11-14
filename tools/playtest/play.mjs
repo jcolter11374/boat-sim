@@ -5075,12 +5075,17 @@ const CHECKS = {
       const scene = await page.evaluate(() => { const r = document.getElementById("ss-scene"); return { shown: !!r && !r.hidden && r.getClientRects().length > 0, pills: [...(r?.querySelectorAll("button") ?? [])].map((b) => b.textContent.trim()) }; });
       out.push(`Watch from on the card: ${scene.shown ? scene.pills.join(" / ") : "HIDDEN"}`);
       if (!scene.shown || !scene.pills.some((p) => /Pico/.test(p))) bad.push(`no "Watch from" Pico on the autopilot card (${JSON.stringify(scene)})`);
-      await open("?who=autopilot&place=pico&quality=medium");
+      // As a player does: the Pico pill on the autopilot card, then go.
+      await open("?who=autopilot&quality=medium");
+      await page.locator("#ss-scene button", { hasText: /Pico/ }).first().click({ timeout: 20000 });
+      await page.waitForTimeout(1000);
+      out.push(`after the Pico pill: ${page.url().split("?")[1] ?? ""}`);
       await sail();
       await page.waitForTimeout(8000);
-      const land = await page.evaluate(() => ({ err: window.__helm.error ?? null, land: window.__helm.land ? JSON.stringify(window.__helm.land).slice(0, 120) : null, reach: Math.round(window.__helm.reach ?? 0) }));
+      const land = await page.evaluate(() => ({ err: window.__helm.error ?? null, url: location.search.slice(0, 80), land: window.__helm.land ? JSON.stringify(window.__helm.land).slice(0, 120) : null, reach: Math.round(window.__helm.reach ?? 0) }));
       out.push(`Pico: ${JSON.stringify(land)}`);
       if (land.err) bad.push(`Pico watch failed: ${land.err}`);
+      if (!/"km":\d/.test(land.land || "")) bad.push(`no Pico coast near the boat after choosing it (${land.land})`);
       await emit("pico");
       // #586/#589: Annapolis buoys, day and night.
       for (const hr of [10, 22]) {
