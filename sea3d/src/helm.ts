@@ -36,6 +36,8 @@ import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
+import { Wetness } from "./boats/wet";
+import { Drain } from "./drain";
 import { ShortWaveRide, type KnockdownTiming } from "./boats/ride";
 import { PropWash } from "./boats/propwash";
 import { Contact } from "./contact";
@@ -183,6 +185,12 @@ let model: BoatModel | null = null;
 let wake: Wake | null = null;
 let propWash: PropWash | null = null;
 let contact: Contact | null = null;
+/** A wet boat in rain and spray, soaked after a knockdown (boats/wet.ts; it was only on the old Watch page). */
+let wet: Wetness | null = null;
+/** Water pouring off the deck as she comes back up from a knockdown (drain.ts; also from the old Watch page). */
+let drain: Drain | null = null;
+/** When a knockdown's water pours off her deck (page clock, s): as she rises, from the ride's own timing. */
+let pourAt = Infinity;
 let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
 let seaLevel: "low" | "high" = quality;
 /** Draw at a level: its resolution, glow and sea mesh. The boats keep the geometry they were built with. */
@@ -235,6 +243,13 @@ function buildBoat(): void {
     propWash.dispose();
     propWash = null;
   }
+  wet?.forget();
+  wet = null;
+  if (drain) {
+    scene.remove(drain.group);
+    drain.dispose();
+    drain = null;
+  }
   // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
   if (spec === RANDOLPH && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && spec === RANDOLPH && buildBoat());
   model = BUILDERS[spec.key](quality);
@@ -248,6 +263,10 @@ function buildBoat(): void {
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
+  wet = new Wetness(model.root); // after the paint: the dry look it keeps is her painted one
+  drain = new Drain(model.form, spec);
+  drain.group.visible = !model.twinHull; // the deck edge is one centred hull's
+  scene.add(drain.group);
   // A boat with motors: the churned trail astern of each running propeller (M5: a dead motor visibly stops).
   if (model.gear.props.length) {
     propWash = new PropWash(model.gear.props.length);
@@ -316,7 +335,12 @@ function useBoat(base: string): void {
 }
 buildBoat();
 // A new paint (the "Your boat" picker): repaint her where she floats, without a rebuild.
-onMyBoatChange(() => model && paintMine(model));
+onMyBoatChange(() => {
+  if (!model) return;
+  wet?.forget(); // dry her, so the new paint is the dry look the next Wetness keeps
+  paintMine(model);
+  wet = new Wetness(model.root);
+});
 let modelsIn = false; // the detailed boats have loaded (or failed to): the shader warm-up waits for them
 void loadDetailedModels().then((ok) => {
   if (ok) buildBoat();
@@ -367,6 +391,13 @@ async function loadWatched(): Promise<Replay> {
 // launch and weather, run by the race's own simulator worker (src/helm/raceSource.ts); boat A sails
 // where your boat does and boat B where the ghost does. Nobody steers.
 const RACE = !params.get("g") && !WATCH && params.has("race");
+/**
+ * "Watch from" a real coast (?place=pico with ?watch=; the old Watch page's "Sail past a real coast"): the
+ * boat is drawn just off that coast, in her voyage's own wind and waves, with the land around her. The
+ * chart, the strip and the clock still follow her real voyage. Annapolis harbour is left out (whoSteers.ts SCENERY).
+ */
+const VISIT = WATCH && params.get("place") !== "annapolis" ? (PLACES[params.get("place") ?? ""] ?? null) : null;
+let visitAimed = false;
 /** Nobody at the helm: a watched voyage or a race. No orders, no wheel, no calls. */
 const SPECTATE = WATCH || RACE;
 const raceMine = (): Record<string, string> | null => {
@@ -450,6 +481,9 @@ let chart: Chart | null = null;
 let chartDirty = true;
 let shownEvents = { boat: 0, ghost: 0 };
 const page = {
+  /** How wet the boat looks (0 dry .. 1 soaked) and how many knockdowns have drained off her deck (for tests). */
+  wet: 0,
+  drains: 0,
   /** The picture's level, where it came from, and the timed median frame (ms) if it was judged (for tests). */
   quality: qstat,
   ready: false,
@@ -1344,6 +1378,7 @@ function moment(e: ReplayEvent, side?: number): void {
     kick = { t: now, dir: side ?? (Math.random() < 0.5 ? -1 : 1) };
     const k = ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
     if (k) cutToKnockdown(k, now);
+    pourAt = k ? k.rising : now; // the water she scooped runs off as she comes back up
     contact?.slam(1); // under a breaking crest
     sound.crash();
     flash("spray");
@@ -4237,6 +4272,8 @@ const filmHost: CinemaHost = {
 };
 const cine = new Cinema(filmHost);
 const sound = new OceanSound();
+/** A knockdown on demand, for the proof frames and tests (the wet look and the deck draining). */
+(window as unknown as { __knock: () => void }).__knock = () => moment({ h: hour, kind: "capsize" } as ReplayEvent);
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
 (page as unknown as { cine: Cinema }).cine = cine;
@@ -4779,6 +4816,15 @@ renderer.setAnimationLoop(() => {
       FOAM_LAMP_UNIFORMS.uFoamLamp.value.set(lampW.x, lampW.y, lampW.z, FOAM_AT_NIGHT * NAV_NIGHT.value);
       FOAM_LAMP_UNIFORMS.uFoamLampR.value = 1.5 * Math.max(1, spec.length / KAYAK.length);
     }
+    if (drain) {
+      if (t >= pourAt) {
+        pourAt = Infinity;
+        drain.pour();
+      }
+      // The roll watcher sees only the wave motion (as on the old page); the ride's knockdown pours at pourAt.
+      drain.update(dt, motion.roll, model.root, atmos.ambient, renderer.domElement.clientHeight);
+      page.drains = drain.count;
+    }
     const failedNow = r ? failuresAt(r, h) : new Map<string, string>();
     for (const part of page.force.failed) if (!failedNow.has(part)) failedNow.set(part, "forced for a picture");
     model.gear.update(
@@ -4825,7 +4871,11 @@ renderer.setAnimationLoop(() => {
   const st0 = page.status?.boat;
   // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
-  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  if (VISIT && !visitAimed && !arrival) {
+    visitAimed = true;
+    aimAt(VISIT.look); // look past her at the land, as the old page did
+  }
+  const [lat, lon] = arrival ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
   if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
   if (practiceAt && wheelNow && ghostTrack && wheel.wheel) {
     const g = ghostAt(ghostTrack, wheel.wheel.s.t)!;
@@ -4891,6 +4941,11 @@ renderer.setAnimationLoop(() => {
   // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
   bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
   rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+  // Wet from rain, and from spray once the waves get up; soaked after a knockdown, drying over a minute or so.
+  const dunked = drain ? 1 - THREE.MathUtils.smoothstep(drain.sinceDrain, 20, 80) : 0;
+  const wetNow = Math.min(1, Math.max(dunked, rain.amount + THREE.MathUtils.smoothstep(hs, 1, 4) * 0.8));
+  wet?.set(wetNow);
+  page.wet = wetNow;
   setRainOnSea(rate != null ? rainFromRate(rate) : rainFromStorm(storm), bands.local, quality === "low"); // rings on the sea (rainRings.ts)
   page.bands = bands.shown;
   traffic?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight);
@@ -5115,7 +5170,7 @@ if (!shared) mountSetSailCard({
     // On for everyone (John, 13 Nov: "shove everything out the door now"); ?who=autopilot still opens the card on her.
     who: whoFromUrl(location.search),
     voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []),
-    watch: (file: string) => location.assign(watchLink(location.search, file)),
+    watch: (file: string, place?: string) => location.assign(watchLink(location.search, file, place)),
     race: (a: RaceId, b: RaceId, day: string) => location.assign(raceLink(location.search, a, b, day)),
   });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
