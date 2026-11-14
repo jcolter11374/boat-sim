@@ -128,6 +128,8 @@ test("Watch a voyage and Race it in every menu open the Set sail card, not the o
   assert.ok(more.includes(`href="${WATCH_HREF}">Watch a voyage<`), "title: Watch a voyage");
   assert.ok(more.includes(`href="${RACE_HREF.replace("&", "&amp;")}">Race it<`), "title: Race it");
   assert.doesNotMatch(more, /voyage\.html|race\.html/);
+  // The Boatyard's own "Watch a voyage" line goes to the card too (its replay links open one particular voyage and stay).
+  assert.ok(readFileSync(ROOT + "boatyard.html", "utf8").includes(`<a href="${WATCH_HREF}">Watch a voyage &rarr;</a>`), "Boatyard: Watch a voyage");
 });
 
 test("the menu marks the one helm entry you are on", () => {

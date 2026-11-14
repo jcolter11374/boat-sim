@@ -26,7 +26,7 @@ import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
-import { BUILDERS, hasDetailedKayak, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, randolphSettled, type BoatModel } from "./boats/model";
 import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
@@ -220,6 +220,8 @@ function buildBoat(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+  if (spec === RANDOLPH && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && spec === RANDOLPH && buildBoat());
   model = BUILDERS[spec.key](quality);
   paintMine(model); // the player's own paint, looks only (boats/paintApply.ts)
   reflectable(model.root);
@@ -4178,7 +4180,7 @@ const here0 = new THREE.Vector3();
 function hideStandIn(): void {
   if (!model) return;
   const card = !page.ready && !$("start").hidden;
-  const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : true;
+  const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : spec === RANDOLPH ? hasDetailedRandolph() || randolphSettled() : true;
   const show = (!card || real) && !boatGone;
   if (model.root.visible === show) return;
   model.root.visible = show;
@@ -4508,9 +4510,13 @@ renderer.setAnimationLoop(() => {
     if (!rival.built) {
       const b = page.race.bases[1];
       const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
-      const m = BUILDERS[rs.key](quality);
-      reflectable(m.root);
-      rival.set(m);
+      // Her detailed model first, if she is the Randolph boat (it loads on demand): she is drawn once it is in.
+      if (rs === RANDOLPH && !randolphSettled()) void loadRandolphModel();
+      else {
+        const m = BUILDERS[rs.key](quality);
+        reflectable(m.root);
+        rival.set(m);
+      }
     }
     const hh = Math.min(h, lastHour(her));
     // Before her first hour is logged (the race opens paused) she is at her reported start, as your boat is.

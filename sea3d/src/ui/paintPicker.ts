@@ -34,7 +34,8 @@ export function swatchSvg(c: { hull: number; deck: number; boot: number; bottom:
 export function paintChoices(built: string): { id: string; name: string; colours: { hull: number; deck: number; boot: number; bottom: number } }[] {
   const b = BUILT[built] ?? BUILT.kayak;
   const own = { id: "", name: "Her own colours", colours: { hull: b.top, deck: b.deck, boot: b.boot, bottom: b.bottom } };
-  return [own, ...PAINTS.map((p: PaintScheme) => ({ id: p.id, name: p.name, colours: p }))];
+  // A scheme in her own hull colour would be the same boat twice (Elena: our kayak is already safety orange).
+  return [own, ...PAINTS.filter((p) => p.hull !== b.top).map((p: PaintScheme) => ({ id: p.id, name: p.name, colours: p }))];
 }
 
 let styled = false;

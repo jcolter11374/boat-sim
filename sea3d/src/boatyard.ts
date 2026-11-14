@@ -13,7 +13,7 @@ import { tidyCatalog } from "./yard/words";
 import { tierOf, type BoardTiers } from "./yard/tier";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
 import { RANDOLPH_REVB, RANDOLPH_REVC } from "./motion";
@@ -127,6 +127,8 @@ function build(): void {
   if (base !== "kayak") {
     // Our model of the Randolph boat (their Rev B and Rev C share a hull shape in our model).
     controls.maxDistance = 25;
+    // Her detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+    if (!hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && base !== "kayak" && !isKeel(base) && build());
     model = BUILDERS.randolph(quality);
     shadowsOn(model.root);
     scene.add(model.root);
