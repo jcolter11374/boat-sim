@@ -3122,8 +3122,11 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       // For the results card's "your calls": what was chosen, and the lead on the ghost then.
       const ghost = c.order?.heading === "auto" || /same as the ghost/i.test(`${c.label} ${c.plain ?? ""}`);
       if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km, ghost });
-      await c.act();
+      // The clock runs on at once (Rosa, responsiveness, 14 Nov): the choice's order is already first in the
+      // simulator's queue, ahead of the next run, so waiting for its answer only held the picture a frame.
+      const acted = c.act();
       setRate(lastRate);
+      await acted;
       if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
     });
     box.append(b);
