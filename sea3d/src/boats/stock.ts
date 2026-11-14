@@ -13,7 +13,7 @@
 
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
-import { addCockpitLight } from "./nightlook";
+import { addCockpitLight, COCKPIT_REACH_M } from "./nightlook";
 import { applyStockFinishes } from "./finishes";
 import { DACRON, clotheSails, tickSails } from "./sailcloth";
 import { gltfLoader } from "../gltf";
@@ -555,7 +555,7 @@ export function buildStock(key: StockKey, quality: Quality) {
   addNavLights(g, "tricolour", at);
   const deck = form.dz(0.5) + 0.3;
   // A faint warm cockpit lamp, so the crew's end of the boat shows at night (nightlook.ts).
-  if (key === "stock_cruiser31" || key === "stock_pearson31_2") addCockpitLight(g, V(form.L * 0.78, deck + 0.8, 0), Math.max(3, spec.length * 0.45));
+  if (key === "stock_cruiser31" || key === "stock_pearson31_2") addCockpitLight(g, V(form.L * 0.78, deck + 0.35, 0), COCKPIT_REACH_M);
   const gear = new Gear(g, {
     props: [],
     light: V(spec.length * 0.98, deck + 0.4, 0),

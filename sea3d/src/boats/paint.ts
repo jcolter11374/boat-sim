@@ -37,7 +37,7 @@ export const PAINTS: PaintScheme[] = [
   { id: "red", name: "Deep red", hull: 0x9e1b1b, deck: 0xe8e5dc, boot: 0xf4f4ee, bottom: 0x1b1d21 },
   { id: "black", name: "Black", hull: 0x1b1d21, deck: 0xc9ced3, boot: 0xf4f4ee, bottom: 0x7a1f1f },
   { id: "sky", name: "Sky blue", hull: 0x7fb6de, deck: 0xf0eee6, boot: 0xf4f4ee, bottom: 0x1d2f4d },
-  { id: "sand", name: "Sand", hull: 0xd9c39a, deck: 0xf0eee6, boot: 0x5a3a22, bottom: 0x1f3a5f },
+  { id: "sand", name: "Sand", hull: 0xdebe98, deck: 0xf0eee6, boot: 0x5a3a22, bottom: 0x1f3a5f },
 ];
 
 /** The scheme with this id, or null: "" and anything unknown mean the boat keeps her own colours. */
