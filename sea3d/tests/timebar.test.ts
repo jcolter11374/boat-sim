@@ -1,7 +1,7 @@
 // The speed bar at the end of a voyage (src/helm/timebar.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "../src/helm/timebar";
+import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "../src/helm/timebar";
 
 const REAL_TIME = 1 / 3600;
 
@@ -57,4 +57,15 @@ test("a stop with no call: the picture's last three hours play at an hour a seco
   }
   // Real time is never sped up to "an hour a second".
   assert.ok(drainStep(1 / 3600, 1, 98, 100, true) - 98 < 0.001);
+});
+
+test("steering, the simulator never runs more than a day between looks for a call", () => {
+  assert.equal(runHours(REAL_TIME, true), 1);
+  assert.equal(runHours(1, true), 1.5);
+  assert.equal(runHours(6, true), 9, "the default speed is as it was");
+  assert.equal(runHours(24, true), 24, "a day a second: was 36 hours");
+  assert.equal(runHours(96, true), 24, "four days a second: was 72 hours, past a gale's 2-day warning");
+  // Watching a recorded voyage or a race there are no calls to miss: as before.
+  assert.equal(runHours(96, false), 72);
+  assert.equal(runHours(24, false), 36);
 });
