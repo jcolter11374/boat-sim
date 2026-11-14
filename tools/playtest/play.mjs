@@ -4622,6 +4622,77 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #568: on 15 April a "Chase it?" call with a map comes around day 3.7. A real mouse click on the
+  // middle of option 1 must choose it (the history card used to sit over it), and the history card
+  // must come back after. Other calls on the way: option 1 by keyboard-free click too.
+  "call-click": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-call-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
+      const p = await ctx.newPage();
+      const errs = [];
+      p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+      try {
+        await p.goto(SITE + "helm.html?who=you&day=2020-04-15&quality=low", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy && window.__helm.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
+        const lv = await p.evaluate(() => document.getElementById("launch")?.value);
+        must(lv === "1", `the card didn't open on 15 April (launch ${lv})`);
+        await p.evaluate(() => document.getElementById("go")?.click());
+        await p.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.keyboard.press("3");
+        const state = () => p.evaluate(() => {
+          const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden";
+          const d = document.getElementById("decide");
+          return { day: window.__helm.hour / 24, open: vis(d), map: vis(document.getElementById("decidemap")), text: (document.getElementById("decidetext")?.textContent || "").slice(0, 120), poi: [...document.querySelectorAll(".poi-card")].map(vis), over: !!window.__helm.status?.over };
+        });
+        let chase = null; const passed = [];
+        const t0 = Date.now();
+        while (Date.now() - t0 < 12 * MIN) {
+          const st = await state();
+          if (st.over || st.day > 9) break;
+          if (st.open) {
+            if (st.map && /Chase it|Take it/.test(st.text)) { chase = st; break; }
+            passed.push(`d${st.day.toFixed(1)} "${st.text.slice(0, 40)}"`);
+            await p.evaluate(() => document.querySelector("#decidebtns button")?.click());
+            await p.waitForTimeout(1500);
+          }
+          await p.waitForTimeout(400);
+        }
+        out.push(`calls on the way: ${passed.join("; ") || "none"}`);
+        if (!chase) { bad.push(`no "Chase it?" call with a map by day ${(await state()).day.toFixed(2)}`); }
+        else {
+          await p.waitForTimeout(1500);
+          shots.push(await emit(p, "chase-up"));
+          const btn = p.locator("#decidebtns button").first();
+          const box = await btn.boundingBox();
+          const hit = await p.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e ? (e.closest("#decidebtns button") ? "option 1" : `${e.tagName.toLowerCase()}${e.id ? "#" + e.id : ""}.${String(e.className).split(" ")[0]}`) : "nothing"; }, [box.x + box.width / 2, box.y + box.height / 2]);
+          const label = (await btn.textContent()).trim().slice(0, 50);
+          const poiUp = chase.poi;
+          await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          await p.waitForTimeout(1500);
+          const after = await state();
+          if (after.open && after.text === chase.text) bad.push(`clicking the middle of option 1 didn't choose it (point hits ${hit})`);
+          shots.push(await emit(p, "chosen"));
+          await p.waitForTimeout(3000);
+          const later = await state();
+          shots.push(await emit(p, "after"));
+          if (poiUp.some((v) => v)) bad.push(`history card visible while the call was up`);
+          const poiBack = later.poi.some((v) => v);
+          out.push(`chase call at day ${chase.day.toFixed(2)}: "${chase.text.slice(0, 80)}"; history cards while up ${JSON.stringify(poiUp)}; option 1 "${label}", its middle hits ${hit}; card ${after.open ? "still open" : "closed"} after the click; history cards after ${JSON.stringify(later.poi)}${poiBack ? " (back)" : ""}`);
+          if (later.poi.length && !poiBack) bad.push(`history card didn't come back after choosing`);
+          if (!later.poi.length) out.push("no history card on the page at that point (unverified that it comes back)");
+        }
+        if (errs.length) bad.push(`page errors ${errs.slice(0, 2).join(" / ")}`);
+      } finally { await ctx.close().catch(() => {}); }
+      out.push(`frames ${shots.join(", ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
