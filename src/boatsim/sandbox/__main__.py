@@ -1,5 +1,8 @@
 """python -m boatsim.sandbox cut|pack|reference
 
+split --bundle forcing_2020.npz --out DIR
+    the bundle split by month for the helm page, which downloads only the
+    months a voyage sails through (numpy only; the stored bytes don't change)
 cut 2020 --out site/sandbox/forcing_2020.npz [--no-currents]
     the season's forcing bundle, from the ERA5/GLORYS caches (Actions)
 pack --out site/sandbox/boatsim.zip [--commit SHA]
@@ -253,6 +256,11 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("--start", type=date.fromisoformat, help="window start instead of 1 April")
     c.add_argument("--end", type=date.fromisoformat, help="window end instead of 20 November")
     c.add_argument("--storms", help="IBTrACS CSV: carry the window's storm tracks (#117)")
+    sp = sub.add_parser("split")
+    sp.add_argument("--bundle", required=True)
+    sp.add_argument(
+        "--out", required=True, help="folder for the static file, the months and _parts.json"
+    )
     k = sub.add_parser("pack")
     k.add_argument("--out", required=True)
     k.add_argument("--commit", help="the commit packed (git SHA)")
@@ -291,6 +299,16 @@ def main(argv: list[str] | None = None) -> None:
             storms_csv=a.storms,
         )
         print(f"{out}: {out.stat().st_size / 1e6:.1f} MB")
+    elif a.cmd == "split":
+        from boatsim.sandbox.forcing import split
+
+        index = split(Path(a.bundle), Path(a.out))
+        print(
+            f"{index['whole']}: {index['whole_bytes'] / 1e6:.2f} MB, split by month (bytes unchanged):"
+        )
+        print(f"  {index['static']:28s} {index['static_bytes'] / 1e6:6.2f} MB")
+        for part in index["parts"]:
+            print(f"  {part['file']:28s} {part['bytes'] / 1e6:6.2f} MB")
     elif a.cmd == "pack":
         n = pack(Path(a.out), commit=a.commit)
         print(f"{a.out}: {n} files, {Path(a.out).stat().st_size / 1e6:.2f} MB")

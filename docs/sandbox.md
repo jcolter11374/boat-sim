@@ -21,7 +21,19 @@ from the server grid."** (See "The exactness gate" below for why.)
 |---|---|---|---|
 | `boatsim.zip` | ~0.5 MB | `src/boatsim`, the design files, the land mask and the ports | packed by `tools/build_site.sh` from the page's own commit |
 | `forcing_2020.npz` | 18 MB | The season's forcing bundle (below) | the `sandbox-data` release ("Sandbox data", publish ticked) |
+| `forcing_2020_static.npz`, `forcing_2020_<YYYY-MM>.npz`, `forcing_2020_parts.json` | the same bytes, by month | The helm page's weather: the static file (grids, time axes, ships), then only the months a voyage sails through, fetched ahead of the clock | `tools/build_site.sh` splits the bundle (`python -m boatsim.sandbox split`) |
 | `reference.json` | small | Reference voyages run in Node + Pyodide | the `sandbox-data` release |
+
+**The split never changes a value.** Each month's file holds a slice of the
+bundle's own stored bytes plus the first step of the next month, so every sample
+has both of its bracketing steps in one file and is computed exactly as from the
+whole bundle (`forcing.PartSeries`). `split` checks the files join back to the
+bundle byte for byte; `tests/test_sandbox_split.py` and the "Sandbox data" run
+check that samples and whole voyages on the split files are identical to the
+last bit. A month that hasn't arrived raises `WeatherNotLoaded`, which is never
+taken for the end of the weather: the game asks for its months before it moves
+(`Game._cover`), and the page fetches the month and asks again. The Boatyard and
+the race sail whole seasons and still load the whole file.
 
 **The page and its simulator are always one commit.** `boatsim.zip` used to come
 from the release too, which only a hand-started run updated, so three times a
