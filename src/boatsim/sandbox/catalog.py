@@ -964,8 +964,7 @@ def _keel_sails(boat: str) -> dict[str, dict[str, Option]]:
             ),
             "storm": _sail_part(
                 "Storm jib and trysail",
-                "Two small, very strong sails at the racing rules' sizes, so she keeps "
-                "sailing in a gale.",
+                "Two small, very strong sails for a gale.",
                 "World Sailing Offshore Special Regulations 4.26: storm jib 5 % of I², "
                 "trysail 17.5 % of P x E; the gale limit is our GUESS",
                 (("storm", "storm"),),
