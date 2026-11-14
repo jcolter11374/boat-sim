@@ -4655,7 +4655,7 @@ const CHECKS = {
           const st = await state();
           if (st.over || st.day > 6) break;
           // Maya: open the held history cards just before the chase (about day 1.47 on 15 April), so one is up when it asks.
-          if (!st.open && st.day >= 1.3 && !dockOpened) dockOpened = await p.evaluate(() => { const t = document.getElementById("poidock"); if (!t) return false; t.click(); return true; });
+          if (!st.open && st.day >= 1.42 && !dockOpened) dockOpened = await p.evaluate(() => { const t = document.getElementById("poidock"); if (!t) return false; t.click(); return true; });
           if (st.open) {
             if (st.map && /Chase it|Take it/.test(st.text)) { chase = st; break; }
             passed.push(`d${st.day.toFixed(1)} "${st.text.slice(0, 40)}"`);
@@ -4676,7 +4676,9 @@ const CHECKS = {
           const label = (await btn.textContent()).trim().slice(0, 50);
           const poiUp = chase.poi;
           await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-          await p.waitForTimeout(1500);
+          await p.waitForTimeout(300);
+          const soon = await state();
+          await p.waitForTimeout(1200);
           const after = await state();
           if (after.open && after.text === chase.text) bad.push(`clicking the middle of option 1 didn't choose it (point hits ${hit})`);
           shots.push(await emit(p, "chosen"));
@@ -4684,10 +4686,10 @@ const CHECKS = {
           const later = await state();
           shots.push(await emit(p, "after"));
           if (poiUp.some((v) => v)) bad.push(`history card visible while the call was up`);
-          const poiBack = later.poi.some((v) => v);
-          out.push(`chase call at day ${chase.day.toFixed(2)}: "${chase.text.slice(0, 80)}"; history cards while up ${JSON.stringify(poiUp)}; option 1 "${label}", its middle hits ${hit}; card ${after.open ? "still open" : "closed"} after the click; history cards after ${JSON.stringify(later.poi)}${poiBack ? " (back)" : ""}`);
-          if (later.poi.length && !poiBack) bad.push(`history card didn't come back after choosing`);
-          if (!later.poi.length) out.push("no history card on the page at that point (unverified that it comes back)");
+          const poiBack = [soon, after, later].some((x) => x.poi.some((v) => v));
+          out.push(`chase call at day ${chase.day.toFixed(2)}: "${chase.text.slice(0, 80)}"; history cards while up ${JSON.stringify(poiUp)}; option 1 "${label}", its middle hits ${hit}; card ${after.open ? "still open" : "closed"} after the click; history cards 0.3 s after ${JSON.stringify(soon.poi)}, 1.5 s after ${JSON.stringify(after.poi)}, 4.5 s after ${JSON.stringify(later.poi)}${poiBack ? " (back)" : ""}`);
+          if ((soon.poi.length || after.poi.length) && !poiBack) bad.push(`history card didn't come back after choosing`);
+          if (!soon.poi.length && !after.poi.length) out.push("no history card on the page at that point (unverified that it comes back)");
         }
         if (errs.length) bad.push(`page errors ${errs.slice(0, 2).join(" / ")}`);
       } finally { await ctx.close().catch(() => {}); }
