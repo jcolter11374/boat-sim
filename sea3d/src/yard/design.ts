@@ -50,7 +50,7 @@ export interface SimSlots {
   /** Other boats to start from (Theo): their own slots, as-built picks, and the kayak slots they share. */
   bases?: Record<string, SimBase>;
   /** The stock boats' parts (Theo): the keelboats' sails and rig, a spare autopilot, the tactician. */
-  stock?: Record<string, { design: string; defaults: Record<string, string>; slots: { id: string; name: string; opts: (SimOption & { d?: string })[] }[] }>;
+  stock?: Record<string, { design: string; defaults: Record<string, string>; slots: { id: string; name: string; note?: string; opts: (SimOption & { d?: string })[] }[] }>;
 }
 export interface SimBase {
   design: string; // the simulator config, e.g. configs/randolph_rev_c.yaml
@@ -63,6 +63,8 @@ export interface CatalogSlot {
   id: string;
   name: string;
   buy?: number;
+  /** A muted line under the slot's options: what the odds don't count yet. */
+  note?: string;
   opts: CatalogOption[];
 }
 export interface Catalog {

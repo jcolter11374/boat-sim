@@ -48,7 +48,6 @@ class Option:
     wh: float | None = None  # brain/AIS daily energy (catalog), for the hotel load
     kg: float = 0.0  # weight against the default option (catalog), for the mass link
     hotel_wh: float = 0.0  # extra daily energy (Wh/day) for parts with no catalog figure
-    cost: float = 0.0  # price against the default option, USD (parts list), for the page
     # Keelboat sail parts: (knob, value) pairs the sail composer (_sail_changes) turns
     # into the vpp block (a variant polar), the rig's damage odds and the storm limit.
     sail: tuple = ()
@@ -700,6 +699,10 @@ CHANGE_NAMES = {
     ("reef", "slab3"): "a third reef",
     ("reef", "inmast"): "in-mast furling",
     ("storm", "storm"): "storm sails",
+    ("keel", "wing"): "wing keel",
+    ("keel", "shoal"): "shoal keel",
+    ("drogue", "jordan"): "Jordan series drogue",
+    ("drogue", "para"): "sea anchor",
     ("spare", "spare-autopilot"): "spare autopilot",
     ("tactician", "off"): "no sailing tactician",
 }
@@ -709,6 +712,8 @@ ADDED = {
     ("drive", "wing-thruster"),
     ("brain", "two-box"),
     ("storm", "storm"),
+    ("drogue", "jordan"),
+    ("drogue", "para"),
     ("spare", "spare-autopilot"),
 }
 # Two changes that read as one phrase.
@@ -752,9 +757,9 @@ RDEFAULTS = {
 # the boat drifts. The one part a player can add is a spare: a second electronics
 # box that takes over the steering when the first dies, as the kayak's safe box
 # does. Not fitted by default, so each stock boat as it comes is its yaml untouched.
-# Weight, power and price are the kayak's second box in the parts list
+# Weight and power are the kayak's second box in the parts list
 # (build-plan/parts-catalog.json "brain": two-box minus one-box): +0.4 kg,
-# +4 Wh/day (31 - 27), +$83 (333 - 250). On a big boat it would steer the same
+# +4 Wh/day (31 - 27). On a big boat it would steer the same
 # rudder drive; the radio and the Iridium modem stay on the first box, so after
 # a swap the boat is tracked by its backup tracker and gets no new route.
 SPARE_BOX = Option(
@@ -763,7 +768,6 @@ SPARE_BOX = Option(
     basis="parts list: the safe-mode box (+0.4 kg, +4 Wh/day); box failure rates are GUESSes",
     kg=0.4,
     hotel_wh=4.0,
-    cost=83.0,
 )
 SPARE_SLOT = {
     "none": Option(basis="as the boat comes: one autopilot"),
@@ -940,6 +944,114 @@ KEEL_SAIL_DEFAULTS = {
 }
 KEEL_SAIL_NAMES = {"rig": "Rig", "cloth": "Sail cloth", "reef": "Reefing", "storm": "Storm sails"}
 
+# Under the water (M4 wave 2). The builders' own shallow keels: Pearson's wing keel
+# (4.0 ft draft, 200 lb more lead; Pearson spec sheet) and Beneteau's shoal-draft
+# First 31.7 (1.45 m, same ballast; boat-specs.com). A shorter keel grips the water
+# less (less lift for its leeway) and carries its lead higher (less righting moment).
+# draft: the keel's published draft (m); plate: the wing's winglets work as end plates
+# (GUESS: 10 % more effective draft); gz: righting levers against the deep keel (GUESS:
+# the lead sits higher; the Pearson's extra 91 kg of lead wins some of it back).
+KEEL_DRAFT = {"stock_pearson31_2": 1.71, "stock_cruiser31": 1.90}  # deep keels (spec sheets)
+KEELS = {
+    "wing": {"draft": 1.22, "plate": 1.1, "gz": 0.95, "kg": 91.0},
+    "shoal": {"draft": 1.45, "plate": 1.0, "gz": 0.92, "kg": 0.0},
+}
+# A drogue or sea anchor, streamed when the waves reach DROGUE_HS_M: sails down, the
+# boat held end-on to the seas, so far fewer breakers catch her beam-on, but she
+# crawls downwind. The Jordan series drogue holds the stern to the seas (Jordan's
+# US Coast Guard report, 1985, DTIC ADA158907; sized by displacement: about 100 small
+# cones on a long line for a 10,000 lb boat); a parachute sea anchor holds the bow
+# (Para-Tech sizes it to displace about twice the boat: a 12 ft one for these boats,
+# Practical Sailor). Beam-on shares, drift speeds and weights are our GUESS.
+DROGUE_HS_M = 5.0  # GUESS: streamed when the significant wave height reaches 5 m
+DROGUES = {
+    "jordan": {"share": 0.03, "kn": 2.0, "kg": 20.0},  # GUESS: stern held to the seas
+    "para": {"share": 0.05, "kn": 1.0, "kg": 25.0},  # GUESS: yaws a little at the parachute
+}
+
+
+def _drogue(kind: str) -> tuple:
+    q = DROGUES[kind]
+    return (
+        ("hazards", "drogue_hs_m", DROGUE_HS_M),
+        ("hazards", "drogue_beam_on_share", q["share"]),
+        ("hazards", "drogue_kn", q["kn"]),
+    )
+
+
+def _under_water(boat: str) -> dict[str, dict[str, Option]]:
+    pearson = boat == "stock_pearson31_2"
+    keel = (
+        {
+            "deep": _sail_part(
+                "Deep fin keel, 5.6 ft (as built)",
+                "Pearson's deep elliptical fin.",
+                "Pearson spec sheet",
+            ),
+            "wing": _sail_part(
+                "Wing keel, 4.0 ft",
+                "Pearson's shoal keel with winglets at the tip and 200 lb more lead: "
+                "1.5 ft less draft, a little less grip and stiffness.",
+                "Pearson spec sheet (draft 4.0 ft, ballast 4,000 lb); lift and stability our GUESS",
+                (("keel", "wing"),),
+                kg=KEELS["wing"]["kg"],
+            ),
+        }
+        if pearson
+        else {
+            "deep": _sail_part(
+                "Deep keel, 1.90 m (as built)",
+                "Beneteau's deep-draft fin and bulb.",
+                "ORC certificate 038800017LU; boat-specs.com",
+            ),
+            "shoal": _sail_part(
+                "Shoal-draft keel, 1.45 m",
+                "Beneteau's own shallow version, same ballast: less grip upwind and "
+                "less stiffness.",
+                "boat-specs.com First 31.7 shoal draft (1.45 m, 1,025 kg ballast); lift "
+                "and stability our GUESS",
+                (("keel", "shoal"),),
+            ),
+        }
+    )
+    drogue = {
+        "none": Option(
+            basis="as built: in a big sea she runs off under bare poles",
+            n="None (as built)",
+            d="Sails down and run off before a big sea.",
+        ),
+        "jordan": Option(
+            _drogue("jordan"),
+            est=True,
+            basis="Jordan series drogue (US Coast Guard report, DTIC ADA158907), sized by "
+            "displacement; how much it helps is our GUESS",
+            kg=DROGUES["jordan"]["kg"],
+            n="Jordan series drogue",
+            d="A long line of small cones off the stern, streamed when waves reach 5 m: "
+            "holds her stern to the breakers at about 2 knots.",
+        ),
+        "para": Option(
+            _drogue("para"),
+            est=True,
+            basis="Para-Tech parachute sea anchor, 12 ft (sized to displace twice the boat, "
+            "Practical Sailor); how much it helps is our GUESS",
+            kg=DROGUES["para"]["kg"],
+            n="Parachute sea anchor",
+            d="A big parachute off the bow, set when waves reach 5 m: she lies head to "
+            "the seas and barely drifts.",
+        ),
+    }
+    return {"keel": keel, "drogue": drogue}
+
+
+KEEL_WATER_DEFAULTS = {"keel": "deep", "drogue": "none"}
+KEEL_WATER_NAMES = {"keel": "Keel", "drogue": "Drogue or sea anchor"}
+# A muted line under a slot on the page: what the odds don't count yet (Maya, #526).
+STOCK_SLOT_NOTES = {
+    "drogue": "The odds don't yet count a keelboat being rolled by a breaking wave, so for "
+    "now they show what a drogue costs (a slow drift in big seas), not what it saves.",
+}
+
 
 def _sail_changes(boat: str, picked: dict, design: Design) -> tuple:
     """(section, key, value) changes a keelboat's sail parts make, from its yaml."""
@@ -982,7 +1094,18 @@ def _sail_changes(boat: str, picked: dict, design: Design) -> tuple:
         )
     if knobs.get("cloth") == "laminate":
         v["cl_max"] = round(v["cl_max"] * LAMINATE_CL, 4)
-    kg = sum(SAIL_KG.get(val, 0.0) for val in knobs.values())
+    hull = {}
+    if knobs.get("keel") in KEELS:
+        k = KEELS[knobs["keel"]]
+        deep = KEEL_DRAFT[boat]
+        te = round(v["keel_te_m"] * k["draft"] / deep * k["plate"], 3)
+        grip = te / v["keel_te_m"]  # lift slope goes with effective draft (aspect), GUESS
+        v["clr_depth_m"] = round(v["clr_depth_m"] * k["draft"] / deep, 3)
+        v["keel_slope_area_m2"] = round(v["keel_slope_area_m2"] * grip, 3)
+        hull["keel_lift_slope_area_m2"] = round(design.hull["keel_lift_slope_area_m2"] * grip, 3)
+        v["keel_te_m"] = te
+        v["gz"] = {**v["gz"], "m": [round(m * k["gz"], 4) for m in v["gz"]["m"]]}
+    kg = sum(SAIL_KG.get(val, 0.0) + KEELS.get(val, {}).get("kg", 0.0) for val in knobs.values())
     if kg:
         v["disp_kg"] = round(v["disp_kg"] + kg, 1)
     v["plans"] = [{"name": nm, "main": m, "jib": jb} for nm, m, jb in plans]
@@ -992,6 +1115,7 @@ def _sail_changes(boat: str, picked: dict, design: Design) -> tuple:
     v["polar_file"] = variant_name(replace(design, vpp=v), stem)
     out = [("vpp", "polar_file", v["polar_file"])]
     out += [("vpp", k, v[k]) for k in v if v[k] != design.vpp.get(k) and k != "polar_file"]
+    out += [("hull", k, x) for k, x in hull.items()]
     damage = 1.0
     for val in knobs.values():
         damage *= SAIL_DAMAGE.get(val, 1.0)
@@ -1008,10 +1132,17 @@ KEELBOATS = ("stock_pearson31_2", "stock_cruiser31")
 for _b in KEELBOATS:
     STOCK_SLOTS[_b] = {
         **_keel_sails(_b),
+        **_under_water(_b),
         **STOCK_SLOTS.get(_b, {"spare": SPARE_SLOT, "tactician": TACTICIAN_SLOT}),
     }
-    STOCK_DEFAULTS[_b] = {**KEEL_SAIL_DEFAULTS[_b], "spare": "none", "tactician": "on"}
+    STOCK_DEFAULTS[_b] = {
+        **KEEL_SAIL_DEFAULTS[_b],
+        **KEEL_WATER_DEFAULTS,
+        "spare": "none",
+        "tactician": "on",
+    }
 STOCK_SLOT_NAMES.update(KEEL_SAIL_NAMES)
+STOCK_SLOT_NAMES.update(KEEL_WATER_NAMES)
 
 
 def base_of(choices: dict | None) -> str:
@@ -1072,7 +1203,7 @@ GRID: tuple[dict, ...] = (
             {"tracker": "none"},
         )
     ),
-    # The keelboats (M4 wave 1): as built, then each sail part on its own.
+    # The keelboats (M4 waves 1 and 2): as built, then each part on its own.
     *(
         {"base": b, **g}
         for b in KEELBOATS
@@ -1085,6 +1216,10 @@ GRID: tuple[dict, ...] = (
             {"storm": "storm"},
             {"spare": "spare-autopilot"},
             {"tactician": "off"},
+            # M4 wave 2: under the water
+            {"keel": "wing" if b == "stock_pearson31_2" else "shoal"},
+            {"drogue": "jordan"},
+            {"drogue": "para"},
         )
     ),
     {  # everything cheapest
@@ -1237,6 +1372,7 @@ def stock_table() -> dict[str, dict]:
                 {
                     "id": slot,
                     "name": STOCK_SLOT_NAMES[slot],
+                    **({"note": STOCK_SLOT_NOTES[slot]} if slot in STOCK_SLOT_NOTES else {}),
                     "opts": [
                         {
                             "id": oid,
@@ -1248,7 +1384,6 @@ def stock_table() -> dict[str, dict]:
                             + (["electronics.hotel_load_wh_per_day"] if o.hotel_wh else [])
                             + (["hull.mass_kg"] if o.kg else []),
                             "kg": o.kg,
-                            "cost": o.cost,
                             **({"n": o.n, "d": o.d} if o.n else {}),
                         }
                         for oid, o in opts.items()

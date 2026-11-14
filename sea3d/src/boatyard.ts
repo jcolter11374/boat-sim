@@ -202,7 +202,7 @@ const GROUPS: [string, string[]][] = [
   ["Power", ["sol", "rsol", "bat", "rbat", "mppt"]],
   ["Brains and radio", ["brain", "spare", "tactician", "sat", "beacon", "tracker"]],
   ["Being seen by ships", ["ais", "radar", "light"]],
-  ["Hull and keel", ["lead", "keel", "paint"]],
+  ["Hull and keel", ["lead", "keel", "paint", "drogue"]],
   ["Before launch", ["spares"]],
 ];
 
@@ -360,6 +360,7 @@ function drawSlots(): void {
       body.className = "sl-body";
       body.id = `sl-body-${slot.id}`;
       for (const o of shown) body.append(optionButton(slot, o));
+      if (slot.note) body.append(Object.assign(document.createElement("p"), { className: "muted sl-note", textContent: slot.note }));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;

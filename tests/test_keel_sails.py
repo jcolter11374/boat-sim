@@ -93,9 +93,41 @@ def test_an_unsaved_combination_builds_its_polar_on_first_use(tmp_path, monkeypa
 def test_the_page_table_names_each_part_and_lists_what_it_sets():
     t = C.stock_table()["stock_pearson31_2"]
     slots = {s["id"]: s for s in t["slots"]}
-    assert set(slots) == {"rig", "cloth", "reef", "storm", "spare", "tactician"}
+    assert set(slots) == {"rig", "cloth", "reef", "storm", "keel", "drogue", "spare", "tactician"}
     lam = next(o for o in slots["cloth"]["opts"] if o["id"] == "laminate")
     assert lam["n"] == "Laminate" and lam["est"] and "vpp.cl_max" in lam["sim"]
     for s in slots.values():
         for o in s["opts"]:
             assert "$" not in o.get("d", "") and "$" not in o["basis"]  # no prices (B7)
+
+
+def test_shallow_keels_grip_less_and_stand_less_stiff():
+    """M4 wave 2: the builders' own shallow keels (Pearson wing keel, First 31.7 shoal)."""
+    for boat, keel in (("stock_pearson31_2", "wing"), ("stock_cruiser31", "shoal")):
+        deep = C.design_for({"base": boat})
+        shoal = C.design_for({"base": boat, "keel": keel})
+        assert shoal.vpp["keel_te_m"] < deep.vpp["keel_te_m"]
+        assert shoal.vpp["keel_slope_area_m2"] < deep.vpp["keel_slope_area_m2"]
+        assert max(shoal.vpp["gz"]["m"]) < max(deep.vpp["gz"]["m"])
+        a, b = (
+            KeelboatVessel(deep).polar.at("full", 16, 45),
+            KeelboatVessel(shoal).polar.at("full", 16, 45),
+        )
+        assert b.speed < a.speed and b.leeway_deg > a.leeway_deg  # slower, more sideslip upwind
+    wing = C.design_for({"base": "stock_pearson31_2", "keel": "wing"})
+    assert wing.hull["mass_kg"] == 4536 + 91  # 200 lb more lead (Pearson spec sheet)
+
+
+def test_a_drogue_cuts_beam_on_knockdowns_once_streamed_and_slows_her():
+    from boatsim.vessel.hazards import HazardParams, drogue_out, knockdown_rate_per_hour
+
+    bare = HazardParams.from_config(C.design_for({"base": "stock_pearson31_2"}).hazards)
+    for kind in ("jordan", "para"):
+        d = C.design_for({"base": "stock_pearson31_2", "drogue": kind})
+        h = HazardParams.from_config(d.hazards)
+        assert not drogue_out(h, 4.9) and drogue_out(h, 5.0) and not drogue_out(bare, 9.0)
+        assert knockdown_rate_per_hour(h, 4.0, 9, 18) == knockdown_rate_per_hour(bare, 4.0, 9, 18)
+        assert knockdown_rate_per_hour(h, 8.0, 12, 28) < 0.25 * knockdown_rate_per_hour(
+            bare, 8.0, 12, 28
+        )
+        assert 0 < h.drogue_kn <= 2.0
