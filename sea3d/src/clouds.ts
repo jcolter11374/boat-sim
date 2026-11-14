@@ -105,12 +105,18 @@ export function stormWall(km: number): number {
 }
 
 /**
- * The new fair-weather cumulus (heaps with real height) is switched off: it shows only with
- * ?cumulus=new in the address. Elena, 14 Nov 2026: the title keeps the clouds it was signed off
- * with, and at sea the heaps wait until they are a field on a shared flat base with the soft
- * high sheets kept above them. Until then every sky draws the earlier cumulus.
+ * Whether a sky draws the fair-weather cumulus as heaps with real height (a field on one flat
+ * base, the soft sheets kept as a thin high layer above). Elena, 14 Nov 2026: on at sea; the
+ * title keeps the clouds it was signed off with. Low graphics keeps the earlier cumulus too (the
+ * heaps are marched through, which a phone or software graphics may not afford).
+ * ?cumulus=old turns the heaps off anywhere, ?cumulus=new turns them on anywhere.
  */
-export const CUMULUS_NEW = typeof location !== "undefined" && new URLSearchParams(location.search).get("cumulus") === "new";
+export function cumulusHeaps(atSea: boolean, quality: CloudQuality, search: string = typeof location !== "undefined" ? location.search : ""): boolean {
+  const asked = new URLSearchParams(search).get("cumulus");
+  if (asked === "new") return true;
+  if (asked === "old") return false;
+  return atSea && quality !== "low";
+}
 
 const cloudVert = /* glsl */ `
 varying vec3 vWorld;
@@ -229,7 +235,7 @@ float cellD(vec2 p) {
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     vec2 g = vec2(float(x), float(y));
     vec2 o = vec2(h21(i + g), h21(i + g + 31.7));
-    float r = 0.6 + 0.8 * h21(i + g + 57.1);
+    float r = 0.6 + 0.55 * h21(i + g + 57.1); // sizes vary, but no giant among them (Elena, 14 Nov)
     d1 = min(d1, length(g + 0.1 + 0.8 * o - f) / r);
   }
   return d1;
@@ -243,15 +249,24 @@ float n3(vec3 x) {
              mix(mix(h31(i + vec3(0, 0, 1)), h31(i + vec3(1, 0, 1)), f.x), mix(h31(i + vec3(0, 1, 1)), h31(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
 float cuDome(float d, float R) { float q = clamp(d / R, 0.0, 1.0); return 1.0 - q * q; } // rounded shoulders that lean in to a dome: no cake sides, no cone
-float cuClump(vec2 p) { return smoothstep(0.42, 0.78, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)); }
+// Clusters and wider gaps across the field, so it never reads as an even pattern (Elena, 14 Nov).
+float cuPatch(vec2 p) { return 1.25 * smoothstep(0.22, 0.5, vnoise(p * 0.11 + uSeed * 0.3 + 5.0)); }
+// Where the heaps gather (Elena, 14 Nov: a field over a quarter to a third of the sky, not five puffs in empty blue).
+float cuClump(vec2 p) { return min(1.0, cuPatch(p)) * smoothstep(0.18, 0.48, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)); }
+float cuCov() { return 0.1 + 0.5 * uCover; }
+// Medium heaps (400 to 700 m across) between the big ones, over a wider stretch of the field.
+float cuMid(vec2 p) { return cuPatch(p) * (0.4 + 0.9 * cuCov()) * smoothstep(0.05, 0.35, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)) * smoothstep(0.1, 0.45, vnoise(p * 0.7 + 3.3)); }
 vec2 cuShape(vec2 x, float detail) {
   vec2 p = (x + uDrift) / 1000.0;
   p += 0.3 * vec2(fbmL(p * 1.3 + 2.7, 0.0, 2), fbmL(p * 1.3 + 9.1, 0.0, 2)) - 0.15; // no round discs
   float clump = cuClump(p);
-  float cov = 0.06 + 0.45 * uCover;
+  float cov = cuCov();
   // Radius of each heap, in cell units: none outside the groups, bigger at their hearts.
   // Fair-weather size (Ines r3): about a kilometre across, a fist or two wide overhead.
-  float Rb = cov * mix(0.0, 1.8, clump);
+  // None close overhead: a heap nearer than about 3 km filled a corner of the frame and was cut by its edge
+  // (Elena, 14 Nov). They shrink away whole as they come near, rather than fading to grey ghosts.
+  float nearK = smoothstep(2000.0, 3800.0, length(x - uCam.xz));
+  float Rb = cov * mix(0.0, 1.3, clump) * nearK; // capped: no heap much over a kilometre across (Elena, 14 Nov)
   float Rs = cov * mix(0.0, 1.4, clump) * smoothstep(0.72, 0.88, vnoise(p * 0.9 + 3.3)); // only a few small ones (Ines r4: no popcorn)
   float dB = cellD(p * 0.6 + uSeed * 1.3);
   float dS = cellD(p * 2.0 + uSeed * 2.7 + 7.1);
@@ -262,10 +277,14 @@ vec2 cuShape(vec2 x, float detail) {
   // Small heaps (about 200 m) are culled (Elena r8): smaller than the search's step, they
   // came out full of holes that twinkled as they drifted.
   float ds = 0.0;
-  float k = max(1.0 - dB / max(Rb, 1e-3), 0.9 * (ds > 0.0 ? 1.0 - dS / max(Rs, 1e-3) : 0.0));
+  float Rm = cuMid(p) * nearK;
+  float dM = cellD(p * 1.3 + uSeed * 2.1 + 3.7);
+  float dm = Rm > 0.25 ? cuDome(dM, Rm * grow) : 0.0;
+  float k = max(max(1.0 - dB / max(Rb, 1e-3), 0.9 * (ds > 0.0 ? 1.0 - dS / max(Rs, 1e-3) : 0.0)), dm > 0.0 ? 1.0 - dM / Rm : 0.0);
   float tall = 0.55 + 0.7 * vnoise(p * 0.6 + uSeed * 1.7); // some heaps grow, some stay low
   // Never taller than wide (Elena r5: no cones): height capped by the heap's own radius in m.
   float top = max(db * min(360.0 * (0.6 + 0.4 * clump) * tall, 1.0 * Rb * 1667.0), ds * min(220.0 * (0.6 + 0.6 * clump), 0.7 * Rs * 500.0));
+  top = max(top, dm * min(300.0 * tall, 0.9 * Rm * 770.0));
   // Heads: narrower round domes rising off the big heap, offset from its middle.
   float dH = cellD(p * 2.4 + uSeed * 4.3 + 2.2);
   float qh = clamp(dH / 0.7, 0.0, 1.0);
@@ -279,9 +298,11 @@ vec2 cuShape(vec2 x, float detail) {
 float cuMaybe(vec2 x) {
   vec2 p = (x + uDrift) / 1000.0;
   float clump = cuClump(p);
-  float cov = 0.06 + 0.45 * uCover;
-  if (cov * 1.8 * clump < 0.12) return 0.0; // outside the groups: open sky, one fbm and done (Kai)
-  if (cellD(p * 0.6 + uSeed * 1.3) < cov * 1.8 * clump * 1.5 + 0.2) return 1200.0;
+  float cov = cuCov();
+  float Rm = cuMid(p);
+  if (cov * 1.3 * clump < 0.12 && Rm < 0.25) return 0.0; // outside the groups: open sky (Kai)
+  if (cellD(p * 0.6 + uSeed * 1.3) < cov * 1.3 * clump * 1.5 + 0.2) return 1200.0;
+  if (Rm >= 0.25 && cellD(p * 1.3 + uSeed * 2.1 + 3.7) < Rm * 1.5 + 0.2) return 700.0;
   return 0.0;
 }
 float gThick = 0.0; // the smooth heap's thickness at the last cuIn() point, m
@@ -338,7 +359,7 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
   vec3 sunD = normalize(uSunDir);
   float gold = smoothstep(-0.02, 0.04, uSunDir.y) * (1.0 - smoothstep(0.14, 0.45, uSunDir.y));
   vec3 sunC = uLit * 9.0 * mix(vec3(1.0), vec3(1.5, 0.86, 0.5), gold); // gold to peach on the sunward tops at a low sun
-  vec3 sky = dot(uLit, vec3(0.2126, 0.7152, 0.0722)) * mix(vec3(0.55, 0.64, 0.82), vec3(0.5, 0.48, 0.72), gold); // cool grey-violet in the shadows at dusk
+  vec3 sky = dot(uLit, vec3(0.2126, 0.7152, 0.0722)) * mix(vec3(0.55, 0.64, 0.82), vec3(0.5, 0.58, 0.8), gold); // cool blue-grey in the shadows at dusk
   float cosT = dot(dir, sunD);
   float g = 0.55; // forward scattering: the silver lining towards the sun
   float phase = 0.55 + 0.45 * (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5) * 0.25;
@@ -371,7 +392,8 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
                + smoothstep(-30.0, 120.0, -cuIn(P + sunD * 500.0, 0.0)) * 700.0; // only the thinnest edges let the sun through: a thin silver line, not a halo
       float Tl = exp(-od * 0.014) * 0.88 + 0.12 * exp(-od * 0.003); // more multiple scattering: brilliant white, not smoke (Elena r5) // a little multiple scattering
       float hf = clamp((P.y - CU_BASE) / CU_TOP, 0.0, 1.0);
-      vec3 L = sunC * Tl * phase + sky * (0.35 + 0.6 * hf);
+      float low = smoothstep(0.0, 320.0, P.y - CU_BASE);
+      vec3 L = sunC * Tl * phase * (0.5 + 0.5 * low) + sky * (0.2 + 0.3 * gold + 0.25 * low + 0.5 * hf); // at dusk the shadows stay a lit blue-grey, never dark blotches // grey, shaded undersides on the shared base; bright tops
       float sig = dens * 0.026;
       float aStep = 1.0 - exp(-sig * st);
       acc += T * aStep * L;
@@ -388,8 +410,8 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
   float sunward = smoothstep(-0.4, 0.8, toSunH);
   col = mix(col, col * vec3(0.85, 0.85, 0.95), lowS * (1.0 - sunward) * 0.25); // a touch only: the shadows carry the cool (sky term)
   col += uGlow * uWarm * 0.5 * smoothstep(-0.2, 0.8, facing) * (1.0 - smoothstep(0.0, 0.06, uSunDir.y));
-  col = mix(col, uHaze, 0.85 * smoothstep(4000.0, 22000.0, distH)); // the far row melts into the haze
-  a *= 1.0 - smoothstep(14000.0, 25000.0, distH);
+  col = mix(col, uHaze, 0.93 * smoothstep(3500.0, 15000.0, distH)); // the far rows go soft and pale, into the horizon's band
+  a *= 1.0 - 0.9 * smoothstep(9000.0, 18000.0, distH);
   return vec4(col, a);
 }
 // The fair-weather cumulus every sky draws (the new heaps replace it only with ?cumulus=new).
@@ -453,29 +475,7 @@ void main() {
   // Overcast, a blow, or steady rain (rain falls from a deck, whatever the sunlight said) close the sky.
   float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.05, 0.8, uRain));
   float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
-  if (cuAmt > 0.01 && alpha < 0.99 && uCuNew < 0.5 && dir.y > 0.0) {
-    // main's layer at 600 m, as it was drawn before the new sky (same look, now on the dome).
-    vec2 qo = onLayer(dir, 600.0);
-    vec2 po = (qo + uDrift) / 900.0;
-    float n = densOld(po);
-    float edge = 1.0 - (0.42 + 0.5 * uCover);
-    float d = smoothstep(edge - 0.015, edge + 0.07, n);
-    if (d > 0.004) {
-      float thick = smoothstep(edge, edge + 0.3, n);
-      vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
-      float toward = densOld(po + sunH * 0.09) - n;
-      float shade = clamp(0.55 * thick + 2.6 * toward, 0.0, 1.0);
-      float dist = length(qo - uCam.xz);
-      float side = smoothstep(700.0, 3500.0, dist);
-      float baseShade = mix(0.35 + 0.65 * shade, shade * (0.4 + 0.6 * smoothstep(-0.3, 0.6, facing)), side);
-      vec3 c = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uStorm));
-      c += uLit * pow(max(facing, 0.0), 5.0) * (1.0 - thick) * 0.9;
-      c += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
-      c = mix(c, uHaze, smoothstep(2500.0, 8000.0, dist));
-      float a = d * (1.0 - smoothstep(5000.0, 8500.0, dist)) * 0.96 * cuAmt;
-      col += (1.0 - alpha) * a * c; alpha += (1.0 - alpha) * a;
-    }
-  } else if (cuAmt > 0.01 && alpha < 0.99) {
+  if (cuAmt > 0.01 && alpha < 0.99 && uCuNew > 0.5) {
     // Hana, round 2 (Ines): heaps with real height. Each heap is a dome standing on a flat
     // base; the view ray is marched through them, so from a low camera the far ones show
     // their sides and heads rising and catching the sun, and the near ones their flat bases.
@@ -500,6 +500,33 @@ void main() {
       cu.rgb /= max(cu.a, 1e-4);
     } else cu = cumulusVol(dir, facing, toSunH, sunUp);
     col += (1.0 - alpha) * cu.a * cuAmt * cu.rgb; alpha += (1.0 - alpha) * cu.a * cuAmt;
+  }
+  if (cuAmt > 0.01 && alpha < 0.99 && dir.y > 0.0) {
+    // With the heaps on, the same soft sheets stay as a thin high layer above them (Elena, 14 Nov:
+    // real skies have both, and it keeps the painterly depth): higher, broader, paler, half as dense.
+    float hiL = step(0.5, uCuNew);
+    // main's layer at 600 m, as it was drawn before the new sky (same look, now on the dome).
+    vec2 qo = onLayer(dir, mix(600.0, 5200.0, hiL));
+    vec2 po = (qo + uDrift) / mix(900.0, 3000.0, hiL);
+    float farK = mix(1.0, 6.0, hiL);
+    float n = densOld(po);
+    float edge = 1.0 - (0.42 + 0.5 * uCover) + 0.05 * hiL;
+    float d = smoothstep(edge - 0.015, edge + mix(0.07, 0.22, hiL), n); // the high layer feathers out: thin veils, no hard-edged slabs
+    if (d > 0.004) {
+      float thick = smoothstep(edge, edge + 0.3, n);
+      vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+      float toward = densOld(po + sunH * 0.09) - n;
+      float shade = clamp(0.55 * thick + 2.6 * toward, 0.0, 1.0);
+      float dist = length(qo - uCam.xz);
+      float side = smoothstep(700.0 * farK, 3500.0 * farK, dist);
+      float baseShade = mix(0.35 + 0.65 * shade, shade * (0.4 + 0.6 * smoothstep(-0.3, 0.6, facing)), side);
+      vec3 c = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uStorm) * mix(1.0, 0.22, hiL));
+      c += uLit * pow(max(facing, 0.0), 5.0) * (1.0 - thick) * 0.9;
+      c += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
+      c = mix(c, uHaze, smoothstep(2500.0 * farK, 8000.0 * farK, dist));
+      float a = d * (1.0 - smoothstep(5000.0 * farK, 8500.0 * farK, dist)) * mix(0.96, 0.34, hiL) * cuAmt;
+      col += (1.0 - alpha) * a * c; alpha += (1.0 - alpha) * a;
+    }
   }
   // ---- deck ----
   // Hana: the deck lies in long rolls along the wind (cloud streets), dark-bellied where
@@ -850,8 +877,11 @@ export class Clouds {
   private cuScene = new THREE.Scene();
   private cuCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private cuOn = false;
+  private readonly heaps: boolean;
 
-  constructor(quality: CloudQuality = "high") {
+  /** atSea: a page out on the water (the helm, a replay, the race), not the title. */
+  constructor(quality: CloudQuality = "high", atSea = false) {
+    this.heaps = cumulusHeaps(atSea, quality);
     const layer = new THREE.ShaderMaterial({
       vertexShader: cloudVert,
       fragmentShader: cloudFrag,
@@ -881,7 +911,7 @@ export class Clouds {
         uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
         uWall: { value: 0 },
         uWallKm: { value: 400 },
-        uCuNew: { value: CUMULUS_NEW ? 1 : 0 },
+        uCuNew: { value: this.heaps ? 1 : 0 },
         uCuRT: { value: 0 },
         uCuTex: { value: null },
         uCuRes: { value: new THREE.Vector2(1, 1) },
@@ -898,7 +928,7 @@ export class Clouds {
     this.layer.renderOrder = 1; // over the sky and its grey lid, under the sea
     this.layer.frustumCulled = false;
     this.group.add(this.layer);
-    if (CUMULUS_NEW) {
+    if (this.heaps) {
       const pass = new THREE.ShaderMaterial({
         vertexShader: cuPassVert,
         fragmentShader: cuPassFrag,
@@ -1028,7 +1058,7 @@ export class Clouds {
     {
       const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(storm, 0.15, 0.7), SM(this.rain, 0.05, 0.8));
       const cuAmt = (1 - SM(Math.max(storm, this.cover), 0.55, 0.95)) * (1 - deck);
-      this.cuOn = CUMULUS_NEW && cuAmt > 0.01; // as the shader's cuAmt
+      this.cuOn = this.heaps && cuAmt > 0.01; // as the shader's cuAmt
       u.uCuRT.value = this.cuOn ? 1 : 0;
     }
 

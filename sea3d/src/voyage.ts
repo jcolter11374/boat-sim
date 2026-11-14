@@ -246,7 +246,7 @@ const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
 // Low cloud (cover read from the logged sunlight) and fog banks (cosmetic).
-const clouds = new Clouds();
+const clouds = new Clouds("high", true);
 scene.add(clouds.group);
 sea.mesh.receiveShadow = true; // boat shadows on the water (Ultra)
 const place: Placement = { x: 0, z: 0, yaw: 0 };
