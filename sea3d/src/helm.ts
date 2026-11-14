@@ -59,7 +59,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
-import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, welcomeBack } from "./helm/voyageSave";
+import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
@@ -1724,7 +1724,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]) };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
     () => game.save(),
   ).start();
@@ -3652,6 +3652,15 @@ async function begin(): Promise<void> {
         // A challenge's one big call was asked before you left: it isn't asked twice.
         const callDay = mission()?.goal.call_day;
         if (callDay != null && v.status.day > callDay) asked.mission = true;
+        // An order sent in the last moment before you left may not have reached the save's code
+        // (the simulator was busy, the page closed): it is given again now, so the helm comes
+        // back as you left it. Hands on only: from base an order is a satellite message.
+        const last = was?.code === shared ? was.order : null;
+        if (last && mode === "hands_on" && !v.status.over && !v.status.no_link && !sameOrder(last, { heading: order, power, sails: sailOrder, engine: engineOrder })) {
+          [order, power, sailOrder, engineOrder] = [last.heading, last.power, last.sails, last.engine];
+          await game.order(order, power, sailOrder, engineOrder);
+          page.status = game.status;
+        }
       }
     } else if (SPECTATE) {
       // A recorded voyage (its file is the game) or a race (the source knows its boats and launch).
