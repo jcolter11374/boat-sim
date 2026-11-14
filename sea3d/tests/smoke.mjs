@@ -643,7 +643,7 @@ try {
     // The boat picker: our kayak and the stock boats cleared for play (the game below sails the kayak).
     const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
     // The list the deploy holds the simulator to (sandbox-needs.json "bases", checked by check-page): the kayak is "".
-    const bases = JSON.parse(readFileSync(new URL("../sandbox-needs.json", import.meta.url), "utf8")).bases.map((b) => (b === "kayak" ? "" : b));
+    const bases = JSON.parse(readFileSync(new globalThis.URL("../sandbox-needs.json", import.meta.url), "utf8")).bases.map((b) => (b === "kayak" ? "" : b));
     if (bases.length < 3 || picks.join() !== bases.join()) fail(`helm: boat picker offers ${JSON.stringify(picks)}, sandbox-needs.json lists ${JSON.stringify(bases)}`);
     // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
     await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
