@@ -37,7 +37,7 @@ function instrument() {
     // After Set sail, what each one is, to say in a failure (SHADER_NAME, else its first defines).
     if (g.after) {
       const src = (this.getAttachedShaders(p) || []).map((x) => this.getShaderSource(x) || "").join("\n");
-      const name = (src.match(/#define SHADER_NAME (.*)/) || [])[1];
+      const name = [(src.match(/#define SHADER_TYPE (.*)/) || [])[1], (src.match(/#define SHADER_NAME (.*)/) || [])[1]].filter(Boolean).join(" ");
       g.after.push(name || (src.match(/#define (USE_\w+|\w+_MATERIAL|STANDARD|PHYSICAL)/g) || []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4).join(" ") || `${src.length} characters`);
     }
     return link.call(this, p);
@@ -87,6 +87,7 @@ async function drawsPerFrame(page, where) {
 
 const counts = {};
 let afterSail = [];
+let env = "";
 try {
   for (let i = 0; i < 50 && server; i++) {
     try { if ((await fetch(SITE)).ok) break; } catch {}
@@ -105,6 +106,11 @@ try {
   // The title.
   {
     const { ctx, page } = await open("?quality=low");
+    env = await page.evaluate(() => {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      const dbg = gl?.getExtension("WEBGL_debug_renderer_info");
+      return `${navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent}; ${dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "?"}; parallel compile ${!!gl?.getExtension("KHR_parallel_shader_compile")}`;
+    });
     await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 10, null, { timeout: 60_000 });
     counts.titlePrograms = await settled(page);
     counts.titleDraws = await drawsPerFrame(page, "title");
@@ -123,8 +129,10 @@ try {
     });
     await page.waitForFunction((h) => window.__helm.ready && window.__helm.hour > h + 0.001, h0, { timeout: 120_000, polling: 100 });
     const after = await settled(page);
-    counts.sailProgramsAfterSetSail = after - before;
+    // Counted from the click itself: on a slow runner the warm-up can still be building when it lands.
     afterSail = await page.evaluate(() => window.__speed.after);
+    counts.sailProgramsAfterSetSail = afterSail.length;
+    if (after - before !== afterSail.length) console.log(`  (${after - before - afterSail.length} programs built between the warm-up seeming done and the click)`);
     counts.sailPrograms = after;
     counts.sailDraws = await drawsPerFrame(page, "sailing screen");
     await ctx.close();
@@ -156,7 +164,7 @@ const what = {
   voyageDraws: "draw calls per frame on a voyage replay at Low",
 };
 const base = JSON.parse(readFileSync(BASELINE, "utf8"));
-console.log(`speed guard (${Math.round((Date.now() - t0) / 1000)} s):`);
+console.log(`speed guard (${Math.round((Date.now() - t0) / 1000)} s; ${env}):`);
 for (const k of Object.keys(what)) console.log(`  ${k}: ${counts[k]} (baseline ${base.counts[k] ?? "none"})`);
 
 if (update) {
