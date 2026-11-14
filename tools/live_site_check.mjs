@@ -110,7 +110,9 @@ async function clickNamed(page, selector, what, opts = {}) {
 // The functional helm checks run on Low quality, as the smoke test does: on the
 // runner's software graphics, High spends the frame in the browser's own raster work
 // (Sam's profile, #293), which starved clicks. visual-helm keeps the default look.
-const HELM = "helm.html?quality=low";
+// HELM_QUERY adds to every helm page's address, to play the same checks with a switch thrown
+// (HELM_QUERY=cumulus=old: the sky without the new cloud heaps, to compare frame times).
+const HELM = `helm.html?quality=low${process.env.HELM_QUERY ? `&${process.env.HELM_QUERY}` : ""}`;
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
