@@ -35,6 +35,7 @@ import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
+import { TitleTrack } from "./titleTrack";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -167,14 +168,18 @@ titleSound.scene.gulls = new URLSearchParams(location.search).get("gulls") === "
 // The title's air (titleMusic.ts): a slow plucked tune of our own over a low pad, under the
 // sea. It goes on and off with the sound; ?music=0 leaves the sea and its sounds alone.
 const titleMusic = new TitleMusic(sound);
-titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
+// John's track (titleTrack.ts, 14 Nov 2026) is the title's music now; ?music=air brings back the code-made air, ?music=0 neither.
+const musicParam = new URLSearchParams(location.search).get("music");
+titleMusic.on = musicParam === "air";
+const titleTrack = new TitleTrack(sound);
+titleTrack.on = musicParam !== "0" && musicParam !== "air";
 (window as unknown as { __titleMusic: TitleMusic }).__titleMusic = titleMusic; // read-only, for the live sound checks (Nina)
 {
   const btn = document.getElementById("t-sound");
   sound.onChange = () => {
     if (!btn) return;
     btn.setAttribute("aria-pressed", String(sound.on));
-    btn.textContent = sound.on ? "Sound: on" : "Sound: off"; // the state, not an order (Elena)
+    btn.setAttribute("aria-label", sound.on ? "Sound: on" : "Sound: off"); // the state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov)
   };
   sound.onChange();
   btn?.addEventListener("click", () => sound.toggle());
@@ -499,6 +504,7 @@ const frame = (): void => {
   if (document.body.classList.contains("title")) {
     titleSound.update(t - soundT);
     titleMusic.update();
+    titleTrack.update();
   } else if (sound.on) sound.disable(false);
   soundT = t;
   sea.update(comps, t);
