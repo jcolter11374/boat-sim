@@ -36,6 +36,8 @@ export const BAY_BRIDGE = {
   ],
 };
 
+/** The bridge's colour as drawn. */
+export const BRIDGE_GREY = 0x525c64;
 /** Drawn within this of the boat (m): past it the haze has it. */
 export const BRIDGE_RANGE = 22000;
 const LOW = 10; // the trestle near the shores (m above the water). GUESS
@@ -144,8 +146,10 @@ export class BayBridge {
 
   private build(): void {
     this.built = true;
-    // Painted steel and concrete, seen grey through the haze.
-    const steel = new THREE.MeshStandardMaterial({ color: 0x8f969b, roughness: 0.85, metalness: 0.1 });
+    // Painted steel and concrete, seen grey through the haze. Darker than the paint really is: at 7 km a pale
+    // bridge vanished into the sky (Elena, 14 Nov: the deck a thin grey line, the two main towers standing up
+    // from it, still softened by haze, not darker than the far shore).
+    const steel = new THREE.MeshStandardMaterial({ color: BRIDGE_GREY, roughness: 0.9, metalness: 0 });
     const lamp: number[] = [];
     const red: number[] = [];
     for (const sp of BAY_BRIDGE.spans) {
