@@ -232,12 +232,25 @@ export class HelmGame {
     return p;
   }
 
-  private take(v: { status?: Status; boat?: Replay; ghost?: Replay; base?: string }): void {
+  /** The latest save code, as the last run, order, new game or load left it (null: none yet, or an older simulator). */
+  code: string | null = null;
+  /** The forecast strip's rows from the last run (null: none came with it). */
+  forecastRows: ForecastRow[] | null = null;
+  /** The simulator hour the forecast rows were made at. */
+  forecastH = -Infinity;
+
+  private take(v: { status?: Status; boat?: Replay; ghost?: Replay; base?: string; code?: string; forecast?: ForecastRow[] }): void {
     if (v.status) this.status = v.status;
     if (v.base !== undefined) this.boatBase = v.base;
     if (v.boat) this.boat = v.boat;
     if (v.ghost) this.ghost = v.ghost;
+    if (v.code !== undefined) this.code = v.code;
+    if (v.forecast) {
+      this.forecastRows = v.forecast;
+      this.forecastH = (v.status?.day ?? 0) * 24;
+    }
   }
+
 
   /** A race only (helm/raceSource.ts): sail launch `i` of the six to the end, both boats, same dice. */
   raceSeasonLaunch<T>(i: number): Promise<T> {
@@ -292,14 +305,20 @@ export class HelmGame {
     return this.ask<string>({ type: "save" });
   }
 
+  /** The save code without a turn of the worker when the last answer brought one (the keeper's autosave). */
+  savedCode(): Promise<string> {
+    return this.code !== null ? Promise.resolve(this.code) : this.save();
+  }
+
   /** sails and engine: sailboats only; null or left out lets the boat decide.
    * trim: a "Take the wheel" spell's share of the best speed (sailboats only): the
    * simulator sails at it for the next watch instead of the autopilot's own trim. */
   async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, trim?: number | null): Promise<OrderResult> {
     const extra: Record<string, unknown> = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
     if (trim != null) extra.trim = trim;
-    const v = await this.ask<{ order: OrderResult; status: Status }>({ type: "order", heading, power, ...extra });
+    const v = await this.ask<{ order: OrderResult; status: Status; code?: string }>({ type: "order", heading, power, ...extra });
     this.status = v.status;
+    if (v.code !== undefined) this.code = v.code;
     return v.order;
   }
 
