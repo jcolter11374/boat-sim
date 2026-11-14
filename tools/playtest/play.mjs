@@ -4538,14 +4538,6 @@ const CHECKS = {
             if (d.over > 2) bad.push(`${w} call: sheet overlaps the strip by ${d.over} px`);
             out.push(`${w} call: sheet ${JSON.stringify(d.sheet)}, boat ${JSON.stringify(d.boat)} ${d.boatOk ? "in view" : "NOT in view"}, cut ${d.cut.length ? d.cut.join("|") : "none"}, overlap ${d.over}`);
           }
-          // #561 motor-stops shot, when the page has a way to force it.
-          const forced = await p.evaluate(() => { const f = window.__helm?.force; if (!f) return "no __helm.force"; try { if (typeof f.failed === "function") { f.failed("one_motor"); return "force.failed(one_motor)"; } if (typeof f === "function") { f("one_motor"); return "force(one_motor)"; } return `force has ${Object.keys(f).join(",")}`; } catch (e) { return `force threw ${e}`; } });
-          await p.waitForTimeout(2500);
-          shots.push(await emit(p, `${w}-motor-a`));
-          await p.waitForTimeout(3000);
-          shots.push(await emit(p, `${w}-motor-b`));
-          const m = await look(p, "#decide");
-          out.push(`${w} motor shot: ${forced}; boat ${JSON.stringify(m.boat)} ${m.boatOk ? "in view" : "NOT in view"}`);
           if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
         } finally { await ctx.close().catch(() => {}); }
       }
@@ -4578,6 +4570,58 @@ const CHECKS = {
       return `${seq} at ${when}: ${stills.length} stills; ${(out.match(/filming at .*/) || ["?"])[0].slice(0, 200)}`;
     },
   }])),
+  // #561: a dead motor visibly stops. Sail the kayak in real time, break the port motor with
+  // __helm.breakMotor (as a logged failure does), film the camera's cut astern and read each
+  // motor's trail (__helm.wash(), 0..1, port first): the port trail should die, starboard's stay.
+  "motor-stop": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-motor-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      for (const [w, h] of [[1280, 720], [390, 844]]) {
+        const phone = w < 500;
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 2 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        try {
+          await p.goto(SITE + "helm.html?quality=medium", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy && window.__helm.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.keyboard.press("1");
+          if (phone) await p.evaluate(() => document.getElementById("orders-x")?.click());
+          const has = await p.evaluate(() => typeof window.__helm.breakMotor === "function" && typeof window.__helm.wash === "function");
+          if (!has) { bad.push(`${w}: no __helm.breakMotor/wash (#561 not deployed?)`); continue; }
+          await p.waitForFunction(() => (window.__helm.wash() || []).some((v) => v > 0.2), null, { timeout: MIN }).catch(() => {});
+          const before = await p.evaluate(() => window.__helm.wash());
+          shots.push(await emit(p, `${w}-before`));
+          await p.evaluate(() => { window.__helm.breakMotor("thruster_port"); });
+          const seen = [];
+          for (const [ms, tag] of [[500, "a"], [1500, "b"], [2000, "c"], [3000, "d"]]) {
+            await p.waitForTimeout(ms);
+            seen.push({ tag, wash: await p.evaluate(() => window.__helm.wash().map((v) => Math.round(v * 100) / 100)), cut: await p.evaluate(() => window.__helm.knockCut()) });
+            shots.push(await emit(p, `${w}-${tag}`));
+          }
+          const last = seen[seen.length - 1].wash;
+          if (!before.length) bad.push(`${w}: the kayak shows no motor trails (wash empty)`);
+          else {
+            if (!(before[0] > 0.2)) bad.push(`${w}: port trail weak before the break (${before[0]})`);
+            if (!(last[0] < before[0] * 0.5)) bad.push(`${w}: port trail didn't die (${before[0]} -> ${last[0]})`);
+            if (before.length > 1 && !(last[1] > 0.2)) bad.push(`${w}: starboard trail died too (${last[1]})`);
+          }
+          if (!seen.some((x) => x.cut)) out.push(`${w}: no camera cut seen (gated?)`);
+          out.push(`${w}: wash before ${JSON.stringify(before.map((v) => Math.round(v * 100) / 100))}, after ${seen.map((x) => `${x.tag} ${JSON.stringify(x.wash)}${x.cut ? " cut" : ""}`).join(", ")}`);
+          if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
