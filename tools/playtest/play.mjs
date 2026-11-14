@@ -5312,6 +5312,47 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Elena (#610): the title no longer draws the picture under its menu, so check nothing undrawn
+  // or black shows as the menu goes. Fresh browser at High, 1280 and 390: a still with the menu up,
+  // then 8 quick frames after Set sail (the page leaves for the helm) and 8 after Just watch the sea
+  // (the menu hides in place). Frames: look-titlefade-<browser>-<size>-<step>.jpg.
+  "title-fade": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const send = (path) => { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); };
+      const quick = async (p, path) => { try { await p.screenshot({ path, type: "jpeg", quality: 85, timeout: 20_000 }); send(path); return true; } catch { return false; } };
+      for (const [w, h] of [[1280, 720], [390, 844]]) {
+        const phone = w < 500;
+        for (const after of ["setsail", "watch"]) {
+          const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 2 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+          const p = await ctx.newPage();
+          const errs = [];
+          p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+          await p.goto(`${SITE}?quality=high`, { waitUntil: "load", timeout: 3 * MIN });
+          await p.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 3, null, { timeout: 4 * MIN }).catch(() => {});
+          await p.waitForTimeout(4000);
+          const tag = `${w}-${after}`;
+          if (after === "setsail") { const path = `look-titlefade-${BROWSER}-${w}-menu.jpg`; if (await jpeg(p, path)) send(path); }
+          const t0 = Date.now();
+          await p.evaluate((id) => document.getElementById(id)?.click(), after === "setsail" ? "t-setsail" : "t-sea");
+          const times = [];
+          for (let i = 1; i <= 8; i++) {
+            const path = `look-titlefade-${BROWSER}-${tag}-${i}.jpg`;
+            const ok = await quick(p, path);
+            times.push(ok ? ((Date.now() - t0) / 1000).toFixed(1) : "x");
+          }
+          const where = await p.evaluate(() => location.pathname.split("/").pop() || "title").catch(() => "?");
+          out.push(`${tag}: frames at ${times.join("/")} s, ended on ${where}${errs.length ? `, errors ${errs.join("; ")}` : ""}`);
+          await ctx.close();
+        }
+      }
+      console.log(`TITLEFADE ${BROWSER}: ${out.join(" || ")}`);
+      return out;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
