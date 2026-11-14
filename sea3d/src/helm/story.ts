@@ -149,16 +149,25 @@ export interface Call {
 export function callLines(calls: Call[], endLead: number, asked = true): string[] {
   // No card ever came (the voyage ended first, or nothing was worth asking): no telling-off (Rosa's feel write-up, 14 Nov).
   if (!calls.length) return [asked ? "You let the autopilot sail. Next time, make a call when the clock stops." : "No call came up before the voyage ended."];
-  return calls.map((k, i) => {
+  const lines = calls.map((k, i) => {
     const gain = Math.round((i + 1 < calls.length ? calls[i + 1].lead : endLead) - k.lead);
     // The ghost's own choice and no gap opened: say so, not "level", which read as "your call did nothing".
     const worth = Math.abs(gain) < 1 ? (k.ghost ? "same as the ghost's choice" : "level with the ghost") : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
     return `Day ${d1(k.day)} · ${k.chose} · ${worth}`;
   });
+  // The gamble's real odds (Maya, 14 Nov): over the six launch days a push's forecast gain came to
+  // nothing on average four days later (handoffs/m5-plan.md D4, "Pushes rarely pay").
+  if (calls.some((k) => /^Pushed to/.test(k.chose))) lines.push(PUSH_ODDS);
+  return lines;
 }
 
 /** A choice's button label, short: "Hold course: fastest, but…" -> "Held course". */
+/** Under "Your calls" when you pushed: what pushing is worth, honestly. */
+export const PUSH_ODDS = "Pushing rarely pays: the autopilot already spends the battery well, so the forecast's gain often never comes.";
+
 export function callName(label: string): string {
+  const pushed = /^Push: (\d+)% power/.exec(label);
+  if (pushed) return `Pushed to ${pushed[1]}% power`;
   const head = label.split(":")[0].replace(/\s*\(same as the ghost\)/i, "").trim();
   const past: [RegExp, string][] = [
     [/^Hold course/i, "Held course"],
