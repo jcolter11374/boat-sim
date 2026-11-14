@@ -3616,7 +3616,7 @@ const CHECKS = {
         shots.push(await emit(p, "later"));
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
-        if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        // She has a motor: the power control may show.
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         if (!/Beneteau/.test(chip) || !/Beneteau/.test(a.top)) bad.push(`top bar does not say Beneteau First 31.7 (title "${chip}", helm "${a.top}")`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
@@ -3686,7 +3686,7 @@ const CHECKS = {
         shots.push(await emit(p, "later"));
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
-        if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        // She has a motor: the power control may show.
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         if (!/Rev/.test(chip) || !/Rev/.test(a.top)) bad.push(`top bar does not say Rev C5 (title "${chip}", helm "${a.top}")`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
