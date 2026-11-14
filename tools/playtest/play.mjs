@@ -4525,13 +4525,13 @@ const CHECKS = {
           if (o.over > 2) bad.push(`${w} orders: sheet overlaps the strip by ${o.over} px`);
           out.push(`${w} orders: sheet ${JSON.stringify(o.sheet)}, strip ${JSON.stringify(o.strip)}, boat ${JSON.stringify(o.boat)} ${o.boatOk ? "in view" : "NOT in view"}, cut ${o.cut.length ? o.cut.join("|") : "none"}, overlap ${o.over}`);
           await p.evaluate(() => document.getElementById("orders-x")?.click());
-          // A "Your call": run at a day a second until one comes (up to 4 min).
+          // A "Your call": run at a day a second until one comes (up to 8 min).
           await p.keyboard.press("4");
-          await p.waitForFunction(() => { const d = document.getElementById("decide"); return d && !d.hidden && d.getClientRects().length > 0; }, null, { timeout: 4 * MIN }).catch(() => {});
+          await p.waitForFunction(() => { const d = document.getElementById("decide"); return d && !d.hidden && d.getClientRects().length > 0; }, null, { timeout: 8 * MIN }).catch(() => {});
           await p.waitForTimeout(2000);
           const d = await look(p, "#decide");
           shots.push(await emit(p, `${w}-call`));
-          if (!d.sheet) out.push(`${w} call: none came in 4 min`);
+          if (!d.sheet) out.push(`${w} call: none came in 8 min`);
           else {
             if (d.boatOk === false) bad.push(`${w} call: boat ${JSON.stringify(d.boat)} not whole above the sheet ${JSON.stringify(d.sheet)}`);
             if (d.cut.length) bad.push(`${w} call: cut off ${d.cut.join(" | ")}`);
