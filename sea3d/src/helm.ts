@@ -847,6 +847,8 @@ function showOrder(): void {
   const s = page.status;
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
+  // No power to set: only the wind drives her (the drone, the dinghy), or her crew rows at its own pace.
+  document.body.classList.toggle("wind-only", s?.drives === false);
   const yacht = isStock(spec.key); // a stock boat: the power is its engine's
   $("powerlabel").textContent = yacht ? "Engine power" : "Motor power";
   $("powerhint").textContent = order === "auto"
@@ -3694,6 +3696,8 @@ const BOAT_BLURB: Partial<Record<string, string>> = {
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small diesel engine for calms. The sails trim and reef themselves; you steer and say how hard the engine works.",
   stock_pearson31_2:
     "the Randolph team's own 9.4 m yacht, as we've modelled it from the builder's numbers: heavier and steadier than the cruiser, with a deep keel and a diesel. The sails trim and reef themselves; you steer and say how hard the engine works.",
+  stock_sail_drone7:
+    "a 7 m robot boat, like the ones scientists send out for months at a time. Its rigid wing turns itself to the wind; there's no motor, so you only steer.",
 };
 for (const k of PLAYABLE_STOCK) {
   const label = document.createElement("label");

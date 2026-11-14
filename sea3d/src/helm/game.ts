@@ -48,6 +48,8 @@ export interface Status {
   order: { heading: Heading; power: number; sails?: string | null; engine?: boolean | null };
   /** True for a boat with sails (#242): it also takes sail and engine orders. */
   sailboat?: boolean;
+  /** False when the player sets no power: only the wind drives her, or her crew rows at its own pace. */
+  drives?: boolean;
   /** A sailboat's state and what may be ordered (#242). */
   sailing?: {
     plans: string[];

@@ -25,6 +25,7 @@ export interface PickerEntry {
 const STOCK_FACT: Partial<Record<StockKey, string>> = {
   stock_pearson31_2: "the Randolph team's own boat",
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small engine",
+  stock_sail_drone7: "a 7 m robot boat with a rigid wing sail: wind only, no motor",
 };
 
 const nameOf = playerName;
