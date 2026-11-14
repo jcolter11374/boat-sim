@@ -51,7 +51,7 @@ test("the night call says \"night is coming\" only when it is, and the time othe
 });
 
 test("the hand-back note, in whole fives of km", () => {
-  assert.equal(handBackNote(61), "Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about 60 km more on the ghost). To hand her back, open Orders.");
+  assert.equal(handBackNote(61), "Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about 60 km better against the ghost). To hand her back, open Orders.");
 });
 
 test("the night call's line: 35% at the autopilot's cruise, higher the harder she is pushed", () => {
