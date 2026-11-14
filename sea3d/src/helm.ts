@@ -391,6 +391,13 @@ async function loadWatched(): Promise<Replay> {
 // launch and weather, run by the race's own simulator worker (src/helm/raceSource.ts); boat A sails
 // where your boat does and boat B where the ghost does. Nobody steers.
 const RACE = !params.get("g") && !WATCH && params.has("race");
+/**
+ * "Watch from" a real coast (?place=pico with ?watch=; the old Watch page's "Sail past a real coast"): the
+ * boat is drawn just off that coast, in her voyage's own wind and waves, with the land around her. The
+ * chart, the strip and the clock still follow her real voyage. Annapolis harbour is left out (whoSteers.ts SCENERY).
+ */
+const VISIT = WATCH && params.get("place") !== "annapolis" ? (PLACES[params.get("place") ?? ""] ?? null) : null;
+let visitAimed = false;
 /** Nobody at the helm: a watched voyage or a race. No orders, no wheel, no calls. */
 const SPECTATE = WATCH || RACE;
 const raceMine = (): Record<string, string> | null => {
@@ -4864,7 +4871,11 @@ renderer.setAnimationLoop(() => {
   const st0 = page.status?.boat;
   // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
-  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  if (VISIT && !visitAimed && !arrival) {
+    visitAimed = true;
+    aimAt(VISIT.look); // look past her at the land, as the old page did
+  }
+  const [lat, lon] = arrival ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
   if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
   if (practiceAt && wheelNow && ghostTrack && wheel.wheel) {
     const g = ghostAt(ghostTrack, wheel.wheel.s.t)!;
@@ -5159,7 +5170,7 @@ if (!shared) mountSetSailCard({
     // On for everyone (John, 13 Nov: "shove everything out the door now"); ?who=autopilot still opens the card on her.
     who: whoFromUrl(location.search),
     voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []),
-    watch: (file: string) => location.assign(watchLink(location.search, file)),
+    watch: (file: string, place?: string) => location.assign(watchLink(location.search, file, place)),
     race: (a: RaceId, b: RaceId, day: string) => location.assign(raceLink(location.search, a, b, day)),
   });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);
