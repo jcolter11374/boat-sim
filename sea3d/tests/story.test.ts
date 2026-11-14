@@ -42,6 +42,12 @@ test("the story is said once when both boats ended the same way", () => {
   assert.equal(plainEnding(caught, "lost"), "Caught in fishing gear near the coast.");
   assert.equal(plainEnding({ ...caught, words: "silent more than 10 days in a row", where: null }, "disqualified"), "Silent for more than 10 days in a row, which is out under the race rules.");
   assert.equal(plainEnding({ ...caught, words: "flamingo seam let go", where: null }, "lost"), "Flamingo seam let go.");
+  // A crewless dinghy rolled in a blow says what rolled her and how big the sea was (Omar, #540).
+  const rolled = { ...caught, words: "capsized and stayed upside down (not self-righting; breaking seas, Hs 3.6 m)", where: "out in the open ocean" };
+  assert.equal(plainEnding(rolled, "lost"), "A breaking wave rolled her over out in the open ocean, in waves of 3.6 m, and with nobody aboard she couldn't right herself.");
+  assert.equal(plainEnding({ ...rolled, words: "capsized and stayed upside down (not self-righting)" }, "lost"), "A breaking wave rolled her over out in the open ocean, and with nobody aboard she couldn't right herself.");
+  const keel = { ...rolled, words: "rolled by a breaking wave: dismasted and flooded (breaking seas, Hs 8.1 m)" };
+  assert.equal(plainEnding(keel, "lost"), "A breaking wave rolled her over out in the open ocean, in waves of 8.1 m: she lost her mast and filled with water.");
 });
 
 test("three big numbers at most, signed against the ghost", () => {

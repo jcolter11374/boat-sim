@@ -45,7 +45,7 @@ export interface Option<K extends string> {
 export const SET_SAIL = {
   where: [
     { key: "ocean", label: "The ocean crossing", sub: "From off the Chesapeake Bay to the finish off Portugal, in the real weather of 2020" },
-    { key: "annapolis", label: "Annapolis practice", sub: "A 31 ft cruiser on the Bay: a short course, timed, against your best" },
+    { key: "annapolis", label: "Annapolis practice", sub: "A Beneteau First 31.7 on the Bay: a short course, timed, against your best" },
   ] as Option<Where>[],
   when: [
     { key: "calm", label: "A calm start", sub: "23 April 2020: a good day, light seas" },

@@ -108,6 +108,46 @@ jobs:
           assert a == b, (a, b)
           print("identical:", a[0]["build"], a[0]["start"])
           PY
+      # The helm page reads this weather split by month (tools/build_site.sh), a
+      # month at a time as a voyage sails. Gate: the split files hold the bundle's
+      # own bytes (split checks that itself), 20,000 samples read from them are the
+      # whole bundle's to the last bit, and voyages sailed on them in Pyodide are
+      # the reference's exactly, every number and every track point.
+      - name: Weather split by month reads and sails the same (exact)
+        if: ${{ !inputs.warm_only }}
+        working-directory: tools/pyodide
+        run: |
+          (cd ../.. && python -m boatsim.sandbox split --bundle "site/forcing_$YEAR.npz" --out /tmp/parts)
+          python - <<'PY'
+          import dataclasses, os, struct
+          from datetime import datetime, timedelta
+          import numpy as np
+          from boatsim.sandbox.forcing import BundleEnvironment, open_parts
+          year = os.environ["YEAR"]
+          a = BundleEnvironment(f"../../site/forcing_{year}.npz")
+          b = open_parts(f"/tmp/parts/forcing_{year}_parts.json")
+          first = datetime.fromisoformat(a.meta["first"])
+          span = int((datetime.fromisoformat(a.meta["last"]) - first).total_seconds()) + 18 * 3600
+          rng = np.random.default_rng(2020)
+          bits = lambda e: [struct.pack("<d", float(v)) for v in dataclasses.astuple(e)]
+          times = [first + timedelta(seconds=int(s)) for s in rng.integers(0, span, 20000)]
+          for m in b.parts[1:]:  # and round every month's first hours, where the parts meet
+              edge = datetime.fromisoformat(m + "-01")
+              times += [edge + timedelta(minutes=k) for k in range(-90, 750, 15)]
+          for t in times:
+              lat, lon = rng.uniform(28.0, 50.0), rng.uniform(-78.0, -8.0)
+              assert bits(a.sample(t, lat, lon)) == bits(b.sample(t, lat, lon)), (t, lat, lon)
+          print(f"{len(times)} samples identical, {len(b.parts)} parts")
+          PY
+          node reference.mjs --pack ../../site/boatsim.zip --parts /tmp/parts \
+            --builds $(echo $BUILDS | cut -d' ' -f1) --launches 0 5 --trace --out /tmp/split.json
+          python - <<'PY'
+          import json
+          a = json.load(open("/tmp/split.json")); b = json.load(open("../../site/reference.json"))
+          b = [r for r in b if (r["build"], r["start"]) in {(x["build"], x["start"]) for x in a}]
+          assert len(a) == 2 and a == b, "voyages on the split weather differ from the reference"
+          print("identical on the split weather:", [(r["build"], r["start"], r["outcome"], r["days"]) for r in a])
+          PY
       - name: Summary
         if: (always()) && !inputs.warm_only
         run: |

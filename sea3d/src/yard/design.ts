@@ -49,6 +49,8 @@ export interface SimSlots {
   new_slots: { id: string; name: string; opts: SimOption[] }[];
   /** Other boats to start from (Theo): their own slots, as-built picks, and the kayak slots they share. */
   bases?: Record<string, SimBase>;
+  /** The stock boats' parts (Theo): the keelboats' sails and rig, a spare autopilot, the tactician. */
+  stock?: Record<string, { design: string; defaults: Record<string, string>; slots: { id: string; name: string; note?: string; opts: (SimOption & { d?: string })[] }[] }>;
 }
 export interface SimBase {
   design: string; // the simulator config, e.g. configs/randolph_rev_c.yaml
@@ -61,6 +63,8 @@ export interface CatalogSlot {
   id: string;
   name: string;
   buy?: number;
+  /** A muted line under the slot's options: what the odds don't count yet. */
+  note?: string;
   opts: CatalogOption[];
 }
 export interface Catalog {
@@ -98,7 +102,8 @@ const OPTION_NAMES: Record<string, string> = {
 };
 
 /** True when the motors and cruise power don't apply: a wing sail with no motors (ours, or the Randolph boat as built). */
-export const sailOnly = (d: Design): boolean => d.picks.drive === "wing-sail" || d.picks.drive === "wing";
+export const sailOnly = (d: Design): boolean =>
+  d.picks.drive === "wing-sail" || d.picks.drive === "wing" || (d.base ?? "").startsWith("stock_");
 
 /**
  * The catalog with the simulator's notes merged in by slot and option id, and
@@ -195,7 +200,7 @@ export function summarise(cat: Catalog, d: Design): Summary {
   let kg = (cat.plannedKg ?? PLANNED_KG) + cat.base.kg;
   const pick = (slot: string) => optionOf(cat, slot, d);
   const estimates: string[] = [];
-  let wh = 0;
+  let wh = cat.fixed?.wh ?? 0; // a keelboat's own electronics, which no slot changes
   for (const s of cat.slots) {
     const o = pick(s.id);
     if (!o) continue;
@@ -218,8 +223,8 @@ export function summarise(cat: Catalog, d: Design): Summary {
     programCost: cat.program.reduce((a, p) => a + p[1], 0),
     massKg: kg,
     thrusters: num(["thr", "drive"], "thr", 2),
-    solarW: num(["sol", "rsol"], "wp", 250),
-    batteryWh: num(["bat", "rbat"], "bat", 1280),
+    solarW: num(["sol", "rsol", "ksol"], "wp", 250),
+    batteryWh: num(["bat", "rbat", "kbat"], "bat", 1280),
     electronicsWhDay: wh,
     boxes: num("brain", "boxes", 2),
     beacon: num(["beacon", "tracker"], "beacon", 1) > 0,

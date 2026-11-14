@@ -42,14 +42,15 @@
   /* The clock (John, 11 Nov): time runs by itself once you set sail, at a speed you choose
      here, like a flight sim's time compression. It stops itself when something happens. */
   #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
-  #arrive { position: fixed; top: calc(var(--bar, 0px) + 60px); left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
-    padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
+  /* The finish banner: the page places it each time in the empty sky, clear of the cape, the lighthouse and the boat (helm/arrivalShot.ts bannerSpot). */
+  #arrive { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; width: min(430px, calc(100vw - 24px)); box-sizing: border-box;
+    padding: 10px 14px 12px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
   body.arriving #strip, body.arriving #orders, body.arriving #orders-tab, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
   body.arriving #keylist, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
   #arrive .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #3ddc97; }
-  #arrivehead { font-size: 20px; font-weight: 650; margin: 2px 0 6px; }
-  #arrive p { margin: 0 0 10px; font-size: 13px; color: var(--dim); }
-  @keyframes arrive-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  #arrivehead { font-size: 18px; font-weight: 650; margin: 1px 0 4px; }
+  #arrive p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.35; color: var(--dim); }
+  @keyframes arrive-in { from { opacity: 0; } to { opacity: 1; } }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
   #decide[hidden] { display: none; }
@@ -162,27 +163,26 @@
      Credits link: there the link sits just above the strip (Elena). 7/4 and 1260 px: the strip is
      93 units of --ui wide, and the link needs about 70 px beside it. */
   @media (max-aspect-ratio: 7/4), (max-width: 1260px) { body.sailing:not(.at-wheel) #credits { bottom: calc(var(--edge) + var(--strip-h) + 4px); } }
-  #practice-what[hidden], #practice-end[hidden] { display: none; }
-  #practice-again[hidden], #prologue-end[hidden], #prologuepick[hidden] { display: none; }
+  #practice-what[hidden] { display: none; }
+  #prologue-end[hidden], #prologuepick[hidden] { display: none; }
   #prologuepick { display: block; margin: 6px 0; }
   #practice-courses .courses { display: flex; flex-direction: column; gap: 6px; }
   #practice-courses .courses button { width: 100%; margin: 0; text-align: left; padding: 7px 12px; }
   #practice-courses button small { display: block; font-weight: 400; font-size: 12px; opacity: .85; }
   #practice-courses small[data-best]:empty { display: none; }
-  #practice-result[hidden] { display: none; }
-  #practice-result .medal { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
-  #practice-result .medal-name { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
-  #practice-result .medal-disc { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
-  #practice-result .medal[data-medal="gold"] { --m1: #fff1b8; --m2: #d9a92a; --m3: #8c6410; }
-  #practice-result .medal[data-medal="silver"] { --m1: #ffffff; --m2: #b9c3cf; --m3: #6d7887; }
-  #practice-result .medal[data-medal="bronze"] { --m1: #ffd9b5; --m2: #b8713a; --m3: #6e3d17; }
-  #practice-result .medal[data-medal=""] { --m1: rgba(255,255,255,.5); --m2: rgba(255,255,255,.08); --m3: rgba(255,255,255,.25); }
-  #practice-end .crossing { display: inline-block; margin-top: 4px; color: rgba(255,255,255,.72); font-size: 13px; text-decoration: none; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,.22); }
-  #practice-end .crossing:hover, #practice-end .crossing:focus-visible { color: #fff; border-bottom-color: rgba(255,255,255,.6); }
-  #practice-result .result-time { font-size: 18px; font-weight: 600; margin: 0 0 2px; font-variant-numeric: tabular-nums; }
-  #practice-result .result-next { font-size: 13px; opacity: .8; margin: 0 0 12px; }
-  #practice-result .result-next:empty { display: none; }
-  #practice-end.trial #practice-sum { display: none; }
+  /* Practice's award on the one results card (M3): the medal, the time against your best, what the next medal needs. */
+  #r-medal[hidden] { display: none; }
+  #r-medal .medal { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
+  #r-medal .medal-name { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+  #r-medal .medal-disc { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  #r-medal .medal[data-medal="gold"] { --m1: #fff1b8; --m2: #d9a92a; --m3: #8c6410; }
+  #r-medal .medal[data-medal="silver"] { --m1: #ffffff; --m2: #b9c3cf; --m3: #6d7887; }
+  #r-medal .medal[data-medal="bronze"] { --m1: #ffd9b5; --m2: #b8713a; --m3: #6e3d17; }
+  #r-medal .medal[data-medal=""] { --m1: rgba(255,255,255,.5); --m2: rgba(255,255,255,.08); --m3: rgba(255,255,255,.25); }
+  #r-medal .result-time { font-size: 18px; font-weight: 600; margin: 0 0 2px; font-variant-numeric: tabular-nums; }
+  #r-medal .result-next { font-size: 13px; opacity: .8; margin: 0 0 12px; }
+  #r-medal .result-next:empty { display: none; }
+  #result .rc-mid[hidden], #r-calls[hidden], #r-details[hidden], #r-info[hidden], #r-stars[hidden] { display: none; }
   #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
   .practice-note { font-size: 12px; opacity: .75; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
@@ -198,7 +198,7 @@
   body.watching #dialrow .side { font-size: 13px; }
   #dialkey { color: var(--dim); font-size: 11.5px; line-height: 1.45; }
   #dialkey i { display: inline-block; width: 9px; height: 3px; margin-right: 5px; vertical-align: middle; }
-  @media (min-width: 1101px) { body.watching #strip { grid-template-columns: 2.05fr 1.25fr .9fr .75fr .95fr 1.35fr max-content 2.2em; } }
+  @media (min-width: 1101px) { body.watching #strip { grid-template-columns: minmax(max-content, 2.05fr) 1.25fr .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 2.2em; } }
   @media (max-width: 760px) { body.watching #strip #c-wind { grid-column: span 7; } }
   /* A race (M2, R3): nobody steers either, but the lead cell stays: it's boat A against boat B. */
   body.racing #orders, body.racing #orders-tab, body.racing #c-order { display: none; }
@@ -208,7 +208,7 @@
   /* The tags over the far boat belong to the sea, not the big map: one peeked out beside it. */
   body:has(#mapbox.big) #ghosttag, body:has(#mapbox.big) #rivaltag { visibility: hidden; }
   body.racing #mside .mleg { line-height: 1.7; } body.racing #mside .mleg i { margin-left: 0; }
-  @media (min-width: 1101px) { body.racing #strip { grid-template-columns: 2.05fr .9fr .75fr .95fr 1.35fr max-content 1.5fr 2.2em; } }
+  @media (min-width: 1101px) { body.racing #strip { grid-template-columns: minmax(max-content, 2.05fr) .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 1.5fr 2.2em; } }
   @media (max-width: 1100px) and (min-width: 761px) { body.racing #strip .c-time { grid-column: span 2; } body.racing #strip { grid-template-columns: 1fr 1fr 1fr 1fr 2.2em; }
     body.racing #strip #c-lead { grid-column: span 2; } }
   @media (max-width: 760px) { body.racing #strip #c-head, body.racing #strip #c-speed { grid-column: span 3; } body.racing #strip #c-bat { grid-column: span 4; border-left: 1px solid var(--hud-line); padding-left: .5em; }
@@ -243,8 +243,7 @@
   @media (max-width: 899px) { #compass, #lookup { display: none !important; } body:has(#compass:not([hidden])) #notes { top: calc(var(--bar, 0px) + 54px); } }
   body.racing.followed #c-lead, body.racing.followed #watch { display: none; } /* following the one boat left in a race */
   body.racing.results:not(.followed) #c-lead { visibility: hidden; } /* the faded strip behind the card must not give away who is ahead (Elena) */
-  #result.raced #r-race, #result.watched #r-race { display: none; } /* you have just raced: "Change the boats" is the way on (Elena) */
-  #result.watched #r-watch, #result.watched #r-day, #result.watched:not(.raced) #r-boat, #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
+  /* Which ways on a card offers is helm/ending.ts's call (the same ones, in the same order, on every ending); these hide the parts a watch or a race has nothing to put in. */
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -294,7 +293,16 @@
   /* Tall cards: More options scrolls inside the card, so its top and Set sail stay put (Elena); the
      height is set by setsailCard.ts to what's left of the window. */
   #more-body { overflow-y: auto; overscroll-behavior: contain; }
-  @media (max-width: 699px) { #start { align-items: flex-end; padding: 0 16px 12px; } #ss-card { max-height: calc(100dvh - var(--bar, 0px) - 200px); } }
+  /* A phone: the card sits at the bottom and never grows into the boat's band above it (200 px under the bar): it
+     scrolls inside itself first. A little tighter there, so the whole card, "More options" included, fits a
+     390x844 screen even with a saved voyage's line on it. */
+  @media (max-width: 699px) { #start { align-items: flex-end; padding: 0 16px 12px; } #ss-card { max-height: calc(100dvh - var(--bar, 0px) - 200px); padding: 12px 18px 8px; }
+    #ss-card h1 { font-size: 23px; margin-bottom: 4px; } #ss-card .ss-row { margin: 6px 0; } #ss-card .ss-l { margin: 5px 0 3px; } #ss-card .ss-continue { padding: 6px 10px; } #ss-card .ss-after { margin: 5px 0 0; } }
+  /* A phone's card that scrolls: Set sail stays whole at the card's bottom and the rows scroll above it (it was cut
+     by the card's edge and looked broken, Elena). The ring in the card's colour hides the rows passing under it. */
+  @media (max-width: 699px) { #ss-card #go { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 0 0 6px rgb(13,31,54); } }
+  /* On a phone the card reaches the bottom corner where Credits sits: before sailing the link moves up under the bar. */
+  @media (max-width: 699px) { body:not(.sailing) #credits { bottom: auto; top: calc(var(--bar, 0px) + 6px); } body:not(.sailing) #credtext { bottom: auto; top: 16px; } }
   .ss-pill small { display: block; margin: 1px 0 0 !important; font-size: 11.5px; }
   #ss-card h1 { font: 800 28px/1.1 "Fraunces", Georgia, serif; margin: 0 0 6px; }
   .ss-row { margin: 8px 0; }
@@ -332,7 +340,6 @@
   #r-stars .s-ghost, #r-stars .s-real { font-size: 14px; margin: 4px 0; }
   #r-stars .s-ghost:empty { display: none; }
   /* A challenge has its own day, so no other launch day to try. */
-  #result.mission #r-day { display: none; }
   /* Short windows and phones: the card scrolls inside the window, so its buttons stay reachable. */
   .card { width: min(560px, 92vw); padding: 20px 24px; box-sizing: border-box; max-height: calc(100vh - var(--bar, 0px) - 24px); max-height: calc(100dvh - var(--bar, 0px) - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .card select { max-width: 100%; }
@@ -390,7 +397,26 @@
   .rc-links a:hover, .rc-links a:focus-visible { color: var(--ink); text-decoration: underline; }
   .rc-links button { all: unset; color: var(--dim); cursor: pointer; }
   .rc-links button:hover, .rc-links button:focus-visible { color: var(--ink); text-decoration: underline; }
-  .rc-links button[hidden], #r-back[hidden] { display: none; }
+  .rc-links [hidden], .rc-btns [hidden], #r-back[hidden] { display: none; }
+  /* On a phone (M3, E5): the card at the bottom with the boat whole in the band above it (Elena). A long card
+     (a challenge's stars and story) scrolls inside, and its buttons stay on its bottom edge, so the headline,
+     the award and the first button are all on screen without scrolling. After #result's own rules, so it wins. */
+  @media (max-width: 699px) {
+    #result { align-items: flex-end; padding: 0 12px 12px; }
+    #result .rc { max-height: calc(100dvh - var(--bar, 0px) - 180px); }
+    #result .rc-btns { position: sticky; bottom: -16px; z-index: 1; margin: 0 -26px; padding: 18px 26px 16px; background: linear-gradient(rgba(11,21,35,0), rgb(11,21,35) 14px); }
+    /* The big numbers straight under the headline, then the award, then the story (two lines at most) and the
+       map, so a long race headline never pushes them out of sight (Maya, from Nina's live run). The map and the
+       numbers leave their shared row (display: contents) so each can take its own place in the card. */
+    #result .rc { display: flex; flex-direction: column; }
+    #result .rc > *, #result .rc-mid > * { flex-shrink: 0; } /* the card scrolls; its parts never squash (a clamped story went to nothing) */
+    #result .rc-mid:not([hidden]) { display: contents; }
+    #result .rc-top, #result #r-caveat { order: -3; }
+    #result #r-nums { order: -2; margin: 8px 0 8px; }
+    #result #r-medal, #result #r-stars { order: -1; }
+    #result #r-map { margin: 0 0 12px; }
+    #result #r-story { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  }
   /* Looking around after a watched voyage: the one way back to its ending card. */
   #r-back { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + var(--strip-h, 62px) + 12px); z-index: 6; font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px;
     color: var(--ink); background: rgba(10,18,30,.62); border: 1px solid rgba(255,255,255,.22); backdrop-filter: blur(8px); cursor: pointer; }
@@ -431,7 +457,7 @@
      the one Watch a voyage has (M2, one strip for every mode): the strip is 13 units wider to seat it,
      so the other cells keep their widths (the time cell must hold "Real time" on one line). */
   #strip { position: fixed; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: var(--strip-w); height: var(--strip-h); box-sizing: border-box;
-    display: grid; grid-template-columns: 2.05fr 1.25fr .9fr .75fr .95fr 1.35fr max-content 1fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
+    display: grid; grid-template-columns: minmax(max-content, 2.05fr) 1.25fr .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 1fr 2.2em; align-items: center; gap: 0; padding: 0 .67em 0 1.17em; z-index: 6; font-size: var(--ui); /* scales with the window, as the wheel strip does (Rosa, Elena) */
     background: var(--strip-bg); border: 1px solid var(--hud-line); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
   #strip .cell { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 .83em; height: 3.5em; box-sizing: border-box;
     border-left: 1px solid var(--hud-line); text-align: left; background: none; border-radius: 0; font: inherit; color: inherit; }
@@ -468,7 +494,12 @@
   #chbrief[hidden] { display: none; }
   #r-stars { margin: .2em 0 .6em; }
   #r-stars[hidden], #r-stars .s-real[hidden] { display: none; }
+  /* The speed buttons never wrap or squeeze, whatever face the browser has for system-ui (a wide one put
+     "Real time" on two lines and the taller bar pushed the day and date out of the strip): on a wide window the
+     time column is at least as wide as its day, date and zone and its buttons, the wind cell as wide as its
+     wind and waves, and the other cells give way. */
   #timebar { display: flex; gap: 2px; margin-top: 3px; }
+  #timebar button { white-space: nowrap; flex: none; }
   #timebar[hidden] { display: none; }
   #timebar button { padding: .1em .5em; border-radius: .5em; font-size: .92em; font-weight: 600; line-height: 1.45em; background: rgba(255,255,255,.07); border-color: transparent; color: #c9d7e8; }
   #timebar button[aria-pressed="true"] { background: rgba(255,138,42,.22); border-color: rgba(255,138,42,.7); color: #fff; }
@@ -494,7 +525,7 @@
     color: rgba(225,235,248,.9); text-shadow: 0 1px 3px rgba(0,0,0,.7); white-space: nowrap; pointer-events: none; transition: opacity 1s; z-index: 5; }
   #keyhint[hidden] { display: none; } #keyhint.gone { opacity: 0; }
   /* A touch screen has no keyboard: no key hint (Elena). */
-  @media (hover: none) and (pointer: coarse) { #keyhint { display: none; } }
+  @media (hover: none) and (pointer: coarse), (max-width: 760px) { #keyhint { display: none; } } /* no keyboard on a touch screen; on a phone-width window it ran into Credits */
   #timestate { display: none !important; } /* the pause shows on the strip's button; a stop says why in a toast */
   #clock { display: none !important; }
 
@@ -509,6 +540,9 @@
   #dialrow { display: flex; gap: 12px; align-items: center; }
   #dial { width: 132px; height: 132px; cursor: crosshair; touch-action: none; flex: none; }
   #dialrow .side { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
+  body.wind-only :is(#powerrow, #power, #powerhint, #keyhint .powerkeys) { display: none; }
+  /* .seg sets display: flex, which beats the hidden attribute: a boat with no engine has no Engine row. */
+  #sailrow .seg[hidden] { display: none; }
   #powerrow { display: flex; justify-content: space-between; margin-top: 8px; }
   #orders-tab { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 6; width: 26px; height: 92px; padding: 0; border-radius: 0 9px 9px 0;
     border: 0; background: var(--hud); color: #ffb070; }
@@ -656,7 +690,7 @@
 </div>
 <div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
-<div id="keyhint" hidden>&larr;&rarr; steer · &uarr;&darr; power · Space pause · ? all keys</div>
+<div id="keyhint" hidden>&larr;&rarr; steer<span class="powerkeys"> · &uarr;&darr; power</span> · Space pause · ? all keys</div>
 <div id="ghosttag" hidden></div>
 <div id="baretip" hidden>H to show</div>
 
@@ -767,17 +801,6 @@
 <div id="rivaltag" hidden><b></b><span></span></div>
 
 <div id="practice-what" class="glass" hidden></div>
-<div id="practice-end" class="overlay" hidden><div class="card glass">
-  <h1>Practice sailing</h1>
-  <p id="practice-sum"></p>
-  <div id="practice-result" hidden>
-    <div class="medal" data-medal=""><svg class="medal-disc" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="var(--m3)"/><circle cx="20" cy="20" r="16.5" fill="var(--m2)"/><circle cx="20" cy="20" r="15" fill="none" stroke="var(--m1)" stroke-width="0.8" opacity=".7"/><path d="M20 7 L22.6 17.4 L33 20 L22.6 22.6 L20 33 L17.4 22.6 L7 20 L17.4 17.4 Z" fill="var(--m1)"/><path d="M20 7 L22.6 17.4 L20 20 Z M33 20 L22.6 22.6 L20 20 Z M20 33 L17.4 22.6 L20 20 Z M7 20 L17.4 17.4 L20 20 Z" fill="var(--m3)" opacity=".55"/><circle cx="20" cy="20" r="1.6" fill="var(--m3)"/></svg><span class="medal-name"></span></div>
-    <p class="result-time"></p>
-    <p class="result-next"></p>
-    <p class="result-go"><button id="practice-ghost" class="go">Race your best run</button> <button id="practice-other">Another course</button></p>
-  </div>
-  <p><button id="practice-again" class="go">Another course</button> <a class="crossing" href="helm.html">Sail across the Atlantic</a></p>
-</div></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
   <h1>Four days later: the Bay mouth</h1>
   <p id="prologue-sum"></p>
@@ -789,13 +812,13 @@
     <h1>Set sail</h1>
     <div class="ss-row ss-continue" id="ss-continue" hidden><div id="ss-continue-words"></div><a id="ss-continue-go" href="./helm.html">Continue your voyage</a><div class="muted" id="ss-continue-new">Starting a new crossing ends that one.</div><div id="ss-ask" role="alertdialog" aria-labelledby="ss-ask-q" hidden><div id="ss-ask-q"></div><div class="ss-ask-btns"><button type="button" id="ss-ask-keep">Keep sailing</button><button type="button" id="ss-ask-new">Start a new one</button></div></div></div>
     <div class="ss-row" id="ss-boat"><div class="ss-l">Your boat</div><b id="ss-boatname">Our kayak</b> &middot; <button type="button" class="ss-link" id="ss-change">Change</button></div>
-    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
+    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Beneteau First 31.7 (our model)</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
     <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-line muted" id="ss-course-line"></div><div class="ss-l">Wind</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
     <!-- Who steers (M2, R2): you, or the autopilot all the way (you watch her go). Hidden for Annapolis: practice is always you. -->
     <div class="ss-row" id="ss-who" hidden><div class="ss-l">Who steers</div><div class="ss-opts" id="ss-who-opts"></div><div class="ss-line muted" id="ss-who-line"></div></div>
     <!-- Race against (M2, R4): with the autopilot, nobody or another boat; with you, it says who the rival is. -->
-    <div class="ss-row" id="ss-rival" hidden><div class="ss-l">Race against</div><div class="ss-opts" id="ss-rival-opts"></div><div class="ss-line muted" id="ss-rival-line"></div>
+    <div class="ss-row" id="ss-rival" hidden><div class="ss-l">Race against</div><div class="ss-opts" id="ss-rival-opts"></div><div class="ss-line muted" id="ss-rival-line"></div><div class="ss-line muted" id="ss-rival-soon" hidden></div>
       <div class="ss-line" id="ss-against" hidden>Against: <b id="ss-against-name"></b> &middot; <button type="button" class="ss-link" id="ss-against-change">Change</button></div></div>
     <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div><div class="ss-line muted" id="ss-when-line" hidden></div></div>
     <div class="ss-row" id="ss-ch" hidden><div class="ss-l">Weather challenge (optional)</div><div class="ss-opts" id="ss-ch-opts"></div><p id="ss-why" class="muted" hidden></p></div>
@@ -848,7 +871,7 @@
 <div id="arrive" class="glass" role="status" hidden>
   <div class="t">Finish</div>
   <div id="arrivehead"></div>
-  <p>The finish circle is 330 km out to sea, too far to see land from. So this is a view of where the boat was headed, not where it is: Cascais, near Lisbon, with Cabo da Roca (Europe's westernmost point) and the Sintra hills to the north-west. The boat itself is still out at the finish.</p>
+  <p>The finish line is 330 km out to sea, too far to see land. Ahead is where she was headed: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse and the Sintra hills behind.</p>
   <button id="arrivego">See the results</button>
 </div>
 <div id="goalcard" role="status" aria-live="polite" hidden>
@@ -861,12 +884,13 @@
     <div class="rc-top"><h1 id="r-head"></h1><button id="r-info" class="i" aria-expanded="false" aria-controls="r-caveat" title="About the weather data">i</button></div>
     <p id="r-caveat" class="muted" hidden></p>
     <p id="r-story"></p>
+    <div id="r-medal" hidden><div class="medal" data-medal=""><svg class="medal-disc" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="var(--m3)"/><circle cx="20" cy="20" r="16.5" fill="var(--m2)"/><circle cx="20" cy="20" r="15" fill="none" stroke="var(--m1)" stroke-width="0.8" opacity=".7"/><path d="M20 7 L22.6 17.4 L33 20 L22.6 22.6 L20 33 L17.4 22.6 L7 20 L17.4 17.4 Z" fill="var(--m1)"/><path d="M20 7 L22.6 17.4 L20 20 Z M33 20 L22.6 22.6 L20 20 Z M20 33 L17.4 22.6 L20 20 Z M7 20 L17.4 17.4 L20 20 Z" fill="var(--m3)" opacity=".55"/><circle cx="20" cy="20" r="1.6" fill="var(--m3)"/></svg><span class="medal-name"></span></div><p class="result-time"></p><p class="result-next"></p></div>
     <div id="r-stars" hidden><p class="s-row"><span class="s-stars"></span> <span class="s-none"></span></p><p class="s-why"></p><p class="s-ghost"></p><p class="s-real"><b>What really happened.</b> <span class="s-text"></span> <a target="_blank" rel="noopener">Source</a></p></div>
     <div class="rc-mid"><canvas id="r-map" aria-label="Both boats' tracks"></canvas><div id="r-nums"></div></div>
     <div id="r-calls"><div class="rc-h">Your calls</div><ul id="r-calllist"></ul></div>
     <div id="r-next"></div>
-    <div class="rc-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button></div>
-    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./race.html">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./voyage.html">Watch a voyage</a></div>
+    <div class="rc-btns" id="r-btns"><button id="again" class="go">Play again</button><button id="r-day">Try another launch day</button><a id="r-boat" class="btn" href="./boatyard.html">Change the boat</a><button id="r-follow" hidden></button><a id="r-sail" class="btn" href="./helm.html" hidden>Sail it yourself</a><button id="r-postcard" hidden>Save postcard</button><button id="r-course" hidden>Another course</button></div>
+    <div class="rc-links" id="r-links"><button id="r-look" hidden>Look around</button><a id="r-race" href="./helm.html?who=autopilot&amp;against=revc">Race it</a><a id="r-board" href="./leaderboard.html">Leaderboard</a><a id="r-watch" href="./helm.html?who=autopilot">Watch her go</a><a id="r-atlantic" href="./helm.html" hidden>Sail across the Atlantic</a></div>
     <details id="r-details"><summary>Details</summary>
       <p id="r-trim" class="muted"></p>
       <table id="r-table"></table>

@@ -66,6 +66,15 @@ export function standing(build: string, board: Board | null, grid: Grid | null):
   return { kind: "none" };
 }
 
+/**
+ * One muted line for wherever a game's result sits beside the Boatyard's odds or a recorded voyage
+ * (M5): since the game's autopilot went to policy 2 it sails better than the one those were run with,
+ * so the ghost's time and the odds no longer describe the same autopilot. Empty when they do.
+ */
+export function autopilotNote(policy: number | null | undefined, besideOdds: boolean): string {
+  return besideOdds && (policy ?? 1) > 1 ? "The autopilot in the game sails smarter than the one behind these odds and the recorded voyages." : "";
+}
+
 /** The standing in plain words: one sentence, and a second line of detail.
  *  Board wording leads with the group, not the place (Ravi): boats in one group
  *  can't be told apart on the board's launches, so a place alone overclaims. */
@@ -74,33 +83,33 @@ export function standingText(s: Standing): { head: string; detail: string } {
     const r = s.row;
     const when = boardDay(s.made);
     const on = when ? `On the board of ${when}` : "On the leaderboard";
-    const rate = `It finishes ${pct(r.finish_rate)} of ${r.launches} launches.`;
+    const rate = `It finishes on ${pct(r.finish_rate)} of ${r.launches} launch days.`;
     const range = `Likely range ${pct(r.ci95[0])} to ${pct(r.ci95[1])}.`;
     if (s.tiers <= 1)
       return {
-        head: `${on}: all ${s.of} builds are in one group, which these launches can't tell apart. ${rate}`,
+        head: `${on}: all ${s.of} boats are in one group, which these launch days can't tell apart. ${rate}`,
         detail: range,
       };
     const others = s.inTier - 1;
     // The leaderboard's tier names (Milo, 12 Nov): Best, Good, Long shot. No place: builds in
     // one group can't be told apart, so "2nd of 8" would contradict it.
     const tier = s.tier === 1 ? "Best" : s.tier === s.tiers ? "Long shot" : "Good";
-    const builds = `${others} build${others === 1 ? "" : "s"}`;
+    const builds = `${others} boat${others === 1 ? "" : "s"}`;
     const with_ = others === 0 ? "" : s.tier === 1 ? ` (with ${builds} just as good)` : ` (with ${builds} like it)`;
     return {
       head: `${on}: ${tier} group, about ${pct(r.finish_rate)} finish${with_}.`,
-      detail: `Tested on ${r.launches} launches. ${range}`,
+      detail: `Tested on ${r.launches} launch days. ${range}`,
     };
   }
   if (s.kind === "odds") {
     const o = s.build.odds!;
     const yrs = s.years ? ` (${s.years[0]} to ${s.years[1]})` : "";
     return {
-      head: `Not on the leaderboard yet. The simulator gives it ${pct(o.odds)} over ${o.voyages} launches${yrs}.`,
+      head: `Not on the leaderboard yet. The simulator gives it ${pct(o.odds)} over ${o.voyages} launch days${yrs}.`,
       detail: `Likely range ${pct(o.low95)} to ${pct(o.high95)}. One voyage is one roll of the dice; these odds are the better guide.`,
     };
   }
-  return { head: "No odds for this build yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
+  return { head: "No odds for this boat yet.", detail: "One voyage is one roll of the dice: sail it again on another launch to see more." };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -117,13 +126,46 @@ export function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
+// ---------------------------------------------------------------- the ways on (M3 piece L4)
+// Every ending offers Leaderboard and Race it. These say where each one leads, so the results
+// card (helm/ending.ts) and any other page ask one place. Neither leads to the old pages.
+
+const RACE_BOATS = ["kayak", "revc", "revb", "mine"];
+
+/**
+ * Where "Leaderboard" leads from an ending. A weather challenge has its own tab (John, W5), so
+ * its ending opens that tab; any other ending opens the designs board at this build's row.
+ */
+export function leaderboardLink(from: { build?: string | null; challenge?: string | null } = {}): string {
+  if (from.challenge) return "./leaderboard.html#challenges";
+  return from.build ? `./leaderboard.html#${encodeURIComponent(from.build)}` : "./leaderboard.html";
+}
+
+/**
+ * Where "Race it" leads from an ending: the Set sail card with the autopilot steering and another
+ * boat picked, so the player sees who she races and presses "Start the race". `boat` is the card's
+ * own boat value ("" our kayak, "revc", "revb", "mine"); `against` picks the rival (left out, the
+ * card's usual one); `day` keeps the launch day just sailed. Null for a boat a race can't run
+ * (a stock yacht): that ending leaves "Race it" out.
+ */
+export function raceItLink(from: { boat?: string | null; against?: string | null; day?: string | null; quality?: string | null } = {}): string | null {
+  const mine = from.boat ? from.boat : "kayak";
+  if (!RACE_BOATS.includes(mine)) return null;
+  const rival = from.against && RACE_BOATS.includes(from.against) && from.against !== mine ? from.against : mine === "revc" ? "kayak" : "revc";
+  const p = new URLSearchParams({ who: "autopilot", against: rival });
+  const day = (from.day ?? "").slice(0, 10);
+  if (/^\d{4}-\d\d-\d\d$/.test(day)) p.set("day", day);
+  if (from.quality && /^(low|medium|high|ultra)$/.test(from.quality)) p.set("quality", from.quality);
+  return `./helm.html?${p.toString()}`;
+}
+
 /** The ways on from Results. `boatyard` is the link that reopens this design
  *  (the remembered "my boat", myboat.ts myBoatYardLink, when there is one). */
 export function nextLinks(build: string, boatyard = "./boatyard.html"): { label: string; href: string }[] {
   return [
     { label: "Back to the Boatyard", href: boatyard },
-    { label: "Race it", href: "./race.html" },
-    { label: "Leaderboard", href: `./leaderboard.html#${encodeURIComponent(build)}` },
+    { label: "Race it", href: raceItLink() ?? "./helm.html" },
+    { label: "Leaderboard", href: leaderboardLink({ build }) },
   ];
 }
 

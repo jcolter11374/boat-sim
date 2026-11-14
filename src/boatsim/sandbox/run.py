@@ -25,9 +25,15 @@ def open_bundle(source):
     """The bundle's weather for every page (Boatyard, helm). A hurricane
     challenge bundle carries its storms' best-track fixes, and the vortex goes
     back into the 1 degree weather at sample time (oceandata/stormboost.py);
-    any other bundle comes back as the plain BundleEnvironment."""
+    any other bundle comes back as the plain BundleEnvironment. A bundle split
+    by month is opened by its "_parts.json" (every month added) or by its
+    static file (no month yet: the page adds them as they arrive)."""
     from boatsim.oceandata.stormboost import boost_bundle
 
+    if str(source).endswith("_parts.json"):
+        from boatsim.sandbox.forcing import open_parts
+
+        return boost_bundle(open_parts(source))
     return boost_bundle(BundleEnvironment(source))
 
 

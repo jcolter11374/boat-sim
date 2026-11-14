@@ -295,7 +295,9 @@ def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
 def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
     """Ravi, 1 May 2020: 'finish' at 25% stopped on a 2 m lead change 20 minutes in."""
     g = Game(env, launch_index=MAY1, max_days=0.9)
-    g.order("finish", 0.25)
+    # 80% power: clear of the ghost from the drop (on a full battery the game's
+    # autopilot now runs above cruise power itself, so 25% no longer leads it).
+    g.order("finish", 0.8)
     out = g.run(hours=6, land_within_km=None, breakdown=False)
     assert out["stopped"] == "time" and out["status"]["lead_km"] > 1.0
     assert g.leader == "me"  # ahead from the drop: noted, not a pass
@@ -376,7 +378,14 @@ def test_results_card_says_how_it_ended(env):
 
 @pytest.mark.parametrize(
     "base",
-    ["joke_canoe", "joke_flamingo", "stock_dinghy14", "stock_sail_drone7", "stock_ocean_rower45"],
+    [
+        "joke_canoe",
+        "joke_flamingo",
+        "stock_dinghy14",
+        "stock_beachcat16",
+        "stock_sail_drone7",
+        "stock_ocean_rower45",
+    ],
 )
 def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     g = Game(env, choices={"base": base}, launch_index=MAY1, max_days=0.9)
@@ -385,6 +394,8 @@ def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     r = g.result()
     assert r["build"] == base
     assert r["boat"]["ending"]["boat"] == g.design.stock["label"]
+    # None of these takes a power order: wind only, or a crew rowing at its own pace.
+    assert g.status()["drives"] is False
 
 
 # ------------------------------------------------------------- start from a port
@@ -477,6 +488,7 @@ CRUISER = {"base": "stock_cruiser31"}
 
 
 def test_sail_and_engine_orders_on_the_cruiser(env):
+    assert Game(env, choices=CRUISER, launch_index=MAY1, max_days=0.5).status()["drives"] is True
     g = Game(env, CRUISER, launch_index=MAY1, max_days=0.9)
     assert g.status()["sailboat"] and g.status()["sailing"]["plan"] is not None
     g.order("finish", 0.0, sails="reef2", engine=False)

@@ -35,6 +35,6 @@ export function chanceFor(
     tested: true,
     value: pct(o.odds),
     note: `Likely range ${pct(o.low95)} to ${pct(o.high95)}.`,
-    about: `Tested on ${o.voyages} launches${when}.`,
+    about: `Tested on ${o.voyages} launch days${when}.`,
   };
 }

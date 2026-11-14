@@ -219,7 +219,7 @@
    "id": "gulf-stream",
    "kind": "ocean",
    "title": "The Gulf Stream",
-   "teaser": "The Gulf Stream, a warm river in the sea, runs faster than the kayak.",
+   "teaser": "The Gulf Stream, a warm river in the sea, outruns small boats like this.",
    "at": [
     [
      35.5,
@@ -251,7 +251,7 @@
     ]
    ],
    "radius_km": 80,
-   "text": "A river of warm water in the sea, flowing north-east. It averages about 6 km/h and can run near 9 km/h, faster than the kayak's motors push it, and it carries more water than all the world's rivers put together. Further north and east it slows to under 2 km/h.",
+   "text": "A river of warm water in the sea, flowing north-east. It averages about 6 km/h and can run near 9 km/h, faster than a small boat like this can go on her own, and it carries more water than all the world's rivers put together. Further north and east it slows to under 2 km/h.",
    "source": "NOAA National Ocean Service",
    "url": "https://oceanservice.noaa.gov/facts/gulfstreamspeed.html"
   },

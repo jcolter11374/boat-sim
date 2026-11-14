@@ -1,0 +1,140 @@
+/**
+ * The finish scene's shot (M5, Hana): the boat low in the frame on a third, and beyond her the
+ * coast she was headed for, with Cabo da Roca and its lighthouse on the horizon. A long lens from
+ * a chase boat's height, so the cape stands up off the horizon instead of lying on it as a thin
+ * line, and a slow push in. Composed, never random; display only (it moves no clock).
+ */
+import * as THREE from "three";
+import { boatAt, compose, type Composed, type FramingHost, type Look } from "../framing";
+
+/** Cabo da Roca lighthouse (the westernmost point of mainland Europe). */
+export const CABO_DA_ROCA = { lat: 38.782, lon: -9.4973 };
+/**
+ * Where the finish scene is set: about 7 km south-west of the cape, on the way in from the open
+ * Atlantic. From there the cliff and its lighthouse stand clear on the horizon with the Sintra
+ * hills behind (from off Cascais, 14 km round the corner, the cape was a low line).
+ */
+export const ARRIVAL_AT: [number, number] = [38.74, -9.56];
+/** How long the scene plays before the results (s); a click or a key ends it sooner. */
+export const ARRIVAL_S = 12;
+/** The frame: a 16 degree lens 1.6 m off the water, the horizon a third up (sky above for the banner and a mast), the boat a fifth of the width. */
+export const ARRIVAL: Look = { az: 180, f: 0.2, H: -0.3, B: 0, fov: 16, h: 1.6, x: 0.45 };
+/**
+ * On an upright phone (Elena, 14 Nov: at a fifth of a narrow frame the kayak was tiny, with half the
+ * screen empty sea below her): the camera comes in until she is about half the width, nearer the
+ * middle so neither end leaves the frame. The horizon stays a third up, which puts her and the cape
+ * in the middle of what the banner leaves free.
+ */
+export const ARRIVAL_UPRIGHT: Look = { ...ARRIVAL, f: 0.45, x: 0.3 };
+/** How far across the frame the cape sits from the boat (in half-widths), so it is beside her, not behind her. */
+export const CAPE_APART = 0.6;
+
+const D2R = Math.PI / 180;
+
+/** Where a far point in direction `dir` (x, z) lands across the frame (-1 left .. 1 right) for a composed camera. */
+export function acrossOf(c: Pick<Composed, "pos" | "quat" | "fov">, aspect: number, dir: THREE.Vector2): number {
+  const cam = new THREE.PerspectiveCamera(c.fov, aspect, 0.1, 1e6);
+  cam.position.copy(c.pos);
+  cam.quaternion.copy(c.quat);
+  cam.updateMatrixWorld();
+  return new THREE.Vector3(c.pos.x + dir.x * 14000, 100, c.pos.z + dir.y * 14000).project(cam).x;
+}
+
+/**
+ * The camera t seconds into the scene. capeBearing: degrees true from the boat to the cape.
+ * The camera stands on the far side of the boat from the cape, on whichever hand puts the cape
+ * on the open side of the frame (the boat on one third, the cape towards the other).
+ */
+export function arrivalShot(
+  host: FramingHost,
+  capeBearing: number,
+  t: number,
+  /** The hand and third picked on an earlier frame of the same scene: kept, so the shot never jumps. */
+  held?: [number, number],
+): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number; cape: number; boat: number; held: [number, number] } {
+  const yaw = host.yaw();
+  const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+  const cape = new THREE.Vector2(Math.sin(capeBearing * D2R), -Math.cos(capeBearing * D2R));
+  const len = host.length?.() ?? 3.05 * (host.scale?.() ?? 1);
+  const target = boatAt(host);
+  const k = Math.min(1, Math.max(0, t / ARRIVAL_S));
+  const ease = k * k * (3 - 2 * k);
+  // A slow push in: the boat a tenth bigger by the end.
+  // Round from the cape's line by what CAPE_APART is of this frame's width (a phone's upright frame is narrow).
+  const off = Math.atan(CAPE_APART * Math.tan((ARRIVAL.fov * D2R) / 2) * host.camera.aspect) / D2R;
+  const base = host.camera.aspect < 1 ? ARRIVAL_UPRIGHT : ARRIVAL;
+  const look: Look = { ...base, az: 180 - off, f: base.f * (1 + 0.1 * ease) };
+  let best: { c: Composed; cape: number; boat: number; score: number; held: [number, number] } | null = null;
+  // Either hand, and the boat on either third: sailing straight at the cape or away from it, the usual
+  // third (behind where she's heading) would put the cape out of the frame, so then she takes the other.
+  for (const [side, flip] of held ? [held] : [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    const c = compose(target, bow, cape, side, len, host.camera.aspect, { ...look, x: flip * look.x! }, 0, host.height?.() ?? 0);
+    const cam = new THREE.PerspectiveCamera(c.fov, host.camera.aspect, 0.1, 1e6);
+    cam.position.copy(c.pos);
+    cam.quaternion.copy(c.quat);
+    cam.updateMatrixWorld();
+    const boat = target.clone().project(cam).x;
+    const x = acrossOf(c, host.camera.aspect, cape);
+    // In the frame, and as far from the boat as it can be.
+    const score = Math.abs(x) < 0.85 ? Math.abs(x - boat) + 0.05 * flip : -Math.abs(x);
+    if (!best || score > best.score) best = { c, cape: x, boat, score, held: [side, flip] };
+  }
+  const c = best!.c;
+  c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
+  return { pos: c.pos, quat: c.quat, fov: c.fov, cape: best!.cape, boat: best!.boat, held: best!.held };
+}
+
+/** A rectangle on the screen, in CSS pixels. */
+export interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Where a point of the scene lands on a w by h picture for a composed camera (CSS pixels from the picture's top left). */
+export function onScreen(c: Pick<Composed, "pos" | "quat" | "fov">, w: number, h: number, p: THREE.Vector3): { x: number; y: number } {
+  const cam = new THREE.PerspectiveCamera(c.fov, w / h, 0.1, 1e6);
+  cam.position.copy(c.pos);
+  cam.quaternion.copy(c.quat);
+  cam.updateMatrixWorld();
+  const v = p.clone().project(cam);
+  return { x: (v.x * 0.5 + 0.5) * w, y: (0.5 - v.y * 0.5) * h };
+}
+
+const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+
+/**
+ * Where the finish banner goes (Elena, 14 Nov: the cape is the reward of the whole crossing, so
+ * the banner never covers the cape, the lighthouse or the boat). In the empty sky at the top, on
+ * the side away from the boat first, then the middle, then the boat's side; if a tall rig and the
+ * cape leave no room up there (a phone), low over the sea below the boat. frame: the picture's
+ * size and how much of its top the page's bar covers. boatSide: -1 with the boat on the left.
+ * Returns the banner's top left corner, which spot it is, and how much it still covers (0 when clear).
+ */
+export function bannerSpot(frame: { w: number; h: number; top: number }, banner: { w: number; h: number }, keep: Box[], boatSide: number): { x: number; y: number; where: string; covers: number } {
+  const m = Math.min(16, Math.max(0, (frame.w - banner.w) / 2));
+  const left = m;
+  const right = frame.w - banner.w - m;
+  const mid = (frame.w - banner.w) / 2;
+  const away = boatSide < 0 ? right : left;
+  const near = boatSide < 0 ? left : right;
+  const top = frame.top + 12;
+  const low = frame.h - banner.h - 28;
+  const spots: [string, number, number][] = [
+    ["top, away from the boat", away, top],
+    ["top, middle", mid, top],
+    ["top, the boat's side", near, top],
+    ["bottom, middle", mid, low],
+    ["bottom, away from the boat", away, low],
+    ["bottom, the boat's side", near, low],
+  ];
+  let best: { x: number; y: number; where: string; covers: number } | null = null;
+  for (const [where, x, y] of spots) {
+    const b: Box = { x0: x, y0: y, x1: x + banner.w, y1: y + banner.h };
+    const covers = keep.reduce((n, k) => n + overlap(b, k), 0);
+    if (!best || covers < best.covers) best = { x, y, where, covers };
+    if (covers === 0) break;
+  }
+  return best!;
+}

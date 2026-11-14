@@ -91,7 +91,7 @@ import numpy as np
 from boatsim.config import Design
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
-from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT
+from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT, drogue_out
 from boatsim.vessel.kayak import (
     KayakState,
     KayakVessel,
@@ -243,11 +243,32 @@ class Polar:
         return float(np.interp(tws_ms / KNOT, self.tws, b))
 
 
+VARIANTS = "polars/variants"  # sail and keel parts' polars, named <boat>-<fingerprint>.json
+
+
+def variant_name(design: Design, stem: str) -> str:
+    """Where the polar for this design's vpp block lives (a part changed it)."""
+    from boatsim.vessel.vpp import fingerprint
+
+    return f"{VARIANTS}/{stem}-{fingerprint(design.vpp)}.json"
+
+
 def polar_path(design: Design, base: Path | None = None) -> Path:
     name = design.vpp["polar_file"]
     for root in (base, Path("configs"), CONFIGS):
         if root is not None and (Path(root) / name).exists():
             return Path(root) / name
+    if name.startswith(VARIANTS + "/"):
+        # A part's polar no one has saved yet: build it (the name is its fingerprint,
+        # so it can't be stale) where the configs are, else beside this run.
+        from boatsim.vessel.vpp import build_polar
+
+        src = f"boatsim.vessel.vpp on {design.name} with Boatyard parts: all GUESS inputs"
+        for root in (CONFIGS, Path("configs"), Path(".")):
+            try:
+                return build_polar(design.vpp, Path(root) / name, src)
+            except OSError:
+                continue
     raise FileNotFoundError(f"polar {name} for {design.name}: run python -m boatsim.vessel.vpp")
 
 
@@ -259,6 +280,20 @@ class KeelboatVessel(KayakVessel):
         self.polar = polar or Polar.load(polar_path(design))
         v, prop = design.vpp, design.propulsion
         self.reef_heel_deg = float(v.get("reef_heel_deg", 25.0))
+        # Reefing by the wind as well as the heel (Elena, Iris's gale frame: full sail
+        # on a reach in 38 kn). The VPP eases a sail to hold the heel down, so on a
+        # reach or a run the heel alone never asks for a reef; a crew reefs by the
+        # apparent wind. reef_aws_kn: the apparent wind the full plan is carried to.
+        # A smaller plan holds more, as its heeling force goes with its area times
+        # the wind squared: limit = reef_aws_kn / sqrt(its share of the full area).
+        # 0 (the default): heel only, as before.
+        self.reef_aws_kn = float(v.get("reef_aws_kn", 0.0))
+        full = float(v.get("main_m2", 0.0)) + float(v.get("jib_m2", 0.0))
+        self.plan_share = {
+            q["name"]: (q["main"] * v["main_m2"] + q["jib"] * v["jib_m2"]) / full
+            for q in v.get("plans", [])
+            if full > 0.0
+        }
         # Baked into the polar's speeds by vpp.py (the file doesn't carry it): a
         # Command.trim_share replaces it for a helm spell's watch.
         self.autopilot_factor = float(v.get("autopilot_factor", 1.0))
@@ -268,6 +303,13 @@ class KeelboatVessel(KayakVessel):
         self.engine_below_wind_kn = float(prop.get("engine_below_wind_kn", 5.0))
         self.engine_idle_frac = float(prop.get("engine_idle_frac", 0.2))  # GUESS
         self.alternator_w = float(prop.get("alternator_w", 0.0))
+        # A towed or pod hydrogenerator (M4 wave 3; power.hydro_*): charges from her
+        # speed under sail, at hydro_w_at_5kn x (speed / 5 kn)^3 up to hydro_rated_w,
+        # and the propeller's pull costs drag = power / (efficiency x speed).
+        pw = design.power
+        self.hydro_w5 = float(pw.get("hydro_w_at_5kn", 0.0))
+        self.hydro_rated_w = float(pw.get("hydro_rated_w", 0.0))
+        self.hydro_eff = float(pw.get("hydro_efficiency", 0.5))
         self.charge_below_soc = float(prop.get("charge_below_soc", 0.35))  # GUESS
         self.charge_until_soc = float(prop.get("charge_until_soc", 0.8))  # GUESS
         self.fuel_reserve_l = float(prop.get("fuel_reserve_l", 5.0))  # GUESS
@@ -300,8 +342,26 @@ class KeelboatVessel(KayakVessel):
         for name in self.polar.plans:
             pt = self.polar.at(name, tws_kn, twa_deg)
             if pt.heel_deg <= self.reef_heel_deg and pt.speed > best_v:
+                if self.reef_aws_kn > 0.0 and self.aws_kn(
+                    tws_kn, twa_deg, pt.speed
+                ) > self.aws_limit_kn(name):
+                    continue
                 best, best_v = name, pt.speed
         return best
+
+    def aws_limit_kn(self, plan: str) -> float:
+        """The apparent wind this plan is carried to (kn); inf with no wind rule."""
+        share = self.plan_share.get(plan, 0.0)
+        if self.reef_aws_kn <= 0.0 or share <= 0.0:
+            return math.inf
+        return self.reef_aws_kn / math.sqrt(share)
+
+    @staticmethod
+    def aws_kn(tws_kn: float, twa_deg: float, speed_ms: float) -> float:
+        """Apparent wind speed (kn) at this true wind angle and boat speed."""
+        v = speed_ms / KNOT
+        c = math.cos(math.radians(abs(twa_deg)))
+        return math.sqrt(max(tws_kn * tws_kn + v * v + 2.0 * tws_kn * v * c, 0.0))
 
     def added_resistance(self, hs: float, wave_rel_deg: float) -> float:
         """vpp.added_resistance with the polar file's fitted size."""
@@ -324,6 +384,12 @@ class KeelboatVessel(KayakVessel):
         sigma = self.gust_sigma_at(rain_mm_h)
         p = 0.5 * math.erfc((g - 1.0) / (sigma * math.sqrt(2.0)))
         return 1.0 - (1.0 - p) ** (self.gusts_per_hour * hours)
+
+    def hydro_power_w(self, speed_ms: float) -> float:
+        """The hydrogenerator's output at this speed through the water (W)."""
+        if self.hydro_w5 <= 0.0 or speed_ms <= 0.0:
+            return 0.0
+        return min(self.hydro_w5 * (speed_ms / KNOT / 5.0) ** 3, self.hydro_rated_w)
 
     def wants_charge(self, state: BoatState, fuel: float) -> bool:
         """Does the autopilot computer run the engine to charge the battery?"""
@@ -366,6 +432,21 @@ class KeelboatVessel(KayakVessel):
         wave_rel = abs((env.wave_dir - heading + 180.0) % 360.0 - 180.0)
         aw = self.added_resistance(env.hs, wave_rel)
         drag = (1.0 + foul) * extra_drag_mult
+        if drogue_out(self.hazards, env.hs):
+            # Drogue or sea anchor streamed (M4 wave 2): sails down, engine off, held
+            # end-on to the seas, drifting downwind no faster than it lets her.
+            self._step.update(
+                plan=DOWN, heel=0.0, engine_used=False, motoring=False, m0=0.0, overload=0.0
+            )
+            sol = solve_speed(
+                self.hull, self.thrusters, heading, 0.0, 0, env, foul, cur_e, cur_n, extra_drag_mult
+            )
+            v = math.hypot(sol.surge, sol.sway)
+            cap = self.hazards.drogue_kn * KNOT
+            if v > cap > 0.0:
+                f = cap / v
+                sol = replace(sol, surge=sol.surge * f, sway=sol.sway * f)
+            return sol
         plan = DOWN
         sail_v = heel = lee = 0.0
         if sail_alpha_max > 0.0:
@@ -377,6 +458,13 @@ class KeelboatVessel(KayakVessel):
             if share is not None:  # a player's watch: their share of the crew's best speed
                 sail_v *= share / self.autopilot_factor
             heel, lee = pt.heel_deg, pt.leeway_deg
+            if self.hydro_w5 > 0.0 and sail_v > 0.0:
+                # Its drag at her speed slows her a little: solve once more with it.
+                w = self.hydro_power_w(sail_v)
+                pull = w / (self.hydro_eff * sail_v)
+                sail_v = pt.speed * (drag + (aw + pull) / pt.resist_n) ** (-1.0 / pt.r_exp)
+                if share is not None:
+                    sail_v *= share / self.autopilot_factor
         motor_v = 0.0
         if self._step.get("motoring"):
             f = self._step["engine"]
@@ -392,6 +480,8 @@ class KeelboatVessel(KayakVessel):
         self._step.update(plan=plan, heel=side * heel, engine_used=motor_v > sail_v, m0=m0)
         self._step["overload"] = max(heel / self.reef_heel_deg - 1.0, 0.0) if plan != DOWN else 0.0
         surge = max(sail_v, motor_v)
+        # Under engine the hydrogenerator is lifted (and it can't charge drifting).
+        self._step["hydro_w"] = self.hydro_power_w(sail_v) if sail_v >= motor_v else 0.0
         if surge <= 0.0:  # bare poles, no engine: drift like any hull
             return solve_speed(
                 self.hull, self.thrusters, heading, 0.0, 0, env, foul, cur_e, cur_n, extra_drag_mult
@@ -431,6 +521,10 @@ class KeelboatVessel(KayakVessel):
             cap = new.battery_capacity_wh
             put = self.alternator_w * hours * self.battery.charge_eff
             new.battery_wh = min(new.battery_wh + put, cap)
+        hydro = self._step.get("hydro_w", 0.0)
+        if hydro > 0.0:
+            cap = new.battery_capacity_wh
+            new.battery_wh = min(new.battery_wh + hydro * hours * self.battery.charge_eff, cap)
         out = KeelboatState(
             **{f.name: getattr(new, f.name) for f in fields(new)},
             fuel_l=max(fuel - burn, 0.0),

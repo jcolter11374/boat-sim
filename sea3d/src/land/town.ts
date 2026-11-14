@@ -121,6 +121,22 @@ float h11(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); 
   return bendWithEarth(m, "boatsim-town-walls-v1");
 }
 
+/** Lights nearer than this throw their full streak (m): the harbour view, where the look was set. */
+export const REFLECT_FULL_M = 1400;
+/**
+ * How bright a light's streak is at d metres, against one close by: the light reaching the water
+ * near you thins with the square of the distance. (From the practice course, 3.5 km out, the town's
+ * streaks were as bright as from the harbour mouth: bars of gold hundreds of metres long under a
+ * row of pin-prick lights.)
+ */
+export function reflectFade(d: number): number {
+  return Math.min(1, Math.max(REFLECT_FAR, (REFLECT_FULL_M / Math.max(d, 1)) ** 2));
+}
+/** ...but never fainter than this: a calm bay at night does show short glints under a far town's brightest lights (Elena, 14 Nov: about a third of the harbour's). */
+export const REFLECT_FAR = 0.33;
+/** A far light's glints are short: the streak's spread narrows to this much of the harbour's, from REFLECT_FULL_M out to three times it. */
+export const REFLECT_SHORT = 0.6;
+
 /**
  * Reflections of lights on the water: one flat streak per light, lying on the sea and
  * running from near the light towards the viewer (the glitter path), brightest where a
@@ -159,6 +175,7 @@ export class Reflections {
         varying float vAcross;
         varying vec3 vTh;     // viewer height, mirror angle, slope spread
         varying vec4 vCol;
+        varying vec2 vEnd;    // how bright for its distance (reflectFade), and 0 far end .. 1 near end
         #include <fog_pars_vertex>
         void main() {
           vec3 src = (modelMatrix * vec4(aSrc.x, 0.0, aSrc.y, 1.0)).xyz;
@@ -171,7 +188,8 @@ export class Reflections {
           // facets tilted up to a couple of slopes either way catch it at nearby angles,
           // so the glitter runs from near the light towards the viewer, longer in a chop.
           float th0 = atan((aSrc.z + Hc) / D);
-          float sig = 0.03 + 0.12 * uRough;
+          // Far lights throw short glints, not long bars: a narrower spread past the harbour's range.
+          float sig = (0.03 + 0.12 * uRough) * mix(1.0, ${REFLECT_SHORT.toFixed(2)}, smoothstep(${REFLECT_FULL_M.toFixed(1)}, ${(3 * REFLECT_FULL_M).toFixed(1)}, D));
           float rNear = Hc / tan(th0 + 2.5 * sig);
           float rFar = min(Hc / tan(max(th0 - 2.5 * sig, 1e-4)), D - 0.5);
           float r = mix(rFar, rNear, position.y);
@@ -183,6 +201,8 @@ export class Reflections {
           vAcross = position.x;
           vTh = vec3(Hc, th0, sig);
           vCol = aCol;
+          float fade = ${REFLECT_FULL_M.toFixed(1)} / max(D, 1.0);
+          vEnd = vec2(min(1.0, max(${REFLECT_FAR.toFixed(2)}, fade * fade)), position.y);
           vec4 mvPosition = viewMatrix * vec4(transformed, 1.0);
           gl_Position = projectionMatrix * mvPosition;
           #include <fog_vertex>
@@ -194,6 +214,7 @@ export class Reflections {
         varying float vAcross;
         varying vec3 vTh;
         varying vec4 vCol;
+        varying vec2 vEnd;
         #include <fog_pars_fragment>
         ${NOISE}
         void main() {
@@ -206,7 +227,8 @@ export class Reflections {
           float scale = 1.2 / (1.0 + vR * 0.01);
           float dash = lnoise(vec2(vR * scale + vCol.a * 40.0, vAcross * 1.5 + uTime * 1.3));
           dash = smoothstep(0.45, 0.85, dash);
-          float a = 0.22 * core * across * dash * uNight;
+          // Thinner with distance, and the end nearest the viewer fades out (it stopped at a hard edge).
+          float a = 0.22 * core * across * dash * uNight * vEnd.x * smoothstep(1.0, 0.75, vEnd.y);
           if (a < 0.003) discard;
           vec3 c = vCol.rgb * a;
           #ifdef USE_FOG

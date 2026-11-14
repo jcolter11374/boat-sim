@@ -435,7 +435,7 @@ export class Atmosphere {
       this.glintDir.copy(this.moon.position).normalize();
       this.glintLight = this.moon.intensity * 0.6 * (1 - 0.95 * Math.max(overcast, smooth(storm, 0.2, 0.7))); // no moon path under a full deck (Sam)
     }
-    if (this.bloom) this.bloom.strength = 0.22 + 0.25 * dusk + 0.15 * night;
+    if (this.bloom) this.bloom.strength = (0.22 + 0.25 * dusk + 0.15 * night) * this.glowScale;
     this.storm = storm;
     this.dusk = dusk;
     su.uClear.value = smooth(elDeg, -4, 4) * (1 - smooth(storm, 0.1, 0.8));
@@ -581,6 +581,20 @@ export class Atmosphere {
    *  CI or some office PCs): the glow is skipped there, it costs too much. */
   readonly software: boolean;
 
+  private glowScale = 1;
+  private glowRadius = 0.55;
+  /**
+   * How strong and how wide the glow is (1 and 0.55 everywhere but the title). The title
+   * keeps it small and tight: a wide glow from a low sun laid a pale veil over the boat
+   * (John, 13 Nov). Takes effect at once and at the next set().
+   */
+  setGlow(scale = 1, radius = 0.55): void {
+    if (this.bloom && this.glowScale > 0) this.bloom.strength *= scale / this.glowScale;
+    this.glowScale = scale;
+    this.glowRadius = radius;
+    if (this.bloom) this.bloom.radius = radius;
+  }
+
   /** Glow around the sun and bright glints (high quality, real graphics card only). */
   setBloom(on: boolean): void {
     this.wantBloom = on;
@@ -646,7 +660,7 @@ export class Atmosphere {
       );
       composer.addPass(this.bokeh);
     }
-    this.bloom = new UnrealBloomPass(size, 0.25, 0.55, 2.2);
+    this.bloom = new UnrealBloomPass(size, 0.25 * this.glowScale, this.glowRadius, 2.2);
     composer.addPass(this.bloom);
     if (this.ultra) {
       this.grade = new ShaderPass(GRADE);

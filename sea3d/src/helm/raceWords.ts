@@ -45,5 +45,7 @@ export function bareRacer(name: string): string {
 export function raceLine(leadKm: number, names: [string, string]): string {
   const c = raceLead(leadKm, names);
   const [a, b] = [bareRacer(names[0]), bareRacer(names[1])];
-  return c.leader === null ? `${a} and ${b} are level` : `${[a, b][c.leader]} is ${c.value} km ahead of ${[a, b][1 - c.leader]}`;
+  // "Our kayak" opens a sentence with its capital and loses it mid-sentence; a boat's own name keeps its capitals.
+  const mid = (n: string) => n.replace(/^Our\b/, "our");
+  return c.leader === null ? `${a} and ${mid(b)} are level` : `${[a, b][c.leader]} is ${c.value} km ahead of ${mid([a, b][1 - c.leader])}`;
 }

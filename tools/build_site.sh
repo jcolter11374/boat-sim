@@ -51,6 +51,15 @@ echo "Data releases:"
 # The 2020 weather bundle for the in-browser simulator (sandbox.yml). Without it
 # the Boatyard launches from the precomputed grid and the helm says so.
 fetch sandbox-data sandbox 'forcing_2020.npz'
+# The same weather split by month, for the helm page: it loads only the months a
+# voyage sails through (a first sail reads about a quarter of the season). The
+# split slices the bundle's stored bytes and checks they join back to it byte
+# for byte, so the values can't change; a failure here stops the build. The
+# whole file stays for the Boatyard and the race, which sail whole seasons.
+if [ -f sea3d/public/sandbox/forcing_2020.npz ]; then
+  rm -f sea3d/public/sandbox/forcing_2020_*
+  python3 -m boatsim.sandbox split --bundle sea3d/public/sandbox/forcing_2020.npz --out sea3d/public/sandbox
+fi
 # Swell for the 3D sea (seastate.yml, display only). The Chesapeake depth
 # files on the same release are left out until a page reads them (#287).
 fetch seastate-data seastate 'seastate_*'
@@ -58,6 +67,23 @@ fetch seastate-data seastate 'seastate_*'
 fetch land-data land 'pico_*' 'baymouth_*' 'lisbon_*' 'annapolis*' 'bay_*'
 # Weather challenges for the helm page's picker (challenges.yml).
 fetch challenge-data challenges 'challenge*'
+# The list itself (challenges.json: names, goals, debriefs) is written from this
+# commit, so a goal added in code reaches the page without republishing the
+# release (Sandy's goal sat unpublished for two days). Only challenges the
+# release already lists are kept: one without its weather bundle couldn't be played.
+if [ -f sea3d/public/challenges/challenges.json ]; then
+  python3 -m boatsim.oceandata.challenges catalog --out sea3d/public/challenges/challenges.fresh.json
+  python3 - <<'PY'
+import json
+d = "sea3d/public/challenges/"
+have = {c["id"] for c in json.load(open(d + "challenges.json"))["challenges"]}
+fresh = json.load(open(d + "challenges.fresh.json"))
+fresh["challenges"] = [c for c in fresh["challenges"] if c["id"] in have]
+json.dump(fresh, open(d + "challenges.json", "w"))
+print("  challenges.json from this commit:", len(fresh["challenges"]), "challenges")
+PY
+  rm -f sea3d/public/challenges/challenges.fresh.json
+fi
 # Today's weather (forecast.yml, display only).
 fetch forecast-data forecast 'forecast_*'
 # The design leaderboard, published only when fair (leaderboard.yml).

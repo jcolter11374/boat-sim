@@ -117,6 +117,11 @@ with `sea3d/scripts/stars.py`.
 
 - **three.js** (MIT, Copyright 2010-2024 Three.js Authors). It is bundled into
   the page scripts, and its licence header is kept in the built files.
+- **Draco** (Apache License 2.0, Copyright Google Inc.). The build compresses the
+  boat models' geometry with the Draco encoder that ships inside three.js
+  (`sea3d/scripts/draco_models.mjs`), and copies three.js's Draco decoder files,
+  unmodified, to `draco/` beside the pages, where they are loaded when a
+  compressed model arrives.
 - **Pyodide** (Mozilla Public License 2.0), with the CPython (PSF licence) and
   NumPy, pandas and PyYAML (BSD and MIT) builds it carries. The Boatyard loads
   them unmodified from the jsDelivr CDN at run time. We don't copy or change
@@ -208,6 +213,14 @@ stored in git. Resampled by us.
   code; any public copy keeps this notice.
   Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
   work, with the OpenStreetMap / Overture credit on the page's credit line.
+- The title's skyline (`sea3d/public/title-skyline.bin`, built by
+  `sea3d/tools/title-skyline.py`; this one small file IS stored in git): the
+  outline of the Annapolis shore seen from one spot on the water, worked out
+  from the terrain, land cover and buildings above. It contains information
+  from OpenStreetMap and Overture Maps Foundation and, as a derived database,
+  is under the ODbL 1.0, separate from this repo's MIT code; terrain from AWS
+  Terrain Tiles (sources above). Shown on the title screen as a produced work,
+  with "© OpenStreetMap contributors" on the page's credit line.
 
 ## Yesteryear (font)
 

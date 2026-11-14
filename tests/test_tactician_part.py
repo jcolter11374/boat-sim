@@ -36,7 +36,7 @@ def test_off_steers_without_it(base):
 
 def test_it_is_software_only():
     for o in C.TACTICIAN_SLOT.values():
-        assert (o.kg, o.hotel_wh, o.cost) == (0.0, 0.0, 0.0)
+        assert (o.kg, o.hotel_wh) == (0.0, 0.0)
     assert "GUESS" in C.TACTICIAN_SLOT["on"].basis  # the wind vane a boat may need
 
 

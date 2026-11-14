@@ -28,9 +28,12 @@ Fairness (design note, Maya's calls of 11 Nov 2026):
 * Same build, launch, weather and seed for both boats, so each step's
   breakdown dice are the same whatever either boat does (#110, #112).
   Breakdowns are on by default; `breakdowns=False` turns them off for both.
-* The ghost is the full autopilot with safe mode and the base station's
-  route corrections, exactly as in the odds runs: `run_voyage` gives the
-  same voyage for the same launch.
+* The ghost is the full autopilot with safe mode and the base station, on
+  the game's autopilot policy (autonomy/policy.py GAME_POLICY: it sails
+  sensibly, so that beating it takes a decision; M5). An odds run on the same
+  policy gives the same voyage for the same launch; the odds themselves are
+  still on ODDS_POLICY until they are regridded, so the ghost on the 1st and
+  15th is no longer the Boatyard's replay of that day.
 * The ghost moves in step with the player's clock, so nothing it does is
   visible before the player gets there.
 * "Hands on" starts on "auto": the player's boat is sailed by the ghost's
@@ -58,6 +61,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from boatsim.autonomy.helm import HelmAutopilot, OrderMission, sail_orders_for
+from boatsim.autonomy.policy import GAME_POLICY, ODDS_POLICY
+from boatsim.autonomy.policy import policy as policy_for
 from boatsim.autonomy.sailing import tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
@@ -110,13 +115,20 @@ PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 
 # felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
 PASS_STOP_SWING_KM = 25.0
 OUTLOOK_HOURS = 48.0
+# A weather bundle split by month (sandbox/forcing.py): before a call moves the
+# boats it asks for every month it could read, to this far past its last step
+# (forecasts and outlooks look 5 days on). A missing month then stops the call
+# before anything has changed, and the page fetches it and asks again.
+COVER_AHEAD = timedelta(days=7)
+GHOST_HOP = timedelta(days=20)  # result(): the ghost sails on this far at a time
 TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
 def day_seed(start: datetime) -> int:
     """The seed for a launch day. The 1st and 15th keep the grid's and the
     replays' seeds (year * 1000 + place among the year's 24 launches), so the
-    ghost on those days is exactly the Boatyard's voyage. Every other day gets
+    ghost on those days is the Boatyard's voyage when both are on the same
+    autopilot policy (autonomy/policy.py). Every other day gets
     year * 1000 + 100 + day of the year, clear of those."""
     for t, seed in launches(start.year):
         if t == start:
@@ -276,8 +288,15 @@ class Game:
         day: str | None = None,
         challenge: str | None = None,
         start_port: str | None = None,
+        policy: int | None = None,
     ):
         from boatsim.runner.land import default_land
+
+        # Which autopilot policy both boats' autopilots sail by (autonomy/policy.py).
+        # None: the game's own. A saved game carries the one it was sailed with.
+        # self.policy ends up as the one in force: a boat with a sail stays on the
+        # odds' policy whatever is asked for (runner/simulate.py).
+        asked = policy_for(GAME_POLICY if policy is None else policy).version
 
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
@@ -321,7 +340,8 @@ class Game:
         land = default_land()
         self.breakdowns = breakdowns
 
-        mine = standard_components(self.design, env, env, seed=self.seed, land=land)
+        mine = standard_components(self.design, env, env, seed=self.seed, land=land, policy=asked)
+        self.policy = mine.policy
         prop = self.design.propulsion
         self.finish = (mine.finish.lat, mine.finish.lon)
         # A boat with a polar (the stock sailboats) also takes sail and engine
@@ -354,11 +374,19 @@ class Game:
         # The polar was built with this factor baked in (vessel/vpp.py); a spell's
         # share is clamped to within TRIM_BELOW of it, up to the crew's best.
         self.autopilot_factor = float(self.design.vpp.get("autopilot_factor", 1.0))
-        ghost = standard_components(self.design, env, env, seed=self.seed, land=land)
+        ghost = standard_components(
+            self.design, env, env, seed=self.seed, land=land, policy=self.policy
+        )
         if not breakdowns:
             _no_breakdowns(mine)
             _no_breakdowns(ghost)
         self.max_drive_w = float(prop["max_drive_w"])
+        # Whether the player sets a power: False when nothing but the wind drives her (the
+        # drone, the dinghy) or her crew rows or paddles at their own pace (the rowing boat,
+        # the joke fleet: vessel/oddboats.py takes no power order). The page hides it then.
+        crew_w = float((self.design.stock.get("odd") or {}).get("crew_w", 0) or 0)
+        motor = int(prop.get("thruster_count", 2)) > 0 or self.has_engine
+        self.drives = motor and crew_w <= 0
         self.mine = Voyage(
             mine,
             self.start,
@@ -426,6 +454,7 @@ class Game:
         reaches the boat at the boat's next mailbox check ("arrives")."""
         v = self.mine
         t = v.state.t
+        self._cover(t)
         if (sails is not None or engine is not None) and not self.sailboat:
             raise ValueError("this boat has no sails or engine to order")
         share = self._check_trim(trim)
@@ -767,6 +796,7 @@ class Game:
         """Step `v` (once, or up to `until`). Sailing off the edge of the weather
         bundle ends that voyage, as in run_voyage ("left_data_box")."""
         from boatsim.oceandata.grid import OutsideCoverage
+        from boatsim.sandbox.forcing import WeatherNotLoaded
 
         try:
             v.step() if until is None else v.run_until(until)
@@ -774,6 +804,13 @@ class Game:
             v.done = True
             v.log.end = v.state.t
             self.left_data.add(id(v))
+        except WeatherNotLoaded as need:
+            # Whoever moved the boats should have asked first (_cover): half a
+            # step can't be sailed again. Not the error the page answers by
+            # fetching the month and asking again, so this is never papered over.
+            raise RuntimeError(
+                f"the boats moved before the weather for {need.part} was loaded"
+            ) from None
 
     def _outcome(self, v: Voyage) -> str:
         if id(v) in self.left_data:
@@ -961,6 +998,7 @@ class Game:
         v = self.mine
         t0 = v.state.t
         until = t0 + timedelta(hours=hours if hours is not None else max_hours)
+        self._cover(until)
         n_events = len(v.log.events)
         near = (
             land_within_km is not None
@@ -1042,6 +1080,7 @@ class Game:
             ),
             "power_w": (self._cruise() if self.on_auto else self.helm.power) * self.max_drive_w,
             "sailboat": self.sailboat,
+            "drives": self.drives,
             "silence": self.silence(),
             "trim": self.trim_status(),  # a helm spell's watch, or None
             # Every watch so far (km through the water, + = gained): the page keeps
@@ -1168,10 +1207,15 @@ class Game:
         design = getattr(self, "design", None)  # QA's stand-in games have none
         label = design.stock.get("label") if design is not None else None
 
-        if self.mine.done:
-            self._advance(
-                self.ghost, self.start + timedelta(days=10_000)
-            )  # the game is over: the rest of the ghost's voyage can be shown
+        # The game is over: the rest of the ghost's voyage can be shown. It sails
+        # on in hops, each asking for its months first (_cover): a step that met a
+        # missing month half way couldn't be asked again (Sam, #540: the report
+        # is taken from the link before base reads the forecast). Hops or one
+        # run, the steps are the same.
+        while self.mine.done and not self.ghost.done:
+            hop = self.ghost.state.t + GHOST_HOP
+            self._cover(hop)
+            self._advance(self.ghost, hop)
         me, gh = card(self.mine), card(self.ghost)
         both = me["outcome"] == gh["outcome"] == Outcome.ARRIVED.value
         margin = gh["days"] - me["days"] if both else None
@@ -1201,6 +1245,7 @@ class Game:
             "challenge": self.challenge,
             "start_port": self.start_port,
             "seed": self.seed,
+            "autopilot_policy": getattr(self, "policy", None),  # QA's stand-in games have none
             "breakdowns_on": self.breakdowns,
             "mode": self.mode,
             "boat": me,
@@ -1277,6 +1322,8 @@ class Game:
         }
         if self.start_port:
             payload["sp"] = self.start_port  # only when set, so other codes stay as they were
+        if self.policy != ODDS_POLICY:
+            payload["ap"] = self.policy  # games saved before policy 2 carry none and stay on 1
         raw = zlib.compress(json.dumps(payload, separators=(",", ":")).encode(), 9)
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -1305,7 +1352,9 @@ class Game:
                 breakdowns=p["b"],
                 max_days=p["d"],
                 mode=p["m"],
+                policy=p.get("ap", ODDS_POLICY),  # older codes: the autopilot they were sailed with
             )
+            g._cover(g.start + timedelta(minutes=p["at"]))  # the whole voyage so far, at once
             for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))
                 sails, engine, trim = (*sail_orders[:3], None, None, None)[:3]
@@ -1318,6 +1367,14 @@ class Game:
         if here != p["p"]:
             raise ValueError("this saved game was sailed by a different simulator version")
         return g
+
+    def _cover(self, until: datetime) -> None:
+        """Raise forcing.WeatherNotLoaded now if a split bundle lacks a month
+        this game could read up to `until` (+ COVER_AHEAD), before anything
+        moves. Whole bundles and other weather: nothing."""
+        require = getattr(self.mine.c.env, "require", None)
+        if require is not None:
+            require(min(self.start, self.mine.state.t), until + COVER_AHEAD)
 
     def _advance_to(self, t: datetime) -> None:
         while not self.mine.done and self.mine.state.t < t:

@@ -16,6 +16,7 @@ import pytest
 from test_sandbox import _fake_sources
 from test_sandbox_helm import MAY1
 
+from boatsim.autonomy.policy import GAME_POLICY, ODDS_POLICY
 from boatsim.runner.land import default_land
 from boatsim.runner.simulate import default_mission, simulate, standard_components
 from boatsim.sandbox import catalog
@@ -96,10 +97,30 @@ def test_ghost_is_bit_identical_to_a_straight_odds_run(env):
     start, seed = launches(env)[MAY1]
     design = catalog.design_for(None)
     drop = (design.voyage["drop_lat"], design.voyage["drop_lon"])
-    c = standard_components(design, env, env, seed=seed, land=default_land())
+    # The ghost and the odds run must be on the same numbered autopilot policy
+    # (autonomy/policy.py): the game's own, named on both sides so a mismatch fails here.
+    assert g.policy == GAME_POLICY
+    assert g.result()["autopilot_policy"] == GAME_POLICY
+    c = standard_components(design, env, env, seed=seed, land=default_land(), policy=GAME_POLICY)
     log = simulate(c, start, *drop, default_mission(drop), seed=seed, max_days=DAYS)
     assert [dict(r) for r in g.ghost.log.rows] == [dict(r) for r in log.rows]
     assert [(e.t, e.kind) for e in g.ghost.log.events] == [(e.t, e.kind) for e in log.events]
+
+
+def test_ghost_on_the_odds_policy_is_the_odds_voyage(env):
+    """A game asked for the odds' own policy (as an older saved game is) sails
+    the ghost exactly as the odds runs do today, with no policy named at all."""
+    g = Game(env, launch_index=MAY1, max_days=DAYS, policy=ODDS_POLICY)
+    while not g.run(hours=24, **QUIET)["status"]["over"]:
+        pass
+    g.result()
+    start, seed = launches(env)[MAY1]
+    design = catalog.design_for(None)
+    drop = (design.voyage["drop_lat"], design.voyage["drop_lon"])
+    c = standard_components(design, env, env, seed=seed, land=default_land())
+    log = simulate(c, start, *drop, default_mission(drop), seed=seed, max_days=DAYS)
+    assert [dict(r) for r in g.ghost.log.rows] == [dict(r) for r in log.rows]
+    assert g.result()["autopilot_policy"] == ODDS_POLICY
 
 
 def test_ghost_never_ahead_with_every_stop_condition(env):

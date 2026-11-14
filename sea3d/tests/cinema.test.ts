@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { TITLE_LOOP_S, titleHeading, titleShot } from "../src/framing";
-import { FINAL, OPENING, SEQUENCES, SHOTS, camHeight, finalShot, openingShot, chooseSequence, compose, fitting, mixLook, shotsFor, sweepFor, type Moment, type ShotKind } from "../src/cinema";
+import { FINAL, OPENING, SEQUENCES, SHOTS, camHeight, finalShot, knockdownShot, openingShot, chooseSequence, compose, fitting, mixLook, shotsFor, sweepFor, type Moment, type ShotKind } from "../src/cinema";
 
 const calm: Moment = { storm: 0, knockdownAgo: Infinity, land: null, ship: null };
 
@@ -244,7 +244,7 @@ test("whichever way the boat heads against the shot's reference (the sun), its n
   }
 });
 
-test("the title hero: backlit, the boat on the right third, bow toward the card with open sea between, loops", () => {
+test("the title hero: the sun off to one side, the boat on the right third, bow toward the card with open sea between, loops", () => {
   for (const len of [3.05, 9.39]) {
     for (const sunAz of [0, 100, 230]) {
       const a = (sunAz * Math.PI) / 180;
@@ -269,9 +269,9 @@ test("the title hero: backlit, the boat on the right third, bow toward the card 
         assert.ok(bow.x >= -0.04 - 1e-6, `${tag}: bow nosing into the card (${bow.x.toFixed(2)})`);
         assert.ok(stern.x < 0.98, `${tag}: stern cropped`);
         assert.ok(sun.z < 1, `${tag}: looking away from the sun`);
-        // Backlit: the sun just above her, the glitter running from it through the boat to the lens.
+        // The sun is off to the right of her, past the frame's edge (John, 13 Nov; see framing.test.ts).
         const mid = (bow.x + stern.x) / 2;
-        assert.ok(Math.abs(sun.x - mid) < 0.08 && sun.y > bow.y && sun.y < 0.9, `${tag}: sun at ${sun.x.toFixed(2)},${sun.y.toFixed(2)}, boat at ${mid.toFixed(2)}`);
+        assert.ok(sun.x > 1.3 && sun.x > stern.x + 0.7, `${tag}: sun at ${sun.x.toFixed(2)}, stern at ${stern.x.toFixed(2)}`);
         // About a fifth of the width, on the two-thirds line (on a wide screen).
         const span = Math.abs(stern.x - bow.x) / 2;
         assert.ok(span > 0.15 && span < 0.25, `${tag}: spans ${(100 * span).toFixed(0)}%`);
@@ -342,4 +342,58 @@ test("never centred, not even end-on; a tall boat's masthead stays inside the le
 
 test("a yacht never gets the kayak's solar-panel close-up", () => {
   for (let i = 0; i < 50; i++) assert.ok(!shotsFor("passage", null, Math.random, ["panels"]).includes("panels"));
+});
+
+test("night's opening shot keeps both ends of the boat in the frame, from either side (Elena, 13 Nov)", () => {
+  for (const len of [3.05, 9.39]) {
+    for (const side of [1, -1]) {
+      for (const u of [0, 1]) {
+        const f = film("light", len, 37, side, u);
+        for (const [name, p] of [["bow", f.bowP], ["stern", f.sternP]] as const) {
+          assert.ok(Math.abs(p.x) < 0.9, `light L${len} side ${side} u${u}: the ${name} is at ${p.x.toFixed(2)} of the half-width`);
+        }
+      }
+    }
+  }
+});
+
+test("the astern night shot is framed by the hull: the horizon on the upper third, a third closer", () => {
+  assert.ok(SHOTS.sternlight.hull);
+  for (const u of [0, 1]) {
+    const f = film("sternlight", 3.05, 37, 1, u);
+    assert.ok(Math.abs(f.horizon.y - 0.25) < 0.03, `horizon at ${f.horizon.y.toFixed(2)}`);
+    // About a third closer than when the aerial set the distance (9.7 m then).
+    const d = f.c.pos.distanceTo(f.c.aim);
+    assert.ok(d > 5.5 && d < 7, `camera ${d.toFixed(1)} m off`);
+  }
+});
+
+test("the helm's knockdown cut: side on, from the side she is thrown towards, the whole boat and her fallen mast in frame", () => {
+  for (const [len, mast] of [[3.05, 0.9], [9.39, 13.5]]) {
+    for (const yawDeg of [0, 37, 140, 250]) {
+      for (const side of [1, -1]) {
+        const yaw = yawDeg * D2R;
+        const camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 1e6);
+        const o = knockdownShot({ camera, controls: { target: new THREE.Vector3() } as never, yaw: () => yaw, length: () => len, height: () => mast, water: () => 0 }, side);
+        camera.position.copy(o.pos);
+        camera.quaternion.copy(o.quat);
+        camera.fov = o.fov;
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld();
+        const tag = `L${len} yaw${yawDeg} side${side}`;
+        const bow = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+        const lee = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(side); // starboard of the bow (the scene's -z for a bow along +x), times the side
+        const flat = new THREE.Vector3(o.pos.x, 0, o.pos.z);
+        assert.ok(flat.dot(lee) > 0.9 * flat.length(), `${tag}: camera off her beam on the side she falls to`);
+        assert.ok(o.pos.y >= 0.5 && o.pos.y < 4, `${tag}: camera ${o.pos.y.toFixed(1)} m up`);
+        // Bow, stern, and the masthead lying flat towards the lens all stay in the picture.
+        const pts = [bow.clone().multiplyScalar(len / 2), bow.clone().multiplyScalar(-len / 2), lee.clone().multiplyScalar(mast)];
+        for (const p of pts) {
+          assert.ok(p.distanceTo(o.pos) > 2, `${tag}: lens inside the boat`);
+          const s = p.project(camera);
+          assert.ok(Math.abs(s.x) < 0.95 && Math.abs(s.y) < 0.95 && s.z < 1, `${tag}: out of frame at ${s.x.toFixed(2)},${s.y.toFixed(2)}`);
+        }
+      }
+    }
+  }
 });
