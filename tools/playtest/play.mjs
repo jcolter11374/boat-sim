@@ -1981,7 +1981,7 @@ const CHECKS = {
       await page.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN });
       if (!(await page.locator("#t-sound").count())) throw new SkipCheck("this build has no title sound (#451 not deployed)");
       await page.waitForTimeout(6000);
-      const st = () => page.evaluate(() => ({ contexts: (window.__ac ?? []).length, running: (window.__ac ?? []).filter((c) => c.state === "running").length, on: !!window.__sound?.on, pill: document.getElementById("t-sound")?.textContent.trim(), pressed: document.getElementById("t-sound")?.getAttribute("aria-pressed") }));
+      const st = () => page.evaluate(() => ({ contexts: (window.__ac ?? []).length, running: (window.__ac ?? []).filter((c) => c.state === "running").length, on: !!window.__sound?.on, pill: (document.getElementById("t-sound")?.textContent.trim() || document.getElementById("t-sound")?.getAttribute("aria-label") || "").trim(), pressed: document.getElementById("t-sound")?.getAttribute("aria-pressed") }));
       let s = await st();
       must(s.running === 0, `sound was running on the title before any click (${s.running} of ${s.contexts} AudioContexts running)`);
       must(!s.on && s.pill === "Sound: off", `the title says sound is on before any click (pill "${s.pill}", on ${s.on})`);
@@ -4756,6 +4756,53 @@ const CHECKS = {
       console.log(`FAST ${BROWSER}: ${res}`);
       must(kinds.some((k) => /gale|storm|wave/.test(k)) || calls.some((c) => /gale|waves/i.test(c)), `no gale call at 4 days a second: ${res}`);
       return res;
+    },
+  },
+  // #573: the almanac title (a band down the left; across the bottom on a phone) and John's track,
+  // fetched only once the sound is on; ?music=air brings back the code-made air, ?music=0 neither.
+  "title-music": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-title-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      for (const [tag, w, h, q] of [["1280", 1280, 720, ""], ["390", 390, 844, ""], ["air", 1280, 720, "?music=air"], ["off", 1280, 720, "?music=0"]]) {
+        const phone = w < 500;
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 2 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const mp3 = [];
+        p.on("response", (r) => { if (/\.mp3(\?|$)/.test(r.url())) mp3.push({ at: Date.now(), status: r.status(), url: r.url().split("/").pop() }); });
+        try {
+          await p.goto(SITE + q, { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.waitForTimeout(5000);
+          const nav = await p.evaluate(() => { const n = document.querySelector("#title nav"); const r = n?.getBoundingClientRect(); return r ? [r.left, r.top, r.right, r.bottom].map(Math.round) : null; });
+          const before = mp3.length;
+          if (tag === "1280" || tag === "390") shots.push(await emit(p, `${tag}-menu`));
+          const tClick = Date.now();
+          await p.mouse.click(Math.round(w * 0.75), Math.round(h * 0.3));
+          await p.waitForTimeout(9000);
+          const st = await p.evaluate(() => ({ on: !!window.__sound?.on, label: document.getElementById("t-sound")?.getAttribute("aria-label"), played: (window.__sound?.played ?? []).map((x) => x.name), air: !!window.__titleMusic?.on }));
+          const fetched = mp3.filter((m) => m.at >= tClick);
+          const track = st.played.includes("track");
+          out.push(`${tag}${q}: nav ${JSON.stringify(nav)}; mp3 before sound ${before}, after ${fetched.map((m) => `${m.url} ${m.status}`).join(",") || "none"}; sound ${st.on ? "on" : "off"} (${st.label}); track ${track ? "playing" : "not playing"}; air ${st.air ? "on" : "off"}`);
+          if (before) bad.push(`${tag}: the mp3 loaded before the sound was on`);
+          if (!st.on) bad.push(`${tag}: the click didn't turn the sound on`);
+          if (tag === "1280" || tag === "390") {
+            if (!fetched.some((m) => m.status === 200) || !track) bad.push(`${tag}: John's track didn't load and play after the sound came on`);
+            if (st.air) bad.push(`${tag}: the old air is on by default`);
+            if (nav && tag === "1280" && !(nav[0] < 80 && nav[3] - nav[1] > h * 0.5)) bad.push(`1280: the menu isn't a band down the left (${JSON.stringify(nav)})`);
+            if (nav && tag === "390" && !(nav[3] > h * 0.6)) bad.push(`390: the menu isn't across the bottom (${JSON.stringify(nav)})`);
+            shots.push(await emit(p, `${tag}-sound`));
+          }
+          if (tag === "air" && (fetched.length || track || !st.air)) bad.push(`?music=air: the track loaded or the air is off`);
+          if (tag === "off" && (fetched.length || track || st.air)) bad.push(`?music=0: some music still played`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
     },
   },
   "look-marks": {
