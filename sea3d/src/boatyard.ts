@@ -888,8 +888,9 @@ const dayOf = (start: string) =>
   new Date(start + (/Z|[+-]\d\d:?\d\d$/.test(start) ? "" : "Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const replayLink = (rp: LaunchReplay, text: string) =>
   Object.assign(document.createElement("a"), {
-    // Absolute, so the voyage page can fetch it (blob: URLs only work in this browser session).
-    href: `./voyage.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`,
+    // Absolute, so the sailing screen can fetch it (blob: URLs only work in this browser session).
+    // Opens on the sailing screen's Watch (helm.html?replay=), not the old voyage page.
+    href: `./helm.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`,
     target: "_blank",
     textContent: text,
   });
@@ -987,8 +988,8 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
     for (const rp of r.replays) {
       const li = document.createElement("li");
       const a = document.createElement("a");
-      // Absolute, so the voyage page can fetch it (blob: URLs only work in this browser session).
-      a.href = `./voyage.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`;
+      // Absolute, so the sailing screen can fetch it (blob: URLs only work in this browser session).
+      a.href = `./helm.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`;
       a.target = "_blank";
       const when = new Date(rp.start + (/Z|[+-]\d\d:?\d\d$/.test(rp.start) ? "" : "Z"));
       a.textContent = `Watch the ${when.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })} launch`;
