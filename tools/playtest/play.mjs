@@ -5295,12 +5295,18 @@ const CHECKS = {
       const at = await page.evaluate(() => ({ hour: +window.__helm.hour.toFixed(2), wind: document.getElementById("c-windv")?.textContent, el: +window.__helm.cine.host.sunEl().toFixed(1) }));
       const out = [`hour ${at.hour}, ${at.wind}, sun ${at.el} deg`];
       const emit = async (name) => { const path = `look-dusk-chromium-${name}.jpg`; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); } };
-      await emit("0-day");
+      // The sail can overshoot into the night, so first find the evening: step the sky forward
+      // until the sun is a little up and going down (run 43641845553 started at -33 deg).
+      const sunAt = (x) => page.evaluate((v) => { window.__helm.force.skyHours = v; return window.__helm.cine.host.sunEl(); }, x);
       let sh = 0;
+      for (let x = 0; x < 30; x += 0.25) { const a = await sunAt(x), b = await sunAt(x + 0.25); if (a > 1 && a < 15 && b < a) { sh = x; break; } }
+      out.push(`evening at sky +${sh.toFixed(2)} h, sun ${(await sunAt(sh)).toFixed(1)}`);
+      await page.waitForTimeout(5000);
+      await emit("0-evening");
       for (const target of [-4, -8, -12, -25]) {
         for (let i = 0; i < 400; i++) {
           const el = await page.evaluate((x) => { window.__helm.force.skyHours = x; return window.__helm.cine.host.sunEl(); }, sh);
-          if (el <= target && sh > 0) break;
+          if (el <= target) break;
           sh += 0.05;
         }
         await page.waitForTimeout(5000);
