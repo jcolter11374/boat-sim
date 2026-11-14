@@ -5,7 +5,8 @@ import { LINKS, RACE_HREF, WATCH_HREF, boatChip, helmEntry, isCurrent, pageName 
 import { raceItLink } from "../src/results";
 import { whoFromUrl } from "../src/helm/whoSteers";
 import { WATCH_DEFAULT_DAY } from "../src/helm/watchSource";
-import { pickedId, pickerEntries } from "../src/ui/boatPicker";
+import { choose, pickedId, pickerEntries } from "../src/ui/boatPicker";
+import { clearMyBoat, loadMyBoat } from "../src/myboat";
 import { shouldShowTitle } from "../src/title";
 
 // The shared top bar and title screen (one-game plan, step 2).
@@ -49,8 +50,8 @@ test("the boat chip: Our kayak by default on every page, my boat named safely", 
     assert.equal(d.href, "./boatyard.html");
   }
   assert.equal(boatChip(null).name, "Our kayak");
-  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Cruiser 31");
-  assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Cruiser 31");
+  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Beneteau First 31.7 (our model)");
+  assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Beneteau First 31.7 (our model)");
   const c = boatChip({ name: 'Rev C <b>"x"</b> & co', href: "./boatyard.html#base=revc" });
   assert.equal(c.href, "./boatyard.html#base=revc");
   // the name is passed through untouched; mountTopbar only ever sets it as textContent
@@ -83,9 +84,9 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   assert.ok(none.filter((e) => e.href).every((e) => e.name.endsWith("→")));
   const names = none.map((e) => e.name);
   assert.ok(names.includes("Pearson 31-2 (our model)"));
-  assert.ok(names.includes("Randolph Rev C5 (our model) →"));
-  assert.ok(names.includes("Cruiser 31"), "metric names (Leo's glossary)");
-  assert.ok(!none.some((e) => /drone|\bft\b/.test(e.name + e.fact)), "player words: robot boat, metric");
+  assert.ok(names.includes("Randolph Rev C5 (our model)"));
+  assert.ok(names.includes("Beneteau First 31.7 (our model)"), "stock boats by their real make and model (John, B4)");
+  assert.ok(!none.some((e) => /\bdrone\b|\bft\b/.test(e.name + e.fact)), "player words: robot boat, metric");
   assert.ok(!none.some((e) => e.id === "mine"));
   assert.equal(none.at(-1)!.href, "./boatyard.html");
   // Every Randolph boat says "(our model)" (B2).
@@ -98,6 +99,18 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   assert.equal(pickedId(null), "kayak");
   assert.equal(pickedId({ kind: "stock", base: "stock_cruiser31", hash: "", name: "x", choices: {}, saved: "" }), "stock_cruiser31");
   assert.equal(pickedId({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {}, saved: "" }), "kayak");
+  // The Randolph boats, unchanged, are picked straight from the list (every built boat in Set sail, John 13 Nov).
+  for (const [id, name] of [["revb", "Randolph Rev B (our model)"], ["revc", "Randolph Rev C5 (our model)"]]) {
+    const row = none.find((e) => e.id === id)!;
+    assert.equal(row.name, name);
+    assert.ok(!row.href, "sailed from here, not a Boatyard link");
+    choose(id);
+    const saved = loadMyBoat()!;
+    assert.deepEqual([saved.kind, saved.base, saved.hash, saved.choices], ["yard", id, `#base=${id}`, { base: id }]);
+    assert.equal(pickedId(saved), id);
+    assert.ok(!pickerEntries(saved).some((e) => e.id === "mine"), "not listed twice as your design");
+    clearMyBoat();
+  }
 });
 
 test("Watch a voyage and Race it in every menu open the Set sail card, not the old pages (M3)", () => {
@@ -115,6 +128,8 @@ test("Watch a voyage and Race it in every menu open the Set sail card, not the o
   assert.ok(more.includes(`href="${WATCH_HREF}">Watch a voyage<`), "title: Watch a voyage");
   assert.ok(more.includes(`href="${RACE_HREF.replace("&", "&amp;")}">Race it<`), "title: Race it");
   assert.doesNotMatch(more, /voyage\.html|race\.html/);
+  // The Boatyard's own "Watch a voyage" line goes to the card too (its replay links open one particular voyage and stay).
+  assert.ok(readFileSync(ROOT + "boatyard.html", "utf8").includes(`<a href="${WATCH_HREF}">Watch a voyage &rarr;</a>`), "Boatyard: Watch a voyage");
 });
 
 test("the menu marks the one helm entry you are on", () => {

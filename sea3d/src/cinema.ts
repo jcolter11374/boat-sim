@@ -264,6 +264,44 @@ function framed(host: FramingHost, look: Look): { pos: THREE.Vector3; quat: THRE
 }
 
 /**
+ * The helm's cut to a knockdown outside the film (M5: a knockdown is seen, not read): the Heel
+ * shot's frame, side on and locked off, from the side she is thrown towards (side +1 starboard,
+ * -1 port, as boats/ride.ts), so her deck and rig come over at the lens. fov in degrees.
+ */
+// In the middle of the screen (x 0), clear of the orders panel on the left and the chart on the
+// right, a little above centre over the instrument strip, and from higher than the film's Heel
+// shot so a gale's crests don't hide a boat lying flat.
+export const KNOCKDOWN: Look = { ...C(90, 0.4, 0.3, 3, 30), B: 0.1, x: 0 };
+// A boat with no rig to speak of (the kayak) lies low and dark when she is flat: from near the
+// water only her dark deck shows, edge on. So closer, and from above, looking down at her at
+// 25 to 30 degrees, on her bright upturned side and the foam around her (Elena, 14 Nov). The
+// height is planned for a cruiser and scaled down by camHeight(): 9 is about 3.4 m up for the
+// kayak, 7 m off.
+export const KNOCKDOWN_HULL: Look = { ...C(90, 0.46, 2, 9, 30), B: 0.1, x: 0 }; // H 2: tilted down past the horizon, the frame is all sea
+export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
+  const yaw = host.yaw();
+  const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+  const len = host.length?.() ?? 3.05 * (host.scale?.() ?? 1);
+  const target = boatAt(host);
+  const tall = host.height?.() ?? 0;
+  // The scene's +z is the port side of a bow along +x (boats/ride.ts: a roll that lowers +z is to port).
+  const lee = new THREE.Vector2(bow.y, -bow.x).multiplyScalar(side < 0 ? -1 : 1);
+  let best: Composed | null = null;
+  let most = -Infinity;
+  for (const s of [1, -1]) {
+    const c = compose(target, bow, bow, s, len, host.camera.aspect, tall <= len ? KNOCKDOWN_HULL : KNOCKDOWN, 0, tall <= len ? 0 : tall);
+    const out = (c.pos.x - target.x) * lee.x + (c.pos.z - target.z) * lee.y;
+    if (out > most) {
+      most = out;
+      best = c;
+    }
+  }
+  const c = best!;
+  c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
+  return { pos: c.pos, quat: c.quat, fov: c.fov };
+}
+
+/**
  * The results card's background (Leo's story-first card, Elena 12 Nov): a composed still of the
  * final moment, with the boat out in a corner (lower left, heading right) clear of the centred
  * card (x 25-75%). A win or a draw: low and warm, a big sky over the boat. Lost: higher and

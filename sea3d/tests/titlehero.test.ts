@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HERO_GLOW, HERO_LIGHT_LOW, HERO_LIGHT_SAILS, HERO_SEA, HERO_SEA_WARM, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec } from "../src/titleHero";
+import { HERO_GLOW, HERO_LIGHT_LOW, HERO_LIGHT_SAILS, HERO_SEA, HERO_SEA_WARM, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "../src/titleHero";
 import type { MyBoat } from "../src/myboat";
 
 const boat = (kind: MyBoat["kind"], base: string): MyBoat => ({ kind, base, hash: "", name: "x", choices: {}, saved: "" });
@@ -56,4 +56,29 @@ test("a boat with sails is filmed towards the sun; a low boat without sails is l
   // A low boat is filmed from a little higher, so the far shore stands clear above her.
   assert.ok(HERO_LIGHT_SAILS.camH === 1.5 && HERO_LIGHT_LOW.camH > 1.6 && HERO_LIGHT_LOW.camH <= 2.4);
   assert.ok(HERO_LIGHT_LOW.fill > HERO_LIGHT_SAILS.fill && HERO_LIGHT_LOW.env > HERO_LIGHT_SAILS.env);
+});
+
+test("the title's white boats sit a touch deeper, with a soft wet line at the water; the others as before", () => {
+  const rev = heroWaterlineFor("randolph");
+  const kay = heroWaterlineFor("kayak");
+  assert.ok(rev.sink > 0 && rev.sink < 0.05, "a few cm deeper, not swamped (her draft is 9 cm)");
+  assert.ok(kay.sink > 0 && kay.sink < rev.sink, "the kayak too, but lighter");
+  assert.ok(kay.wet > 0 && kay.wet < rev.wet);
+  assert.deepEqual(heroWaterlineFor("stock_pearson31_2"), { sink: 0, wet: 0 });
+});
+
+test("the title's backlight goes out with the sun: full at the title's dusk, none at night", async () => {
+  const { backAt } = await import("../src/titleHero");
+  assert.equal(backAt(HERO_SUN.el), 1);
+  assert.equal(backAt(55), 1);
+  assert.equal(backAt(-18), 0);
+  assert.equal(backAt(-6), 0);
+  for (let el = -8; el < 4; el += 0.5) assert.ok(backAt(el + 0.5) >= backAt(el));
+});
+
+test("a yacht's lamps at night light the cockpit, not the sails", async () => {
+  const { COCKPIT_REACH_M, BACK_FILL } = await import("../src/boats/nightlook");
+  // The Pearson's boom is about 2.5 m above the cockpit lamp: out of its reach.
+  assert.ok(COCKPIT_REACH_M <= 2.4 && COCKPIT_REACH_M >= 1.5);
+  assert.ok(BACK_FILL > 0 && BACK_FILL <= 1.5, "the fill lifts dark paint without matching the sky");
 });

@@ -165,6 +165,7 @@ export function onMyBoatChange(cb: (b: MyBoat | null) => void): () => void {
     cb((e as CustomEvent<MyBoat | null>).detail ?? null);
   const other = (e: StorageEvent) => {
     if (e.key === MYBOAT_KEY || e.key === null) cb(parseMyBoat(e.newValue)); // key null: storage cleared
+    else if (e.key === PAINT_KEY) cb(loadMyBoat()); // another tab repainted her
   };
   window.addEventListener(MYBOAT_EVENT, here);
   window.addEventListener("storage", other);
@@ -174,8 +175,56 @@ export function onMyBoatChange(cb: (b: MyBoat | null) => void): () => void {
   };
 }
 
+/**
+ * The player's paint (boats/paint.ts): the id of a scheme, or "" for the boat's own colours.
+ * Looks only. Kept beside the boat rather than inside it, so it stays when the player picks
+ * another boat and nothing that compares saved boats (the as-built Randolph designs, "our
+ * kayak" = nothing saved) has to know about it.
+ */
+export const PAINT_KEY = "boatsim.paint.v1";
+let paintMemory = "";
+export function loadPaint(s: StorageLike | null = store()): string {
+  if (s) {
+    try {
+      const v = s.getItem(PAINT_KEY);
+      if (v !== null) return /^[a-z0-9_-]{1,24}$/.test(v) ? v : "";
+    } catch {
+      // unreadable: use the in-memory copy
+    }
+  }
+  return paintMemory;
+}
+/** Remember the paint and tell the page as a change to the player's boat, so every view of her redraws. */
+export function savePaint(id: string, s: StorageLike | null = store()): void {
+  paintMemory = id;
+  if (s) {
+    try {
+      if (id) s.setItem(PAINT_KEY, id);
+      else s.removeItem(PAINT_KEY);
+    } catch {
+      // full or switched off: the in-memory copy carries it for this page
+    }
+  }
+  announce(loadMyBoat(s));
+}
+
 /** The Boatyard page that reopens this boat, relative to the site root
  *  ("boatyard.html#base=revc&rudder=single"). A stock boat opens the Boatyard as it is. */
 export function myBoatYardLink(b: MyBoat): string {
   return b.kind === "yard" ? `boatyard.html${b.hash}` : "boatyard.html";
+}
+
+/** Our models of the Randolph team's boats, unchanged in the Boatyard: picked straight from the boat
+ * picker, saved as a Boatyard design on that base so every page sails it (John, 13 Nov: every built
+ * boat in Set sail). The Rev B is their earlier boat as built; the Rev C5 their current design. */
+export const RANDOLPH_AS_BUILT = {
+  revb: { kind: "yard", base: "revb", hash: "#base=revb", name: "Randolph Rev B (our model)", choices: { base: "revb" } },
+  revc: { kind: "yard", base: "revc", hash: "#base=revc", name: "Randolph Rev C5 (our model)", choices: { base: "revc" } },
+} as const;
+export type RandolphKey = keyof typeof RANDOLPH_AS_BUILT;
+/** Which Randolph boat this is, unchanged, or null for anything else (a changed design included). */
+export function randolphAsBuilt(b: MyBoat | null): RandolphKey | null {
+  if (!b || b.kind !== "yard") return null;
+  for (const k of Object.keys(RANDOLPH_AS_BUILT) as RandolphKey[]) if (b.base === k && b.hash === RANDOLPH_AS_BUILT[k].hash) return k;
+  return null;
 }

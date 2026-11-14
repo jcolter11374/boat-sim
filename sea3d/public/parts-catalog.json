@@ -51,6 +51,15 @@
      "kg": -0.45,
      "thr": 1,
      "url": "https://bluerobotics.com/store/thrusters/t200-thruster/"
+    },
+    {
+     "id": "two-t500",
+     "n": "Two Blue Robotics T500",
+     "d": "Bigger propellers: more push for the same power. Heavier.",
+     "cost": 0,
+     "kg": 1.626,
+     "thr": 2,
+     "est": 1
     }
    ]
   },

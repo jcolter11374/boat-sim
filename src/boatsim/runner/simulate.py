@@ -28,6 +28,9 @@ class Components:
     pinger: object | None = None  # e.g. comms.GlobalstarPinger; one-way position beacon
     land: object | None = None  # runner.land.LandMask; None = no aground check (#70)
     finish: FinishTarget = field(default_factory=FinishTarget)  # Microtransat target circle
+    # The numbered autopilot policy these parts were set by (autonomy/policy.py): the
+    # one in force, which for a boat with a sail is the odds' whatever was asked for.
+    policy: int = 1
 
 
 @dataclass
@@ -342,6 +345,7 @@ def standard_components(
     forecast_error: float = 1.0,
     land=None,
     routing: str | None = None,
+    policy: int | None = None,
 ) -> Components:
     """The team's current components for one voyage of `design` (a config.Design)
     in `env`. Every voyage gets fresh vessel, autopilot, link and base objects
@@ -351,8 +355,14 @@ def standard_components(
     routing: how base plans. "fan" (the default) tries a fan of 3-day legs
     each morning (basestation/replan.py); "isochrone" runs the 5-day weather
     router (basestation/isochrone.py). None reads the design's
-    `voyage.routing`, else "fan"."""
+    `voyage.routing`, else "fan".
+
+    policy: which numbered autopilot policy to sail by (autonomy/policy.py).
+    None is the one behind the odds; the game asks for its own."""
     from boatsim.autonomy import SafeModeAutopilot
+    from boatsim.autonomy.guidance import WaypointAutopilot
+    from boatsim.autonomy.policy import ODDS_POLICY
+    from boatsim.autonomy.policy import policy as policy_for
     from boatsim.autonomy.sailing import wrap_for_sailing
     from boatsim.basestation import ForecastReplanPolicy
     from boatsim.comms import GlobalstarPinger, IridiumSBDLink
@@ -362,12 +372,27 @@ def standard_components(
     prop = design.propulsion
     drop = (design.voyage["drop_lat"], design.voyage["drop_lon"])
     vessel = make_vessel(design)
+    polar = getattr(vessel, "polar", None)
+    steady = getattr(vessel, "steady_polar", None)
+    sail_only = steady is not None and steady() is not None
+    # The numbered policy sets how a boat under motor only is sailed (the kayak, the
+    # rowing boat). Anything with a sail stays on the odds' policy, whatever is asked
+    # for: policy 2 was tuned and measured on the kayak alone, and its steering near
+    # a coast is what grounded the sailing boats when it was last tried
+    # (docs/qa/near75-coastal-stall-2026-11.md).
+    motor_only = polar is None and not sail_only
+    pol = policy_for(policy if policy is not None and motor_only else ODDS_POLICY)
+    if policy is not None:
+        policy_for(policy)  # an unknown number is an error for every boat
     autopilot = SafeModeAutopilot(
         cruise_fraction=prop["cruise_drive_w"] / prop["max_drive_w"],
+        guidance=WaypointAutopilot(
+            pursuit_crab_deg=pol.pursuit_crab_deg, track_near_land_km=pol.track_near_land_km
+        ),
         thruster_count=int(prop.get("thruster_count", 2)),
+        throttle_steps=pol.throttle_steps,
     )
     route = default_mission(drop).waypoints
-    polar = getattr(vessel, "polar", None)
     routing = routing or design.voyage.get("routing", "fan")
     if routing not in ("fan", "isochrone"):
         raise ValueError(f"routing must be 'fan' or 'isochrone', not {routing!r}")
@@ -375,8 +400,6 @@ def standard_components(
         from boatsim.basestation.isochrone import IsochroneReplanPolicy as Policy
     else:
         Policy = ForecastReplanPolicy
-    steady = getattr(vessel, "steady_polar", None)
-    sail_only = steady is not None and steady() is not None
     if polar is None and routing == "isochrone" and sail_only:
         # A wing-sail boat with no VPP polar and no motors (the drone): the
         # router needs its speeds by wind angle, so it gets a table from the
@@ -394,6 +417,9 @@ def standard_components(
         )
     elif polar is None:
         base = Policy(route=route)
+        # The policy says how much a detour must save (motor-only boats; see above).
+        if pol.replan_min_gain_h is not None:
+            base.min_gain_h = pol.replan_min_gain_h
     else:
         # A sailing boat: base costs legs from the polar and the forecast wind,
         # within the tactician's angle limits. Past the 3-day forecast it
@@ -401,14 +427,16 @@ def standard_components(
         # polar_factor. GUESS.
         from boatsim.autonomy.sailing import tactician_for
 
+        # With the tactician switched off (a Boatyard part) base plans within the
+        # whole circle and the boat's own steering keeps her out of the no-go zone.
         tac = tactician_for(vessel)
         f = ForecastReplanPolicy.polar_factor
         base = Policy(
             route=route,
             polar=polar,
             boat_speed=f * polar.speed_ms(7.0, 100.0),
-            min_twa_deg=tac.min_twa_deg,
-            max_twa_deg=tac.max_twa_deg,
+            min_twa_deg=tac.min_twa_deg if tac else 0.0,
+            max_twa_deg=tac.max_twa_deg if tac else 180.0,
         )
     return Components(
         env=env,
@@ -421,4 +449,5 @@ def standard_components(
         base=base,
         land=land,
         finish=FinishTarget.from_voyage(design.voyage),
+        policy=pol.version,
     )

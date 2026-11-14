@@ -2,12 +2,14 @@
  * "Your boat": the one boat picker, opened from the "My boat" chip in the top bar and
  * from the title screen (one-game plan, step 1; Leo's words in one-game-words.md §4).
  *
- * Picking a boat only sets "my boat" (src/myboat.ts); every page then sails it. A boat
- * that needs the Boatyard to build it first (the Randolph Rev C5, a new design) is a link
- * there instead. Names a player typed are only ever set as text.
+ * Picking a boat only sets "my boat" (src/myboat.ts); every page then sails it. The Randolph
+ * boats are saved as unchanged Boatyard designs (RANDOLPH_AS_BUILT); building a new one is a
+ * link to the Boatyard. Names a player typed are only ever set as text.
  */
-import { clearMyBoat, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
-import { PLAYABLE_STOCK, STOCK, type StockKey } from "../boats/specs";
+import { RANDOLPH_AS_BUILT, clearMyBoat, loadMyBoat, randolphAsBuilt, saveMyBoat, type MyBoat, type RandolphKey } from "../myboat";
+import { PLAYABLE_STOCK, STOCK, isStock, playerName, type StockKey } from "../boats/specs";
+import { ABOUT } from "../boats/about";
+import { paintPicker } from "./paintPicker";
 
 export interface PickerEntry {
   /** "kayak", a stock id, "mine" (the saved design) or "yard:<base>" (a Boatyard link). */
@@ -24,12 +26,13 @@ export interface PickerEntry {
 const STOCK_FACT: Partial<Record<StockKey, string>> = {
   stock_pearson31_2: "the Randolph team's own boat",
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small engine",
+  stock_sail_drone7: "a 7 m robot boat with a rigid wing sail: wind only, no motor",
+  stock_ocean_rower45: "an 8.6 m boat rowed across oceans: four rowers in shifts, two cabins",
+  stock_dinghy14: "a 4.2 m one-sail dinghy, here with nobody aboard: a squall can tip it over for good",
+  stock_beachcat16: "a 5 m beach catamaran, here with nobody aboard: fast, until a squall flips it",
 };
 
-const capital = (s: string) => s.replace(/^\w/, (c) => c.toUpperCase());
-/** The names a player sees (Leo's glossary): metric, and the cruiser is "Cruiser 31" as on the wheel. */
-const NAME: Partial<Record<StockKey, string>> = { stock_pearson31_2: "Pearson 31-2 (our model)", stock_cruiser31: "Cruiser 31" };
-const nameOf = (k: StockKey) => NAME[k] ?? capital(STOCK[k].name);
+const nameOf = playerName;
 
 /** The picker's rows, in order, for the boat saved now (or none). */
 export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
@@ -40,8 +43,9 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     const name = nameOf(k);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
-  out.push({ id: "yard:revc", group: "The Randolph team's boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
-  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === ""))
+  out.push({ id: "revc", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revc.name, fact: "their current wing-sail robot boat design, as drawn: wind only, no motor" });
+  out.push({ id: "revb", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revb.name, fact: "their earlier 1.5 m wing-sail robot boat, as built: wind only, no motor" });
+  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === "") && !randolphAsBuilt(mine))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
   out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "pick a hull, sails or motors, batteries and electronics", href: "./boatyard.html" });
   return out;
@@ -50,6 +54,8 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
 /** Which row stands for the boat saved now. */
 export function pickedId(mine: MyBoat | null): string {
   if (!mine || (mine.kind === "yard" && mine.base === "kayak" && mine.hash === "")) return "kayak";
+  const r = randolphAsBuilt(mine);
+  if (r) return r;
   return mine.kind === "stock" ? mine.base : "mine";
 }
 
@@ -58,6 +64,10 @@ export function choose(id: string): void {
   if (id === "mine") return; // already saved
   if (id === "kayak") {
     clearMyBoat(); // no boat saved = Our kayak, everywhere
+    return;
+  }
+  if (id in RANDOLPH_AS_BUILT) {
+    saveMyBoat({ ...RANDOLPH_AS_BUILT[id as RandolphKey] });
     return;
   }
   const k = id as StockKey;
@@ -78,6 +88,14 @@ const CSS = `
 #boatpick input { margin: 0 8px 0 0; accent-color: #ff8a2a; }
 #boatpick small { display: block; color: #9fb3c8; font-size: 12px; margin: 1px 0 0 22px; }
 #boatpick a.row small { margin-left: 0; }
+#boatpick details.about { margin: -1px 0 6px 32px; font-size: 12px; color: #c9d6e4; }
+#boatpick details.about summary { cursor: pointer; color: #8ab4ff; font-weight: 600; }
+#boatpick details.about[open] { padding: 4px 0 2px; }
+#boatpick details.about dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 6px 0; }
+#boatpick details.about dt { color: #9fb3c8; }
+#boatpick details.about dd { margin: 0; }
+#boatpick details.about p { margin: 6px 0; }
+#boatpick details.about .src, #boatpick details.about .src a { color: #9fb3c8; font-size: 11px; }
 #boatpick .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
 #boatpick .go { font: 700 15px system-ui, sans-serif; padding: 9px 20px; border-radius: 10px; border: 1px solid #ff8a2a; background: #ff8a2a; color: #1a0d02; cursor: pointer; }
 #boatpick .x { background: none; border: 0; color: #9fb3c8; font: 600 13px system-ui, sans-serif; cursor: pointer; }
@@ -140,6 +158,21 @@ export function openBoatPicker(doc: Document = document, use?: PickerUse): void 
     label.append(input, Object.assign(doc.createElement("b"), { textContent: e.name }));
     if (fact) label.append(fact);
     card.append(label);
+    if (isStock(e.id)) card.append(aboutBox(doc, e.id));
+  }
+  // Paint for the player's own boat (not when the picker is choosing some other boat).
+  if (!use) {
+    const builtOf = (id: string) => (id === "revb" || id === "revc" ? "randolph" : isStock(id) ? id : id === "mine" && mine && mine.base !== "kayak" ? "randolph" : "kayak");
+    let pick = paintPicker(builtOf(picked), doc);
+    card.append(pick);
+    // The "own colours" swatch follows the boat ticked above.
+    card.addEventListener("change", (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.name !== "boatpick") return;
+      const next = paintPicker(builtOf(t.value), doc);
+      pick.replaceWith(next);
+      pick = next;
+    });
   }
   const foot = doc.createElement("div");
   foot.className = "foot";
@@ -157,6 +190,26 @@ export function openBoatPicker(doc: Document = document, use?: PickerUse): void 
   root.hidden = false;
   card.querySelector<HTMLInputElement>("input:checked")?.focus();
   (window as unknown as { __boatpick?: unknown }).__boatpick = { open: true };
+}
+
+/** "Specs and history" under a stock boat's row (John, 13 Nov): folded until asked for. Text only. */
+export function aboutBox(doc: Document, key: StockKey): HTMLDetailsElement {
+  const a = ABOUT[key];
+  const box = Object.assign(doc.createElement("details"), { className: "about" });
+  box.dataset.boat = key;
+  box.append(Object.assign(doc.createElement("summary"), { textContent: "Specs and history" }));
+  const dl = doc.createElement("dl");
+  for (const [k, v] of a.specs) dl.append(Object.assign(doc.createElement("dt"), { textContent: k }), Object.assign(doc.createElement("dd"), { textContent: v }));
+  const p = (t: string) => Object.assign(doc.createElement("p"), { textContent: t });
+  box.append(p(`Based on ${a.basedOn}. Our own model: not the maker's boat, and no connection to them.`), dl, p(a.history));
+  if (a.ours) box.append(p(a.ours));
+  const src = Object.assign(doc.createElement("p"), { className: "src", textContent: "Sources: " });
+  a.sources.forEach((s, i) => {
+    if (i) src.append("; ");
+    src.append(Object.assign(doc.createElement("a"), { href: s.url, textContent: s.name, target: "_blank", rel: "noopener" }));
+  });
+  box.append(src);
+  return box;
 }
 
 function close(): void {

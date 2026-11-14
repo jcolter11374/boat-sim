@@ -11,12 +11,13 @@ import { paintBoatName } from "./boatName";
 import { addNavLights, disposeNavLights } from "./navlights";
 import * as THREE from "three";
 import { nightLook } from "./nightlook";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { gltfLoader } from "../gltf";
 import { applyFinishes } from "./finishes";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
 import { buildStock, type StockRig } from "./stock";
+import { holdThinParts, holdWidth } from "./wire";
 
 export interface BoatModel {
   spec: BoatSpec;
@@ -62,7 +63,7 @@ async function loadOne(base: string, name: string): Promise<THREE.Group | null> 
   // for hosts that won't serve .glb files.
   for (const file of [`${name}.glb`, `${name}.json`]) {
     try {
-      return (await new GLTFLoader().loadAsync(`${base}/${file}`)).scene;
+      return (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
     } catch {
       // try the next one
     }
@@ -70,14 +71,36 @@ async function loadOne(base: string, name: string): Promise<THREE.Group | null> 
   return null; // not built: keep the drawn-in-code model
 }
 
-/** Load the detailed models; true if any arrived (rebuild the boats then). */
+/** Load our kayak's detailed model; true if it arrived (rebuild the boats then). The Randolph
+ *  boat's model is another megabyte that most visits never show, so it loads when a page first
+ *  builds her (loadRandolphModel), as the stock boats' models do (boats/stock.ts). */
 export async function loadDetailedModels(base = "./models"): Promise<boolean> {
   if (new URLSearchParams(location.search).get("models") === "simple") return false;
-  [kayakDetailed, randolphDetailed] = await Promise.all([loadOne(base, "kayak"), loadOne(base, "randolph")]);
-  if (kayakDetailed) applyFinishes(kayakDetailed, "kayak");
-  if (randolphDetailed) applyFinishes(randolphDetailed, "randolph"); // generic finishes: their materials are theirs to say
-  return kayakDetailed !== null || randolphDetailed !== null;
+  kayakDetailed = await loadOne(base, "kayak");
+  if (kayakDetailed) {
+    applyFinishes(kayakDetailed, "kayak");
+    holdThinParts(kayakDetailed); // her aerials and thin rods: a whole line at any range, not dashes
+  }
+  return kayakDetailed !== null;
 }
+let randolphLoading: Promise<boolean> | null = null;
+let randolphDone = false;
+/** Load the Randolph boat's detailed model, once; true if the build has it (rebuild her then). */
+export function loadRandolphModel(base = "./models"): Promise<boolean> {
+  if (new URLSearchParams(location.search).get("models") === "simple") return Promise.resolve(false);
+  randolphLoading ??= loadOne(base, "randolph").then((g) => {
+    randolphDetailed = g;
+    if (g) {
+      applyFinishes(g, "randolph"); // generic finishes: their materials are theirs to say
+      holdThinParts(g);
+    }
+    randolphDone = true;
+    return g !== null;
+  });
+  return randolphLoading;
+}
+/** Whether the Randolph model has been asked for and has come back (with a model or without). */
+export const randolphSettled = () => randolphDone || new URLSearchParams(location.search).get("models") === "simple";
 export const hasDetailedKayak = () => kayakDetailed !== null;
 
 // The Boatyard's other hull shapes (blender/build_shapes.py), loaded when first picked.
@@ -195,6 +218,9 @@ export function buildKayak(quality: Quality): BoatModel {
     const black = kit.std(0x222426);
     const aftDeck = deckY(3.0, 0.11);
     kit.cyl(g, black, 0.012, 3.0, aftDeck, aftDeck + 0.06, 0.11);
+    // The whip is 10 mm across: under a pixel on the title's long lens, so it broke up and its top
+    // came and went as she moved (John, 13 Nov). Held to at least a pixel, like the yachts' stays.
+    holdWidth(white, 0.005);
     kit.cyl(g, white, 0.005, 3.0, aftDeck + 0.06, aftDeck + 0.95, 0.11);
     kit.cyl(g, black, 0.008, 3.0, aftDeck, aftDeck + 0.2, -0.11);
     kit.cyl(g, kit.std(0xffffff, { emissive: 0xfff3c4, emissiveIntensity: 0.6 }), 0.022, 3.0, aftDeck + 0.2, aftDeck + 0.25, -0.11);
@@ -326,6 +352,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     const dark = kit.std(0x26292c);
     const spar = kit.std(0x2a2d31, { metalness: 0.4 });
     const glass = kit.std(0xd6d3bd, { roughness: 0.5 }); // pultruded fibreglass (Rev C3)
+    holdWidth(glass, 0.006); // its 12 mm rods and stern pole: a fine unbroken line at any range
     kit.cyl(g, pvc, 0.03, 0.6, 0.0, 0.25);
     kit.cyl(g, dark, 0.0185, 0.6, 0.25, 0.268);
     // Rotating wing assembly: wing, spar, boom, tail flap, counterweight.

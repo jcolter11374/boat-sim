@@ -46,9 +46,36 @@ export interface HeroLight {
 }
 export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0, camH: 1.5 };
 export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6, camH: 1.9 };
+/**
+ * How much of the backlight is left with the sun at el degrees: all of it while the sun is up, none
+ * once it is well down. (The title's night view, for look reviews, kept the sunset's backlight: the
+ * sails glowed brown-orange and the hull had an orange edge in the dark; Elena, 14 Nov.)
+ */
+export function backAt(el: number): number {
+  const k = Math.min(1, Math.max(0, (el + 6) / 6));
+  return k * k * (3 - 2 * k);
+}
 export function heroLightFor(key: string): HeroLight {
   return key === "kayak" || key === "randolph" || key === "stock_ocean_rower45" ? HERO_LIGHT_LOW : HERO_LIGHT_SAILS;
 }
+/**
+ * Where the title's boat meets the water (Elena, 13 Nov: the Rev C5's white hull had a hard,
+ * clean edge at the sea; the kayak's stern too, a little). sink: how much deeper she sits than
+ * her floating waterline (m), so the sea climbs her side a touch; wet: how dark the wet band and
+ * the thin wet line along her waterline go (0..1, inWater.ts lite; 0: none). A dark hull (the
+ * Pearson) already reads as in the water: no change for the others.
+ */
+export interface HeroWaterline {
+  sink: number;
+  wet: number;
+}
+export function heroWaterlineFor(key: string): HeroWaterline {
+  // GUESS (by eye, against Elena's frame): about a third of the Rev C5's 9 cm draft deeper.
+  if (key === "randolph") return { sink: 0.03, wet: 1 };
+  if (key === "kayak") return { sink: 0.015, wet: 0.5 };
+  return { sink: 0, wet: 0 };
+}
+
 /**
  * A calm evening in Annapolis Roads (the title's boat floats off the town, titleShore.ts):
  * small ripples a quarter of a metre high, so the water lies flat and takes the sky's
@@ -59,7 +86,8 @@ export const HERO_SEA: SeaState = { name: "Title", hs: 0.25, tp: 2.6, meanDirect
 /** The boat the hero shows: the player's own; our kayak when they haven't chosen one. */
 export function heroSpec(mine: MyBoat | null): BoatSpec {
   if (!mine) return KAYAK;
-  if (mine.kind === "stock" && mine.base in STOCK) return STOCK[mine.base as StockKey];
+  // A stock boat, or a Boatyard design that starts from one (the keelboats' sails, M4).
+  if (mine.base in STOCK) return STOCK[mine.base as StockKey];
   if (mine.base === "revb" || mine.base === "revc") return RANDOLPH;
   return KAYAK;
 }

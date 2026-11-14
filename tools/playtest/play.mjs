@@ -12,6 +12,7 @@
 // play-<browser>-<check>.png. Exit code 1 if anything failed.
 import * as pw from "playwright";
 import { appendFileSync, readFileSync } from "node:fs";
+import { speedCheck } from "./speed.mjs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const BROWSER = process.env.BROWSER ?? "chromium";
@@ -1171,10 +1172,12 @@ const CHECKS = {
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await ready();
       await page.waitForTimeout(5000);
-      const bar = () => page.evaluate(() => ({ view: window.__helm.view, day: window.__helm.status?.day, over: !!window.__helm.status?.over, err: window.__helm.error, shown: !document.getElementById("timebar").hidden, rates: [...document.querySelectorAll("#timebar .rate")].filter((e) => e.offsetParent).map((e) => e.dataset.rate + (e.getAttribute("aria-pressed") === "true" ? "*" : "")), strip: document.getElementById("strip").innerText.replace(/\s+/g, " ") }));
+      const bar = () => page.evaluate(() => ({ race: !!window.__helm.race, day: window.__helm.status?.day, over: !!window.__helm.status?.over, err: window.__helm.error, shown: !document.getElementById("timebar").hidden, rates: [...document.querySelectorAll("#timebar .rate")].filter((e) => e.offsetParent).map((e) => e.dataset.rate + (e.getAttribute("aria-pressed") === "true" ? "*" : "")), strip: document.getElementById("strip").innerText.replace(/\s+/g, " ") }));
       const r0 = await bar();
       await shot("race-start");
-      must(!r0.err && r0.view === "race", `the race didn't open on the sailing screen: ${JSON.stringify(r0)}`);
+      // (__helm.view was the page's mode until #500 gave that name to a camera helper: the body's
+      // class says a race is on, and the strip's race cell shows it.)
+      must(!r0.err && r0.race && /level the two boats|ahead|behind/.test(r0.strip), `the race didn't open on the sailing screen: ${JSON.stringify(r0)}`);
       must(r0.shown && r0.rates[0]?.startsWith("rt"), `Real time isn't first on the race's speed bar: ${JSON.stringify(r0.rates)}`);
       await page.evaluate(() => document.querySelector('#timebar .rate[data-rate="24"]')?.click());
       await page.waitForFunction(() => (window.__helm.status?.day ?? 0) >= 3 || window.__helm.status?.over, null, { timeout: 4 * MIN }).catch(() => {});
@@ -1283,6 +1286,21 @@ const CHECKS = {
       must(t.v.day >= t.v.left - 8, `4 days a second: the save's code stands at day ${t.v.day}, more than 8 days before she was left (${t.v.left})`);
       out.push(await comeBack(t, "4 days a second, not paused"));
       return out.join("; ");
+    },
+  },
+  // Manual: the speed baseline (speed.mjs): downloads, waits and per-frame cost on every page,
+  // printed to the log as JSON between SPEED-BEGIN and SPEED-END. It measures; it asserts
+  // only that the title and the sailing screen came up at all.
+  speed: {
+    manual: true,
+    path: "leaderboard.html",
+    run: async (page) => {
+      const browser = page.context().browser();
+      let line = "";
+      let err = null;
+      try { line = await speedCheck(browser, { SITE, BROWSER }); } catch (e) { err = e; }
+      must(!err, `the speed run stopped: ${String(err?.message ?? err).split("\n")[0]}`);
+      return line;
     },
   },
   // #385 (Felix): sound waits for a click, "No thanks" is remembered, N and the speaker button

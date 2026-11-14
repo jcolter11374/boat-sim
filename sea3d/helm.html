@@ -42,14 +42,15 @@
   /* The clock (John, 11 Nov): time runs by itself once you set sail, at a speed you choose
      here, like a flight sim's time compression. It stops itself when something happens. */
   #preview { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: rgba(255,138,42,.12); border-left: 3px solid #ff8a2a; }
-  #arrive { position: fixed; top: calc(var(--bar, 0px) + 60px); left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
-    padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
+  /* The finish banner: the page places it each time in the empty sky, clear of the cape, the lighthouse and the boat (helm/arrivalShot.ts bannerSpot). */
+  #arrive { position: fixed; top: calc(var(--bar, 0px) + 12px); left: 12px; width: min(430px, calc(100vw - 24px)); box-sizing: border-box;
+    padding: 10px 14px 12px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
   body.arriving #strip, body.arriving #orders, body.arriving #orders-tab, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
   body.arriving #keylist, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
   #arrive .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #3ddc97; }
-  #arrivehead { font-size: 20px; font-weight: 650; margin: 2px 0 6px; }
-  #arrive p { margin: 0 0 10px; font-size: 13px; color: var(--dim); }
-  @keyframes arrive-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  #arrivehead { font-size: 18px; font-weight: 650; margin: 1px 0 4px; }
+  #arrive p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.35; color: var(--dim); }
+  @keyframes arrive-in { from { opacity: 0; } to { opacity: 1; } }
   #decide { position: fixed; top: calc(var(--bar, 0px) + 124px); left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 24px));
     padding: 12px 14px; border-left: 4px solid #ffb84d; display: flex; flex-direction: column; gap: 8px; z-index: 6; font-size: 14px; }
   #decide[hidden] { display: none; }
@@ -539,6 +540,9 @@
   #dialrow { display: flex; gap: 12px; align-items: center; }
   #dial { width: 132px; height: 132px; cursor: crosshair; touch-action: none; flex: none; }
   #dialrow .side { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
+  body.wind-only :is(#powerrow, #power, #powerhint, #keyhint .powerkeys) { display: none; }
+  /* .seg sets display: flex, which beats the hidden attribute: a boat with no engine has no Engine row. */
+  #sailrow .seg[hidden] { display: none; }
   #powerrow { display: flex; justify-content: space-between; margin-top: 8px; }
   #orders-tab { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 6; width: 26px; height: 92px; padding: 0; border-radius: 0 9px 9px 0;
     border: 0; background: var(--hud); color: #ffb070; }
@@ -657,6 +661,8 @@
     #strip .cell { padding: 0 .5em; }
     #strip .v { font-size: 1.1em; }
     #strip .l { font-size: .78em; letter-spacing: .3px; }
+    /* The wind and waves pair is the longest value on a phone ("13 · 0.9"): Firefox's wider fallback font cut it by a few px. */
+    #strip #c-wind { padding: 0 .3em; } #strip #c-wind .v { letter-spacing: 0; font-size: 1.04em; }
   }
   /* Narrow windows (as above): the corner chart folds to a map button. These four rules lost their
      @media when the phone strip went in (#453), which hid the corner chart at every width. */
@@ -686,7 +692,7 @@
 </div>
 <div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
-<div id="keyhint" hidden>&larr;&rarr; steer · &uarr;&darr; power · Space pause · ? all keys</div>
+<div id="keyhint" hidden>&larr;&rarr; steer<span class="powerkeys"> · &uarr;&darr; power</span> · Space pause · ? all keys</div>
 <div id="ghosttag" hidden></div>
 <div id="baretip" hidden>H to show</div>
 
@@ -808,7 +814,7 @@
     <h1>Set sail</h1>
     <div class="ss-row ss-continue" id="ss-continue" hidden><div id="ss-continue-words"></div><a id="ss-continue-go" href="./helm.html">Continue your voyage</a><div class="muted" id="ss-continue-new">Starting a new crossing ends that one.</div><div id="ss-ask" role="alertdialog" aria-labelledby="ss-ask-q" hidden><div id="ss-ask-q"></div><div class="ss-ask-btns"><button type="button" id="ss-ask-keep">Keep sailing</button><button type="button" id="ss-ask-new">Start a new one</button></div></div></div>
     <div class="ss-row" id="ss-boat"><div class="ss-l">Your boat</div><b id="ss-boatname">Our kayak</b> &middot; <button type="button" class="ss-link" id="ss-change">Change</button></div>
-    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
+    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Beneteau First 31.7 (our model)</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
     <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-line muted" id="ss-course-line"></div><div class="ss-l">Wind</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
     <!-- Who steers (M2, R2): you, or the autopilot all the way (you watch her go). Hidden for Annapolis: practice is always you. -->
@@ -867,7 +873,7 @@
 <div id="arrive" class="glass" role="status" hidden>
   <div class="t">Finish</div>
   <div id="arrivehead"></div>
-  <p>The finish circle is 330 km out to sea, too far to see land from. So this is a view of where the boat was headed, not where it is: Cascais, near Lisbon, with Cabo da Roca (Europe's westernmost point) and the Sintra hills to the north-west. The boat itself is still out at the finish.</p>
+  <p>The finish line is 330 km out to sea, too far to see land. Ahead is where she was headed: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse and the Sintra hills behind.</p>
   <button id="arrivego">See the results</button>
 </div>
 <div id="goalcard" role="status" aria-live="polite" hidden>

@@ -5,6 +5,8 @@
 // Cosmetic only: the numbers come from the catalog (design.ts), not from here.
 // Sizes are the makers' published box sizes where we know them, else ≈.
 
+import { BUILT, type PaintScheme } from "../boats/paint";
+import { applyPaint, paintedHullMap } from "../boats/paintApply";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { BoatModel } from "../boats/model";
@@ -88,6 +90,9 @@ export class Outfit {
   };
   private hullMat: THREE.MeshStandardMaterial | null = null;
   private hullBase = { rough: 0.32, metal: 0 };
+  private hullMap: THREE.Texture | null = null; // the hull's picture as built
+  private transom: { mat: THREE.MeshStandardMaterial; own: THREE.Color }[] = [];
+  private paint: PaintScheme | null = null;
   private bulb: THREE.Object3D | null = null;
   private bulbMesh: THREE.Mesh | null = null;
   private bulbC = new THREE.Vector3();
@@ -121,7 +126,9 @@ export class Outfit {
     const hullMats = own(named("hull"));
     this.hullMat = hullMats.find((m) => m.name === "hull") ?? hullMats[0] ?? null;
     this.ghosts.push(...hullMats);
+    for (const m of hullMats) if (m.name === "transom") this.transom.push({ mat: m, own: m.color.clone() });
     if (this.hullMat) {
+      this.hullMap = this.hullMat.map;
       this.hullBase = { rough: this.hullMat.roughness, metal: this.hullMat.metalness };
       const u = this.hullU;
       this.hullMat.onBeforeCompile = (sh) => {
@@ -380,10 +387,14 @@ uniform vec3 uTop; uniform float uTopLum, uMat, uPattern, uBare, uWl, uBottomLum
     // Hull: bottom paint, material, shape.
     const u = this.hullU;
     u.uBare.value = picks.paint === "none" ? 1 : 0;
-    const m = MATERIALS[picks.material ?? "polyethylene"] ?? null;
+    // Paint covers the hull's material: a painted carbon hull shows its paint, not its weave.
+    const m = this.paint ? null : (MATERIALS[picks.material ?? "polyethylene"] ?? null);
     u.uMat.value = m ? 1 : 0;
-    u.uTop.value.set(m ? m.color : PE_TOP.getHex());
+    u.uTop.value.set(m ? m.color : this.paint ? this.paint.hull : PE_TOP.getHex());
     u.uTopLum.value = lum(PE_TOP);
+    // With no bottom paint the hull's own colour carries on under the water; the shader scales
+    // it by the picture's bottom, which is the scheme's bottom colour once she is painted.
+    u.uBottomLum.value = this.paint ? Math.max(0.02, lum(new THREE.Color(this.paint.bottom))) : BOTTOM_LUM;
     u.uPattern.value = m?.pattern ?? 0;
     if (this.hullMat) {
       this.hullMat.roughness = m?.rough ?? this.hullBase.rough;
@@ -449,6 +460,7 @@ uniform vec3 uTop; uniform float uTopLum, uMat, uPattern, uBare, uWl, uBottomLum
         });
         this.model.root.add(g);
         this.shapes.set(id, g);
+        if (this.paint) applyPaint(g, `shape_${id}`, this.paint);
         g.visible = this.wanted === id;
         if (this.wanted === id) this.onShapeLoaded?.();
       });
@@ -461,6 +473,27 @@ uniform vec3 uTop; uniform float uTopLum, uMat, uPattern, uBare, uWl, uBottomLum
   /** Flash the parts of a slot that just changed. */
   pulse(slot: string, t: number): void {
     this.pulses.set(slot, t);
+  }
+
+  /**
+   * The player's paint (boats/paint.ts), or null for her own colours: the hull's picture,
+   * the transom, the dome, and the other hull shapes' models. Looks only. Call apply() after.
+   */
+  setPaint(scheme: PaintScheme | null): void {
+    this.paint = scheme;
+    if (this.hullMat && this.hullMap) {
+      const map = scheme ? paintedHullMap(this.hullMap, "kayak", scheme, this.model.form) : null;
+      this.hullMat.map = map ?? this.hullMap;
+      this.hullMat.needsUpdate = true;
+    }
+    for (const t of this.transom) {
+      if (scheme) t.mat.color.setHex(scheme.hull, THREE.SRGBColorSpace);
+      else t.mat.color.copy(t.own);
+    }
+    // Everything else that takes paint (the dome), leaving the materials this class owns alone.
+    const mine = new Set<THREE.Material>([...(this.hullMat ? [this.hullMat] : []), ...this.transom.map((t) => t.mat)]);
+    applyPaint(this.g, "kayak", scheme, this.model.form, (m) => mine.has(m));
+    for (const [id, g] of this.shapes) if (g && BUILT[`shape_${id}`]) applyPaint(g, `shape_${id}`, scheme);
   }
 
   setView(v: View): void {

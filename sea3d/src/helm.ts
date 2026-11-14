@@ -26,27 +26,30 @@ import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
-import { BUILDERS, hasDetailedKayak, loadDetailedModels, type BoatModel } from "./boats/model";
-import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "./boats/specs";
+import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, randolphSettled, type BoatModel } from "./boats/model";
+import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
-import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
+import { paintMine } from "./boats/paintApply";
+import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
-import { ShortWaveRide } from "./boats/ride";
+import { ShortWaveRide, type KnockdownTiming } from "./boats/ride";
 import { Contact } from "./contact";
-import { heightAt, MixedSea as LiveSea } from "./waves";
+import { heightAt, MixedSea as LiveSea, type WaveComponent } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
-import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
+import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { runOutStep, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
+import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
@@ -56,7 +59,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
-import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, welcomeBack } from "./helm/voyageSave";
+import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
@@ -70,18 +73,20 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
+import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
 import { Hud, setRacers, showStrip } from "./helm/hud";
 import { bareRacer, farBoatTag, raceLine } from "./helm/raceWords";
 import { bandLine, slideRoom } from "./framing";
+import { focusBoat, type Focus } from "./focus";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons, heightOf, type Moment } from "./cinema";
+import { Cinema, filmButtons, heightOf, knockdownShot, type CinemaHost, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
-import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
+import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -146,6 +151,10 @@ const spot = (params.get("spot") ?? "").split(",").map(Number);
 const SPOT: [number, number] | null = spot.length === 2 && spot.every(Number.isFinite) ? [spot[0], spot[1]] : null;
 /** After a finish at the Lisbon line: the scene moves to the coast the line points at. */
 let arrival: [number, number] | null = null;
+/** Seconds into the finish scene's shot, and whether it is held still (reduced motion). */
+let arrivalT = 0;
+let arrivalStill = false;
+let arrivalHeld: [number, number] | null = null;
 const bands = new RainBands();
 scene.add(bands.mesh);
 // Other ships, where the real traffic is (loaded in the background; none until it is).
@@ -219,7 +228,10 @@ function buildBoat(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+  if (spec === RANDOLPH && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && spec === RANDOLPH && buildBoat());
   model = BUILDERS[spec.key](quality);
+  paintMine(model); // the player's own paint, looks only (boats/paintApply.ts)
   reflectable(model.root);
   contact = new Contact(model.form, spec, quality, model.root);
   ride = new ShortWaveRide(spec.length, spec.beam, contact.bow[0], model.stern.x);
@@ -242,6 +254,8 @@ deckLight.name = "deck_light";
  *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
 const FOAM_AT_NIGHT = 0.3;
+/** A yacht's low deck lamp reaches this far (m): her deck, not her sails (at 5 m and twice as bright it lit the sail's foot warm; Elena, 14 Nov: sails a dim cool grey at night). */
+const YACHT_DECK_REACH_M = 3.2;
 const lampW = new THREE.Vector3();
 /** A lantern higher than this (m) is a masthead light, not a deck lantern. */
 const MASTHEAD_LAMP_M = 5;
@@ -268,7 +282,7 @@ function placeDeckLight(): void {
     deckLight.position.set(0, box.max.y + 0.1, 0);
     model.root.add(deckLight);
   }
-  deckLight.distance = deckYacht ? 5 : 6 * Math.max(1, spec.length / KAYAK.length);
+  deckLight.distance = deckYacht ? YACHT_DECK_REACH_M : 6 * Math.max(1, spec.length / KAYAK.length);
 }
 /** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
@@ -289,6 +303,8 @@ function useBoat(base: string): void {
   if (k && !hasDetailedStock(k)) void loadStockModel(k).then((ok) => ok && spec.key === k && buildBoat());
 }
 buildBoat();
+// A new paint (the "Your boat" picker): repaint her where she floats, without a rebuild.
+onMyBoatChange(() => model && paintMine(model));
 let modelsIn = false; // the detailed boats have loaded (or failed to): the shader warm-up waits for them
 void loadDetailedModels().then((ok) => {
   if (ok) buildBoat();
@@ -485,6 +501,12 @@ const page = {
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
   arrival: false,
+  /** The finish scene's shot: where the cape and the boat sit across the frame, -1 left .. 1 right (for tests). */
+  arrivalShot: null as { cape: number; boat: number } | null,
+  /** Where the finish banner was put, and how much of the boat or the cape it still covers in square pixels (0 when clear; for tests). */
+  arrivalBanner: null as { where: string; covers: number } | null,
+  /** Play the finish scene now, as after a crossing of `days`, for `seconds` (for pictures and tests). */
+  arrive: (days = 59.3, seconds = ARRIVAL_S) => arrivalScene({ boat: { days }, margin_days: null } as Card, seconds),
   /** "arrival" while the finish scene plays, before the results card (for tests). */
   scene: "",
   /** Look the given compass bearing past the boat (for pictures and tests). */
@@ -507,7 +529,7 @@ const page = {
   },
 };
 /** For pictures and reviews: where the camera looks from and at, and where the boat is, in world metres. */
-(page as unknown as { view: () => { cam: number[]; target: number[]; boat: number[] | null } }).view = () => {
+(page as unknown as { camView: () => { cam: number[]; target: number[]; boat: number[] | null } }).camView = () => {
   const r = (v: THREE.Vector3) => v.toArray().map((x) => Math.round(x * 10) / 10);
   return { cam: r(camera.position), target: r(controls.target), boat: model ? r(model.root.getWorldPosition(new THREE.Vector3())) : null };
 };
@@ -847,6 +869,8 @@ function showOrder(): void {
   const s = page.status;
   if (s && s.order.power > 0) maxW = s.power_w / s.order.power;
   const w = Math.round(power * maxW);
+  // No power to set: only the wind drives her (the drone, the dinghy), or her crew rows at its own pace.
+  document.body.classList.toggle("wind-only", s?.drives === false);
   const yacht = isStock(spec.key); // a stock boat: the power is its engine's
   $("powerlabel").textContent = yacht ? "Engine power" : "Motor power";
   $("powerhint").textContent = order === "auto"
@@ -1292,11 +1316,12 @@ let finishing = false;
 const shake = new THREE.Vector3();
 const stillCamera = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function moment(e: ReplayEvent): void {
+function moment(e: ReplayEvent, side?: number): void {
   const now = clock.getElapsedTime();
   if (e.kind === "capsize") {
-    kick = { t: now, dir: Math.random() < 0.5 ? -1 : 1 };
-    ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
+    kick = { t: now, dir: side ?? (Math.random() < 0.5 ? -1 : 1) };
+    const k = ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
+    if (k) cutToKnockdown(k, now);
     contact?.slam(1); // under a breaking crest
     sound.crash();
     flash("spray");
@@ -1311,6 +1336,25 @@ function moment(e: ReplayEvent): void {
   }
 }
 
+/**
+ * A knockdown is seen, not read (M5): the camera goes to her beam, on the side she is thrown
+ * towards, and holds there locked off while she goes over and comes back up, then returns to
+ * where it was. Not in the film (it has its own Knockdown sequence), not at the wheel (your
+ * hands are on the boat), not with reduced motion; a drag on the view takes the camera back.
+ */
+let knockCut: Focus | null = null;
+function cutToKnockdown(k: KnockdownTiming, now: number): void {
+  if (knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
+  const shot = knockdownShot(filmHost, k.side);
+  const off = shot.pos.sub(controls.target);
+  knockCut = focusBoat(camera, () => controls.target, {
+    easeMs: KNOCK_EASE_MS,
+    holdMs: Math.max(1500, (k.upright - now + 1) * 1000 - KNOCK_EASE_MS),
+    framing: (t) => ({ pos: t.clone().add(off), quat: shot.quat, fov: shot.fov }),
+  });
+}
+const KNOCK_EASE_MS = 400; // there by the time she is flat (ride.ts: 0.5 s and up)
+
 function flash(kind: "spray" | "alarm"): void {
   const el = $("flash");
   el.className = "";
@@ -1320,7 +1364,7 @@ function flash(kind: "spray" | "alarm"): void {
 
 /** Play at an hour a second: during a moment, and over the last hours before the end. */
 function slowNow(t: number): boolean {
-  return t < slowUntil || (finishing && shownTo - hour < 3) || (!!foresee && hour >= foresee.from && hour < foresee.h);
+  return t < slowUntil || (finishing && shownTo - hour < 3) || inStretch(foresee, hour);
 }
 
 // ---------- running time ----------
@@ -1496,6 +1540,8 @@ async function clockRun(): Promise<void> {
     } else if (stopped !== "time" && !(SPECTATE && stopped === "over")) {
       setRate(0, true);
       const d = `Day ${game.status!.day.toFixed(1)}`;
+      // The end has its own slow last hours (slowNow); every other stop gets them here.
+      if (stopped !== "over") foresee = { ...stopStretch(game.status!.day * 24), look: null };
       if (stopped === "breakdown") {
         const e = game.boat!.events.filter(isNotable).at(-1);
         const cut = e ? linkCutBy(e) : null;
@@ -1680,7 +1726,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]) };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
     () => game.save(),
   ).start();
@@ -1982,6 +2028,7 @@ function rigTop(): number {
 // the old orbit view and back; dragging the view takes it over until 4 s after you let go.
 const chase = new ChaseCam();
 controls.addEventListener("start", () => chase.drag(true));
+controls.addEventListener("start", () => knockCut?.cancel()); // a hand on the view takes the camera back
 controls.addEventListener("end", () => chase.drag(false));
 const chaseLook = new THREE.Vector3();
 let wheelFov = false;
@@ -2413,7 +2460,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     }
   }
   // A night that could run the battery flat.
-  if (fc && motors && st.boat.soc < 0.35 && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= MIN_CALL_GAP_H) {
+  if (fc && motors && st.boat.soc < nightLine(power) && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= (lastCallKind === "push" ? NIGHT_AFTER_PUSH_H : MIN_CALL_GAP_H)) {
     if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
       asked.night = h;
       return {
@@ -2422,6 +2469,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         choices: [
           { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
+          // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
+          { label: "Hand her back to the autopilot (what the ghost does)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
         ],
       };
     }
@@ -2501,6 +2550,9 @@ const calls: Call[] = [];
 const ROUTE_GAIN_DAYS = 0.25; // a quarter of a day on the ghost over the 4-day look
 const ROUTE_MIN_TURN = 10; // degrees: smaller is not a different line
 let lastCallH = -Infinity; // the first call of a voyage is never held back
+let lastCallKind = ""; // the night call may follow a push sooner than the usual gap (helm/powerCall.ts)
+/** The forecast gain (days) of the last push you said "stay" to: only a clearly better one asks again. */
+let pushTurnedDown: number | null = null;
 let routeLookedH = -Infinity;
 let callCount = 0;
 /** Hours of quiet before the next route check: 72 to 120, fixed by the voyage and the call count. */
@@ -2554,9 +2606,15 @@ function maybeRouteCheck(st: Status): boolean {
     const b: BestHeading | null = await game.bestHeading().catch(() => null);
     if (!b || seq !== decisionSeq) return resume();
     const mine: { heading: Heading; power: number } = { heading: order, power };
-    const o = await game.outlook([{ heading: b.best, power }, mine, { heading: "auto" }], LOOK_H).catch(() => null);
+    // The same look asks about power too (M5, D2): more of it, where there is battery to spend.
+    const more = quiet ? pushOrders(order, order === "auto" ? 0 : power, st.boat.soc, !st.sailboat && st.power_w > 0) : [];
+    // On the autopilot "your order" and "the autopilot" are one forecast sail, not two.
+    const onAuto = order === "auto";
+    const o = await game.outlook([{ heading: b.best, power }, mine, ...(onAuto ? [] : [{ heading: "auto" as Heading }]), ...more], LOOK_H).catch(() => null);
     if (!o || seq !== decisionSeq) return resume();
-    const [best, now, auto] = o.orders;
+    const [best, now] = o.orders;
+    const auto = onAuto ? now : o.orders[2];
+    const pushed = o.orders.slice(onAuto ? 2 : 3);
     const turn = Math.abs(((b.best - b.heading + 540) % 360) - 180);
     const gainKm = best.lead_km - now.lead_km;
     const pace = o.hours > 0 ? (o.ghost.km / o.hours) * 24 : 0;
@@ -2577,6 +2635,7 @@ function maybeRouteCheck(st: Status): boolean {
     if (chase) {
       chaseAsked = true;
       lastCallH = h;
+      lastCallKind = "chase";
       callCount++;
       page.decisions.push({ kind: "chase", day: st.day });
       // Relative words, not a compass point (Leo): "south-east" reads as "away from Portugal".
@@ -2602,13 +2661,46 @@ function maybeRouteCheck(st: Status): boolean {
       return;
     }
     if (!quiet) return resume(); // an early look that found no chase: nothing to say
+    // No route call: is more power a real trade? (helm/powerCall.ts)
+    const offer = ask ? null : pickPush(now, pushed, pace);
+    const push = offer && worthAskingAgain(offer.gainDays, pushTurnedDown) ? offer : null;
+    if (push) {
+      lastCallH = h;
+      lastCallKind = "push";
+      callCount++;
+      page.decisions.push({ kind: "push", day: st.day });
+      const words = pushCard(order, power, st.boat.soc, push.push);
+      const to = { heading: pushHeading(order), power: push.push.power ?? power };
+      const d: Decision = {
+        kind: "push",
+        text: words.text,
+        choices: [
+          { label: words.push, title: words.pushTitle, order: to, act: () => {
+            // What it bought, told when the forecast's 4 days are up, as the chase does.
+            pushTurnedDown = null;
+            if (streamCall) alsoCalled(words.did);
+            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
+            return setOrder(to.heading, to.power);
+          } },
+          { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
+        ],
+      };
+      const view: Outlook = { ...o, orders: [push.push, now] };
+      askAt(() => showDecision(d, view, [true, true]));
+      return;
+    }
     if (better && !ask) {
       // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
       const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} over ${orderWords(order)} for the next 4 days (${timeChange(gainKm, pace)}), in no worse seas. Change it in Orders.`;
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
+    } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
+      // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
+      const text = `Navigator's note: the forecast favours the autopilot over your order for the next 4 days (${timeChange(auto.lead_km - now.lead_km, pace)}). Hand her back in Orders.`;
+      whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     if (!ask) return resume();
     lastCallH = h;
+    lastCallKind = "route";
     callCount++;
     page.decisions.push({ kind: "route", day: st.day });
     const price = [rougher ? `rougher seas (waves to ${best.hs_max!.toFixed(1)} m, not ${now.hs_max!.toFixed(1)})` : "", drains ? `a lower battery (down to ${Math.round(best.soc_min! * 100)}%)` : ""].filter(Boolean).join(" and ");
@@ -2673,7 +2765,9 @@ function maybeDecide(force = false): boolean {
   const d = decisionDue(st, lastForecast);
   if (!d) return maybeRouteCheck(st);
   const callBefore = lastCallH;
+  const kindBefore = lastCallKind;
   lastCallH = st.day * 24;
+  lastCallKind = d.kind;
   callCount++;
   // The Stream may come out as only a note (Elena's rule), so it looks first with the clock
   // running and pauses only for a card; a storm always asks, so it pauses now.
@@ -2704,6 +2798,7 @@ function maybeDecide(force = false): boolean {
       const quiet = o ? notWorthAsking(d, o, has) : null;
       if (quiet) {
         lastCallH = callBefore; // no call was made: the cadence guard doesn't count it
+        lastCallKind = kindBefore;
         page.decisions.at(-1)!.asked = false;
         whenAt(h, () => note(quiet, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
         return;
@@ -2791,7 +2886,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       const shown = o!.orders.filter((_, j) => has[j]);
       // One tag in race terms, worded as a forecast so it can honestly be wrong (Maya, Leo).
       const pace = o!.hours > 0 ? (o!.ghost.km / o!.hours) * 24 : 0;
-      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves", d.kind === "chase" && i === 0)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
+      k.textContent = `Forecast, next ${days} days: ${timeChange(p.lead_km - o!.lead_now_km, pace)}${costWords(p, shown, d.kind === "gale" || d.kind === "waves", (d.kind === "chase" || d.kind === "push") && i === 0)}${p.outcome !== "at_sea" ? ` (${p.outcome.replace(/_/g, " ")})` : ""}`;
       b.append(k);
     }
     const lightUp = (on: boolean) => drawDecisionMap?.(on ? i : -1);
@@ -3176,7 +3271,7 @@ async function finish(): Promise<void> {
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
   if (me.outcome === "arrived" && finishesOffLisbon()) {
     showArrival();
-    bits.push("Behind this card: the arrival, off Cascais near Lisbon, with Cabo da Roca and the Sintra hills to the north-west. The finish line itself is about 330 km out to sea, too far to see land from.");
+    bits.push("Behind this card: the arrival, off Cabo da Roca, west of Lisbon: the lighthouse on its cliff (the westernmost point of mainland Europe) and the Sintra hills behind. The finish line itself is about 330 km out to sea, too far to see land from.");
   }
   // #335: the browser sails on a lighter weather file than the full runs behind the voyage replays.
   $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
@@ -3210,7 +3305,8 @@ async function showStanding(build: string): Promise<void> {
   // Not in a challenge (Ines): the odds read as a scolding there, and they belong in the Boatyard.
   if (!mission()) box.append(p);
   const t = standingText(s);
-  $("r-standing").textContent = `${t.head} ${t.detail}`;
+  const smarter = autopilotNote(page.card.autopilot_policy, rate !== null);
+  $("r-standing").textContent = `${t.head} ${t.detail}${smarter ? ` ${smarter}` : ""}`;
   page.standing = s.kind;
 }
 
@@ -3365,25 +3461,65 @@ function lastFix(r: Replay): [number, number] | null {
 
 /** True when this game's finish is the usual one, the race's line west of Lisbon (39.5N 13.5W). */
 function showArrival(): void {
-  const L = PLACES.lisbon;
-  if (!arrival) aimAt(L.look);
-  arrival = [L.lat, L.lon];
+  if (!arrival) aimAt(bearing(ARRIVAL_AT, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]));
+  arrival = [ARRIVAL_AT[0], ARRIVAL_AT[1]];
   page.arrival = true;
+}
+
+/** Put the finish banner in the empty sky, clear of the boat (mast and all), the cape and its lighthouse, for the whole push in. */
+function placeArrivalBanner(banner: HTMLElement): void {
+  if (!arrival) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  const capeBearing = bearing(arrival, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]);
+  const light = LANDMARKS.find((l) => l.key === "cabodaroca");
+  const o = light ? landmarkOffset(light, arrival[0], arrival[1]) : { x: 0, z: 0 };
+  const lightTop = new THREE.Vector3(o.x, (light?.base ?? 0) + (light?.light?.focal ?? 0) + 6, o.z);
+  const yaw = smoothYaw ?? 0;
+  const half = spec.length / 2;
+  const tall = filmHost.height?.() ?? 0;
+  const keep: Box[] = [];
+  let boatSide = -1;
+  let held: [number, number] | undefined;
+  for (const t of [0, ARRIVAL_S]) {
+    const s = arrivalShot(filmHost, capeBearing, arrivalStill ? 0 : t, held);
+    held = s.held;
+    boatSide = s.boat < 0 ? -1 : 1;
+    const at = (p: THREE.Vector3) => onScreen(s, r.width, r.height, p);
+    const tg = controls.target;
+    const pts = [-1, 1].map((k) => at(new THREE.Vector3(tg.x + k * half * Math.cos(yaw), 0, tg.z - k * half * Math.sin(yaw))));
+    pts.push(at(new THREE.Vector3(tg.x, Math.max(tall, 0.8), tg.z)));
+    const pad = 16;
+    keep.push({ x0: Math.min(...pts.map((p) => p.x)) - pad, y0: Math.min(...pts.map((p) => p.y)) - pad, x1: Math.max(...pts.map((p) => p.x)) + pad, y1: Math.max(...pts.map((p) => p.y)) + pad });
+    // The cape: from its tip (left of the light) along the land to the frame's right edge, the light's top down to the sea.
+    const l = at(lightTop);
+    const sea = at(new THREE.Vector3(o.x, 0, o.z));
+    keep.push({ x0: l.x - 0.3 * r.width, y0: l.y - 14, x1: r.width, y1: sea.y + 10 });
+  }
+  const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0;
+  const spot = bannerSpot({ w: r.width, h: r.height, top: bar }, { w: banner.offsetWidth, h: banner.offsetHeight }, keep, boatSide);
+  banner.style.left = `${Math.round(r.left + spot.x)}px`;
+  banner.style.top = `${Math.round(r.top + spot.y)}px`;
+  page.arrivalBanner = { where: spot.where, covers: spot.covers };
 }
 
 /** The finish scene: the view cuts to the coast the finish points at, the camera
  *  swings slowly round the boat, and a banner says so. The results follow after a
  *  few seconds, or at once on a click or key. */
-async function arrivalScene(c: Card): Promise<void> {
+async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
   showArrival();
   page.scene = "arrival";
   const ahead = c.margin_days !== null && c.margin_days > 0;
   $("arrivehead").textContent = `You made it, after ${c.boat.days.toFixed(1)} days at sea${ahead ? `, ${c.margin_days!.toFixed(1)} days ahead of the ghost` : ""}!`;
-  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  controls.autoRotate = !still;
-  controls.autoRotateSpeed = 0.5;
+  // The scene's own shot (the frame loop runs it): held still for reduced motion.
+  arrivalStill = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  arrivalT = 0;
+  arrivalHeld = null;
+  const hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
   const banner = $("arrive");
   banner.hidden = false;
+  placeArrivalBanner(banner);
+  const replace = () => placeArrivalBanner(banner);
+  addEventListener("resize", replace);
   document.body.classList.add("arriving"); // the panels step aside for the view
   await new Promise<void>((done) => {
     const end = () => {
@@ -3392,14 +3528,19 @@ async function arrivalScene(c: Card): Promise<void> {
       $("arrivego").removeEventListener("click", end);
       done();
     };
-    const timer = setTimeout(end, 8000);
+    const timer = setTimeout(end, seconds * 1000);
     addEventListener("keydown", end);
     $("arrivego").addEventListener("click", end);
   });
   banner.hidden = true;
+  removeEventListener("resize", replace);
   document.body.classList.remove("arriving");
-  controls.autoRotate = false;
   page.scene = "";
+  // Back to the hand camera where it was, looking the same way: the coast stays behind the card.
+  camera.fov = hand.fov;
+  camera.updateProjectionMatrix();
+  camera.position.copy(controls.target).add(hand.off);
+  controls.update();
 }
 
 function finishesOffLisbon(): boolean {
@@ -3513,6 +3654,15 @@ async function begin(): Promise<void> {
         // A challenge's one big call was asked before you left: it isn't asked twice.
         const callDay = mission()?.goal.call_day;
         if (callDay != null && v.status.day > callDay) asked.mission = true;
+        // An order sent in the last moment before you left may not have reached the save's code
+        // (the simulator was busy, the page closed): it is given again now, so the helm comes
+        // back as you left it. Hands on only: from base an order is a satellite message.
+        const last = was?.code === shared ? was.order : null;
+        if (last && mode === "hands_on" && !v.status.over && !v.status.no_link && !sameOrder(last, { heading: order, power, sails: sailOrder, engine: engineOrder })) {
+          [order, power, sailOrder, engineOrder] = [last.heading, last.power, last.sails, last.engine];
+          await game.order(order, power, sailOrder, engineOrder);
+          page.status = game.status;
+        }
       }
     } else if (SPECTATE) {
       // A recorded voyage (its file is the game) or a race (the source knows its boats and launch).
@@ -3694,6 +3844,14 @@ const BOAT_BLURB: Partial<Record<string, string>> = {
   stock_cruiser31: "a 9.5 m sailing yacht with a keel and a small diesel engine for calms. The sails trim and reef themselves; you steer and say how hard the engine works.",
   stock_pearson31_2:
     "the Randolph team's own 9.4 m yacht, as we've modelled it from the builder's numbers: heavier and steadier than the cruiser, with a deep keel and a diesel. The sails trim and reef themselves; you steer and say how hard the engine works.",
+  stock_sail_drone7:
+    "a 7 m robot boat, like the ones scientists send out for months at a time. Its rigid wing turns itself to the wind; there's no motor, so you only steer.",
+  stock_ocean_rower45:
+    "an 8.6 m ocean rowing boat with a crew of four: two row while two rest, day and night, and they tire over the weeks. In head winds and gales they put out a parachute anchor and wait. You steer; they row.",
+  stock_dinghy14:
+    "the 4.2 m dinghy people learn to sail in, here with nobody aboard and an autopilot on the tiller. A real one stays upright because its sailor leans out; with nobody to do that, a squall can knock it flat, and it stays over. Honest physics: see how far it gets.",
+  stock_beachcat16:
+    "the 5 m twin-hulled beach catamaran, here with nobody aboard and an autopilot steering. It's quick, but its crew normally hang out on wires to hold it down; with nobody there the autopilot sails it gently, and a squall can still flip it. A catamaran stays upside down.",
 };
 for (const k of PLAYABLE_STOCK) {
   const label = document.createElement("label");
@@ -3702,7 +3860,7 @@ for (const k of PLAYABLE_STOCK) {
   input.name = "boat";
   input.value = k;
   const b = document.createElement("b");
-  b.textContent = STOCK[k].name.replace(/^\w/, (c) => c.toUpperCase());
+  b.textContent = playerName(k);
   label.append(input, " ", b, `: ${BOAT_BLURB[k] ?? "a ready-made boat, sailed as it comes."}`);
   $("boats").append(label);
 }
@@ -3721,7 +3879,9 @@ if (startMine) {
     const input = Object.assign(document.createElement("input"), { type: "radio", name: "boat", value: MINE });
     // The name is the player's own text: textContent only.
     const b = Object.assign(document.createElement("b"), { textContent: startMine.name });
-    label.append(input, " ", b, startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.");
+    const asBuilt = randolphAsBuilt(startMine);
+    const words = asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's current wing-sail robot boat design. Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
+    label.append(input, " ", b, words);
     $("boats").querySelector("legend")!.after(label);
   }
   boatRow(v)!.checked = true;
@@ -3738,7 +3898,7 @@ function powerFor(pick: string): void {
 /** The boat a new game sails becomes "my boat" (unless it already is), so the other pages carry it on. */
 function rememberBoat(pick: string, mine: MyBoat | null): void {
   if (pick === MINE || (mine && rowFor(mine) === pick)) return;
-  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: STOCK[pick].name.replace(/^\w/, (c) => c.toUpperCase()), choices: { base: pick } });
+  if (isStock(pick)) saveMyBoat({ kind: "stock", base: pick, hash: "", name: playerName(pick), choices: { base: pick } });
   else saveMyBoat({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {} });
 }
 powerFor(chosenBoat());
@@ -3903,7 +4063,8 @@ function knownLanes(): { rep: Replay; colours: { main: string; beacon: string; g
 }
 
 // ---------- cinematic mode and sound ----------
-const cine = new Cinema({
+/** What a composed shot needs to know about the page and its boat (the film, and the finish scene). */
+const filmHost: CinemaHost = {
   camera,
   controls,
   water: (x, z) => heightAt(live.advance(last), x, z, last),
@@ -3928,7 +4089,8 @@ const cine = new Cinema({
     const name = spec === KAYAK ? (loadMyBoat()?.name ?? "My kayak") : spec.name.replace(/\s*\(.*\)\s*$/, "");
     return game.boat ? `${name} · Day ${Math.floor(hour / 24) + 1}` : name;
   },
-});
+};
+const cine = new Cinema(filmHost);
 const sound = new OceanSound();
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
@@ -3938,6 +4100,12 @@ filmButtons(cine, sound);
 Object.assign(page, {
   heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
   knockdown: () => ride?.knockdown ?? null,
+  /** True while the camera is on a knockdown (the cut outside the film). */
+  knockCut: (): boolean => !!knockCut,
+  /** Throw the boat flat now, as a recorded knockdown does (for tests and pictures). */
+  knock: (side?: number): void => {
+    moment({ h: hour, kind: "capsize" } as ReplayEvent, side);
+  },
 });
 /** What the frame loop last saw, for the film: speed through the water (m/s) and where. */
 const film = { stw: 0, lat: NaN, lon: NaN };
@@ -4057,9 +4225,11 @@ function poisReached(): void {
 }
 
 /** Land near the boat: load it, keep it in place, and reach the view out to it (gently, over a few seconds). */
-function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: number, hs: number, wu: number, wv: number): void {
+function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: number, hs: number, wu: number, wv: number, comps?: WaveComponent[]): void {
   if (!land) return;
-  land.update(lat, lon, t, { haze: atmos.fog.color, light: atmos.ambient, sunEl, hs, storm, wu, wv });
+  // The buoys off Annapolis float on the same sea as the boat.
+  const seaAt = comps?.length ? (x: number, z: number) => heightAt(comps, x, z, t) : undefined;
+  land.update(lat, lon, t, { haze: atmos.fog.color, light: atmos.ambient, sunEl, hs, storm, wu, wv, sea: seaAt });
   page.land = land.shown;
   const want = land.active ? LAND_HORIZON : HORIZON;
   if (want > sea.horizon) sea.setHorizon(want);
@@ -4162,7 +4332,7 @@ const here0 = new THREE.Vector3();
 function hideStandIn(): void {
   if (!model) return;
   const card = !page.ready && !$("start").hidden;
-  const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : true;
+  const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : spec === RANDOLPH ? hasDetailedRandolph() || randolphSettled() : true;
   const show = (!card || real) && !boatGone;
   if (model.root.visible === show) return;
   model.root.visible = show;
@@ -4179,10 +4349,10 @@ function phoneBand(): { top: number; bottom: number } {
 }
 function frameBoat(dt: number): void {
   hideStandIn();
-  const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
+  const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card && !knockCut; // the knockdown cut composes its own frame
   // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
   // the horizon lower, never dead centre (Ines).
-  const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on;
+  const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on && page.scene !== "arrival"; // the finish scene composes its own frame
   let tx = 0;
   let ty = 0;
   if (want && smoothYaw !== null) {
@@ -4218,7 +4388,7 @@ function frameBoat(dt: number): void {
   // The results card on a phone keeps the same rule: the boat whole in the band above it (Elena).
   // At the finish too: on a phone the card covers the arrival's view, so she sits in the band above it.
   const phoneResults = !$("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on;
-  if ((!page.ready && !$("start").hidden) || phoneResults) {
+  if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults)) {
     // Her waterline, where she is: the world's middle on the crossing, off Annapolis on a practice page.
     here0.set(controls.target.x, 0, controls.target.z).project(camera); // includes the lens's current slide, so this settles on the target
     const phone = window.innerWidth < 700;
@@ -4241,6 +4411,9 @@ function frameBoat(dt: number): void {
     const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
     ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
   }
+  // The finish scene is a cut to its own composed frame: no slide left over from the view before it
+  // (it eased out over the first seconds, so the horizon sank and the banner's measured spot was off).
+  if (page.scene === "arrival") third.x = third.y = 0;
   const k = Math.min(1, dt * 1.2);
   third.x += (tx - third.x) * k;
   third.y += (ty - third.y) * k;
@@ -4313,7 +4486,7 @@ renderer.setAnimationLoop(() => {
   if (tickClock(dt)) {
     // the clock moved the picture on
   } else if (drainRate > 0 && hour < shownTo) {
-    hour = Math.min(shownTo, hour + dt * (slowNow(t) ? Math.min(drainRate, 1) : drainRate));
+    hour = drainStep(drainRate, dt, hour, shownTo, slowNow(t), foresee?.from);
     if (hour >= shownTo) drainRate = 0;
   } else if (hopPlay && hour < shownTo) {
     const span = Math.max(shownTo - hour, 1);
@@ -4407,7 +4580,12 @@ renderer.setAnimationLoop(() => {
   }
   camera.position.copy(controls.target).add(off);
   // A sailing yacht leans on its sails (the replay's heel); the waves rock it about that.
-  motion.heel = wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  // Turned over for good (a dinghy or cat with nobody to right it): over she goes, the way she was
+  // leaning, and floats upside down, as on the voyage page (not upright beside the ending card).
+  const over = !wheelNow && !!r && stayedOver(r, h);
+  motion.heel = over ? 0 : wheelNow ? rollFromWheel(wheelNow.heelDeg) : r?.heel ? THREE.MathUtils.degToRad(valueAt(r, r.heel, h) ?? 0) : 0;
+  if (over && !motion.capsized) motion.capsized = motion.roll < 0 ? -1 : 1;
+  if (!over) motion.capsized = 0;
   motion.advance(comps, t);
   const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
@@ -4416,7 +4594,7 @@ renderer.setAnimationLoop(() => {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 2 : Math.max(1, spec.length / KAYAK.length) ** 2);
+    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
@@ -4487,9 +4665,13 @@ renderer.setAnimationLoop(() => {
     if (!rival.built) {
       const b = page.race.bases[1];
       const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
-      const m = BUILDERS[rs.key](quality);
-      reflectable(m.root);
-      rival.set(m);
+      // Her detailed model first, if she is the Randolph boat (it loads on demand): she is drawn once it is in.
+      if (rs === RANDOLPH && !randolphSettled()) void loadRandolphModel();
+      else {
+        const m = BUILDERS[rs.key](quality);
+        reflectable(m.root);
+        rival.set(m);
+      }
     }
     const hh = Math.min(h, lastHour(her));
     // Before her first hour is logged (the race opens paused) she is at her reported start, as your boat is.
@@ -4535,7 +4717,7 @@ renderer.setAnimationLoop(() => {
   page.spindrift = spray.amount;
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.foamLight);
-  updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
+  updateLand(t, dt, lat, lon, sp.el, hs, wu, wv, comps);
   sound.rig = rigOf(spec.key);
   sound.length = spec.length;
   if (contact?.splash) sound.splash(contact.splash);
@@ -4543,7 +4725,24 @@ renderer.setAnimationLoop(() => {
   sound.update(dt, { wind: Math.hypot(wu, wv), hs, tp, rain: rain.amount, near: camera.position.distanceTo(controls.target), stw, apparent: feel ? Math.hypot(feel.x, feel.z) : undefined, luff: (wheelNow as { luff?: number } | null)?.luff });
   wheelCamera(dt, t);
   markPointer();
-  if (!cine.update(dt)) controls.update();
+  if (page.scene === "arrival" && arrival) {
+    knockCut?.cancel();
+    // The finish scene's own shot: past the boat to Cabo da Roca (helm/arrivalShot.ts).
+    arrivalT += dt;
+    const s = arrivalShot(filmHost, bearing(arrival, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]), arrivalStill ? 0 : arrivalT, arrivalHeld ?? undefined);
+    arrivalHeld = s.held;
+    camera.position.copy(s.pos);
+    camera.quaternion.copy(s.quat);
+    if (camera.fov !== s.fov) {
+      camera.fov = s.fov;
+      camera.updateProjectionMatrix();
+    }
+    page.arrivalShot = { cape: s.cape, boat: s.boat };
+  } else {
+    if (knockCut && (cine.on || wheelNow)) knockCut.cancel();
+    if (knockCut && !knockCut.update(dt)) knockCut = null;
+    if (!knockCut && !cine.update(dt)) controls.update();
+  }
   frameBoat(dt);
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
@@ -4631,7 +4830,10 @@ renderer.setAnimationLoop(() => {
       live.heading = wheelNow ? wheelNow.heading : hdg;
       live.speedKn = stw * KN;
       // Before the first logged hour there's no reading yet: the status's own stays.
-      const heel = r.heel ? valueAt(r, r.heel, h) : null;
+      // While she is thrown flat on screen the heel figure follows the picture, not the log's hourly lean (Elena).
+      const kd = ride?.knockdown;
+      const thrown = !!kd && t >= kd.start && t < kd.upright;
+      const heel = r.heel ? (thrown ? ride!.heelDeg(motion.roll) : valueAt(r, r.heel, h)) : null;
       const soc = r.heel ? null : valueAt(r, r.soc, h);
       if (heel != null) live.heel = heel;
       if (soc != null) live.battery = soc * 100;

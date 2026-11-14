@@ -118,7 +118,21 @@ hazards:
   enabled: true
   hull_length_m: 9.50
   hull_beam_m: 3.21
-  critical_wave_frac_of_length: 0.55  # Wolfson / Fastnet: breaker 55 % of length rolls a yacht
+  # Rolled beyond horizontal by a breaking wave (vessel/hazards.py knockdowns; M4, Maya).
+  # Tank tests after the 1979 Fastnet (Wolfson Unit; SNAME): a beam-on breaker about 30 %
+  # of the boat's length high puts a yacht in danger, 60 % or more rolls her almost
+  # surely. The Fastnet inquiry: about a third of the fleet (mostly 9-15 m yachts) went
+  # beyond horizontal in one night of Force 10-11. FIT (Theo): 37.5 % of length rolls her,
+  # so a 10 m yacht beam-on to the breakers of a 12 h Hs 8 m storm has a one-in-three
+  # chance of a roll (tests/test_keelboat_knockdowns.py); 33-43 % for Hs 7-9 m (the
+  # storm's Hs is our GUESS from 10-15 m reported seas). No beam floor: it is for
+  # short hulls. Each roll that dismasts or floods her: five of about 100 boats rolled
+  # sank (inquiry), so 5 % at Hs 8 m, i.e. 0.7 % at the 3 m reference (GUESS: scaled
+  # (Hs / 3 m)^2 as every hazard here).
+  critical_wave_frac_of_length: 0.375
+  critical_wave_frac_of_beam: 0.0
+  p_inverted_stuck: 0.007
+  lost_why: "rolled by a breaking wave: dismasted and flooded"
   damage_ref_hs_m: 3.0
   p_part:                    # GUESS: per knockdown at Hs 3 m
     panel_port: 4.0e-5
@@ -169,6 +183,9 @@ vpp:
   waves_k: 0.0038            # added resistance per m^2 of wave height, x weight
   autopilot_factor: 0.93     # GUESS: autopilot steering and set-and-forget trim vs a race crew
   reef_heel_deg: 25          # GUESS: the boat reefs to stay under this heel
+  # GUESS (cruising practice): the first reef goes in at about 20 kn of apparent wind,
+  # the top of Force 5, whatever the heel; smaller plans hold more (keelboat.py).
+  reef_aws_kn: 20
   p_sink_given_leak: 0.3     # GUESS: a leak the electric bilge pump can't keep up with
   gz:                        # GZ (righting lever, m). GM 1.15 m from orc RM 78 kg.m at 1 deg;
     deg: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]   # the curve's shape is a

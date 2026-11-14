@@ -48,6 +48,8 @@ export interface Status {
   order: { heading: Heading; power: number; sails?: string | null; engine?: boolean | null };
   /** True for a boat with sails (#242): it also takes sail and engine orders. */
   sailboat?: boolean;
+  /** False when the player sets no power: only the wind drives her, or her crew rows at its own pace. */
+  drives?: boolean;
   /** A sailboat's state and what may be ordered (#242). */
   sailing?: {
     plans: string[];
@@ -155,6 +157,8 @@ export interface Card {
   build: string;
   launch: string;
   seed: number;
+  /** The numbered autopilot policy both boats' autopilots sailed by (simulator: autonomy/policy.py). 1, or absent: the one behind the odds. */
+  autopilot_policy?: number | null;
   breakdowns_on: boolean;
   boat: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
   ghost: { outcome: string; days: number; battery_low: number; breakdowns: string[]; ending?: Ending; airtime?: Airtime | null };
