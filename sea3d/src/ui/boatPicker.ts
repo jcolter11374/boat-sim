@@ -9,6 +9,7 @@
 import { RANDOLPH_AS_BUILT, clearMyBoat, loadMyBoat, randolphAsBuilt, saveMyBoat, type MyBoat, type RandolphKey } from "../myboat";
 import { PLAYABLE_STOCK, STOCK, isStock, playerName, type StockKey } from "../boats/specs";
 import { ABOUT } from "../boats/about";
+import { paintPicker } from "./paintPicker";
 
 export interface PickerEntry {
   /** "kayak", a stock id, "mine" (the saved design) or "yard:<base>" (a Boatyard link). */
@@ -158,6 +159,20 @@ export function openBoatPicker(doc: Document = document, use?: PickerUse): void 
     if (fact) label.append(fact);
     card.append(label);
     if (isStock(e.id)) card.append(aboutBox(doc, e.id));
+  }
+  // Paint for the player's own boat (not when the picker is choosing some other boat).
+  if (!use) {
+    const builtOf = (id: string) => (id === "revb" || id === "revc" ? "randolph" : isStock(id) ? id : id === "mine" && mine && mine.base !== "kayak" ? "randolph" : "kayak");
+    let pick = paintPicker(builtOf(picked), doc);
+    card.append(pick);
+    // The "own colours" swatch follows the boat ticked above.
+    card.addEventListener("change", (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.name !== "boatpick") return;
+      const next = paintPicker(builtOf(t.value), doc);
+      pick.replaceWith(next);
+      pick = next;
+    });
   }
   const foot = doc.createElement("div");
   foot.className = "foot";

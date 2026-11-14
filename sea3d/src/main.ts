@@ -24,6 +24,7 @@ import { mountSailLink } from "./sailLink";
 import { Clouds } from "./clouds";
 import { seaUniforms } from "./seaSurface";
 import { heightOf, titleHeading, titleShot } from "./framing";
+import { paintMine } from "./boats/paintApply";
 import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
@@ -218,6 +219,7 @@ function buildHero(q: Quality): void {
   if (!heroOn()) return;
   const spec = heroSpec(loadMyBoat());
   const model = BUILDERS[spec.key](q);
+  paintMine(model); // the player's own paint, looks only (boats/paintApply.ts)
   const contact = new Contact(model.form, spec, q);
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec.key !== "randolph";
   // A white hull's wet line at the sea, hers alone (Elena; Lena: not the shared in-water hook).
@@ -259,7 +261,9 @@ function shoreShown(on: boolean): void {
 function heroLight(): void {
   if (!heroOn()) return;
   heroL = heroLightFor(hero?.spec.key ?? "kayak");
-  atmos.set(HERO_SUN.el, HERO_SUN.az, 0, true);
+  // ?sunel=55 (or -18) shows the title's boat at noon or at night: for look reviews only.
+  const sunEl = new URLSearchParams(location.search).get("sunel");
+  atmos.set(sunEl !== null && Number.isFinite(Number(sunEl)) ? Number(sunEl) : HERO_SUN.el, HERO_SUN.az, 0, true);
   // A boat with sails: lit from astern and to one side (Ines, 12 Nov; the sun moved off her
   // 13 Nov), her near side in her own shadow, her edges and sails lit, little fill from the
   // sky. A boat without: the sun over the lens's shoulder, on the side we see (heroLightFor).

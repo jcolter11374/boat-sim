@@ -60,7 +60,7 @@
   .hints { margin: 2px 2px 0; padding: 0; list-style: none; font-size: 12px; color: #ffd9b3; }
   .hints li::before { content: "\2192  "; color: var(--orange); }
   #cruise { width: 100%; accent-color: var(--orange); }
-  #sum { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; padding: 12px 16px 14px; }
+  #sum { position: fixed; top: calc(var(--bar, 0px) + 12px); right: 12px; width: 300px; padding: 12px 16px 14px; max-height: calc(100vh - var(--bar, 0px) - 50px); overflow-y: auto; }
   #sum h2 { margin: 0 0 8px; font-size: 15px; }
   .row { display: flex; justify-content: space-between; padding: 3px 0; font-variant-numeric: tabular-nums; }
   .row span:first-child { color: var(--dim); }
