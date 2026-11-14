@@ -50,7 +50,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { RACE_DAYS, raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -1470,7 +1470,7 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
   setRate(0); // a skip pauses the clock: you see where it got to
   ++decisionSeq; // a look under way is for a moment that is gone
   setCallComing(false);
-  looking = false;
+  setLooking(false);
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
   if (page.status?.over) return setBusy(false);
@@ -1716,6 +1716,15 @@ async function clockRun(): Promise<void> {
  * paused. The picture plays on up to the simulator and the time bar keeps its speed; only a
  * card, if the look ends in one, pauses the clock (CI #391: a look read as "Paused"). */
 let looking = false;
+/** When the look under way began (clock seconds), and how long looks have been taking (s). */
+let lookFrom = 0;
+let lookTakes: number | null = null;
+function setLooking(on: boolean): void {
+  const now = clock.getElapsedTime();
+  if (on && !looking) lookFrom = now;
+  else if (!on && looking) lookTakes = lookExpect(lookTakes, now - lookFrom);
+  looking = on;
+}
 
 /** "Until something happens" runs at most this long (the simulator's own cap, 72 h). */
 const UNTIL_H = 72;
@@ -1733,7 +1742,9 @@ function tickClock(dt: number): boolean {
   if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
-  hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
+  // While a look holds the simulator, make what is in hand last the look (helm/timebar.ts lookPace).
+  const pace = looking ? lookPace(r, ahead, (lookTakes ?? 3) - (clock.getElapsedTime() - lookFrom)) : ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r);
+  hour = Math.min(shownTo, hour + dt * pace);
   if (!inFlight && !looking && shownTo - hour < rate)
     inFlight = clockRun().finally(() => {
       inFlight = null;
@@ -1868,7 +1879,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
       return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
-    () => game.save(),
+    () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
@@ -2742,16 +2753,16 @@ function maybeRouteCheck(st: Status): boolean {
   const early = !chaseAsked && h >= CHASE_FROM_H && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
   if (!quiet && !early) return false;
   routeLookedH = h;
-  looking = true; // the simulator waits; the clock runs on (no "Paused" for a look)
+  setLooking(true); // the simulator waits; the clock runs on (no "Paused" for a look)
   const seq = ++decisionSeq;
   setCallComing(false); // a card still on its way is for a moment this look replaces
   const resume = () => {
-    if (seq === decisionSeq) looking = false;
+    if (seq === decisionSeq) setLooking(false);
   };
   /** The look ends in a card: now the clock pauses, the picture plays on to the look's moment, and it asks. */
   const askAt = (show: () => void) => {
     if (seq !== decisionSeq) return;
-    looking = false;
+    setLooking(false);
     setRate(0, true);
     setCallComing(true);
     whenAt(h, () => {
@@ -2932,7 +2943,7 @@ function maybeDecide(force = false): boolean {
   // running and pauses only for a card; a storm always asks, so it pauses now.
   const stream = d.kind === "stream";
   if (stream) {
-    looking = true;
+    setLooking(true);
     setCallComing(false);
   } else {
     setRate(0, true);
@@ -2956,7 +2967,7 @@ function maybeDecide(force = false): boolean {
   if (stream) {
     void stakes.then((o) => {
       if (seq !== decisionSeq) return;
-      looking = false;
+      setLooking(false);
       // The Stream asks only when there's something to weigh (Elena, 12 Nov); otherwise a
       // note, and the clock never stopped.
       const quiet = o ? notWorthAsking(d, o, has) : null;
@@ -3143,7 +3154,9 @@ function runDue(): void {
 
 async function refreshForecast(): Promise<void> {
   if (page.status?.over) return;
-  lastForecast = await game.forecast();
+  // The rows came with the last run when they were made at the simulator's hour now (speed, 14 Nov).
+  const fresh = game.forecastRows && Math.abs(game.forecastH - (game.status?.day ?? -1) * 24) < 1e-6;
+  lastForecast = fresh ? game.forecastRows! : await game.forecast();
   drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
 }
 

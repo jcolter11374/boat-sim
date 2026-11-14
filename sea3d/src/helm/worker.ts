@@ -225,6 +225,22 @@ def run_until(kw):
             out["stopped"] = "time"
             return out
 
+def code():
+    # The save code rides on every answer that moves the game (run, order, new, load), so the
+    # page never queues a "save" behind the sailing (Rosa, speed, 14 Nov: 71 saves in 25 days,
+    # each one a turn of the worker the picture had to wait through).
+    try:
+        return {"code": G.save()}
+    except Exception:
+        return {}
+
+def ahead_forecast():
+    # And the forecast strip's rows ride on each run, for the same reason (33 more turns).
+    try:
+        return {"forecast": G.forecast(hours=120)}
+    except Exception:
+        return {}
+
 def voyages():
     # "base": which boat is sailing ("" for our kayak, else e.g. "stock_cruiser31"), so the 3D view draws it.
     c = getattr(G, "choices", None) or {}
@@ -300,7 +316,7 @@ except KeyError as err:
     if choices:
         raise RuntimeError("NO_BOAT " + str(err))  # an older simulator without this boat
     raise
-json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages()}, default=_f)
+json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages(), **code()}, default=_f)
 `;
     } else if (m.type === "load") {
       say(m.mine ? "Sailing back to where you left off..." : "Sailing the shared game back to where it was...");
@@ -312,7 +328,7 @@ try:
     G = Game.load(ENV, m["code"])
 except ValueError as err:
     raise RuntimeError("BAD_CODE " + str(err))
-json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), "orders": G.orders, "launch": G.launch_index, **voyages()}, default=_f)
+json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), "orders": G.orders, "launch": G.launch_index, **voyages(), **code()}, default=_f)
 `;
     } else if (m.type === "save") {
       code = `json.dumps(G.save())`;
@@ -321,7 +337,7 @@ json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(EN
 m = json.loads(msg_json)
 # Sail and engine orders (#242) go only when the page sends them, so older simulators still play.
 o = G.order(m["heading"], m["power"], *([m["sails"], m["engine"]] if "sails" in m else []), **({"trim": m["trim"]} if "trim" in m else {}))
-json.dumps({"order": o if isinstance(o, dict) else {"accepted": True}, "status": G.status()}, default=_f)
+json.dumps({"order": o if isinstance(o, dict) else {"accepted": True}, "status": G.status(), **code()}, default=_f)
 `;
     } else if (m.type === "run") {
       say("Sailing...");
@@ -331,7 +347,7 @@ kw = {k: m[k] for k in ("hours", "soc_below", "wind_above", "breakdown", "land_w
 if kw.get("hours") is None and UNTIL_CAP == 240.0:
     kw["hours"] = 240.0  # an older simulator without the 3-day cap
 out = run_until(kw)
-json.dumps({"stopped": out["stopped"], "status": out["status"], **voyages()}, default=_f)
+json.dumps({"stopped": out["stopped"], "status": out["status"], **voyages(), **code(), **({} if out["status"].get("over") else ahead_forecast())}, default=_f)
 `;
     } else if (m.type === "preview") {
       // What an order would do over the next day, from a copy of the boat (#330). Older simulators: null.

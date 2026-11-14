@@ -1,7 +1,7 @@
 // The speed bar at the end of a voyage (src/helm/timebar.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "../src/helm/timebar";
+import { drainStep, lookExpect, lookPace, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "../src/helm/timebar";
 
 const REAL_TIME = 1 / 3600;
 
@@ -68,4 +68,15 @@ test("steering, the simulator never runs more than a day between looks for a cal
   // Watching a recorded voyage or a race there are no calls to miss: as before.
   assert.equal(runHours(96, false), 72);
   assert.equal(runHours(24, false), 36);
+});
+
+test("during a look the picture slows to make what it has last, instead of stopping (speed, 14 Nov)", () => {
+  // 4 days a second, 24 h in hand, a look expected to take 4 s: 6 h a second, so the 24 h last the look.
+  assert.equal(lookPace(96, 24, 4), 6);
+  assert.equal(lookPace(6, 24, 1), 6, "never faster than the speed chosen");
+  assert.equal(lookPace(96, 24, 0), 48, "a look overdue: half a second's worth at a time, not all at once");
+  assert.equal(lookPace(96, 0, 4), 0, "nothing in hand: nothing to play");
+  assert.equal(lookPace(96, 0.01, 10), 0.05, "a crawl, never quite stopped while there is picture left");
+  assert.equal(lookExpect(null, 3), 3);
+  assert.equal(lookExpect(3, 5), 4);
 });
