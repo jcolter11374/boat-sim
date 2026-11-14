@@ -91,7 +91,7 @@ export function nightOpener(soc: number, hoursToDark: number): string {
 /** The note when you steer and the forecast puts the autopilot ahead of your order. */
 export function handBackNote(km: number): string {
   const n = Math.max(5, Math.round(Math.abs(km) / 5) * 5);
-  return `Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about ${n} km more on the ghost). To hand her back, open Orders.`;
+  return `Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about ${n} km better against the ghost). To hand her back, open Orders.`;
 }
 
 /** The night call may follow a push this soon (hours): the push is what runs the battery down,
