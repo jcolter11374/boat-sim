@@ -4597,6 +4597,42 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
 const third = { x: 0, y: 0 };
 const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
+/** Her fade-in behind the card: each material's own opacity and transparency, put back when it's done. */
+const FADE_S = 0.25;
+let fadedRoot: THREE.Object3D | null = null;
+let fade: { at: number; mats: Map<THREE.Material, { opacity: number; transparent: boolean }> } | null = null;
+function materialsOf(o: THREE.Object3D): THREE.Material[] {
+  const m = (o as THREE.Mesh).material;
+  return (m ? (Array.isArray(m) ? m : [m]) : []).filter((x) => !x.transparent);
+}
+function startFade(root: THREE.Object3D): void {
+  endFade();
+  const mats = new Map<THREE.Material, { opacity: number; transparent: boolean }>();
+  root.traverse((o) => {
+    for (const x of materialsOf(o)) if (!mats.has(x)) mats.set(x, { opacity: x.opacity, transparent: x.transparent });
+  });
+  for (const x of mats.keys()) {
+    x.transparent = true;
+    x.opacity = 0;
+    x.needsUpdate = true; // the see-through programs, built behind the card with hers
+  }
+  fade = { at: clock.getElapsedTime(), mats };
+}
+function endFade(): void {
+  if (!fade) return;
+  for (const [x, was] of fade.mats) {
+    x.opacity = was.opacity;
+    x.transparent = was.transparent;
+    x.needsUpdate = true;
+  }
+  fade = null;
+}
+function fadeIn(): void {
+  if (!fade) return;
+  const k = (clock.getElapsedTime() - fade.at) / FADE_S;
+  if (k >= 1) return endFade();
+  for (const [x, was] of fade.mats) x.opacity = was.opacity * Math.max(0, k);
+}
 /** Behind the Set sail card, never a stand-in (Elena): the drawn-in-code boat stays hidden, an empty
  *  sea, until her real model has loaded (useBoat and loadDetailedModels rebuild her then). At sea she
  *  always shows. */
@@ -4605,6 +4641,13 @@ function hideStandIn(): void {
   const card = !page.ready && !$("start").hidden;
   const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : spec === RANDOLPH ? hasDetailedRandolph() || randolphSettled() : true;
   const show = (!card || (real && boatWarm())) && !boatGone;
+  fadeIn();
+  // Behind the card she fades in over a quarter second, not a pop (Elena, #596). Once per boat: a new
+  // model can arrive already shown, so this goes by her, not by the visible flag.
+  if (show && card && parallel && fadedRoot !== model.root) {
+    fadedRoot = model.root;
+    startFade(model.root);
+  }
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
@@ -4740,7 +4783,7 @@ const WARM_MS = 40;
 const WARM_BOAT_MS = 200;
 let warmed = false;
 /** What's left to build: each part for the screen, and again for the calm-water reflection's picture if it's in it. */
-let warmQueue: { o: THREE.Object3D; mirror: boolean }[] | null = null;
+let warmQueue: { o: THREE.Object3D; mirror: boolean; seeThrough?: boolean }[] | null = null;
 /** The boat whose shaders are being built first, and how many of her parts are still to build. */
 let warmRoot: THREE.Object3D | null = null;
 let warmRootLeft = 0;
@@ -4778,8 +4821,11 @@ function warmShaders(): void {
     drawables(scene, warmQueue);
   }
   if (model && warmRoot !== model.root && !warmedRoots.has(model.root)) {
-    const mine: { o: THREE.Object3D; mirror: boolean }[] = [];
+    const mine: { o: THREE.Object3D; mirror: boolean; seeThrough?: boolean }[] = [];
     drawables(model.root, mine);
+    // Her fade-in draws her see-through for a quarter second, which three builds as other programs. Only where the
+    // driver builds in the background: on software drawing they'd cost seconds more, and there she simply appears.
+    if (parallel) for (const x of mine.filter((x) => !x.mirror)) mine.push({ o: x.o, mirror: false, seeThrough: true });
     // What appears with her: her wake, the prop's wash, the water at her hull.
     for (const o of [wake?.points, propWash?.mesh, contact?.collar, contact?.spray]) if (o) drawables(o, mine);
     warmQueue.unshift(...mine);
@@ -4787,17 +4833,27 @@ function warmShaders(): void {
     warmRootLeft = mine.length;
     warmRootPrograms = [];
   }
-  const until = performance.now() + (warmRootLeft > 0 ? WARM_BOAT_MS : WARM_MS);
+  const start = performance.now();
+  const boatStep = warmRootLeft > 0;
+  const until = start + (boatStep ? WARM_BOAT_MS : WARM_MS);
   const prev = renderer.getRenderTarget();
   // Built as she'll be drawn: shown, so her lamp counts among the lights as it will at sea.
   const shown = model?.root.visible ?? true;
   if (model) model.root.visible = true;
   try {
     while (warmQueue.length && performance.now() < until) {
-      if (warmRootLeft === 0 && warmRoot && !warmedRoots.has(warmRoot) && performance.now() > until - WARM_BOAT_MS + WARM_MS) break; // her last part built: back to the short step
-      const { o, mirror: inMirror } = warmQueue.shift()!;
+      // Her last part built in this step: back to the short step. (Only within that step: with parallel compiling
+      // she can wait on the driver for frames, and the rest of the queue carries on meanwhile; Lena, #596.)
+      if (boatStep && warmRootLeft === 0 && performance.now() > start + WARM_MS) break;
+      const { o, mirror: inMirror, seeThrough } = warmQueue.shift()!;
       renderer.setRenderTarget(inMirror ? mirror.target : prev);
+      const mats = seeThrough ? materialsOf(o) : [];
+      for (const x of mats) x.transparent = true;
       const built = renderer.compile(o, camera, scene);
+      for (const x of mats) {
+        x.transparent = false;
+        x.needsUpdate = true; // back to her solid program on the next draw, not the see-through one just built
+      }
       renderer.setRenderTarget(prev);
       // Without parallel compiling the driver only queues the work and it lands, all of it, on the next
       // drawn frame: finishing each program here keeps that frame light and the budget honest. With it
