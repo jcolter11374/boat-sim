@@ -1060,6 +1060,8 @@ try {
   await browser.close();
   console.log(`OK (part ${PART}, ${Math.round((Date.now() - t0) / 1000)} s): ${log.join(", ")}${runA ? `; both boats afloat; sea vertices high ${vHigh}, low ${vLow}` : ""}`);
 } catch (e) {
-  fail(String(e));
+  // A bare "Timeout exceeded" doesn't say which wait it was: add the line of this file it came from.
+  const at = /smoke\.mjs:(\d+)/.exec(String(e?.stack ?? ""));
+  fail(`${String(e)}${at ? ` (smoke.mjs line ${at[1]})` : ""}`);
 }
 server.kill();
