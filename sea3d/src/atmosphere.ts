@@ -678,6 +678,11 @@ export class Atmosphere {
     this.composer?.setSize(w, h);
   }
 
+  /** The picture the scene is drawn into before the post-processing (null: straight to the screen). For building shaders ahead (warmup.ts). */
+  sceneTarget(): THREE.WebGLRenderTarget | null {
+    return this.composer ? this.composer.readBuffer : null;
+  }
+
   setPixelRatio(r: number): void {
     this.composer?.setPixelRatio(r);
   }

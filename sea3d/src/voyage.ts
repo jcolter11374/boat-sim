@@ -78,6 +78,7 @@ import { equipmentParts } from "./replay/equipment";
 import { VoyageHud, equipmentIcons, type Part } from "./replay/hud";
 import { focusBoat, type Focus } from "./focus";
 import { applyPaint, myPaint } from "./boats/paintApply";
+import { intoTarget, startWhenBuilt } from "./warmup";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -1344,7 +1345,8 @@ let last = 0;
 let rigHeave = 0;
 let smoothYaw: number | null = null;
 let storm = 0; // 0 fair .. 1 gale, eased
-renderer.setAnimationLoop(() => {
+// Drawing starts once the shaders are built, after the page has painted (warmup.ts).
+startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
   const dt = Math.min(t - last, 0.1);
   last = t;
@@ -1618,7 +1620,7 @@ renderer.setAnimationLoop(() => {
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
   status.frames++;
-});
+}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
 
 // ---------- "Pick your launch day" ----------
 function showBeat(b: Beat): void {
