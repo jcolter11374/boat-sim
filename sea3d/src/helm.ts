@@ -4819,7 +4819,10 @@ renderer.setAnimationLoop(() => {
       live.heading = wheelNow ? wheelNow.heading : hdg;
       live.speedKn = stw * KN;
       // Before the first logged hour there's no reading yet: the status's own stays.
-      const heel = r.heel ? valueAt(r, r.heel, h) : null;
+      // While she is thrown flat on screen the heel figure follows the picture, not the log's hourly lean (Elena).
+      const kd = ride?.knockdown;
+      const thrown = !!kd && t >= kd.start && t < kd.upright;
+      const heel = r.heel ? (thrown ? ride!.heelDeg(motion.roll) : valueAt(r, r.heel, h)) : null;
       const soc = r.heel ? null : valueAt(r, r.soc, h);
       if (heel != null) live.heel = heel;
       if (soc != null) live.battery = soc * 100;
