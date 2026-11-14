@@ -359,6 +359,12 @@ class Game:
             _no_breakdowns(mine)
             _no_breakdowns(ghost)
         self.max_drive_w = float(prop["max_drive_w"])
+        # Whether the player sets a power: False when nothing but the wind drives her (the
+        # drone, the dinghy) or her crew rows or paddles at their own pace (the rowing boat,
+        # the joke fleet: vessel/oddboats.py takes no power order). The page hides it then.
+        crew_w = float((self.design.stock.get("odd") or {}).get("crew_w", 0) or 0)
+        motor = int(prop.get("thruster_count", 2)) > 0 or self.has_engine
+        self.drives = motor and crew_w <= 0
         self.mine = Voyage(
             mine,
             self.start,
@@ -1042,6 +1048,7 @@ class Game:
             ),
             "power_w": (self._cruise() if self.on_auto else self.helm.power) * self.max_drive_w,
             "sailboat": self.sailboat,
+            "drives": self.drives,
             "silence": self.silence(),
             "trim": self.trim_status(),  # a helm spell's watch, or None
             # Every watch so far (km through the water, + = gained): the page keeps
