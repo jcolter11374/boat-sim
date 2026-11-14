@@ -685,6 +685,8 @@
     #decidemap { height: 96px; }
     #decidefoot { display: none; } /* keys 1-3 and Esc: no keyboard on a phone */
     body:has(#decide:not([hidden])) #orders { visibility: hidden; }
+    /* The sound question under the top-right buttons, not over her mast top (Elena). */
+    #soundask { top: calc(var(--bar, 0px) + var(--edge) + 48px); }
   }
 </style>
 </head>

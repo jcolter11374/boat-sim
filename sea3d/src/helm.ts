@@ -2454,7 +2454,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       return {
         kind,
         look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
-        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
+        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
         choices,
       };
     }
@@ -2840,7 +2840,9 @@ function costWords(p: Preview, all: Preview[], waves = false, meaning = false): 
   // a knockdown gets likelier with bigger waves, and under 15% the motors stop to keep the
   // electronics and the radio going (autonomy/safemode.py hold_below_soc).
   if (p.hs_max != null && (waves || Math.max(...hs) - Math.min(...hs) >= 0.5))
-    out.push(`waves to ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
+    // The worst along this option's own way over the next 4 days, not the peak at her spot that the card's
+    // text gives (side by side, "up to 5.3 m" over "to 6.1 m" read as a contradiction: Elena).
+    out.push(`worst waves ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
   const soc = all.map((x) => x.soc_min ?? 1);
   if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08)
     out.push(`battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
