@@ -25,6 +25,7 @@ import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
+import { shipStandIn } from "./boats/ships";
 import { standIns, Wildlife } from "./wildlife";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
@@ -183,6 +184,8 @@ void Wildlife.load().then((w) => {
 // Hidden: one of each animal, built and drawn behind the Set sail card (warmShaders), so the first
 // animals met don't build their shaders mid-voyage.
 scene.add(standIns());
+// And one ship: the first ship met built 4 shaders a couple of seconds after Set sail.
+scene.add(shipStandIn());
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
