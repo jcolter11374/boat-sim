@@ -4837,6 +4837,11 @@ const CHECKS = {
           await p.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
           await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
           await p.waitForTimeout(6000);
+          // #581: the title's frame rate (software rendering on the runner: compare, don't read as a phone's).
+          const f0 = await p.evaluate(() => window.__sea3d?.frames ?? 0);
+          await p.waitForTimeout(15000);
+          const fps = ((await p.evaluate(() => window.__sea3d?.frames ?? 0)) - f0) / 15;
+          out.push(`${w} title ${fps.toFixed(2)} fps`);
           shots.push(await emit(p, `${w}-title`));
           if (!(await p.locator("#t-sea").count())) { bad.push(`${w}: no "Just watch the sea"`); continue; }
           await p.evaluate(() => { const d = document.querySelector("#title nav details"); if (d) d.open = true; });
@@ -4916,6 +4921,47 @@ const CHECKS = {
       out.push(`frames ${shots.join(", ")}`);
       must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
       return out.join("; ");
+    },
+  },
+  // #582: "Race all 6 launch days" on a race's results card: play the race to its end, press it,
+  // the table fills day by day and the verdict reads in plain words (no statistics).
+  "race-season": {
+    manual: true,
+    path: "helm.html?race=kayak,revc&launch=0&quality=low",
+    run: async (page) => {
+      await page.waitForFunction(() => window.__helm && ((window.__helm.ready && !window.__helm.busy) || window.__helm.error), null, { timeout: 8 * MIN });
+      must(!(await page.evaluate(() => window.__helm.error)), `the race didn't load`);
+      const t0 = Date.now();
+      const up = () => page.evaluate(() => { const r = document.getElementById("result"); return !!r && !r.hidden && r.getClientRects().length > 0; });
+      while (!(await up()) && Date.now() - t0 < 20 * MIN) {
+        await page.evaluate(() => { if (window.__helm.clock === 0 && document.getElementById("result").hidden) document.querySelector('#timebar .rate[data-rate="96"]')?.click(); });
+        await page.waitForTimeout(2500);
+      }
+      must(await up(), "no results card after 20 min at 4 days a second");
+      await page.waitForTimeout(3000);
+      const head = await page.evaluate(() => document.getElementById("r-head")?.textContent.trim());
+      must(await page.locator("#r-seasonbtn").count(), `no "Race all 6 launch days" on the card ("${head}")`);
+      await page.locator("#r-seasonbtn").scrollIntoViewIfNeeded();
+      await page.click("#r-seasonbtn");
+      const t1 = Date.now();
+      const seen = [];
+      let last = -1;
+      while (Date.now() - t1 < 75 * MIN) {
+        const st = await page.evaluate(() => ({ rows: document.querySelectorAll("#r-season tr").length - 1, done: !!window.__helm.season, running: /Racing launch day/.test(document.getElementById("r-season")?.textContent || "") }));
+        if (st.rows !== last) { seen.push(`${st.rows} at ${Math.round((Date.now() - t1) / 1000)} s`); last = st.rows; }
+        if (!st.running && (st.done || st.rows >= 6)) break;
+        if (!st.running && Date.now() - t1 > 20000) break;
+        await page.waitForTimeout(3000);
+      }
+      const r = await page.evaluate(() => ({ table: [...document.querySelectorAll("#r-season tr")].map((tr) => [...tr.children].map((c) => c.textContent.trim()).join(" | ")), words: [...document.querySelectorAll("#r-season p")].map((p) => p.textContent.trim()), season: window.__helm.season }));
+      await page.locator("#r-season").scrollIntoViewIfNeeded().catch(() => {});
+      if (BROWSER === "chromium") { const path = "look-race-season-chromium.jpg"; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); } }
+      const res = `race "${head}" (${Math.round((t1 - t0) / 1000)} s); season rows ${seen.join(", ")}; table ${r.table.join(" // ")}; words ${r.words.join(" / ")}; ${JSON.stringify(r.season)} in ${Math.round((Date.now() - t1) / 1000)} s`;
+      console.log(`SEASON ${BROWSER}: ${res}`);
+      must(r.table.length === 7, `the table has ${r.table.length - 1} launch days, not 6: ${res}`);
+      must(r.words.some((w) => /better boat|Too close to call|Every launch day/.test(w)), `no verdict in words: ${res}`);
+      must(!r.words.some((w) => /p =|95%|sign test/.test(w)), `statistics on the card: ${res}`);
+      return res;
     },
   },
   "look-marks": {
