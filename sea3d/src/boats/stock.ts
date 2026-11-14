@@ -16,7 +16,7 @@ import * as THREE from "three";
 import { addCockpitLight } from "./nightlook";
 import { applyStockFinishes } from "./finishes";
 import { DACRON, clotheSails, tickSails } from "./sailcloth";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { gltfLoader } from "../gltf";
 import { holdWires } from "./wire";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
@@ -128,7 +128,7 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
     p = (async () => {
       for (const file of [`${FILE[key]}.glb`, `${FILE[key]}.json`]) {
         try {
-          const g = (await new GLTFLoader().loadAsync(`${base}/${file}`)).scene;
+          const g = (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
           g.traverse((o) => {
             const m = o as THREE.Mesh;
             if (m.isMesh && /^(sail|batten)/.test(o.name)) {
