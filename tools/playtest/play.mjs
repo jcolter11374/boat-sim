@@ -4298,6 +4298,63 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // M4 wave 3 (#532) T500 motors on the kayak, and the M5 finish scene off Cabo da Roca (#533) via __helm.arrive().
+  "wave3-finish": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-w3-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      for (const [w, h] of [[1280, 720], [390, 844]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        try {
+          await p.goto(SITE + "boatyard.html?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+          await p.waitForTimeout(4000);
+          const t = await p.evaluate(() => {
+            document.querySelectorAll(".slot[data-group]:not(.gopen) h3").forEach((x) => x.click());
+            const b = document.querySelector('.opt[data-opt="two-t500"]');
+            if (!b) return null;
+            const sl = b.closest(".sl"); if (sl && !sl.classList.contains("open")) sl.querySelector(".sl-head")?.click();
+            b.scrollIntoView({ block: "center" });
+            return { name: b.querySelector(".top span")?.textContent.trim(), odds: document.getElementById("s-odds")?.textContent.trim() };
+          });
+          if (!t) bad.push(`${w}: no T500 option on the kayak`);
+          else {
+            await p.waitForTimeout(600);
+            await p.evaluate(() => document.querySelector('.opt[data-opt="two-t500"]').click());
+            await p.waitForTimeout(4000);
+            const after = await p.evaluate(() => document.getElementById("s-odds")?.textContent.trim());
+            shots.push(await emit(p, `${w}-t500`));
+            const money = await p.evaluate(() => (document.body.innerText.match(/[$€£]\s?\d|\bUSD\b|\bprice\b/gi) || []).slice(0, 3));
+            if (money.length) bad.push(`${w}: money shows (${money.join(",")})`);
+            out.push(`${w}: T500 "${t.name}", gauge "${t.odds}" -> "${after}"`);
+          }
+          await p.goto(SITE + "helm.html?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__helm && window.__helm.frames > 10 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+          const has = await p.evaluate(() => typeof window.__helm?.arrive === "function");
+          if (!has) { bad.push(`${w}: no __helm.arrive()`); continue; }
+          await p.evaluate(() => window.__helm.arrive());
+          for (const [i, ms] of [[1, 3000], [2, 6000], [3, 8000]]) { await p.waitForTimeout(ms); shots.push(await emit(p, `${w}-finish-${i}`)); }
+          const a = await p.evaluate(() => { const e = document.getElementById("arrive"); return e ? { shown: e.getClientRects().length > 0, text: e.innerText.slice(0, 200) } : null; });
+          const card = await p.evaluate(() => document.getElementById("result") && !document.getElementById("result").hidden ? document.getElementById("result").innerText.slice(0, 160) : "");
+          if (!/Cabo da Roca/.test(`${a?.text ?? ""} ${card}`)) bad.push(`${w}: finish scene never named Cabo da Roca`);
+          if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
+          out.push(`${w}: finish caption ${a ? `${a.shown ? "shown" : "hidden"} "${a.text.replace(/\s+/g, " ").slice(0, 120)}"` : "none"}; card "${card.replace(/\s+/g, " ").slice(0, 100)}"`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`WAVE3 ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
