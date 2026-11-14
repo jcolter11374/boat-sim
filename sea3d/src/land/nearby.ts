@@ -179,7 +179,7 @@ export class NearbyLand {
     if (!this.now && !this.loading && near && near.km < LOAD_KM) void this.load(near.tile);
     this.landmarks.update(lat, lon, t, a.sunEl);
     this.shown.landmarks = this.landmarks.count;
-    this.seamarks.update(lat, lon, t, a.sunEl, a.sea);
+    this.seamarks.update(lat, lon, t, a.sunEl, a.sea, a.hs);
     this.shown.seamarks = this.seamarks.count;
     this.bridge.update(lat, lon, a.sunEl);
     this.shown.bridge = this.bridge.shown;

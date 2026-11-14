@@ -9,7 +9,7 @@
 // Yellow is a special mark (here NOAA's weather buoy).
 import * as THREE from "three";
 import { R_EARTH } from "./shader";
-import { nightOf } from "./town";
+import { Reflections, nightOf } from "./town";
 import { flashAt, glowTexture, offsetOf } from "./landmarks";
 import { BUOY_FIXED, BUOY_LIGHT_HEIGHT, makeBuoy, type BuoyKind } from "../boats/buoys";
 
@@ -77,10 +77,17 @@ export function markFlash(m: Seamark, t: number): number {
   return flashAt({ period: m.period, flash: Math.min(SEAMARK_FLASH, m.period * 0.35) }, t + Math.abs(phase));
 }
 
+/** The soft glow round a lit mark's lantern after dark (m across): a lantern's, not a lighthouse's (Elena, 14 Nov). */
+export const SEAMARK_HALO_M = 1.6;
+/** How bright its broken reflection on the water is against the town's lights (Elena: kept small). */
+export const SEAMARK_REFLECT = 0.45;
+
 interface Shown {
   m: Seamark;
   group: THREE.Group;
   glow: THREE.Sprite | null;
+  halo: THREE.Sprite | null;
+  reflect: Reflections | null;
   lamp: THREE.MeshStandardMaterial | null;
 }
 
@@ -105,6 +112,8 @@ export class Seamarks {
       group.add(mark);
       let lamp: THREE.MeshStandardMaterial | null = null;
       let glow: THREE.Sprite | null = null;
+      let halo: THREE.Sprite | null = null;
+      let reflect: Reflections | null = null;
       if (m.period) {
         const at = lampHeight(kind);
         // The lantern itself glows on its flash (over the model's own white lantern); the glow is seen from afar after dark.
@@ -118,11 +127,22 @@ export class Seamarks {
           glow.renderOrder = 30;
           glow.visible = false;
           group.add(glow);
+          // Near to, a faint soft glow round the lantern, sized in metres so it stays a lantern's.
+          halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: LAMP[m.colour], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0 }));
+          halo.position.set(0, at, 0);
+          halo.scale.setScalar(SEAMARK_HALO_M);
+          halo.renderOrder = 29;
+          halo.visible = false;
+          group.add(halo);
         }
+        // A short broken streak on the water under it, as the town's lights throw (town.ts), on with each flash.
+        reflect = new Reflections([{ x: 0, z: 0, height: at, width: 0.12, color: new THREE.Color(LAMP[m.colour]) }]);
+        reflect.mesh.name = "seamark-reflection";
+        group.add(reflect.mesh);
       }
       group.visible = false;
       this.root.add(group);
-      return { m, group, glow, lamp };
+      return { m, group, glow, halo, reflect, lamp };
     });
   }
 
@@ -130,7 +150,7 @@ export class Seamarks {
    * Each frame, with the boat at (lat, lon): each mark in range at its spot, floating on the sea
    * (sea: the water's height at a scene spot, when the page has one), its light flashing after dark.
    */
-  update(lat: number, lon: number, t: number, sunEl: number, sea?: (x: number, z: number) => number): void {
+  update(lat: number, lon: number, t: number, sunEl: number, sea?: (x: number, z: number) => number, hs = 0.3): void {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     // Nothing is built until the boat is near a mark (most pages never are).
     if (!this.shown.length) {
@@ -164,6 +184,11 @@ export class Seamarks {
         s.glow.material.opacity = on * night * fade;
         s.glow.visible = s.glow.material.opacity > 0.002;
       }
+      if (s.halo) {
+        s.halo.material.opacity = 0.35 * on * night;
+        s.halo.visible = s.halo.material.opacity > 0.002;
+      }
+      s.reflect?.update(t, SEAMARK_REFLECT * on * night, hs);
     }
     this.count = n;
   }
