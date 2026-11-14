@@ -2,11 +2,11 @@
  * "Your boat": the one boat picker, opened from the "My boat" chip in the top bar and
  * from the title screen (one-game plan, step 1; Leo's words in one-game-words.md §4).
  *
- * Picking a boat only sets "my boat" (src/myboat.ts); every page then sails it. A boat
- * that needs the Boatyard to build it first (the Randolph Rev C5, a new design) is a link
- * there instead. Names a player typed are only ever set as text.
+ * Picking a boat only sets "my boat" (src/myboat.ts); every page then sails it. The Randolph
+ * boats are saved as unchanged Boatyard designs (RANDOLPH_AS_BUILT); building a new one is a
+ * link to the Boatyard. Names a player typed are only ever set as text.
  */
-import { REVB_AS_BUILT, clearMyBoat, isRevbAsBuilt, loadMyBoat, saveMyBoat, type MyBoat } from "../myboat";
+import { RANDOLPH_AS_BUILT, clearMyBoat, loadMyBoat, randolphAsBuilt, saveMyBoat, type MyBoat, type RandolphKey } from "../myboat";
 import { PLAYABLE_STOCK, STOCK, isStock, playerName, type StockKey } from "../boats/specs";
 import { ABOUT } from "../boats/about";
 
@@ -42,9 +42,9 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     const name = nameOf(k);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
-  out.push({ id: "yard:revc", group: "The Randolph team's boats", name: "Randolph Rev C5 (our model) →", fact: "the Randolph team's wing-sail robot boat, built in the Boatyard", href: "./boatyard.html#base=revc" });
-  out.push({ id: "revb", group: "The Randolph team's boats", name: REVB_AS_BUILT.name, fact: "their earlier 1.5 m wing-sail robot boat, as built: wind only, no motor" });
-  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === "") && !isRevbAsBuilt(mine))
+  out.push({ id: "revc", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revc.name, fact: "their current wing-sail robot boat design, as drawn: wind only, no motor" });
+  out.push({ id: "revb", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revb.name, fact: "their earlier 1.5 m wing-sail robot boat, as built: wind only, no motor" });
+  if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === "") && !randolphAsBuilt(mine))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });
   out.push({ id: "yard:new", group: "Your designs", name: "Build a new one in the Boatyard →", fact: "pick a hull, sails or motors, batteries and electronics", href: "./boatyard.html" });
   return out;
@@ -53,7 +53,8 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
 /** Which row stands for the boat saved now. */
 export function pickedId(mine: MyBoat | null): string {
   if (!mine || (mine.kind === "yard" && mine.base === "kayak" && mine.hash === "")) return "kayak";
-  if (isRevbAsBuilt(mine)) return "revb";
+  const r = randolphAsBuilt(mine);
+  if (r) return r;
   return mine.kind === "stock" ? mine.base : "mine";
 }
 
@@ -64,8 +65,8 @@ export function choose(id: string): void {
     clearMyBoat(); // no boat saved = Our kayak, everywhere
     return;
   }
-  if (id === "revb") {
-    saveMyBoat({ ...REVB_AS_BUILT });
+  if (id in RANDOLPH_AS_BUILT) {
+    saveMyBoat({ ...RANDOLPH_AS_BUILT[id as RandolphKey] });
     return;
   }
   const k = id as StockKey;
