@@ -32,7 +32,7 @@ export const PAINTS: PaintScheme[] = [
   { id: "yellow", name: "Signal yellow", hull: 0xf2c21b, deck: 0xe8e5dc, boot: 0x1b2430, bottom: 0x1f3a5f },
   { id: "white", name: "Classic white", hull: 0xf4f3ef, deck: 0xe6e2d6, boot: 0xb3261e, bottom: 0x1d2f4d },
   { id: "grey", name: "Pale grey", hull: 0xc9ced3, deck: 0xe8e5dc, boot: 0x1b2430, bottom: 0x7a1f1f },
-  { id: "navy", name: "Navy", hull: 0x1a2a4a, deck: 0xf0eee6, boot: 0xf4f4ee, bottom: 0x7a1f1f },
+  { id: "navy", name: "Navy", hull: 0x1f3769, deck: 0xf0eee6, boot: 0xf4f4ee, bottom: 0x7a1f1f },
   { id: "green", name: "Racing green", hull: 0x0f4d32, deck: 0xe6e2d6, boot: 0xf0e6c8, bottom: 0x7a1f1f },
   { id: "red", name: "Deep red", hull: 0x9e1b1b, deck: 0xe8e5dc, boot: 0xf4f4ee, bottom: 0x1b1d21 },
   { id: "black", name: "Black", hull: 0x1b1d21, deck: 0xc9ced3, boot: 0xf4f4ee, bottom: 0x7a1f1f },
@@ -54,7 +54,7 @@ export const rgbOf = (hex: number): Rgb => [(hex >> 16) & 255, (hex >> 8) & 255,
 export const lightness = (c: Rgb) => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
 
 /** Registration letters: dark on a light hull, white on a dark one (Elena). */
-export const INK_DARK = 0x1b2430;
+export const INK_DARK = 0x0d1116;
 export const INK_LIGHT = 0xf4f4ee;
 export const inkFor = (hull: number) => (lightness(rgbOf(hull)) < 0.3 ? INK_LIGHT : INK_DARK);
 
@@ -126,8 +126,11 @@ export function repaintHull(px: Uint8ClampedArray, w: number, h: number, built: 
   const nBottom = bare ? nTop : rgbOf(to.bottom);
   const oInk = built.ink === undefined ? null : rgbOf(built.ink);
   const nInk = rgbOf(inkFor(to.hull));
-  const inkAxis = oInk ? [oInk[0] - oTop[0], oInk[1] - oTop[1], oInk[2] - oTop[2]] : null;
-  const inkLen2 = inkAxis ? inkAxis[0] ** 2 + inkAxis[1] ** 2 + inkAxis[2] ** 2 : 1;
+  // Dark letters on a light hull thin out to grey when the boat is small on screen (white on dark doesn't):
+  // they get a bolder stroke, two dots wider all round.
+  const bolder = oInk !== null && form !== undefined && lightness(nInk) < 0.3;
+  const mask = bolder ? new Float32Array(w * h) : null;
+  const topL = Math.max(lumOf(oTop[0], oTop[1], oTop[2]), 1);
   const oDeckL = lumOf(oDeck[0], oDeck[1], oDeck[2]);
   // Along the hull the lines only depend on the column: work the keel and deck heights out once.
   const kz = new Float32Array(w);
@@ -178,9 +181,11 @@ export function repaintHull(px: Uint8ClampedArray, w: number, h: number, built: 
       }
       // Letters on the topsides: how far this dot is from the hull colour towards the ink.
       let ink = 0;
-      if (inkAxis && form && wt > 0.5) {
-        const p = ((r - oTop[0]) * inkAxis[0] + (g - oTop[1]) * inkAxis[1] + (b - oTop[2]) * inkAxis[2]) / inkLen2;
-        ink = smooth(0.5, 0.85, p);
+      if (oInk && form && wt > 0.5) {
+        // The letters are stamped on the hull as a much darker hull colour, darker than any shadow baked on the
+        // topsides: how dark this dot is against the hull's own colour says how much of it is ink.
+        ink = 1 - smooth(0.3, 0.6, l / topL);
+        if (mask && ink > 0) mask[y * w + x] = ink;
       }
       const oL = wb * lumOf(oBottom[0], oBottom[1], oBottom[2]) + ws * lumOf(oBoot[0], oBoot[1], oBoot[2]) + wt * lumOf(oTop[0], oTop[1], oTop[2]);
       // The picture's own light and dark (shadows baked under the kit, the blotchy bottom paint).
@@ -190,6 +195,27 @@ export function repaintHull(px: Uint8ClampedArray, w: number, h: number, built: 
         out[i + c] = paint + (nInk[c] - paint) * ink;
       }
     }
+  }
+  if (mask) {
+    const R = 2;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const own = mask[y * w + x];
+        if (own >= 1) continue;
+        let m = own;
+        for (let dy = -R; dy <= R && m < 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -R; dx <= R; dx++) {
+            const v = mask[yy * w + ((x + dx + w) % w)];
+            if (v > m) m = v;
+          }
+        }
+        if (m <= own) continue;
+        const k = (m - own) / (1 - own);
+        const i = 4 * (y * w + x);
+        for (let c = 0; c < 3; c++) out[i + c] += (nInk[c] - out[i + c]) * k;
+      }
   }
   return out;
 }
