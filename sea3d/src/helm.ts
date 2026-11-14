@@ -65,6 +65,7 @@ import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
 import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
+import { ROUTE_BIG_KM, routeBigText } from "./helm/routeCall";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
@@ -2872,11 +2873,15 @@ function maybeRouteCheck(st: Status): boolean {
       askAt(() => showDecision(d, view, [true, true]));
       return;
     }
-    if (better && !ask) {
-      // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
-      const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} over ${orderWords(order)} for the next 4 days (${timeChange(gainKm, pace)}), in no worse seas. Change it in Orders.`;
+    if (better && !ask && gainKm >= ROUTE_BIG_KM) {
+      // A line the forecast puts far ahead, in no worse seas: the note says it is a gamble, with the
+      // odds measured (routing-findings.md: forecast gains of 90 km or more paid 7 times in 8).
+      const text = routeBigText(fmtDeg(b.best), orderWords(order), timeChange(gainKm, pace));
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
-    } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
+    }
+    // A smaller free line is no longer told (routing-findings.md): steered for days, lines the forecast
+    // put under 90 km ahead lost on the median (34 km from day 15 on), as the autopilot re-routes all the time.
+    if (!(better && !ask) && !ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
       // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
       const text = handBackNote(auto.lead_km - now.lead_km);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
