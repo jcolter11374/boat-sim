@@ -683,6 +683,8 @@
       bottom: calc(var(--edge) + var(--strip-live, var(--strip-h)) + 6px); overflow-y: auto; overscroll-behavior: contain;
       max-height: calc(100dvh - var(--strip-live, var(--strip-h)) - 170px); }
     #decidemap { height: 96px; }
+    /* Shorter phones (360x740) draw the boat lower, and the sheet covered her whole (Nina, 14 Nov): leave more sky above it; the sheet scrolls. */
+    @media (max-height: 780px) { #decide, #decide.withmap { max-height: calc(100dvh - var(--strip-live, var(--strip-h)) - 225px); } }
     #decidefoot { display: none; } /* keys 1-3 and Esc: no keyboard on a phone */
     body:has(#decide:not([hidden])) #orders { visibility: hidden; }
     /* The sound question under the top-right buttons, not over her mast top (Elena). */
