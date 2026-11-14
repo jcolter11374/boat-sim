@@ -4686,7 +4686,7 @@ renderer.setAnimationLoop(() => {
       const yaw = smoothYaw ?? 0;
       model.gear.props.forEach((p, i) => p.getWorldPosition((propAt[i] ??= new THREE.Vector3())));
       propWash.surface = (x, z) => sea.surfaceAt(comps, x, z, t);
-      propWash.update(t, propAt, -Math.cos(yaw), Math.sin(yaw), model.gear.shown.spin, stw, spec.cruiseSpeed, hs, atmos.foamLight);
+      propWash.update(t, propAt, -Math.cos(yaw), Math.sin(yaw), model.gear.shown.spin, stw, spec.cruiseSpeed, hs, atmos.foamLight, power);
     }
     // The strip's equipment cell (the same icons as Watch a voyage): the watched boat's parts at the shown hour.
     equipmentIcons(equipmentParts(spec.key, r ? commsAt(r, h) : null, failedNow), true, "", false);
