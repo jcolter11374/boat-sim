@@ -295,7 +295,9 @@ def test_base_mode_shows_what_base_knows_not_the_true_boat(env):
 def test_a_pass_needs_a_clear_kilometre_and_not_in_the_first_hour(env):
     """Ravi, 1 May 2020: 'finish' at 25% stopped on a 2 m lead change 20 minutes in."""
     g = Game(env, launch_index=MAY1, max_days=0.9)
-    g.order("finish", 0.25)
+    # 80% power: clear of the ghost from the drop (on a full battery the game's
+    # autopilot now runs above cruise power itself, so 25% no longer leads it).
+    g.order("finish", 0.8)
     out = g.run(hours=6, land_within_km=None, breakdown=False)
     assert out["stopped"] == "time" and out["status"]["lead_km"] > 1.0
     assert g.leader == "me"  # ahead from the drop: noted, not a pass

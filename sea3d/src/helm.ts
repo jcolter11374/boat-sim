@@ -83,7 +83,7 @@ import { equipmentIcons } from "./replay/hud";
 import { Cinema, filmButtons, heightOf, type CinemaHost, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
-import { maybeJson, standing, standingText, type Board, type Grid } from "./results";
+import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -3227,7 +3227,8 @@ async function showStanding(build: string): Promise<void> {
   // Not in a challenge (Ines): the odds read as a scolding there, and they belong in the Boatyard.
   if (!mission()) box.append(p);
   const t = standingText(s);
-  $("r-standing").textContent = `${t.head} ${t.detail}`;
+  const smarter = autopilotNote(page.card.autopilot_policy, rate !== null);
+  $("r-standing").textContent = `${t.head} ${t.detail}${smarter ? ` ${smarter}` : ""}`;
   page.standing = s.kind;
 }
 
