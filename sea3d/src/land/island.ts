@@ -17,6 +17,9 @@ import type { Quality } from "../boats/parts";
 import type { Place } from "./place";
 import { CURVE, NOISE, distanceField, metresPerDegree } from "./shader";
 
+/** Where the files have no sea floor, open water's ground sits this far under the sea (m). */
+const OPEN_SEA_Y = -8;
+
 export interface LandGrid {
   nx: number;
   ny: number;
@@ -122,7 +125,7 @@ export class Island {
           let nb = 0;
           for (let dj = -1; dj <= 1; dj++)
             for (let di = -1; di <= 1; di++) nb = Math.max(nb, at(Math.max(si + di * step, 0), Math.max(sj + dj * step, 0)));
-          pos[k * 3 + 1] = -8 - 3 * nb;
+          pos[k * 3 + 1] = OPEN_SEA_Y - 3 * nb;
         }
         pos[k * 3 + 2] = zOf(sj);
         uv[k * 2] = si / (meta.nx - 1);
@@ -135,11 +138,16 @@ export class Island {
       const sj = Math.min(j * step, meta.ny - 1);
       return skip!(lonOf(si), latOf(sj));
     };
+    // Open water: without a sea floor in the files, a sea point with no land beside it sits flat at
+    // OPEN_SEA_Y, under the opaque sea. A quad of four such points is never seen, so it isn't drawn
+    // (Rosa, speed, 14 Nov: 37% of the Annapolis ground's triangles, one draw at a fifth of the drawing).
+    const flat = (i: number, j: number) => pos[(j * nx + i) * 3 + 1] === OPEN_SEA_Y;
     const idx = new Uint32Array((nx - 1) * (ny - 1) * 6);
     let n = 0;
     for (let j = 0; j < ny - 1; j++)
       for (let i = 0; i < nx - 1; i++) {
         if (skip && out(i, j) && out(i + 1, j) && out(i, j + 1) && out(i + 1, j + 1)) continue;
+        if (!meta.depths && flat(i, j) && flat(i + 1, j) && flat(i, j + 1) && flat(i + 1, j + 1)) continue;
         const a = j * nx + i;
         idx.set([a, a + nx, a + 1, a + 1, a + nx, a + nx + 1], n);
         n += 6;
