@@ -60,8 +60,9 @@ const PLAIN: [RegExp, string][] = [
   [/^electronics box dead/, "Her computer failed{w}, and she went silent."],
   [/^taken or snagged/, "Caught in fishing gear{w}."],
   [/^early-life defect/, "An early fault we can't name ended it{w}: the kind a shakedown trial is there to catch."],
-  [/^capsized and stayed upside down/, "Capsized{w}, and she couldn't right herself."],
-  [/^stuck inverted or keel lost/, "Rolled over{w}, and she stayed upside down."],
+  [/^capsized and stayed upside down/, "A breaking wave rolled her over{w}{hs}, and with nobody aboard she couldn't right herself."],
+  [/^stuck inverted or keel lost/, "Rolled over{w}{hs}, and she stayed upside down."],
+  [/^rolled by a breaking wave: dismasted and flooded/, "A breaking wave rolled her over{w}{hs}: she lost her mast and filled with water."],
   [/^broached and stayed over/, "A wave threw her on her side{w}, and she stayed over."],
   [/^capsized in a gust/, "A gust knocked her flat{w}, and she stayed over."],
   [/^flooded: the bilge pump lost power/, "She filled with water{w} once the pump lost power."],
@@ -88,7 +89,9 @@ export function plainEnding(e: Ending, outcome: string, when = ""): string {
   if (/^\d+(\.\d+)?[NS]\s/.test(e.words)) return `She washed ashore at ${e.words}${when ? `, ${when}` : ""}.`;
   for (const [re, to] of PLAIN) {
     const m = re.exec(e.words);
-    if (m) return to.replace("$1", m[1] ?? "").replace("{w}", w);
+    // The sea that did it, when the simulator says ("breaking seas, Hs 3.6 m").
+    const hs = /Hs (\d+(?:\.\d+)?) m/.exec(e.words);
+    if (m) return to.replace("$1", m[1] ?? "").replace("{w}", w).replace("{hs}", hs ? `, in waves of ${hs[1]} m` : "");
   }
   if (FROM_OUTCOME[outcome] && (e.words === "" || /^(lost at sea|washed up|still sailing|sailed out)/.test(e.words))) return FROM_OUTCOME[outcome].replace("{w}", w);
   return `${cap(e.words)}${w}.`;
