@@ -5165,6 +5165,63 @@ const CHECKS = {
       return res;
     },
   },
+  // #596: shaders built a few per frame behind the Set sail card. From the card appearing to the first
+  // sail: the longest frozen frame, whether the card answers clicks throughout, and when the boat shows.
+  "card-freeze": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      for (const [tag, w, h, q] of [["1280-medium", 1280, 720, "medium"], ["390-medium", 390, 844, "medium"]]) {
+        const phone = w < 500;
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 3 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+        await ctx.addInitScript(() => {
+          window.__ft = { frames: [], probes: [] };
+          const f = (t) => { window.__ft.frames.push(t); requestAnimationFrame(f); };
+          requestAnimationFrame(f);
+          // Main-thread probe: a timer every 100 ms, and how late it fires.
+          let want = performance.now() + 100;
+          const tick = () => { const now = performance.now(); window.__ft.probes.push([now, now - want]); want = now + 100; setTimeout(tick, 100); };
+          setTimeout(tick, 100);
+        });
+        const p = await ctx.newPage();
+        try {
+          const t0 = Date.now();
+          await p.goto(SITE + `helm.html?quality=${q}`, { waitUntil: "commit", timeout: 2 * MIN });
+          await p.waitForFunction(() => { const g = document.getElementById("go"); return g && g.getClientRects().length > 0; }, null, { timeout: 3 * MIN });
+          const cardAt = await p.evaluate(() => performance.now());
+          // Clicks on the card while it builds: the "who steers" pills back and forth, each timed.
+          const clicks = [];
+          let boatAt = null;
+          const pills = p.locator("#ss-who-opts button");
+          for (let i = 0; i < 10; i++) {
+            const c0 = Date.now();
+            const ok = await pills.nth(i % 2).click({ timeout: 10000 }).then(() => true, () => false);
+            clicks.push(ok ? Date.now() - c0 : "timeout");
+            if (boatAt === null) boatAt = await p.evaluate(() => (window.__helm?.boatBox?.() ? performance.now() : null));
+            await p.waitForTimeout(1000);
+          }
+          await pills.nth(0).click({ timeout: 10000 }).catch(() => {});
+          const goAt = await p.evaluate(() => performance.now());
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy, null, { timeout: 5 * MIN }).catch(() => {});
+          const sailAt = await p.evaluate(() => performance.now());
+          const r = await p.evaluate(([a, b]) => {
+            const fr = window.__ft.frames.filter((t) => t >= a && t <= b);
+            let worst = 0, at = 0;
+            for (let i = 1; i < fr.length; i++) if (fr[i] - fr[i - 1] > worst) { worst = fr[i] - fr[i - 1]; at = fr[i - 1]; }
+            const late = window.__ft.probes.filter(([t]) => t >= a && t <= b).map(([, d]) => d);
+            return { frames: fr.length, worst: Math.round(worst), worstAfterCard: Math.round(at - a), lateMax: Math.round(Math.max(0, ...late)), lateOver500: late.filter((d) => d > 500).length };
+          }, [cardAt, sailAt]);
+          const boat = boatAt === null ? "not by the last click" : `${((boatAt - cardAt) / 1000).toFixed(1)} s after the card`;
+          out.push(`${tag}: card at ${((cardAt) / 1000).toFixed(1)} s after load; longest frozen frame ${r.worst} ms (at ${(r.worstAfterCard / 1000).toFixed(1)} s); timer late up to ${r.lateMax} ms, ${r.lateOver500} times over 0.5 s; clicks ${clicks.join("/")} ms; boat ${boat}; Set sail to sailing ${((sailAt - goAt) / 1000).toFixed(1)} s; ${r.frames} frames`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`CARDFREEZE ${BROWSER}: ${out.join(" || ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
