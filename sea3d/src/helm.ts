@@ -4766,6 +4766,9 @@ renderer.setAnimationLoop(() => {
   }
   if (tickClock(dt)) {
     // the clock moved the picture on
+  } else if (cine.on) {
+    // The film holds the picture where it is (John, 11 Nov: cinematic mode never moves the clock). A stop's
+    // play-on to its moment, or a skip's hours, used to carry on under the film: a night film turned to day in 8 s.
   } else if (drainRate > 0 && hour < shownTo) {
     hour = drainStep(drainRate, dt, hour, shownTo, slowNow(t), foresee?.from);
     if (hour >= shownTo) drainRate = 0;
