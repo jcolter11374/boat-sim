@@ -13,6 +13,7 @@
 import * as pw from "playwright";
 import { appendFileSync, readFileSync } from "node:fs";
 import { speedCheck } from "./speed.mjs";
+import { T, measurePace } from "./pace.mjs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const BROWSER = process.env.BROWSER ?? "chromium";
@@ -30,6 +31,7 @@ const must = (ok, msg) => {
 async function open(browser, path) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: "block" });
   const page = await ctx.newPage();
+  page.setDefaultTimeout(T(30_000)); // a click with no wait of its own: Playwright's 30 s, stretched on a slow machine (pace.mjs)
   const errors = [];
   const notes = [];
   page.on("console", (m) => {
@@ -67,7 +69,7 @@ async function tickBoat(r) {
 async function pressSetSail(page, opts = {}) {
   await page.click("#go", opts);
   const ask = page.locator("#ss-ask");
-  if ((await ask.count()) && (await ask.isVisible().catch(() => false))) await page.click("#ss-ask-new", { noWaitAfter: true, timeout: 15_000 });
+  if ((await ask.count()) && (await ask.isVisible().catch(() => false))) await page.click("#ss-ask-new", { noWaitAfter: true, timeout: T(15_000) });
 }
 
 async function helmStart(page, setup = async () => {}) {
@@ -101,7 +103,7 @@ async function openOrders(page) {
   // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
   // until it has fully slid in, then point at it, which keeps it open (the player is using it).
   for (let i = 0; i < 3; i++) {
-    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: T(15_000) }).catch(() => {});
     const there = await page
       .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
       .then(() => true, () => false);
@@ -172,7 +174,7 @@ async function practiceTriangle(page) {
   await page.waitForFunction(() => !window.__helm?.busy, null, { timeout: 3 * MIN }).catch(() => {});
   for (let i = 0; i < 3 && !(await page.evaluate(() => !!window.__wheel?.on)); i++) {
     await page.waitForFunction((s) => { const b = document.querySelector(s); return b && !b.disabled && b.offsetParent !== null; }, sel, { timeout: MIN }).catch(() => {});
-    await page.click(sel, { timeout: 15_000 }).catch(() => page.evaluate((s) => document.querySelector(s)?.click(), sel));
+    await page.click(sel, { timeout: T(15_000) }).catch(() => page.evaluate((s) => document.querySelector(s)?.click(), sel));
     await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 30_000 }).catch(() => {});
   }
   const on = await page.evaluate(() => !!window.__wheel?.on);
@@ -343,7 +345,7 @@ const CHECKS = {
         const a = document.getElementById("soundask");
         if (a) new MutationObserver(() => { if (!a.hidden) window.__askedSound = true; }).observe(a, { attributes: true });
       });
-      await page.click("#go", { timeout: 15_000 }).catch(() => {
+      await page.click("#go", { timeout: T(15_000) }).catch(() => {
         throw new CheckFail(`couldn't click "Set sail"`);
       });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
@@ -354,7 +356,7 @@ const CHECKS = {
         if (await page.evaluate(() => window.__helm.card || window.__helm.status?.over)) break;
         // Key 5 is "4 days a second" (key 1 is real time since T1) (the key hint); a key can't be blocked by a panel over the button.
         if (await page.evaluate(() => window.__helm.clock === 0)) {
-          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => page.keyboard.press("5"));
+          if (await fast.isVisible()) await fast.click({ noWaitAfter: true, timeout: T(10_000) }).catch(() => page.keyboard.press("5"));
           else await page.keyboard.press("5");
         }
         await page.waitForFunction(() => window.__helm.clock === 0 || window.__helm.error || window.__helm.card, null, { timeout: 4 * MIN }).catch(() => {});
@@ -364,7 +366,7 @@ const CHECKS = {
           const d = await page.evaluate(() => ({ text: document.getElementById("decidetext").textContent, btns: [...document.querySelectorAll("#decidebtns button")].map((b) => b.textContent) }));
           must(d.text.trim() && d.btns.length >= 2, `a decision showed without a question or choices: ${JSON.stringify(d)}`);
           await page.screenshot({ path: `play-${BROWSER}-decision.png` }).catch(() => {});
-          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
+          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: T(10_000) }).catch(() => {
             throw new CheckFail(`couldn't click "${d.btns[0]}" on the decision`);
           });
           await page.waitForFunction(() => document.getElementById("decide").hidden && window.__helm.clock > 0, null, { timeout: 20_000 }).catch(() => {
@@ -381,7 +383,7 @@ const CHECKS = {
       if (await page.locator("#soundask").count()) {
         const asked = await page.waitForFunction(() => !document.getElementById("soundask").hidden || window.__askedSound, null, { timeout: 75_000 }).then(() => true).catch(() => false);
         must(asked, `"Sound on?" was never asked (expected a minute in, or after the first call)`);
-        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: 5_000 }).then(() => true).catch(() => false));
+        const clicked = (await page.click("#soundno", { noWaitAfter: true, timeout: T(5_000) }).then(() => true).catch(() => false));
         const gone = await page.waitForFunction(() => document.getElementById("soundask").hidden, null, { timeout: 25_000 }).then(() => true).catch(() => false);
         must(gone, `the "Sound on?" question didn't go away${clicked ? ' after "No thanks"' : ""}`);
         out.push(`"Sound on?" asked, ${clicked ? 'closed with "No thanks"' : "closed by itself after 20 s"}`);
@@ -428,7 +430,7 @@ const CHECKS = {
       const b = page.locator("#b-wheel");
       must(await b.isVisible(), `no "Take the wheel" button on the cruiser`);
       const t0 = Date.now();
-      await b.click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {
+      await b.click({ noWaitAfter: true, timeout: T(10_000) }).catch(() => {
         throw new CheckFail(`couldn't click "Take the wheel"`);
       });
       await page.waitForFunction(() => window.__wheel?.on, null, { timeout: 60_000 }).catch(async () => {
@@ -735,7 +737,7 @@ const CHECKS = {
       must(lb, "no Leaderboard link on the card");
       const link = page.locator(`#result a[href="${lb.href}"]`).first();
       await link.scrollIntoViewIfNeeded().catch(() => {});
-      await link.click({ timeout: 15_000 }).catch((e) => {
+      await link.click({ timeout: T(15_000) }).catch((e) => {
         throw new CheckFail(`the card's Leaderboard link can't be clicked: ${String(e).split("\n")[0]}`);
       });
       await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: MIN }).catch(() => {
@@ -822,8 +824,8 @@ const CHECKS = {
       const menu = await page.evaluate(() => [...document.querySelectorAll("#title a, #title button")].filter((e) => e.offsetParent).map((e) => e.textContent.trim().split("\n")[0]));
       await page.screenshot({ path: `play-${BROWSER}-title.png` }).catch(() => {});
       // "Just watch the sea" lives under More since the one-front-door title (#437): open it first.
-      if (await page.locator("#t-more").count()) await page.click("#t-more summary", { timeout: 10_000 }).catch(() => {});
-      await page.click("#t-sea", { noWaitAfter: true, timeout: 10_000 }).catch(() => {
+      if (await page.locator("#t-more").count()) await page.click("#t-more summary", { timeout: T(10_000) }).catch(() => {});
+      await page.click("#t-sea", { noWaitAfter: true, timeout: T(10_000) }).catch(() => {
         throw new CheckFail(`couldn't click "Just watch the sea"`);
       });
       await page.waitForFunction(() => document.getElementById("title").hidden, null, { timeout: 10_000 }).catch(() => {
@@ -894,7 +896,7 @@ const CHECKS = {
       // 5. Watch a voyage, default view; 6-8. cinematic, three frames 10 s apart.
       await go("voyage.html", () => window.__replay && (window.__replay.frames ?? 0) > 30, 8000);
       await shot("05-voyage-default");
-      await page.click("#cinebtn", { noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+      await page.click("#cinebtn", { noWaitAfter: true, timeout: T(10_000) }).catch(() => {});
       for (const n of ["06", "07", "08"]) {
         await page.waitForTimeout(n === "06" ? 4000 : 10_000);
         await shot(`${n}-voyage-cinematic`);
@@ -942,7 +944,7 @@ const CHECKS = {
         await page.waitForTimeout(5000);
         const when = await page.evaluate(() => `${document.getElementById("clock")?.textContent} ${document.getElementById("local")?.textContent}`.replace(/[^\w.:+-]+/g, "_"));
         await shot(`night-${target}-panels-${when}`.slice(0, 80));
-        await page.click("#cinebtn", { noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+        await page.click("#cinebtn", { noWaitAfter: true, timeout: T(10_000) }).catch(() => {});
         await page.waitForTimeout(6000);
         await shot(`night-${target}-cinematic`);
         await page.keyboard.press("Escape");
@@ -973,7 +975,7 @@ const CHECKS = {
         await page.goto(SITE + "helm.html?practice", { waitUntil: "load", timeout: 2 * MIN });
         await page.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 3 * MIN }).catch(() => {});
         await page.evaluate(() => document.querySelector("#ss-course-opts .ss-pill")?.click()); // the triangle, on the Set sail card
-        await page.click("#go", { timeout: 30_000 }).catch(() => {});
+        await page.click("#go", { timeout: T(30_000) }).catch(() => {});
         await page.waitForFunction(() => window.__wheel?.on, null, { timeout: MIN }).catch(() => {});
         await page.waitForTimeout(8000);
         await shot(`${w}-practice-day`);
@@ -989,7 +991,7 @@ const CHECKS = {
         await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
         await page.waitForTimeout(4000);
         await shot(`${w}-helm-default`);
-        await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+        await page.click("#orders-tab", { timeout: T(15_000) }).catch(() => {});
         await page.waitForFunction(() => { const o = document.getElementById("orders"); return o?.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 }).catch(() => {});
         await page.hover("#orders h2", { timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(1500);
@@ -1036,7 +1038,7 @@ const CHECKS = {
       // of boat time), so turn at 10x until the wheel counts a tack and the wind line reads the other side, then back to 1x.
       const key = left(a) ? "ArrowLeft" : "ArrowRight";
       const tacks0 = await page.evaluate(() => window.__wheel?.wheel?.s?.tacks ?? 0);
-      await page.click('.w-rate button[data-x="10"], button[data-x="10"]', { timeout: 5000 }).catch(() => page.keyboard.press("4"));
+      await page.click('.w-rate button[data-x="10"], button[data-x="10"]', { timeout: T(5000) }).catch(() => page.keyboard.press("4"));
       await page.keyboard.down(key);
       await page.waitForFunction(([src, wasLeft, t0]) => {
         // Past the tack itself, keep turning until she's sailing on the new side (out of "too close").
@@ -1047,7 +1049,7 @@ const CHECKS = {
       await page.waitForTimeout(800);
       await page.keyboard.up(key);
       await page.waitForTimeout(4000);
-      await page.click('button[data-x="1"]', { timeout: 5000 }).catch(() => page.keyboard.press("1"));
+      await page.click('button[data-x="1"]', { timeout: T(5000) }).catch(() => page.keyboard.press("1"));
       await page.waitForTimeout(4000);
       const b = await wind();
       const tacks = (await page.evaluate(() => window.__wheel?.wheel?.s?.tacks ?? 0)) - tacks0;
@@ -1091,7 +1093,7 @@ const CHECKS = {
       }
       await page.goto(SITE + "voyage.html", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__replay && (window.__replay.frames ?? 0) > 30, null, { timeout: 3 * MIN }).catch(() => {});
-      await page.click("#cinebtn", { noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+      await page.click("#cinebtn", { noWaitAfter: true, timeout: T(10_000) }).catch(() => {});
       await page.waitForTimeout(5000);
       await shot("bow-voyage-cinematic");
       return `${shots.length} looks: ${shots.join(", ")}`;
@@ -1151,13 +1153,13 @@ const CHECKS = {
       const card = await page.evaluate(() => { const c = document.getElementById("ss-continue"); return { shown: !!c && !c.hidden, text: (c?.innerText ?? "").replace(/\s+/g, " ") }; });
       await shot("card");
       must(card.shown, "the Set sail card doesn't offer the saved crossing");
-      await page.click("#go", { noWaitAfter: true, timeout: 30_000 });
+      await page.click("#go", { noWaitAfter: true, timeout: T(30_000) });
       await page.waitForTimeout(1000);
       const ask = await page.evaluate(() => { const a = document.getElementById("ss-ask"); return { shown: !!a && !a.hidden, text: (a?.innerText ?? "").replace(/\s+/g, " ") }; });
       await shot("ask");
       must(ask.shown, "Set sail didn't ask before a new crossing ends the saved one");
       out.push(`card: "${card.text}"; ask: "${ask.text}"`);
-      await page.click("#ss-ask-keep", { noWaitAfter: true, timeout: 15_000 });
+      await page.click("#ss-ask-keep", { noWaitAfter: true, timeout: T(15_000) });
       await page.waitForFunction(() => /continue=1/.test(location.search) && window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await ready();
       await page.waitForTimeout(5000);
@@ -1265,7 +1267,7 @@ const CHECKS = {
       // 5. An order: send one, wait 3 s, leave without pausing; back and playing, the strip shows it.
       await play();
       await openOrders(page);
-      await page.click("#b-finish", { timeout: 15_000 });
+      await page.click("#b-finish", { timeout: T(15_000) });
       const sent = await page.evaluate(() => document.getElementById("c-orderv").textContent);
       await page.waitForTimeout(3000);
       t = await leave();
@@ -1372,7 +1374,7 @@ const CHECKS = {
       s = await soundState(page);
       must(!s.pressed && s.stored === "off", `N didn't turn sound off: button pressed ${s.pressed}, stored ${s.stored}`);
       const off1 = s.icon;
-      await page.click("#soundbtn", { noWaitAfter: true, timeout: 10_000 });
+      await page.click("#soundbtn", { noWaitAfter: true, timeout: T(10_000) });
       await page.waitForTimeout(800);
       s = await soundState(page);
       must(s.pressed && s.stored === "on" && s.contexts === 1, `the speaker button didn't turn sound on: pressed ${s.pressed}, stored ${s.stored}, ${s.contexts} AudioContext`);
@@ -1428,7 +1430,7 @@ const CHECKS = {
       s = await soundState(page);
       must(!s.pressed && s.stored === "off", `N didn't turn sound off: button pressed ${s.pressed}, stored ${s.stored}`);
       const off1 = `"${s.text}"`;
-      await page.click("#soundbtn", { noWaitAfter: true, timeout: 10_000 });
+      await page.click("#soundbtn", { noWaitAfter: true, timeout: T(10_000) });
       await page.waitForTimeout(800);
       s = await soundState(page);
       must(s.pressed && s.stored === "on", `the Sound button didn't turn sound on: pressed ${s.pressed}, stored ${s.stored}`);
@@ -1463,7 +1465,7 @@ const CHECKS = {
       if (!(await page.evaluate(() => Array.isArray(window.__sound?.played)))) throw new SkipCheck("this build has no sound log (Felix's played-log patch not deployed)");
       const played = () => page.evaluate(() => window.__sound.played.map((p) => ({ ...p })));
       const out = [];
-      await page.click("#go", { timeout: 15_000 });
+      await page.click("#go", { timeout: T(15_000) });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       await page.waitForTimeout(2000);
       must((await played()).length === 0, `moments logged with sound off: ${JSON.stringify(await played())}`);
@@ -1478,7 +1480,7 @@ const CHECKS = {
       for (let i = 0; i < 40; i++) {
         if (await page.evaluate(() => window.__helm.status?.over)) break;
         if (await page.evaluate(() => !document.getElementById("decide").hidden && document.querySelectorAll("#decidebtns button").length)) {
-          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: 10_000 }).catch(() => {});
+          await page.locator("#decidebtns button").first().click({ noWaitAfter: true, timeout: T(10_000) }).catch(() => {});
           await page.waitForTimeout(1000);
         }
         if (await page.evaluate(() => window.__helm.clock === 0 && !window.__helm.status?.over)) await page.keyboard.press("4");
@@ -1533,7 +1535,7 @@ const CHECKS = {
       };
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       if (!(await page.evaluate(() => typeof window.__traffic?.ships === "function"))) throw new SkipCheck("this build has no traffic hook (Marco's traffic patch not deployed)");
-      await page.click("#go", { timeout: 15_000 });
+      await page.click("#go", { timeout: T(15_000) });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       await page.click("#soundno", { timeout: 3000 }).catch(() => {});
       // Paused: traffic moves in boat time, and any fast-forward carries her off (Marco). The frame
@@ -1553,7 +1555,7 @@ const CHECKS = {
         await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
         await page.goto(SITE + "helm.html?ship=container&near=200", { waitUntil: "load", timeout: 2 * MIN });
         await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
-        await page.click("#go", { timeout: 15_000 });
+        await page.click("#go", { timeout: T(15_000) });
         await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
         await page.click("#soundno", { timeout: 3000 }).catch(() => {});
         await page.evaluate(() => { if (window.__helm.clock > 0) document.getElementById("t-pause")?.click(); });
@@ -1610,10 +1612,10 @@ const CHECKS = {
       const n1 = n;
       await film(3);
       out.push(`start card ${n - n1}`);
-      await page.click("#go", { timeout: 30_000 });
+      await page.click("#go", { timeout: T(30_000) });
       await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: 8 * MIN });
       must(!(await page.evaluate(() => window.__helm.error)), "Set sail failed");
-      await page.click("#soundno", { timeout: 5000 }).catch(() => {});
+      await page.click("#soundno", { timeout: T(5000) }).catch(() => {});
       await page.waitForFunction(() => !document.querySelector("#orders.open"), null, { timeout: 30_000 }).catch(() => {});
       await page.waitForTimeout(2000);
       // 3. Sailing at the helm (13 s), the clock running by itself as a new player sees it.
@@ -1828,6 +1830,9 @@ const LAUNCH = {
     : {}),
 };
 const browser = await pw[BROWSER].launch(LAUNCH);
+// How slowly this machine draws: click waits stretch by it (pace.mjs), and the report says so.
+const PACE = await measurePace(browser, SITE);
+console.log(`PACE ${BROWSER}: the sea at Low draws at ${PACE.frameMs} ms a frame here; click waits are stretched ${PACE.pace} times`);
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);

@@ -13,6 +13,7 @@
 import * as pw from "playwright";
 import { appendFileSync } from "node:fs";
 import { PAGES, checkPage } from "./live_visual_checks.mjs";
+import { T, measurePace } from "./playtest/pace.mjs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const MIN = 60_000;
@@ -31,6 +32,7 @@ const must = (ok, msg) => {
 async function open(browser, path, viewport = { width: 1400, height: 900 }) {
   const ctx = await browser.newContext({ viewport, bypassCSP: false, serviceWorkers: "block" });
   const page = await ctx.newPage();
+  page.setDefaultTimeout(T(30_000)); // a click with no wait of its own: Playwright's 30 s, stretched on a slow machine (playtest/pace.mjs)
   const errors = [];
   const notes = [];
   page.on("console", (m) => {
@@ -86,7 +88,7 @@ async function openOrders(page) {
   // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
   // until it has fully slid in, then point at it, which keeps it open (the player is using it).
   for (let i = 0; i < 3; i++) {
-    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: T(15_000) }).catch(() => {});
     const there = await page
       .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
       .then(() => true, () => false);
@@ -110,7 +112,9 @@ async function clickNamed(page, selector, what, opts = {}) {
 // The functional helm checks run on Low quality, as the smoke test does: on the
 // runner's software graphics, High spends the frame in the browser's own raster work
 // (Sam's profile, #293), which starved clicks. visual-helm keeps the default look.
-const HELM = "helm.html?quality=low";
+// HELM_QUERY adds to every helm page's address, to play the same checks with a switch thrown
+// (HELM_QUERY=cumulus=old: the sky without the new cloud heaps, to compare frame times on one machine).
+const HELM = `helm.html?quality=low${process.env.HELM_QUERY ? `&${process.env.HELM_QUERY}` : ""}`;
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
@@ -475,7 +479,7 @@ CHECKS["helm-small-window"] = {
     // stable, scrolled, not covered); with software graphics at about a frame a second
     // 10 s was too tight. Main's unscrollable card still fails at 30 s ("outside of
     // the viewport"), so the check still catches the bug (#288).
-    await page.click("#go", { trial: true, timeout: 30_000 }).catch(() => {
+    await page.click("#go", { trial: true, timeout: T(30_000) }).catch(() => {
       throw new CheckFail('"Set sail" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
     });
     return '"Set sail" is reachable at 960x540';
@@ -539,6 +543,9 @@ const LAUNCH = {
     : {}),
 };
 const browser = await pw[process.env.BROWSER ?? "chromium"].launch(LAUNCH);
+// How slowly this machine draws: click waits stretch by it (playtest/pace.mjs), and the report says so.
+const PACE = await measurePace(browser, SITE);
+console.log(`PACE: the sea at Low draws at ${PACE.frameMs} ms a frame here; click waits are stretched ${PACE.pace} times`);
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);

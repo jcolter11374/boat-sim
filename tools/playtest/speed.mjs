@@ -9,6 +9,8 @@
 //
 // Read-only: it only visits the public site.
 
+import { T } from "./pace.mjs";
+
 const MIN = 60_000;
 
 /** Runs before any page script: counts frames, long tasks and WebGL draws. */
@@ -195,7 +197,7 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
     await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
     const pressed = await now(page);
     const pressedAt = Date.now() - net.t0;
-    await page.click("#go", { noWaitAfter: true, timeout: 30_000 });
+    await page.click("#go", { noWaitAfter: true, timeout: T(30_000) });
     const ready = await when(page, () => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, Number(process.env.SPEED_SIM_MS) || 8 * MIN).catch(() => -1);
     const readyAt = Date.now() - net.t0;
     const st = await page.evaluate((late) => ({ err: late ? "the simulator did not start in time" : window.__helm.error, quality: window.__helm.quality, msgs: window.__spd.msgs }), ready < 0);
@@ -245,10 +247,10 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
       const j = { lingerMs: linger, titleKB: weigh(net, SITE).kB, titleWireKB: weigh(net, SITE).wireKB };
       if (!/never/.test(name)) {
         const left = Date.now();
-        await (more.hasTouch ? page.tap("#t-setsail", { noWaitAfter: true, timeout: 30_000 }) : page.click("#t-setsail", { noWaitAfter: true, timeout: 30_000 }));
+        await (more.hasTouch ? page.tap("#t-setsail", { noWaitAfter: true, timeout: T(30_000) }) : page.click("#t-setsail", { noWaitAfter: true, timeout: T(30_000) }));
         await page.waitForFunction(() => /helm\.html/.test(location.pathname) && window.__helm && window.__helm.frames > 2 && !document.getElementById("go")?.disabled, null, { timeout: 3 * MIN, polling: 50 });
         j.toCardMs = Date.now() - left;
-        await page.click("#go", { noWaitAfter: true, timeout: 30_000 });
+        await page.click("#go", { noWaitAfter: true, timeout: T(30_000) });
         const ok = await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: Number(process.env.SPEED_SIM_MS) || 8 * MIN, polling: 50 }).then(() => true).catch(() => false);
         j.toSailingMs = ok ? Date.now() - left : null;
         j.error = await page.evaluate(() => window.__helm.error || "");
