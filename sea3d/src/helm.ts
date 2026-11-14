@@ -36,7 +36,7 @@ import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
-import { ShortWaveRide } from "./boats/ride";
+import { ShortWaveRide, type KnockdownTiming } from "./boats/ride";
 import { Contact } from "./contact";
 import { heightAt, MixedSea as LiveSea } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
@@ -78,9 +78,10 @@ import { tapeItems, type TapeMark } from "./replay/skytape";
 import { Hud, setRacers, showStrip } from "./helm/hud";
 import { bareRacer, farBoatTag, raceLine } from "./helm/raceWords";
 import { bandLine, slideRoom } from "./framing";
+import { focusBoat, type Focus } from "./focus";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons, heightOf, type CinemaHost, type Moment } from "./cinema";
+import { Cinema, filmButtons, heightOf, knockdownShot, type CinemaHost, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
@@ -1309,11 +1310,12 @@ let finishing = false;
 const shake = new THREE.Vector3();
 const stillCamera = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function moment(e: ReplayEvent): void {
+function moment(e: ReplayEvent, side?: number): void {
   const now = clock.getElapsedTime();
   if (e.kind === "capsize") {
-    kick = { t: now, dir: Math.random() < 0.5 ? -1 : 1 };
-    ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
+    kick = { t: now, dir: side ?? (Math.random() < 0.5 ? -1 : 1) };
+    const k = ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
+    if (k) cutToKnockdown(k, now);
     contact?.slam(1); // under a breaking crest
     sound.crash();
     flash("spray");
@@ -1327,6 +1329,25 @@ function moment(e: ReplayEvent): void {
     slowUntil = now + 4;
   }
 }
+
+/**
+ * A knockdown is seen, not read (M5): the camera goes to her beam, on the side she is thrown
+ * towards, and holds there locked off while she goes over and comes back up, then returns to
+ * where it was. Not in the film (it has its own Knockdown sequence), not at the wheel (your
+ * hands are on the boat), not with reduced motion; a drag on the view takes the camera back.
+ */
+let knockCut: Focus | null = null;
+function cutToKnockdown(k: KnockdownTiming, now: number): void {
+  if (knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
+  const shot = knockdownShot(filmHost, k.side);
+  const off = shot.pos.sub(controls.target);
+  knockCut = focusBoat(camera, () => controls.target, {
+    easeMs: KNOCK_EASE_MS,
+    holdMs: Math.max(1500, (k.upright - now + 1) * 1000 - KNOCK_EASE_MS),
+    framing: (t) => ({ pos: t.clone().add(off), quat: shot.quat, fov: shot.fov }),
+  });
+}
+const KNOCK_EASE_MS = 400; // there by the time she is flat (ride.ts: 0.5 s and up)
 
 function flash(kind: "spray" | "alarm"): void {
   const el = $("flash");
@@ -1999,6 +2020,7 @@ function rigTop(): number {
 // the old orbit view and back; dragging the view takes it over until 4 s after you let go.
 const chase = new ChaseCam();
 controls.addEventListener("start", () => chase.drag(true));
+controls.addEventListener("start", () => knockCut?.cancel()); // a hand on the view takes the camera back
 controls.addEventListener("end", () => chase.drag(false));
 const chaseLook = new THREE.Vector3();
 let wheelFov = false;
@@ -3977,6 +3999,12 @@ filmButtons(cine, sound);
 Object.assign(page, {
   heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
   knockdown: () => ride?.knockdown ?? null,
+  /** True while the camera is on a knockdown (the cut outside the film). */
+  knockCut: (): boolean => !!knockCut,
+  /** Throw the boat flat now, as a recorded knockdown does (for tests and pictures). */
+  knock: (side?: number): void => {
+    moment({ h: hour, kind: "capsize" } as ReplayEvent, side);
+  },
 });
 /** What the frame loop last saw, for the film: speed through the water (m/s) and where. */
 const film = { stw: 0, lat: NaN, lon: NaN };
@@ -4218,7 +4246,7 @@ function phoneBand(): { top: number; bottom: number } {
 }
 function frameBoat(dt: number): void {
   hideStandIn();
-  const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card;
+  const want = page.ready && !wheel.on && !cine.on && !arrival && !page.card && !knockCut; // the knockdown cut composes its own frame
   // Before the game is ready too (the start card, the one-click loading view): the boat on a third,
   // the horizon lower, never dead centre (Ines).
   const waiting = !page.ready && !PRACTICE && !wheel.on && !cine.on && page.scene !== "arrival"; // the finish scene composes its own frame
@@ -4592,6 +4620,7 @@ renderer.setAnimationLoop(() => {
   wheelCamera(dt, t);
   markPointer();
   if (page.scene === "arrival" && arrival) {
+    knockCut?.cancel();
     // The finish scene's own shot: past the boat to Cabo da Roca (helm/arrivalShot.ts).
     arrivalT += dt;
     const s = arrivalShot(filmHost, bearing(arrival, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]), arrivalStill ? 0 : arrivalT, arrivalHeld ?? undefined);
@@ -4603,7 +4632,11 @@ renderer.setAnimationLoop(() => {
       camera.updateProjectionMatrix();
     }
     page.arrivalShot = { cape: s.cape, boat: s.boat };
-  } else if (!cine.update(dt)) controls.update();
+  } else {
+    if (knockCut && (cine.on || wheelNow)) knockCut.cancel();
+    if (knockCut && !knockCut.update(dt)) knockCut = null;
+    if (!knockCut && !cine.update(dt)) controls.update();
+  }
   frameBoat(dt);
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
