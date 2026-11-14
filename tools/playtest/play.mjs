@@ -3439,7 +3439,7 @@ const CHECKS = {
           await p.evaluate(() => { const d = [...document.querySelectorAll("#boatpick details.about")].find((x) => /Beneteau/.test(x.previousElementSibling?.textContent ?? "")); d?.scrollIntoView({ block: "center" }); });
           await p.waitForTimeout(500);
           shots.push(await emit(p, "picker-beneteau-open"));
-          for (const want of ["Pearson 31-2 (our model)", "Beneteau First 31.7"]) if (!pick.names.includes(want)) bad.push(`picker has no "${want}" (rows: ${pick.names.join(" / ")})`);
+          for (const want of ["Pearson 31-2 (our model)", "Beneteau First 31.7"]) if (!pick.names.some((n) => n.startsWith(want))) bad.push(`picker has no "${want}" (rows: ${pick.names.join(" / ")})`);
           if (/Cruiser 31/.test(pick.text)) bad.push(`picker still says "Cruiser 31"`);
           for (const b of pick.boxes) if (b.summary !== "Specs and history" || b.nums < 1 || b.words < 40 || b.links < 1 || !b.shown) bad.push(`${b.row}: box "${b.summary}" ${b.nums} numbers, ${b.words} chars of history, ${b.links} source links${b.shown ? "" : ", did not unfold"}`);
           out.push(`picker rows: ${pick.names.join(" / ")}; boxes: ${pick.boxes.map((b) => `${b.row} [${b.nums} numbers, ${b.words} chars, ${b.links} links${b.shown ? "" : ", NOT unfolded"}]`).join("; ")}`);
@@ -4233,6 +4233,67 @@ const CHECKS = {
       }
       out.push(`frames ${shots.join(", ")}`);
       console.log(`PAINT ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
+  // #530: the Randolph boat's detailed model loads only where she's shown. Four scenes, 1280: the title with the
+  // Rev C5 as my boat, a race against the Rev C5, the Boatyard on the Rev C5, Set sail with the Rev B. Each logs the
+  // boat models (.glb) the page fetched and takes a frame (look-randolph-<browser>-*.jpg) to judge the stand-in by eye.
+  "randolph-scenes": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-randolph-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const scene = async (name, fn) => {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const glb = [], errs = [];
+        p.on("response", (r) => { if (/\.glb(\?|$)/.test(r.url())) glb.push(`${r.url().split("/").pop().split("?")[0]} ${r.status()}`); });
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        try {
+          await fn(p);
+          await p.waitForLoadState("networkidle").catch(() => {});
+          await p.waitForTimeout(8000);
+          shots.push(await emit(p, name));
+          const r = glb.filter((g) => /randolph|revc|revb/i.test(g));
+          if (!r.length) bad.push(`${name}: no Randolph model fetched (models: ${glb.join(", ") || "none"})`);
+          else if (r.some((g) => !/ 200$| 304$/.test(g))) bad.push(`${name}: Randolph model ${r.join(", ")}`);
+          if (errs.length) bad.push(`${name}: page errors ${errs.slice(0, 2).join(" / ")}`);
+          out.push(`${name}: models ${glb.join(", ") || "none"}`);
+        } finally { await ctx.close().catch(() => {}); }
+      };
+      const pick = async (p, id) => {
+        await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 10, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.evaluate(() => document.getElementById("t-change")?.click());
+        await p.waitForFunction((v) => document.querySelector(`#boatpick input[value="${v}"]`), id, { timeout: MIN }).catch(() => { throw new CheckFail(`no ${id} in the picker`); });
+        await p.evaluate((v) => { document.querySelector(`#boatpick input[value="${v}"]`).click(); document.querySelector("#boatpick .go").click(); }, id);
+      };
+      await scene("title-revc", async (p) => { await pick(p, "revc"); await p.waitForTimeout(3000); });
+      await scene("race-vs-revc", async (p) => {
+        await p.goto(SITE + "helm.html?quality=high&race=kayak,revc&launch=4", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 10 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.evaluate(() => (document.getElementById("go") || document.getElementById("start"))?.click());
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+      });
+      await scene("yard-revc", async (p) => {
+        await p.goto(SITE + "boatyard.html?quality=high#base=revc", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+      });
+      await scene("setsail-revb", async (p) => {
+        await pick(p, "revb");
+        await p.waitForTimeout(1500);
+        await p.evaluate(() => document.getElementById("t-setsail")?.click());
+        await p.waitForURL(/helm\.html/, { timeout: MIN }).catch(() => {});
+        await p.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy, null, { timeout: 2 * MIN }).catch(() => {});
+        await p.evaluate(() => document.getElementById("go")?.click());
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+      });
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`RANDOLPH ${BROWSER}: ${out.join(" || ")}`);
       must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
       return out.join("; ");
     },
