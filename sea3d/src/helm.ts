@@ -462,6 +462,8 @@ const page = {
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
   force: { wind: -1, hs: -1, skyHours: 0, failed: [] as string[] },
   busy: false,
+  /** A "Your call" card is on its way: the clock is stopped and the picture is playing on to it. */
+  callComing: false,
   stops: [] as Stop[],
   card: null as Card | null,
   /** Whether each boat crossed the race's start line, for the results card. */
@@ -1412,6 +1414,7 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
   if (busy || !page.ready || page.status?.over) return;
   setRate(0); // a skip pauses the clock: you see where it got to
   ++decisionSeq; // a look under way is for a moment that is gone
+  setCallComing(false);
   looking = false;
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
@@ -1527,7 +1530,31 @@ function applyPending(all = false): void {
 
 /** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
 let rateAtEnd = 0;
+/** A call is decided and its card is waiting for the picture to reach its moment. Until the card
+ * is up, ▶ or a speed cannot carry on past it (Nina, 14 Nov: at 4 days a second a quick press
+ * lost 8 of 11 calls with no word). The press picks the speed to carry on at after the call. */
+let callComing = false;
+function setCallComing(on: boolean): void {
+  callComing = on;
+  page.callComing = on;
+  showClock();
+}
+/** A speed the player pressed (▶, a speed button, Space or 1 to 5). With a "Your call" card up it
+ * cannot carry on past the card ("Time is paused until you choose"): a quick second press as the
+ * card appeared used to hide it with no choice made. The speed is kept for after the call. */
+function playerRate(r: number): void {
+  if (r > 0 && !$("decide").hidden) {
+    lastRate = r;
+    return;
+  }
+  setRate(r);
+}
 function setRate(r: number, drain = false): void {
+  if (r > 0 && callComing) {
+    lastRate = r;
+    if (!drainRate) drainRate = r; // paused by hand before the card: the picture plays on to it
+    return;
+  }
   // Your voyage is over and the picture is playing out to the results: a speed key (1 to 5, Space) can't start the
   // clock again. It used to, and the run-out stopped where it was with no results card ever coming.
   if (r > 0 && !SPECTATE && page.status?.over) return;
@@ -1558,7 +1585,7 @@ function showClock(): void {
   pause.textContent = rate === 0 ? "▶" : "❚❚";
   pause.title = rate === 0 ? "Carry on (space bar)" : "Pause (space bar)";
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && rateOf(b) === rate));
-  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
+  $("timestate").textContent = rate === 0 && callComing ? "Paused: your call is coming up" : rate === 0 && !$("decide").hidden ? "Paused: make your call" : rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
 }
 
 /** One short run of the simulator, ahead of the picture. */
@@ -1641,8 +1668,8 @@ function tickClock(dt: number): boolean {
   return true;
 }
 
-for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(rateOf(b)));
-$("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => playerRate(rateOf(b)));
+$("t-pause").addEventListener("click", () => playerRate(rate ? 0 : lastRate));
 // Keys, so it feels like steering rather than filling in a form (Leo's review): Space
 // pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
 const SPEED_KEYS: Record<string, number> = { Digit1: REAL_TIME, Digit2: 1, Digit3: 6, Digit4: 24, Digit5: 96, Numpad1: REAL_TIME, Numpad2: 1, Numpad3: 6, Numpad4: 24, Numpad5: 96 };
@@ -2294,8 +2321,8 @@ addEventListener("keydown", (e) => {
   const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
-    setRate(rate ? 0 : lastRate);
-  } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
+    playerRate(rate ? 0 : lastRate);
+  } else if (SPEED_KEYS[e.code]) playerRate(SPEED_KEYS[e.code]);
   else if (e.key === "?" || e.code === "KeyK") {
     hideKeyHint();
     hud.keys();
@@ -2632,6 +2659,7 @@ function maybeRouteCheck(st: Status): boolean {
   routeLookedH = h;
   looking = true; // the simulator waits; the clock runs on (no "Paused" for a look)
   const seq = ++decisionSeq;
+  setCallComing(false); // a card still on its way is for a moment this look replaces
   const resume = () => {
     if (seq === decisionSeq) looking = false;
   };
@@ -2640,8 +2668,11 @@ function maybeRouteCheck(st: Status): boolean {
     if (seq !== decisionSeq) return;
     looking = false;
     setRate(0, true);
+    setCallComing(true);
     whenAt(h, () => {
-      if (seq === decisionSeq && rate === 0 && !game.status?.over) show();
+      if (seq !== decisionSeq) return; // a later question has taken its place
+      setCallComing(false);
+      if (rate === 0 && !game.status?.over) show();
     });
   };
   (async () => {
@@ -2815,14 +2846,19 @@ function maybeDecide(force = false): boolean {
   // The Stream may come out as only a note (Elena's rule), so it looks first with the clock
   // running and pauses only for a card; a storm always asks, so it pauses now.
   const stream = d.kind === "stream";
-  if (stream) looking = true;
-  else setRate(0, true);
+  if (stream) {
+    looking = true;
+    setCallComing(false);
+  } else {
+    setRate(0, true);
+    setCallComing(true);
+  }
   page.decisions.push({ kind: d.kind, day: st.day });
   // See it coming (Rosa): over the last half day before the call the picture slows to an hour
   // a second and the camera turns toward the problem, so the pause lands on a picture of it.
   foresee = { from: st.day * 24 - 12, h: st.day * 24, look: d.look ?? null };
-  // Asked once the picture gets there, so the question and the view agree. Carrying on
-  // before then skips it; a later question replaces it.
+  // Asked once the picture gets there, so the question and the view agree. The clock cannot
+  // carry on before then (callComing); a later question replaces it.
   const seq = ++decisionSeq;
   // Each option's stake against the ghost in 2 days, from the forecast as issued (never the
   // truth), while the picture catches up. An older simulator, or a failure: no stakes.
@@ -2847,15 +2883,20 @@ function maybeDecide(force = false): boolean {
         return;
       }
       setRate(0, true);
+      setCallComing(true);
       whenAt(h, () => {
-        if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, o, has);
+        if (seq !== decisionSeq) return;
+        setCallComing(false);
+        if (rate === 0 && !game.status?.over) showDecision(d, o, has);
       });
     });
     return true;
   }
   whenAt(h, async () => {
     const o = await stakes;
-    if (seq !== decisionSeq || rate !== 0 || game.status?.over) return;
+    if (seq !== decisionSeq) return;
+    setCallComing(false);
+    if (rate !== 0 || game.status?.over) return;
     showDecision(d, o, has);
   });
   return true;
@@ -2952,6 +2993,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     box.append(b);
   }
   $("decide").hidden = false;
+  showClock();
   // On the right, it sits 12 px under the chart, whatever the chart's size (Ines).
   const chartBox = document.getElementById("mapbox")?.getBoundingClientRect();
   $("decide").style.top = withMap && chartBox && chartBox.height > 0 ? `${Math.round(chartBox.bottom + 12)}px` : "";
