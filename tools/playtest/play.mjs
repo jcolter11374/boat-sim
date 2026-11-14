@@ -4425,6 +4425,49 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #558 cumulus: frame rate before (?cumulus=old) and after, at 390x844 on the runner's software graphics,
+  // on the title and while sailing, at Low and at the page's own choice. Each 30 s, alternating old/new.
+  "cumulus-fps": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const rows = [];
+      const measure = async (url, counter, sail) => {
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + url, { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction((c) => (c === "sea" ? window.__sea3d?.frames : window.__helm?.frames) > 5, counter, { timeout: 3 * MIN }).catch(() => {});
+          if (sail) {
+            await p.waitForFunction(() => document.querySelector("#go") && !window.__helm?.busy, null, { timeout: 2 * MIN }).catch(() => {});
+            await p.evaluate(() => document.getElementById("go")?.click());
+            await p.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 10, null, { timeout: 3 * MIN }).catch(() => {});
+          }
+          await p.waitForLoadState("networkidle").catch(() => {});
+          await p.waitForTimeout(10_000);
+          const get = () => p.evaluate((c) => ({ f: (c === "sea" ? window.__sea3d?.frames : window.__helm?.frames) ?? 0, t: performance.now() }), counter);
+          const a = await get();
+          await p.waitForTimeout(30_000);
+          const b = await get();
+          return ((b.f - a.f) / ((b.t - a.t) / 1000));
+        } finally { await ctx.close().catch(() => {}); }
+      };
+      for (const [scene, base, counter, sail] of [["title", "?", "sea", false], ["sailing", "helm.html?", "helm", true]]) {
+        for (const q of ["quality=low", ""]) {
+          const r = {};
+          for (const v of ["old", "new", "old", "new"]) {
+            const url = `${base}${[q, v === "old" ? "cumulus=old" : ""].filter(Boolean).join("&")}`;
+            (r[v] ??= []).push(await measure(url, counter, sail));
+          }
+          const avg = (xs) => xs.reduce((x, y) => x + y, 0) / xs.length;
+          rows.push(`${scene} ${q || "auto"}: old ${r.old.map((x) => x.toFixed(2)).join("/")} -> new ${r.new.map((x) => x.toFixed(2)).join("/")} fps (new/old ${(avg(r.new) / avg(r.old) * 100).toFixed(0)}%)`);
+        }
+      }
+      console.log(`CUMULUS ${BROWSER}: ${rows.join(" || ")}`);
+      return rows.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
