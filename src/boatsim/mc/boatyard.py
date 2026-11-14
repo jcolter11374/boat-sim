@@ -62,13 +62,27 @@ class Build:
     note: str = ""  # behind the name's "i": our-model notes, the full list of changes
 
 
-BOAT_NAMES = {"kayak": "v4 kayak", "revc": "Randolph Rev C", "revb": "Randolph Rev B"}
+BOAT_NAMES = {
+    "kayak": "v4 kayak",
+    "revc": "Randolph Rev C",
+    "revb": "Randolph Rev B",
+    "stock_pearson31_2": "Pearson 31-2",
+    "stock_cruiser31": "Beneteau First 31.7",
+}
 # The names a player reads (Leo, quality audit item 9). Our model of their boats is
 # said behind the "i" (MODEL_NOTE), not in the name. configs/randolph_rev_c.yaml is C5 (#304).
-LABEL_NAMES = {"kayak": "Our kayak", "revc": "Randolph Rev C5", "revb": "Randolph Rev B"}
+LABEL_NAMES = {
+    "kayak": "Our kayak",
+    "revc": "Randolph Rev C5",
+    "revb": "Randolph Rev B",
+    "stock_pearson31_2": "Pearson 31-2",
+    "stock_cruiser31": "Beneteau First 31.7",
+}
 MODEL_NOTE = {
     "revc": "Our model of the Randolph team's Rev C5, from their published design.",
     "revb": "Our model of the Randolph team's earlier Rev B, from their published design.",
+    "stock_pearson31_2": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
+    "stock_cruiser31": "Our model, from Beneteau's published specs and an ORC certificate.",
 }
 BARE_BONES = "k-p15-thr.one-t200-sol.solar-200-bat.one-50ah-mppt.one-mppt-brain.one-box-beacon.none-ais.none-paint.none"
 MAX_PHRASES = 2
@@ -138,7 +152,11 @@ def _kayak(choices: dict) -> Build:
         catalog.BASES[base],
         label,
         Variant("boatyard", label, changes),
-        {**({"base": base} if base != "kayak" else {}), **picked, "cruise_w": cruise},
+        {
+            **({"base": base} if base != "kayak" else {}),
+            **picked,
+            **({"cruise_w": cruise} if cruise is not None else {}),
+        },
         note,
     )
 
