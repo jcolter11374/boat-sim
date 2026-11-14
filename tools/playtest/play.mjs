@@ -5262,6 +5262,52 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Elena, #603: one stormy voyage hour (the default launch's gale near hour 123.6), the clock stopped,
+  // the sky run forward with __helm.force.skyHours to the sun at -4, -8 and -12 degrees, then deep night
+  // (rain curtains, if the hour's logged rain has any). 1280, helm view.
+  "dusk-storm": {
+    manual: true,
+    path: "helm.html?quality=medium",
+    run: async (page) => {
+      if (BROWSER !== "chromium") throw new SkipCheck("frames in Chromium only");
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForFunction(() => document.querySelector("#go") && window.__helm && window.__helm.frames > 3, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.evaluate(() => document.getElementById("go")?.click());
+      await page.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 10, null, { timeout: 5 * MIN }).catch(() => {});
+      await page.keyboard.press("4");
+      const t0 = Date.now();
+      while (Date.now() - t0 < 40 * MIN) {
+        const st = await page.evaluate(() => { const d = document.getElementById("decide"); return { hour: window.__helm.hour, card: !!d && !d.hidden && d.getClientRects().length > 0, clock: window.__helm.clock, coming: !!window.__helm.callComing }; });
+        if (st.hour >= 123.3) break;
+        if (st.card) { await page.evaluate(() => document.querySelector("#decidebtns button")?.click()); await page.waitForTimeout(500); }
+        if (st.hour > 115) await page.keyboard.press("2"); else if (!st.coming && (st.clock === 0 || st.card)) await page.keyboard.press("4");
+        await page.waitForTimeout(st.hour > 115 ? 150 : 400);
+      }
+      await page.evaluate(() => { if (window.__helm.clock !== 0) document.getElementById("t-pause")?.click(); });
+      await page.keyboard.press("Space").catch(() => {});
+      await page.waitForTimeout(1500);
+      if (await page.evaluate(() => window.__helm.clock !== 0)) await page.keyboard.press("Space");
+      await page.evaluate(() => { const o = document.getElementById("orders-x"); o?.click(); });
+      const at = await page.evaluate(() => ({ hour: +window.__helm.hour.toFixed(2), wind: document.getElementById("c-windv")?.textContent, el: +window.__helm.cine.host.sunEl().toFixed(1) }));
+      const out = [`hour ${at.hour}, ${at.wind}, sun ${at.el} deg`];
+      const emit = async (name) => { const path = `look-dusk-chromium-${name}.jpg`; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); } };
+      await emit("0-day");
+      let sh = 0;
+      for (const target of [-4, -8, -12, -25]) {
+        for (let i = 0; i < 400; i++) {
+          const el = await page.evaluate((x) => { window.__helm.force.skyHours = x; return window.__helm.cine.host.sunEl(); }, sh);
+          if (el <= target && sh > 0) break;
+          sh += 0.05;
+        }
+        await page.waitForTimeout(5000);
+        const el = await page.evaluate(() => +window.__helm.cine.host.sunEl().toFixed(1));
+        out.push(`sky +${sh.toFixed(2)} h: sun ${el}`);
+        await emit(target === -25 ? "night" : `sun${target}`);
+      }
+      console.log(`DUSK: ${out.join("; ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
