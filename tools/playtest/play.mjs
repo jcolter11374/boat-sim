@@ -3557,6 +3557,80 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Set sail sweep: Pearson 31-2 from the picker (title and Set sail frames of her front sail), sails from Set sail, no power control,
+  // and frames of her sails at Set sail and after a few days (look-stock-pearson-<browser>-*.jpg).
+  "stock-pearson": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-stock-pearson-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const ctx = await page.context().browser().newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
+      const p = await ctx.newPage();
+      const errs = [];
+      p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 160)));
+      try {
+        await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 10, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.evaluate(() => document.getElementById("t-change")?.click());
+        await p.waitForFunction(() => document.querySelector("#boatpick label"), null, { timeout: MIN }).catch(() => {});
+        const pick = await p.evaluate(() => {
+          const i = [...document.querySelectorAll('#boatpick input[name="boatpick"]')].find((x) => x.value === "stock_pearson31_2" || /Pearson/.test(x.closest("label")?.textContent ?? ""));
+          if (!i) return { found: false, names: [...document.querySelectorAll("#boatpick label b")].map((b) => b.textContent.trim()) };
+          const label = i.closest("label");
+          const d = label?.nextElementSibling?.matches("details.about") ? label.nextElementSibling : null;
+          if (d) d.open = true;
+          d?.scrollIntoView({ block: "center" });
+          i.click();
+          return { found: true, value: i.value, name: label?.querySelector("b")?.textContent.trim(), fact: label?.querySelector("small")?.textContent.trim(), box: d ? { summary: d.querySelector("summary")?.textContent.trim(), nums: d.querySelectorAll("dt").length, words: [...d.querySelectorAll("p:not(.src)")].map((x) => x.textContent).join(" ").length, links: d.querySelectorAll(".src a").length, h: Math.round(d.getBoundingClientRect().height) } : null };
+        });
+        if (!pick.found) throw new CheckFail(`the picker has no Pearson (rows: ${pick.names.join(" / ")})`);
+        await p.waitForTimeout(600);
+        shots.push(await emit(p, "picker"));
+        if (pick.box && (pick.box.summary !== "Specs and history" || pick.box.nums < 1 || pick.box.words < 40 || pick.box.links < 1 || pick.box.h < 40)) bad.push(`Pearson box thin: ${JSON.stringify(pick.box)}`);
+        out.push(`picker row "${pick.name}" (${pick.value}) "${pick.fact}"; box ${pick.box ? `${pick.box.nums} numbers, ${pick.box.words} chars, ${pick.box.links} links, ${pick.box.h} px open` : "none"}`);
+        await p.evaluate(() => document.querySelector("#boatpick .go")?.click());
+        await p.waitForTimeout(1500);
+        const chip = await p.evaluate(() => document.getElementById("topbar-boat")?.textContent.trim() ?? "");
+        await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 10, null, { timeout: 2 * MIN }).catch(() => {});
+        await p.waitForLoadState("networkidle").catch(() => {});
+        await p.waitForTimeout(8000);
+        for (let i = 1; i <= 3; i++) { shots.push(await emit(p, `title-${i}`)); await p.waitForTimeout(5000); }
+        await p.evaluate(() => document.getElementById("t-setsail")?.click());
+        await p.waitForURL(/helm\.html/, { timeout: MIN }).catch(() => {});
+        await p.waitForFunction(() => document.querySelector("#go"), null, { timeout: 2 * MIN }).catch(() => {});
+        await p.waitForFunction(() => !window.__helm?.busy, null, { timeout: 2 * MIN }).catch(() => {});
+        await p.evaluate(() => document.getElementById("go")?.click());
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForTimeout(6000);
+        const st = () => p.evaluate(() => {
+          const vis = (id) => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"; };
+          return { day: window.__helm?.status?.day ?? null, over: !!window.__helm?.status?.over, err: window.__helm?.error ?? null, windOnly: document.body.classList.contains("wind-only"), power: ["powerrow", "power", "powerhint"].filter(vis), top: document.getElementById("topbar-boat")?.textContent.trim() ?? "", url: location.search };
+        });
+        const a = await st();
+        shots.push(await emit(p, "setsail-1"));
+        await p.waitForTimeout(5000);
+        shots.push(await emit(p, "setsail-2"));
+        // Let her sail a few days at 4 days a second, then look again.
+        await p.keyboard.press("5");
+        await p.waitForFunction((d0) => (window.__helm?.status?.day ?? 0) > (d0 ?? 0) + 2 || window.__helm?.status?.over, a.day, { timeout: 4 * MIN }).catch(() => {});
+        await p.keyboard.press("1");
+        await p.waitForTimeout(4000);
+        const b = await st();
+        shots.push(await emit(p, "later"));
+        if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
+        if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
+        // She has a motor: the power control may show.
+        if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
+        if (!/Pearson/.test(chip) || !/Pearson/.test(a.top)) bad.push(`top bar does not say Pearson (title "${chip}", helm "${a.top}")`);
+        out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
+        out.push(`frames ${shots.join(", ")}`);
+      } finally { await ctx.close().catch(() => {}); }
+      console.log(`STOCKPEARSON ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   // Set sail sweep: Beneteau First 31.7 from the picker, sails from Set sail, no power control,
   // and frames of her sails at Set sail and after a few days (look-stock-beneteau-<browser>-*.jpg).
   "stock-beneteau": {
