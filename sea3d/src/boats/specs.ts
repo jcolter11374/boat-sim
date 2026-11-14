@@ -182,7 +182,7 @@ export const STOCK_HULL: Record<StockKey, HullParams> = {
 /** The stock boats you can pick in Set sail. Maya held all but the keelboats back on 11 Nov (the
  * dinghy and cat capsize in squalls, and the sandbox had no rain yet); John, 13 Nov: every built boat
  * goes in, one at a time, each checked on the water first. */
-export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31", "stock_pearson31_2", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14"];
+export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31", "stock_pearson31_2", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14", "stock_beachcat16"];
 export const isStock = (k: string): k is StockKey => k in STOCK;
 /** The names a player sees for the stock boats: their real make and model (John's decision B4, 12 Nov:
  * "brands are in"), each our own model of it. The same in the boat picker, on the Set sail card and as
