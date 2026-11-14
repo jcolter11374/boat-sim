@@ -427,14 +427,16 @@ def standard_components(
         # polar_factor. GUESS.
         from boatsim.autonomy.sailing import tactician_for
 
+        # With the tactician switched off (a Boatyard part) base plans within the
+        # whole circle and the boat's own steering keeps her out of the no-go zone.
         tac = tactician_for(vessel)
         f = ForecastReplanPolicy.polar_factor
         base = Policy(
             route=route,
             polar=polar,
             boat_speed=f * polar.speed_ms(7.0, 100.0),
-            min_twa_deg=tac.min_twa_deg,
-            max_twa_deg=tac.max_twa_deg,
+            min_twa_deg=tac.min_twa_deg if tac else 0.0,
+            max_twa_deg=tac.max_twa_deg if tac else 180.0,
         )
     return Components(
         env=env,
