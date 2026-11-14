@@ -29,12 +29,16 @@ Reading needs only numpy, so it runs in Pyodide.
 from __future__ import annotations
 
 import io
+import json
 import math
+from bisect import bisect_right
 from datetime import date, datetime, timedelta
+from itertools import pairwise
+from pathlib import Path
 
 import numpy as np
 
-from boatsim.oceandata.grid import Box, GridSeries
+from boatsim.oceandata.grid import Box, GridSeries, OutsideCoverage, to_datetime64
 from boatsim.types import EnvState
 
 CORRIDOR = Box(lat_min=28.0, lat_max=50.0, lon_min=-78.0, lon_max=-8.0)
@@ -124,43 +128,136 @@ def _times(z, key: str) -> np.ndarray:
     return z[key].astype("datetime64[s]")
 
 
+# Each time axis and the stored fields on it. A bundle split by month (split()
+# below) keeps the axes whole in its "static" file and these fields in the parts.
+AXES = {
+    "t_weather": ("wind_u", "wind_v", "hs", "tp", "wave_dir", "cloud_fraction"),
+    "t_daily": ("air_temp", "clearness"),
+    "t_rain": ("rain",),
+    "t_current": ("current_u", "current_v"),
+}
+
+
+class WeatherNotLoaded(Exception):
+    """A split bundle was asked for a time whose month hasn't been added yet.
+    On purpose not an OutsideCoverage or a ValueError: code that shortens a
+    forecast at the end of the weather must never take a missing month for the
+    end. The page fetches the part named here and asks again."""
+
+    def __init__(self, part: str):
+        super().__init__(f"WEATHER_PART {part}")
+        self.part = part
+
+
+class PartSeries:
+    """A GridSeries whose values arrive a part at a time (a bundle split by
+    month). The whole time axis is known from the start; each part holds its
+    own steps and the first step of the next part, so every sample has both of
+    its bracketing steps in one part and comes out exactly as from the whole
+    series: the same steps, the same weights, the same arithmetic."""
+
+    def __init__(self, times, lats, lons, names, keys, starts):
+        self.times = np.asarray(times).astype("datetime64[s]")
+        self.lats = np.asarray(lats, dtype=np.float64)
+        self.lons = np.asarray(lons, dtype=np.float64)
+        self.fields = dict.fromkeys(names)  # the names, as GridSeries.fields has them
+        self._t = self.times.astype(np.int64).tolist()
+        self._keys = list(keys)
+        self._starts = [int(i) for i in starts]  # each part's first step on the axis
+        self._first = [self._t[i] for i in self._starts]
+        self._parts: dict[int, GridSeries] = {}
+
+    def add(self, n: int, fields: dict[str, np.ndarray]) -> None:
+        i0 = self._starts[n]
+        i1 = self._starts[n + 1] if n + 1 < len(self._starts) else len(self._t) - 1
+        nt = len(next(iter(fields.values())))
+        if nt != i1 - i0 + 1:
+            raise ValueError(f"part {self._keys[n]} has {nt} steps, expected {i1 - i0 + 1}")
+        self._parts[n] = GridSeries(self.times[i0 : i1 + 1], self.lats, self.lons, fields)
+
+    def sample(self, t, lat: float, lon: float, names) -> dict[str, float]:
+        t64 = to_datetime64(t)
+        ts = int(t64.astype(np.int64))
+        if ts < self._t[0] or ts > self._t[-1]:
+            raise OutsideCoverage(f"time {t64} is outside {self.times[0]}..{self.times[-1]}")
+        # The last part that starts at or before t: a time on a boundary is read
+        # from the part it opens, as the whole series reads it (weight 0 on the
+        # step after).
+        n = bisect_right(self._first, ts) - 1
+        g = self._parts.get(n)
+        if g is None:
+            raise WeatherNotLoaded(self._keys[n])
+        return g.sample(t64, lat, lon, names)
+
+
+def _source(source):
+    if isinstance(source, (bytes, bytearray, memoryview)):
+        return io.BytesIO(bytes(source))
+    return source
+
+
+def _weather_fields(z) -> dict[str, np.ndarray]:
+    return {
+        **{k: _unpack(z, k) for k in ("wind_u", "wind_v", "hs", "tp", "cloud_fraction")},
+        **_wave_vectors(z),
+    }
+
+
 class BundleEnvironment:
-    """Environment.sample(t, lat, lon) from a forcing bundle (path or bytes)."""
+    """Environment.sample(t, lat, lon) from a forcing bundle (path or bytes).
+
+    A whole bundle is ready at once. The static file of a split bundle
+    (split()) gives an environment that knows the season but holds no weather
+    yet: add_part() each month as it arrives; sampling a month that isn't there
+    raises WeatherNotLoaded. The values are the whole bundle's, bit for bit."""
 
     def __init__(self, source):
-        if isinstance(source, (bytes, bytearray, memoryview)):
-            source = io.BytesIO(bytes(source))
-        with np.load(source) as z:
+        self.parts: list[str] = []  # a split bundle's part names, in time order
+        self.loaded: set[str] = set()
+        with np.load(_source(source)) as z:
             lat, lon = z["lat"], z["lon"]
             self.meta = {k[5:]: z[k].item() for k in z.files if k.startswith("meta_")}
-            self.weather = GridSeries(
-                _times(z, "t_weather"),
-                lat,
-                lon,
-                {
-                    **{
-                        k: _unpack(z, k) for k in ("wind_u", "wind_v", "hs", "tp", "cloud_fraction")
-                    },
-                    **_wave_vectors(z),
-                },
-            )
-            self.daily = GridSeries(
-                _times(z, "t_daily"),
-                lat,
-                lon,
-                {k: _unpack(z, k) for k in ("air_temp", "clearness")},
-            )
-            self.rain = None
-            if "rain" in z.files:
-                self.rain = GridSeries(_times(z, "t_rain"), lat, lon, {"rain": _unpack(z, "rain")})
-            self.currents = None
-            if "current_u" in z.files:
-                self.currents = GridSeries(
-                    _times(z, "t_current"),
-                    z["lat_current"],
-                    z["lon_current"],
-                    {k: _unpack(z, k) for k in ("current_u", "current_v")},
+            if "parts_keys" in z.files:
+                self.parts = [str(k) for k in z["parts_keys"]]
+
+                def series(axis, la, lo, names):
+                    starts = z["parts_" + axis].tolist()
+                    return PartSeries(_times(z, axis), la, lo, names, self.parts, starts)
+
+                self.weather = series(
+                    "t_weather",
+                    lat,
+                    lon,
+                    ("wind_u", "wind_v", "hs", "tp", "cloud_fraction", "_wd_x", "_wd_y"),
                 )
+                self.daily = series("t_daily", lat, lon, ("air_temp", "clearness"))
+                self.rain = series("t_rain", lat, lon, ("rain",)) if "t_rain" in z.files else None
+                self.currents = None
+                if "t_current" in z.files:
+                    self.currents = series(
+                        "t_current", z["lat_current"], z["lon_current"], ("current_u", "current_v")
+                    )
+            else:
+                self.weather = GridSeries(_times(z, "t_weather"), lat, lon, _weather_fields(z))
+                self.daily = GridSeries(
+                    _times(z, "t_daily"),
+                    lat,
+                    lon,
+                    {k: _unpack(z, k) for k in ("air_temp", "clearness")},
+                )
+                self.rain = None
+                if "rain" in z.files:
+                    self.rain = GridSeries(
+                        _times(z, "t_rain"), lat, lon, {"rain": _unpack(z, "rain")}
+                    )
+                self.currents = None
+                if "current_u" in z.files:
+                    self.currents = GridSeries(
+                        _times(z, "t_current"),
+                        z["lat_current"],
+                        z["lon_current"],
+                        {k: _unpack(z, k) for k in ("current_u", "current_v")},
+                    )
             self.storms = None  # best-track fixes, if the bundle carries them
             if "storm_t" in z.files:
                 from boatsim.oceandata.stormboost import storms_from_arrays
@@ -174,6 +271,35 @@ class BundleEnvironment:
                     z["lon_ships"],
                     {"ship_density": _unpack(z, "ship_density")[None]},
                 )
+
+    def add_part(self, key: str, source) -> None:
+        """One month of a split bundle (path or bytes). Adding it again does nothing."""
+        if key in self.loaded:
+            return
+        n = self.parts.index(key)
+        with np.load(_source(source)) as z:
+            self.weather.add(n, _weather_fields(z))
+            self.daily.add(n, {k: _unpack(z, k) for k in ("air_temp", "clearness")})
+            if self.rain is not None:
+                self.rain.add(n, {"rain": _unpack(z, "rain")})
+            if self.currents is not None:
+                self.currents.add(n, {k: _unpack(z, k) for k in ("current_u", "current_v")})
+        self.loaded.add(key)
+
+    def missing(self, t0: datetime, t1: datetime) -> list[str]:
+        """The parts of a split bundle that sampling anywhere from t0 to t1 could
+        read and that aren't here yet (a whole bundle: none). A day is added at
+        each end: the daily values are stamped at noon and the rain half an hour
+        on, so a time early on the 1st still reads the month before."""
+        a = (t0 - timedelta(days=1)).strftime("%Y-%m")
+        b = (t1 + timedelta(days=1)).strftime("%Y-%m")
+        return [k for k in self.parts if a <= k <= b and k not in self.loaded]
+
+    def require(self, t0: datetime, t1: datetime) -> None:
+        """Raise WeatherNotLoaded for the first part missing(t0, t1) names."""
+        need = self.missing(t0, t1)
+        if need:
+            raise WeatherNotLoaded(need[0])
 
     def sample(self, t: datetime, lat: float, lon: float) -> EnvState:
         t64 = np.datetime64(t, "s")
@@ -372,3 +498,109 @@ def cut(
     arrays["meta_last"] = np.array(str(d1))
     np.savez_compressed(out, **arrays)
     return {k: v.nbytes for k, v in arrays.items()}
+
+
+# --- Splitting by month (numpy only: the site build does it) ------------------------
+
+
+def _part_starts(times: np.ndarray, months: list[str]) -> list[int]:
+    """Each month's first step on a time axis (the first month starts at 0)."""
+    t = times.astype("datetime64[s]")
+    out = [0]
+    for m in months[1:]:
+        out.append(int(np.searchsorted(t, np.datetime64(f"{m}-01T00:00:00", "s"), side="left")))
+    return out
+
+
+def split(source, out_dir, stem: str | None = None) -> dict:
+    """Split a whole bundle by calendar month, so the page downloads only the
+    months a voyage sails through: `<stem>_static.npz` (grids, the whole time
+    axes, ships, storms, the season) and one `<stem>_<YYYY-MM>.npz` per month
+    with that month's stored values and the first step of the next month (see
+    PartSeries). `<stem>_parts.json` lists them for the page.
+
+    Nothing is re-quantised: the parts hold slices of the bundle's own stored
+    bytes, and before returning this checks that the parts joined end to end
+    are the bundle's arrays byte for byte."""
+    source = Path(source)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = stem or source.stem
+    with np.load(source) as z:
+        whole = {k: z[k] for k in z.files}
+    axes = {a: f for a, f in AXES.items() if a in whole}
+    timed = {f for fields in axes.values() for f in fields if f in whole}
+    t_all = whole["t_weather"].astype("datetime64[s]")
+    months = sorted({str(t)[:7] for t in t_all.astype("datetime64[M]")})
+    starts = {a: _part_starts(whole[a], months) for a in axes}
+    for a, st in starts.items():
+        if any(j <= i for i, j in pairwise(st)):
+            raise ValueError(f"{a}: a month of the bundle holds no step")
+
+    static = {k: v for k, v in whole.items() if k not in timed}
+    static["parts_keys"] = np.array(months)
+    for a, st in starts.items():
+        static["parts_" + a] = np.array(st, dtype=np.int64)
+    files = {"static": f"{stem}_static.npz"}
+    np.savez_compressed(out_dir / files["static"], **static)
+
+    def cut_time(name: str, i0: int, i1: int) -> np.ndarray:
+        a = whole[name]
+        # stored planes are (2, time, lat, lon); anything else is (time, lat, lon)
+        return a[:, i0 : i1 + 1] if a.dtype == np.uint8 else a[i0 : i1 + 1]
+
+    parts = []
+    for n, m in enumerate(months):
+        arrays = {}
+        for a, fields in axes.items():
+            st = starts[a]
+            i1 = st[n + 1] if n + 1 < len(st) else len(whole[a]) - 1
+            for f in fields:
+                if f in whole:
+                    arrays[f] = cut_time(f, st[n], i1)
+        name = f"{stem}_{m}.npz"
+        np.savez_compressed(out_dir / name, **arrays)
+        parts.append({"key": m, "file": name, "bytes": (out_dir / name).stat().st_size})
+
+    # The check: read the files back and join them (dropping each part's shared
+    # last step); every stored array must be the bundle's, byte for byte.
+    back = {m["key"]: dict(np.load(out_dir / m["file"])) for m in parts}
+    for a, fields in axes.items():
+        for f in fields:
+            if f not in whole:
+                continue
+            ax = 1 if whole[f].dtype == np.uint8 else 0
+            pieces = []
+            for n, m in enumerate(months):
+                p = back[m][f]
+                last = n == len(months) - 1
+                pieces.append(p if last else np.delete(p, -1, axis=ax))
+            joined = np.concatenate(pieces, axis=ax)
+            if joined.dtype != whole[f].dtype or joined.tobytes() != whole[f].tobytes():
+                raise ValueError(f"split changed {f}: the parts don't join back to the bundle")
+    with np.load(out_dir / files["static"]) as z:
+        for k, v in whole.items():
+            if k not in timed and (z[k].dtype != v.dtype or z[k].tobytes() != v.tobytes()):
+                raise ValueError(f"split changed {k}")
+
+    index = {
+        "static": files["static"],
+        "static_bytes": (out_dir / files["static"]).stat().st_size,
+        "parts": parts,
+        "whole": source.name,
+        "whole_bytes": source.stat().st_size,
+    }
+    (out_dir / f"{stem}_parts.json").write_text(json.dumps(index))
+    return index
+
+
+def open_parts(index_path, keys=None) -> BundleEnvironment:
+    """A split bundle from its `_parts.json`, with every part added (or only
+    `keys`): the whole bundle's environment, read from the split files."""
+    index_path = Path(index_path)
+    index = json.loads(index_path.read_text())
+    env = BundleEnvironment(index_path.parent / index["static"])
+    for p in index["parts"]:
+        if keys is None or p["key"] in keys:
+            env.add_part(p["key"], index_path.parent / p["file"])
+    return env

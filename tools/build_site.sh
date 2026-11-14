@@ -51,6 +51,15 @@ echo "Data releases:"
 # The 2020 weather bundle for the in-browser simulator (sandbox.yml). Without it
 # the Boatyard launches from the precomputed grid and the helm says so.
 fetch sandbox-data sandbox 'forcing_2020.npz'
+# The same weather split by month, for the helm page: it loads only the months a
+# voyage sails through (a first sail reads about a quarter of the season). The
+# split slices the bundle's stored bytes and checks they join back to it byte
+# for byte, so the values can't change; a failure here stops the build. The
+# whole file stays for the Boatyard and the race, which sail whole seasons.
+if [ -f sea3d/public/sandbox/forcing_2020.npz ]; then
+  rm -f sea3d/public/sandbox/forcing_2020_*
+  python3 -m boatsim.sandbox split --bundle sea3d/public/sandbox/forcing_2020.npz --out sea3d/public/sandbox
+fi
 # Swell for the 3D sea (seastate.yml, display only). The Chesapeake depth
 # files on the same release are left out until a page reads them (#287).
 fetch seastate-data seastate 'seastate_*'
