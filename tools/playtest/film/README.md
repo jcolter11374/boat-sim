@@ -73,3 +73,15 @@ in my knockdown and gale proofs, but not by this exact script.
 - storm now uses `gale` (a daylight gale found by the wind reading), since the roughest hour I had named is at night.
 - golden now also needs a fairly clear sky (cloud cover 0.5 or less, as the film's own rule after #576), so the sheet
   shows a golden hour the film would really choose, not an overcast one.
+
+## Landfall and Company in Practice at Annapolis (Elena, 14 Nov)
+On a crossing these two almost never come up (the start is offshore; the finish is 350 km off Lisbon), so they
+are filmed in Practice, where land and the Bay's traffic are near. `PRACTICE=1` opens `helm.html?practice` at a
+practice hour, takes the first course, sails by hand in real time, and films when the moment comes; if it doesn't
+within `WAIT_S` seconds (default 90) it tries the next hour in `HOURS` (default 8, 8.5, ... 17: ships are placed by the hour).
+```
+PRACTICE=1 node live_sheet.mjs kayak landfall coast out/landfall
+PRACTICE=1 node live_sheet.mjs kayak company  ship  out/company
+```
+The boat is Practice's own (the Pearson), not the kayak. Locally: coast can't be tried (no land files in a local
+build); ship found no ship within 5 km at ten hours (nearest 14 km), so exit 3 is possible: widen HOURS or WAIT_S.

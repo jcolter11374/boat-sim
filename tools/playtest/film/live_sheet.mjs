@@ -39,6 +39,42 @@ if ((await import("node:fs")).existsSync("/tmp/claude-0/pyocdn")) await ctx.rout
 const p = await ctx.newPage();
 p.setDefaultTimeout(180000);
 p.on("pageerror", (e) => console.log("pageerror:", e.message));
+// PRACTICE=1: Practice at Annapolis, where land and the Bay's traffic are always near (Elena, 14 Nov: Landfall and
+// Company almost never come up on a crossing, which starts offshore and ends 350 km off Lisbon). Hand sailing in real
+// time on the first course; each practice hour in HOURS is tried in turn (ships are placed by the hour) until the moment comes.
+const PRACTICE = process.env.PRACTICE === "1";
+const want = when.startsWith("hour:") ? Number(when.slice(5)) : null;
+const MAX_MIN = Number(process.env.MAX_MIN ?? 25);
+if (PRACTICE) {
+  let found = null;
+  for (const hr of (process.env.HOURS ? process.env.HOURS.split(",") : Array.from({ length: 19 }, (_, i) => String(8 + i / 2)))) {
+    await p.goto(`${BASE}helm.html?practice&quality=high&hour=${hr}`);
+    await p.waitForFunction(() => window.__helm && window.__helm.frames > 30, null, { timeout: 300000 });
+    await p.waitForFunction(() => document.querySelector("#ss-course-opts .ss-pill"), null, { timeout: 180000 }).catch(() => {});
+    await p.evaluate(() => document.querySelector("#ss-course-opts .ss-pill")?.click()); // the first course
+    await p.waitForFunction(() => !window.__helm?.busy, null, { timeout: 180000 }).catch(() => {});
+    for (let i = 0; i < 3 && !(await p.evaluate(() => !!window.__wheel?.on)); i++) {
+      await p.click("#go", { timeout: 30000 }).catch(() => p.evaluate(() => document.getElementById("go")?.click()));
+      await p.waitForFunction(() => window.__wheel?.on, null, { timeout: 60000 }).catch(() => {});
+    }
+    if (!(await p.evaluate(() => !!window.__wheel?.on))) { console.log(`hour ${hr}: not at the wheel`); continue; }
+    for (let s = 0; s < Number(process.env.WAIT_S ?? 90); s += 3) {
+      const st = await p.evaluate(() => {
+        const h = window.__helm;
+        const m = h.cine.host.moment?.() ?? {};
+        // Practice has no voyage, so the film's sunEl() is 0 there: the sun's height from the sky itself.
+        return { land: m.land ? m.land.name : null, shipKm: m.ship ? m.ship.km : null, storm: m.storm ?? 0, el: (Math.asin(Math.min(1, Math.max(-1, h.cine.host.sunDir().y))) * 180) / Math.PI, kn: h.cine.host.speed() };
+      });
+      const there = (when === "coast" ? !!st.land : when === "ship" ? st.shipKm != null && st.shipKm < 5 : true) && st.el > 10 && st.storm < 0.5;
+      if (there) { found = { ...st, practiceHour: hr }; break; }
+      if (s === 0) console.log(`hour ${hr}:`, JSON.stringify(st));
+      await p.waitForTimeout(3000);
+    }
+    if (found) break;
+  }
+  if (!found) { console.log("NEVER REACHED THE MOMENT (practice)"); process.exit(3); }
+  console.log("moment:", JSON.stringify(found));
+} else {
 await p.goto(`${BASE}helm.html?quality=high`);
 if (boat !== "kayak") {
   await p.waitForFunction((b) => !!document.querySelector(`input[name="boat"][value="${b}"]`), boat, { timeout: 120000 });
@@ -50,8 +86,6 @@ await p.waitForFunction(() => window.__helm?.ready, null, { timeout: 300000 });
 // Sail on until the voyage itself reaches the moment wanted: a day a second while it is far off (hour targets only),
 // 6 h a second, then 1 h a second near it. The page checks the moment and stops its own clock in the same step,
 // so a slow machine cannot sail past it (Nina's live run, 14 Nov: golden hour overshot by 0.6 h at 6 h a second).
-const want = when.startsWith("hour:") ? Number(when.slice(5)) : null;
-const MAX_MIN = Number(process.env.MAX_MIN ?? 25);
 let rate = when === "day" ? "1" : want != null && want > 40 ? "24" : "6";
 await p.click(`button.rate[data-rate="${rate}"]`);
 const t0 = Date.now();
@@ -82,6 +116,7 @@ for (;;) {
   await p.waitForTimeout(rate === "1" ? 40 : 120);
 }
 await p.evaluate(() => window.__helm.clock !== 0 && document.getElementById("t-pause")?.click());
+}
 await p.waitForTimeout(3000);
 await p.evaluate(() => window.__virtual());
 await p.evaluate(() => { for (let k = 0; k < 40; k++) window.__tick(0.05); });
