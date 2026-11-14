@@ -4439,7 +4439,7 @@ const CHECKS = {
       const browser = page.context().browser();
       const rows = [];
       const measure = async (url, counter, sail) => {
-        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: "block" });
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, ...(BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
         const p = await ctx.newPage();
         try {
           await p.goto(SITE + url, { waitUntil: "load", timeout: 2 * MIN });
@@ -4504,7 +4504,7 @@ const CHECKS = {
         return { sheet: sr ? [sr.left, sr.top, sr.right, sr.bottom].map(Math.round) : null, strip: strip ? [Math.round(strip.top), Math.round(strip.bottom)] : null, boat: boat ? [boat.x, boat.y, boat.x + boat.w, boat.y + boat.h].map(Math.round) : null, boatOk, cut, over: Math.round(over) };
       }, sheetSel);
       for (const [w, h] of [[390, 844], [360, 740]]) {
-        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: "block" });
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, ...(BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
         const p = await ctx.newPage();
         const errs = [];
         p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
