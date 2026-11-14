@@ -74,7 +74,8 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { EASE_POWER, SUNRISE_GHI, morningPower, NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { stormKeep, stormNote } from "./helm/stormCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -1528,6 +1529,23 @@ function applyPending(all = false): void {
   if (changed) showStatus();
 }
 
+/** Eased off for the night (the night call): the order and power to go back to in the morning. */
+let nightEase: { order: Heading; power: number; dark: number } | null = null;
+/** Morning after "ease off till sunrise": the power goes back to what it was, with a note (helm/powerCall.ts). */
+function morning(): void {
+  const st = game.status;
+  if (!nightEase || !st || st.over || mode !== "hands_on") return;
+  const h = st.day * 24;
+  const back = morningPower(nightEase, order, power, st.weather?.ghi ?? 0, h);
+  if (back === null && h > nightEase.dark && (st.weather?.ghi ?? 0) >= SUNRISE_GHI) nightEase = null; // you changed it: yours stands
+  if (back === null) return;
+  nightEase = null;
+  $<HTMLInputElement>("power").value = String(Math.round(back * 100));
+  void setOrder(order, back);
+  const text = `Morning: back to ${Math.round(back * 100)}% power, as before the night.`;
+  whenAt(st.day * 24, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
+}
+
 /** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
 let rateAtEnd = 0;
 /** A call is decided and its card is waiting for the picture to reach its moment. Until the card
@@ -1598,6 +1616,7 @@ async function clockRun(): Promise<void> {
     shownTo = Math.max(lastHour(game.boat!), shownTo);
     present();
     chartDirty = true;
+    morning();
     if (stopped === "battery") {
       // Reaching the reserve is news, not a choice: a note, and the clock runs on.
       // The night call ("ease off before dark?") is the battery stop with a choice in it (Leo, F5).
@@ -2514,15 +2533,17 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         // With the forecast beside them the labels carry no claims: on 23 Apr the 120° "dodge"
         // forecast 214 km gained AND 0.6 m bigger waves, so "safer, a longer way round" was
         // wrong on both counts (Sam, 12 Nov). The tag says which is faster and which rougher.
-        { label: "Hold course: fastest, but a knockdown is likelier", plain: "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
+        { label: "Hold course: fastest, but a knockdown is likelier", plain: order === "auto" ? "Hold course (same as the ghost)" : "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
         { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
       ];
       if (motors && power > 0.1)
         choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)), order: { heading: order === "auto" ? "route" : order, power: 0.1 } });
+      const intro = `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that.`;
       return {
         kind,
         look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
-        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
+        text: `${intro} What will you do?`,
+        intro,
         choices,
       };
     }
@@ -2536,7 +2557,11 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         kind: "night",
         text: `${nightOpener(st.boat.soc, dark.ah)} At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
         choices: [
-          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
+          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "The power goes back up in the morning", act: () => {
+            alsoCalled("eased off for the night");
+            nightEase = { order, power, dark: h + dark.ah };
+            return setOrder(order, EASE_POWER);
+          } },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
           // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
           { label: "Hand her back to the autopilot (same as the ghost)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
@@ -2897,6 +2922,21 @@ function maybeDecide(force = false): boolean {
     if (seq !== decisionSeq) return;
     setCallComing(false);
     if (rate !== 0 || game.status?.over) return;
+    if (o && (d.kind === "gale" || d.kind === "waves")) {
+      // Turning away only when it is calmer (helm/stormCall.ts); with nothing left to weigh, a note.
+      const keep = stormKeep(d.choices.map((_, i) => (has[i] ? (o.orders[i]?.hs_max ?? null) : null)));
+      if (keep.filter(Boolean).length < 2) {
+        lastCallH = callBefore; // no card: the cadence guard doesn't count it
+        lastCallKind = kindBefore;
+        page.decisions.at(-1)!.asked = false;
+        void d.choices[0].act(); // she holds course: the "it has passed" note still follows
+        note(stormNote(d.intro ?? d.text), `Day ${st.day.toFixed(1)}`, TONE_COLOUR.warn);
+        setRate(lastRate);
+        return;
+      }
+      const at = (i: number) => keep[i];
+      return showDecision({ ...d, choices: d.choices.filter((_, i) => at(i)) }, { ...o, orders: o.orders.filter((_, i) => at(i)) }, has.filter((_, i) => at(i)));
+    }
     showDecision(d, o, has);
   });
   return true;
