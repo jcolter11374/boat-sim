@@ -58,14 +58,33 @@ export function watchDay(days: WatchDay[], asked: string): WatchDay | null {
 }
 
 /** The card's own keys, dropped from a link that starts watching (the page's other switches, ?quality= and the like, are kept). */
-const CARD_KEYS = ["where", "when", "challenge", "course", "breeze", "boat", "practice", "go", "who", "day", "against", "sail", "watch", "replay", "race", "launch"];
+const CARD_KEYS = ["where", "when", "challenge", "course", "breeze", "boat", "practice", "go", "who", "day", "against", "sail", "watch", "replay", "race", "launch", "place"];
 /** The link that sets sail with the autopilot steering: this page, watching that voyage. */
-export function watchLink(search: string, file: string): string {
+export function watchLink(search: string, file: string, place = ""): string {
   const p = new URLSearchParams(search);
   for (const k of CARD_KEYS) p.delete(k);
   p.set("watch", file);
+  if (SCENERY.some((s) => s.key === place && place)) p.set("place", place);
   return `helm.html?${p.toString()}`;
 }
+
+/**
+ * "Watch from" (the old Watch page's "Sail past a real coast", brought to the card): her voyage's
+ * wind and waves, seen from just off a real coast (land/place.ts). Annapolis is left out: it is the
+ * practice course, and its harbour is sheltered water the open-sea voyage can't stand for.
+ */
+export const SCENERY = [
+  { key: "", pill: "Out at sea" },
+  { key: "pico", pill: "Pico, Azores" },
+  { key: "horta", pill: "Horta, Faial" },
+  { key: "lisbon", pill: "Cascais, Lisbon" },
+  { key: "baymouth", pill: "Chesapeake Bay mouth" },
+] as const;
+export const SCENERY_WORDS = {
+  label: "Watch from",
+  sea: "Out on her own route, wherever the day takes her.",
+  coast: "Her voyage's wind and waves, seen from just off a real coast. The chart still follows her.",
+} as const;
 
 // ---------------------------------------------------------------- "Race against" (M2 piece R4)
 // Race it is the autopilot steering two different boats on the same sea, so it sits under the

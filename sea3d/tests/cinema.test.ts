@@ -112,8 +112,18 @@ test("sequences follow the plan's order, vary, and never repeat a shot twice run
   assert.ok(seen.size > 5, "passage varies");
 });
 
-test("the sequence fits the moment: five for launch", () => {
-  assert.deepEqual(Object.keys(SEQUENCES).sort(), ["golden", "knockdown", "night", "passage", "storm"]);
+test("the sequence fits the moment: the five from launch, and Landfall and Company (14 Nov)", () => {
+  assert.deepEqual(Object.keys(SEQUENCES).sort(), ["company", "golden", "knockdown", "landfall", "night", "passage", "storm"]);
+  // Land in sight by day: Landfall before the passage; a ship within a few km: Company. Not at night, not in a gale.
+  const land = { ...calm, land: { bearing: 40, name: "Pico" } };
+  const ship = { ...calm, ship: { bearing: 200, km: 3 } };
+  assert.deepEqual(fitting(land, 40), ["landfall", "passage"]);
+  assert.deepEqual(fitting(ship, 40), ["company", "passage"]);
+  assert.deepEqual(fitting({ ...ship, ship: { bearing: 200, km: 9 } }, 40), ["passage"]);
+  assert.deepEqual(fitting(land, -30), ["night"]);
+  assert.ok(!fitting({ ...land, storm: 0.8 }, 40).includes("landfall"));
+  assert.deepEqual(shotsFor("landfall", null, () => 0), ["landfall", "alongside", "landfall"]);
+  assert.deepEqual(shotsFor("company", null, () => 0), ["company", "stern", "alongside"]);
   assert.deepEqual(fitting(calm, 40), ["passage"]);
   assert.deepEqual(fitting({ ...calm, storm: 0.8 }, 40), ["storm", "passage"]);
   assert.ok(fitting(calm, 4).includes("golden"));
@@ -336,7 +346,8 @@ test("never centred, not even end-on; a tall boat's masthead stays inside the le
           // And she isn't shrunk to fit it: a yacht framed by her mast fills half the frame's
           // height in every shot but the wide establishing one and the drone's pull-away (round 3: a fifth).
           const foot = new THREE.Vector3(0, 0, 0).project(cam);
-          if (!["establish", "drone", "panels", "sterndetail", "bowdetail"].includes(kind)) assert.ok((top.y - foot.y) / 2 > 0.45, `${tag}: yacht ${(50 * (top.y - foot.y)).toFixed(0)}% tall`);
+          // Landfall is wide too: the land on the horizon is its subject (the shot plan).
+          if (!["establish", "drone", "landfall", "panels", "sterndetail", "bowdetail"].includes(kind)) assert.ok((top.y - foot.y) / 2 > 0.45, `${tag}: yacht ${(50 * (top.y - foot.y)).toFixed(0)}% tall`);
         }
       }
     }

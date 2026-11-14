@@ -702,6 +702,12 @@ if (uSeaWarm.w > 0.0) { // uniform branch: the title only
   const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
   vec3 tinted = warm * (dot(gl_FragColor.rgb, LUM) / max(dot(warm, LUM), 1e-3));
   gl_FragColor.rgb = mix(gl_FragColor.rgb, mix(tinted, warm, 0.25), uSeaWarm.w * farW * farW);
+  // The near water, under the lens, mirrored the pink dawn over its own dark and read muddy brown
+  // (John, 14 Nov 2026: "drab"): it leans to a deep blue-green, keeping its lights and darks, so
+  // the gold sky stands out against it.
+  const vec3 DEEP = vec3(0.10, 0.36, 0.42);
+  vec3 deep = DEEP * (dot(gl_FragColor.rgb, LUM) / dot(DEEP, LUM));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, deep, 0.55 * (1.0 - farW));
   if (uSeaGlint.w > 0.0) {
     // With the sun behind the lens (a boat without sails) the far water read as one flat blue
     // (Elena, 13 Nov): in the band between the boat and the horizon, and nowhere nearer, the

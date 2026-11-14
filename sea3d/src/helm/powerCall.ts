@@ -61,13 +61,17 @@ export function worthAskingAgain(gainDays: number, turnedDown: number | null): b
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+/** Under this the motors stop to keep the electronics and the radio going (autonomy/safemode.py
+ * hold_below_soc), so a forecast low under it is said as "15%, where her motors stop" (Elena). */
+export const MOTORS_STOP_SOC = 0.15;
+const lowWords = (x: number) => (x < MOTORS_STOP_SOC ? "15%, where her motors stop" : pct(x));
 
 /** The card's words (Elena's ruling, 14 Nov: plain, no "would gain on"). One sentence of what the
  * forecast says, with the price in it; the options' forecast tags carry the numbers. `ago`: what
  * the note four days later opens with, before "she's now N km ahead of the ghost". */
 export function pushCard(order: Heading, power: number, soc: number, push: Staked): { text: string; push: string; pushTitle: string; stay: string; did: string; ago: string } {
   const to = pct(push.power ?? 0);
-  const low = pct(push.soc_min ?? 0);
+  const low = lowWords(push.soc_min ?? 0);
   const faster = order === "auto" ? "pull ahead of the autopilot" : `go faster than at your ${pct(power)}`;
   return {
     text: `Navigator's check: the battery is at ${pct(soc)}. At ${to} power she'd ${faster} over the next 4 days, but the battery would drop to ${low}.`,
@@ -105,6 +109,22 @@ export const NIGHT_AFTER_PUSH_H = 12;
 export function nightLine(power: number): number {
   return Math.min(0.9, Math.max(0.35, 0.15 + 0.8 * power));
 }
+
+/** Sunlight (W/m², as the weather gives it) that counts as morning for "ease off till sunrise". GUESS. */
+export const SUNRISE_GHI = 50;
+/** "Ease off to 10%: slower, but lasts till sunrise" means till sunrise (Nina, live 14 Nov): left at
+ * 10%, she sailed on at it for days, and the next push card said 50% would beat "your 10%", then
+ * the next night asked again, round and round. In the morning the power goes back to what it was
+ * before the night. eased: the order and power before easing off, and `dark`, the voyage hour the
+ * night call saw dark coming (null: not eased); hour: now. Returns the
+ * power to go back to, or null to leave things as they are (not morning yet, or you have changed
+ * the order or the power since). */
+export function morningPower(eased: { order: Heading; power: number; dark: number } | null, order: Heading, power: number, ghi: number, hour: number): number | null {
+  if (!eased || hour <= eased.dark || ghi < SUNRISE_GHI) return null; // the sun of the evening before is not morning
+  return order === eased.order && Math.abs(power - EASE_POWER) < 1e-6 ? eased.power : null;
+}
+/** The night call's "ease off" power. */
+export const EASE_POWER = 0.1;
 
 /** The power an order leaves on the Orders panel. A push raises it; handing her back to the
  * autopilot puts it back to what it was before the push (`before`, null if there was none), so a

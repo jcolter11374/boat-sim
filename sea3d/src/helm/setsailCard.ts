@@ -10,7 +10,9 @@ import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
-import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who } from "./whoSteers";
+import { DROP_POINT, loadToday, samplesAt, todayWords } from "./today";
+import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who, SCENERY, SCENERY_WORDS } from "./whoSteers";
+import { roughStartLine } from "./roughStart";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
 export const CARD_WORDS = {
@@ -69,7 +71,7 @@ export interface CardHooks {
   /** Who steers (M2, R2): the pick the page opens on, the voyages the autopilot has sailed, and how to go and watch one. */
   who?: { who: Who; day: string; against?: string };
   voyages?: Promise<IndexEntry[]>;
-  watch?: (file: string) => void;
+  watch?: (file: string, place?: string) => void;
   /** Race against (M2, R4): go and race boat a against boat b, launched that day. */
   race?: (a: RaceId, b: RaceId, day: string) => void;
 }
@@ -111,6 +113,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
   let voyage: string | null = null;
   // Race against: nobody, or another boat (only with the autopilot steering).
   let rival: "nobody" | "boat" = hooks.who?.against ? "boat" : "nobody";
+  /** Watch from: out at sea (""), or a real coast (whoSteers.ts SCENERY). */
+  let scenery = "";
   let other: RaceId | null = (hooks.who?.against as RaceId | undefined) || null;
   /** The race Set sail starts: [your boat, the other boat, the day]; null when it isn't a race, or she'd race herself. */
   let race: [RaceId, RaceId, string] | null = null;
@@ -142,6 +146,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     });
   }
 
+  /** Today's real weather at the drop point (helm/today.ts), when this copy of the site carries a fresh forecast. */
+  let today: string[] | null = null;
   const checkedBoat = () => document.querySelector<HTMLInputElement>('input[name="boat"]:checked');
   const draw = () => {
     const s = { ...hooks.current(), where, challenge: where === "ocean" ? challenge.value : "" };
@@ -162,6 +168,10 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const whoShown = where === "ocean" && !!hooks.watch && sailed.length > 0;
     const auto = whoShown && who === "autopilot";
     $("ss-who").hidden = !whoShown;
+    // Today's real weather: only for a crossing you sail (a watched voyage or a race is already 2020's).
+    const todayBox = $("ss-today");
+    todayBox.hidden = !today || where !== "ocean" || auto;
+    if (today && todayBox.childElementCount !== today.length) todayBox.replaceChildren(...today.map((t) => Object.assign(document.createElement("div"), { textContent: t })));
     // A new crossing takes the saved one's place; practice and watching the autopilot don't touch it.
     $("ss-continue-new").hidden = where !== "ocean" || auto || !!$("ss-continue").dataset.lost || !$("ss-ask").hidden;
     // Set sail is dimmed only while its question is the thing to answer: practice and watching end nothing.
@@ -190,6 +200,15 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("ss-rival-soon").textContent = RIVAL_WORDS.soon;
     $("ss-rival-line").textContent = !auto ? RIVAL_WORDS.you : against && against === mine ? RIVAL_WORDS.same : RIVAL_WORDS[racing ? "boat" : "nobody"].line;
     $("ss-against").hidden = !racing;
+    // Watch from: only when watching her alone (a race keeps both boats on their own sea).
+    $("ss-scene").hidden = !auto || racing;
+    if (auto && !racing) {
+      pills($("ss-scene-opts"), SCENERY.map((s) => ({ key: s.key, label: s.pill })), scenery, (k) => {
+        scenery = k;
+        draw();
+      });
+      $("ss-scene-line").textContent = scenery ? SCENERY_WORDS.coast : SCENERY_WORDS.sea;
+    }
     $("ss-against-name").textContent = against ? rivalName(against, mineName()) : ""; // a player's own name for a design: text only
     $("ss-after").textContent = racing ? RIVAL_WORDS.boat.after : WHO_WORDS[auto ? "autopilot" : "you"].after;
     // Annapolis: the course and the breeze instead of the boat, the day and the challenge.
@@ -266,6 +285,11 @@ export function mountSetSailCard(hooks: CardHooks): void {
         draw();
       },
     );
+    // A rough start is said before Set sail (Elena, 14 Nov): she may be knocked flat in the first hours.
+    const sailDay = auto ? (on?.day ?? null) : /^\d+$/.test(lv) ? (RACE_DAYS[Number(lv)] ?? null) : lv;
+    const rough = show.whenShown && where === "ocean" && !challenge.value ? roughStartLine(sailDay) : "";
+    $("ss-rough").hidden = !rough;
+    $("ss-rough").textContent = rough;
     // Weather challenge (optional): None, then each challenge; the one-line why under it.
     $("ss-ch").hidden = where !== "ocean" || auto || challenge.options.length < 2;
     // None and the first three, then "More…" for the rest (Leo: "None · Gentle June · … · …"), so the card stays short.
@@ -323,7 +347,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
       if (where === "ocean" && who === "autopilot" && hooks.watch && sailed.length > 0) {
         e.stopImmediatePropagation();
         if (race) hooks.race?.(...race);
-        else if (voyage) hooks.watch(voyage);
+        else if (voyage) hooks.watch(voyage, scenery);
         return;
       }
       if (where === "ocean" && !endIt && kept) {
@@ -401,6 +425,11 @@ export function mountSetSailCard(hooks: CardHooks): void {
   document.getElementById("boats")?.addEventListener("change", draw);
   draw();
   void hooks.challengesReady.then(draw);
+  void loadToday().then((f) => {
+    if (!f) return;
+    today = todayWords(f.header, samplesAt(f.header, f.data, DROP_POINT[0], DROP_POINT[1]), Date.now());
+    if (today) draw();
+  });
   void hooks.voyages?.then((v) => {
     sailed = v;
     draw();

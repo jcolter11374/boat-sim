@@ -73,9 +73,10 @@ export function cutAt(rep: Replay, hour: number): Replay {
     hs: rep.hs.slice(0, n),
     tp: rep.tp.slice(0, n),
     wave_dir: rep.wave_dir.slice(0, n),
-    current_u: rep.current_u.slice(0, n),
-    current_v: rep.current_v.slice(0, n),
-    ghi: rep.ghi.slice(0, n),
+    // The Boatyard's launch replays are lean (sandbox/sim.py, stride_h): no currents or sunshine columns.
+    ...(rep.current_u ? { current_u: rep.current_u.slice(0, n) } : {}),
+    ...(rep.current_v ? { current_v: rep.current_v.slice(0, n) } : {}),
+    ...(rep.ghi ? { ghi: rep.ghi.slice(0, n) } : {}),
     ...(rep.rain ? { rain: cut(rep.rain) } : {}),
     ...(rep.iridium_ok ? { iridium_ok: cut(rep.iridium_ok) } : {}),
     ...(rep.beacon_ok ? { beacon_ok: cut(rep.beacon_ok) } : {}),

@@ -158,6 +158,24 @@
   #title nav > a::after { height: 6px; bottom: -3px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='6' viewBox='0 0 24 6'%3E%3Cpath d='M0 3 Q6 0.6 12 3 T24 3' fill='none' stroke='%23d8b679' stroke-width='1.4'/%3E%3C/svg%3E") repeat-x 0 0 / 24px 6px;
     animation: t-flow 1.4s linear infinite; }
   @media (prefers-reduced-motion: reduce) { #title h1 .bw-h, #title details::before, #title h1 .bw-mark::after, #title nav > a::after { animation: none !important; } }
+  /* "Just watch the sea": the menu goes and the shot has the whole screen; a quiet Menu link and the speaker
+     sit in the corner and fade away when the pointer rests (John, 14 Nov 2026: it used to open the old two-boat demo). */
+  #t-watch { display: none; }
+  body.title.sea-only #title { display: none; }
+  body.title.sea-only #t-watch { display: flex; position: fixed; top: 16px; left: 18px; gap: 10px; align-items: center; z-index: 6; transition: opacity .6s ease; }
+  body.title.sea-only.idle #t-watch { opacity: 0; }
+  body.title.sea-only.idle { cursor: none; }
+  #t-back { cursor: pointer; background: rgba(14,23,42,.55); border: 1px solid rgba(216,182,121,.5); color: #f2e8d5; padding: 6px 14px 7px;
+    font: italic 400 17px/1 "Fraunces", Georgia, serif; letter-spacing: .01em; transition: color .2s ease, border-color .2s ease; }
+  #t-back:hover { color: #d8b679; border-color: #d8b679; }
+  #t-back:focus-visible, #t-sound2:focus-visible { outline: 1px solid #d8b679; outline-offset: 3px; }
+  #t-sound2 { width: 36px; height: 36px; padding: 6px; box-sizing: border-box; cursor: pointer; background: none; border: 0; color: rgba(242,232,213,.8); filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+  #t-sound2 svg { display: block; width: 100%; height: 100%; }
+  #t-sound2 .waves { opacity: 0; } #t-sound2 .off { opacity: 1; }
+  #t-sound2[aria-pressed="true"] .waves { opacity: 1; } #t-sound2[aria-pressed="true"] .off { opacity: 0; }
+  #t-sound2:hover { color: #d8b679; }
+  /* The title's grade (John, 14 Nov 2026: "drab and depressing"): a little more colour and snap in the dawn, title only. */
+  body.title #app canvas { filter: saturate(1.3) contrast(1.07) brightness(1.03); }
   /* A phone's title: the credits shrink to the one "Credits" link (the full list is behind it), so they don't print over the menu (Elena). */
   @media (max-width: 600px) { body.title #credits .long { display: none; } }
   /* The way into the game (src/sailLink.ts): sail this sea at the helm, or build a boat first. */
@@ -189,7 +207,7 @@
 <div id="tags"></div>
 <section id="title" aria-labelledby="title-h">
   <h1 id="title-h"><span class="bw-mark bw-on-photo" aria-label="Bluewater"><span class="bw-a">Blue</span><span class="bw-b">water</span><span class="bw-h"></span><span class="bw-sun"></span></span></h1>
-  <p class="tag">Design a small robot boat, then try to sail it across the Atlantic: from the Chesapeake Bay to a finish line off Portugal, on real weather.</p>
+  <p class="tag" title="From the Chesapeake Bay to a finish line off Portugal, on real weather from past years.">Build a small robot boat and sail it across the Atlantic.</p>
   <nav>
     <a class="main" id="t-continue" href="./helm.html" hidden>Continue your voyage<small id="t-continue-sub"></small></a>
     <a class="main" id="t-setsail" href="./helm.html">Set sail<small>Cross the Atlantic in your boat, on real weather.</small></a>
@@ -203,6 +221,8 @@
   <p class="fine">Free and open source. Real weather from past years.</p>
   <button type="button" id="t-sound" aria-pressed="false" aria-label="Sound" title="Sound: the sea, a far bell buoy and the title music. Starts at your first click; N turns it off and on."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" fill="currentColor" fill-opacity=".18"/><g class="waves"><path d="M15.2 9.2a4 4 0 0 1 0 5.6"/><path d="M17.8 6.8a7.4 7.4 0 0 1 0 10.4"/></g><g class="off"><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></g></svg></button>
 </section>
+<!-- "Just watch the sea" (John, 14 Nov 2026): the title's own shot with the menu away; Menu (or Esc) brings it back. -->
+<div id="t-watch"><button type="button" id="t-back">&larr; Menu</button><button type="button" id="t-sound2" class="t-snd" aria-pressed="false" aria-label="Sound" title="Sound: the sea, a far bell buoy and the title music. N turns it off and on."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" fill="currentColor" fill-opacity=".18"/><g class="waves"><path d="M15.2 9.2a4 4 0 0 1 0 5.6"/><path d="M17.8 6.8a7.4 7.4 0 0 1 0 10.4"/></g><g class="off"><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></g></svg></button></div>
 <script>
   // Before the first paint: the sea demo instead of the title for ?title=0 or "Just watch the sea" earlier
   // in this tab (the same rule as title.ts shouldShowTitle, which takes over once the scripts have loaded).
