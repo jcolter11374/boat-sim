@@ -12,7 +12,7 @@ import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { forcedSea } from "./seaTest";
 import { seaUniforms } from "./seaSurface";
-import { Mirror, reflectable } from "./mirror";
+import { MIRROR_LAYER, Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
 import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_FINISH_WORDS, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon, type XY } from "./helm/course";
@@ -50,7 +50,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { RACE_DAYS, raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { drainStep, inStretch, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -95,6 +95,7 @@ import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
+import { intoTarget, startWhenBuilt } from "./warmup";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -291,6 +292,18 @@ function buildBoat(): void {
 // material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
 const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
 deckLight.name = "deck_light";
+// The light itself stays in the scene, always: three builds every shader for the lights it can see,
+// so a light that came and went with the boat (hidden behind the Set sail card, shown when she sails)
+// rebuilt every shader each time, a freeze of a second or more (Omar's speed list, 14 Nov). It follows
+// deckLamp, which rides on the boat, and is dark while she is hidden, and by day.
+scene.add(deckLight);
+const deckLamp = new THREE.Object3D();
+deckLamp.name = "deck_lamp";
+/** Whether o and all it hangs from are shown, in the scene. */
+const shownInScene = (o: THREE.Object3D | null): boolean => {
+  for (; o; o = o.parent) if (!o.visible) return false; else if (o === scene) return true;
+  return false;
+};
 /** Candela at full night, and the lamp's light on the foam right beside it (falling away
  *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
@@ -304,7 +317,7 @@ const MASTHEAD_LAMP_M = 5;
 let deckYacht = false;
 function placeDeckLight(): void {
   if (!model) return;
-  deckLight.removeFromParent();
+  deckLamp.removeFromParent();
   const nav = model.root.getObjectByName("nav_lights");
   const lamp = nav?.children[0];
   // On a yacht the lantern is at the masthead, 12 m+ up: there it floodlit the sail like a searchlight
@@ -313,15 +326,15 @@ function placeDeckLight(): void {
   const up = lamp ? model.root.worldToLocal(lamp.getWorldPosition(new THREE.Vector3())).y : 0;
   deckYacht = !!(nav && lamp && up > MASTHEAD_LAMP_M);
   if (deckYacht) {
-    deckLight.position.set(0, up * 0.1, 0);
-    model.root.add(deckLight);
+    deckLamp.position.set(0, up * 0.1, 0);
+    model.root.add(deckLamp);
   } else if (nav && lamp) {
-    deckLight.position.copy(lamp.position);
-    nav.add(deckLight);
+    deckLamp.position.copy(lamp.position);
+    nav.add(deckLamp);
   } else {
     const box = new THREE.Box3().setFromObject(model.root);
-    deckLight.position.set(0, box.max.y + 0.1, 0);
-    model.root.add(deckLight);
+    deckLamp.position.set(0, box.max.y + 0.1, 0);
+    model.root.add(deckLamp);
   }
   deckLight.distance = deckYacht ? YACHT_DECK_REACH_M : 6 * Math.max(1, spec.length / KAYAK.length);
 }
@@ -1470,7 +1483,7 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
   setRate(0); // a skip pauses the clock: you see where it got to
   ++decisionSeq; // a look under way is for a moment that is gone
   setCallComing(false);
-  looking = false;
+  setLooking(false);
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
   if (page.status?.over) return setBusy(false);
@@ -1716,6 +1729,15 @@ async function clockRun(): Promise<void> {
  * paused. The picture plays on up to the simulator and the time bar keeps its speed; only a
  * card, if the look ends in one, pauses the clock (CI #391: a look read as "Paused"). */
 let looking = false;
+/** When the look under way began (clock seconds), and how long looks have been taking (s). */
+let lookFrom = 0;
+let lookTakes: number | null = null;
+function setLooking(on: boolean): void {
+  const now = clock.getElapsedTime();
+  if (on && !looking) lookFrom = now;
+  else if (!on && looking) lookTakes = lookExpect(lookTakes, now - lookFrom);
+  looking = on;
+}
 
 /** "Until something happens" runs at most this long (the simulator's own cap, 72 h). */
 const UNTIL_H = 72;
@@ -1733,7 +1755,9 @@ function tickClock(dt: number): boolean {
   if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
-  hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
+  // While a look holds the simulator, make what is in hand last the look (helm/timebar.ts lookPace).
+  const pace = looking ? lookPace(r, ahead, (lookTakes ?? 3) - (clock.getElapsedTime() - lookFrom)) : ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r);
+  hour = Math.min(shownTo, hour + dt * pace);
   if (!inFlight && !looking && shownTo - hour < rate)
     inFlight = clockRun().finally(() => {
       inFlight = null;
@@ -1868,7 +1892,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
       return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
-    () => game.save(),
+    () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
@@ -2742,16 +2766,16 @@ function maybeRouteCheck(st: Status): boolean {
   const early = !chaseAsked && h >= CHASE_FROM_H && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
   if (!quiet && !early) return false;
   routeLookedH = h;
-  looking = true; // the simulator waits; the clock runs on (no "Paused" for a look)
+  setLooking(true); // the simulator waits; the clock runs on (no "Paused" for a look)
   const seq = ++decisionSeq;
   setCallComing(false); // a card still on its way is for a moment this look replaces
   const resume = () => {
-    if (seq === decisionSeq) looking = false;
+    if (seq === decisionSeq) setLooking(false);
   };
   /** The look ends in a card: now the clock pauses, the picture plays on to the look's moment, and it asks. */
   const askAt = (show: () => void) => {
     if (seq !== decisionSeq) return;
-    looking = false;
+    setLooking(false);
     setRate(0, true);
     setCallComing(true);
     whenAt(h, () => {
@@ -2932,7 +2956,7 @@ function maybeDecide(force = false): boolean {
   // running and pauses only for a card; a storm always asks, so it pauses now.
   const stream = d.kind === "stream";
   if (stream) {
-    looking = true;
+    setLooking(true);
     setCallComing(false);
   } else {
     setRate(0, true);
@@ -2956,7 +2980,7 @@ function maybeDecide(force = false): boolean {
   if (stream) {
     void stakes.then((o) => {
       if (seq !== decisionSeq) return;
-      looking = false;
+      setLooking(false);
       // The Stream asks only when there's something to weigh (Elena, 12 Nov); otherwise a
       // note, and the clock never stopped.
       const quiet = o ? notWorthAsking(d, o, has) : null;
@@ -3143,7 +3167,9 @@ function runDue(): void {
 
 async function refreshForecast(): Promise<void> {
   if (page.status?.over) return;
-  lastForecast = await game.forecast();
+  // The rows came with the last run when they were made at the simulator's hour now (speed, 14 Nov).
+  const fresh = game.forecastRows && Math.abs(game.forecastH - (game.status?.day ?? -1) * 24) < 1e-6;
+  lastForecast = fresh ? game.forecastRows! : await game.forecast();
   drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
 }
 
@@ -4584,6 +4610,42 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
 const third = { x: 0, y: 0 };
 const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
+/** Her fade-in behind the card: each material's own opacity and transparency, put back when it's done. */
+const FADE_S = 0.25;
+let fadedRoot: THREE.Object3D | null = null;
+let fade: { at: number; mats: Map<THREE.Material, { opacity: number; transparent: boolean }> } | null = null;
+function materialsOf(o: THREE.Object3D): THREE.Material[] {
+  const m = (o as THREE.Mesh).material;
+  return (m ? (Array.isArray(m) ? m : [m]) : []).filter((x) => !x.transparent);
+}
+function startFade(root: THREE.Object3D): void {
+  endFade();
+  const mats = new Map<THREE.Material, { opacity: number; transparent: boolean }>();
+  root.traverse((o) => {
+    for (const x of materialsOf(o)) if (!mats.has(x)) mats.set(x, { opacity: x.opacity, transparent: x.transparent });
+  });
+  for (const x of mats.keys()) {
+    x.transparent = true;
+    x.opacity = 0;
+    x.needsUpdate = true; // the see-through programs, built behind the card with hers
+  }
+  fade = { at: clock.getElapsedTime(), mats };
+}
+function endFade(): void {
+  if (!fade) return;
+  for (const [x, was] of fade.mats) {
+    x.opacity = was.opacity;
+    x.transparent = was.transparent;
+    x.needsUpdate = true;
+  }
+  fade = null;
+}
+function fadeIn(): void {
+  if (!fade) return;
+  const k = (clock.getElapsedTime() - fade.at) / FADE_S;
+  if (k >= 1) return endFade();
+  for (const [x, was] of fade.mats) x.opacity = was.opacity * Math.max(0, k);
+}
 /** Behind the Set sail card, never a stand-in (Elena): the drawn-in-code boat stays hidden, an empty
  *  sea, until her real model has loaded (useBoat and loadDetailedModels rebuild her then). At sea she
  *  always shows. */
@@ -4591,7 +4653,14 @@ function hideStandIn(): void {
   if (!model) return;
   const card = !page.ready && !$("start").hidden;
   const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : spec === RANDOLPH ? hasDetailedRandolph() || randolphSettled() : true;
-  const show = (!card || real) && !boatGone;
+  const show = (!card || (real && boatWarm())) && !boatGone;
+  fadeIn();
+  // Behind the card she fades in over a quarter second, not a pop (Elena, #596). Once per boat: a new
+  // model can arrive already shown, so this goes by her, not by the visible flag.
+  if (show && card && parallel && fadedRoot !== model.root) {
+    fadedRoot = model.root;
+    startFade(model.root);
+  }
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
@@ -4718,24 +4787,113 @@ function aimAt(bearing: number): void {
 // Build the sailing view's shaders while the Set sail card is up (M1 start-up profile):
 // the first sailing frames otherwise build about a dozen at once (the boat again for the
 // calm-water reflection, which draws into its own picture), and the page waits for each.
-// Built here, once the card shows and the detailed boats are in, the graphics driver does that work while
-// the player reads the card. Once per page; nothing on screen changes.
+// A few per frame (speed list, 14 Nov): all at once was one frozen frame of 6.6 s on software drawing,
+// with the card deaf to clicks. Her boat goes first and stays hidden (an empty sea behind the card, as
+// for a stand-in) until her shaders are built, so her first drawn frame no longer builds them all at once
+// (a 3.6 s freeze there). Each frame builds what fits in WARM_MS; a real graphics card finishes in a frame or two.
+const WARM_MS = 40;
+/** Her own parts get longer per frame, so she isn't kept off screen for long on a slow machine. */
+const WARM_BOAT_MS = 200;
 let warmed = false;
+/** What's left to build: each part for the screen, and again for the calm-water reflection's picture if it's in it. */
+let warmQueue: { o: THREE.Object3D; mirror: boolean; seeThrough?: boolean }[] | null = null;
+/** The boat whose shaders are being built first, and how many of her parts are still to build. */
+let warmRoot: THREE.Object3D | null = null;
+let warmRootLeft = 0;
+/** Her programs, which the graphics driver may still be building in the background (parallel compiling). */
+let warmRootPrograms: { isReady(): boolean }[] = [];
+const warmedRoots = new WeakSet<THREE.Object3D>();
+const parallel = renderer.extensions.has("KHR_parallel_shader_compile");
+function drawables(root: THREE.Object3D, out: { o: THREE.Object3D; mirror: boolean }[]): void {
+  root.traverse((o) => {
+    const r = o as THREE.Mesh;
+    // A light inside the object would be counted twice (once from the scene), building the wrong program:
+    // those few build on their first draw, as before.
+    if (!(r.isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) || !r.material) return;
+    let lit = false;
+    o.traverse((c) => {
+      if ((c as THREE.Light).isLight) lit = true;
+    });
+    if (lit) return;
+    out.push({ o, mirror: false });
+    // The reflection draws only what's on its layer: building the sea's or the clouds' shaders for it was
+    // about 3 s each on software drawing, for programs never used.
+    if (o.layers.isEnabled(MIRROR_LAYER)) out.push({ o, mirror: true });
+  });
+}
+/** Behind the Set sail card her boat waits for her shaders (see warmShaders). */
+function boatWarm(): boolean {
+  return !model || warmedRoots.has(model.root) || !warmWanted();
+}
+function warmWanted(): boolean {
+  return modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden;
+}
 function warmShaders(): void {
-  warmed = true;
+  if (!warmQueue) {
+    warmQueue = [];
+    drawables(scene, warmQueue);
+  }
+  if (model && warmRoot !== model.root && !warmedRoots.has(model.root)) {
+    const mine: { o: THREE.Object3D; mirror: boolean; seeThrough?: boolean }[] = [];
+    drawables(model.root, mine);
+    // Her fade-in draws her see-through for a quarter second, which three builds as other programs. Only where the
+    // driver builds in the background: on software drawing they'd cost seconds more, and there she simply appears.
+    if (parallel) for (const x of mine.filter((x) => !x.mirror)) mine.push({ o: x.o, mirror: false, seeThrough: true });
+    // What appears with her: her wake, the prop's wash, the water at her hull.
+    for (const o of [wake?.points, propWash?.mesh, contact?.collar, contact?.spray]) if (o) drawables(o, mine);
+    warmQueue.unshift(...mine);
+    warmRoot = model.root;
+    warmRootLeft = mine.length;
+    warmRootPrograms = [];
+  }
+  const start = performance.now();
+  const boatStep = warmRootLeft > 0;
+  const until = start + (boatStep ? WARM_BOAT_MS : WARM_MS);
   const prev = renderer.getRenderTarget();
+  // Built as she'll be drawn: shown, so her lamp counts among the lights as it will at sea.
+  const shown = model?.root.visible ?? true;
+  if (model) model.root.visible = true;
   try {
-    renderer.compile(scene, camera);
-    renderer.setRenderTarget(mirror.target);
-    renderer.compile(scene, camera);
+    while (warmQueue.length && performance.now() < until) {
+      // Her last part built in this step: back to the short step. (Only within that step: with parallel compiling
+      // she can wait on the driver for frames, and the rest of the queue carries on meanwhile; Lena, #596.)
+      if (boatStep && warmRootLeft === 0 && performance.now() > start + WARM_MS) break;
+      const { o, mirror: inMirror, seeThrough } = warmQueue.shift()!;
+      renderer.setRenderTarget(inMirror ? mirror.target : prev);
+      const mats = seeThrough ? materialsOf(o) : [];
+      for (const x of mats) x.transparent = true;
+      const built = renderer.compile(o, camera, scene);
+      for (const x of mats) {
+        x.transparent = false;
+        x.needsUpdate = true; // back to her solid program on the next draw, not the see-through one just built
+      }
+      renderer.setRenderTarget(prev);
+      // Without parallel compiling the driver only queues the work and it lands, all of it, on the next
+      // drawn frame: finishing each program here keeps that frame light and the budget honest. With it
+      // (most real graphics cards) the driver builds them in the background while the card is up.
+      for (const m of built)
+        for (const pr of (renderer.properties.get(m) as { programs?: Map<string, { getUniforms(): unknown; isReady(): boolean }> }).programs?.values() ?? []) {
+          if (!parallel) pr.getUniforms();
+          else if (warmRootLeft > 0) warmRootPrograms.push(pr);
+        }
+      if (warmRootLeft > 0) warmRootLeft--;
+    }
   } catch {
     /* only a head start: the first sailing frame builds whatever is missing */
+    warmQueue.length = 0;
+    warmRootLeft = 0;
+    warmRootPrograms = [];
   } finally {
     renderer.setRenderTarget(prev);
+    if (model) model.root.visible = shown;
   }
+  // Shown once her programs are ready, so her first frame doesn't wait on the driver.
+  if (warmRoot && warmRootLeft === 0 && warmRootPrograms.every((pr) => pr.isReady())) warmedRoots.add(warmRoot);
+  if (!warmQueue.length) warmed = true;
 }
-renderer.setAnimationLoop(() => {
-  if (!warmed && modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden) warmShaders();
+// Drawing starts once the shaders are built, after the page has painted (warmup.ts).
+startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
+  if ((!warmed || !boatWarm()) && warmWanted()) warmShaders();
   const t = clock.getElapsedTime();
   // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
   if (judging && !document.hidden && !page.busy) {
@@ -4878,8 +5036,9 @@ renderer.setAnimationLoop(() => {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
+    deckLamp.getWorldPosition(deckLight.position);
+    deckLight.intensity = shownInScene(deckLamp) ? DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2) : 0;
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
@@ -5155,7 +5314,7 @@ renderer.setAnimationLoop(() => {
   page.frames++;
   page.hour = hour;
   page.simHour = shownTo;
-});
+}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
 
 // ---------- Set sail (the one-game plan, step 1; Rosa) ----------
 // One entry for every way to start: the ocean crossing, Annapolis practice, a weather

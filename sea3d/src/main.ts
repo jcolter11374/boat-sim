@@ -38,6 +38,7 @@ import { TitleCompany } from "./titleCompany";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 import { TitleTrack } from "./titleTrack";
+import { startWhenBuilt } from "./warmup";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -430,12 +431,42 @@ headingSelect.addEventListener("change", () => {
 });
 underCheck.addEventListener("change", () => sea.setSeeThrough(underCheck.checked));
 tourCheck.addEventListener("change", () => (controls.autoRotate = tourCheck.checked));
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+/**
+ * The part of the window the title's menu covers, which is not drawn (speed list, 14 Nov: the sea under
+ * the opaque menu was a quarter of the title's drawing on a computer with no graphics card). The camera
+ * keeps its whole-window frame (setViewOffset), so what shows beside the menu is the same picture.
+ */
+const hidden = { left: 0, bottom: 0 };
+function underMenu(card: HTMLElement | null): { left: number; bottom: number } {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (!card || card.hidden || !document.body.classList.contains("title") || document.body.classList.contains("sea-only")) return { left: 0, bottom: 0 };
+  const cs = getComputedStyle(card);
+  // Only once it's fully in (it fades in over a second), solid, and across one whole edge.
+  if (cs.display === "none" || cs.opacity !== "1" || !/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/.test(cs.transform)) return { left: 0, bottom: 0 };
+  const r = card.getBoundingClientRect();
+  if (r.left <= 0 && r.top <= 0 && r.bottom >= h - 1 && r.right < w * 0.7) return { left: Math.floor(r.right) - 1, bottom: 0 };
+  if (r.left <= 0 && r.right >= w - 1 && r.bottom >= h - 1 && r.top > h * 0.2) return { left: 0, bottom: Math.floor(h - r.top) - 1 };
+  return { left: 0, bottom: 0 };
+}
+function fitView(force = false): void {
+  const want = underMenu(heroOn() ? document.getElementById("title") : null);
+  if (!force && want.left === hidden.left && want.bottom === hidden.bottom) return;
+  hidden.left = Math.max(0, want.left);
+  hidden.bottom = Math.max(0, want.bottom);
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const dw = w - hidden.left;
+  const dh = h - hidden.bottom;
+  camera.aspect = w / h;
+  if (hidden.left || hidden.bottom) camera.setViewOffset(w, h, hidden.left, 0, dw, dh);
+  else camera.clearViewOffset();
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  atmos.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.setSize(dw, dh);
+  renderer.domElement.style.marginLeft = hidden.left ? `${hidden.left}px` : "";
+  atmos.setSize(dw, dh);
+}
+window.addEventListener("resize", () => fitView(true));
 
 setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
@@ -561,6 +592,7 @@ const frame = (): void => {
     // The shot: titleShot's 20 s loop, the boat right of the menu, looking into the low sun.
     const card = document.getElementById("title");
     const shot = titleShot(heroHost(t), t, cardRightOf(card, window.innerWidth), cardBelowOf(card, window.innerWidth, window.innerHeight), heroL.sunOff, heroL.camH);
+    fitView();
     camera.position.copy(shot.pos);
     camera.quaternion.copy(shot.quat);
     if (camera.fov !== shot.fov) {
@@ -600,6 +632,7 @@ const frame = (): void => {
     return;
   }
   status.hero = "";
+  fitView();
   // Camera rides the swell with the boats (mean heave), and never dips under the water.
   const meanHeave = boats.reduce((a, b) => a + b.motion.heave, 0) / boats.length;
   const dy = meanHeave - rigHeave;
@@ -647,4 +680,4 @@ const frame = (): void => {
 };
 // Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
 // in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
-void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => renderer.setAnimationLoop(frame));
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(frame), [(r, sc, cam) => clouds.warm(r, sc, cam)], () => atmos.sceneTarget()));
