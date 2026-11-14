@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { SEAMARKS, SEAMARK_RANGE, Seamarks, LAMP_M, markFlash, markGeometry } from "../src/land/seamarks";
+import { SEAMARKS, SEAMARK_RANGE, Seamarks, kindOf, lampHeight, markFlash } from "../src/land/seamarks";
+import { buoyGeometry } from "../src/boats/buoys";
 import { BAY_BRIDGE, BRIDGE_RANGE, BayBridge, deckHeight, roadLamps, spanGeometry } from "../src/land/bayBridge";
 import { bearingTo, offsetOf } from "../src/land/landmarks";
 import { ANNAPOLIS_COURSE } from "../src/helm/course";
@@ -35,12 +36,17 @@ test("green marks are odd and flat-topped or lit, red marks even; each shape sta
     if (m.shape === "nun") assert.equal(m.colour, "red");
     assert.equal(!!m.period, m.shape === "lit" || m.shape === "post", `${m.name}: lit marks flash, plain ones don't`);
   }
-  for (const shape of ["can", "nun", "lit", "post"] as const) {
-    const g = markGeometry(shape);
+  // Drawn with the detailed channel-mark models (Elena, 14 Nov): each chart entry gets its own kind, and a lit
+  // mark's lamp sits at the top of its model (the lantern, or a daybeacon's pile top).
+  assert.deepEqual(Object.fromEntries(SEAMARKS.map((m) => [m.key, kindOf(m)])), {
+    AN: "lit_yellow", "5": "lit_green", "14": "nun", "1AH": "daybeacon_green", "2": "lit_red", "1": "can", "91": "lit_green", WR87: "lit_green",
+  });
+  for (const m of SEAMARKS) {
+    const g = buoyGeometry(kindOf(m));
     g.computeBoundingBox();
     const b = g.boundingBox!;
-    assert.ok(b.max.y > 1.5 && b.max.y < 6 && b.min.y < 0, `${shape}: ${b.min.y} to ${b.max.y}`);
-    if (LAMP_M[shape]) assert.ok(LAMP_M[shape] >= b.max.y - 0.5, `${shape}: the lamp is on top`);
+    assert.ok(b.max.y > 1.4 && b.max.y < 6 && b.min.y < 0, `${m.name}: ${b.min.y} to ${b.max.y}`);
+    if (m.period) assert.ok(Math.abs(lampHeight(kindOf(m)) - b.max.y) < 0.5, `${m.name}: the lamp is on top (${lampHeight(kindOf(m))} by ${b.max.y.toFixed(2)})`);
   }
 });
 
