@@ -4825,6 +4825,17 @@ let warmRootLeft = 0;
 let warmRootPrograms: { isReady(): boolean }[] = [];
 const warmedRoots = new WeakSet<THREE.Object3D>();
 const parallel = renderer.extensions.has("KHR_parallel_shader_compile");
+// The card answers first (Omar's speed list, 14 Nov: on the playtest runner a click on the card waited
+// 0.5 to 1 s behind the warm-up, which reads a pixel back after each forced first draw, 0.1 to 0.5 s each
+// there). No warm-up in a frame just after a press or a key, or while one is waiting to be handled. (One
+// forced draw per frame at most made the warm-up 6 times longer on a fast machine, 7 to 40 s, and no
+// shorter per frame where each draw is slow: the time budget already stops after the first.)
+let lastInput = -Infinity;
+for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => (lastInput = performance.now()), { capture: true, passive: true });
+function inputWaiting(): boolean {
+  const s = (navigator as Navigator & { scheduling?: { isInputPending?: () => boolean } }).scheduling;
+  return performance.now() - lastInput < 300 || !!s?.isInputPending?.();
+}
 function drawables(root: THREE.Object3D, out: { o: THREE.Object3D; mirror: boolean }[]): void {
   root.traverse((o) => {
     const r = o as THREE.Mesh;
@@ -4867,6 +4878,8 @@ function warmShaders(): void {
     warmRootLeft = mine.length;
     warmRootPrograms = [];
   }
+  // A press or a key just now: this frame is the card's.
+  if (!parallel && inputWaiting()) return;
   const start = performance.now();
   const boatStep = warmRootLeft > 0;
   const until = start + (boatStep ? WARM_BOAT_MS : WARM_MS);
@@ -4899,8 +4912,11 @@ function warmShaders(): void {
         }
       // And without it, draw it once too (into a corner, alone): the driver sets each shader up for
       // drawing on its first use, which was most of the 4 to 10 s wait after Set sail (rank 12).
-      if (!parallel && !seeThrough) drawEach(renderer, scene, camera, [o], inMirror ? mirror.target : prev);
       if (warmRootLeft > 0) warmRootLeft--;
+      if (!parallel && !seeThrough) drawEach(renderer, scene, camera, [o], inMirror ? mirror.target : prev);
+      // A press came in meanwhile: the rest waits for the next frame (the step's time budget already
+      // stops after the first forced draw where each one is slow).
+      if (!parallel && inputWaiting()) break;
     }
   } catch {
     /* only a head start: the first sailing frame builds whatever is missing */

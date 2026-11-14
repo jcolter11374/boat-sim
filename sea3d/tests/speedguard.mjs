@@ -112,7 +112,9 @@ try {
     env = await page.evaluate(() => {
       const gl = document.createElement("canvas").getContext("webgl2");
       const dbg = gl?.getExtension("WEBGL_debug_renderer_info");
-      return `${navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent}; ${dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "?"}; parallel compile ${!!gl?.getExtension("KHR_parallel_shader_compile")}`;
+      const out = `${navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent}; ${dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "?"}; parallel compile ${!!gl?.getExtension("KHR_parallel_shader_compile")}`;
+      gl?.getExtension("WEBGL_lose_context")?.loseContext(); // a throwaway context (Maya, #615)
+      return out;
     });
     await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 10, null, { timeout: 60_000 });
     counts.titlePrograms = await settled(page);
