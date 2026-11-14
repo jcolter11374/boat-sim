@@ -272,6 +272,10 @@ function framed(host: FramingHost, look: Look): { pos: THREE.Vector3; quat: THRE
 // right, a little above centre over the instrument strip, and from higher than the film's Heel
 // shot so a gale's crests don't hide a boat lying flat.
 export const KNOCKDOWN: Look = { ...C(90, 0.4, 0.3, 3, 30), B: 0.1, x: 0 };
+// A boat with no rig to speak of (the kayak) lies low and dark when she is flat: closer and
+// lower, so she fills near half the width between the panels and her spray and bright topsides
+// stand against the sea behind her (Elena, 14 Nov: she nearly disappeared at the moment that matters).
+export const KNOCKDOWN_HULL: Look = { ...C(90, 0.46, 0.3, 1.5, 30), B: 0.1, x: 0 };
 export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
   const yaw = host.yaw();
   const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
@@ -283,7 +287,7 @@ export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vec
   let best: Composed | null = null;
   let most = -Infinity;
   for (const s of [1, -1]) {
-    const c = compose(target, bow, bow, s, len, host.camera.aspect, KNOCKDOWN, 0, tall <= len ? 0 : tall);
+    const c = compose(target, bow, bow, s, len, host.camera.aspect, tall <= len ? KNOCKDOWN_HULL : KNOCKDOWN, 0, tall <= len ? 0 : tall);
     const out = (c.pos.x - target.x) * lee.x + (c.pos.z - target.z) * lee.y;
     if (out > most) {
       most = out;
