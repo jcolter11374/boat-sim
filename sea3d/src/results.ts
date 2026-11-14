@@ -69,6 +69,15 @@ export function standing(build: string, board: Board | null, grid: Grid | null):
 /** The standing in plain words: one sentence, and a second line of detail.
  *  Board wording leads with the group, not the place (Ravi): boats in one group
  *  can't be told apart on the board's launches, so a place alone overclaims. */
+/**
+ * One muted line for wherever a game's result sits beside the Boatyard's odds or a recorded voyage
+ * (M5): since the game's autopilot went to policy 2 it sails better than the one those were run with,
+ * so the ghost's time and the odds no longer describe the same autopilot. Empty when they do.
+ */
+export function autopilotNote(policy: number | null | undefined, besideOdds: boolean): string {
+  return besideOdds && (policy ?? 1) > 1 ? "The autopilot in the game sails smarter than the one behind these odds and the recorded voyages." : "";
+}
+
 export function standingText(s: Standing): { head: string; detail: string } {
   if (s.kind === "board") {
     const r = s.row;

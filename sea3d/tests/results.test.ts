@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boardDay, leaderboardLink, nextLinks, raceItLink, ordinal, standing, standingText, type Board, type Grid } from "../src/results";
+import { autopilotNote, boardDay, leaderboardLink, nextLinks, raceItLink, ordinal, standing, standingText, type Board, type Grid } from "../src/results";
 
 const row = (design: string, finish_rate: number, tier: number) => ({
   tier,
@@ -119,4 +119,14 @@ test("Race it from an ending: the Set sail card with a rival picked, never the o
   assert.equal(raceItLink({ boat: "stock_cruiser31" }), null); // a stock yacht can't race: leave the button out
   assert.equal(raceItLink({ day: "soon", quality: "<x>" }), "./helm.html?who=autopilot&against=revc");
   for (const l of [raceItLink(), raceItLink({ boat: "revc" })]) assert.doesNotMatch(l!, /race\.html|voyage\.html/);
+});
+
+test("the muted line where a game's result sits beside the odds: only on the game's newer autopilot", () => {
+  const line = "The autopilot in the game sails smarter than the one behind these odds and the recorded voyages.";
+  assert.equal(autopilotNote(2, true), line);
+  assert.equal(autopilotNote(2, false), ""); // no odds shown: nothing to set it beside
+  assert.equal(autopilotNote(1, true), ""); // a boat with a sail, or an older saved game: the same autopilot as the odds
+  assert.equal(autopilotNote(undefined, true), ""); // an older simulator says nothing
+  assert.equal(autopilotNote(null, true), "");
+  assert.doesNotMatch(line, /[$£€]|ghost|policy/i);
 });
