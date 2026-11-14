@@ -3396,7 +3396,7 @@ const CHECKS = {
       // 1. The Pearson on the title, then the picker, then Set sail.
       {
         const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, serviceWorkers: "block" });
-        await ctx.addInitScript((mb) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", JSON.stringify(mb)); } catch {} }, PEARSON);
+        await ctx.addInitScript((v) => { try { if (!localStorage.getItem("boatsim.myboat.v1")) localStorage.setItem("boatsim.myboat.v1", v); } catch {} }, JSON.stringify(PEARSON));
         const p = await ctx.newPage();
         try {
           await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
@@ -3464,13 +3464,15 @@ const CHECKS = {
           const twa = () => p.evaluate(() => { const t = document.querySelector(".w-twa")?.title ?? ""; const m = t.match(/(-?\d+)°/); return m ? Math.abs(+m[1]) : null; });
           const side = await p.evaluate(() => (document.body.innerText.match(/(?:upwind|reach|behind), (left|right)/) || [""])[0]);
           const key = /left/.test(side) ? "ArrowLeft" : "ArrowRight";
-          let best = await twa(), hw = 0;
+          let best = await twa(), hw = 0, tick = 0;
+          await p.click('.w-rate button[data-x="10"], button[data-x="10"]', { timeout: 5000 }).catch(() => p.keyboard.press("4"));
           await p.keyboard.down(key);
           const t0 = Date.now();
           while (Date.now() - t0 < 90_000 && hw < 2) {
             const a = await twa();
             if (a != null && a < (best ?? 999)) best = a;
-            if (a != null && a <= 20) { await p.keyboard.up(key); shots.push(await emit(p, `practice-head-to-wind-${++hw}`)); await p.keyboard.down(key); await p.waitForTimeout(400); }
+            if (a != null && a <= 25) { await p.keyboard.up(key); shots.push(await emit(p, `practice-head-to-wind-${++hw}-${a}deg`)); await p.keyboard.down(key); await p.waitForTimeout(400); }
+            else if (++tick % 40 === 0) { await p.keyboard.up(key); shots.push(await emit(p, `practice-turning-${a}deg`)); await p.keyboard.down(key); }
             await p.waitForTimeout(250);
           }
           await p.keyboard.up(key);
