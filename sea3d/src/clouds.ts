@@ -1233,6 +1233,27 @@ export class Clouds {
     u.uMoon.value = light;
   }
 
+  /** Build the cloud's own passes' shaders ahead of the first frame (warmup.ts): they draw into their own pictures, which the scene doesn't hold. */
+  warm(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): THREE.Material[] {
+    const out: THREE.Material[] = [];
+    const prev = renderer.getRenderTarget();
+    const shown = this.layer.visible;
+    try {
+      // The dome too: it is hidden until the first weather update, and three only builds what shows.
+      this.layer.visible = true;
+      out.push(...renderer.compile(this.layer, camera, scene));
+      for (const [sc, rt] of [[this.skyScene, this.skyRT], [this.cuScene, this.cuRT]] as const) {
+        if (!sc.children.length) continue;
+        renderer.setRenderTarget(rt);
+        out.push(...renderer.compile(sc, this.cuCam));
+      }
+    } finally {
+      this.layer.visible = shown;
+      renderer.setRenderTarget(prev);
+    }
+    return out;
+  }
+
   /** Low draws one cheaper layer; High the deck and scud with shading; Ultra more detail. */
   setQuality(q: CloudQuality): void {
     this.layer.material.uniforms.uQ.value = q === "low" ? 0 : q === "ultra" ? 2 : 1;

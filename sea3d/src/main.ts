@@ -38,6 +38,7 @@ import { TitleCompany } from "./titleCompany";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 import { TitleTrack } from "./titleTrack";
+import { startWhenBuilt } from "./warmup";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -647,4 +648,4 @@ const frame = (): void => {
 };
 // Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
 // in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
-void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => renderer.setAnimationLoop(frame));
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(frame), [(r, sc, cam) => clouds.warm(r, sc, cam)], () => atmos.sceneTarget()));
