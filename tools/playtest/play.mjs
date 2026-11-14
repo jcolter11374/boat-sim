@@ -4722,7 +4722,7 @@ const CHECKS = {
           return { hour: h.hour, clock: h.clock, busy: !!h.busy, open: vis(document.getElementById("decide")), text: (document.getElementById("decidetext")?.textContent || "").slice(0, 70), card: !!h.card, over: !!h.status?.over, result: vis(document.getElementById("result")) };
         });
         const now = Date.now();
-        if (st.over || st.result) { end = `ended day ${(st.hour / 24).toFixed(1)}${st.result ? " (results card)" : ""}`; break; }
+        if (st.over || st.result) { await page.waitForTimeout(3000); const why = await page.evaluate(() => [window.__helm.status?.outcome, window.__helm.status?.reason, (document.getElementById("result")?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 160)].filter(Boolean).join(" / ")); end = `ended day ${(st.hour / 24).toFixed(1)}${st.result ? " (results card)" : ""}: ${why || "no reason shown"}`; break; }
         if (st.open) {
           calls.push(`d${(st.hour / 24).toFixed(2)} ${st.text}`);
           await page.evaluate(() => document.querySelector("#decidebtns button")?.click());
