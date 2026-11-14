@@ -10,7 +10,10 @@
 //   - but never asking the simulator more than once every two seconds;
 //   - when the page is hidden or closed: at once, with what is already held (the simulator's
 //     code takes a moment, and a closing page doesn't wait), and then a fresh save if the
-//     page lives long enough to finish it.
+//     page lives long enough to finish it. The order on the helm is written with it: one
+//     sent in the last moment may not be in the code yet (Omar's live check, 14 Nov: an
+//     order sent 3 s before leaving, with the simulator busy, came back as Autopilot), and
+//     coming back gives it again.
 // So what can go unsaved is about two seconds of play: nothing in real time, an hour or two at
 // an hour a second, more at the fast speeds. The save says which day was on the screen when
 // the page was left (`left`), so coming back can say truthfully where it is (welcomeBack).
@@ -109,7 +112,7 @@ export class VoyageKeeper {
     const st = this.state();
     if (!st || !this.last) return false;
     if (st.over) return this.end();
-    const v = packVoyage({ ...this.last, left: st.seen, rate: st.rate }, new Date());
+    const v = packVoyage({ ...this.last, left: st.seen, rate: st.rate, order: st.order }, new Date());
     if (!v) return false;
     saveVoyage(v, this.storage);
     this.last = v;

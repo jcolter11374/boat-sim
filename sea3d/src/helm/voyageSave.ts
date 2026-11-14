@@ -30,6 +30,15 @@ export const VOYAGE_VERSION = 1;
 /** Real time on the speed bar (John's T1) as a saved rate: a second of the voyage every second. */
 export const REAL_TIME = "rt";
 
+/** The order on the helm: a heading (degrees, or the autopilot's "auto", "finish", "route"),
+ *  the power share, and for a sailing boat her sails and engine. */
+export interface SavedOrder {
+  heading: number | "auto" | "finish" | "route";
+  power: number;
+  sails: string | null;
+  engine: boolean | null;
+}
+
 export interface SavedVoyage {
   v: typeof VOYAGE_VERSION;
   /** The simulator's save code: launch, boat, seeds and the orders so far. The only part
@@ -44,6 +53,11 @@ export interface SavedVoyage {
   /** The voyage day that was on the screen when the page was last written to, for the
    *  welcome-back words only (see welcomeBack); null if not known (an older save). */
   left: number | null;
+  /** The order on the helm when the page was last written to (hands on only), or null. The
+   *  code holds every order the simulator has answered; one sent in the last moment before
+   *  the page closed may not be in it yet. Coming back sends this one again if the voyage
+   *  came back without it (see sameOrder). Not the boat's state: an order, given again. */
+  order: SavedOrder | null;
   /** Km left to the finish when saved, for the offer's words only; null if not known. */
   toGoKm: number | null;
   /** The speed the clock was at: hours of voyage per second, REAL_TIME, or 0 for paused. */
@@ -62,6 +76,7 @@ export interface VoyageNow {
   boat?: string | null;
   day: number;
   left?: number | null;
+  order?: SavedOrder | null;
   toGoKm?: number | null;
   rate?: number | typeof REAL_TIME | null;
   sim?: string | null;
@@ -76,6 +91,26 @@ const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const finite = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 const okRate = (x: unknown): x is number | typeof REAL_TIME => x === REAL_TIME || (finite(x) && x >= 0 && x <= 1000);
 
+const AUTO = ["auto", "finish", "route"];
+
+/** An order that can be given again, or null: a heading in degrees or one of the autopilot's
+ *  words, a power from 0 to 1, and only then the sails and engine. */
+function okOrder(x: unknown): SavedOrder | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  const heading = finite(o.heading) && o.heading >= 0 && o.heading <= 360 ? o.heading : typeof o.heading === "string" && AUTO.includes(o.heading) ? (o.heading as SavedOrder["heading"]) : null;
+  if (heading === null || !finite(o.power) || o.power < 0 || o.power > 1) return null;
+  return { heading, power: o.power, sails: typeof o.sails === "string" && o.sails.length <= 40 ? o.sails : null, engine: typeof o.engine === "boolean" ? o.engine : null };
+}
+
+/** Whether two orders are the same order (a heading to a tenth of a degree, a power to a
+ *  thousandth). Coming back gives the saved order again only if the voyage came back with a
+ *  different one. */
+export function sameOrder(a: SavedOrder, b: SavedOrder): boolean {
+  const sameHeading = typeof a.heading === "number" && typeof b.heading === "number" ? Math.abs(a.heading - b.heading) < 0.1 : a.heading === b.heading;
+  return sameHeading && Math.abs(a.power - b.power) < 0.001 && (a.sails ?? null) === (b.sails ?? null) && (a.engine ?? null) === (b.engine ?? null);
+}
+
 /** A save record for this moment, or null if there's nothing worth keeping (no code, or
  *  a day that isn't a number). `now` is injectable for tests. */
 export function packVoyage(n: VoyageNow, now: Date = new Date()): SavedVoyage | null {
@@ -89,6 +124,7 @@ export function packVoyage(n: VoyageNow, now: Date = new Date()): SavedVoyage | 
     boat: typeof n.boat === "string" ? n.boat.trim().slice(0, 60) : "",
     day: Math.round(n.day * 100) / 100,
     left: finite(n.left) && n.left >= 0 ? Math.round(n.left * 100) / 100 : null,
+    order: okOrder(n.order),
     toGoKm: finite(n.toGoKm) && n.toGoKm >= 0 ? Math.round(n.toGoKm) : null,
     rate: okRate(n.rate) ? n.rate : 0,
     sim: typeof n.sim === "string" ? n.sim.slice(0, 80) : "",
@@ -120,6 +156,7 @@ export function parseVoyage(raw: string | null | undefined): SavedVoyage | null 
     boat: typeof r.boat === "string" ? r.boat.slice(0, 60) : "",
     day: r.day,
     left: finite(r.left) && r.left >= 0 ? r.left : null,
+    order: okOrder(r.order),
     toGoKm: finite(r.toGoKm) && r.toGoKm >= 0 ? r.toGoKm : null,
     rate: okRate(r.rate) ? r.rate : 0,
     sim: typeof r.sim === "string" ? r.sim.slice(0, 80) : "",
