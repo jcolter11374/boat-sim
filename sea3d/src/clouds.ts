@@ -105,10 +105,12 @@ export function stormWall(km: number): number {
 }
 
 /**
- * The new fair-weather cumulus (Hana; passed Elena 12 Nov 2026) is the default; ?cumulus=old
- * brings back main's earlier flat cumulus as a way back.
+ * The new fair-weather cumulus (heaps with real height) is switched off: it shows only with
+ * ?cumulus=new in the address. Elena, 14 Nov 2026: the title keeps the clouds it was signed off
+ * with, and at sea the heaps wait until they are a field on a shared flat base with the soft
+ * high sheets kept above them. Until then every sky draws the earlier cumulus.
  */
-export const CUMULUS_NEW = typeof location === "undefined" || new URLSearchParams(location.search).get("cumulus") !== "old";
+export const CUMULUS_NEW = typeof location !== "undefined" && new URLSearchParams(location.search).get("cumulus") === "new";
 
 const cloudVert = /* glsl */ `
 varying vec3 vWorld;
@@ -212,7 +214,7 @@ float deckD(vec2 r, float lod, int oct) {
   float v = 0.36 * big * k * (0.45 + 0.55 * tear) + 0.12 * bumps * (1.0 - smoothstep(0.0, 0.5, lod)) + 0.6 * mass - 0.03;
   return mix(0.5, v, 1.0 - 0.6 * lod) + 0.01;
 }
-// ---- new fair cumulus (the default; ?cumulus=old for the earlier one): heaps as height fields over a flat base ----
+// ---- new fair cumulus (only with ?cumulus=new): heaps as height fields over a flat base ----
 const float CU_BASE = 1400.0; // m, the flat base
 const float CU_TOP = 1300.0;  // m above the base, the tallest head
 // The heap here: x = its underside, y = its top, in m above the base (y <= x: clear sky).
@@ -390,7 +392,7 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
   a *= 1.0 - smoothstep(14000.0, 25000.0, distH);
   return vec4(col, a);
 }
-// main's fair-weather cumulus (kept as the way back: ?cumulus=old).
+// The fair-weather cumulus every sky draws (the new heaps replace it only with ?cumulus=new).
 float fbmOld(vec2 p) {
   float v = 0.0, a = 0.5;
   for (int k = 0; k < 5; k++) { v += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
