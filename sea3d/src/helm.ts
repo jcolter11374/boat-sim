@@ -74,7 +74,7 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -2376,7 +2376,8 @@ const compassOf = (east: number, north: number): number => ((Math.atan2(east, no
 const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 /** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
-let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number } | null = null;
+/** now: the whole opening when told alone, before "she's now ... the ghost" (the push's words, Elena). */
+let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number; now?: string } | null = null;
 /** A later call made before the Stream's three days were up, so its debrief credits both (Leo). */
 const alsoCalled = (what: string) => streamCall?.later.push(what);
 /** The challenge's call, once made: which, and when (voyage hours), for the toast two days on. */
@@ -2501,16 +2502,17 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   }
   // A night that could run the battery flat.
   if (fc && motors && st.boat.soc < nightLine(power) && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= (lastCallKind === "push" ? NIGHT_AFTER_PUSH_H : MIN_CALL_GAP_H)) {
-    if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
+    const dark = ahead.find((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5);
+    if (dark) {
       asked.night = h;
       return {
         kind: "night",
-        text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
+        text: `${nightOpener(st.boat.soc, dark.ah)} At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
         choices: [
           { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
           // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
-          { label: "Hand her back to the autopilot (what the ghost does)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
+          { label: "Hand her back to the autopilot (same as the ghost)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
         ],
       };
     }
@@ -2524,7 +2526,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     const later = streamCall.later;
     const also = later.length ? ` You also ${later.length > 1 ? `${later.slice(0, -1).join(", ")} and ${later[later.length - 1]}` : later[0]}.` : "";
     const span = `${Math.round((streamCall.after ?? 72) / 24)} days`;
-    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : `${streamCall.chose}: ${where} after ${span}.`;
+    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : streamCall.now ? `${streamCall.now}: she's now ${where}.` : `${streamCall.chose}: ${where} after ${span}.`;
     // White on the strip's glass, with the colour on the number only (Elena).
     const num = Math.abs(km) < 1 ? undefined : `${Math.abs(km).toLocaleString()} km`;
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn, num));
@@ -2570,7 +2572,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
             return setOrder(Math.round(toFinish));
           },
         },
-        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: "Let the autopilot decide (same as the ghost)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
   }
@@ -2693,7 +2695,7 @@ function maybeRouteCheck(st: Status): boolean {
             streamCall = { h, chose: `Since you bent ${deg}° ${side}`, since: `Since you bent ${deg}° ${side}`, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(b.best);
           }, order: { heading: b.best, power } },
-          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (what the ghost does)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
+          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (same as the ghost)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
         ],
       };
       const view: Outlook = { ...o, orders: [best, auto] };
@@ -2720,7 +2722,7 @@ function maybeRouteCheck(st: Status): boolean {
             pushTurnedDown = null;
             powerBeforePush ??= power;
             if (streamCall) alsoCalled(words.did);
-            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
+            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, now: words.ago, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(to.heading, to.power);
           } },
           { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
@@ -2736,7 +2738,7 @@ function maybeRouteCheck(st: Status): boolean {
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
       // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
-      const text = `Navigator's note: the forecast favours the autopilot over your order for the next 4 days (${timeChange(auto.lead_km - now.lead_km, pace)}). Hand her back in Orders.`;
+      const text = handBackNote(auto.lead_km - now.lead_km);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     if (!ask) return resume();
@@ -2752,8 +2754,8 @@ function maybeRouteCheck(st: Status): boolean {
       text: `Navigator's check: the forecast says ${fmtDeg(b.best)} would gain on ${orderWords(order)} over the next 4 days, but through ${price}.`,
       choices: [
         { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
-        { label: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
-        { label: "Let the autopilot decide (what the ghost does)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: "Let the autopilot decide (same as the ghost)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
     const picks = order === "auto" || same ? [0, 1] : [0, 1, 2];
