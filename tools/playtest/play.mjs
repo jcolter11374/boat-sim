@@ -5173,11 +5173,13 @@ const CHECKS = {
     run: async (page) => {
       const browser = page.context().browser();
       const out = [];
-      for (const [tag, w, h, q] of [["1280-medium", 1280, 720, "medium"], ["390-medium", 390, 844, "medium"]]) {
+      for (const [tag, w, h, q] of [["1280-low", 1280, 720, "low"], ["1280-medium", 1280, 720, "medium"], ["390-medium", 390, 844, "medium"]]) {
         const phone = w < 500;
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 3 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
         await ctx.addInitScript(() => {
-          window.__ft = { frames: [], probes: [] };
+          window.__ft = { frames: [], probes: [], long: [] };
+          // Omar: long tasks (Chrome only; Firefox has no "longtask" entries).
+          try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__ft.long.push([e.startTime, e.duration]); }).observe({ type: "longtask", buffered: true }); } catch {}
           const f = (t) => { window.__ft.frames.push(t); requestAnimationFrame(f); };
           requestAnimationFrame(f);
           // Main-thread probe: a timer every 100 ms, and how late it fires.
@@ -5212,10 +5214,11 @@ const CHECKS = {
             let worst = 0, at = 0;
             for (let i = 1; i < fr.length; i++) if (fr[i] - fr[i - 1] > worst) { worst = fr[i] - fr[i - 1]; at = fr[i - 1]; }
             const late = window.__ft.probes.filter(([t]) => t >= a && t <= b).map(([, d]) => d);
-            return { frames: fr.length, worst: Math.round(worst), worstAfterCard: Math.round(at - a), lateMax: Math.round(Math.max(0, ...late)), lateOver500: late.filter((d) => d > 500).length };
+            const lt = window.__ft.long.filter(([t]) => t >= a && t <= b).map(([, d]) => d);
+            return { longMax: lt.length ? Math.round(Math.max(...lt)) : null, longN: lt.length, frames: fr.length, worst: Math.round(worst), worstAfterCard: Math.round(at - a), lateMax: Math.round(Math.max(0, ...late)), lateOver500: late.filter((d) => d > 500).length };
           }, [cardAt, sailAt]);
           const boat = boatAt === null ? "not by the last click" : `${((boatAt - cardAt) / 1000).toFixed(1)} s after the card`;
-          out.push(`${tag}: card at ${((cardAt) / 1000).toFixed(1)} s after load; longest frozen frame ${r.worst} ms (at ${(r.worstAfterCard / 1000).toFixed(1)} s); timer late up to ${r.lateMax} ms, ${r.lateOver500} times over 0.5 s; clicks ${clicks.join("/")} ms; boat ${boat}; Set sail to sailing ${((sailAt - goAt) / 1000).toFixed(1)} s; ${r.frames} frames`);
+          out.push(`${tag}: card at ${((cardAt) / 1000).toFixed(1)} s after load; longest task ${r.longMax ?? "n/a"} ms (${r.longN} long tasks); longest frozen frame ${r.worst} ms (at ${(r.worstAfterCard / 1000).toFixed(1)} s); timer late up to ${r.lateMax} ms, ${r.lateOver500} times over 0.5 s; clicks ${clicks.join("/")} ms; boat ${boat}; Set sail to sailing ${((sailAt - goAt) / 1000).toFixed(1)} s; ${r.frames} frames`);
         } finally { await ctx.close().catch(() => {}); }
       }
       console.log(`CARDFREEZE ${BROWSER}: ${out.join(" || ")}`);
