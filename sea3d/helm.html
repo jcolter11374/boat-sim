@@ -12,6 +12,8 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1726; color: var(--ink);
     font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
   #app { position: fixed; inset: 0; }
+  #still { position: fixed; top: 0; display: none; background: no-repeat center / cover; }
+  #still.on { display: block; }
   .glass { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
   a { color: #8ab4ff; }
@@ -323,6 +325,14 @@
   .ss-ask-btns button:focus-visible { outline: 2px solid var(--orange, #ff8a2a); outline-offset: 2px; }
   #ss-ask-keep { background: var(--orange, #ff8a2a); border-color: var(--orange, #ff8a2a); color: #1a0d02; }
   .ss-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* From the title (helm.html's first script): the card opens at its full size, each row's place kept
+     until its pills arrive (setsailCard.ts takes the class off once all of them have), so nothing jumps. */
+  body.ss-filling #ss-who[hidden], body.ss-filling #ss-rival[hidden], body.ss-filling #ss-ch[hidden],
+  body.ss-filling #ss-today[hidden], body.ss-filling #ss-rival-soon[hidden] { display: block; }
+  body.ss-filling #ss-where-opts { min-height: 81px; } body.ss-filling #ss-today { min-height: 70px; }
+  body.ss-filling #ss-who-opts { min-height: 30px; } body.ss-filling #ss-when-opts { min-height: 45px; }
+  body.ss-filling #ss-ch-opts { min-height: 66px; }
+  body.ss-filling #ss-who-line, body.ss-filling #ss-rival-line, body.ss-filling #ss-rival-soon { min-height: 18px; }
   .ss-pill { font: 600 13.5px system-ui, sans-serif; color: var(--ink); text-align: left; padding: 6px 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(27,51,82,.55); cursor: pointer; }
   .ss-pill small { font-weight: 400; color: var(--dim); margin-left: 6px; }
   .ss-pill:hover { border-color: #8ab4ff; }
@@ -701,6 +711,25 @@
 </style>
 </head>
 <body>
+<div id="still" aria-hidden="true"></div>
+<script>
+  // Before the first paint: the title's last picture of the sea behind the page while the helm loads,
+  // and the plain Set sail card at its full size from the start (helm/still.ts; Elena, 14 Nov).
+  try {
+    var raw = sessionStorage.getItem("boatsim.helm.still");
+    sessionStorage.removeItem("boatsim.helm.still");
+    var s = raw ? JSON.parse(raw) : null;
+    if (s && Date.now() - s.at < 120000 && /^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(s.src)) {
+      var el = document.getElementById("still");
+      el.style.backgroundImage = 'url("' + s.src + '")';
+      el.style.left = 100 * s.x + "%";
+      el.style.width = 100 * s.w + "%";
+      el.style.height = 100 * s.h + "%";
+      el.className = "on";
+      if (s.kind === "setsail" && !location.search) document.body.classList.add("ss-filling");
+    }
+  } catch (e) { /* private mode: the plain navy page, as before */ }
+</script>
 <div id="app"></div>
 <div id="clock" hidden></div>
 <div id="decide" class="glass" role="dialog" aria-live="polite" aria-labelledby="decidetext" hidden>

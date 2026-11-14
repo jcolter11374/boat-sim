@@ -5337,6 +5337,8 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     showStrip(live);
   }
   page.frames++;
+  // The title's picture behind the page while it loaded (helm/still.ts): the sea is drawn over it now.
+  if (page.frames === 1) document.getElementById("still")?.remove();
   page.hour = hour;
   page.simHour = shownTo;
 }), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());

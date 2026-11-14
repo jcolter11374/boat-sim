@@ -31,6 +31,7 @@ import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
 import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, backAt, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
 import { prefetchHelmOnIntent } from "./helm/prefetch";
+import { saveStill } from "./helm/still";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
 import { TitleLandmarks } from "./titleLandmarks";
@@ -111,6 +112,9 @@ prefetchHelmOnIntent(
   [document.getElementById("t-setsail"), document.getElementById("t-continue")],
   document.getElementById("title"),
 );
+// Leaving for the helm: its sea takes seconds to come on a slow computer, so it shows this picture meanwhile (helm/still.ts).
+for (const [id, kind] of [["t-setsail", "setsail"], ["t-continue", "continue"]] as const)
+  document.getElementById(id)?.addEventListener("click", () => saveStill(renderer.domElement, kind));
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
