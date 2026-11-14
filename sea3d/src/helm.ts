@@ -516,6 +516,8 @@ const page = {
   /** The picture's level, where it came from, and the timed median frame (ms) if it was judged (for tests). */
   quality: qstat,
   ready: false,
+  /** Her boat is on screen (behind the Set sail card she waits for her shaders first; for tests). */
+  boatShown: false,
   /** Which mode the one sailing screen is in (M2): you at the helm, a recorded voyage, or a race. */
   view: (WATCH ? "watch" : RACE ? "race" : "helm") as "helm" | "watch" | "race",
   /** A race's two boats (their names, the helm's keys for their models) and its launch, once it has started. */
@@ -4674,6 +4676,7 @@ function hideStandIn(): void {
     fadedRoot = model.root;
     startFade(model.root);
   }
+  page.boatShown = show;
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
