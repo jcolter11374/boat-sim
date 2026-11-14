@@ -438,6 +438,14 @@ let lanes: Lane[] = [];
 let focus = 0; // which lane the close-up and the cards follow
 let rep: Replay | null = null; // lanes[focus].rep
 let hour = 0;
+// Ready (for tests) once the replay is in and the loop runs: drawing waits for the shaders to be
+// built (#600), and until then the replay's clock doesn't move, so a test that played the moment
+// the replay was in saw it stand still (smoke: "playback didn't advance").
+let loaded = false;
+let drawing = false;
+function markReady(): void {
+  status.ready = loaded && drawing;
+}
 let playing = false;
 let warp = 1 / 3600; // voyage hours per real second: real time (the game and the live tracker start here)
 /** A replay opens already playing at this speed: real time. John's call (T2 in
@@ -783,7 +791,8 @@ async function load(files: string[], pick = files[0], autoplay = !REDUCED_MOTION
     beats = GAME && gamePicked ? storyBeats(lanes[0].rep) : []; // none behind the picker
     seek(0);
     setPlaying(autoplay);
-    status.ready = true;
+    loaded = true;
+    markReady();
   } catch (e) {
     fail(String(e));
   }
@@ -819,7 +828,8 @@ async function loadLive(course: Replay["course"], keepHour = false): Promise<voi
     seek(keepHour && !wasNow ? Math.min(hour, endHour()) : tracked.nowHour);
     // A reload carries on as it was (a reload that stopped the playback looked like a glitch).
     setPlaying(keepHour && wasPlaying);
-    status.ready = true;
+    loaded = true;
+    markReady();
   } catch (e) {
     fail(String(e));
   }
@@ -1349,6 +1359,10 @@ let smoothYaw: number | null = null;
 let storm = 0; // 0 fair .. 1 gale, eased
 // Drawing starts once the shaders are built, after the page has painted (warmup.ts).
 startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
+  if (!drawing) {
+    drawing = true;
+    markReady();
+  }
   const t = clock.getElapsedTime();
   const dt = Math.min(t - last, 0.1);
   last = t;
