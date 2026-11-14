@@ -678,6 +678,13 @@
     #orders { top: auto; bottom: calc(var(--edge) + var(--strip-live, var(--strip-h)) + 6px);
       max-height: max(150px, min(50dvh, calc(100dvh - var(--bar, 0px) - var(--strip-live, var(--strip-h)) - 270px))); }
     body.sailing #orders:not(.open) { transform: translateY(calc(100% + var(--strip-live, var(--strip-h)) + 20px)); }
+    /* A "Your call" takes the same place while it's up (time is paused until you choose), the orders step aside for it. */
+    #decide, #decide.withmap { top: auto !important; left: var(--edge); right: var(--edge); width: auto; transform: none; z-index: 8;
+      bottom: calc(var(--edge) + var(--strip-live, var(--strip-h)) + 6px); overflow-y: auto; overscroll-behavior: contain;
+      max-height: calc(100dvh - var(--strip-live, var(--strip-h)) - 170px); }
+    #decidemap { height: 96px; }
+    #decidefoot { display: none; } /* keys 1-3 and Esc: no keyboard on a phone */
+    body:has(#decide:not([hidden])) #orders { visibility: hidden; }
   }
 </style>
 </head>
