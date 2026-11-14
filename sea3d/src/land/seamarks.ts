@@ -1,16 +1,17 @@
 // The real buoys and beacons off Annapolis (M5, Hana): the government marks a sailor on the
 // practice course actually sees, at their charted spots, in their real colours and shapes, each
-// flashing its own rhythm after dark. Drawn in code, a few hundred triangles each. Display only:
+// flashing its own rhythm after dark. Drawn with the detailed channel-mark models (boats/buoys.ts;
+// Elena, 14 Nov: this file's chart, that file's models, this file's lights). Display only:
 // the boat's physics never sees them (she sails through one; real sailors keep clear).
 //
 // Colours (the US system): green marks have flat tops ("cans") and odd numbers, red marks have
 // pointed tops ("nuns") and even numbers; coming in from the sea, red is kept on the right.
 // Yellow is a special mark (here NOAA's weather buoy).
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { R_EARTH } from "./shader";
 import { nightOf } from "./town";
 import { flashAt, glowTexture, offsetOf } from "./landmarks";
+import { BUOY_FIXED, BUOY_LIGHT_HEIGHT, makeBuoy, type BuoyKind } from "../boats/buoys";
 
 export type MarkShape = "can" | "nun" | "lit" | "post";
 
@@ -47,35 +48,27 @@ export const SEAMARKS: Seamark[] = [
 export const SEAMARK_RANGE = 9000;
 /** How long each flash lasts (s). GUESS: the sheet gives the rhythm, not the flash's length. */
 export const SEAMARK_FLASH = 0.4;
-/** The lamp's height above the water (m) for each shape. GUESS from the usual sizes: a lighted buoy's lamp is about 4.5 m up, a small fixed light's about 5 m. */
-export const LAMP_M: Record<MarkShape, number> = { can: 0, nun: 0, lit: 4.5, post: 5.2 };
+/**
+ * How each charted mark is drawn: with the detailed channel-mark models (boats/buoys.ts, rust, weed and
+ * numbers), Elena's ruling of 14 Nov: this file keeps the chart (where, which, what rhythm), buoys.ts the
+ * look. A "post" is a lighted daybeacon: a pile with its board.
+ */
+export function kindOf(m: Seamark): BuoyKind {
+  if (m.shape === "can") return "can";
+  if (m.shape === "nun") return "nun";
+  if (m.shape === "post") return m.colour === "red" ? "daybeacon_red" : "daybeacon_green";
+  return m.colour === "red" ? "lit_red" : m.colour === "green" ? "lit_green" : "lit_yellow";
+}
+/** Pile top on a daybeacon (buoys.ts): a lighted one carries its lamp on it. */
+const PILE_TOP_M = 4.25;
+/** The lamp's height above the water (m) for each kind: the lit buoys' own lantern (buoys.ts), a daybeacon's on its pile top. */
+export function lampHeight(kind: BuoyKind): number {
+  return BUOY_LIGHT_HEIGHT[kind] ?? PILE_TOP_M + 0.15;
+}
 
-const PAINT = { green: 0x1f7a4a, red: 0xc0392b, yellow: 0xe8c21a };
 const LAMP = { green: 0x35ff7a, red: 0xff3a28, yellow: 0xffd84a };
 
 const cyl = (r0: number, r1: number, h: number, y: number, seg = 14) => new THREE.CylinderGeometry(r0, r1, h, seg).translate(0, y + h / 2, 0);
-
-/** One mark's shape (m, the waterline at y = 0). Sizes are a GUESS from the usual ones: a can or nun stands about 1.8 m out of the water, a lighted buoy 4.5 m. */
-export function markGeometry(shape: MarkShape): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  if (shape === "can") parts.push(cyl(0.5, 0.55, 2.4, -0.6));
-  else if (shape === "nun") parts.push(cyl(0.5, 0.55, 1.5, -0.6), cyl(0.12, 0.5, 0.9, 0.9));
-  else if (shape === "lit") {
-    // A broad steel float, a four-legged tower on it, a ring for the radar reflector, the lamp on top.
-    parts.push(cyl(1.15, 1.2, 1.5, -0.7, 20));
-    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-      const leg = new THREE.CylinderGeometry(0.05, 0.05, 3.5, 5);
-      leg.rotateZ(sx * 0.15).rotateX(-sz * 0.15).translate(sx * 0.42, 2.5, sz * 0.42);
-      parts.push(leg);
-    }
-    parts.push(new THREE.BoxGeometry(0.85, 0.9, 0.85).translate(0, 3.1, 0), cyl(0.22, 0.22, 0.25, 4.2, 8));
-  } else {
-    // A fixed light: one pile driven into the shoal, a small platform, a square board (green, numbered) each way.
-    parts.push(cyl(0.3, 0.3, 6, -1.5, 10), new THREE.BoxGeometry(1.4, 0.12, 1.4).translate(0, 3.6, 0));
-    parts.push(new THREE.BoxGeometry(1.2, 1.2, 0.06).translate(0, 4.3, 0.2), new THREE.BoxGeometry(0.06, 1.2, 1.2).translate(0.2, 4.3, 0));
-  }
-  return mergeGeometries(parts.map((p) => p.toNonIndexed()))!;
-}
 
 /** Brightness of a mark's light at t seconds (0 or 1): each starts its rhythm at its own moment, as real ones do. */
 export function markFlash(m: Seamark, t: number): number {
@@ -102,32 +95,25 @@ export class Seamarks {
   }
 
   private build(): void {
-    const geo = new Map<MarkShape, THREE.BufferGeometry>();
-    const wet = new THREE.MeshStandardMaterial({ color: 0x1a2420, roughness: 0.4 });
     this.shown = this.all.map((m) => {
-      if (!geo.has(m.shape)) geo.set(m.shape, markGeometry(m.shape));
+      const kind = kindOf(m);
       const group = new THREE.Group();
       group.name = `seamark-${m.key}`;
-      const paint = new THREE.MeshStandardMaterial({ color: m.shape === "post" ? 0x6f6a60 : PAINT[m.colour], roughness: 0.7 });
-      group.add(new THREE.Mesh(geo.get(m.shape)!, paint));
-      if (m.shape === "post") {
-        // The boards are the mark's colour; the pile is weathered wood.
-        const board = new THREE.MeshStandardMaterial({ color: PAINT[m.colour], roughness: 0.7 });
-        group.add(new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.22, 0.08).translate(0, 4.3, 0.2), board), new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.22, 1.22).translate(0.2, 4.3, 0), board));
-      } else {
-        // Weed and wet at the waterline.
-        const r = m.shape === "lit" ? 1.22 : 0.57;
-        group.add(new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.3, 16, 1, true).translate(0, 0.05, 0), wet));
-      }
+      const mark = makeBuoy(kind, m.key); // shared body and material; its own number plates
+      // Each faces its own way, as moored marks swing and piles are driven: the number isn't always square on.
+      mark.rotation.y = ((m.lat * 7919 + m.lon * 104729) % 1) * Math.PI * 2;
+      group.add(mark);
       let lamp: THREE.MeshStandardMaterial | null = null;
       let glow: THREE.Sprite | null = null;
       if (m.period) {
+        const at = lampHeight(kind);
+        // The lantern itself glows on its flash (over the model's own white lantern); the glow is seen from afar after dark.
         lamp = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: LAMP[m.colour], emissiveIntensity: 0.15 });
-        group.add(new THREE.Mesh(cyl(0.12, 0.12, 0.3, LAMP_M[m.shape] - 0.15, 8), lamp));
+        group.add(new THREE.Mesh(cyl(0.12, 0.12, 0.3, at - 0.15, 8), lamp));
         const tex = glowTexture();
         if (tex) {
           glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: LAMP[m.colour], sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false, opacity: 0 }));
-          glow.position.set(0, LAMP_M[m.shape], 0);
+          glow.position.set(0, at, 0);
           glow.scale.setScalar(0.022); // a buoy's small lamp: a third of the lighthouse's glow
           glow.renderOrder = 30;
           glow.visible = false;
@@ -163,7 +149,7 @@ export class Seamarks {
       s.group.visible = d < SEAMARK_RANGE;
       if (!s.group.visible) continue;
       n++;
-      const floats = s.m.shape !== "post";
+      const floats = !BUOY_FIXED.has(kindOf(s.m));
       const h = floats && sea && d < 1500 ? sea(x, z) : 0;
       s.group.position.set(x, h - (d * d) / (2 * R_EARTH), z);
       if (floats && sea && d < 600) {
@@ -186,6 +172,8 @@ export class Seamarks {
     for (const s of this.shown) {
       this.root.remove(s.group);
       s.group.traverse((o) => {
+        // The marks' bodies share one geometry per kind and one material (buoys.ts): those stay for the next copy.
+        if (o.name === "body") return;
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();
         const mats = mesh.material;

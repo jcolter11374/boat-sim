@@ -16,11 +16,13 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-export type BuoyKind = "can" | "nun" | "lit_red" | "lit_green" | "daybeacon_red" | "daybeacon_green";
-export const BUOY_KINDS: BuoyKind[] = ["can", "nun", "lit_red", "lit_green", "daybeacon_red", "daybeacon_green"];
+// lit_yellow: a special mark's lighted buoy (NOAA's weather buoy AN off Annapolis; Elena, 14 Nov).
+export type BuoyKind = "can" | "nun" | "lit_red" | "lit_green" | "lit_yellow" | "daybeacon_red" | "daybeacon_green";
+export const BUOY_KINDS: BuoyKind[] = ["can", "nun", "lit_red", "lit_green", "lit_yellow", "daybeacon_red", "daybeacon_green"];
 
 const RED = 0xb3362b;
 const GREEN = 0x2d6e45;
+const YELLOW = 0xd8b31e;
 const STEEL = 0x3b3f44;
 const PILE = 0x5b5247;
 const WHITE = 0xe9e7e0;
@@ -37,6 +39,7 @@ export const BUOY_LIGHT_HEIGHT: Record<BuoyKind, number | null> = {
   nun: null,
   lit_red: 4.25,
   lit_green: 4.25,
+  lit_yellow: 4.25,
   daybeacon_red: null,
   daybeacon_green: null,
 };
@@ -77,8 +80,8 @@ export function buoyGeometry(kind: BuoyKind): THREE.BufferGeometry {
     parts.push(cyl(0.48, 0.5, d, 1.3, GREEN), cyl(0.5, 0.5, 1.3, 1.36, GREEN), cyl(0.12, 0.12, 1.36, 1.5, STEEL, 8)); // body, lip, lifting eye
   } else if (kind === "nun") {
     parts.push(cyl(0.48, 0.5, d, 0.95, RED), cyl(0.5, 0.1, 0.95, 1.55, RED), cyl(0.1, 0.0, 1.55, 1.6, RED), cyl(0.05, 0.05, 1.58, 1.68, STEEL, 6)); // body 60%, a blunt cone 40%
-  } else if (kind === "lit_red" || kind === "lit_green") {
-    const c = kind === "lit_red" ? RED : GREEN;
+  } else if (kind === "lit_red" || kind === "lit_green" || kind === "lit_yellow") {
+    const c = kind === "lit_red" ? RED : kind === "lit_green" ? GREEN : YELLOW;
     parts.push(cyl(0.85, 1.0, d, 0.45, c, 20), cyl(1.0, 0.9, 0.45, 0.65, c, 20)); // the float and its deck
     parts.push(cyl(0.99, 1.01, 0.02, 0.16, 0x26292c, 20)); // fendering band just above the waterline (nothing proud of the float below it)
     // The lattice tower: four legs closing in, three rings of rails, panels for the colour.
@@ -154,6 +157,7 @@ export function numberPlace(kind: BuoyKind): { at: THREE.Vector3; w: number; h: 
       return { at: new THREE.Vector3(0, 0.48, 0), w: 0.85, h: 0.85 };
     case "lit_red":
     case "lit_green":
+    case "lit_yellow":
       return { at: new THREE.Vector3(0, 1.95, 0.485), w: 0.72, h: 0.72 }; // on the daymark panel
     case "daybeacon_red":
       return { at: new THREE.Vector3(0, 3.86, 0.275), w: 0.5, h: 0.5 }; // low in the triangle, where it's widest
