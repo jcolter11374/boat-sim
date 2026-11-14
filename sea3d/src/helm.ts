@@ -19,6 +19,7 @@ import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT
 import { Buoys } from "./helm/buoys";
 import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
+import { DROP_POINT } from "./helm/today";
 import { metresPerDegree } from "./land/shader";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
@@ -360,7 +361,7 @@ function launchTime(): Date | null {
   return day ? new Date(`${day}T12:00:00Z`) : null;
 }
 /** Where the boat is dropped (the start card's sea): 100 km ESE of the Bay mouth. */
-const DROP: [number, number] = [36.65, -74.94];
+const DROP: [number, number] = DROP_POINT; // helm/today.ts: the one drop point, shared with the Set sail card
 let flowStw = 0; // the boat's speed through the water last frame (m/s)
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;

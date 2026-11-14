@@ -10,6 +10,7 @@ import { implied, SET_SAIL, type SetSail } from "./setsail";
 import { loadMyBoat, onMyBoatChange, type MyBoat } from "../myboat";
 import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
+import { DROP_POINT, loadToday, samplesAt, todayWords } from "./today";
 import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who, SCENERY, SCENERY_WORDS } from "./whoSteers";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
@@ -144,6 +145,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     });
   }
 
+  /** Today's real weather at the drop point (helm/today.ts), when this copy of the site carries a fresh forecast. */
+  let today: string[] | null = null;
   const checkedBoat = () => document.querySelector<HTMLInputElement>('input[name="boat"]:checked');
   const draw = () => {
     const s = { ...hooks.current(), where, challenge: where === "ocean" ? challenge.value : "" };
@@ -164,6 +167,10 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const whoShown = where === "ocean" && !!hooks.watch && sailed.length > 0;
     const auto = whoShown && who === "autopilot";
     $("ss-who").hidden = !whoShown;
+    // Today's real weather: only for a crossing you sail (a watched voyage or a race is already 2020's).
+    const todayBox = $("ss-today");
+    todayBox.hidden = !today || where !== "ocean" || auto;
+    if (today && todayBox.childElementCount !== today.length) todayBox.replaceChildren(...today.map((t) => Object.assign(document.createElement("div"), { textContent: t })));
     // A new crossing takes the saved one's place; practice and watching the autopilot don't touch it.
     $("ss-continue-new").hidden = where !== "ocean" || auto || !!$("ss-continue").dataset.lost || !$("ss-ask").hidden;
     // Set sail is dimmed only while its question is the thing to answer: practice and watching end nothing.
@@ -412,6 +419,11 @@ export function mountSetSailCard(hooks: CardHooks): void {
   document.getElementById("boats")?.addEventListener("change", draw);
   draw();
   void hooks.challengesReady.then(draw);
+  void loadToday().then((f) => {
+    if (!f) return;
+    today = todayWords(f.header, samplesAt(f.header, f.data, DROP_POINT[0], DROP_POINT[1]), Date.now());
+    if (today) draw();
+  });
   void hooks.voyages?.then((v) => {
     sailed = v;
     draw();
