@@ -8,7 +8,8 @@
 // The baseline is tests/speed-baseline.json, measured on main. A count above its baseline by
 // more than its margin fails, naming the count. When an increase is intended (a new effect worth
 // its cost), re-measure and commit the new baseline in the same PR:
-//   npm run build && npm run test:speed -- --update
+//   npm run build && npm run test:speed -- --update   (or copy the counts the failed quick job printed:
+//   the baseline is the runner's, which has the Blender boats a local build may lack)
 // SITE=http://host:port/ uses a site already being served instead of starting vite preview.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -190,7 +191,7 @@ for (const k of Object.keys(what)) {
 if (over.length) {
   console.error("FAIL: speed guard, a count went up:\n  " + over.join("\n  "));
   console.error(
-    "If the increase is intended (a new effect worth its cost), re-measure and commit the new baseline in this PR:\n" +
+    "If the increase is intended (a new effect worth its cost), re-measure and commit the new baseline in this PR (or copy the counts above, measured on the runner):\n" +
       "  cd sea3d && npm run build && npm run test:speed -- --update   (tests/speed-baseline.json)",
   );
   await stop(1);
