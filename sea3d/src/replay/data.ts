@@ -118,7 +118,9 @@ function nearest(col: Col, i: number): number | null {
   return null;
 }
 
-export function valueAt(rep: Replay, col: Col, hour: number): number | null {
+export function valueAt(rep: Replay, col: Col | undefined, hour: number): number | null {
+  // A column a lean replay leaves out (the Boatyard's launches have no currents or sunshine) reads as no value.
+  if (!col) return null;
   const [i, f] = locate(rep.h, hour);
   const a = col[i] ?? nearest(col, i);
   if (f === 0 || i + 1 >= col.length) return a;
