@@ -169,7 +169,7 @@ export function raceLabel(b: RaceCardBoat, name: string): string {
   return `${name}: ${(OUTCOME[b.outcome] ?? b.outcome.replace(/_/g, " ")).replace(/^was /, "")} ${onDay(b.days)}`;
 }
 
-type Ask = { id: number; type: string; base?: string; hours?: number };
+type Ask = { id: number; type: string; base?: string; hours?: number; i?: number };
 type Reply = { id?: number; ok?: boolean; value?: unknown; error?: string; type?: string; text?: string };
 type RaceValue = { launches?: string[]; stopped?: string; status: RaceStatus; replays: [Replay, Replay] | null; card?: RaceCard };
 
@@ -198,6 +198,11 @@ export function raceWorker(real: () => Worker, pick: RacePick, loaded: (info: Ra
         case "warm":
           asked.set(m.id, m.type);
           return inner.postMessage({ id: m.id, base: m.base, type: m.type, replays: true });
+        case "season_launch":
+        case "season_verdict":
+          // "Race all 6 launches" on the race's ending: answered as the race worker gives them.
+          asked.set(m.id, "season");
+          return inner.postMessage({ id: m.id, base: m.base, type: m.type, i: m.i });
         case "order":
           return answer({ ok: false, error: "nobody steers a race" });
         case "preview":
@@ -217,7 +222,7 @@ export function raceWorker(real: () => Worker, pick: RacePick, loaded: (info: Ra
     if (r.type === "progress" || r.id === undefined) return w.onmessage?.(ev);
     const what = asked.get(r.id);
     asked.delete(r.id);
-    if (!r.ok || what === "warm") return w.onmessage?.(ev);
+    if (!r.ok || what === "warm" || what === "season") return w.onmessage?.(ev);
     const v = r.value as RaceValue;
     if (!v.replays) return w.onmessage?.({ data: { id: r.id, ok: false, error: "NO_RACE" } } as MessageEvent);
     for (const [i, rep] of v.replays.entries()) rep.boat = raceName(v.status.boats[i].name);
@@ -262,4 +267,40 @@ export function swapSides(...sts: (Status | null | undefined)[]): void {
     [st.boat, st.ghost] = [st.ghost, st.boat];
     st.lead_km = -st.lead_km;
   }
+}
+
+/** One launch of a season, as the race worker gives it (boatsim.sandbox.race.season_launch). */
+export interface SeasonRun {
+  a: { start: string; outcome: string; days?: number };
+  b: { start: string; outcome: string; days?: number };
+}
+/** The season's paired verdict (boatsim.sandbox.race.season_verdict), as much as the page reads. */
+export interface SeasonVerdict {
+  launches: { launch: string; a: { outcome: string; days?: number | null }; b: { outcome: string; days?: number | null } }[];
+  finished: [number, number];
+  pair: { n: number; a_only: number; b_only: number; clear: boolean; gap: number };
+}
+
+/** A table cell for one boat on one launch day: "61 days" or what became of her ("sank", "still at sea"). */
+export function seasonCell(o: { outcome: string; days?: number | null }): string {
+  if (o.outcome === "arrived") return o.days != null ? `finished, ${Math.round(o.days)} days` : "finished";
+  if (UNFINISHED.has(o.outcome)) return "still at sea";
+  return OUTCOME[o.outcome] ?? o.outcome.replace(/_/g, " ");
+}
+
+/**
+ * The season in plain words (the old race page printed the statistics: gap, 95% range, sign test).
+ * `names` are the boats' full names in the race's order (A, B): a Randolph boat keeps "(our model)" (B2).
+ */
+export function seasonWords(s: SeasonVerdict, names: [string, string]): string[] {
+  const n = s.launches.length;
+  const fin = `Finished: ${names[0]} ${s.finished[0]} of ${n} launch days, ${names[1]} ${s.finished[1]} of ${n}.`;
+  const { a_only, b_only } = s.pair;
+  if (s.pair.clear && a_only !== b_only) {
+    const [win, lose] = a_only > b_only ? names : [names[1], names[0]];
+    return [fin, `${win} is the better boat this spring: she finished on ${Math.max(a_only, b_only)} launch days where ${lose} didn't, and ${lose} on ${Math.min(a_only, b_only)} where she didn't.`];
+  }
+  if (a_only === 0 && b_only === 0)
+    return [fin, `Every launch day ended the same way for both, so this season can't tell them apart. ${n} days is a small sample: a hint, not a ranking.`];
+  return [fin, `Too close to call: ${names[0]} finished on ${a_only} launch day${a_only === 1 ? "" : "s"} where ${names[1]} didn't, and ${names[1]} on ${b_only} where she didn't. ${n} days is a small sample, so it could be luck.`];
 }

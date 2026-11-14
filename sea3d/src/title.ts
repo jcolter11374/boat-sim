@@ -25,10 +25,32 @@ export function mountTitle(): void {
   };
   show(shouldShowTitle(location.search, dismissedBefore()));
 
+  // "Just watch the sea" (John, 14 Nov 2026): the title's own shot with the menu away, not the old
+  // two-boat demo (that stays at ?title=0). A quiet Menu link and the speaker sit in the corner and
+  // fade when the pointer rests; Menu or Esc brings the menu back.
+  let idle = 0;
+  const wake = () => {
+    document.body.classList.remove("idle");
+    clearTimeout(idle);
+    if (document.body.classList.contains("sea-only")) idle = window.setTimeout(() => document.body.classList.add("idle"), 3000);
+  };
+  const watch = (on: boolean) => {
+    document.body.classList.toggle("sea-only", on);
+    if (on) (document.getElementById("t-back") as HTMLElement | null)?.focus({ preventScroll: true });
+    else (document.querySelector("#t-continue:not([hidden]), #t-setsail") as HTMLElement | null)?.focus({ preventScroll: true });
+    wake();
+  };
   document.getElementById("t-sea")?.addEventListener("click", () => {
-    try { sessionStorage.setItem(KEY, "1"); } catch { /* private mode: fine, it just shows again */ }
-    show(false);
+    (document.getElementById("t-more") as HTMLDetailsElement | null)?.removeAttribute("open");
+    watch(true);
   });
+  document.getElementById("t-back")?.addEventListener("click", () => watch(false));
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.body.classList.contains("sea-only")) watch(false);
+    else wake();
+  });
+  addEventListener("pointermove", wake, { passive: true });
+  addEventListener("pointerdown", wake, { passive: true });
 
   // "Continue your voyage" (M3): shown when a crossing is saved in this browser, as the one
   // orange button; Set sail steps down to an ordinary one while it is there. Drawn again when

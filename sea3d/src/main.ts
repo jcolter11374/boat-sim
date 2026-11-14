@@ -33,8 +33,11 @@ import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN,
 import { prefetchHelmOnIntent } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
+import { TitleLandmarks } from "./titleLandmarks";
+import { TitleCompany } from "./titleCompany";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
+import { TitleTrack } from "./titleTrack";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -167,24 +170,30 @@ titleSound.scene.gulls = new URLSearchParams(location.search).get("gulls") === "
 // The title's air (titleMusic.ts): a slow plucked tune of our own over a low pad, under the
 // sea. It goes on and off with the sound; ?music=0 leaves the sea and its sounds alone.
 const titleMusic = new TitleMusic(sound);
-titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
+// John's track (titleTrack.ts, 14 Nov 2026) is the title's music now; ?music=air brings back the code-made air, ?music=0 neither.
+const musicParam = new URLSearchParams(location.search).get("music");
+titleMusic.on = musicParam === "air";
+const titleTrack = new TitleTrack(sound);
+titleTrack.on = musicParam !== "0" && musicParam !== "air";
 (window as unknown as { __titleMusic: TitleMusic }).__titleMusic = titleMusic; // read-only, for the live sound checks (Nina)
 {
-  const btn = document.getElementById("t-sound");
+  // The menu's speaker and the one in "Just watch the sea"'s corner (title.ts) show the same state.
+  const btns = Array.from(document.querySelectorAll<HTMLButtonElement>("#t-sound, #t-sound2"));
   sound.onChange = () => {
-    if (!btn) return;
-    btn.setAttribute("aria-pressed", String(sound.on));
-    btn.textContent = sound.on ? "Sound: on" : "Sound: off"; // the state, not an order (Elena)
+    for (const btn of btns) {
+      btn.setAttribute("aria-pressed", String(sound.on));
+      btn.setAttribute("aria-label", sound.on ? "Sound: on" : "Sound: off"); // the state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov)
+    }
   };
   sound.onChange();
-  btn?.addEventListener("click", () => sound.toggle());
+  for (const btn of btns) btn.addEventListener("click", () => sound.toggle());
   const touch = (e: Event) => {
     if (!document.body.classList.contains("title")) return;
     const el = e.target as Element | null;
     if (e instanceof KeyboardEvent) {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
       if (e.code === "KeyN" && !el?.closest?.("input, select, textarea")) return sound.toggle();
-    } else if (el?.closest?.("#t-sound")) return; // the button says what it does itself
+    } else if (el?.closest?.("#t-sound, #t-sound2")) return; // the button says what it does itself
     if (startsAtFirstTouch(sound.on, sound.muted)) sound.enable(false); // on for now; not recorded as their choice
   };
   addEventListener("pointerdown", touch, true);
@@ -260,8 +269,14 @@ let heroL = heroLightFor("kayak");
 let shore: TitleShore | null = null;
 let shoreAsked = false;
 const osmCredit = document.getElementById("osm");
+// The Bay Bridge and the buoys round the title's spot (titleLandmarks.ts), with the shore.
+let marks: TitleLandmarks | null = null;
+// Other boats about on the title's water, for life (titleCompany.ts): display only.
+let company: TitleCompany | null = null;
 function shoreShown(on: boolean): void {
   if (shore) shore.mesh.visible = on;
+  if (marks) marks.root.visible = on;
+  if (company) company.root.visible = on;
   if (osmCredit) osmCredit.hidden = !(on && shore);
 }
 /** The title's light for the boat it shows now (again whenever the boat changes). */
@@ -499,6 +514,7 @@ const frame = (): void => {
   if (document.body.classList.contains("title")) {
     titleSound.update(t - soundT);
     titleMusic.update();
+    titleTrack.update();
   } else if (sound.on) sound.disable(false);
   soundT = t;
   sea.update(comps, t);
@@ -553,13 +569,19 @@ const frame = (): void => {
     }
     if (!shoreAsked && status.frames > 3) {
       shoreAsked = true;
+      company = new TitleCompany(quality);
+      scene.add(company.root);
       void TitleShore.load(HERO_SUN.az, { sunDir: atmos.sunDir, sun: atmos.sun.color, haze: atmos.fog.color }).then((s) => {
         if (!s) return;
         shore = s;
         scene.add(s.mesh);
+        marks = new TitleLandmarks(HERO_SUN.az);
+        scene.add(marks.root);
         shoreShown(heroOn());
       });
     }
+    marks?.update(t);
+    company?.update(t, (x, z) => heightAt(comps, x, z, t));
     const under = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < under) camera.position.y = under;
     clouds.update(t, heroDt(t), camera, HERO_CLOUD, 0, 0, 3, 1, atmos.sunDir, atmos.fog.color, atmos.ambient);

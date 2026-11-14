@@ -10,8 +10,12 @@ import { STOCK, KAYAK, RANDOLPH, type BoatSpec, type StockKey } from "./boats/sp
 import type { MyBoat } from "./myboat";
 import type { SeaState } from "./waves";
 
-/** The sun for the hero: 5 degrees up (warm, long light, still bright enough to model the sails), in the west. */
-export const HERO_SUN = { el: 5, az: 255 };
+/**
+ * The sun for the hero: 3 degrees up (was 5; John, 14 Nov: "drab and depressing"), so the sky is
+ * warmer and more golden, still bright enough to model the sails. Its compass bearing is the
+ * title's own; titleShore.ts turns the world so the true sunrise falls on it.
+ */
+export const HERO_SUN = { el: 3, az: 255 };
 /** Fair-weather cumulus, a third of the sky: lit heads and gold rims at golden hour (Hana's #410). */
 export const HERO_CLOUD = 0.3;
 /** The sky's pattern for the hero: a fixed day, so the first frame is the same every visit. */
@@ -21,8 +25,8 @@ export const HERO_SKY_DAY = 20190;
  * radius, so the low sun's light stays by the sun and nothing lies over the boat.
  */
 export const HERO_GLOW = { scale: 0.45, radius: 0.2 };
-/** How much the far water takes of the sky's warm horizon colour (0..1; gentle). */
-export const HERO_SEA_WARM = 0.55;
+/** How much the far water takes of the sky's warm horizon colour (0..1; gentle). 0.55 made the bay a muddy brown (John, 14 Nov: "drab"). */
+export const HERO_SEA_WARM = 0.3;
 /**
  * How the title lights a boat. sunOff: how far round from the lens's line the low sun stands
  * (degrees; framing.ts titleShot). fill, env: how much of the sky dome's light and of the
@@ -44,7 +48,7 @@ export interface HeroLight {
   /** The lens's height above the water (m). A low boat is filmed from a little higher, so she sits on the water below the horizon and the far shore stands clear above her, not on the line of her deck (Elena, 13 Nov). */
   camH: number;
 }
-export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0, camH: 1.5 };
+export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0.5, camH: 1.5 };
 export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6, camH: 1.9 };
 /**
  * How much of the backlight is left with the sun at el degrees: all of it while the sun is up, none

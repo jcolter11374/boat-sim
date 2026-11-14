@@ -124,11 +124,11 @@ try {
       setsail: document.getElementById("t-setsail").classList.contains("main"),
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
-    // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is bare (Elena).
-    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.morePhone.join() !== "Boatyard,Practice" || ts.barH !== 40 || !ts.setsail)
+    // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is hidden, so the mark shows once (John's almanac title, 14 Nov 2026).
+    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.morePhone.join() !== "Boatyard,Practice" || ts.barH !== 0 || !ts.setsail)
       fail(`title screen: ${JSON.stringify(ts)}`);
-    // The chip opens the boat picker; picking the Pearson makes it my boat, and Our kayak puts it back.
-    await page.click("#topbar-boat");
+    // The menu's Change opens the boat picker (the bar's chip is hidden on the title); picking the Pearson makes it my boat, and Our kayak puts it back.
+    await page.click("#t-change");
     await page.waitForFunction(() => window.__boatpick?.open, null, { timeout: 15000 });
     await page.check('#boatpick input[value="stock_pearson31_2"]');
     await page.click("#boatpick .go");
@@ -141,8 +141,17 @@ try {
     if (ts.chip !== "My boat: Our kayak") fail(`top bar boat chip with no boat saved: "${ts.chip}"`);
     await page.click("#t-more summary"); // "Just watch the sea" lives under More (Elena)
     await page.click("#t-sea");
-    const tsea = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
-    if (tsea.title || tsea.panelTop < 40) fail(`"Just watch the sea" should swap the menu for the sea panel, below the bar: ${JSON.stringify(tsea)}`);
+    // "Just watch the sea" (John, 14 Nov 2026): the title's own shot with the menu away and a Menu link back, not the old demo.
+    const tsea = await page.evaluate(() => ({ heroOn: document.body.classList.contains("title"), menu: getComputedStyle(document.getElementById("title")).display, back: !!document.getElementById("t-back").offsetParent, panel: getComputedStyle(document.getElementById("panel")).display }));
+    if (!tsea.heroOn || tsea.menu !== "none" || !tsea.back || tsea.panel !== "none") fail(`"Just watch the sea" should hide the menu over the title shot, with a Menu link: ${JSON.stringify(tsea)}`);
+    await page.click("#t-back");
+    const tback = await page.evaluate(() => getComputedStyle(document.getElementById("title")).display);
+    if (tback === "none") fail(`Menu should bring the title menu back`);
+    // The two-boat sea demo (the panel and the views below) is still at ?title=0.
+    await page.goto(`${URL}?quality=low&title=0`);
+    await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 10, null, { timeout: 30000 });
+    const tdemo = await page.evaluate(() => ({ title: !document.getElementById("title").hidden, panelTop: document.getElementById("panel").getBoundingClientRect().top }));
+    if (tdemo.title || tdemo.panelTop < 40) fail(`?title=0 should show the sea panel, below the bar: ${JSON.stringify(tdemo)}`);
 
     for (const sea of ["calm", "moderate", "gale"]) {
       await page.selectOption("#sea", sea);
@@ -612,6 +621,7 @@ try {
       .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
     if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
     log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+    if (!(await page.evaluate(() => window.__helm.wildlife.known))) fail("helm: no wildlife map (wildlife.json not loaded?)");
     // Off Annapolis: Thomas Point Light stands on its shoal (the model, or its drawn stand-in), no page errors.
     await page.goto(`${URL}helm.html?quality=low&spot=38.91,-76.45`);
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.land.landmarks > 0, null, { timeout: 60000 })

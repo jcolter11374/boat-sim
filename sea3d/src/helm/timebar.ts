@@ -36,3 +36,13 @@ export function drainStep(rate: number, dt: number, hour: number, shownTo: numbe
   const to = !slow && slowFrom !== undefined && slowFrom > hour ? Math.min(shownTo, slowFrom) : shownTo;
   return Math.min(to, hour + dt * (slow ? Math.min(rate, 1) : rate));
 }
+
+/** When you steer, the game looks for a call after every run of the simulator, so a run is never
+ * longer than this many voyage hours: a gale is looked for 2 days ahead and the first chase only
+ * in a crossing's first 5 days, and at 4 days a second a 72-hour run stepped right over both. */
+export const CALL_CHECK_H = 24;
+/** Voyage hours for one run of the simulator, ahead of the picture: about a second and a half of
+ * play at the chosen speed, at least an hour, at most 72 (watching) or CALL_CHECK_H (steering). */
+export function runHours(rate: number, steering: boolean): number {
+  return Math.min(steering ? CALL_CHECK_H : 72, Math.max(1, rate * 1.5));
+}

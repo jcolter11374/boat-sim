@@ -239,6 +239,15 @@ export class HelmGame {
     if (v.ghost) this.ghost = v.ghost;
   }
 
+  /** A race only (helm/raceSource.ts): sail launch `i` of the six to the end, both boats, same dice. */
+  raceSeasonLaunch<T>(i: number): Promise<T> {
+    return this.ask<T>({ type: "season_launch", i });
+  }
+  /** A race only: the paired verdict over the launches sailed so far by raceSeasonLaunch. */
+  raceSeasonVerdict<T>(): Promise<T> {
+    return this.ask<T>({ type: "season_verdict" });
+  }
+
   /** Load Python, the simulator and the 2020 weather now, so Set sail starts at once. Errors are left for start() to report. */
   warm(): Promise<void> {
     return this.ask<null>({ type: "warm" }).then(

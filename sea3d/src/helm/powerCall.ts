@@ -61,20 +61,41 @@ export function worthAskingAgain(gainDays: number, turnedDown: number | null): b
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+/** Under this the motors stop to keep the electronics and the radio going (autonomy/safemode.py
+ * hold_below_soc), so a forecast low under it is said as "15%, where her motors stop" (Elena). */
+export const MOTORS_STOP_SOC = 0.15;
+const lowWords = (x: number) => (x < MOTORS_STOP_SOC ? "15%, where her motors stop" : pct(x));
 
-/** The card's words. One sentence of what the forecast says, with the price in it; the options'
- * forecast tags carry the numbers. */
-export function pushCard(order: Heading, power: number, soc: number, push: Staked): { text: string; push: string; pushTitle: string; stay: string; did: string } {
+/** The card's words (Elena's ruling, 14 Nov: plain, no "would gain on"). One sentence of what the
+ * forecast says, with the price in it; the options' forecast tags carry the numbers. `ago`: what
+ * the note four days later opens with, before "she's now N km ahead of the ghost". */
+export function pushCard(order: Heading, power: number, soc: number, push: Staked): { text: string; push: string; pushTitle: string; stay: string; did: string; ago: string } {
   const to = pct(push.power ?? 0);
-  const low = pct(push.soc_min ?? 0);
-  const than = order === "auto" ? "the autopilot" : `your ${pct(power)} power`;
+  const low = lowWords(push.soc_min ?? 0);
+  const faster = order === "auto" ? "pull ahead of the autopilot" : `go faster than at your ${pct(power)}`;
   return {
-    text: `Navigator's check: the battery is at ${pct(soc)}. The forecast says ${to} power would gain on ${than} over the next 4 days, but run the battery down to ${low}.`,
-    push: order === "auto" ? `Push: ${to} power, straight at the finish` : `Push: ${to} power`,
-    pushTitle: "More power from the battery. Ease off, or hand her back to the autopilot, before it runs low",
-    stay: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${pct(power)} power`,
+    text: `Navigator's check: the battery is at ${pct(soc)}. At ${to} power she'd ${faster} over the next 4 days, but the battery would drop to ${low}.`,
+    push: `Push: ${to} power`,
+    pushTitle: "Faster, but it drains the battery. Ease off, or hand her back to the autopilot, before it runs low.",
+    stay: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${pct(power)} power`,
     did: `pushed to ${to} power`,
+    ago: `You pushed to ${to} power 4 days ago`,
   };
+}
+
+/** How the night call opens (Elena, 14 Nov). "Night is coming" only when dark is about 3 hours
+ * off or less; earlier in the day it gives the time instead, because after a push the call can
+ * come around midday. hoursToDark: to the first forecast row with no sun; the rows are 6 hours
+ * apart, so it is "dark in about", not a sunset time. */
+export function nightOpener(soc: number, hoursToDark: number): string {
+  if (hoursToDark <= 3) return `The battery is at ${pct(soc)} and night is coming, with no sun to charge it.`;
+  return `The battery is at ${pct(soc)}, and it will be dark in about ${Math.round(hoursToDark)} hours, with no sun to charge it.`;
+}
+
+/** The note when you steer and the forecast puts the autopilot ahead of your order. */
+export function handBackNote(km: number): string {
+  const n = Math.max(5, Math.round(Math.abs(km) / 5) * 5);
+  return `Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about ${n} km better against the ghost). To hand her back, open Orders.`;
 }
 
 /** The night call may follow a push this soon (hours): the push is what runs the battery down,
@@ -87,4 +108,28 @@ export const NIGHT_AFTER_PUSH_H = 12;
  * motors stop at 15%. GUESS: fitted to our kayak, used for every boat with motors. */
 export function nightLine(power: number): number {
   return Math.min(0.9, Math.max(0.35, 0.15 + 0.8 * power));
+}
+
+/** Sunlight (W/m², as the weather gives it) that counts as morning for "ease off till sunrise". GUESS. */
+export const SUNRISE_GHI = 50;
+/** "Ease off to 10%: slower, but lasts till sunrise" means till sunrise (Nina, live 14 Nov): left at
+ * 10%, she sailed on at it for days, and the next push card said 50% would beat "your 10%", then
+ * the next night asked again, round and round. In the morning the power goes back to what it was
+ * before the night. eased: the order and power before easing off, and `dark`, the voyage hour the
+ * night call saw dark coming (null: not eased); hour: now. Returns the
+ * power to go back to, or null to leave things as they are (not morning yet, or you have changed
+ * the order or the power since). */
+export function morningPower(eased: { order: Heading; power: number; dark: number } | null, order: Heading, power: number, ghi: number, hour: number): number | null {
+  if (!eased || hour <= eased.dark || ghi < SUNRISE_GHI) return null; // the sun of the evening before is not morning
+  return order === eased.order && Math.abs(power - EASE_POWER) < 1e-6 ? eased.power : null;
+}
+/** The night call's "ease off" power. */
+export const EASE_POWER = 0.1;
+
+/** The power an order leaves on the Orders panel. A push raises it; handing her back to the
+ * autopilot puts it back to what it was before the push (`before`, null if there was none), so a
+ * heading ordered days later does not quietly sail at the pushed power. On the autopilot the
+ * power is the autopilot's own, so this is only what your next order of your own starts from. */
+export function powerAfter(heading: Heading, asked: number, before: number | null): number {
+  return heading === "auto" && before !== null ? before : asked;
 }
