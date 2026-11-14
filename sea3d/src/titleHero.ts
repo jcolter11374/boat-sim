@@ -46,6 +46,15 @@ export interface HeroLight {
 }
 export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0, camH: 1.5 };
 export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6, camH: 1.9 };
+/**
+ * How much of the backlight is left with the sun at el degrees: all of it while the sun is up, none
+ * once it is well down. (The title's night view, for look reviews, kept the sunset's backlight: the
+ * sails glowed brown-orange and the hull had an orange edge in the dark; Elena, 14 Nov.)
+ */
+export function backAt(el: number): number {
+  const k = Math.min(1, Math.max(0, (el + 6) / 6));
+  return k * k * (3 - 2 * k);
+}
 export function heroLightFor(key: string): HeroLight {
   return key === "kayak" || key === "randolph" || key === "stock_ocean_rower45" ? HERO_LIGHT_LOW : HERO_LIGHT_SAILS;
 }

@@ -661,6 +661,8 @@
     #strip .cell { padding: 0 .5em; }
     #strip .v { font-size: 1.1em; }
     #strip .l { font-size: .78em; letter-spacing: .3px; }
+    /* The wind and waves pair is the longest value on a phone ("13 · 0.9"): Firefox's wider fallback font cut it by a few px. */
+    #strip #c-wind { padding: 0 .3em; } #strip #c-wind .v { letter-spacing: 0; font-size: 1.04em; }
   }
   /* Narrow windows (as above): the corner chart folds to a map button. These four rules lost their
      @media when the phone strip went in (#453), which hid the corner chart at every width. */
@@ -671,6 +673,12 @@
     #mapbtn { display: inline-block !important; }
   }
   @media (max-width: 700px) { #orders { width: auto; right: var(--edge); } #mapbox.big #mside { display: none; } }
+  /* On a phone the orders open as a short sheet sitting on the strip, so the boat stays in view above it (Elena). */
+  @media (max-width: 699px) {
+    #orders { top: auto; bottom: calc(var(--edge) + var(--strip-live, var(--strip-h)) + 6px);
+      max-height: max(150px, min(50dvh, calc(100dvh - var(--bar, 0px) - var(--strip-live, var(--strip-h)) - 270px))); }
+    body.sailing #orders:not(.open) { transform: translateY(calc(100% + var(--strip-live, var(--strip-h)) + 20px)); }
+  }
 </style>
 </head>
 <body>

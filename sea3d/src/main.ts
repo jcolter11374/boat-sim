@@ -29,7 +29,7 @@ import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, backAt, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
 import { prefetchHelmOnIntent } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
@@ -270,12 +270,13 @@ function heroLight(): void {
   heroL = heroLightFor(hero?.spec.key ?? "kayak");
   // ?sunel=55 (or -18) shows the title's boat at noon or at night: for look reviews only.
   const sunEl = new URLSearchParams(location.search).get("sunel");
-  atmos.set(sunEl !== null && Number.isFinite(Number(sunEl)) ? Number(sunEl) : HERO_SUN.el, HERO_SUN.az, 0, true);
+  const el = sunEl !== null && Number.isFinite(Number(sunEl)) ? Number(sunEl) : HERO_SUN.el;
+  atmos.set(el, HERO_SUN.az, 0, true);
   // A boat with sails: lit from astern and to one side (Ines, 12 Nov; the sun moved off her
   // 13 Nov), her near side in her own shadow, her edges and sails lit, little fill from the
   // sky. A boat without: the sun over the lens's shoulder, on the side we see (heroLightFor).
   heroPlace.yaw = titleHeading(atmos.sunDir, heroL.sunOff);
-  setBacklight(atmos.sunDir, heroL.back, atmos.sun.color);
+  setBacklight(atmos.sunDir, heroL.back * backAt(el), atmos.sun.color);
   atmos.hemi.intensity *= heroL.fill;
   scene.environmentIntensity = heroL.env;
 }

@@ -37,6 +37,7 @@ import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from ".
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
 import { ShortWaveRide, type KnockdownTiming } from "./boats/ride";
+import { PropWash } from "./boats/propwash";
 import { Contact } from "./contact";
 import { heightAt, MixedSea as LiveSea, type WaveComponent } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
@@ -59,7 +60,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
-import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, welcomeBack } from "./helm/voyageSave";
+import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
@@ -83,7 +84,7 @@ import { bandLine, slideRoom } from "./framing";
 import { focusBoat, type Focus } from "./focus";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons, heightOf, knockdownShot, type CinemaHost, type Moment } from "./cinema";
+import { Cinema, filmButtons, heightOf, knockdownShot, motorShot, slideTo, type CinemaHost, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
@@ -180,6 +181,7 @@ let hull: HullParams = KAYAK_V4;
 let motion = new BoatMotion(hull, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
+let propWash: PropWash | null = null;
 let contact: Contact | null = null;
 let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
 let seaLevel: "low" | "high" = quality;
@@ -228,6 +230,11 @@ function buildBoat(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  if (propWash) {
+    scene.remove(propWash.mesh);
+    propWash.dispose();
+    propWash = null;
+  }
   // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
   if (spec === RANDOLPH && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && spec === RANDOLPH && buildBoat());
   model = BUILDERS[spec.key](quality);
@@ -241,6 +248,11 @@ function buildBoat(): void {
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
+  // A boat with motors: the churned trail astern of each running propeller (M5: a dead motor visibly stops).
+  if (model.gear.props.length) {
+    propWash = new PropWash(model.gear.props.length);
+    scene.add(propWash.mesh);
+  }
   placeDeckLight();
 }
 
@@ -254,6 +266,8 @@ deckLight.name = "deck_light";
  *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
 const FOAM_AT_NIGHT = 0.3;
+/** A yacht's low deck lamp reaches this far (m): her deck, not her sails (at 5 m and twice as bright it lit the sail's foot warm; Elena, 14 Nov: sails a dim cool grey at night). */
+const YACHT_DECK_REACH_M = 3.2;
 const lampW = new THREE.Vector3();
 /** A lantern higher than this (m) is a masthead light, not a deck lantern. */
 const MASTHEAD_LAMP_M = 5;
@@ -280,7 +294,7 @@ function placeDeckLight(): void {
     deckLight.position.set(0, box.max.y + 0.1, 0);
     model.root.add(deckLight);
   }
-  deckLight.distance = deckYacht ? 5 : 6 * Math.max(1, spec.length / KAYAK.length);
+  deckLight.distance = deckYacht ? YACHT_DECK_REACH_M : 6 * Math.max(1, spec.length / KAYAK.length);
 }
 /** Sail the boat the game names ("" our kayak, "revc"/"revb" for a Boatyard design on our model of the
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
@@ -444,7 +458,7 @@ const page = {
   /** A watched voyage, whole (its length, boat and ending), once its file is in; the rows so far are game.boat. */
   watch: null as WatchInfo | null,
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
-  force: { wind: -1, hs: -1, skyHours: 0 },
+  force: { wind: -1, hs: -1, skyHours: 0, failed: [] as string[] },
   busy: false,
   stops: [] as Stop[],
   card: null as Card | null,
@@ -1328,6 +1342,7 @@ function moment(e: ReplayEvent, side?: number): void {
     sound.breakdown(e.kind); // the part stopping, then the instrument's chirp
     flash("alarm");
     slowUntil = now + 3;
+    if (e.kind !== "ship_strike" && (e.kind !== "part_failed" || /^thruster_/.test(failedPart(e).part))) cutToMotor();
   } else if (e.kind === "arrived" || e.kind === "finish_line") {
     sound.horn();
     slowUntil = now + 4;
@@ -1340,16 +1355,35 @@ function moment(e: ReplayEvent, side?: number): void {
  * where it was. Not in the film (it has its own Knockdown sequence), not at the wheel (your
  * hands are on the boat), not with reduced motion; a drag on the view takes the camera back.
  */
+/** The middle of the open picture beside the orders panel, across the screen (-1 .. 1): the screen's middle when the panel is closed. */
+function openMiddle(): number {
+  const r = document.getElementById("orders")?.getBoundingClientRect();
+  // The panel on the left, open, and not the whole width (a phone's sheet): the space runs from its right edge to the screen's.
+  if (!r || r.width < 1 || r.height < 1 || r.left > innerWidth * 0.25 || r.right > innerWidth * 0.6) return 0;
+  return Math.max(0, r.right) / innerWidth;
+}
 let knockCut: Focus | null = null;
+const propAt: THREE.Vector3[] = [];
 function cutToKnockdown(k: KnockdownTiming, now: number): void {
   if (knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
-  const shot = knockdownShot(filmHost, k.side);
+  const shot = slideTo(knockdownShot(filmHost, k.side), camera.aspect, openMiddle());
   const off = shot.pos.sub(controls.target);
   knockCut = focusBoat(camera, () => controls.target, {
     easeMs: KNOCK_EASE_MS,
     holdMs: Math.max(1500, (k.upright - now + 1) * 1000 - KNOCK_EASE_MS),
     framing: (t) => ({ pos: t.clone().add(off), quat: shot.quat, fov: shot.fov }),
   });
+}
+/**
+ * A dead motor visibly stops (M5): the camera goes to above her quarter, astern, where each
+ * running motor leaves its churned trail on the water, and holds while the dead one's dies
+ * away. Only a boat with motors; gated as the knockdown's cut is.
+ */
+function cutToMotor(): void {
+  if (!propWash || knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
+  const shot = slideTo(motorShot(filmHost), camera.aspect, openMiddle());
+  const off = shot.pos.sub(controls.target);
+  knockCut = focusBoat(camera, () => controls.target, { easeMs: 600, holdMs: 3200, framing: (t) => ({ pos: t.clone().add(off), quat: shot.quat, fov: shot.fov }) });
 }
 const KNOCK_EASE_MS = 400; // there by the time she is flat (ride.ts: 0.5 s and up)
 
@@ -1724,7 +1758,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]) };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
     () => game.save(),
   ).start();
@@ -3652,6 +3686,15 @@ async function begin(): Promise<void> {
         // A challenge's one big call was asked before you left: it isn't asked twice.
         const callDay = mission()?.goal.call_day;
         if (callDay != null && v.status.day > callDay) asked.mission = true;
+        // An order sent in the last moment before you left may not have reached the save's code
+        // (the simulator was busy, the page closed): it is given again now, so the helm comes
+        // back as you left it. Hands on only: from base an order is a satellite message.
+        const last = was?.code === shared ? was.order : null;
+        if (last && mode === "hands_on" && !v.status.over && !v.status.no_link && !sameOrder(last, { heading: order, power, sails: sailOrder, engine: engineOrder })) {
+          [order, power, sailOrder, engineOrder] = [last.heading, last.power, last.sails, last.engine];
+          await game.order(order, power, sailOrder, engineOrder);
+          page.status = game.status;
+        }
       }
     } else if (SPECTATE) {
       // A recorded voyage (its file is the game) or a race (the source knows its boats and launch).
@@ -4089,6 +4132,13 @@ filmButtons(cine, sound);
 Object.assign(page, {
   heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
   knockdown: () => ride?.knockdown ?? null,
+  /** Each motor's trail on the water now, 0..1, port first (boats/propwash.ts); empty on a boat with no motors. */
+  wash: (): number[] => propWash?.shown.strength ?? [],
+  /** Break a motor now, as a logged failure does: "thruster_port" or "thruster_starboard" (for tests and pictures). */
+  breakMotor: (part: string): void => {
+    page.force.failed.push(part);
+    moment({ h: hour, kind: "part_failed", detail: `${part} (forced for a picture)` } as ReplayEvent);
+  },
   /** True while the camera is on a knockdown (the cut outside the film). */
   knockCut: (): boolean => !!knockCut,
   /** Throw the boat flat now, as a recorded knockdown does (for tests and pictures). */
@@ -4326,13 +4376,21 @@ function hideStandIn(): void {
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
+  if (propWash) propWash.mesh.visible = show;
   if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
 }
 /** On a phone, the band of sea above the Set sail card: from the bar's foot to the card's top (px). */
+/** The orders sheet, when it is open and showing on a phone (it is fixed, so it has no offsetParent). */
+function ordersSheet(): HTMLElement | null {
+  const o = document.getElementById("orders");
+  if (!o || window.innerWidth >= 700 || !o.classList.contains("open")) return null;
+  const cs = getComputedStyle(o);
+  return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) > 0 ? o : null;
+}
 function phoneBand(): { top: number; bottom: number } {
   const top = document.getElementById("topbar")?.getBoundingClientRect().bottom ?? 40;
   // The Set sail card, or the results card (which sits at the bottom on a phone too).
-  const card = [document.getElementById("ss-card"), document.querySelector<HTMLElement>("#result .rc")].find((c) => c && c.offsetParent);
+  const card = [document.getElementById("ss-card"), document.querySelector<HTMLElement>("#result .rc"), ordersSheet()].find((c) => c && (c.offsetParent || c.id === "orders"));
   const bottom = card ? card.getBoundingClientRect().top : window.innerHeight * 0.45;
   return { top, bottom };
 }
@@ -4377,7 +4435,9 @@ function frameBoat(dt: number): void {
   // The results card on a phone keeps the same rule: the boat whole in the band above it (Elena).
   // At the finish too: on a phone the card covers the arrival's view, so she sits in the band above it.
   const phoneResults = !$("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on;
-  if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults)) {
+  // Sailing with the orders sheet open on a phone: the same band rule, the boat whole above the sheet (Elena).
+  const phoneOrders = page.ready && $("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on && !!ordersSheet();
+  if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults || phoneOrders)) {
     // Her waterline, where she is: the world's middle on the crossing, off Annapolis on a practice page.
     here0.set(controls.target.x, 0, controls.target.z).project(camera); // includes the lens's current slide, so this settles on the target
     const phone = window.innerWidth < 700;
@@ -4583,7 +4643,7 @@ renderer.setAnimationLoop(() => {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 2 : Math.max(1, spec.length / KAYAK.length) ** 2);
+    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
@@ -4594,6 +4654,7 @@ renderer.setAnimationLoop(() => {
       FOAM_LAMP_UNIFORMS.uFoamLampR.value = 1.5 * Math.max(1, spec.length / KAYAK.length);
     }
     const failedNow = r ? failuresAt(r, h) : new Map<string, string>();
+    for (const part of page.force.failed) if (!failedNow.has(part)) failedNow.set(part, "forced for a picture");
     model.gear.update(
       {
         speed: stw / spec.cruiseSpeed,
@@ -4605,6 +4666,13 @@ renderer.setAnimationLoop(() => {
       },
       t,
     );
+    if (propWash) {
+      // Each running motor's churned trail astern of its propeller; a dead motor's dies as it runs down.
+      const yaw = smoothYaw ?? 0;
+      model.gear.props.forEach((p, i) => p.getWorldPosition((propAt[i] ??= new THREE.Vector3())));
+      propWash.surface = (x, z) => sea.surfaceAt(comps, x, z, t);
+      propWash.update(t, propAt, -Math.cos(yaw), Math.sin(yaw), model.gear.shown.spin, stw, spec.cruiseSpeed, hs, atmos.foamLight);
+    }
     // The strip's equipment cell (the same icons as Watch a voyage): the watched boat's parts at the shown hour.
     equipmentIcons(equipmentParts(spec.key, r ? commsAt(r, h) : null, failedNow), true, "", false);
     model.rig?.update(dt, {
