@@ -65,6 +65,16 @@ async function fresh(browser, site, path, more = {}) {
   };
   page.on("requestfinished", (r) => void done(r, false));
   page.on("requestfailed", (r) => void done(r, true));
+  // Chrome can say what really crossed the wire (nothing, for a file it already had): the
+  // sizes above count a file again when it comes from the browser's cache.
+  net.wire = null;
+  if (browser.browserType().name() === "chromium") {
+    net.wire = { bytes: 0, cached: 0, at: [] };
+    const cdp = await ctx.newCDPSession(page);
+    await cdp.send("Network.enable");
+    cdp.on("Network.loadingFinished", (e) => { net.wire.bytes += e.encodedDataLength; net.wire.at.push([Date.now() - net.t0, e.encodedDataLength]); });
+    cdp.on("Network.requestServedFromCache", () => net.wire.cached++);
+  }
   net.t0 = Date.now();
   await page.goto(site + path, { waitUntil: "commit", timeout: 2 * MIN });
   return { ctx, page, net };
@@ -98,6 +108,9 @@ function weigh(net, site, upTo = Infinity) {
   const by = {};
   for (const f of files) by[kind(f)] = (by[kind(f)] ?? 0) + f.bytes;
   return {
+    // Chrome only: bytes that crossed the wire for the page itself (its workers' downloads are not in this count), and files served from its cache.
+    wireKB: net.wire ? Math.round(net.wire.at.filter((w) => w[0] <= upTo).reduce((a, w) => a + w[1], 0) / 1024) : null,
+    fromCache: net.wire ? net.wire.cached : null,
     requests: files.length,
     kB: Math.round(files.reduce((a, f) => a + f.bytes, 0) / 1024),
     byKind: Object.fromEntries(Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v / 1024)])),
@@ -208,7 +221,7 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
       }
       h.dayReached = await page.evaluate(() => window.__helm.status?.day ?? null);
     }
-    const all = { ...net, files: net.files.filter((f) => f.at > pressedAt && f.at <= readyAt) };
+    const all = { ...net, wire: null, files: net.files.filter((f) => f.at > pressedAt && f.at <= readyAt) };
     h.simulatorDownloads = weigh(all, SITE);
     h.whole = weigh(net, SITE);
     out.pages.helm = h;
@@ -229,7 +242,7 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
     try {
       await when(page, () => window.__sea3d && window.__sea3d.frames >= 3);
       await page.waitForTimeout(linger);
-      const j = { lingerMs: linger, titleKB: weigh(net, SITE).kB };
+      const j = { lingerMs: linger, titleKB: weigh(net, SITE).kB, titleWireKB: weigh(net, SITE).wireKB };
       if (!/never/.test(name)) {
         const left = Date.now();
         await (more.hasTouch ? page.tap("#t-setsail", { noWaitAfter: true, timeout: 30_000 }) : page.click("#t-setsail", { noWaitAfter: true, timeout: 30_000 }));
@@ -240,6 +253,8 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
         j.toSailingMs = ok ? Date.now() - left : null;
         j.error = await page.evaluate(() => window.__helm.error || "");
         j.wholeKB = weigh(net, SITE).kB;
+        j.wholeWireKB = weigh(net, SITE).wireKB;
+        j.fromCache = weigh(net, SITE).fromCache;
       }
       out.journeys[name] = j;
     } catch (e) {
