@@ -2572,7 +2572,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
             return setOrder(Math.round(toFinish));
           },
         },
-        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: "Let the autopilot decide (same as the ghost)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
   }
@@ -2695,7 +2695,7 @@ function maybeRouteCheck(st: Status): boolean {
             streamCall = { h, chose: `Since you bent ${deg}° ${side}`, since: `Since you bent ${deg}° ${side}`, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(b.best);
           }, order: { heading: b.best, power } },
-          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (what the ghost does)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
+          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (same as the ghost)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
         ],
       };
       const view: Outlook = { ...o, orders: [best, auto] };
@@ -2754,8 +2754,8 @@ function maybeRouteCheck(st: Status): boolean {
       text: `Navigator's check: the forecast says ${fmtDeg(b.best)} would gain on ${orderWords(order)} over the next 4 days, but through ${price}.`,
       choices: [
         { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
-        { label: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
-        { label: "Let the autopilot decide (what the ghost does)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: "Let the autopilot decide (same as the ghost)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
     const picks = order === "auto" || same ? [0, 1] : [0, 1, 2];
