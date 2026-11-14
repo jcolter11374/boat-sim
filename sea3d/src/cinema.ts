@@ -52,6 +52,8 @@ export interface CinemaHost {
   landmark?(): number | null;
   /** Cloud cover now, 0..1 (kept for shots that need a clear sky; none at launch). */
   cloud?(): number;
+  /** Which side of the boat her lamp lights at night: +1 starboard, -1 port, 0 both alike (a lamp on her centreline). */
+  lampSide?(): number;
   /** The sound toggle, for the N key. */
   toggleSound?(): void;
   /** How much bigger than our 3 m kayak the boat is (used when length() isn't given). */
@@ -194,11 +196,15 @@ export function sweepFor(knots: number): number {
 }
 
 /** The sequences that fit now, best first (only those whose conditions hold). */
-export function fitting(m: Moment, sunEl: number): SequenceKind[] {
+/** Cloud cover (0..1) up to which a low sun still shows as a golden hour: above it the light is grey and flat (GUESS by eye). */
+export const GOLDEN_CLOUD = 0.5;
+export function fitting(m: Moment, sunEl: number, cloud = 0): SequenceKind[] {
   const out: SequenceKind[] = [];
   if (m.knockdownAgo < 3 || m.recentKnockdown) out.push("knockdown");
   if (m.storm > 0.5) out.push("storm");
-  if (sunEl > -3 && sunEl < 10 && m.storm < 0.7) out.push("golden");
+  // Golden hour only when there is one to see: the sun low AND the sky fairly clear. Under an overcast
+  // the low sun is grey and flat, and the film shows the passage instead; never a faked glow (Elena, 14 Nov).
+  if (sunEl > -3 && sunEl < 10 && m.storm < 0.7 && cloud <= GOLDEN_CLOUD) out.push("golden");
   if (sunEl < -10) out.push("night");
   if (sunEl >= -10 || m.storm > 0.5) out.push("passage");
   return out;
@@ -326,6 +332,21 @@ export function motorShot(host: FramingHost): { pos: THREE.Vector3; quat: THREE.
   const c = compose(boatAt(host), bow, bow, 1, len, host.camera.aspect, MOTOR, 0, 0);
   c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
   return { pos: c.pos, quat: c.quat, fov: c.fov };
+}
+
+/**
+ * Whether a camera standing azDeg round from the bow on `side` (as compose's) is on the side of the
+ * boat her lamp leaves dark. yaw: the boat's scene yaw; lamp: +1 starboard, -1 port, 0 centred.
+ */
+export function onDarkSide(yaw: number, azDeg: number, side: number, lamp: number): boolean {
+  if (!lamp) return false;
+  const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+  const a = azDeg * D2R * side;
+  const cx = bow.x * Math.cos(a) - bow.y * Math.sin(a);
+  const cz = bow.x * Math.sin(a) + bow.y * Math.cos(a);
+  // The scene's +z is the port side of a bow along +x, so starboard is (bow.y, -bow.x).
+  const starboard = cx * bow.y - cz * bow.x;
+  return Math.abs(starboard) > 0.2 && Math.sign(starboard) !== Math.sign(lamp);
 }
 
 /**
@@ -524,7 +545,14 @@ export class Cinema {
       const i = shots.indexOf("establish");
       if (i >= 0) shots.splice(i, 1);
     }
-    this.seq = { kind, shots, i: -1, side: this.sideFor(shots[0]) };
+    const side = this.sideFor(shots[0]);
+    // At night from the side her lamp doesn't light, the alongside shot was a black hull on black water with
+    // only the antenna tip showing (Elena, 14 Nov): there the sequence keeps to the light and stern-light shots.
+    if (kind === "night" && shots.length > 1 && this.onDarkSide(side, shots.includes("alongside") ? "alongside" : shots[0])) {
+      const i = shots.indexOf("alongside");
+      if (i >= 0) shots.splice(i, 1);
+    }
+    this.seq = { kind, shots, i: -1, side };
     this.sequences.push(kind);
     this.captionFor(kind);
   }
@@ -534,6 +562,10 @@ export class Cinema {
    * it's rim-lit with the glitter on the water, not flat and front-lit (Elena). At night
    * either side will do, so night sequences alternate.
    */
+  private onDarkSide(side: number, kind: ShotKind): boolean {
+    return onDarkSide(this.host.yaw(), SHOTS[kind].from.az, side, this.host.lampSide?.() ?? 0);
+  }
+
   private sideFor(first: ShotKind): number {
     const def = SHOTS[first];
     const sd = this.host.sunDir();
@@ -557,7 +589,7 @@ export class Cinema {
   private next(forced?: SequenceKind): void {
     if (forced || !this.seq || this.seq.i >= this.seq.shots.length - 1) {
       const m = this.moment();
-      const fit = fitting(m, this.host.sunEl());
+      const fit = fitting(m, this.host.sunEl(), this.host.cloud?.() ?? 0);
       this.startSequence(forced ?? chooseSequence(fit, this.sequences, m.knockdownAgo < 3));
     }
     const s = this.seq!;
