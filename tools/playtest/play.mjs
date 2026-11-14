@@ -4059,6 +4059,102 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // M4 wave 1 (#524): the Pearson 31-2 and the Beneteau First 31.7 in the Boatyard. Parts list and fitted-boat
+  // frames at 1280 and 390 (look-yard-<browser>-<base>-<w>-*.jpg), sail slots, no prices, the gauge before and
+  // after a sail swap, and (1280) the swapped design saved as my boat and sailed from Set sail.
+  "yard-keel": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-yard-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      for (const base of ["stock_pearson31_2", "stock_cruiser31"]) {
+        const short = base === "stock_cruiser31" ? "beneteau" : "pearson";
+        for (const [w, h] of [[1280, 720], [390, 844]]) {
+          const tag = `${short}-${w}`;
+          const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block" });
+          const p = await ctx.newPage();
+          const errs = [];
+          p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 160)));
+          try {
+            await p.goto(SITE + `boatyard.html?quality=high#base=${base}`, { waitUntil: "load", timeout: 2 * MIN });
+            await p.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 30, null, { timeout: 4 * MIN }).catch(() => {});
+            await p.waitForLoadState("networkidle").catch(() => {});
+            await p.waitForTimeout(5000);
+            const pressed = await p.evaluate((b) => document.querySelector(`#bases button[data-base="${b}"]`)?.getAttribute("aria-pressed"), base);
+            if (pressed !== "true") bad.push(`${tag}: #base=${base} did not select her`);
+            shots.push(await emit(p, `${tag}-boat`));
+            // Open every section and the four sail slots.
+            await p.evaluate(() => {
+              document.querySelectorAll(".slot[data-group]:not(.gopen) h3").forEach((h) => h.click());
+              for (const s of ["rig", "cloth", "reef", "storm"]) { const sl = document.querySelector(`.sl[data-slot="${s}"]`); if (sl && !sl.classList.contains("open")) sl.querySelector(".sl-head")?.click(); }
+            });
+            await p.waitForTimeout(800);
+            const info = await p.evaluate(() => ({
+              slots: [...document.querySelectorAll(".sl[data-slot]")].map((e) => e.getAttribute("data-slot")),
+              sail: Object.fromEntries(["rig", "cloth", "reef", "storm"].map((s) => [s, [...document.querySelectorAll(`.opt[data-slot="${s}"]`)].map((b) => b.querySelector(".top span")?.textContent.trim() ?? b.dataset.opt)])),
+              odds: document.getElementById("s-odds")?.textContent.trim() ?? "",
+              note: document.getElementById("s-odds-note")?.textContent.trim() ?? "",
+              money: (document.body.innerText.match(/[$€£]\s?\d|\bUSD\b|\bprice\b|\bcost\b/gi) || []).slice(0, 4),
+            }));
+            for (const s of ["rig", "cloth", "reef", "storm"]) if (!info.sail[s]?.length) bad.push(`${tag}: no "${s}" slot parts`);
+            if (info.money.length) bad.push(`${tag}: money shows (${info.money.join(", ")})`);
+            await p.evaluate(() => document.querySelector('.sl[data-slot="cloth"], .sl[data-slot="rig"]')?.scrollIntoView({ block: "center" }));
+            await p.waitForTimeout(600);
+            shots.push(await emit(p, `${tag}-parts`));
+            // Swap the sail cloth (or the rig) to a part not fitted now.
+            const swap = await p.evaluate(() => {
+              for (const s of ["cloth", "rig", "reef", "storm"]) { const b = [...document.querySelectorAll(`.opt[data-slot="${s}"]`)].find((x) => x.getAttribute("aria-pressed") !== "true"); if (b) { b.scrollIntoView({ block: "center" }); b.click(); return { slot: s, part: b.querySelector(".top span")?.textContent.trim() ?? b.dataset.opt }; } }
+              return null;
+            });
+            await p.waitForTimeout(4000);
+            const after = await p.evaluate(() => ({ odds: document.getElementById("s-odds")?.textContent.trim() ?? "", note: document.getElementById("s-odds-note")?.textContent.trim() ?? "", share: window.__yard?.share ?? location.hash }));
+            if (!swap) bad.push(`${tag}: no sail part to swap`);
+            shots.push(await emit(p, `${tag}-swapped`));
+            await p.evaluate(() => { const c = document.querySelector("canvas"); c?.scrollIntoView({ block: "start" }); });
+            await p.waitForTimeout(1500);
+            shots.push(await emit(p, `${tag}-fitted`));
+            out.push(`${tag}: slots ${info.slots.join(",")}; sail parts ${Object.entries(info.sail).map(([k, v]) => `${k}[${v.join(" / ")}]`).join(" ")}; gauge "${info.odds}" -> after swapping ${swap ? `${swap.slot} to "${swap.part}"` : "nothing"}: "${after.odds}" (${after.odds === info.odds ? "same" : "moved"}; note "${after.note.slice(0, 80)}")`);
+            if (w === 1280) {
+              // Save the swapped design as my boat, then sail it from Set sail.
+              await p.fill("#mb-name", "Nina test").catch(() => {});
+              await p.click("#mb-save", { timeout: 10_000 }).catch(() => p.evaluate(() => document.getElementById("mb-save")?.click()));
+              await p.waitForTimeout(1500);
+              const saved = await p.evaluate(() => localStorage.getItem("boatsim.myboat.v1"));
+              const sv = (() => { try { return JSON.parse(saved); } catch { return null; } })();
+              if (!sv || sv.base !== base) bad.push(`${tag}: not saved as my boat (${saved?.slice(0, 120)})`);
+              await p.goto(SITE + "?quality=low", { waitUntil: "load", timeout: 2 * MIN });
+              await p.waitForFunction(() => document.getElementById("t-setsail"), null, { timeout: 2 * MIN }).catch(() => {});
+              const chip = await p.evaluate(() => document.getElementById("topbar-boat")?.textContent.trim() ?? "");
+              await p.evaluate(() => document.getElementById("t-setsail")?.click());
+              await p.waitForURL(/helm\.html/, { timeout: MIN }).catch(() => {});
+              await p.waitForFunction(() => document.querySelector("#go") && !window.__helm?.busy, null, { timeout: 2 * MIN }).catch(() => {});
+              await p.evaluate(() => document.getElementById("go")?.click());
+              await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+              await p.waitForTimeout(4000);
+              const d0 = await p.evaluate(() => ({ day: window.__helm?.status?.day ?? null, err: window.__helm?.error ?? null, top: document.getElementById("topbar-boat")?.textContent.trim() ?? "" }));
+              await p.keyboard.press("5");
+              await p.waitForFunction((d) => (window.__helm?.status?.day ?? 0) > (d ?? 0) + 2 || window.__helm?.status?.over, d0.day, { timeout: 4 * MIN }).catch(() => {});
+              await p.keyboard.press("1");
+              await p.waitForTimeout(3000);
+              const d1 = await p.evaluate(() => ({ day: window.__helm?.status?.day ?? null, over: !!window.__helm?.status?.over, err: window.__helm?.error ?? null, money: (document.body.innerText.match(/[$€£]\s?\d|\bUSD\b|\bprice\b/gi) || []).slice(0, 3) }));
+              shots.push(await emit(p, `${tag}-sailing`));
+              if (d0.err || d1.err) bad.push(`${tag}: helm error ${d0.err ?? d1.err}`);
+              if (!(d1.day > (d0.day ?? 0))) bad.push(`${tag}: the saved design did not sail (day ${d0.day} -> ${d1.day})`);
+              if (d1.money.length) bad.push(`${tag}: money shows on the helm (${d1.money.join(", ")})`);
+              out.push(`${tag} saved as "${sv?.name}" (${sv?.base}); title chip "${chip}"; helm top bar "${d0.top}"; day ${d0.day} -> ${d1.day}${d1.over ? " (ended)" : ""}`);
+            }
+            if (errs.length) bad.push(`${tag}: page errors ${errs.slice(0, 2).join(" / ")}`);
+          } finally { await ctx.close().catch(() => {}); }
+        }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`YARD ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
