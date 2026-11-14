@@ -250,10 +250,18 @@ export function makeBuoy(kind: BuoyKind, number: string): THREE.Group {
   if (plate) {
     plate.position.copy(p.at);
     o.add(plate);
-    if (kind === "can" || kind === "nun" || kind.startsWith("lit")) {
-      // The same number on the back, so it reads from either side of the channel.
+    if (kind === "can" || kind === "nun") {
+      // Round all the way: three times, a third of a turn apart, so it reads from any side
+      // (Elena, 14 Nov: two left a blind quarter either side, where can 1 showed no number).
+      for (const turn of [1, 2]) {
+        const more = plate.clone();
+        more.rotation.y = (turn * 2 * Math.PI) / 3;
+        o.add(more);
+      }
+    } else if (kind.startsWith("lit")) {
+      // The same number on the back of the daymark, so it reads from either side of the channel.
       const back = plate.clone();
-      back.position.set(p.at.x, p.at.y, -p.at.z);  // (z = 0 for the round ones: the turn does it)
+      back.position.set(p.at.x, p.at.y, -p.at.z);
       back.rotation.y = Math.PI;
       o.add(back);
     }

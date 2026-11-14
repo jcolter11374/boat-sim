@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { SEAMARKS, SEAMARK_RANGE, Seamarks, kindOf, lampHeight, markFlash } from "../src/land/seamarks";
+import { SEAMARKS, SEAMARK_HALO_M, SEAMARK_RANGE, Seamarks, kindOf, lampHeight, markFlash } from "../src/land/seamarks";
 import { buoyGeometry } from "../src/boats/buoys";
 import { BAY_BRIDGE, BRIDGE_RANGE, BayBridge, deckHeight, roadLamps, spanGeometry } from "../src/land/bayBridge";
 import { bearingTo, offsetOf } from "../src/land/landmarks";
@@ -88,6 +88,9 @@ test("the marks show round the course, float on the sea, and none are built far 
   const post = s.root.getObjectByName("seamark-1AH")!;
   assert.ok(post.position.y < 0.05, "a fixed light stands on the bottom, it doesn't ride the waves");
   assert.ok(SEAMARK_RANGE > 7000);
+  // Each lit mark throws a short broken streak on the water at night (Elena, 14 Nov); an unlit can doesn't.
+  for (const m of SEAMARKS) assert.equal(!!s.root.getObjectByName(`seamark-${m.key}`)!.getObjectByName("seamark-reflection"), !!m.period, m.key);
+  assert.ok(SEAMARK_HALO_M < 2.5, "a lantern's glow, not a lighthouse's");
   s.dispose();
   assert.equal(s.root.children.length, 0);
 });
