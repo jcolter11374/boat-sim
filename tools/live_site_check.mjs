@@ -13,6 +13,7 @@
 import * as pw from "playwright";
 import { appendFileSync } from "node:fs";
 import { PAGES, checkPage } from "./live_visual_checks.mjs";
+import { T, measurePace } from "./playtest/pace.mjs";
 
 const SITE = (process.env.SITE ?? "https://jcolter11374.github.io/boat-sim/").replace(/\/?$/, "/");
 const MIN = 60_000;
@@ -31,6 +32,7 @@ const must = (ok, msg) => {
 async function open(browser, path, viewport = { width: 1400, height: 900 }) {
   const ctx = await browser.newContext({ viewport, bypassCSP: false, serviceWorkers: "block" });
   const page = await ctx.newPage();
+  page.setDefaultTimeout(T(30_000)); // a click with no wait of its own: Playwright's 30 s, stretched on a slow machine (playtest/pace.mjs)
   const errors = [];
   const notes = [];
   page.on("console", (m) => {
@@ -86,7 +88,7 @@ async function openOrders(page) {
   // in use; on slow software graphics the slide takes seconds. So: open it if it's shut, wait
   // until it has fully slid in, then point at it, which keeps it open (the player is using it).
   for (let i = 0; i < 3; i++) {
-    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: 15_000 }).catch(() => {});
+    if (!(await page.locator("#orders.open").count())) await page.click("#orders-tab", { timeout: T(15_000) }).catch(() => {});
     const there = await page
       .waitForFunction(() => { const o = document.getElementById("orders"); return o.classList.contains("open") && o.getBoundingClientRect().x >= 0; }, null, { timeout: 20_000 })
       .then(() => true, () => false);
@@ -110,7 +112,9 @@ async function clickNamed(page, selector, what, opts = {}) {
 // The functional helm checks run on Low quality, as the smoke test does: on the
 // runner's software graphics, High spends the frame in the browser's own raster work
 // (Sam's profile, #293), which starved clicks. visual-helm keeps the default look.
-const HELM = "helm.html?quality=low";
+// HELM_QUERY adds to every helm page's address, to play the same checks with a switch thrown
+// (HELM_QUERY=cumulus=old: the sky without the new cloud heaps, to compare frame times on one machine).
+const HELM = `helm.html?quality=low${process.env.HELM_QUERY ? `&${process.env.HELM_QUERY}` : ""}`;
 async function helmStart(page, setup) {
   await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
   // Launch day, challenges and how you steer sit under "More options" (Nina's review); open it if this page has it.
@@ -177,6 +181,32 @@ const pickBoat = (value) => async (page) => {
   must(!shown || shown === want, `the Set sail card shows ${JSON.stringify(shown)}, not ${JSON.stringify(want)}`);
 };
 
+/** Press a pill on the Set sail card by its words, as a player does. The card is the one place to
+ * pick (the old lists are its hidden sources), and a row can keep some pills behind a last
+ * "Pick a day…" or "More…" pill: press that first when the wanted one isn't showing. */
+async function pressPill(page, box, words, what) {
+  const pill = () => page.locator(`${box} .ss-pill`).filter({ hasText: words }).first();
+  if (!(await pill().count())) {
+    const more = page.locator(`${box} .ss-pill`).filter({ hasText: /…$/ }).first();
+    if (await more.count()) await more.click({ timeout: MIN });
+  }
+  must((await pill().count()) > 0, `the Set sail card has no ${what} pill (it offers: ${(await page.locator(`${box} .ss-pill`).allTextContents()).join(" | ")})`);
+  await pill().click({ timeout: MIN });
+  must((await pill().getAttribute("aria-pressed")) === "true", `pressing the ${what} pill on the Set sail card didn't pick it`);
+}
+
+/** A launch day by its pill; `value` is what the card's source (#launch) must then hold. */
+const pickLaunch = (words, value, what) => async (page) => {
+  await pressPill(page, "#ss-when-opts", words, what);
+  const got = await page.evaluate(() => document.getElementById("launch").value);
+  must(got === value, `the ${what} pill set the launch to ${JSON.stringify(got)}, not ${JSON.stringify(value)}`);
+};
+
+/** Open the card's "More options", where the port, how you steer, breakdowns and the battery are. */
+async function openMoreOptions(page) {
+  if (await page.evaluate(() => document.getElementById("more")?.open === false)) await page.click("#more summary", { timeout: MIN });
+}
+
 const CHECKS = {
   index: {
     path: "",
@@ -185,7 +215,7 @@ const CHECKS = {
       return `${await page.evaluate(() => window.__sea3d.frames)} frames drawn`;
     },
   },
-  "helm-drop": { path: HELM, run: helm(async (p) => p.selectOption("#launch", "0")) },
+  "helm-drop": { path: HELM, run: helm(pickLaunch(/^Rough/, "0", "Rough (1 April)")) },
   "helm-port": {
     path: HELM,
     run: helm(async (p) => {
@@ -206,7 +236,10 @@ const CHECKS = {
         const ids = await p.evaluate(() => [...document.querySelectorAll("#challenge option")].map((o) => o.value).filter(Boolean));
         const id = ids.find((i) => /dorian/i.test(i));
         must(id, `no Dorian challenge offered (offered: ${ids.join(", ")})`);
-        await p.selectOption("#challenge", id);
+        must(await p.isVisible("#ss-ch"), "the Set sail card doesn't show its weather challenges");
+        await pressPill(p, "#ss-ch-opts", /Dorian/i, "Dorian challenge");
+        const got = await p.evaluate(() => document.getElementById("challenge").value);
+        must(got === id, `the Dorian pill picked ${JSON.stringify(got)}, not ${id}`);
       },
       async (p) => `, challenge ${await p.evaluate(() => window.__helm.challenge)}`,
     ),
@@ -215,7 +248,7 @@ const CHECKS = {
   "helm-share": {
     path: HELM,
     run: async (page) => {
-      await helmStart(page, async (p) => p.selectOption("#launch", "1"));
+      await helmStart(page, pickLaunch(/^15 Apr/, "1", "15 April"));
       const before = await frameTimes(page);
       const st = await helmSailADay(page);
       const after = await frameTimes(page);
@@ -223,6 +256,12 @@ const CHECKS = {
       await clickNamed(page, "#share", "Copy a share link");
       await page.waitForFunction(() => !!window.__helm.share, null, { timeout: 2 * MIN });
       const link = await page.evaluate(() => window.__helm.share);
+      // Whoever opens a shared link does it on their own machine. Here both would be pages of one
+      // browser, and on a runner's software graphics two pages drawing the sea at once share one
+      // GPU process: the second draws a frame every few seconds, and its Set sail click took 40 s
+      // locally with the first still drawing, 13 s with it gone (Omar, 14 Nov). The sharer's day is
+      // already in st, so the sharer's page stops drawing before the link is opened.
+      await page.goto("about:blank");
       const o = await open(page.context().browser(), `${link.slice(SITE.length)}&quality=low`);
       try {
         await o.page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
@@ -242,7 +281,14 @@ const CHECKS = {
       }
     },
   },
-  "helm-base": { path: HELM, run: helm(async (p) => p.locator('input[name="mode"][value="base"]').check()) },
+  "helm-base": {
+    path: HELM,
+    run: helm(async (p) => {
+      await openMoreOptions(p);
+      await pressPill(p, "#ss-mode-opts", /^From home, by satellite/, "From home, by satellite");
+      must(await p.evaluate(() => document.querySelector('input[name="mode"]:checked')?.value === "base"), "the satellite pill didn't change how the boat is steered");
+    }),
+  },
 };
 
 // The Sea page leads into the game (sea3d/src/sailLink.ts): with Gale on screen,
@@ -283,8 +329,57 @@ for (const b of STOCK_BOATS)
   CHECKS[`helm-${b}`] = {
     path: HELM,
     optional: true, // only if the live picker offers it; the list of offered boats is checked in helm-boats
-    run: helm(pickBoat(b)),
+    // Every stock boat but the dinghy lasts the first day of the usual launch. The open dinghy
+    // doesn't (helm-dinghy-rolled below), so her game is played from 1 May, the first of five
+    // launch days in a row she sails on from for three days or more (Theo's run of every 2020
+    // launch day), and the check holds her to it: still sailing after the day.
+    run:
+      b === "stock_dinghy14"
+        ? helm(
+            async (p) => {
+              await pickBoat(b)(p);
+              await pickLaunch(/^1 May/, "2", "1 May")(p);
+            },
+            async (p) => {
+              const st = await p.evaluate(() => window.__helm.status);
+              must(st && !st.over, `the dinghy didn't last her first day from 1 May: over on day ${st?.day}`);
+              return ", still sailing";
+            },
+          )
+        : helm(pickBoat(b)),
   };
+// The dinghy on the usual launch (23 April 2020): the wind builds to 28 kn and the sea to 3.7 m
+// by the first evening, a breaking wave rolls her over on day 0.93, and with nobody aboard she
+// can't right herself. That is the model working (Theo, #547), so the check holds the game to
+// it: she is lost inside the first day, and the results card says what happened in plain words.
+CHECKS["helm-dinghy-rolled"] = {
+  path: HELM,
+  optional: true,
+  run: async (page) => {
+    await helmStart(page, async (p) => {
+      await pickBoat("stock_dinghy14")(p);
+      const day = await p.evaluate(() => document.getElementById("launch").value);
+      must(day === "2020-04-23", `the Set sail card opened on launch ${JSON.stringify(day)}, not the usual 23 April`);
+    });
+    let st;
+    for (let hop = 0; hop < 3 && !st?.over; hop++) {
+      await clickNamed(page, "#sday", "Sail 1 day");
+      await page.waitForFunction(() => !window.__helm.busy, null, { timeout: 8 * MIN });
+      st = await page.evaluate(() => ({ day: window.__helm.status?.day, stop: window.__helm.lastStop, err: window.__helm.error, over: window.__helm.status?.over }));
+      must(!st.err, `sailing failed: ${st.err}`);
+    }
+    must(st.over, `the dinghy was still sailing on day ${st.day?.toFixed(2)} of the 23 April launch (last stop: ${st.stop}); she should be rolled over on the first evening`);
+    must(st.day > 0.5 && st.day < 1.5, `the dinghy's game ended on day ${st.day?.toFixed(2)}, not on the first evening`);
+    await page.waitForFunction(() => window.__helm.card || window.__helm.error, null, { timeout: 4 * MIN });
+    await page.waitForFunction(() => !document.getElementById("result").hidden && document.getElementById("r-story").textContent.trim(), null, { timeout: 2 * MIN }).catch(() => {
+      throw new CheckFail("the results card never showed how the dinghy's voyage ended");
+    });
+    const story = await page.evaluate(() => document.getElementById("r-story").textContent.trim());
+    must(/A breaking wave rolled her over/.test(story), `the results card doesn't say a breaking wave rolled her over; it says ${JSON.stringify(story)}`);
+    must(/couldn't right herself/.test(story), `the results card doesn't say she couldn't right herself; it says ${JSON.stringify(story)}`);
+    return `lost on day ${st.day.toFixed(2)}; the card says ${JSON.stringify(story.slice(0, 160))}`;
+  },
+};
 CHECKS["helm-boats"] = {
   path: HELM,
   run: async (page) => {
@@ -390,7 +485,7 @@ CHECKS["helm-small-window"] = {
     // stable, scrolled, not covered); with software graphics at about a frame a second
     // 10 s was too tight. Main's unscrollable card still fails at 30 s ("outside of
     // the viewport"), so the check still catches the bug (#288).
-    await page.click("#go", { trial: true, timeout: 30_000 }).catch(() => {
+    await page.click("#go", { trial: true, timeout: T(30_000) }).catch(() => {
       throw new CheckFail('"Set sail" can\'t be reached at 960x540 (the start card is taller than the window and doesn\'t scroll)');
     });
     return '"Set sail" is reachable at 960x540';
@@ -454,6 +549,9 @@ const LAUNCH = {
     : {}),
 };
 const browser = await pw[process.env.BROWSER ?? "chromium"].launch(LAUNCH);
+// How slowly this machine draws: click waits stretch by it (playtest/pace.mjs), and the report says so.
+const PACE = await measurePace(browser, SITE);
+console.log(`PACE: the sea at Low draws at ${PACE.frameMs} ms a frame here; click waits are stretched ${PACE.pace} times`);
 const results = [];
 for (const n of names) {
   const r = await runCheck(browser, n);

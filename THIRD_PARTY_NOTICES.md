@@ -75,6 +75,22 @@ The 3D pages' other ships come from the same map: `sea3d/public/ships.bin` is
 this file on a log scale with near-all-land cells cleared (built by
 `sea3d/scripts/ships.py`), so it carries the same two credits and licence.
 
+## Wildlife map (`sea3d/public/wildlife.json`)
+
+Built by `sea3d/scripts/wildlife.py` (workflow "Build wildlife map"), which
+counts records of dolphins and porpoises, baleen and sperm whales, and birds
+since 1990 and scales them by one survey. We binned, smoothed and rescaled
+them.
+
+- **OBIS**, the Ocean Biodiversity Information System, Intergovernmental
+  Oceanographic Commission of UNESCO (https://obis.org), via its public API.
+  The records come from many datasets, each under CC0, CC BY or CC BY-NC as
+  OBIS lists them; we use only per-cell counts.
+- **AMAPPS Northeast Shipboard Cruise, Summer 2016**, NOAA Northeast
+  Fisheries Science Center (GBIF/OBIS dataset
+  5d89b3ba-fad9-4481-9a4e-d1303f776a65): its sighting totals and trackline
+  length set the scale.
+
 ## Weather and ocean data
 
 The weather and current files in `data/era5/`, the voyage replays in
@@ -127,9 +143,14 @@ with `sea3d/scripts/stars.py`.
   them unmodified from the jsDelivr CDN at run time. We don't copy or change
   them.
 - **Fraunces** (SIL Open Font License 1.1, Copyright 2020 The Fraunces Project
-  Authors), the typeface of the Bluewater wordmark. We ship the Latin subset
-  unmodified as `sea3d/public/fonts/fraunces-latin-full-normal.woff2`, with its
-  licence beside it in `sea3d/public/fonts/Fraunces-OFL.txt`.
+  Authors), the typeface of the Bluewater wordmark and the title menu. We ship the
+  Latin subsets unmodified as `sea3d/public/fonts/fraunces-latin-full-normal.woff2`
+  and `sea3d/public/fonts/fraunces-latin-italic.woff2` (from Google Fonts), with
+  their licence beside them in `sea3d/public/fonts/Fraunces-OFL.txt`.
+- **"Saltwater Patience"**, the title screen's music, supplied by the project's
+  owner, who holds the rights to it. `sea3d/public/music/saltwater-patience-loop.mp3`
+  is an edited loop of it (the middle of the track, crossfaded and turned down).
+  It is used here with the rights holder's permission; ask before reusing it elsewhere.
 - **Blender** (GPL) is used only as a tool in CI to build the boat models.
   Models made with Blender belong to whoever made them, so the GPL doesn't
   cover our `.glb` files. Our build scripts that call Blender's Python API are

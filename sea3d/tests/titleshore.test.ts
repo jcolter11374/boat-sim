@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as THREE from "three";
 import { HERO_SEA, HERO_SUN } from "../src/titleHero";
+import { BAY_BRIDGE } from "../src/land/bayBridge";
+import { bearingTo } from "../src/land/landmarks";
 import { CROWN, SHORE, SHORE_EYE, SHORE_REACH, SHORE_TALLER, readSkyline, shoreClear, shoreStrip } from "../src/titleShore";
 
 const light = { sunDir: new THREE.Vector3(Math.sin((255 * Math.PI) / 180), 0.09, -Math.cos((255 * Math.PI) / 180)).normalize(), sun: new THREE.Color(1, 0.7, 0.4), haze: new THREE.Color(0.8, 0.6, 0.5) };
@@ -29,9 +31,9 @@ test("the skyline file: ours is read; a web page, a stub or nonsense is refused"
   assert.ok(new Uint8Array(readFileSync("public/title-skyline.bin")).length <= 40000, "small: it is on the first screen");
 });
 
-test("the strip: land only where there is land, turned so the June sunset falls on the title's sun", () => {
-  // Land from 290 to 310 degrees true (the sunset in its middle), 2 km off, 12 m tall.
-  const s = shoreStrip(made(720, (deg) => (deg >= 290 && deg <= 310 ? [2000, 12] : null)), HERO_SUN.az, light);
+test("the strip: land only where there is land, turned so the true sunrise falls on the title's sun", () => {
+  // Land from 85 to 105 degrees true (the sunrise in its middle), 2 km off, 12 m tall.
+  const s = shoreStrip(made(720, (deg) => (deg >= SHORE.sunAz - 10 && deg <= SHORE.sunAz + 10 ? [2000, 12] : null)), HERO_SUN.az, light);
   const verts = s.position.length / 3;
   assert.equal(verts, 2 * 41);
   assert.equal(s.index.length, 6 * 40, "joined along its length, not round the back");
@@ -47,7 +49,7 @@ test("the strip: land only where there is land, turned so the June sunset falls 
 });
 
 test("the strip: joined across north; a far shore is brought inside the title's sea at the height it appears", () => {
-  const s = shoreStrip(made(360, (deg) => (deg >= 350 || deg <= 10 ? [5200, 30] : null)), SHORE.sunsetAz, light);
+  const s = shoreStrip(made(360, (deg) => (deg >= 350 || deg <= 10 ? [5200, 30] : null)), SHORE.sunAz, light);
   assert.equal(s.position.length / 3, 2 * 22, "north is there twice: the strip's start and its end");
   assert.equal(s.index.length, 6 * 20);
   for (let i = 0; i < s.position.length / 3; i++) assert.ok(Math.hypot(s.position[3 * i], s.position[3 * i + 2]) <= SHORE_REACH + 0.01);
@@ -55,7 +57,7 @@ test("the strip: joined across north; a far shore is brought inside the title's 
   const y = s.position[3 * 1 + 1];
   assert.ok(y > 14 && y < 32, `top ${y}`);
   // Land all the way round closes on itself.
-  const ring = shoreStrip(made(360, () => [2000, 10]), SHORE.sunsetAz, light);
+  const ring = shoreStrip(made(360, () => [2000, 10]), SHORE.sunAz, light);
   assert.equal(ring.index.length, 6 * 360);
 });
 
@@ -78,31 +80,28 @@ test("the strip's colours: dark against the sun, lit with the sun behind the len
   assert.ok(shoreClear(2500) > 0.6 && shoreClear(2500) < 0.9, "softened at the shore's distance, not lost");
 });
 
-test("our skyline, as the title's two shots see it: a shore 1.5 to 4 km off, the State House in the yacht's view", () => {
+test("our skyline, as the title's two shots see it at sunrise: the open bay and the Bay Bridge for a yacht, Greenbury Point for the kayak", () => {
   const d = readSkyline(new Uint8Array(readFileSync("public/title-skyline.bin")).buffer)!;
   const n = d.length / 2;
-  const at = (trueDeg: number) => ({ dist: d[2 * Math.round((trueDeg * n) / 360)], top: d[2 * Math.round((trueDeg * n) / 360) + 1] / 10 });
-  const turn = SHORE.sunsetAz - HERO_SUN.az;
+  const idx = (trueDeg: number) => Math.round(((((trueDeg % 360) + 360) % 360) * n) / 360) % n;
+  const at = (trueDeg: number) => ({ dist: d[2 * idx(trueDeg)], top: d[2 * idx(trueDeg) + 1] / 10 });
+  const turn = SHORE.sunAz - HERO_SUN.az;
   // A boat with sails is filmed looking 218 degrees by the title's compass, 41 degrees wide; a boat without, 128 (framing.ts).
-  let peak = 0;
-  for (let b = 198; b <= 238; b += 0.05) {
-    const v = at(b + turn);
-    assert.ok(v.dist >= 1500 && v.dist <= 4000, `yacht's view, ${b}: ${v.dist} m`);
-    assert.ok(v.top > 3 && v.top < 60, `yacht's view, ${b}: ${v.top} m tall`);
-    peak = Math.max(peak, v.top);
-  }
-  assert.ok(peak > 30, `the dome stands above the roofs (${peak} m as drawn at the shore's distance)`);
+  for (let b = 198; b <= 238; b += 0.5) assert.equal(at(b + turn).dist, 0, `yacht's view, ${b}: open water to the far shore`);
+  const bridge = bearingTo(BAY_BRIDGE, SHORE.lat, SHORE.lon) - turn;
+  assert.ok(bridge > 204 && bridge < 232, `the Bay Bridge is in the yacht's view, clear of its edges (${bridge})`);
   let shore = 0;
   for (let b = 108; b <= 148; b += 0.5) {
     const v = at(b + turn);
     if (!v.dist) continue;
     shore++;
     assert.ok(v.dist >= 1500 && v.dist <= 4500, `kayak's view, ${b}: ${v.dist} m`);
+    assert.ok(v.top > 3 && v.top < 60, `kayak's view, ${b}: ${v.top} m tall`);
   }
-  assert.ok(shore > 15 && shore < 70, "the kayak's view has shore on one side and open water on the other");
+  assert.ok(shore > 60, "the kayak's view has the shore across it");
 });
 
-test("the title's sea is a calm evening in the harbour", () => {
+test("the title's sea is calm, as on a still morning in the roads", () => {
   assert.ok(HERO_SEA.hs >= 0.2 && HERO_SEA.hs <= 0.3);
   assert.ok(HERO_SEA.tp < 4);
 });

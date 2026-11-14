@@ -52,6 +52,7 @@ import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } f
 import { chanceFor, type Chance } from "./yard/chance";
 import { OddsModel } from "./yard/estimate";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
+import { startWhenBuilt } from "./warmup";
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -888,8 +889,9 @@ const dayOf = (start: string) =>
   new Date(start + (/Z|[+-]\d\d:?\d\d$/.test(start) ? "" : "Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const replayLink = (rp: LaunchReplay, text: string) =>
   Object.assign(document.createElement("a"), {
-    // Absolute, so the voyage page can fetch it (blob: URLs only work in this browser session).
-    href: `./voyage.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`,
+    // Absolute, so the sailing screen can fetch it (blob: URLs only work in this browser session).
+    // Opens on the sailing screen's Watch (helm.html?replay=), not the old voyage page.
+    href: `./helm.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`,
     target: "_blank",
     textContent: text,
   });
@@ -987,8 +989,8 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
     for (const rp of r.replays) {
       const li = document.createElement("li");
       const a = document.createElement("a");
-      // Absolute, so the voyage page can fetch it (blob: URLs only work in this browser session).
-      a.href = `./voyage.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`;
+      // Absolute, so the sailing screen can fetch it (blob: URLs only work in this browser session).
+      a.href = `./helm.html?replay=${encodeURIComponent(new URL(rp.url, location.href).href)}`;
       a.target = "_blank";
       const when = new Date(rp.start + (/Z|[+-]\d\d:?\d\d$/.test(rp.start) ? "" : "Z"));
       a.textContent = `Watch the ${when.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })} launch`;
@@ -1110,7 +1112,8 @@ const bowW = new THREE.Vector3();
 const labelP = new THREE.Vector3();
 const labelBox = $("labels");
 let lastT = 0;
-renderer.setAnimationLoop(() => {
+// Drawing starts once the shaders are built, after the page has painted (warmup.ts).
+startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime();
   const dt = Math.min(t - lastT, 0.3);
   lastT = t;
@@ -1149,4 +1152,4 @@ renderer.setAnimationLoop(() => {
   atmos.render();
   drawLabels();
   status.frames++;
-});
+}), [], () => atmos.sceneTarget());

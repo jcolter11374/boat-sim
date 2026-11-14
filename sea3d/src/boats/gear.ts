@@ -167,6 +167,11 @@ export class Gear {
   /** What the gear is showing now (for the smoke test). */
   readonly shown = { spin: [] as number[], rudder: 0, wing: 0, light: "", sun: 0, signs: [] as string[] };
 
+  /** The propellers, port first (for the page's prop wash, boats/propwash.ts). */
+  get props(): readonly THREE.Object3D[] {
+    return this.layout.props;
+  }
+
   constructor(
     g: THREE.Object3D,
     private readonly layout: GearLayout,

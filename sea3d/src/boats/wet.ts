@@ -83,6 +83,13 @@ export class Wetness {
     });
   }
 
+  /** Dry her and drop the kept dry look, so a repaint (or a rebuilt boat) is the dry look the next Wetness keeps. */
+  forget(): void {
+    this.set(0);
+    for (const d of this.mats) delete d.m.userData.dry;
+    this.mats = [];
+  }
+
   /** 0 dry .. 1 soaked. */
   set(w: number): void {
     w = THREE.MathUtils.clamp(w, 0, 1);

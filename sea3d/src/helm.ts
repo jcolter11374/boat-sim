@@ -12,18 +12,20 @@ import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { forcedSea } from "./seaTest";
 import { seaUniforms } from "./seaSurface";
-import { Mirror, reflectable } from "./mirror";
+import { MIRROR_LAYER, Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
 import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_FINISH_WORDS, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon, type XY } from "./helm/course";
 import { Buoys } from "./helm/buoys";
 import { CHASE_FOV, ChaseCam } from "./helm/chaseCam";
 import { PLACES } from "./land/place";
+import { DROP_POINT } from "./helm/today";
 import { metresPerDegree } from "./land/shader";
 import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
+import { Wildlife } from "./wildlife";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, randolphSettled, type BoatModel } from "./boats/model";
@@ -36,7 +38,10 @@ import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
+import { Wetness } from "./boats/wet";
+import { Drain } from "./drain";
 import { ShortWaveRide, type KnockdownTiming } from "./boats/ride";
+import { PropWash } from "./boats/propwash";
 import { Contact } from "./contact";
 import { heightAt, MixedSea as LiveSea, type WaveComponent } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
@@ -44,8 +49,8 @@ import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
-import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
+import { RACE_DAYS, raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
+import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -54,7 +59,7 @@ import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlig
 import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
-import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, swapSides, type RaceCard, type RaceInfo } from "./helm/raceSource";
+import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, seasonCell, seasonWords, swapSides, type RaceCard, type RaceInfo, type SeasonRun, type SeasonVerdict } from "./helm/raceSource";
 import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
@@ -73,7 +78,9 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { START_H, knockdownNote } from "./helm/roughStart";
+import { EASE_POWER, MOTORS_STOP_SOC, SUNRISE_GHI, morningPower, NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { stormKeep, stormNote } from "./helm/stormCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -83,11 +90,12 @@ import { bandLine, slideRoom } from "./framing";
 import { focusBoat, type Focus } from "./focus";
 import { equipmentParts } from "./replay/equipment";
 import { equipmentIcons } from "./replay/hud";
-import { Cinema, filmButtons, heightOf, knockdownShot, type CinemaHost, type Moment } from "./cinema";
+import { Cinema, filmButtons, heightOf, knockdownShot, motorShot, slideTo, type CinemaHost, type Moment } from "./cinema";
 import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
+import { intoTarget, startWhenBuilt } from "./warmup";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -163,6 +171,12 @@ void Traffic.load().then((tr) => {
   traffic = tr;
   scene.add(tr.root);
 });
+// Dolphins, whales and seabirds, as often as they're met where the boat is (wildlife.json, from OBIS).
+let wildlife: Wildlife | null = null;
+void Wildlife.load().then((w) => {
+  wildlife = w;
+  scene.add(w.root);
+});
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
@@ -180,7 +194,14 @@ let hull: HullParams = KAYAK_V4;
 let motion = new BoatMotion(hull, place);
 let model: BoatModel | null = null;
 let wake: Wake | null = null;
+let propWash: PropWash | null = null;
 let contact: Contact | null = null;
+/** A wet boat in rain and spray, soaked after a knockdown (boats/wet.ts; it was only on the old Watch page). */
+let wet: Wetness | null = null;
+/** Water pouring off the deck as she comes back up from a knockdown (drain.ts; also from the old Watch page). */
+let drain: Drain | null = null;
+/** When a knockdown's water pours off her deck (page clock, s): as she rises, from the ride's own timing. */
+let pourAt = Infinity;
 let ride: ShortWaveRide | null = null; // the short waves, felt for the picture only
 let seaLevel: "low" | "high" = quality;
 /** Draw at a level: its resolution, glow and sea mesh. The boats keep the geometry they were built with. */
@@ -228,6 +249,18 @@ function buildBoat(): void {
     scene.remove(contact.collar, contact.spray);
     contact.dispose();
   }
+  if (propWash) {
+    scene.remove(propWash.mesh);
+    propWash.dispose();
+    propWash = null;
+  }
+  wet?.forget();
+  wet = null;
+  if (drain) {
+    scene.remove(drain.group);
+    drain.dispose();
+    drain = null;
+  }
   // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
   if (spec === RANDOLPH && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && spec === RANDOLPH && buildBoat());
   model = BUILDERS[spec.key](quality);
@@ -241,6 +274,15 @@ function buildBoat(): void {
   wake = new Wake(quality, spec.cruiseSpeed, spec.beam, model.stern.x);
   wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
+  wet = new Wetness(model.root); // after the paint: the dry look it keeps is her painted one
+  drain = new Drain(model.form, spec);
+  drain.group.visible = !model.twinHull; // the deck edge is one centred hull's
+  scene.add(drain.group);
+  // A boat with motors: the churned trail astern of each running propeller (M5: a dead motor visibly stops).
+  if (model.gear.props.length) {
+    propWash = new PropWash(model.gear.props.length);
+    scene.add(propWash.mesh);
+  }
   placeDeckLight();
 }
 
@@ -250,6 +292,18 @@ function buildBoat(): void {
 // material a light. Off by day (NAV_NIGHT is 0), so daytime looks exactly as before.
 const deckLight = new THREE.PointLight(0xfff0d8, 0, 6, 2);
 deckLight.name = "deck_light";
+// The light itself stays in the scene, always: three builds every shader for the lights it can see,
+// so a light that came and went with the boat (hidden behind the Set sail card, shown when she sails)
+// rebuilt every shader each time, a freeze of a second or more (Omar's speed list, 14 Nov). It follows
+// deckLamp, which rides on the boat, and is dark while she is hidden, and by day.
+scene.add(deckLight);
+const deckLamp = new THREE.Object3D();
+deckLamp.name = "deck_lamp";
+/** Whether o and all it hangs from are shown, in the scene. */
+const shownInScene = (o: THREE.Object3D | null): boolean => {
+  for (; o; o = o.parent) if (!o.visible) return false; else if (o === scene) return true;
+  return false;
+};
 /** Candela at full night, and the lamp's light on the foam right beside it (falling away
  *  with distance, FOAM_LAMP_UNIFORMS): tuned on the kayak at 1 AM, moonless. */
 const DECK_CD = 3.2;
@@ -263,7 +317,7 @@ const MASTHEAD_LAMP_M = 5;
 let deckYacht = false;
 function placeDeckLight(): void {
   if (!model) return;
-  deckLight.removeFromParent();
+  deckLamp.removeFromParent();
   const nav = model.root.getObjectByName("nav_lights");
   const lamp = nav?.children[0];
   // On a yacht the lantern is at the masthead, 12 m+ up: there it floodlit the sail like a searchlight
@@ -272,15 +326,15 @@ function placeDeckLight(): void {
   const up = lamp ? model.root.worldToLocal(lamp.getWorldPosition(new THREE.Vector3())).y : 0;
   deckYacht = !!(nav && lamp && up > MASTHEAD_LAMP_M);
   if (deckYacht) {
-    deckLight.position.set(0, up * 0.1, 0);
-    model.root.add(deckLight);
+    deckLamp.position.set(0, up * 0.1, 0);
+    model.root.add(deckLamp);
   } else if (nav && lamp) {
-    deckLight.position.copy(lamp.position);
-    nav.add(deckLight);
+    deckLamp.position.copy(lamp.position);
+    nav.add(deckLamp);
   } else {
     const box = new THREE.Box3().setFromObject(model.root);
-    deckLight.position.set(0, box.max.y + 0.1, 0);
-    model.root.add(deckLight);
+    deckLamp.position.set(0, box.max.y + 0.1, 0);
+    model.root.add(deckLamp);
   }
   deckLight.distance = deckYacht ? YACHT_DECK_REACH_M : 6 * Math.max(1, spec.length / KAYAK.length);
 }
@@ -304,7 +358,12 @@ function useBoat(base: string): void {
 }
 buildBoat();
 // A new paint (the "Your boat" picker): repaint her where she floats, without a rebuild.
-onMyBoatChange(() => model && paintMine(model));
+onMyBoatChange(() => {
+  if (!model) return;
+  wet?.forget(); // dry her, so the new paint is the dry look the next Wetness keeps
+  paintMine(model);
+  wet = new Wetness(model.root);
+});
 let modelsIn = false; // the detailed boats have loaded (or failed to): the shader warm-up waits for them
 void loadDetailedModels().then((ok) => {
   if (ok) buildBoat();
@@ -324,7 +383,7 @@ function launchTime(): Date | null {
   return day ? new Date(`${day}T12:00:00Z`) : null;
 }
 /** Where the boat is dropped (the start card's sea): 100 km ESE of the Bay mouth. */
-const DROP: [number, number] = [36.65, -74.94];
+const DROP: [number, number] = DROP_POINT; // helm/today.ts: the one drop point, shared with the Set sail card
 let flowStw = 0; // the boat's speed through the water last frame (m/s)
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -355,6 +414,13 @@ async function loadWatched(): Promise<Replay> {
 // launch and weather, run by the race's own simulator worker (src/helm/raceSource.ts); boat A sails
 // where your boat does and boat B where the ghost does. Nobody steers.
 const RACE = !params.get("g") && !WATCH && params.has("race");
+/**
+ * "Watch from" a real coast (?place=pico with ?watch=; the old Watch page's "Sail past a real coast"): the
+ * boat is drawn just off that coast, in her voyage's own wind and waves, with the land around her. The
+ * chart, the strip and the clock still follow her real voyage. Annapolis harbour is left out (whoSteers.ts SCENERY).
+ */
+const VISIT = WATCH && params.get("place") !== "annapolis" ? (PLACES[params.get("place") ?? ""] ?? null) : null;
+let visitAimed = false;
 /** Nobody at the helm: a watched voyage or a race. No orders, no wheel, no calls. */
 const SPECTATE = WATCH || RACE;
 const raceMine = (): Record<string, string> | null => {
@@ -377,6 +443,8 @@ const done = (): boolean => voyageDone(!!page.status?.over, SPECTATE, hour, show
 let watch: "boat" | "ghost" = "boat";
 let busy = false;
 let order: Heading = "auto"; // every game starts on the ghost's own autopilot (#327)
+/** The power before a "Push" call raised it, to put back when she is handed back to the autopilot. */
+let powerBeforePush: number | null = null;
 let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
@@ -436,6 +504,9 @@ let chart: Chart | null = null;
 let chartDirty = true;
 let shownEvents = { boat: 0, ghost: 0 };
 const page = {
+  /** How wet the boat looks (0 dry .. 1 soaked) and how many knockdowns have drained off her deck (for tests). */
+  wet: 0,
+  drains: 0,
   /** The picture's level, where it came from, and the timed median frame (ms) if it was judged (for tests). */
   quality: qstat,
   ready: false,
@@ -446,8 +517,10 @@ const page = {
   /** A watched voyage, whole (its length, boat and ending), once its file is in; the rows so far are game.boat. */
   watch: null as WatchInfo | null,
   /** Weather forced for pictures and tests (Iris): wind (m/s) and wind-sea height Hs (m); -1 leaves it to the data. */
-  force: { wind: -1, hs: -1, skyHours: 0 },
+  force: { wind: -1, hs: -1, skyHours: 0, failed: [] as string[] },
   busy: false,
+  /** A "Your call" card is on its way: the clock is stopped and the picture is playing on to it. */
+  callComing: false,
   stops: [] as Stop[],
   card: null as Card | null,
   /** Whether each boat crossed the race's start line, for the results card. */
@@ -514,6 +587,7 @@ const page = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
+  wildlife: { dolphins: 0, whales: 0, birds: 0, nearest: Infinity, bearing: 0, known: false } as Wildlife["shown"],
   ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, bulk: 0, fishing: 0 } } as Traffic["shown"],
   /** The wreck showing through the water below, if any (its id). */
   wreck: "",
@@ -653,6 +727,12 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     return;
   }
   order = h;
+  // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
+  p = powerAfter(h, p, powerBeforePush);
+  if (h === "auto" && powerBeforePush !== null) {
+    powerBeforePush = null;
+    $<HTMLInputElement>("power").value = String(Math.round(p * 100));
+  }
   power = p;
   if (mode === "base" && page.ready) {
     // From base an order is a satellite message, one a day: draft it, then send.
@@ -1226,6 +1306,14 @@ function note(text: string, when: string, colour: string, hl?: string): void {
   hud.toast(text, when, colour, { warn: colour === TONE_COLOUR.warn || colour === TONE_COLOUR.bad, sticky: /^Paused:/.test(text), hl });
 }
 
+/** A knockdown in the first hours, told as "just after the drop" (Elena, 14 Nov; helm/roughStart.ts). */
+function knockedAtStart(e: ReplayEvent, who: "boat" | "ghost"): string | null {
+  const m = e.kind === "capsize" && e.h <= START_H ? /(\d+) knockdown\(s\), Hs ([\d.]+) m/.exec(e.detail) : null;
+  if (!m) return null;
+  const lost = !!rep(who)?.events.some((x) => x.kind === "lost" && Math.abs(x.h - e.h) < 1e-6);
+  return knockdownNote(e.h, Number(m[1]), m[2], lost);
+}
+
 function newEvents(): void {
   // Only what the picture has got to: the simulator runs ahead of it.
   const seen = (who: "boat" | "ghost") => rep(who)?.events.filter((e) => isNotable(e) && e.h <= hour + 1e-6) ?? [];
@@ -1255,7 +1343,7 @@ function newEvents(): void {
       }
       const cut = who === "boat" ? linkCutBy(e) : null;
       if (cut && pausedFor.has(e.h)) continue; // the pause's own note tells it
-      const text = cut ? NO_LINK_WORDS[cut] : describeEvent(e, who === "boat" ? "your boat" : "the ghost");
+      const text = cut ? NO_LINK_WORDS[cut] : knockedAtStart(e, who) ?? describeEvent(e, who === "boat" ? "your boat" : "the ghost");
       // The log can name one failure twice (the part, then what it means): one note is enough.
       const key = `${who} ${text}`;
       if (lastNote[key] !== undefined && e.h - lastNote[key] < 6) continue;
@@ -1322,6 +1410,7 @@ function moment(e: ReplayEvent, side?: number): void {
     kick = { t: now, dir: side ?? (Math.random() < 0.5 ? -1 : 1) };
     const k = ride?.knock(now, kick.dir); // thrown flat, hangs, rights itself (boats/ride.ts)
     if (k) cutToKnockdown(k, now);
+    pourAt = k ? k.rising : now; // the water she scooped runs off as she comes back up
     contact?.slam(1); // under a breaking crest
     sound.crash();
     flash("spray");
@@ -1330,6 +1419,7 @@ function moment(e: ReplayEvent, side?: number): void {
     sound.breakdown(e.kind); // the part stopping, then the instrument's chirp
     flash("alarm");
     slowUntil = now + 3;
+    if (e.kind !== "ship_strike" && (e.kind !== "part_failed" || /^thruster_/.test(failedPart(e).part))) cutToMotor();
   } else if (e.kind === "arrived" || e.kind === "finish_line") {
     sound.horn();
     slowUntil = now + 4;
@@ -1342,16 +1432,36 @@ function moment(e: ReplayEvent, side?: number): void {
  * where it was. Not in the film (it has its own Knockdown sequence), not at the wheel (your
  * hands are on the boat), not with reduced motion; a drag on the view takes the camera back.
  */
+/** The middle of the open picture beside the orders panel, across the screen (-1 .. 1): the screen's middle when the panel is closed. */
+function openMiddle(): number {
+  const r = document.getElementById("orders")?.getBoundingClientRect();
+  // The panel on the left, open, and not the whole width (a phone's sheet): the space runs from its right edge to the screen's.
+  if (!r || r.width < 1 || r.height < 1 || r.left > innerWidth * 0.25 || r.right > innerWidth * 0.6) return 0;
+  return Math.max(0, r.right) / innerWidth;
+}
 let knockCut: Focus | null = null;
+const lampAt = new THREE.Vector3();
+const propAt: THREE.Vector3[] = [];
 function cutToKnockdown(k: KnockdownTiming, now: number): void {
   if (knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
-  const shot = knockdownShot(filmHost, k.side);
+  const shot = slideTo(knockdownShot(filmHost, k.side), camera.aspect, openMiddle());
   const off = shot.pos.sub(controls.target);
   knockCut = focusBoat(camera, () => controls.target, {
     easeMs: KNOCK_EASE_MS,
     holdMs: Math.max(1500, (k.upright - now + 1) * 1000 - KNOCK_EASE_MS),
     framing: (t) => ({ pos: t.clone().add(off), quat: shot.quat, fov: shot.fov }),
   });
+}
+/**
+ * A dead motor visibly stops (M5): the camera goes to above her quarter, astern, where each
+ * running motor leaves its churned trail on the water, and holds while the dead one's dies
+ * away. Only a boat with motors; gated as the knockdown's cut is.
+ */
+function cutToMotor(): void {
+  if (!propWash || knockCut || cine.on || wheelNow || stillCamera || arrival || page.card || !page.ready) return;
+  const shot = slideTo(motorShot(filmHost), camera.aspect, openMiddle());
+  const off = shot.pos.sub(controls.target);
+  knockCut = focusBoat(camera, () => controls.target, { easeMs: 600, holdMs: 3200, framing: (t) => ({ pos: t.clone().add(off), quat: shot.quat, fov: shot.fov }) });
 }
 const KNOCK_EASE_MS = 400; // there by the time she is flat (ride.ts: 0.5 s and up)
 
@@ -1372,7 +1482,8 @@ async function sail(kind: "6h" | "day" | "event" | "end"): Promise<void> {
   if (busy || !page.ready || page.status?.over) return;
   setRate(0); // a skip pauses the clock: you see where it got to
   ++decisionSeq; // a look under way is for a moment that is gone
-  looking = false;
+  setCallComing(false);
+  setLooking(false);
   setBusy(true, "Sailing...");
   if (inFlight) await inFlight; // the clock's own run finishes first
   if (page.status?.over) return setBusy(false);
@@ -1485,9 +1596,50 @@ function applyPending(all = false): void {
   if (changed) showStatus();
 }
 
+/** Eased off for the night (the night call): the order and power to go back to in the morning. */
+let nightEase: { order: Heading; power: number; dark: number } | null = null;
+/** Morning after "ease off till sunrise": the power goes back to what it was, with a note (helm/powerCall.ts). */
+function morning(): void {
+  const st = game.status;
+  if (!nightEase || !st || st.over || mode !== "hands_on") return;
+  const h = st.day * 24;
+  const back = morningPower(nightEase, order, power, st.weather?.ghi ?? 0, h);
+  if (back === null && h > nightEase.dark && (st.weather?.ghi ?? 0) >= SUNRISE_GHI) nightEase = null; // you changed it: yours stands
+  if (back === null) return;
+  nightEase = null;
+  $<HTMLInputElement>("power").value = String(Math.round(back * 100));
+  void setOrder(order, back);
+  const text = `Morning: back to ${Math.round(back * 100)}% power, as before the night.`;
+  whenAt(st.day * 24, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
+}
+
 /** The speed the clock last ran at (a race's "Follow her to the end" carries on at it). */
 let rateAtEnd = 0;
+/** A call is decided and its card is waiting for the picture to reach its moment. Until the card
+ * is up, ▶ or a speed cannot carry on past it (Nina, 14 Nov: at 4 days a second a quick press
+ * lost 8 of 11 calls with no word). The press picks the speed to carry on at after the call. */
+let callComing = false;
+function setCallComing(on: boolean): void {
+  callComing = on;
+  page.callComing = on;
+  showClock();
+}
+/** A speed the player pressed (▶, a speed button, Space or 1 to 5). With a "Your call" card up it
+ * cannot carry on past the card ("Time is paused until you choose"): a quick second press as the
+ * card appeared used to hide it with no choice made. The speed is kept for after the call. */
+function playerRate(r: number): void {
+  if (r > 0 && !$("decide").hidden) {
+    lastRate = r;
+    return;
+  }
+  setRate(r);
+}
 function setRate(r: number, drain = false): void {
+  if (r > 0 && callComing) {
+    lastRate = r;
+    if (!drainRate) drainRate = r; // paused by hand before the card: the picture plays on to it
+    return;
+  }
   // Your voyage is over and the picture is playing out to the results: a speed key (1 to 5, Space) can't start the
   // clock again. It used to, and the run-out stopped where it was with no results card ever coming.
   if (r > 0 && !SPECTATE && page.status?.over) return;
@@ -1518,12 +1670,12 @@ function showClock(): void {
   pause.textContent = rate === 0 ? "▶" : "❚❚";
   pause.title = rate === 0 ? "Carry on (space bar)" : "Pause (space bar)";
   for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.setAttribute("aria-pressed", String(rate > 0 && rateOf(b) === rate));
-  $("timestate").textContent = rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
+  $("timestate").textContent = rate === 0 && callComing ? "Paused: your call is coming up" : rate === 0 && !$("decide").hidden ? "Paused: make your call" : rate === 0 ? "Paused: press ▶ or a speed to carry on" : rate === REAL_TIME ? "▶ Real time" : rate === 1 ? "▶ 1 hour a second" : rate < 24 ? `▶▶ ${rate} hours a second` : rate === 24 ? "▶▶▶ 1 day a second" : `▶▶▶ ${rate / 24} days a second`;
 }
 
 /** One short run of the simulator, ahead of the picture. */
 async function clockRun(): Promise<void> {
-  const hours = Math.min(72, Math.max(1, rate * 1.5));
+  const hours = runHours(rate, !SPECTATE);
   try {
     const stopped = await game.run({ ...(armed ?? untilOptions()), hours });
     page.stops.push(stopped);
@@ -1531,6 +1683,7 @@ async function clockRun(): Promise<void> {
     shownTo = Math.max(lastHour(game.boat!), shownTo);
     present();
     chartDirty = true;
+    morning();
     if (stopped === "battery") {
       // Reaching the reserve is news, not a choice: a note, and the clock runs on.
       // The night call ("ease off before dark?") is the battery stop with a choice in it (Leo, F5).
@@ -1576,6 +1729,15 @@ async function clockRun(): Promise<void> {
  * paused. The picture plays on up to the simulator and the time bar keeps its speed; only a
  * card, if the look ends in one, pauses the clock (CI #391: a look read as "Paused"). */
 let looking = false;
+/** When the look under way began (clock seconds), and how long looks have been taking (s). */
+let lookFrom = 0;
+let lookTakes: number | null = null;
+function setLooking(on: boolean): void {
+  const now = clock.getElapsedTime();
+  if (on && !looking) lookFrom = now;
+  else if (!on && looking) lookTakes = lookExpect(lookTakes, now - lookFrom);
+  looking = on;
+}
 
 /** "Until something happens" runs at most this long (the simulator's own cap, 72 h). */
 const UNTIL_H = 72;
@@ -1593,7 +1755,9 @@ function tickClock(dt: number): boolean {
   if (easeUpAt !== null && hour >= easeUpAt) setRate(DEFAULT_RATE);
   const ahead = shownTo - hour;
   const r = clock.getElapsedTime() < slowUntil ? Math.min(rate, 1) : rate; // a moment (#329) plays at an hour a second
-  hour = Math.min(shownTo, hour + dt * (ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r)));
+  // While a look holds the simulator, make what is in hand last the look (helm/timebar.ts lookPace).
+  const pace = looking ? lookPace(r, ahead, (lookTakes ?? 3) - (clock.getElapsedTime() - lookFrom)) : ahead >= r / 2 ? r : r * Math.max(0.2, (2 * ahead) / r);
+  hour = Math.min(shownTo, hour + dt * pace);
   if (!inFlight && !looking && shownTo - hour < rate)
     inFlight = clockRun().finally(() => {
       inFlight = null;
@@ -1601,8 +1765,8 @@ function tickClock(dt: number): boolean {
   return true;
 }
 
-for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => setRate(rateOf(b)));
-$("t-pause").addEventListener("click", () => setRate(rate ? 0 : lastRate));
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>("#timebar .rate"))) b.addEventListener("click", () => playerRate(rateOf(b)));
+$("t-pause").addEventListener("click", () => playerRate(rate ? 0 : lastRate));
 // Keys, so it feels like steering rather than filling in a form (Leo's review): Space
 // pauses or carries on, 1-3 pick a speed, Left/Right turn 5 degrees, Up/Down change power.
 const SPEED_KEYS: Record<string, number> = { Digit1: REAL_TIME, Digit2: 1, Digit3: 6, Digit4: 24, Digit5: 96, Numpad1: REAL_TIME, Numpad2: 1, Numpad3: 6, Numpad4: 24, Numpad5: 96 };
@@ -1728,7 +1892,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
       return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
-    () => game.save(),
+    () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();
 /** ?hour=21 sets the practice clock (Annapolis local time, April): for dusk and night looks. Default 10 am. */
 const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.get("hour") !== null ? Number(params.get("hour")) - 10 : 0;
@@ -2254,8 +2418,8 @@ addEventListener("keydown", (e) => {
   const ax = keyAxis(e.code);
   if (e.code === "Space") {
     if (t?.closest?.("button")) return; // Space presses the focused button instead
-    setRate(rate ? 0 : lastRate);
-  } else if (SPEED_KEYS[e.code]) setRate(SPEED_KEYS[e.code]);
+    playerRate(rate ? 0 : lastRate);
+  } else if (SPEED_KEYS[e.code]) playerRate(SPEED_KEYS[e.code]);
   else if (e.key === "?" || e.code === "KeyK") {
     hideKeyHint();
     hud.keys();
@@ -2306,7 +2470,9 @@ function untilOptions(): Record<string, number | boolean> {
   // Only the 20% reserve stops the clock: a big drop is a note that doesn't pause (batteryNote;
   // Leo, Rosa, 12 Nov: a stop with nothing to choose becomes a toast).
   if (soc > 0.2) o.soc_below = 0.2;
-  if (wind < 15) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
+  // Not within 36 h of a storm call either: "the wind is getting up" a day after a card about the
+  // same blow was one stop too many (Rosa's feel write-up, Maya's pick 8, 14 Nov).
+  if (wind < 15 && (st?.day ?? 0) * 24 - asked.gale >= STORM_QUIET_H) o.wind_above = 17; // a gale coming (17 m/s is 33 knots); not again while it blows
   // A challenge's big call: stop the clock on its day, so it's asked then and not days later.
   const m = mission();
   if (st && m?.goal.call_day != null && !asked.mission && st.day < m.goal.call_day) o.hours = Math.max(0.5, (m.goal.call_day - st.day) * 24);
@@ -2333,10 +2499,13 @@ type Choice = {
 type Decision = { kind: string; text: string; choices: Choice[]; look?: number; intro?: string };
 /** Compass bearing (deg) of a vector given as east and north parts. */
 const compassOf = (east: number, north: number): number => ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+/** Hours after a storm call with no "wind is getting up" stop. */
+const STORM_QUIET_H = 36;
 const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 /** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
-let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number } | null = null;
+/** now: the whole opening when told alone, before "she's now ... the ghost" (the push's words, Elena). */
+let streamCall: { h: number; chose: string; lead: number; later: string[]; since?: string; after?: number; now?: string } | null = null;
 /** A later call made before the Stream's three days were up, so its debrief credits both (Leo). */
 const alsoCalled = (what: string) => streamCall?.later.push(what);
 /** The challenge's call, once made: which, and when (voyage hours), for the toast two days on. */
@@ -2446,31 +2615,38 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         // With the forecast beside them the labels carry no claims: on 23 Apr the 120° "dodge"
         // forecast 214 km gained AND 0.6 m bigger waves, so "safer, a longer way round" was
         // wrong on both counts (Sam, 12 Nov). The tag says which is faster and which rougher.
-        { label: "Hold course: fastest, but a knockdown is likelier", plain: "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
+        { label: "Hold course: fastest, but a knockdown is likelier", plain: order === "auto" ? "Hold course (same as the ghost)" : "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
         { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
       ];
       if (motors && power > 0.1)
         choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)), order: { heading: order === "auto" ? "route" : order, power: 0.1 } });
+      const intro = `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that.`;
       return {
         kind,
         look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
-        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
+        text: `${intro} What will you do?`,
+        intro,
         choices,
       };
     }
   }
   // A night that could run the battery flat.
   if (fc && motors && st.boat.soc < nightLine(power) && power > 0.15 && order !== "auto" && h - asked.night >= 24 && h - lastCallH >= (lastCallKind === "push" ? NIGHT_AFTER_PUSH_H : MIN_CALL_GAP_H)) {
-    if (ahead.some((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5)) {
+    const dark = ahead.find((r) => r.ah > 0 && r.ah <= 12 && r.ghi < 5);
+    if (dark) {
       asked.night = h;
       return {
         kind: "night",
-        text: `The battery is at ${Math.round(st.boat.soc * 100)}% and night is coming, with no sun to charge it. At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
+        text: `${nightOpener(st.boat.soc, dark.ah)} At your ${Math.round(power * 100)}% power the motors could run it flat before morning, and a flat boat can't call home.`,
         choices: [
-          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "Turn the power back up in the morning", act: () => (alsoCalled("eased off for the night"), setOrder(order, 0.1)) },
+          { label: "Ease off to 10%: slower, but lasts till sunrise", title: "The power goes back up in the morning", act: () => {
+            alsoCalled("eased off for the night");
+            nightEase = { order, power, dark: h + dark.ah };
+            return setOrder(order, EASE_POWER);
+          } },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
           // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
-          { label: "Hand her back to the autopilot (what the ghost does)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
+          { label: "Hand her back to the autopilot (same as the ghost)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
         ],
       };
     }
@@ -2484,7 +2660,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     const later = streamCall.later;
     const also = later.length ? ` You also ${later.length > 1 ? `${later.slice(0, -1).join(", ")} and ${later[later.length - 1]}` : later[0]}.` : "";
     const span = `${Math.round((streamCall.after ?? 72) / 24)} days`;
-    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : `${streamCall.chose}: ${where} after ${span}.`;
+    const text = later.length ? `${streamCall.since ?? "Since the Stream"}: ${where} after ${span}.${also}` : streamCall.now ? `${streamCall.now}: she's now ${where}.` : `${streamCall.chose}: ${where} after ${span}.`;
     // White on the strip's glass, with the colour on the number only (Elena).
     const num = Math.abs(km) < 1 ? undefined : `${Math.abs(km).toLocaleString()} km`;
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, km - was >= 0 ? TONE_COLOUR.good : TONE_COLOUR.warn, num));
@@ -2530,7 +2706,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
             return setOrder(Math.round(toFinish));
           },
         },
-        { label: "Let the autopilot decide (what the ghost does)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: "Let the autopilot decide (same as the ghost)", title: "The autopilot's route allows for the current", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
   }
@@ -2540,6 +2716,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
 let decisionSeq = 0;
 /** The calls made when the clock stopped, for the results card. */
 const calls: Call[] = [];
+/** "Your call" cards put up this voyage: none, and the results don't tell you off for not calling. */
+let cardsShown = 0;
 
 /** Stop the clock and ask, when a decision is due. */
 // ---------- the route check (#10, the fallback call) ----------
@@ -2588,18 +2766,22 @@ function maybeRouteCheck(st: Status): boolean {
   const early = !chaseAsked && h >= CHASE_FROM_H && h < CHASE_UNTIL_H && h - lastCallH >= MIN_CALL_GAP_H && h - routeLookedH >= CHASE_EVERY_H;
   if (!quiet && !early) return false;
   routeLookedH = h;
-  looking = true; // the simulator waits; the clock runs on (no "Paused" for a look)
+  setLooking(true); // the simulator waits; the clock runs on (no "Paused" for a look)
   const seq = ++decisionSeq;
+  setCallComing(false); // a card still on its way is for a moment this look replaces
   const resume = () => {
-    if (seq === decisionSeq) looking = false;
+    if (seq === decisionSeq) setLooking(false);
   };
   /** The look ends in a card: now the clock pauses, the picture plays on to the look's moment, and it asks. */
   const askAt = (show: () => void) => {
     if (seq !== decisionSeq) return;
-    looking = false;
+    setLooking(false);
     setRate(0, true);
+    setCallComing(true);
     whenAt(h, () => {
-      if (seq === decisionSeq && rate === 0 && !game.status?.over) show();
+      if (seq !== decisionSeq) return; // a later question has taken its place
+      setCallComing(false);
+      if (rate === 0 && !game.status?.over) show();
     });
   };
   (async () => {
@@ -2653,7 +2835,7 @@ function maybeRouteCheck(st: Status): boolean {
             streamCall = { h, chose: `Since you bent ${deg}° ${side}`, since: `Since you bent ${deg}° ${side}`, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(b.best);
           }, order: { heading: b.best, power } },
-          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (what the ghost does)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
+          { label: order === "auto" ? "Keep your course (the autopilot's choice)" : "Back on the autopilot (same as the ghost)", title: "The autopilot steers, as it does for the ghost", act: () => setOrder("auto"), order: { heading: "auto" } },
         ],
       };
       const view: Outlook = { ...o, orders: [best, auto] };
@@ -2678,8 +2860,9 @@ function maybeRouteCheck(st: Status): boolean {
           { label: words.push, title: words.pushTitle, order: to, act: () => {
             // What it bought, told when the forecast's 4 days are up, as the chase does.
             pushTurnedDown = null;
+            powerBeforePush ??= power;
             if (streamCall) alsoCalled(words.did);
-            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
+            else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, now: words.ago, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(to.heading, to.power);
           } },
           { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
@@ -2695,7 +2878,7 @@ function maybeRouteCheck(st: Status): boolean {
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
       // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
-      const text = `Navigator's note: the forecast favours the autopilot over your order for the next 4 days (${timeChange(auto.lead_km - now.lead_km, pace)}). Hand her back in Orders.`;
+      const text = handBackNote(auto.lead_km - now.lead_km);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     if (!ask) return resume();
@@ -2711,8 +2894,8 @@ function maybeRouteCheck(st: Status): boolean {
       text: `Navigator's check: the forecast says ${fmtDeg(b.best)} would gain on ${orderWords(order)} over the next 4 days, but through ${price}.`,
       choices: [
         { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
-        { label: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
-        { label: "Let the autopilot decide (what the ghost does)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
+        { label: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: "Let the autopilot decide (same as the ghost)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
     const picks = order === "auto" || same ? [0, 1] : [0, 1, 2];
@@ -2772,14 +2955,19 @@ function maybeDecide(force = false): boolean {
   // The Stream may come out as only a note (Elena's rule), so it looks first with the clock
   // running and pauses only for a card; a storm always asks, so it pauses now.
   const stream = d.kind === "stream";
-  if (stream) looking = true;
-  else setRate(0, true);
+  if (stream) {
+    setLooking(true);
+    setCallComing(false);
+  } else {
+    setRate(0, true);
+    setCallComing(true);
+  }
   page.decisions.push({ kind: d.kind, day: st.day });
   // See it coming (Rosa): over the last half day before the call the picture slows to an hour
   // a second and the camera turns toward the problem, so the pause lands on a picture of it.
   foresee = { from: st.day * 24 - 12, h: st.day * 24, look: d.look ?? null };
-  // Asked once the picture gets there, so the question and the view agree. Carrying on
-  // before then skips it; a later question replaces it.
+  // Asked once the picture gets there, so the question and the view agree. The clock cannot
+  // carry on before then (callComing); a later question replaces it.
   const seq = ++decisionSeq;
   // Each option's stake against the ghost in 2 days, from the forecast as issued (never the
   // truth), while the picture catches up. An older simulator, or a failure: no stakes.
@@ -2792,7 +2980,7 @@ function maybeDecide(force = false): boolean {
   if (stream) {
     void stakes.then((o) => {
       if (seq !== decisionSeq) return;
-      looking = false;
+      setLooking(false);
       // The Stream asks only when there's something to weigh (Elena, 12 Nov); otherwise a
       // note, and the clock never stopped.
       const quiet = o ? notWorthAsking(d, o, has) : null;
@@ -2804,15 +2992,35 @@ function maybeDecide(force = false): boolean {
         return;
       }
       setRate(0, true);
+      setCallComing(true);
       whenAt(h, () => {
-        if (seq === decisionSeq && rate === 0 && !game.status?.over) showDecision(d, o, has);
+        if (seq !== decisionSeq) return;
+        setCallComing(false);
+        if (rate === 0 && !game.status?.over) showDecision(d, o, has);
       });
     });
     return true;
   }
   whenAt(h, async () => {
     const o = await stakes;
-    if (seq !== decisionSeq || rate !== 0 || game.status?.over) return;
+    if (seq !== decisionSeq) return;
+    setCallComing(false);
+    if (rate !== 0 || game.status?.over) return;
+    if (o && (d.kind === "gale" || d.kind === "waves")) {
+      // Turning away only when it is calmer (helm/stormCall.ts); with nothing left to weigh, a note.
+      const keep = stormKeep(d.choices.map((_, i) => (has[i] ? (o.orders[i]?.hs_max ?? null) : null)));
+      if (keep.filter(Boolean).length < 2) {
+        lastCallH = callBefore; // no card: the cadence guard doesn't count it
+        lastCallKind = kindBefore;
+        page.decisions.at(-1)!.asked = false;
+        void d.choices[0].act(); // she holds course: the "it has passed" note still follows
+        note(stormNote(d.intro ?? d.text), `Day ${st.day.toFixed(1)}`, TONE_COLOUR.warn);
+        setRate(lastRate);
+        return;
+      }
+      const at = (i: number) => keep[i];
+      return showDecision({ ...d, choices: d.choices.filter((_, i) => at(i)) }, { ...o, orders: o.orders.filter((_, i) => at(i)) }, has.filter((_, i) => at(i)));
+    }
     showDecision(d, o, has);
   });
   return true;
@@ -2845,7 +3053,10 @@ function costWords(p: Preview, all: Preview[], waves = false, meaning = false): 
     out.push(`worst waves ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
   const soc = all.map((x) => x.soc_min ?? 1);
   if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08)
-    out.push(`battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
+    // Under 15% the motors stop, so "down to 0%" read as a bug (Rosa's feel write-up; Elena's words, 14 Nov).
+    out.push(p.soc_min < MOTORS_STOP_SOC
+      ? `battery down to 15%, where her motors stop to save power for the radio${meaning ? ", so a cloudy spell could leave her drifting" : ""}`
+      : `battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
   return out.length ? ` · ${out.join(" · ")}` : "";
 }
 
@@ -2901,7 +3112,8 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       page.outlook = null;
       drawDecisionMap = null;
       // For the results card's "your calls": what was chosen, and the lead on the ghost then.
-      if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km });
+      const ghost = c.order?.heading === "auto" || /same as the ghost/i.test(`${c.label} ${c.plain ?? ""}`);
+      if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km, ghost });
       await c.act();
       setRate(lastRate);
       if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
@@ -2909,6 +3121,8 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     box.append(b);
   }
   $("decide").hidden = false;
+  cardsShown++;
+  showClock();
   // On the right, it sits 12 px under the chart, whatever the chart's size (Ines).
   const chartBox = document.getElementById("mapbox")?.getBoundingClientRect();
   $("decide").style.top = withMap && chartBox && chartBox.height > 0 ? `${Math.round(chartBox.bottom + 12)}px` : "";
@@ -2953,7 +3167,9 @@ function runDue(): void {
 
 async function refreshForecast(): Promise<void> {
   if (page.status?.over) return;
-  lastForecast = await game.forecast();
+  // The rows came with the last run when they were made at the simulator's hour now (speed, 14 Nov).
+  const fresh = game.forecastRows && Math.abs(game.forecastH - (game.status?.day ?? -1) * 24) < 1e-6;
+  lastForecast = fresh ? game.forecastRows! : await game.forecast();
   drawForecast($<HTMLCanvasElement>("fc"), lastForecast, startMs);
 }
 
@@ -3128,6 +3344,57 @@ function followRival(): void {
   setRate(rateAtEnd > 0 ? rateAtEnd : REAL_TIME);
 }
 
+/** "Race all 6 launch days" (from the old race page): the same two boats from every launch day, kept for this race. */
+let season: { rows: SeasonRun[]; verdict: SeasonVerdict | null; running: boolean } | null = null;
+/** The season part of a race's results card: a button, then each launch day as it is sailed, then the verdict in plain words. */
+function seasonOffer(names: [string, string]): void {
+  const part = Object.assign(document.createElement("div"), { id: "r-season" });
+  $("r-next").append(part);
+  const draw = () => {
+    part.replaceChildren();
+    if (!season) {
+      const go = Object.assign(document.createElement("button"), { id: "r-seasonbtn", textContent: "Race all 6 launch days" });
+      go.title = "Both boats sail from every launch day, 1 April to 15 June 2020, with the same dice for breakdowns.";
+      go.addEventListener("click", () => void runSeason(draw));
+      part.append(go, Object.assign(document.createElement("p"), { className: "muted", textContent: "One race is one roll of the dice; six launch days show which boat is better. Takes a few minutes." }));
+      return;
+    }
+    const t = document.createElement("table");
+    const tr = (cells: string[], th = false) => {
+      const r = document.createElement("tr");
+      for (const c of cells) r.append(Object.assign(document.createElement(th ? "th" : "td"), { textContent: c })); // a player's own name for a design: text only
+      t.append(r);
+    };
+    const short = (n: string) => n.replace(/\s*\(our model\)$/, "");
+    tr(["Launch day", short(names[0]), short(names[1])], true);
+    const day = (iso: string) => new Date(utc(iso)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+    for (const r of season.rows) tr([day(r.a.start), seasonCell(r.a), seasonCell(r.b)]);
+    part.append(t);
+    const p = (text: string, muted = false) => part.append(Object.assign(document.createElement("p"), { className: muted ? "muted" : "", textContent: text }));
+    if (season.verdict) for (const line of seasonWords(season.verdict, names)) p(line);
+    else if (season.running) p(`Racing launch day ${season.rows.length + 1} of ${RACE_DAYS.length}, both boats to the end...`, true);
+    else p("The season stopped before the end.", true);
+  };
+  draw();
+}
+async function runSeason(draw: () => void): Promise<void> {
+  if (season) return;
+  season = { rows: [], verdict: null, running: true };
+  draw();
+  try {
+    for (let i = 0; i < RACE_DAYS.length; i++) {
+      season.rows.push(await game.raceSeasonLaunch<SeasonRun>(i));
+      draw();
+    }
+    season.verdict = await game.raceSeasonVerdict<SeasonVerdict>();
+  } catch (e) {
+    console.warn("season", e);
+  }
+  season.running = false;
+  (page as unknown as { season: unknown }).season = season.verdict ? { rows: season.rows.length, finished: season.verdict.finished } : null;
+  draw();
+}
+
 /** A race's ending: who finished first, in the boats' own names; each boat's days; both tracks. */
 async function raceFinish(): Promise<void> {
   const c = raceKept?.card ?? ((await game.result()) as Card & { race: RaceCard });
@@ -3155,6 +3422,7 @@ async function raceFinish(): Promise<void> {
     : `${names[0]} against ${names[1]}, both launched on ${launched} into the same weather, with the same dice for breakdowns. One race is one roll of the dice.`;
   const nums = c.race.boats.slice(0, more ? 1 : 2).map((x, k) => ({ value: x.days.toFixed(1), unit: "days", label: raceLabel(x, short(names[k])) }));
   $("r-next").replaceChildren();
+  if (!more) seasonOffer(names);
   // "Follow her to the end" when she is still sailing; "Change the boats" goes back to the Set sail card with the autopilot and this other boat picked.
   // What happened (E4): the lead, what broke, the knockdowns or the roughest sea, from both boats' own logs.
   const [ra, rb] = followed ? [game.ghost, game.boat] : [game.boat, game.ghost]; // the race's own order (A, B)
@@ -3203,7 +3471,7 @@ async function finish(): Promise<void> {
     .map((n) => (mi && n.unit === "km" ? { value: n.value, unit: "", label: "km sailed" } : n));
   // Your calls (hands on only: from base, orders go by satellite and aren't calls).
   $("r-calllist").replaceChildren(
-    ...callLines(calls, lead).map((t) => {
+    ...callLines(calls, lead, cardsShown > 0).map((t) => {
       const li = document.createElement("li");
       li.textContent = t;
       return li;
@@ -4081,6 +4349,11 @@ const filmHost: CinemaHost = {
   },
   sunDir: () => atmos.sunDir,
   cloud: () => clouds.cover,
+  lampSide: () => {
+    if (!model) return 0;
+    const z = model.root.worldToLocal(deckLight.getWorldPosition(lampAt)).z; // the boat's +z is to port
+    return Math.abs(z) < 0.03 ? 0 : z < 0 ? 1 : -1;
+  },
   toggleSound: () => sound.toggle(),
   fade: (sec) => sound.duck(sec),
   length: () => spec.length,
@@ -4094,6 +4367,8 @@ const filmHost: CinemaHost = {
 };
 const cine = new Cinema(filmHost);
 const sound = new OceanSound();
+/** A knockdown on demand, for the proof frames and tests (the wet look and the deck draining). */
+(window as unknown as { __knock: () => void }).__knock = () => moment({ h: hour, kind: "capsize" } as ReplayEvent);
 (window as unknown as { __sound: OceanSound }).__sound = sound; // read-only, for the live sound checks (Nina)
 filmButtons(cine, sound);
 (page as unknown as { cine: Cinema }).cine = cine;
@@ -4102,6 +4377,13 @@ filmButtons(cine, sound);
 Object.assign(page, {
   heel: (): number => ride?.heelDeg(motion.roll) ?? 0,
   knockdown: () => ride?.knockdown ?? null,
+  /** Each motor's trail on the water now, 0..1, port first (boats/propwash.ts); empty on a boat with no motors. */
+  wash: (): number[] => propWash?.shown.strength ?? [],
+  /** Break a motor now, as a logged failure does: "thruster_port" or "thruster_starboard" (for tests and pictures). */
+  breakMotor: (part: string): void => {
+    page.force.failed.push(part);
+    moment({ h: hour, kind: "part_failed", detail: `${part} (forced for a picture)` } as ReplayEvent);
+  },
   /** True while the camera is on a knockdown (the cut outside the film). */
   knockCut: (): boolean => !!knockCut,
   /** Throw the boat flat now, as a recorded knockdown does (for tests and pictures). */
@@ -4328,6 +4610,42 @@ function showOrderLine(hdg: number, comps: Parameters<typeof heightAt>[0], t: nu
 const third = { x: 0, y: 0 };
 const ahead = new THREE.Vector3();
 const here0 = new THREE.Vector3();
+/** Her fade-in behind the card: each material's own opacity and transparency, put back when it's done. */
+const FADE_S = 0.25;
+let fadedRoot: THREE.Object3D | null = null;
+let fade: { at: number; mats: Map<THREE.Material, { opacity: number; transparent: boolean }> } | null = null;
+function materialsOf(o: THREE.Object3D): THREE.Material[] {
+  const m = (o as THREE.Mesh).material;
+  return (m ? (Array.isArray(m) ? m : [m]) : []).filter((x) => !x.transparent);
+}
+function startFade(root: THREE.Object3D): void {
+  endFade();
+  const mats = new Map<THREE.Material, { opacity: number; transparent: boolean }>();
+  root.traverse((o) => {
+    for (const x of materialsOf(o)) if (!mats.has(x)) mats.set(x, { opacity: x.opacity, transparent: x.transparent });
+  });
+  for (const x of mats.keys()) {
+    x.transparent = true;
+    x.opacity = 0;
+    x.needsUpdate = true; // the see-through programs, built behind the card with hers
+  }
+  fade = { at: clock.getElapsedTime(), mats };
+}
+function endFade(): void {
+  if (!fade) return;
+  for (const [x, was] of fade.mats) {
+    x.opacity = was.opacity;
+    x.transparent = was.transparent;
+    x.needsUpdate = true;
+  }
+  fade = null;
+}
+function fadeIn(): void {
+  if (!fade) return;
+  const k = (clock.getElapsedTime() - fade.at) / FADE_S;
+  if (k >= 1) return endFade();
+  for (const [x, was] of fade.mats) x.opacity = was.opacity * Math.max(0, k);
+}
 /** Behind the Set sail card, never a stand-in (Elena): the drawn-in-code boat stays hidden, an empty
  *  sea, until her real model has loaded (useBoat and loadDetailedModels rebuild her then). At sea she
  *  always shows. */
@@ -4335,10 +4653,18 @@ function hideStandIn(): void {
   if (!model) return;
   const card = !page.ready && !$("start").hidden;
   const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : spec === RANDOLPH ? hasDetailedRandolph() || randolphSettled() : true;
-  const show = (!card || real) && !boatGone;
+  const show = (!card || (real && boatWarm())) && !boatGone;
+  fadeIn();
+  // Behind the card she fades in over a quarter second, not a pop (Elena, #596). Once per boat: a new
+  // model can arrive already shown, so this goes by her, not by the visible flag.
+  if (show && card && parallel && fadedRoot !== model.root) {
+    fadedRoot = model.root;
+    startFade(model.root);
+  }
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
+  if (propWash) propWash.mesh.visible = show;
   if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
 }
 /**
@@ -4430,7 +4756,10 @@ function frameBoat(dt: number): void {
     // One rule for every boat and every card height (a saved voyage's line, a race row, practice's course line make the
     // card taller): her waterline sits a set way down the band, so she is whole inside it with air between her and the card.
     const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
-    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
+    // A phone's band can be short (a storm call's card fills the lower 80%): her waterline then sits near the
+    // top, and a slide capped at 0.4 left her hull tucked under the card's edge (Elena). Up to half a screen there.
+    const cap = phone ? 0.5 : 0.4;
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -cap, cap);
   }
   // The finish scene is a cut to its own composed frame: no slide left over from the view before it
   // (it eased out over the first seconds, so the horizon sank and the banner's measured spot was off).
@@ -4458,24 +4787,113 @@ function aimAt(bearing: number): void {
 // Build the sailing view's shaders while the Set sail card is up (M1 start-up profile):
 // the first sailing frames otherwise build about a dozen at once (the boat again for the
 // calm-water reflection, which draws into its own picture), and the page waits for each.
-// Built here, once the card shows and the detailed boats are in, the graphics driver does that work while
-// the player reads the card. Once per page; nothing on screen changes.
+// A few per frame (speed list, 14 Nov): all at once was one frozen frame of 6.6 s on software drawing,
+// with the card deaf to clicks. Her boat goes first and stays hidden (an empty sea behind the card, as
+// for a stand-in) until her shaders are built, so her first drawn frame no longer builds them all at once
+// (a 3.6 s freeze there). Each frame builds what fits in WARM_MS; a real graphics card finishes in a frame or two.
+const WARM_MS = 40;
+/** Her own parts get longer per frame, so she isn't kept off screen for long on a slow machine. */
+const WARM_BOAT_MS = 200;
 let warmed = false;
+/** What's left to build: each part for the screen, and again for the calm-water reflection's picture if it's in it. */
+let warmQueue: { o: THREE.Object3D; mirror: boolean; seeThrough?: boolean }[] | null = null;
+/** The boat whose shaders are being built first, and how many of her parts are still to build. */
+let warmRoot: THREE.Object3D | null = null;
+let warmRootLeft = 0;
+/** Her programs, which the graphics driver may still be building in the background (parallel compiling). */
+let warmRootPrograms: { isReady(): boolean }[] = [];
+const warmedRoots = new WeakSet<THREE.Object3D>();
+const parallel = renderer.extensions.has("KHR_parallel_shader_compile");
+function drawables(root: THREE.Object3D, out: { o: THREE.Object3D; mirror: boolean }[]): void {
+  root.traverse((o) => {
+    const r = o as THREE.Mesh;
+    // A light inside the object would be counted twice (once from the scene), building the wrong program:
+    // those few build on their first draw, as before.
+    if (!(r.isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) || !r.material) return;
+    let lit = false;
+    o.traverse((c) => {
+      if ((c as THREE.Light).isLight) lit = true;
+    });
+    if (lit) return;
+    out.push({ o, mirror: false });
+    // The reflection draws only what's on its layer: building the sea's or the clouds' shaders for it was
+    // about 3 s each on software drawing, for programs never used.
+    if (o.layers.isEnabled(MIRROR_LAYER)) out.push({ o, mirror: true });
+  });
+}
+/** Behind the Set sail card her boat waits for her shaders (see warmShaders). */
+function boatWarm(): boolean {
+  return !model || warmedRoots.has(model.root) || !warmWanted();
+}
+function warmWanted(): boolean {
+  return modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden;
+}
 function warmShaders(): void {
-  warmed = true;
+  if (!warmQueue) {
+    warmQueue = [];
+    drawables(scene, warmQueue);
+  }
+  if (model && warmRoot !== model.root && !warmedRoots.has(model.root)) {
+    const mine: { o: THREE.Object3D; mirror: boolean; seeThrough?: boolean }[] = [];
+    drawables(model.root, mine);
+    // Her fade-in draws her see-through for a quarter second, which three builds as other programs. Only where the
+    // driver builds in the background: on software drawing they'd cost seconds more, and there she simply appears.
+    if (parallel) for (const x of mine.filter((x) => !x.mirror)) mine.push({ o: x.o, mirror: false, seeThrough: true });
+    // What appears with her: her wake, the prop's wash, the water at her hull.
+    for (const o of [wake?.points, propWash?.mesh, contact?.collar, contact?.spray]) if (o) drawables(o, mine);
+    warmQueue.unshift(...mine);
+    warmRoot = model.root;
+    warmRootLeft = mine.length;
+    warmRootPrograms = [];
+  }
+  const start = performance.now();
+  const boatStep = warmRootLeft > 0;
+  const until = start + (boatStep ? WARM_BOAT_MS : WARM_MS);
   const prev = renderer.getRenderTarget();
+  // Built as she'll be drawn: shown, so her lamp counts among the lights as it will at sea.
+  const shown = model?.root.visible ?? true;
+  if (model) model.root.visible = true;
   try {
-    renderer.compile(scene, camera);
-    renderer.setRenderTarget(mirror.target);
-    renderer.compile(scene, camera);
+    while (warmQueue.length && performance.now() < until) {
+      // Her last part built in this step: back to the short step. (Only within that step: with parallel compiling
+      // she can wait on the driver for frames, and the rest of the queue carries on meanwhile; Lena, #596.)
+      if (boatStep && warmRootLeft === 0 && performance.now() > start + WARM_MS) break;
+      const { o, mirror: inMirror, seeThrough } = warmQueue.shift()!;
+      renderer.setRenderTarget(inMirror ? mirror.target : prev);
+      const mats = seeThrough ? materialsOf(o) : [];
+      for (const x of mats) x.transparent = true;
+      const built = renderer.compile(o, camera, scene);
+      for (const x of mats) {
+        x.transparent = false;
+        x.needsUpdate = true; // back to her solid program on the next draw, not the see-through one just built
+      }
+      renderer.setRenderTarget(prev);
+      // Without parallel compiling the driver only queues the work and it lands, all of it, on the next
+      // drawn frame: finishing each program here keeps that frame light and the budget honest. With it
+      // (most real graphics cards) the driver builds them in the background while the card is up.
+      for (const m of built)
+        for (const pr of (renderer.properties.get(m) as { programs?: Map<string, { getUniforms(): unknown; isReady(): boolean }> }).programs?.values() ?? []) {
+          if (!parallel) pr.getUniforms();
+          else if (warmRootLeft > 0) warmRootPrograms.push(pr);
+        }
+      if (warmRootLeft > 0) warmRootLeft--;
+    }
   } catch {
     /* only a head start: the first sailing frame builds whatever is missing */
+    warmQueue.length = 0;
+    warmRootLeft = 0;
+    warmRootPrograms = [];
   } finally {
     renderer.setRenderTarget(prev);
+    if (model) model.root.visible = shown;
   }
+  // Shown once her programs are ready, so her first frame doesn't wait on the driver.
+  if (warmRoot && warmRootLeft === 0 && warmRootPrograms.every((pr) => pr.isReady())) warmedRoots.add(warmRoot);
+  if (!warmQueue.length) warmed = true;
 }
-renderer.setAnimationLoop(() => {
-  if (!warmed && modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden) warmShaders();
+// Drawing starts once the shaders are built, after the page has painted (warmup.ts).
+startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
+  if ((!warmed || !boatWarm()) && warmWanted()) warmShaders();
   const t = clock.getElapsedTime();
   // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
   if (judging && !document.hidden && !page.busy) {
@@ -4506,6 +4924,9 @@ renderer.setAnimationLoop(() => {
   }
   if (tickClock(dt)) {
     // the clock moved the picture on
+  } else if (cine.on) {
+    // The film holds the picture where it is (John, 11 Nov: cinematic mode never moves the clock). A stop's
+    // play-on to its moment, or a skip's hours, used to carry on under the film: a night film turned to day in 8 s.
   } else if (drainRate > 0 && hour < shownTo) {
     hour = drainStep(drainRate, dt, hour, shownTo, slowNow(t), foresee?.from);
     if (hour >= shownTo) drainRate = 0;
@@ -4615,8 +5036,9 @@ renderer.setAnimationLoop(() => {
     ride?.update((x, z) => sea.detailHeightAt(x, z), place, dt, t);
     model.root.position.set(0, motion.heave + (ride?.heave ?? 0) - (contact?.sink ?? 0) - spec.cgBelowWaterline, 0);
     model.root.rotation.set(motion.roll + (ride?.roll ?? 0), smoothYaw, motion.pitch + (ride?.pitch ?? 0), "YZX");
-    deckLight.intensity = DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2);
     model.root.updateMatrixWorld();
+    deckLamp.getWorldPosition(deckLight.position);
+    deckLight.intensity = shownInScene(deckLamp) ? DECK_CD * NAV_NIGHT.value * (deckYacht ? 1 : Math.max(1, spec.length / KAYAK.length) ** 2) : 0;
     if (contact) {
       bowW.set(contact.bow[0], spec.cgBelowWaterline, contact.bow[1]);
       model.root.localToWorld(bowW);
@@ -4625,7 +5047,17 @@ renderer.setAnimationLoop(() => {
       FOAM_LAMP_UNIFORMS.uFoamLamp.value.set(lampW.x, lampW.y, lampW.z, FOAM_AT_NIGHT * NAV_NIGHT.value);
       FOAM_LAMP_UNIFORMS.uFoamLampR.value = 1.5 * Math.max(1, spec.length / KAYAK.length);
     }
+    if (drain) {
+      if (t >= pourAt) {
+        pourAt = Infinity;
+        drain.pour();
+      }
+      // The roll watcher sees only the wave motion (as on the old page); the ride's knockdown pours at pourAt.
+      drain.update(dt, motion.roll, model.root, atmos.ambient, renderer.domElement.clientHeight);
+      page.drains = drain.count;
+    }
     const failedNow = r ? failuresAt(r, h) : new Map<string, string>();
+    for (const part of page.force.failed) if (!failedNow.has(part)) failedNow.set(part, "forced for a picture");
     model.gear.update(
       {
         speed: stw / spec.cruiseSpeed,
@@ -4637,6 +5069,13 @@ renderer.setAnimationLoop(() => {
       },
       t,
     );
+    if (propWash) {
+      // Each running motor's churned trail astern of its propeller; a dead motor's dies as it runs down.
+      const yaw = smoothYaw ?? 0;
+      model.gear.props.forEach((p, i) => p.getWorldPosition((propAt[i] ??= new THREE.Vector3())));
+      propWash.surface = (x, z) => sea.surfaceAt(comps, x, z, t);
+      propWash.update(t, propAt, -Math.cos(yaw), Math.sin(yaw), model.gear.shown.spin, stw, spec.cruiseSpeed, hs, atmos.foamLight, power);
+    }
     // The strip's equipment cell (the same icons as Watch a voyage): the watched boat's parts at the shown hour.
     equipmentIcons(equipmentParts(spec.key, r ? commsAt(r, h) : null, failedNow), true, "", false);
     model.rig?.update(dt, {
@@ -4663,7 +5102,11 @@ renderer.setAnimationLoop(() => {
   const st0 = page.status?.boat;
   // Practice off Annapolis: the boat is where the wheel has sailed her from the course's start.
   const prac = practiceAt && wheelNow ? toLatLon(practiceAt, wheelNow) : practiceHere;
-  const [lat, lon] = arrival ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  if (VISIT && !visitAimed && !arrival) {
+    visitAimed = true;
+    aimAt(VISIT.look); // look past her at the land, as the old page did
+  }
+  const [lat, lon] = arrival ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
   if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
   if (practiceAt && wheelNow && ghostTrack && wheel.wheel) {
     const g = ghostAt(ghostTrack, wheel.wheel.s.t)!;
@@ -4729,10 +5172,17 @@ renderer.setAnimationLoop(() => {
   // Gathered into showers: grey curtains on the horizon, harder rain when one passes over.
   bands.update(t, camera, rate != null ? rainFromRate(rate) : rainFromStorm(storm), wu, -wv, atmos.fog, atmos.ambient);
   rain.update(t, camera, bands.local, wu, -wv, atmos.ambient);
+  // Wet from rain, and from spray once the waves get up; soaked after a knockdown, drying over a minute or so.
+  const dunked = drain ? 1 - THREE.MathUtils.smoothstep(drain.sinceDrain, 20, 80) : 0;
+  const wetNow = Math.min(1, Math.max(dunked, rain.amount + THREE.MathUtils.smoothstep(hs, 1, 4) * 0.8));
+  wet?.set(wetNow);
+  page.wet = wetNow;
   setRainOnSea(rate != null ? rainFromRate(rate) : rainFromStorm(storm), bands.local, quality === "low"); // rings on the sea (rainRings.ts)
   page.bands = bands.shown;
   traffic?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight);
   if (traffic) page.ships = traffic.shown;
+  wildlife?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight, (a, b) => traffic?.water(a, b) ?? true, t);
+  if (wildlife) page.wildlife = wildlife.shown;
   renderer.getDrawingBufferSize(sprayBuf);
   spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
   page.spindrift = spray.amount;
@@ -4864,7 +5314,7 @@ renderer.setAnimationLoop(() => {
   page.frames++;
   page.hour = hour;
   page.simHour = shownTo;
-});
+}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
 
 // ---------- Set sail (the one-game plan, step 1; Rosa) ----------
 // One entry for every way to start: the ocean crossing, Annapolis practice, a weather
@@ -4953,7 +5403,7 @@ if (!shared) mountSetSailCard({
     // On for everyone (John, 13 Nov: "shove everything out the door now"); ?who=autopilot still opens the card on her.
     who: whoFromUrl(location.search),
     voyages: loadIndex(params.get("data") ?? "./voyages").catch(() => []),
-    watch: (file: string) => location.assign(watchLink(location.search, file)),
+    watch: (file: string, place?: string) => location.assign(watchLink(location.search, file, place)),
     race: (a: RaceId, b: RaceId, day: string) => location.assign(raceLink(location.search, a, b, day)),
   });
 // On a practice page the card's Annapolis choice is caught by the card itself (it calls start);

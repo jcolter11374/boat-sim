@@ -52,6 +52,8 @@ export interface CinemaHost {
   landmark?(): number | null;
   /** Cloud cover now, 0..1 (kept for shots that need a clear sky; none at launch). */
   cloud?(): number;
+  /** Which side of the boat her lamp lights at night: +1 starboard, -1 port, 0 both alike (a lamp on her centreline). */
+  lampSide?(): number;
   /** The sound toggle, for the N key. */
   toggleSound?(): void;
   /** How much bigger than our 3 m kayak the boat is (used when length() isn't given). */
@@ -88,9 +90,11 @@ export type ShotKind =
   | "drone"
   | "stormlow"
   | "heel"
-  | "sunset";
+  | "sunset"
+  | "landfall"
+  | "company";
 
-export type SequenceKind = "passage" | "storm" | "knockdown" | "golden" | "night";
+export type SequenceKind = "passage" | "storm" | "knockdown" | "golden" | "night" | "landfall" | "company";
 
 /** What the azimuth is measured from: the bow, or the direction to the sun, land or a ship. */
 type Ref = "bow" | "sun" | "land" | "ship";
@@ -144,12 +148,18 @@ export const SHOTS: Record<ShotKind, ShotDef> = {
   heel: { ref: "bow", from: C(90, 0.5, 0.33, 2.2, 30), to: C(90, 0.6, 0.33, 2.2, 30), len: [6, 7], locked: true },
   // Into the low sun: the horizon on the upper third so the sun and its glitter path are in frame.
   sunset: { ref: "sun", from: { ...C(166, 0.4, 0.25, 1.0, 24), sunSide: true }, to: { ...C(168, 0.42, 0.25, 1.0, 24), sunSide: true }, len: [6, 8], low: true },
+  // Landfall (the shot plan's sequence 3): from behind the boat, looking past her at the land on the horizon; a slow
+  // pull back, 22% of the width to 16% (the plan said 12%, under the 6%-of-the-frame floor on the kayak), so the land grows in the frame as she shrinks (9-12 s).
+  landfall: { ref: "land", from: C(168, 0.22, 0.33, 2.5, 22), to: C(172, 0.16, 0.33, 3, 22), len: [9, 12] },
+  // Company (sequence 4): a ship within a few km. From behind the boat towards the ship, the boat near on one third,
+  // the ship far on the other; held (7-9 s).
+  company: { ref: "ship", from: C(160, 0.3, 0.33, 2, 26), to: C(163, 0.3, 0.33, 2, 26), len: [7, 9], locked: true },
 };
 
 /**
  * The sequences, as the plan sets them out: shots in order (a list = one of them,
- * varied). Five for launch (Elena): Landfall and Company come back once land and
- * ships pass the screenshot test themselves.
+ * varied). Five shipped first (Elena); Landfall and Company joined on 14 Nov (John: put
+ * the built pieces in), for Elena's look on live.
  */
 export const SEQUENCES: Record<SequenceKind, (ShotKind | ShotKind[])[]> = {
   passage: ["establish", ["alongside", "bowon", "stern", "skim"], ["alongside", "bowon", "stern", "skim"], ["panels", "sterndetail", "bowdetail"], "drone"],
@@ -159,10 +169,14 @@ export const SEQUENCES: Record<SequenceKind, (ShotKind | ShotKind[])[]> = {
   // Night is short and close: the boat's own light carries it (Elena, 12 Nov). Three shots, and each
   // night sequence films from the other side to the last, so a minute of night isn't one side view.
   night: ["light", "alongside", "sternlight"],
+  landfall: ["landfall", "alongside", "landfall"],
+  company: ["company", "stern", "alongside"],
 };
 
 /** How long shots run in each sequence: storms quicker, calm and night slower. */
-const PACE: Record<SequenceKind, number> = { passage: 1, storm: 0.7, knockdown: 1, golden: 1, night: 1.1 };
+const PACE: Record<SequenceKind, number> = { passage: 1, storm: 0.7, knockdown: 1, golden: 1, night: 1.1, landfall: 1, company: 1 };
+/** A ship this close (km) is company worth filming (the plan: "within a few km"). */
+export const COMPANY_KM = 5;
 
 const ease = (u: number) => u * u * (3 - 2 * u);
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
@@ -194,11 +208,19 @@ export function sweepFor(knots: number): number {
 }
 
 /** The sequences that fit now, best first (only those whose conditions hold). */
-export function fitting(m: Moment, sunEl: number): SequenceKind[] {
+/** Cloud cover (0..1) up to which a low sun still shows as a golden hour: above it the light is grey and flat (GUESS by eye). */
+export const GOLDEN_CLOUD = 0.5;
+export function fitting(m: Moment, sunEl: number, cloud = 0): SequenceKind[] {
   const out: SequenceKind[] = [];
   if (m.knockdownAgo < 3 || m.recentKnockdown) out.push("knockdown");
   if (m.storm > 0.5) out.push("storm");
-  if (sunEl > -3 && sunEl < 10 && m.storm < 0.7) out.push("golden");
+  // By day, land or a landmark in sight, then a ship close by (the plan's order; never in a gale, where the land
+  // and the ship are lost in the murk).
+  if (sunEl > -3 && m.storm < 0.5 && m.land) out.push("landfall");
+  if (sunEl > -3 && m.storm < 0.5 && m.ship && m.ship.km < COMPANY_KM) out.push("company");
+  // Golden hour only when there is one to see: the sun low AND the sky fairly clear. Under an overcast
+  // the low sun is grey and flat, and the film shows the passage instead; never a faked glow (Elena, 14 Nov).
+  if (sunEl > -3 && sunEl < 10 && m.storm < 0.7 && cloud <= GOLDEN_CLOUD) out.push("golden");
   if (sunEl < -10) out.push("night");
   if (sunEl >= -10 || m.storm > 0.5) out.push("passage");
   return out;
@@ -278,6 +300,17 @@ export const KNOCKDOWN: Look = { ...C(90, 0.4, 0.3, 3, 30), B: 0.1, x: 0 };
 // height is planned for a cruiser and scaled down by camHeight(): 9 is about 3.4 m up for the
 // kayak, 7 m off.
 export const KNOCKDOWN_HULL: Look = { ...C(90, 0.46, 2, 9, 30), B: 0.1, x: 0 }; // H 2: tilted down past the horizon, the frame is all sea
+/**
+ * Turn a composed frame so the boat sits at `atX` across the screen (-1 left edge .. 1 right, 0 the
+ * middle) instead of dead centre: the middle of the open space beside a panel (Elena, 14 Nov).
+ */
+export function slideTo<T extends { quat: THREE.Quaternion; fov: number }>(shot: T, aspect: number, atX: number): T {
+  if (atX) {
+    const turn = Math.atan(atX * Math.tan((shot.fov * D2R) / 2) * aspect); // turning the lens left puts her right
+    shot.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn));
+  }
+  return shot;
+}
 export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
   const yaw = host.yaw();
   const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
@@ -299,6 +332,37 @@ export function knockdownShot(host: FramingHost, side: number): { pos: THREE.Vec
   const c = best!;
   c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
   return { pos: c.pos, quat: c.quat, fov: c.fov };
+}
+
+/**
+ * The helm's look at a motor that has just stopped (M5: a dead motor visibly stops): from
+ * above her quarter, astern, looking down on the stern and the water behind it, where each
+ * running motor leaves its churned trail (boats/propwash.ts) and the dead one's dies away.
+ * The height is planned for a cruiser and scaled down by camHeight(), as KNOCKDOWN_HULL's.
+ */
+export const MOTOR: Look = { ...C(152, 0.5, 2, 8, 30, [-0.4, 0]), B: 0.05, x: 0 };
+export function motorShot(host: FramingHost): { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } {
+  const yaw = host.yaw();
+  const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+  const len = host.length?.() ?? 3.05 * (host.scale?.() ?? 1);
+  const c = compose(boatAt(host), bow, bow, 1, len, host.camera.aspect, MOTOR, 0, 0);
+  c.pos.y = Math.max(c.pos.y, host.water(c.pos.x, c.pos.z) + 0.5);
+  return { pos: c.pos, quat: c.quat, fov: c.fov };
+}
+
+/**
+ * Whether a camera standing azDeg round from the bow on `side` (as compose's) is on the side of the
+ * boat her lamp leaves dark. yaw: the boat's scene yaw; lamp: +1 starboard, -1 port, 0 centred.
+ */
+export function onDarkSide(yaw: number, azDeg: number, side: number, lamp: number): boolean {
+  if (!lamp) return false;
+  const bow = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+  const a = azDeg * D2R * side;
+  const cx = bow.x * Math.cos(a) - bow.y * Math.sin(a);
+  const cz = bow.x * Math.sin(a) + bow.y * Math.cos(a);
+  // The scene's +z is the port side of a bow along +x, so starboard is (bow.y, -bow.x).
+  const starboard = cx * bow.y - cz * bow.x;
+  return Math.abs(starboard) > 0.2 && Math.sign(starboard) !== Math.sign(lamp);
 }
 
 /**
@@ -497,7 +561,14 @@ export class Cinema {
       const i = shots.indexOf("establish");
       if (i >= 0) shots.splice(i, 1);
     }
-    this.seq = { kind, shots, i: -1, side: this.sideFor(shots[0]) };
+    const side = this.sideFor(shots[0]);
+    // At night from the side her lamp doesn't light, the alongside shot was a black hull on black water with
+    // only the antenna tip showing (Elena, 14 Nov): there the sequence keeps to the light and stern-light shots.
+    if (kind === "night" && shots.length > 1 && this.onDarkSide(side, shots.includes("alongside") ? "alongside" : shots[0])) {
+      const i = shots.indexOf("alongside");
+      if (i >= 0) shots.splice(i, 1);
+    }
+    this.seq = { kind, shots, i: -1, side };
     this.sequences.push(kind);
     this.captionFor(kind);
   }
@@ -507,6 +578,10 @@ export class Cinema {
    * it's rim-lit with the glitter on the water, not flat and front-lit (Elena). At night
    * either side will do, so night sequences alternate.
    */
+  private onDarkSide(side: number, kind: ShotKind): boolean {
+    return onDarkSide(this.host.yaw(), SHOTS[kind].from.az, side, this.host.lampSide?.() ?? 0);
+  }
+
   private sideFor(first: ShotKind): number {
     const def = SHOTS[first];
     const sd = this.host.sunDir();
@@ -530,7 +605,7 @@ export class Cinema {
   private next(forced?: SequenceKind): void {
     if (forced || !this.seq || this.seq.i >= this.seq.shots.length - 1) {
       const m = this.moment();
-      const fit = fitting(m, this.host.sunEl());
+      const fit = fitting(m, this.host.sunEl(), this.host.cloud?.() ?? 0);
       this.startSequence(forced ?? chooseSequence(fit, this.sequences, m.knockdownAgo < 3));
     }
     const s = this.seq!;

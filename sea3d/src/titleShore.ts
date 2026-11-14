@@ -14,8 +14,19 @@
  */
 import * as THREE from "three";
 
-/** The spot (keep in step with tools/title-skyline.py), and where the sun sets there in June (compass degrees). */
-export const SHORE = { lat: 38.97403, lon: -76.45254, sunsetAz: 300 };
+/**
+ * The spot (keep in step with tools/title-skyline.py), and where the sun comes up (compass degrees):
+ * the title is a sunrise with the Bay Bridge (John, 14 Nov 2026), no longer the sunset over the town
+ * (that was 300). The bridge is at 64 degrees from here, 6.6 km off; with the sun rising at 95 (early
+ * March or early October) the yacht's view, which looks 37 degrees left of the sun, has the bridge
+ * against the dawn glow across its middle and the sun just out of frame, still backlighting the
+ * sails; the kayak's view, 120 degrees round, has Greenbury Point and the Severn's mouth in the low
+ * sun. A summer sunrise (about 60) is behind the bridge itself, too close to frame the two apart.
+ */
+export const SHORE = { lat: 38.9655, lon: -76.4405, sunAz: 95 };
+
+/** How far round the world is turned (deg, + anticlockwise from above) so the true sun bearing falls where the title draws its sun. */
+export const shoreTurn = (drawnSunAz: number) => SHORE.sunAz - drawnSunAz;
 /** The camera height the skyline was worked out for (m). */
 export const SHORE_EYE = 1.5;
 /** Nothing is drawn further off than this (m): inside the title's sea, which ends at 3 km. A farther shore is brought in to here at the height it appears to have. */
@@ -61,11 +72,11 @@ export interface ShoreStrip {
 /**
  * The strip: two vertices (foot, top) for each bearing that has land, joined to the next
  * where that has land too. sunAz: the compass bearing the title's sun is drawn at; the
- * skyline is turned so that the true sunset bearing (SHORE.sunsetAz) falls on it.
+ * skyline is turned so that the true sun bearing (SHORE.sunAz) falls on it.
  */
 export function shoreStrip(data: Uint16Array, sunAz: number, light: ShoreLight): ShoreStrip {
   const n = data.length >> 1;
-  const turn = SHORE.sunsetAz - sunAz;
+  const turn = shoreTurn(sunAz);
   const sunH = new THREE.Vector2(light.sunDir.x, light.sunDir.z);
   if (sunH.lengthSq() > 1e-9) sunH.normalize();
   const position: number[] = [];
