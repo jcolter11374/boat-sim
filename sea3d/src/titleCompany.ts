@@ -86,11 +86,14 @@ export class TitleCompany {
 
   dispose(): void {
     for (const y of this.yachts) y.model.dispose();
-    this.root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (this.yachts.some((y) => y.model.root === o)) return;
-      m.geometry?.dispose?.();
-    });
+    // The ships: their geometry and their own materials (Maya, #581).
+    for (const ship of this.ships)
+      ship.traverse((o) => {
+        const m = o as THREE.Mesh;
+        m.geometry?.dispose?.();
+        const mats = m.material;
+        for (const x of mats ? (Array.isArray(mats) ? mats : [mats]) : []) x.dispose();
+      });
     this.root.clear();
     this.yachts = [];
     this.ships = [];
