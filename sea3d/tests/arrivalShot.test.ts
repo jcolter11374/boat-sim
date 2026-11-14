@@ -46,6 +46,30 @@ test("a slow push in: closer by the end, never a jump, and it stops when the sce
   assert.equal(d(ARRIVAL_S + 30), d(ARRIVAL_S));
 });
 
+test("on an upright phone the boat is about half the width, in the lower middle of the frame", async () => {
+  const { onScreen } = await import("../src/helm/arrivalShot");
+  const W = 390;
+  const H = 844;
+  const wide = (len: number, tall: number, heading: number, W = 390, H = 844) => {
+    const h = host(heading, W / H, len, tall);
+    const s = arrivalShot(h, cape, 0);
+    const yaw = h.yaw();
+    const end = (k: number) => onScreen(s, W, H, new THREE.Vector3(Math.cos(yaw) * k * len, 0.3, -Math.sin(yaw) * k * len));
+    const a = end(-0.5);
+    const b = end(0.5);
+    return { span: Math.abs(a.x - b.x) / W, lo: Math.min(a.x, b.x), hi: Math.max(a.x, b.x), y: (a.y + b.y) / 2 };
+  };
+  // Side-on to the lens: the kayak about half the frame's width, both ends inside it.
+  const k = wide(3.05, 0, cape + 90);
+  assert.ok(k.span > 0.38 && k.span < 0.6, `kayak ${k.span.toFixed(2)} of the width`);
+  assert.ok(k.lo > 0 && k.hi < W, `both ends in the frame: ${k.lo.toFixed(0)} ${k.hi.toFixed(0)}`);
+  // She sits in the lower middle of the frame, not on the top half with empty sea below.
+  assert.ok(k.y > 0.6 * H && k.y < 0.8 * H, `kayak at ${(k.y / H).toFixed(2)} of the height`);
+  // A wide screen keeps the framing it had: a fifth of the width.
+  const d = wide(3.05, 0, cape + 90, 1280, 720);
+  assert.ok(d.span > 0.15 && d.span < 0.25, `on a wide screen ${d.span.toFixed(2)} of the width`);
+});
+
 test("a yacht's mast fits: the camera stands back for a tall boat", () => {
   const kayak = arrivalShot(host(70), cape, 0).pos.length();
   const yacht = arrivalShot(host(70, 16 / 9, 9.6, 14), cape, 0).pos.length();
