@@ -4395,14 +4395,18 @@ const CHECKS = {
             let now = await local(p);
             while (Date.now() - t0 < 4 * MIN && (now == null || Math.abs(now - want) > 0.4)) { await p.waitForTimeout(300); now = await local(p); }
             await p.keyboard.press("Space");
-            await p.waitForTimeout(1500);
+            await p.waitForTimeout(800);
+            // Make sure the clock is stopped (Elena: the night burst brightened when it wasn't).
+            if (await p.evaluate(() => window.__helm.clock !== 0)) { await p.keyboard.press("Space"); await p.waitForTimeout(800); }
+            if (await p.evaluate(() => window.__helm.clock !== 0)) await p.evaluate(() => document.querySelector('#timebar .rate[data-rate="0"], #timebar .pause, #timebar button[aria-label*="ause"]')?.click());
+            await p.waitForTimeout(700);
             now = await local(p);
             await p.evaluate(() => { window.__helm.arrive(59.3, 60); });
             await p.waitForTimeout(3000);
             shots.push(await emit(p, `${w}-${label}-a`));
             const ban = await p.evaluate(() => ({ spot: window.__helm.arrivalBanner ?? null, text: document.getElementById("arrive")?.innerText.replace(/\s+/g, " ").slice(0, 90) ?? "" }));
             if (ban.spot?.covers?.length) bad.push(`${w} ${label}: banner covers ${JSON.stringify(ban.spot.covers)}`);
-            if (label === "night") for (let i = 1; i <= 8; i++) { await p.waitForTimeout(700); shots.push(await emit(p, `${w}-night-flash-${i}`)); }
+            if (label === "night") for (let i = 1; i <= 8; i++) { await p.waitForTimeout(2500); shots.push(await emit(p, `${w}-night-flash-${i}`)); }
             else { await p.waitForTimeout(6000); shots.push(await emit(p, `${w}-${label}-b`)); }
             out.push(`${w} ${label}: local ${now?.toFixed(2)} h; banner ${JSON.stringify(ban.spot)} "${ban.text}"`);
             await p.keyboard.press("Escape");
