@@ -29,6 +29,15 @@ node live_sheet.mjs kayak knockdown after-knockdown  out/knockdown
 node live_sheet.mjs kayak golden    golden           out/golden
 node live_sheet.mjs kayak night     night            out/night
 ```
+Two more, once #585 (Landfall and Company) is live; on an older build the sequence name is unknown:
+```
+node live_sheet.mjs kayak landfall  coast            out/landfall
+node live_sheet.mjs kayak company   ship             out/company
+```
+- coast: land within 40 km (the film's own `land` test, the same one #585 picks Landfall from), sun over
+  10 degrees up, no storm. Read from `__helm.cine.host.moment().land`. Most likely in the first hours, near the start.
+- ship: another ship within 5 km (#585's COMPANY_KM), sun over 10 degrees up, no storm. Read from
+  `__helm.cine.host.moment().ship.km`. The run drops to 1 hour a second while any ship is within 6 km.
 What each moment is, from my local runs of the same voyage (default launch, 23 Apr 2020):
 - passage: some hours out, by day (sun more than 15 degrees up), making about 2 knots.
 - storm: the first daylight hour with 27 knots of wind or more (sun over 10 degrees up). Not hour 209.5 as

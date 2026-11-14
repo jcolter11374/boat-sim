@@ -64,15 +64,20 @@ for (;;) {
     const kn = h.cine.host.speed();
     const k = h.knockdown()?.start ?? null;
     const windKn = Number(/([\d.]+) kn/.exec(document.getElementById("c-windv")?.textContent ?? "")?.[1] ?? 0);
-    const there = (when === "gale" ? h.hour > 6 && windKn >= 27 && el > 10 : when === "day" ? h.hour >= 7 && el > 15 : when === "golden" ? h.hour > 6 && el > 1 && el < 6 && (h.cine.host.cloud?.() ?? 0) <= 0.5 : when === "night" ? h.hour > 6 && el < -12 : when === "after-knockdown" ? k != null : h.hour >= want) && kn > 0.3;
+    // Landfall and Company (#585) key on the film's own moment: land within 40 km, another ship within 5 km.
+    const m = h.cine.host.moment?.() ?? {};
+    const storm = m.storm ?? 0;
+    const landKm = m.land ? m.land.name : null;
+    const shipKm = m.ship ? m.ship.km : null;
+    const there = (when === "coast" ? !!m.land && el > 10 && storm < 0.5 : when === "ship" ? shipKm != null && shipKm < 5 && el > 10 && storm < 0.5 : when === "gale" ? h.hour > 6 && windKn >= 27 && el > 10 : when === "day" ? h.hour >= 7 && el > 15 : when === "golden" ? h.hour > 6 && el > 1 && el < 6 && (h.cine.host.cloud?.() ?? 0) <= 0.5 : when === "night" ? h.hour > 6 && el < -12 : when === "after-knockdown" ? k != null : h.hour >= want) && kn > 0.3;
     if (there) { if (h.clock !== 0) document.getElementById("t-pause")?.click(); }
     else if (h.clock === 0 && !h.busy && !h.card) document.getElementById("t-pause")?.click();
-    return { there, windKn, hour: h.hour, over: !!h.status?.over, el, kn, k, wind: document.getElementById("c-windv")?.textContent };
+    return { there, land: landKm, shipKm, storm, windKn, hour: h.hour, over: !!h.status?.over, el, kn, k, wind: document.getElementById("c-windv")?.textContent };
   }, [when, want]);
   if (st.there) { console.log("moment:", JSON.stringify(st)); break; }
   if (st.over || Date.now() - t0 > MAX_MIN * 60e3) { console.log("NEVER REACHED THE MOMENT:", JSON.stringify(st)); process.exit(3); }
   // Slow down near the moment: an hour target by the hours left; golden hour and night by the sun getting low.
-  const near = want != null ? (st.hour >= want - 9 ? "1" : st.hour >= want - 40 ? "6" : rate) : (when === "golden" || when === "night") && st.hour > 6 && st.el < 14 ? "1" : when === "gale" ? (st.windKn >= 22 && st.el > 0 ? "1" : "6") : rate;
+  const near = want != null ? (st.hour >= want - 9 ? "1" : st.hour >= want - 40 ? "6" : rate) : (when === "golden" || when === "night") && st.hour > 6 && st.el < 14 ? "1" : when === "gale" ? (st.windKn >= 22 && st.el > 0 ? "1" : "6") : when === "coast" ? (st.land ? "1" : "6") : when === "ship" ? (st.shipKm != null ? "1" : "6") : rate;
   if (near !== rate) { rate = near; await p.click(`button.rate[data-rate="${rate}"]`); }
   await p.waitForTimeout(rate === "1" ? 40 : 120);
 }
@@ -92,7 +97,7 @@ for (let i = 0; i < n; i++) {
   await p.evaluate((dt) => window.__tick(dt), 1 / FPS);
   // SHEET_ONLY=1 keeps just the twelve stills the contact sheet uses (one every 5 s of film), for a job log that can't hold more.
   if (!process.env.SHEET_ONLY || i % 40 === 4) await p.screenshot({ path: `${dir}/f${String(i).padStart(5, "0")}.jpg`, type: "jpeg", quality: 85 });
-  boxes.push(await p.evaluate(() => ({ box: window.__helm.boatBox(), shot: window.__helm.cine.current })));
+  boxes.push(await p.evaluate(() => ({ box: window.__helm.boatBox(), shot: window.__helm.cine.current, hour: window.__helm.hour, el: window.__helm.cine.host.sunEl(), clock: window.__helm.clock, on: window.__helm.cine.on })));
 }
 (await import("node:fs")).writeFileSync(`${dir}.boxes.json`, JSON.stringify(boxes));
 (await import("node:fs")).writeFileSync(`${dir}.info.json`, JSON.stringify({ boat, seq, when, base: BASE, ...info, ...(await p.evaluate(() => ({ seqs: window.__helm.cine.sequences, log: window.__helm.cine.log }))) }));
