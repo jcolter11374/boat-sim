@@ -14,7 +14,7 @@
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 // Replies that move time carry both boats' voyages so far as replays (hourly rows).
 
-import { FIRST_WEATHER, HELM_PACKAGES } from "./prefetch";
+import { FIRST_WEATHER, HELM_PACKAGES, WARM_NAME } from "./prefetch";
 
 // Pass the folder too: Firefox can't work it out from a module imported in a worker
 // ("Could not extract indexURL path from pyodide module location", #294).
@@ -238,6 +238,12 @@ def voyages():
   return ready;
 }
 
+// Start loading as soon as this worker runs (Rosa, 14 Nov). The page names the worker "warm <base>"
+// and sends "warm" too, but its message only gets here once the page's main thread is free, and the
+// page builds its whole scene first: on a computer with no graphics card that held the loading back
+// about 3 s. A worker that isn't named so (the race's, the watched voyage's, tests) waits for messages.
+if (self.name.startsWith(WARM_NAME)) start(self.name.slice(WARM_NAME.length)).catch(() => undefined); // errors: Set sail reports them
+
 const loaded = new Set<string>([""]);
 
 /** Point ENV at the weather a game needs: the 2020 bundle, or a challenge's own
@@ -302,7 +308,17 @@ except KeyError as err:
     if choices:
         raise RuntimeError("NO_BOAT " + str(err))  # an older simulator without this boat
     raise
-json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages(), **code()}, default=_f)
+# The first order and the forecast strip come back with the new game, not as two more turns of
+# the worker: the page reads each answer only between frames, and on a slow picture each turn
+# cost a frame of up to 2 s (Rosa, speed, 14 Nov). If the order fails here the page sends it again.
+first = None
+o = m.get("order")
+if o and G.mode == "hands_on":
+    try:
+        first = G.order(o["heading"], o["power"], *([o["sails"], o["engine"]] if "sails" in o else []))
+    except Exception:
+        first = None
+json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), "first_order": first, **voyages(), **code(), **ahead_forecast()}, default=_f)
 `;
     } else if (m.type === "load") {
       say(m.mine ? "Sailing back to where you left off..." : "Sailing the shared game back to where it was...");
