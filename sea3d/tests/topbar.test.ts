@@ -84,7 +84,7 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   assert.ok(none.filter((e) => e.href).every((e) => e.name.endsWith("→")));
   const names = none.map((e) => e.name);
   assert.ok(names.includes("Pearson 31-2 (our model)"));
-  assert.ok(names.includes("Randolph Rev C5 (our model) →"));
+  assert.ok(names.includes("Randolph Rev C5 (our model)"));
   assert.ok(names.includes("Beneteau First 31.7"), "stock boats by their real make and model (John, B4)");
   assert.ok(!none.some((e) => /\bdrone\b|\bft\b/.test(e.name + e.fact)), "player words: robot boat, metric");
   assert.ok(!none.some((e) => e.id === "mine"));
@@ -99,16 +99,18 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   assert.equal(pickedId(null), "kayak");
   assert.equal(pickedId({ kind: "stock", base: "stock_cruiser31", hash: "", name: "x", choices: {}, saved: "" }), "stock_cruiser31");
   assert.equal(pickedId({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {}, saved: "" }), "kayak");
-  // Rev B, as built, is picked straight from the list (every built boat in Set sail, John 13 Nov).
-  const revb = none.find((e) => e.id === "revb")!;
-  assert.equal(revb.name, "Randolph Rev B (our model)");
-  assert.ok(!revb.href, "sailed from here, not a Boatyard link");
-  choose("revb");
-  const saved = loadMyBoat()!;
-  assert.deepEqual([saved.kind, saved.base, saved.hash, saved.choices], ["yard", "revb", "#base=revb", { base: "revb" }]);
-  assert.equal(pickedId(saved), "revb");
-  assert.ok(!pickerEntries(saved).some((e) => e.id === "mine"), "not listed twice as your design");
-  clearMyBoat();
+  // The Randolph boats, unchanged, are picked straight from the list (every built boat in Set sail, John 13 Nov).
+  for (const [id, name] of [["revb", "Randolph Rev B (our model)"], ["revc", "Randolph Rev C5 (our model)"]]) {
+    const row = none.find((e) => e.id === id)!;
+    assert.equal(row.name, name);
+    assert.ok(!row.href, "sailed from here, not a Boatyard link");
+    choose(id);
+    const saved = loadMyBoat()!;
+    assert.deepEqual([saved.kind, saved.base, saved.hash, saved.choices], ["yard", id, `#base=${id}`, { base: id }]);
+    assert.equal(pickedId(saved), id);
+    assert.ok(!pickerEntries(saved).some((e) => e.id === "mine"), "not listed twice as your design");
+    clearMyBoat();
+  }
 });
 
 test("Watch a voyage and Race it in every menu open the Set sail card, not the old pages (M3)", () => {
