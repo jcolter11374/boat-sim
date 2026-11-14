@@ -15,7 +15,7 @@ test("each keelboat starts as built, with her sails, rig, keel, drogue, spare au
   for (const key of KEEL_KEYS) {
     const c = keelCatalog(key, sim, kayak)!;
     assert.ok(c, key);
-    assert.deepEqual(c.slots.map((s) => s.id), ["rig", "cloth", "reef", "storm", "keel", "drogue", "spare", "tactician"]);
+    assert.deepEqual(c.slots.map((s) => s.id), ["rig", "cloth", "reef", "storm", "keel", "drogue", "vane", "ksol", "kbat", "hydro", "spare", "tactician"]);
     const d = plannedDesign(c);
     assert.equal(d.base, key);
     assert.deepEqual(d.picks, sim.stock![key].defaults);
@@ -65,4 +65,13 @@ test("the drogue slot has no caveat now the odds count a keelboat being rolled",
     const c = keelCatalog(key, sim, kayak)!;
     assert.equal(c.slots.find((s) => s.id === "drogue")!.note, undefined);
   }
+});
+
+test("the keelboats' power parts move the build card's figures (M4 wave 3)", () => {
+  const c = keelCatalog("stock_cruiser31", sim, kayak)!;
+  const plan = plannedDesign(c);
+  const s0 = summarise(c, plan);
+  assert.deepEqual([s0.solarW, s0.batteryWh, s0.electronicsWhDay], [400, 2400, 960]);
+  const s1 = summarise(c, { ...plan, picks: { ...plan.picks, ksol: "600w", kbat: "lfp", vane: "hydrovane" } });
+  assert.deepEqual([s1.solarW, s1.batteryWh, s1.electronicsWhDay], [600, 5120, 400]);
 });

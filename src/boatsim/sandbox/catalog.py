@@ -23,6 +23,7 @@ masses and part names stay in Sam's file.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -61,6 +62,18 @@ def _thr(n: int, kg: float = 0.0) -> Option:
         basis="Blue Robotics T200 datasheet, 50 W burst each",
         kg=kg,
     )
+
+
+# Blue Robotics T500 (M4 wave 3): a bigger propeller for the same power budget, so
+# more thrust per watt at the kayak's 10-50 W. Datasheet: 114.5 mm propeller,
+# 6.0 kgf forward at 12 V full throttle for 202 W, 1157 g in air with its cable
+# (T200: 344 g). The efficiency is fitted to that point as the T200's is
+# (vessel/propulsion.py); using it at low power is the same GUESS.
+T500_DIAMETER_M = 0.1145
+T500_EFFICIENCY = round(
+    (6.0 * 9.80665) ** 1.5 / math.sqrt(2.0 * 1025.0 * math.pi * T500_DIAMETER_M**2 / 4.0) / 202.0, 3
+)
+T500_EXTRA_KG = 1.157 - 0.344  # each, against a T200
 
 
 def _no_effect(why: str) -> Option:
@@ -247,7 +260,22 @@ SHAPES = {
 }
 
 SLOTS: dict[str, dict[str, Option]] = {
-    "thr": {"two-t200": _thr(2), "one-t200": _thr(1, -0.45)},
+    "thr": {
+        "two-t200": _thr(2),
+        "one-t200": _thr(1, -0.45),
+        "two-t500": Option(
+            (
+                ("propulsion", "thruster_count", 2),
+                ("propulsion", "max_drive_w", 100),
+                ("propulsion", "thruster_diameter_m", T500_DIAMETER_M),
+                ("propulsion", "thruster_efficiency", T500_EFFICIENCY),
+            ),
+            est=True,
+            basis="Blue Robotics T500 datasheet (114.5 mm propeller, 6.0 kgf for 202 W at "
+            "12 V, 1157 g); same 50 W each; low-power efficiency our GUESS",
+            kg=round(2 * T500_EXTRA_KG, 3),
+        ),
+    },
     "sol": {
         "solar-250": Option((("power", "solar_wp", 250),), basis="panel datasheets"),
         "solar-200": Option((("power", "solar_wp", 200),), basis="panel datasheets", kg=-1.2),
@@ -703,6 +731,12 @@ CHANGE_NAMES = {
     ("keel", "shoal"): "shoal keel",
     ("drogue", "jordan"): "Jordan series drogue",
     ("drogue", "para"): "sea anchor",
+    ("vane", "hydrovane"): "Hydrovane",
+    ("vane", "monitor"): "Monitor windvane",
+    ("ksol", "600w"): "600 W solar",
+    ("kbat", "lfp"): "lithium battery",
+    ("hydro", "pod600"): "hydrogenerator",
+    ("thr", "two-t500"): "T500 motors",
     ("spare", "spare-autopilot"): "spare autopilot",
     ("tactician", "off"): "no sailing tactician",
 }
@@ -714,6 +748,9 @@ ADDED = {
     ("storm", "storm"),
     ("drogue", "jordan"),
     ("drogue", "para"),
+    ("vane", "hydrovane"),
+    ("vane", "monitor"),
+    ("hydro", "pod600"),
     ("spare", "spare-autopilot"),
 }
 # Two changes that read as one phrase.
@@ -1048,6 +1085,143 @@ KEEL_WATER_DEFAULTS = {"keel": "deep", "drogue": "none"}
 KEEL_WATER_NAMES = {"keel": "Keel", "drogue": "Drogue or sea anchor"}
 # A muted line under a slot on the page: what the odds don't count yet (Maya, #526).
 # The drogue had one until the keelboats' knockdown model counted rolls (M4).
+# Self-steering and power (M4 wave 3).
+# A windvane steers by the wind with no electricity (vessel/kayak.py windvane):
+# the autopilot then runs only under engine in calms, and if it dies she sails on
+# at her last angle to the wind instead of drifting. Hydrovane: its own rudder
+# (an emergency rudder, PBO), 37 kg in its average fit (Hydrovane specifications).
+# Monitor (Scanmar): a servo-pendulum working the boat's own rudder; its weight is
+# our GUESS. VANE_HOTEL_WH: GUESS, the 960 Wh/day less most of the autopilot's
+# ~30 W (stock_*.yaml electronics), which now steers only a fifth of the time.
+VANE_HOTEL_WH = 400.0
+VANE_KG = {"hydrovane": 37.0, "monitor": 25.0}
+# Solar: two 300 W rigid panels for the two 200 W ones (panel datasheets; the extra
+# weight is our GUESS). Battery: four Battle Born 100 Ah LiFePO4 (BB10012 datasheet:
+# 12.8 V, 31 lb each, 99 % efficient, charges down to 25 F) for the two 100 Ah
+# lead-acid (our GUESS: 30 kg each). Hydrogenerator: Watt&Sea POD 600 (maker: 120 W
+# at 5 knots, 600 W rated, 5 kg plus a 1.5 kg converter and 2.55 kg dump load); the
+# shape of its curve (cube of speed) and its 50 % efficiency are our GUESS.
+SOLAR_600_KG = 8.0
+LFP_WH = 4 * 12.8 * 100
+LFP_KG = round(4 * 31 * 0.4536 - 2 * 30.0, 2)
+HYDRO = {"w5": 120.0, "rated": 600.0, "eff": 0.5, "kg": 5.0 + 1.5 + 2.55}
+
+
+def _self_power(boat: str) -> dict[str, dict[str, Option]]:
+    vane = {
+        "autopilot": Option(
+            basis="as built: a below-deck autopilot steers all the time",
+            n="Electric autopilot (as built)",
+            d="Steers all the time on battery power; if it dies she drifts.",
+        ),
+        **{
+            k: Option(
+                (
+                    ("electronics", "windvane", k),
+                    ("electronics", "hotel_load_wh_per_day", VANE_HOTEL_WH),
+                ),
+                est=True,
+                kg=VANE_KG[k],
+                basis=b,
+                n=n,
+                d=d,
+            )
+            for k, n, d, b in (
+                (
+                    "hydrovane",
+                    "Hydrovane windvane",
+                    (
+                        "Steers by the wind on its own rudder, with no power: she keeps "
+                        "sailing if the autopilot dies, or even the main rudder."
+                    ),
+                    (
+                        "Hydrovane specifications (own rudder, 37 kg); PBO windvane guide "
+                        "(emergency rudder); power saved our GUESS"
+                    ),
+                ),
+                (
+                    "monitor",
+                    "Monitor windvane",
+                    (
+                        "A servo-pendulum vane working her own rudder, with no power: she "
+                        "keeps sailing if the autopilot dies."
+                    ),
+                    (
+                        "Scanmar Monitor (servo-pendulum, steers the main rudder); weight "
+                        "and power saved our GUESS"
+                    ),
+                ),
+            )
+        },
+    }
+    return {
+        "vane": vane,
+        "ksol": {
+            "400w": Option(
+                basis="as built: two 200 W panels",
+                n="400 W solar (as built)",
+                d="Two 200 W panels on a stern arch.",
+            ),
+            "600w": Option(
+                (
+                    ("power", "solar_wp", 600),
+                    ("power", "panels_w", {"panel_port": 300, "panel_stbd": 300}),
+                ),
+                est=True,
+                kg=SOLAR_600_KG,
+                basis="rigid 300 W panel datasheets; weight our GUESS",
+                n="600 W solar",
+                d="Two 300 W panels in place of the 200 W ones.",
+            ),
+        },
+        "kbat": {
+            "lead": Option(
+                basis="as built: two 100 Ah lead-acid",
+                n="2 x 100 Ah lead-acid (as built)",
+                d="A 2,400 Wh house bank.",
+            ),
+            "lfp": Option(
+                (
+                    ("power", "battery_wh", LFP_WH),
+                    ("power", "charge_eff", 0.99),
+                    ("power", "discharge_eff", 0.99),
+                    ("power", "min_charge_temp_c", -4),
+                ),
+                kg=LFP_KG,
+                basis="Battle Born BB10012 datasheet x 4 (12.8 V 100 Ah, 31 lb, 99 % "
+                "efficient, charges from 25 F); the lead-acid weight is our GUESS",
+                n="4 x 100 Ah LiFePO4",
+                d="Lithium: over twice the stored energy, lighter, and it takes a charge faster.",
+                est=True,
+            ),
+        },
+        "hydro": {
+            "none": Option(basis="as built: none", n="None (as built)", d="Sun and engine only."),
+            "pod600": Option(
+                (
+                    ("power", "hydro_w_at_5kn", HYDRO["w5"]),
+                    ("power", "hydro_rated_w", HYDRO["rated"]),
+                    ("power", "hydro_efficiency", HYDRO["eff"]),
+                ),
+                est=True,
+                kg=HYDRO["kg"],
+                basis="Watt&Sea POD 600 (maker: 120 W at 5 knots, 600 W rated, 9 kg with "
+                "converter and dump load); curve shape and drag our GUESS",
+                n="Watt&Sea POD 600 hydrogenerator",
+                d="A small propeller under the hull that charges from her speed, day and "
+                "night, for a little drag.",
+            ),
+        },
+    }
+
+
+KEEL_POWER_DEFAULTS = {"vane": "autopilot", "ksol": "400w", "kbat": "lead", "hydro": "none"}
+KEEL_POWER_NAMES = {
+    "vane": "Self-steering",
+    "ksol": "Solar panels",
+    "kbat": "Battery",
+    "hydro": "Hydrogenerator",
+}
 STOCK_SLOT_NOTES: dict[str, str] = {}  # the drogue's went when keelboats could be rolled
 
 
@@ -1131,16 +1305,19 @@ for _b in KEELBOATS:
     STOCK_SLOTS[_b] = {
         **_keel_sails(_b),
         **_under_water(_b),
+        **_self_power(_b),
         **STOCK_SLOTS.get(_b, {"spare": SPARE_SLOT, "tactician": TACTICIAN_SLOT}),
     }
     STOCK_DEFAULTS[_b] = {
         **KEEL_SAIL_DEFAULTS[_b],
         **KEEL_WATER_DEFAULTS,
+        **KEEL_POWER_DEFAULTS,
         "spare": "none",
         "tactician": "on",
     }
 STOCK_SLOT_NAMES.update(KEEL_SAIL_NAMES)
 STOCK_SLOT_NAMES.update(KEEL_WATER_NAMES)
+STOCK_SLOT_NAMES.update(KEEL_POWER_NAMES)
 
 
 def base_of(choices: dict | None) -> str:
@@ -1172,6 +1349,7 @@ GRID: tuple[dict, ...] = (
     {},  # the kayak as it stands, 25 W cruise
     *({"cruise_w": w} for w in (10, 15, 20, 30)),
     {"thr": "one-t200"},
+    {"thr": "two-t500"},  # M4 wave 3
     {"sol": "solar-200"},
     {"sol": "solar-300"},
     {"bat": "one-50ah"},
@@ -1218,6 +1396,12 @@ GRID: tuple[dict, ...] = (
             {"keel": "wing" if b == "stock_pearson31_2" else "shoal"},
             {"drogue": "jordan"},
             {"drogue": "para"},
+            # M4 wave 3: self-steering and power
+            {"vane": "hydrovane"},
+            {"vane": "monitor"},
+            {"ksol": "600w"},
+            {"kbat": "lfp"},
+            {"hydro": "pod600"},
         )
     ),
     {  # everything cheapest
