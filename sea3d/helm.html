@@ -56,6 +56,9 @@
   #decide[hidden] { display: none; }
   /* With a map, the card stands on the right third, under the chart, so the boat shows on the left third (Elena). */
   #decide.withmap { left: auto; right: 56px; transform: none; top: calc(var(--bar, 0px) + 196px); width: min(440px, calc(100vw - 80px)); }
+  /* A "Your call" card is the one thing to look at: the "history nearby" card (src/pois.ts, on top at z 20) steps aside
+     while it is up, and comes back when you have chosen. It sat over the options and took their clicks (Rosa, M5 D4). */
+  body:has(#decide:not([hidden])) .poi-card { visibility: hidden; }
   #decide .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb84d; }
   #fcbox.lit { outline: 2px solid #ffb84d; }
   #decidebtns { display: flex; flex-direction: column; gap: 6px; }
