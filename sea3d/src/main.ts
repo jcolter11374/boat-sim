@@ -6,6 +6,7 @@
 // The simple surface follower (standin.ts) is kept as a fallback.
 
 import * as THREE from "three";
+import { ownWetMaterials } from "./boats/inWater";
 import { detailFor } from "./seaDetail";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
@@ -27,7 +28,7 @@ import { loadMyBoat, onMyBoatChange } from "./myboat";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
-import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec } from "./titleHero";
+import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
 import { prefetchHelm } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
@@ -202,12 +203,16 @@ titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
 let hero: Boat | null = null;
 const heroOn = () => document.body.classList.contains("title");
 const heroPlace: Placement = { x: 0, z: 0, yaw: 0 };
+let heroSink = 0; // m: the title's boat sits this much deeper (heroWaterlineFor)
+let heroMats: THREE.Material[] = []; // her own copies of the materials at the water (ownWetMaterials)
 function buildHero(q: Quality): void {
   if (hero) {
     scene.remove(hero.model.root, hero.wake.points, hero.contact.collar, hero.contact.spray);
     hero.model.dispose();
     hero.wake.dispose();
     hero.contact.dispose();
+    for (const m of heroMats) m.dispose();
+    heroMats = [];
     hero = null;
   }
   if (!heroOn()) return;
@@ -215,6 +220,13 @@ function buildHero(q: Quality): void {
   const model = BUILDERS[spec.key](q);
   const contact = new Contact(model.form, spec, q);
   contact.collar.visible = contact.spray.visible = !model.twinHull && spec.key !== "randolph";
+  // A white hull's wet line at the sea, hers alone (Elena; Lena: not the shared in-water hook).
+  const wl = heroWaterlineFor(spec.key);
+  heroSink = wl.sink;
+  if (wl.wet > 0) {
+    heroMats = ownWetMaterials(model.root, spec.cgBelowWaterline + heroSink);
+    contact.wetTitle(model.root, heroMats, wl.wet);
+  }
   const wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   shadowsOn(model.root);
   scene.add(model.root, wake.points, contact.collar, contact.spray);
@@ -233,6 +245,7 @@ const clouds = new Clouds(quality);
 clouds.group.visible = false;
 scene.add(clouds.group);
 let heroWas = false;
+let demoStale = false; // the detailed models came while the title was up: the demo boats are built when it goes
 let heroL = heroLightFor("kayak");
 // The shore on the title's horizon (titleShore.ts): asked for once the title is drawing, never before.
 let shore: TitleShore | null = null;
@@ -261,6 +274,10 @@ function heroMode(): void {
   if (on === heroWas && (!on || hero)) return;
   heroWas = on;
   buildHero(quality);
+  if (!on && demoStale) {
+    demoStale = false;
+    buildBoats(quality); // the detailed demo boats, now the title's boat is gone
+  }
   for (const b of boats) {
     b.model.root.visible = b.wake.points.visible = !on;
     b.contact.collar.visible = b.contact.spray.visible = !on;
@@ -393,9 +410,14 @@ window.addEventListener("resize", () => {
 
 setQuality(look);
 // The detailed (Blender) boats, when the build has them: swap them in once loaded.
-loadDetailedModels().then((ok) => {
+const detailed = loadDetailedModels().then((ok) => {
   if (ok) {
-    buildBoats(quality);
+    // Under the title the two demo boats wait until it goes. Built now, they put their in-water look
+    // (the sea-wash loops, inWater.ts) on the detailed materials, which the title's boat shares with
+    // them (clones share materials), so each of her ten-odd shaders grew it too: about 0.45 s each to
+    // prepare on Direct3D, and the title froze for 4.5 s just after it first moved (John's PC).
+    if (heroOn()) demoStale = true;
+    else buildBoats(quality);
     heroWas = !heroOn();
     heroMode();
   }
@@ -457,7 +479,7 @@ const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) /
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
 let soundT = 0;
-renderer.setAnimationLoop(() => {
+const frame = (): void => {
   const t = clock.getElapsedTime();
   // The title's sound runs while the title is up, and fades out when it goes.
   if (document.body.classList.contains("title")) {
@@ -494,7 +516,7 @@ renderer.setAnimationLoop(() => {
     const b = hero;
     b.motion.advance(comps, t);
     const root = b.model.root;
-    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline, b.place.z);
+    root.position.set(b.place.x, b.motion.heave - b.spec.cgBelowWaterline - heroSink, b.place.z);
     root.rotation.set(b.motion.roll, b.place.yaw, b.motion.pitch, "YZX");
     b.model.animate(t);
     b.wake.update(comps, t, b.place);
@@ -586,4 +608,7 @@ renderer.setAnimationLoop(() => {
   status.sea = seaKey;
   status.quality = quality;
   status.seaVertices = sea.vertexCount;
-});
+};
+// Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
+// in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => renderer.setAnimationLoop(frame));

@@ -48,6 +48,13 @@ export const GROUPS: Record<string, string> = {
   shape: "hull",
   lead: "hull",
   keel: "hull",
+  // The keelboats' sails (M4 wave 1): a third reef, storm sails and a cutter's staysail
+  // all answer the same gale, so they overlap.
+  rig: "sails",
+  cloth: "sails",
+  reef: "sails",
+  storm: "sails",
+  spare: "links",
 };
 /** A part that only changes the weight by this little (kg) can't move the odds measurably. */
 const NEGLIGIBLE_KG = 1;

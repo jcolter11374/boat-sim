@@ -179,10 +179,23 @@ export const STOCK_HULL: Record<StockKey, HullParams> = {
   stock_ocean_rower45: OCEAN_ROWER45,
   stock_pearson31_2: PEARSON31_2,
 };
-/** Only the keelboats can be sailed in the games for now (Maya, 11 Nov: the dinghy and
- * cat capsize in squalls, and the sandbox has no rain yet). */
-export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31", "stock_pearson31_2"];
+/** The stock boats you can pick in Set sail. Maya held all but the keelboats back on 11 Nov (the
+ * dinghy and cat capsize in squalls, and the sandbox had no rain yet); John, 13 Nov: every built boat
+ * goes in, one at a time, each checked on the water first. */
+export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31", "stock_pearson31_2", "stock_sail_drone7", "stock_ocean_rower45", "stock_dinghy14", "stock_beachcat16"];
 export const isStock = (k: string): k is StockKey => k in STOCK;
+/** The names a player sees for the stock boats: their real make and model (John's decision B4, 12 Nov:
+ * "brands are in"), each our own model of it. The same in the boat picker, on the Set sail card and as
+ * "my boat". Randolph and Becky's boat always says "(our model)" (B2). */
+const PLAYER_NAME: Record<StockKey, string> = {
+  stock_pearson31_2: "Pearson 31-2 (our model)",
+  stock_cruiser31: "Beneteau First 31.7",
+  stock_dinghy14: "Sunfish",
+  stock_beachcat16: "Hobie 16",
+  stock_sail_drone7: "Saildrone Explorer",
+  stock_ocean_rower45: "Rannoch R45 ocean rowing boat",
+};
+export const playerName = (k: StockKey): string => PLAYER_NAME[k];
 /** The stock boat a replay's boat name is ("31 ft cruiser"), or null. */
 export function stockKeyOf(boat: string | undefined): StockKey | null {
   const b = boat ?? "";

@@ -181,7 +181,7 @@
   #r-medal .result-time { font-size: 18px; font-weight: 600; margin: 0 0 2px; font-variant-numeric: tabular-nums; }
   #r-medal .result-next { font-size: 13px; opacity: .8; margin: 0 0 12px; }
   #r-medal .result-next:empty { display: none; }
-  #result .rc-mid[hidden], #r-calls[hidden], #r-details[hidden], #r-info[hidden] { display: none; }
+  #result .rc-mid[hidden], #r-calls[hidden], #r-details[hidden], #r-info[hidden], #r-stars[hidden] { display: none; }
   #practice-breeze button[aria-pressed="true"] { background: rgba(61,220,151,.28); border-color: #3ddc97; }
   .practice-note { font-size: 12px; opacity: .75; }
   #trimchip { position: fixed; top: calc(var(--bar, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 6; padding: 3px 10px; border-radius: 999px;
@@ -243,7 +243,6 @@
   body.racing.followed #c-lead, body.racing.followed #watch { display: none; } /* following the one boat left in a race */
   body.racing.results:not(.followed) #c-lead { visibility: hidden; } /* the faded strip behind the card must not give away who is ahead (Elena) */
   /* Which ways on a card offers is helm/ending.ts's call (the same ones, in the same order, on every ending); these hide the parts a watch or a race has nothing to put in. */
-  #result.watched #r-details, #result.watched #r-stars, #result.watched #r-calls, #result.watched #r-info { display: none; }
   body.at-wheel #strip, body.at-wheel #keyhint, body.at-wheel #orders-tab, body.at-wheel #keylist { display: none; }
   body.at-wheel #orders, body.at-wheel #fcbox, body.at-wheel #mapbox { visibility: hidden; }
   /* The start card: boat, where to start, Set sail. The rest folds away. */
@@ -398,6 +397,25 @@
   .rc-links button { all: unset; color: var(--dim); cursor: pointer; }
   .rc-links button:hover, .rc-links button:focus-visible { color: var(--ink); text-decoration: underline; }
   .rc-links [hidden], .rc-btns [hidden], #r-back[hidden] { display: none; }
+  /* On a phone (M3, E5): the card at the bottom with the boat whole in the band above it (Elena). A long card
+     (a challenge's stars and story) scrolls inside, and its buttons stay on its bottom edge, so the headline,
+     the award and the first button are all on screen without scrolling. After #result's own rules, so it wins. */
+  @media (max-width: 699px) {
+    #result { align-items: flex-end; padding: 0 12px 12px; }
+    #result .rc { max-height: calc(100dvh - var(--bar, 0px) - 180px); }
+    #result .rc-btns { position: sticky; bottom: -16px; z-index: 1; margin: 0 -26px; padding: 18px 26px 16px; background: linear-gradient(rgba(11,21,35,0), rgb(11,21,35) 14px); }
+    /* The big numbers straight under the headline, then the award, then the story (two lines at most) and the
+       map, so a long race headline never pushes them out of sight (Maya, from Nina's live run). The map and the
+       numbers leave their shared row (display: contents) so each can take its own place in the card. */
+    #result .rc { display: flex; flex-direction: column; }
+    #result .rc > *, #result .rc-mid > * { flex-shrink: 0; } /* the card scrolls; its parts never squash (a clamped story went to nothing) */
+    #result .rc-mid:not([hidden]) { display: contents; }
+    #result .rc-top, #result #r-caveat { order: -3; }
+    #result #r-nums { order: -2; margin: 8px 0 8px; }
+    #result #r-medal, #result #r-stars { order: -1; }
+    #result #r-map { margin: 0 0 12px; }
+    #result #r-story { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  }
   /* Looking around after a watched voyage: the one way back to its ending card. */
   #r-back { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + var(--strip-h, 62px) + 12px); z-index: 6; font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px;
     color: var(--ink); background: rgba(10,18,30,.62); border: 1px solid rgba(255,255,255,.22); backdrop-filter: blur(8px); cursor: pointer; }
@@ -521,6 +539,9 @@
   #dialrow { display: flex; gap: 12px; align-items: center; }
   #dial { width: 132px; height: 132px; cursor: crosshair; touch-action: none; flex: none; }
   #dialrow .side { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
+  body.wind-only :is(#powerrow, #power, #powerhint, #keyhint .powerkeys) { display: none; }
+  /* .seg sets display: flex, which beats the hidden attribute: a boat with no engine has no Engine row. */
+  #sailrow .seg[hidden] { display: none; }
   #powerrow { display: flex; justify-content: space-between; margin-top: 8px; }
   #orders-tab { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 6; width: 26px; height: 92px; padding: 0; border-radius: 0 9px 9px 0;
     border: 0; background: var(--hud); color: #ffb070; }
@@ -668,7 +689,7 @@
 </div>
 <div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
-<div id="keyhint" hidden>&larr;&rarr; steer · &uarr;&darr; power · Space pause · ? all keys</div>
+<div id="keyhint" hidden>&larr;&rarr; steer<span class="powerkeys"> · &uarr;&darr; power</span> · Space pause · ? all keys</div>
 <div id="ghosttag" hidden></div>
 <div id="baretip" hidden>H to show</div>
 
@@ -790,13 +811,13 @@
     <h1>Set sail</h1>
     <div class="ss-row ss-continue" id="ss-continue" hidden><div id="ss-continue-words"></div><a id="ss-continue-go" href="./helm.html">Continue your voyage</a><div class="muted" id="ss-continue-new">Starting a new crossing ends that one.</div><div id="ss-ask" role="alertdialog" aria-labelledby="ss-ask-q" hidden><div id="ss-ask-q"></div><div class="ss-ask-btns"><button type="button" id="ss-ask-keep">Keep sailing</button><button type="button" id="ss-ask-new">Start a new one</button></div></div></div>
     <div class="ss-row" id="ss-boat"><div class="ss-l">Your boat</div><b id="ss-boatname">Our kayak</b> &middot; <button type="button" class="ss-link" id="ss-change">Change</button></div>
-    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Cruiser 31</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
+    <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Beneteau First 31.7</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div></div>
     <div class="ss-row" id="ss-course" hidden><div class="ss-l">Course</div><div class="ss-opts" id="ss-course-opts"></div><div class="ss-line muted" id="ss-course-line"></div><div class="ss-l">Wind</div><div class="ss-opts" id="ss-breeze-opts"></div></div>
     <!-- Who steers (M2, R2): you, or the autopilot all the way (you watch her go). Hidden for Annapolis: practice is always you. -->
     <div class="ss-row" id="ss-who" hidden><div class="ss-l">Who steers</div><div class="ss-opts" id="ss-who-opts"></div><div class="ss-line muted" id="ss-who-line"></div></div>
     <!-- Race against (M2, R4): with the autopilot, nobody or another boat; with you, it says who the rival is. -->
-    <div class="ss-row" id="ss-rival" hidden><div class="ss-l">Race against</div><div class="ss-opts" id="ss-rival-opts"></div><div class="ss-line muted" id="ss-rival-line"></div>
+    <div class="ss-row" id="ss-rival" hidden><div class="ss-l">Race against</div><div class="ss-opts" id="ss-rival-opts"></div><div class="ss-line muted" id="ss-rival-line"></div><div class="ss-line muted" id="ss-rival-soon" hidden></div>
       <div class="ss-line" id="ss-against" hidden>Against: <b id="ss-against-name"></b> &middot; <button type="button" class="ss-link" id="ss-against-change">Change</button></div></div>
     <div class="ss-row" id="ss-when"><div class="ss-l">Launch day</div><div class="ss-opts" id="ss-when-opts"></div><div class="ss-line muted" id="ss-when-line" hidden></div></div>
     <div class="ss-row" id="ss-ch" hidden><div class="ss-l">Weather challenge (optional)</div><div class="ss-opts" id="ss-ch-opts"></div><p id="ss-why" class="muted" hidden></p></div>

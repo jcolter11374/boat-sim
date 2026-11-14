@@ -42,5 +42,6 @@ def test_stock_bases_sail_as_designed():
         assert catalog.grid_id({"base": base}) == base
         assert catalog.design_changes({"base": base}) == ()
         assert catalog.design_for({"base": base}).name
-        assert catalog.nearest({"base": base}) == (base, False)
+        # The keelboats are in the odds grid (M4 wave 1); the other stock boats aren't.
+        assert catalog.nearest({"base": base}) == (base, base in catalog.KEELBOATS)
         assert path.endswith(f"{base}.yaml")

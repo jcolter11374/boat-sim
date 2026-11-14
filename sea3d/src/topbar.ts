@@ -22,6 +22,19 @@ export interface BarLink {
   title: string;
 }
 
+/** "Watch a voyage": the Set sail card with The autopilot picked, on the usual day. */
+export const WATCH_HREF = "./helm.html?who=autopilot";
+/** "Race it": the same card with Another boat picked (results.ts raceItLink() gives the same address; a test holds them together). */
+export const RACE_HREF = "./helm.html?who=autopilot&against=revc";
+
+/** Which of the helm page's menu entries an address is: "practice", "watch", "race", or "" for Set sail. */
+export function helmEntry(search: string): string {
+  const p = new URLSearchParams(search);
+  if (p.has("practice")) return "practice";
+  if (p.get("who") === "autopilot") return p.get("against") ? "race" : "watch";
+  return "";
+}
+
 /** The menu (one-game plan, step 1): Set sail, Boatyard and Practice, then the rest under More.
  *  `more` links sit in the More menu. Practice is the helm page with ?practice. */
 export const LINKS: (BarLink & { more?: boolean; search?: string })[] = [
@@ -29,18 +42,20 @@ export const LINKS: (BarLink & { more?: boolean; search?: string })[] = [
   { page: "helm", href: "./helm.html", label: "Set sail", short: "Sail", title: "Cross the Atlantic in your boat, on real weather" },
   { page: "boatyard", href: "./boatyard.html", label: "Boatyard", short: "Build", title: "Build your own boat, part by part, and see if she'd make it" },
   { page: "helm", search: "practice", href: "./helm.html?practice", label: "Practice", short: "Practice", title: "Learn to steer on the Annapolis course" },
-  { page: "voyage", more: true, href: "./voyage.html", label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail, and watch her go." },
-  { page: "race", more: true, href: "./race.html", label: "Race it", short: "Race", title: "Two boats, the same weather: who gets there first?" },
+  // Watch and Race are the Set sail card with the autopilot steering (M3): one sailing screen, not the old
+  // voyage.html and race.html, which stay on the site but are no longer in any menu.
+  { page: "helm", search: "watch", more: true, href: WATCH_HREF, label: "Watch a voyage", short: "Watch", title: "Let the autopilot sail, and watch her go." },
+  { page: "helm", search: "race", more: true, href: RACE_HREF, label: "Race it", short: "Race", title: "Two boats, the same weather: who gets there first?" },
   { page: "leaderboard", more: true, href: "./leaderboard.html", label: "Leaderboard", short: "Board", title: "Which designs reach the finish most often" },
 ];
 /** Credits, last in the More menu. */
 const CREDITS = "https://github.com/jcolter11374/boat-sim/blob/main/THIRD_PARTY_NOTICES.md";
 
-/** Is this link the page we're on? Practice and Set sail share helm.html. */
+/** Is this link the page we're on? Set sail, Practice, Watch a voyage and Race it share helm.html. */
 export function isCurrent(l: { page: string; search?: string }, here: string, search: string): boolean {
   if (l.page !== here) return false;
-  const practice = new URLSearchParams(search).has("practice");
-  return l.search === "practice" ? practice : !practice;
+  if (l.page !== "helm") return true;
+  return helmEntry(search) === (l.search ?? "");
 }
 
 const CSS = `
@@ -72,19 +87,27 @@ const CSS = `
 body.title #topbar .nav, body.title #topbar .more { display: none; }
 #topbar #topbar-chip { margin-left: auto; display: flex; min-width: 0; }
 #topbar .boat { cursor: pointer; font-family: inherit; background: none; white-space: nowrap; padding: 5px 10px; border: 1px solid rgba(160,200,255,.25); border-radius: 999px;
-  font-weight: 600; font-size: 12.5px; color: #dbe6f5; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  font-weight: 600; font-size: 12.5px; color: #dbe6f5; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
 #topbar .boat:hover { border-color: #8ab4ff; }
 #topbar .boat b { color: #ffb072; font-weight: 650; }
 @media (max-width: 760px) {
   #topbar .nav, #topbar .more summary { padding: 7px 6px; }
-  #topbar .more .menu { position: fixed; left: auto; right: 6px; top: calc(var(--bar, 40px) + 4px); } /* the bar is the containing block (backdrop-filter): its right edge */ #topbar .brand .bw-mark { font-size: 20px; } #topbar .boat .p { display: none; } #topbar .boat { max-width: 130px; }
+  #topbar .more .menu { position: fixed; left: auto; right: 6px; top: calc(var(--bar, 40px) + 4px); } /* the bar is the containing block (backdrop-filter): its right edge */ #topbar .brand .bw-mark { font-size: 20px; } #topbar .boat .p { display: none; } #topbar .boat { max-width: 200px; }
 }
 @media (max-width: 480px) {
   #topbar { padding: 0 6px; font-size: 12.5px; } #topbar .brand { margin-right: 4px; } #topbar .brand .bw-mark { font-size: 17px; }
-  #topbar .nav, #topbar .more summary { padding: 7px 4px; } #topbar .boat { max-width: 40vw; padding: 5px 8px; }
+  #topbar .nav, #topbar .more summary { padding: 7px 3px; }
+  /* The chip never gives up the boat's name: it keeps its width and a long name ("Pearson 31-2 (our model)")
+     goes onto two short lines inside the bar, so "our model" stays visible (B2, Elena). */
+  #topbar #topbar-chip { flex: none; min-width: auto; }
+  #topbar .boat { max-width: 34vw; padding: 3px 9px; white-space: normal; line-height: 1.1; text-align: center; font-size: 12px; border-radius: 14px; }
   /* Phones: the same words as on a desktop, so Practice moves into More; the chip shows the boat's name (Elena). */
   #topbar .nav.ph-more { display: none; } #topbar .more .menu a.ph { display: block; }
 }
+/* The narrowest phones: Boatyard joins Practice in More, so the boat chip keeps her whole name, "our model"
+   and all (B2; the chip itself opens the boat picker, which leads to the Boatyard). */
+#topbar .more .menu a.ph2 { display: none; }
+@media (max-width: 400px) { #topbar .nav.ph-more2 { display: none; } #topbar .more .menu a.ph2 { display: block; } }
 `;
 
 /** Which page we're on, from the file name ("index" for the site root). */
@@ -99,7 +122,7 @@ export function pageName(pathname: string): string {
  *  where a new player first meets the chip, and "build one" there read as broken). */
 export function boatChip(boat: { name: string; href: string } | null, page = ""): { prefix: string; name: string; href: string; title: string } {
   // Practice sailing always sails the club's cruiser, whatever boat is yours (Elena: no nag there).
-  if (page === "practice") return { prefix: "Practice boat: ", name: "Cruiser 31", href: "./boatyard.html", title: "Practice sails Cruiser 31, a 9.5 m yacht; your own boat sails the voyages" };
+  if (page === "practice") return { prefix: "Practice boat: ", name: "Beneteau First 31.7", href: "./boatyard.html", title: "Practice sails a Beneteau First 31.7, a 9.5 m yacht; your own boat sails the voyages" };
   if (!boat) return { prefix: "My boat: ", name: "Our kayak", href: "./boatyard.html", title: "Our kayak, until you build your own in the Boatyard" };
   return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }
@@ -132,12 +155,12 @@ export function mountTopbar(doc: Document = document): HTMLElement | null {
   bar.innerHTML =
     `<a class="brand" href="./" title="Bluewater: design a boat, then sail it across the Atlantic">${MARK_SMALL}</a>` +
     top
-      .map((l) => `<a class="nav${l.search === "practice" ? " ph-more" : ""}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
+      .map((l) => `<a class="nav${l.search === "practice" ? " ph-more" : l.page === "boatyard" ? " ph-more2" : ""}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}><span class="l">${l.label}</span><span class="s">${l.short}</span></a>`)
       .join("") +
     `<details class="more${moreHere ? " cur" : ""}"><summary>More</summary><div class="menu">` +
     top
-      .filter((l) => l.search === "practice")
-      .map((l) => `<a class="ph" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`)
+      .filter((l) => l.search === "practice" || l.page === "boatyard")
+      .map((l) => `<a class="${l.page === "boatyard" ? "ph2" : "ph"}" href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`)
       .join("") +
     more.map((l) => `<a href="${l.href}" title="${l.title}"${isCurrent(l, here, search) ? ' aria-current="page"' : ""}>${l.label}</a>`).join("") +
     `<a href="${CREDITS}" target="_blank" rel="noopener">Credits</a></div></details>` +

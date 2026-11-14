@@ -17,6 +17,29 @@
     "randolph": {
       "voyage": "voyage_randolph-rev-b_2020-04-15.json",
       "label": "Randolph Rev B (our model)"
+    },
+    "drone": {
+      "voyage": "voyage_wind-powered-ocean-drone_2020-04-15.json",
+      "label": "Wind-powered ocean drone"
+    },
+    "dinghy": {
+      "voyage": "voyage_31-ft-cruiser_2020-04-15.json",
+      "drawas": "stock_dinghy14",
+      "label": "14 ft dinghy (drawn on a 31 ft cruiser replay: it has no replays of its own yet)"
+    },
+    "beachcat": {
+      "voyage": "voyage_31-ft-cruiser_2020-04-15.json",
+      "drawas": "stock_beachcat16",
+      "label": "16 ft beach cat (drawn on a 31 ft cruiser replay: it has no replays of its own yet)"
+    },
+    "rower": {
+      "voyage": "voyage_wind-powered-ocean-drone_2020-04-15.json",
+      "drawas": "stock_ocean_rower45",
+      "label": "Rannoch R45 rowing boat (drawn on the wind drone's replay: it has no replays of its own yet, and the drone sails at about rowing speed)"
+    },
+    "revc": {
+      "voyage": "voyage_randolph-rev-c_2020-04-15.json",
+      "label": "Randolph Rev C (our model)"
     }
   },
   "seas": {
@@ -470,6 +493,34 @@
         "long",
         "over",
         "moon"
+      ],
+      "clips": []
+    },
+    "fleet": {
+      "about": "Every boat you can pick in Set sail: force 5, golden hour, beam, close and low views.",
+      "size": "1280x720",
+      "quality": "high",
+      "boats": [
+        "kayak",
+        "pearson",
+        "cruiser",
+        "dinghy",
+        "beachcat",
+        "drone",
+        "rower",
+        "randolph",
+        "revc"
+      ],
+      "seas": [
+        "f5"
+      ],
+      "times": [
+        "golden"
+      ],
+      "views": [
+        "beam",
+        "close",
+        "low"
       ],
       "clips": []
     }

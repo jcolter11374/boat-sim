@@ -897,6 +897,7 @@ try {
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
     // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
     // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
+    // The launch day: named pills first, as yours (Elena): Usual (her 1 Jun), Calm, Rough, then the other dates.
     // On for everyone since 13 Nov (John): the plain card shows the row with "You" picked and Set sail unchanged.
     await page.goto(`${URL}helm.html?quality=low`);
     await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 60000 });
@@ -913,7 +914,7 @@ try {
       label: document.querySelector("#ss-when .ss-l").textContent,
       bad: /record|replay/i.test(document.getElementById("ss-card").innerText),
     }));
-    if (ws.who !== "The autopilot" || ws.day !== "1 Jun" || ws.label !== "Launch day, 2020" || ws.days < 2 || ws.go !== "Watch her go" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
+    if (ws.who !== "The autopilot" || ws.day !== "Usual1 Jun" || ws.label !== "Launch day, 2020" || ws.days < 2 || ws.go !== "Watch her go" || ws.bad) fail(`Who steers: the autopilot's card is wrong: ${JSON.stringify(ws)}`);
     await page.click("#go");
     await page.waitForFunction(() => window.__helm?.view === "watch" && (window.__helm.ready || window.__helm.error), null, { timeout: 60000 }).catch(() => fail("Set sail with the autopilot didn't open her voyage"));
     if (!/watch=voyage_2020-06-01\.json/.test(page.url())) fail(`Set sail with the autopilot opened ${page.url()}`);
