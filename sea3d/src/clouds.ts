@@ -86,7 +86,7 @@ const EMBER = new THREE.Color(0.85, 0.32, 0.3); // the break after the sun has g
  * thing in a stormy sky, gold by day, copper at sunset, ember just after.
  */
 /** Under a full deck the sky meets the sea at this share of the haze colour (shader hzC). */
-export const HORIZON_DECK = 0.86;
+export const HORIZON_DECK = 1.0;
 
 export function skyColours(haze: THREE.Color, sunEl: number, storm: number, cover: number) {
   const lum = Math.max(0.2126 * haze.r + 0.7152 * haze.g + 0.0722 * haze.b, 0.003);
@@ -105,10 +105,18 @@ export function stormWall(km: number): number {
 }
 
 /**
- * The new fair-weather cumulus is on look-hold (Ines, 12 Nov): until it passes, fair skies
- * keep main's clouds and ?cumulus=new shows the new heaps. Everything else in the sky is new.
+ * Whether a sky draws the fair-weather cumulus as heaps with real height (a field on one flat
+ * base, the soft sheets kept as a thin high layer above). Elena, 14 Nov 2026: on at sea; the
+ * title keeps the clouds it was signed off with. Low graphics keeps the earlier cumulus too (the
+ * heaps are marched through, which a phone or software graphics may not afford).
+ * ?cumulus=old turns the heaps off anywhere, ?cumulus=new turns them on anywhere.
  */
-export const CUMULUS_NEW = typeof location !== "undefined" && new URLSearchParams(location.search).get("cumulus") === "new";
+export function cumulusHeaps(atSea: boolean, quality: CloudQuality, search: string = typeof location !== "undefined" ? location.search : ""): boolean {
+  const asked = new URLSearchParams(search).get("cumulus");
+  if (asked === "new") return true;
+  if (asked === "old") return false;
+  return atSea && quality !== "low";
+}
 
 const cloudVert = /* glsl */ `
 varying vec3 vWorld;
@@ -136,7 +144,9 @@ void main() {
 // wind (drift and the scud's direction). uQ: 0 Low, 1 High, 2 Ultra.
 const cloudFrag = /* glsl */ `
 uniform float uCover, uStorm, uRain, uWarm, uQ, uTime, uLight;
-uniform float uBreak, uMoon, uWall, uCuNew;
+uniform float uBreak, uMoon, uWall, uWallKm, uCuNew, uCuRT;
+uniform sampler2D uCuTex;
+uniform vec2 uCuRes, uCuTexSize;
 uniform vec2 uWallDir;
 uniform vec2 uDrift, uScud, uWind, uSeed;
 uniform vec3 uCam, uSunDir, uMoonDir, uLit, uShade, uHaze, uGlow, uSteel, uBelly, uBrk;
@@ -197,15 +207,214 @@ float deckSide(float azD, float el, float calmDeck, float drift) {
   return 0.25 * fbmL(sv * 1.3, 0.0, 2) * (1.0 - 0.6 * calmDeck) + 0.5 * cells(sw) + 0.25 * cells(sw * 2.1 + 5.7) * (1.0 - 0.5 * calmDeck) + 0.15 * calmDeck;
 }
 float deckD(vec2 r, float lod, int oct) {
-  vec2 w = r + 0.35 * vec2(vnoise(r * 0.5 + 2.7), vnoise(r * 0.5 + 6.1));
-  float big = cells(w * 1.9);
-  float bumps = cells(w * 5.2 + 7.3);
+  // Torn, wind-stretched masses, not a tiling of round cells (Ines: "leopard spots"): a
+  // strong two-scale warp, cells drawn out along the wind (r.x), and a slow mask that
+  // tears some of them away so the pattern never repeats evenly.
+  vec2 w = r + 0.9 * vec2(vnoise(r * 0.35 + 2.7), vnoise(r * 0.35 + 6.1)) + 0.3 * vec2(vnoise(r * 1.3 + 4.4), vnoise(r * 1.3 + 9.2));
+  vec2 ws = w * vec2(0.6, 1.0);
+  float big = cells(ws * 1.9);
+  float bumps = cells(ws * 5.2 + 7.3);
   float mass = fbmL(w * 0.7, lod, max(oct - 1, 2));
+  float tear = smoothstep(0.3, 0.7, vnoise(r * 0.22 + 1.9));
   float k = 1.0 - smoothstep(0.2, 0.9, lod); // cells blur away with distance
-  float v = 0.46 * big * k + 0.14 * bumps * (1.0 - smoothstep(0.0, 0.5, lod)) + 0.5 * mass - 0.04;
+  float v = 0.36 * big * k * (0.45 + 0.55 * tear) + 0.12 * bumps * (1.0 - smoothstep(0.0, 0.5, lod)) + 0.6 * mass - 0.03;
   return mix(0.5, v, 1.0 - 0.6 * lod) + 0.01;
 }
-// main's fair-weather cumulus (until the new heaps pass review; ?cumulus=new shows them).
+// ---- new fair cumulus (only with ?cumulus=new): heaps as height fields over a flat base ----
+const float CU_BASE = 1400.0; // m, the flat base
+const float CU_TOP = 1300.0;  // m above the base, the tallest head
+// The heap here: x = its underside, y = its top, in m above the base (y <= x: clear sky).
+// A few big heaps and scattered small ones, gathered in groups with whole stretches of empty
+// sky between (Ines r2: about half as many). Each big heap is a dome with narrower heads
+// stacked on it, and billows on those (domes on domes, never a box).
+// Distance to the nearest of a jittered set of centres, weighted by each one's size (0 at a
+// centre). A heap is a dome over that distance: no plateau, so no flat-topped boxes.
+float cellD(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  float d1 = 9.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y));
+    vec2 o = vec2(h21(i + g), h21(i + g + 31.7));
+    float r = 0.6 + 0.55 * h21(i + g + 57.1); // sizes vary, but no giant among them (Elena, 14 Nov)
+    d1 = min(d1, length(g + 0.1 + 0.8 * o - f) / r);
+  }
+  return d1;
+}
+// 3D value noise for the round bulges on a heap's surface (Ines r3: no flat faces).
+float h31(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float n3(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h31(i), h31(i + vec3(1, 0, 0)), f.x), mix(h31(i + vec3(0, 1, 0)), h31(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(h31(i + vec3(0, 0, 1)), h31(i + vec3(1, 0, 1)), f.x), mix(h31(i + vec3(0, 1, 1)), h31(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float cuDome(float d, float R) { float q = clamp(d / R, 0.0, 1.0); return 1.0 - q * q; } // rounded shoulders that lean in to a dome: no cake sides, no cone
+// Clusters and wider gaps across the field, so it never reads as an even pattern (Elena, 14 Nov).
+float cuPatch(vec2 p) { return 1.25 * smoothstep(0.22, 0.5, vnoise(p * 0.11 + uSeed * 0.3 + 5.0)); }
+// Where the heaps gather (Elena, 14 Nov: a field over a quarter to a third of the sky, not five puffs in empty blue).
+float cuClump(vec2 p) { return min(1.0, cuPatch(p)) * smoothstep(0.18, 0.48, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)); }
+float cuCov() { return 0.1 + 0.5 * uCover; }
+// Medium heaps (400 to 700 m across) between the big ones, over a wider stretch of the field.
+float cuMid(vec2 p) { return cuPatch(p) * (0.4 + 0.9 * cuCov()) * smoothstep(0.05, 0.35, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)) * smoothstep(0.1, 0.45, vnoise(p * 0.7 + 3.3)); }
+vec2 cuShape(vec2 x, float detail) {
+  vec2 p = (x + uDrift) / 1000.0;
+  p += 0.3 * vec2(fbmL(p * 1.3 + 2.7, 0.0, 2), fbmL(p * 1.3 + 9.1, 0.0, 2)) - 0.15; // no round discs
+  float clump = cuClump(p);
+  float cov = cuCov();
+  // Radius of each heap, in cell units: none outside the groups, bigger at their hearts.
+  // Fair-weather size (Ines r3): about a kilometre across, a fist or two wide overhead.
+  // None close overhead: a heap nearer than about 3 km filled a corner of the frame and was cut by its edge
+  // (Elena, 14 Nov). They shrink away whole as they come near, rather than fading to grey ghosts.
+  float nearK = smoothstep(2000.0, 3800.0, length(x - uCam.xz));
+  float Rb = cov * mix(0.0, 1.3, clump) * nearK; // capped: no heap much over a kilometre across (Elena, 14 Nov)
+  float Rs = cov * mix(0.0, 1.4, clump) * smoothstep(0.72, 0.88, vnoise(p * 0.9 + 3.3)); // only a few small ones (Ines r4: no popcorn)
+  float dB = cellD(p * 0.6 + uSeed * 1.3);
+  float dS = cellD(p * 2.0 + uSeed * 2.7 + 7.1);
+  // The search (detail < 0) sees every heap 35% wider, so a ray can't step over a thin edge
+  // between two samples: that per-pixel hit-or-miss was the last grain on small heaps' edges.
+  float grow = detail < -0.5 ? 1.5 : 1.0;
+  float db = Rb > 0.2 ? cuDome(dB, Rb * grow) : 0.0; // no slivers at a group's fringe
+  // Small heaps (about 200 m) are culled (Elena r8): smaller than the search's step, they
+  // came out full of holes that twinkled as they drifted.
+  float ds = 0.0;
+  float Rm = cuMid(p) * nearK;
+  float dM = cellD(p * 1.3 + uSeed * 2.1 + 3.7);
+  float dm = Rm > 0.25 ? cuDome(dM, Rm * grow) : 0.0;
+  float k = max(max(1.0 - dB / max(Rb, 1e-3), 0.9 * (ds > 0.0 ? 1.0 - dS / max(Rs, 1e-3) : 0.0)), dm > 0.0 ? 1.0 - dM / Rm : 0.0);
+  float tall = 0.55 + 0.7 * vnoise(p * 0.6 + uSeed * 1.7); // some heaps grow, some stay low
+  // Never taller than wide (Elena r5: no cones): height capped by the heap's own radius in m.
+  float top = max(db * min(360.0 * (0.6 + 0.4 * clump) * tall, 1.0 * Rb * 1667.0), ds * min(220.0 * (0.6 + 0.6 * clump), 0.7 * Rs * 500.0));
+  top = max(top, dm * min(300.0 * tall, 0.9 * Rm * 770.0));
+  // Heads: narrower round domes rising off the big heap, offset from its middle.
+  float dH = cellD(p * 2.4 + uSeed * 4.3 + 2.2);
+  float qh = clamp(dH / 0.7, 0.0, 1.0);
+  top += db * db * pow(1.0 - qh * qh, 0.7) * 260.0 * tall; // heads only on the heap's upper part
+  float bot = 20.0 * pow(1.0 - smoothstep(0.0, 0.3, k), 2.0); // the rim curls up off the flat base
+  if (top > 0.0 && detail > 0.5) top += (fbmL(p * 4.0 + uSeed * 3.1, 0.0, 2) - 0.5) * 160.0 * smoothstep(0.0, 200.0, top);
+  return vec2(bot, top);
+}
+// Cheap, generous test for the march's search (Kai: clear sky must cost little): could there
+// be a heap here at all, and how tall (no warp, no detail; the margins cover them).
+float cuMaybe(vec2 x) {
+  vec2 p = (x + uDrift) / 1000.0;
+  float clump = cuClump(p);
+  float cov = cuCov();
+  float Rm = cuMid(p);
+  if (cov * 1.3 * clump < 0.12 && Rm < 0.25) return 0.0; // outside the groups: open sky (Kai)
+  if (cellD(p * 0.6 + uSeed * 1.3) < cov * 1.3 * clump * 1.5 + 0.2) return 1200.0;
+  if (Rm >= 0.25 && cellD(p * 1.3 + uSeed * 2.1 + 3.7) < Rm * 1.5 + 0.2) return 700.0;
+  return 0.0;
+}
+float gThick = 0.0; // the smooth heap's thickness at the last cuIn() point, m
+float cuIn(vec3 P, float detail) { // < 0 inside a heap: how far in (m)
+  vec2 s = cuShape(P.xz, detail);
+  gThick = s.y - s.x;
+  if (s.y <= s.x) return 1e3; // no heap over this spot: far outside (not "near" just for being at base height)
+  float y = P.y - CU_BASE;
+  // Round bulges, smaller ones on bigger ones, most detail towards the top (Ines r3: cumulus
+  // has no flat faces). They carve the sides and top only, so the base stays flat and always
+  // belongs to the heap above it (no loose ledges).
+  float lump = 0.0;
+  if (detail > 0.5) {
+    vec3 q = P / vec3(230.0, 900.0, 230.0) + vec3(uSeed, 0.0); // nearly upright lobes: no shelves, no stacked tiers (Elena r5)
+    float up = smoothstep(0.0, 500.0, y);
+    lump = (n3(q) - 0.5) * 190.0 + (n3(P / vec3(110.0, 200.0, 110.0) + vec3(uSeed, 4.1)) - 0.5) * 110.0 * up; // cauliflower towards the head // no finer octave: finer than a step it only made speckle
+  }
+  // Near the base the bulges may only swell outward: one flat, level base under the whole heap
+  // (the condensation level, the same height across the field), never a round cotton-ball bottom.
+  lump += 0.4 * y; // sides lean in as they rise: each head narrows to a dome (Elena r6: no cakes)
+  float d = max(s.x - y, y - s.y + lump);
+  d = max(d, 0.5 * (150.0 - (s.y - s.x))); // on the smooth shape: bulges must not break a thin heap into dots // no thin slabs: a heap is at least ~90 m thick or not there
+  return d;
+}
+vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
+  if (dir.y < 0.004) return vec4(0.0);
+  float hor = max(length(dir.xz), 1e-3);
+  float t0 = (CU_BASE - 150.0 - uCam.y) / dir.y;
+  float t1 = (CU_BASE + CU_TOP + 250.0 - uCam.y) / dir.y;
+  float tEnd = min(t1, 28000.0 / hor);
+  if (t0 >= tEnd) return vec4(0.0);
+  // 1) Find where the ray first comes near a heap (coarse, cheap shape).
+  int N = uQ < 0.5 ? 20 : uQ < 1.5 ? 32 : 44;
+  float dt = (tEnd - t0) / float(N);
+  // Jitter fixed to the cloud, not the screen (Elena r8: holes must not twinkle): from where
+  // the ray meets the base, drifting with the cloud, at about a pixel's size there.
+  vec2 jq = ((uCam + dir * t0).xz + uDrift) / max(4.0, t0 * 0.0015);
+  float jit = fract(vnoise(jq) * 9.0 + vnoise(jq * 0.37 + 5.3) * 5.0);
+  float t = t0 + dt * jit;
+  float tIn = -1.0;
+  for (int i = 0; i < 56; i++) {
+    if (i >= N) break;
+    vec3 Pc = uCam + dir * t;
+    float mb = cuMaybe(Pc.xz);
+    if (mb > 0.0 && Pc.y - CU_BASE < mb + 60.0 && cuIn(Pc, -1.0) < 190.0 + 0.4 * dt * dir.y) { tIn = max(t - dt, t0); break; }
+    t += dt;
+  }
+  if (tIn < 0.0) return vec4(0.0);
+  float lo = tIn, hi = tIn + dt;
+  for (int k = 0; k < 6; k++) { float m = 0.5 * (lo + hi); if (cuIn(uCam + dir * m, -1.0) < 190.0) hi = m; else lo = m; }
+  // 2) Through the cloud in fine steps: soft density (thin at the edges, so they glow where
+  //    the sun is behind them and stay soft), light from the sun through what lies towards it,
+  //    and sky light from above.
+  vec3 sunD = normalize(uSunDir);
+  float gold = smoothstep(-0.02, 0.04, uSunDir.y) * (1.0 - smoothstep(0.14, 0.45, uSunDir.y));
+  vec3 sunC = uLit * 9.0 * mix(vec3(1.0), vec3(1.5, 0.86, 0.5), gold); // gold to peach on the sunward tops at a low sun
+  vec3 sky = dot(uLit, vec3(0.2126, 0.7152, 0.0722)) * mix(vec3(0.55, 0.64, 0.82), vec3(0.5, 0.58, 0.8), gold); // cool blue-grey in the shadows at dusk
+  float cosT = dot(dir, sunD);
+  float g = 0.55; // forward scattering: the silver lining towards the sun
+  float phase = 0.55 + 0.45 * (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5) * 0.25;
+  float fs = 18.0 + 0.002 * lo; // step, m (longer far off)
+  float T = 1.0; vec3 acc = vec3(0.0);
+  float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); // even dither, no grain
+  float tt = lo + fs * fract(jit * 1.618 + 0.31); // the same cloud-fixed jitter
+  float dFirst = -1.0;
+  int M = int(float(uQ < 0.5 ? 12 : 30) * (1.0 - 0.6 * smoothstep(3000.0, 15000.0, lo * hor))); // fewer far off
+  // Only steps inside cloud count against M: from far off, a shallow ray can run a long way
+  // between "near a heap" and the heap itself, and stopping early cut heads off (loose slabs).
+  int used = 0;
+  int cap = uQ < 0.5 ? 40 : 80;
+  for (int i = 0; i < 80; i++) {
+    if (i >= cap || used >= M || T < 0.03 || tt > tEnd) break;
+    vec3 P = uCam + dir * tt;
+    float inside = -cuIn(P, uQ < 0.5 ? 0.0 : 1.0); // Low: no bulges (Kai)
+    float thin = smoothstep(160.0, 400.0, gThick); // thin rims and thin heaps fade out softly instead of breaking into twinkling holes
+    // Stride through clear air, faster where no heap stands at all, so a ray that grazes one
+    // heap still reaches the next (else a whole heap came out as scattered dots).
+    float st = inside < -200.0 ? (cuMaybe(P.xz) > 0.0 ? 2.5 * fs : max(2.5 * fs, 0.5 * dt)) : (gThick > 0.0 ? min(fs, max(gThick / 8.0, 8.0)) : fs); // finer steps through thin cloud, so a thin heap isn't left to a few random samples; fine steps anywhere near a heap: long strides skipped thin edges at random
+    float dens = smoothstep(0.0, 20.0 + 1.2 * fs, inside) * thin; // crisp up close, soft far off // edge ramp wider than a step: no comb // crisp heads, a soft fringe
+    if (dens > 0.001) {
+      used++;
+      if (dFirst < 0.0) dFirst = tt;
+      // Light reaching this point from the sun, through the heap towards it.
+      // (samples out to 500 m, so a heap backlit by a low sun is dark on the side we see)
+      float od = smoothstep(-40.0, 80.0, -cuIn(P + sunD * 30.0, uQ < 0.5 ? 0.0 : 1.0)) * 60.0 // the silver line stays thin
+               + smoothstep(-30.0, 120.0, -cuIn(P + sunD * 90.0, uQ < 0.5 ? 0.0 : 1.0)) * 260.0 // bulges shade each other
+               + smoothstep(-30.0, 120.0, -cuIn(P + sunD * 500.0, 0.0)) * 700.0; // only the thinnest edges let the sun through: a thin silver line, not a halo
+      float Tl = exp(-od * 0.014) * 0.88 + 0.12 * exp(-od * 0.003); // more multiple scattering: brilliant white, not smoke (Elena r5) // a little multiple scattering
+      float hf = clamp((P.y - CU_BASE) / CU_TOP, 0.0, 1.0);
+      float low = smoothstep(0.0, 320.0, P.y - CU_BASE);
+      vec3 L = sunC * Tl * phase * (0.5 + 0.5 * low) + sky * (0.2 + 0.3 * gold + 0.25 * low + 0.5 * hf); // at dusk the shadows stay a lit blue-grey, never dark blotches // grey, shaded undersides on the shared base; bright tops
+      float sig = dens * 0.026;
+      float aStep = 1.0 - exp(-sig * st);
+      acc += T * aStep * L;
+      T *= 1.0 - aStep;
+    }
+    tt += st;
+  }
+  float a = 1.0 - T;
+  if (a < 0.003) return vec4(0.0);
+  vec3 col = acc / a;
+  float distH = length(dir.xz) * (dFirst > 0.0 ? dFirst : lo);
+  // At a low sun: blue-grey away from it (Ines r1, kept); a rose glow once it sets.
+  float lowS = smoothstep(-0.03, 0.01, uSunDir.y) * (1.0 - smoothstep(0.06, 0.2, uSunDir.y));
+  float sunward = smoothstep(-0.4, 0.8, toSunH);
+  col = mix(col, col * vec3(0.85, 0.85, 0.95), lowS * (1.0 - sunward) * 0.25); // a touch only: the shadows carry the cool (sky term)
+  col += uGlow * uWarm * 0.5 * smoothstep(-0.2, 0.8, facing) * (1.0 - smoothstep(0.0, 0.06, uSunDir.y));
+  col = mix(col, uHaze, 0.93 * smoothstep(3500.0, 15000.0, distH)); // the far rows go soft and pale, into the horizon's band
+  a *= 1.0 - 0.9 * smoothstep(9000.0, 18000.0, distH);
+  return vec4(col, a);
+}
+// The fair-weather cumulus every sky draws (the new heaps replace it only with ?cumulus=new).
 float fbmOld(vec2 p) {
   float v = 0.0, a = 0.5;
   for (int k = 0; k < 5; k++) { v += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
@@ -266,68 +475,57 @@ void main() {
   // Overcast, a blow, or steady rain (rain falls from a deck, whatever the sunlight said) close the sky.
   float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.05, 0.8, uRain));
   float cuAmt = (1.0 - smoothstep(0.55, 0.95, max(uStorm, uCover))) * (1.0 - deckAmt);
-  if (cuAmt > 0.01 && alpha < 0.99 && uCuNew < 0.5 && dir.y > 0.0) {
+  if (cuAmt > 0.01 && alpha < 0.99 && uCuNew > 0.5) {
+    // Hana, round 2 (Ines): heaps with real height. Each heap is a dome standing on a flat
+    // base; the view ray is marched through them, so from a low camera the far ones show
+    // their sides and heads rising and catching the sun, and the near ones their flat bases.
+    // Drawn at half resolution in its own pass (Kai: cost), then a soft 4-tap read here,
+    // which also smooths the march's grain.
+    vec4 cu;
+    if (uCuRT > 0.5) {
+      // Bilinear by hand (half-float targets may only filter nearest, which came out as blocks
+      // on Low: Kai r5), on premultiplied colour so edges don't darken.
+      vec2 st = gl_FragCoord.xy / uCuRes * uCuTexSize - 0.5;
+      vec2 i0 = floor(st), fr = st - i0;
+      vec2 it = 1.0 / uCuTexSize;
+      vec4 c00 = texture2D(uCuTex, (i0 + 0.5) * it), c10 = texture2D(uCuTex, (i0 + vec2(1.5, 0.5)) * it);
+      vec4 c01 = texture2D(uCuTex, (i0 + vec2(0.5, 1.5)) * it), c11 = texture2D(uCuTex, (i0 + 1.5) * it);
+      cu = mix(mix(c00, c10, fr.x), mix(c01, c11, fr.x), fr.y);
+      // Fill single-texel holes (a march that missed where all its neighbours hit) from the four
+      // neighbours, so thin heads don't show pinholes that flicker as the cloud drifts (Elena r8).
+      vec2 ic = (floor(st + 0.5) + 0.5) * it;
+      vec4 nb = 0.25 * (texture2D(uCuTex, ic + vec2(it.x, 0.0)) + texture2D(uCuTex, ic - vec2(it.x, 0.0))
+                      + texture2D(uCuTex, ic + vec2(0.0, it.y)) + texture2D(uCuTex, ic - vec2(0.0, it.y)));
+      cu = mix(cu, nb, smoothstep(0.15, 0.45, nb.a - cu.a));
+      cu.rgb /= max(cu.a, 1e-4);
+    } else cu = cumulusVol(dir, facing, toSunH, sunUp);
+    col += (1.0 - alpha) * cu.a * cuAmt * cu.rgb; alpha += (1.0 - alpha) * cu.a * cuAmt;
+  }
+  if (cuAmt > 0.01 && alpha < 0.99 && dir.y > 0.0) {
+    // With the heaps on, the same soft sheets stay as a thin high layer above them (Elena, 14 Nov:
+    // real skies have both, and it keeps the painterly depth): higher, broader, paler, half as dense.
+    float hiL = step(0.5, uCuNew);
     // main's layer at 600 m, as it was drawn before the new sky (same look, now on the dome).
-    vec2 qo = onLayer(dir, 600.0);
-    vec2 po = (qo + uDrift) / 900.0;
+    vec2 qo = onLayer(dir, mix(600.0, 5200.0, hiL));
+    vec2 po = (qo + uDrift) / mix(900.0, 3000.0, hiL);
+    float farK = mix(1.0, 6.0, hiL);
     float n = densOld(po);
-    float edge = 1.0 - (0.42 + 0.5 * uCover);
-    float d = smoothstep(edge - 0.015, edge + 0.07, n);
+    float edge = 1.0 - (0.42 + 0.5 * uCover) + 0.05 * hiL;
+    float d = smoothstep(edge - 0.015, edge + mix(0.07, 0.22, hiL), n); // the high layer feathers out: thin veils, no hard-edged slabs
     if (d > 0.004) {
       float thick = smoothstep(edge, edge + 0.3, n);
       vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
       float toward = densOld(po + sunH * 0.09) - n;
       float shade = clamp(0.55 * thick + 2.6 * toward, 0.0, 1.0);
       float dist = length(qo - uCam.xz);
-      float side = smoothstep(700.0, 3500.0, dist);
+      float side = smoothstep(700.0 * farK, 3500.0 * farK, dist);
       float baseShade = mix(0.35 + 0.65 * shade, shade * (0.4 + 0.6 * smoothstep(-0.3, 0.6, facing)), side);
-      vec3 c = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uStorm));
+      vec3 c = mix(uLit, uShade, clamp(baseShade, 0.0, 1.0) * (0.8 + 0.2 * uStorm) * mix(1.0, 0.22, hiL));
       c += uLit * pow(max(facing, 0.0), 5.0) * (1.0 - thick) * 0.9;
       c += uGlow * uWarm * (0.35 + 0.65 * smoothstep(-0.5, 0.8, facing)) * (1.0 - 0.45 * thick);
-      c = mix(c, uHaze, smoothstep(2500.0, 8000.0, dist));
-      float a = d * (1.0 - smoothstep(5000.0, 8500.0, dist)) * 0.96 * cuAmt;
+      c = mix(c, uHaze, smoothstep(2500.0 * farK, 8000.0 * farK, dist));
+      float a = d * (1.0 - smoothstep(5000.0 * farK, 8500.0 * farK, dist)) * mix(0.96, 0.34, hiL) * cuAmt;
       col += (1.0 - alpha) * a * c; alpha += (1.0 - alpha) * a;
-    }
-  } else if (cuAmt > 0.01 && alpha < 0.99) {
-    vec2 q = onLayer(dir, 1200.0) + uDrift;
-    float dist = length(q - uDrift - uCam.xz);
-    float lod = footprint(dist, el, 700.0);
-    vec2 p = q / 1800.0;
-    vec2 w = p + 0.45 * vec2(vnoise(p * 0.8 + 3.1), vnoise(p * 0.8 + 8.3));
-    // Hana: separate rounded heaps (cells) with knobbly detail, blue sky between them.
-    float heaps = cells(w * 1.15 + uSeed);
-    float n = mix(0.5 * heaps + 0.5 * fbmL(w, lod, oct) + 0.05, 0.45, lod);
-    float edge = 1.0 - (0.3 + 0.42 * uCover);
-    float d = smoothstep(edge - 0.004, edge + 0.025 + 0.4 * lod, n); // crisp cauliflower edge
-    // Far heaps thin out into the clear sky's own horizon (not into the fog colour, which is darker).
-    d *= 1.0 - smoothstep(9000.0, 30000.0, dist);
-    if (d > 0.003) {
-      float thick = smoothstep(edge, edge + 0.28, n);
-      // The heap's surface direction from its own shape: up its slope towards the middle.
-      float shade = 0.5;
-      if (uQ > 0.5) {
-        vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
-        float toward = (0.5 * cells((w + sunH * 0.08) * 1.15 + uSeed) + 0.5 * fbmL(w + sunH * 0.08, lod, oct) + 0.05) - n;
-        shade = clamp(0.5 * thick + 2.4 * toward, 0.0, 1.0);
-      } else shade = 0.3 + 0.4 * thick;
-      float side = smoothstep(2500.0, 12000.0, dist); // far off you see the sunlit sides, not the base
-      // Overhead: thin rims glow white with the sun through them, thick middles are the flat grey base.
-      float baseShade = mix(0.15 + 0.6 * thick + 0.25 * shade, shade * (0.25 + 0.75 * smoothstep(-0.3, 0.6, facing)), side);
-      // Golden hour: sunlit sides go warm gold, the shade stays cool blue-grey.
-      float gold = smoothstep(0.0, 0.06, uSunDir.y) * (1.0 - smoothstep(0.14, 0.45, uSunDir.y));
-      // (the flat bases overhead see the blue sky more than the sun: they stay neutral)
-      // Sunlit tops bright white; at golden hour gold on the sun side, pink further round.
-      vec3 goldC = mix(vec3(1.3, 0.85, 0.72), vec3(1.35, 1.0, 0.62), smoothstep(-0.2, 0.7, facing));
-      vec3 lit = uLit * 1.3 * mix(vec3(1.0), goldC, gold * (0.6 + 0.4 * side));
-      // Shade is cool blue-grey (lit by the blue sky), never the haze's warm brown.
-      vec3 cool = dot(uShade, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.84, 0.92, 1.1);
-      vec3 c = mix(lit, mix(uShade, cool, 0.75), clamp(baseShade, 0.0, 1.0));
-      c += lit * pow(max(facing, 0.0), 6.0) * (1.0 - thick) * 0.9 * sunUp; // silver lining
-      // Once the sun is on the horizon or below it, the undersides glow orange then rose.
-      c += uGlow * uWarm * 0.6 * smoothstep(-0.2, 0.8, facing) * (1.0 - 0.45 * thick) * (1.0 - smoothstep(0.0, 0.06, uSunDir.y));
-      c = mix(c, uHaze, 0.5 * smoothstep(4000.0, 26000.0, dist));
-      d *= cuAmt;
-      col += (1.0 - alpha) * d * c; alpha += (1.0 - alpha) * d;
     }
   }
   // ---- deck ----
@@ -419,7 +617,11 @@ void main() {
   // The horizon: everything goes to the haze over the last few degrees, as the sea does.
   // Only the last few degrees: the cloud base runs down into the haze, with no flat band above it (Ines).
   // In a downpour the mist swallows the lower sky too, not just the last few degrees (Kai).
-  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.07, deckAmt) + 0.3 * smoothstep(2.0, 8.0, uRain), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
+  // Under a deck the cloud frays down into the haze: the band's top rises and falls with the
+  // bearing and the cloud's own lumps (Ines: no ruled edge).
+  float frayN = fbmL(vec2(atan(dir.z, dir.x) * 7.0, el * 40.0) + uSeed * 1.9, 0.0, 3) - 0.5;
+  float fray = deckAmt * frayN;
+  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.07, deckAmt) * (1.0 + 0.9 * fray) + 0.3 * smoothstep(2.0, 8.0, uRain), el)) * (1.0 - 0.75 * brkSide); // the break stays bright
   // Under a deck the cloud goes to the haze (the sea's far fade); in clear weather it thins
   // away and the sky's own horizon shows, which the haze would only darken.
   float hz2 = hz * hz * (3.0 - 2.0 * hz);
@@ -432,39 +634,129 @@ void main() {
   // A storm on its way: a dark wall of cloud low on the horizon on its bearing, faint and
   // hazy when it is far, taller, darker and wider as it closes (uWall 0..1, setStorm()).
   if (uWall > 0.01) {
-    float az = atan(dir.z, dir.x);
-    float on = smoothstep(mix(0.82, 0.35, uWall), 1.0, dot(normalize(dir.xz + 1e-5), uWallDir));
-    // A thunderstorm seen from afar (Ines: never a coastline): towering heaps with bright
-    // sunlit tops and an anvil spreading at the top, a dark flat base lifted off the
-    // horizon, and soft grey rain curtains hanging from it with paler sky between them.
-    // Outline: a few broad heaps, smaller turrets on them, cauliflower lumps along the rim.
+    // Angle from the storm's bearing, so the wrap (and its seam) sits behind the viewer.
+    vec2 nxz = normalize(dir.xz + 1e-5);
+    float az = atan(nxz.x * uWallDir.y - nxz.y * uWallDir.x, dot(nxz, uWallDir));
+    // One storm cell fills a sector of the horizon (about 30 degrees far off, 60 close),
+    // fading out at its sides (Ines), not the whole width.
+    float sector = mix(0.26, 0.52, smoothstep(0.2, 1.0, uWall)); // half-width, rad
+    float on = 1.0 - smoothstep(sector * 0.45, sector, abs(az));
     float az1 = az + uTime * 0.0005;
-    float towers = 0.55 * cells(vec2(az1 * 5.0, 0.3) + uSeed) + 0.3 * cells(vec2(az1 * 13.0, 1.7) + uSeed) + 0.15 * cells(vec2(az1 * 31.0, 2.9) + uSeed);
-    towers = towers * towers;
-    float rim = cells(vec2(az1 * 70.0, el * 150.0) + uSeed * 3.0);
-    float top = mix(0.03, 0.2, uWall) * (0.15 + 0.85 * towers) * (0.4 + 0.6 * on) * (0.85 + 0.15 * rim);
-    // The base: flat, a little ragged, lifted off the horizon.
-    float base = mix(0.008, 0.028, uWall) * (0.8 + 0.4 * fbmL(vec2(az1 * 30.0, 4.1) + uSeed, 0.0, 2));
-    float h01 = clamp((el - base) / max(top - base, 1e-4), 0.0, 1.0);
-    float body = on * smoothstep(base - 0.002, base + 0.002, el) * (1.0 - smoothstep(top * 0.97, top * 1.03, el));
-    // The anvil: a thinner, wider shelf at the top, brightest of all.
-    float onA = smoothstep(mix(0.9, 0.3, uWall), 1.0, dot(normalize(dir.xz + 1e-5), uWallDir));
-    float topA = mix(0.03, 0.2, uWall) * 0.8;
-    float anvil = onA * smoothstep(topA * 0.84, topA * 0.9, el) * (1.0 - smoothstep(topA * 0.97, topA * 1.04, el)) * smoothstep(0.3, 0.8, uWall);
-    // Rain under the base: soft slanting veils with paler gaps, fading into the sea haze.
-    float curtains = smoothstep(0.3, 0.75, fbmL(vec2(az1 * 9.0 + el * 25.0 + uTime * 0.002, el * 30.0) + uSeed * 2.0, 0.0, 3));
-    float rain = on * (1.0 - smoothstep(base - 0.004, base + 0.002, el)) * smoothstep(-0.004, base * 0.8, el) * (0.15 + 0.55 * curtains);
-    vec3 dark = mix(uHaze * 0.75, uBelly * 0.75, smoothstep(0.05, 0.6, uWall));
-    vec3 lit = mix(uHaze, uLit * 1.45, 0.4 + 0.6 * sunUp);
-    // Each lump lit on top and shaded under, so the towers read as heaped cloud.
-    float lump = cells(vec2(az1 * 28.0, el * 90.0) + uSeed);
-    float litK = smoothstep(0.0, 0.45, h01 + 0.15 * (lump - 0.5));
+    // Real geometry (Ines r3): heights in km at the storm's distance, less what the earth's
+    // curve hides (D^2 / 2R, R = 7433 km with the usual refraction): from 400 km only the
+    // anvil peeps over the horizon, at 150 km the towers stand with their base just hidden.
+    float D = max(uWallKm, 40.0);
+    float drop = D * D / 14866.0;
+    float hkm = el * D + drop;        // height of this pixel at the storm, km (0 = its sea level)
+    float skm = az1 * D;              // sideways along the horizon at the storm, km
+    // One dominant tower, a little off the bearing (by the voyage's seed), with lower,
+    // uneven towers beside it at irregular gaps. Each is a column with steep sides and a
+    // broad, rounded head (never a ridge or a coastline). Smooth shapes only: the detail is
+    // the outline itself, no per-pixel grain (Ines r3).
+    float c0 = (fract(uSeed.x * 0.37) - 0.5) * sector * 0.6 * D;
+    vec3 rs = fract(vec3(uSeed.x * 1.31, uSeed.y * 2.17, uSeed.x * 0.73 + uSeed.y)) - 0.5;
+    float und = fbmL(vec2(skm * 0.09, 4.4) + uSeed, 0.0, 2); // broad lobes on the heads
+    float topk = 0.0;
+    // Which way the wind carries the top of the storm across the line of sight (+1 / -1).
+    float wl = length(uWind);
+    float wSide = wl > 0.5 ? dot(uWind / wl, vec2(uWallDir.y, -uWallDir.x)) : (fract(uSeed.y) - 0.5) * 2.0;
+    float wSgn = wSide < 0.0 ? -1.0 : 1.0;
+    // Stacked billows: each tower's sides bulge in and out with height, a few km a lobe.
+    float bul = 2.2 * (fbmL(vec2(hkm * 0.45, skm * 0.05) + uSeed * 1.7, 0.0, 2) - 0.5)
+      + 0.6 * (fbmL(vec2(hkm * 0.7, skm * 0.12) + uSeed * 2.3, 0.0, 2) - 0.5); // and smaller cauliflower bumps
+    // tower(centre km, half-width km, top km): flat-ish dome with steep, bulging sides.
+    // tx: across the tower that sets the outline here, -1..1 (which side faces the sun).
+    float tx = 0.0;
+    #define TOWER(c, w, h, e) { float xs = (skm - (c) + bul) / (w); float pr = sqrt(max(1.0 - pow(abs(xs), e), 0.0)); if ((h) * pr > topk) { topk = (h) * pr; tx = xs; } }
+    // The main column widens continuously up into the anvil (Ines r4: no neck or gap),
+    // much further downwind than upwind.
+    float xm = (skm - c0 + bul) * wSgn;
+    float flare = pow(smoothstep(7.0, 11.8, hkm), 1.5) * (xm > 0.0 ? 17.0 : 4.0);
+    TOWER(c0, 7.5 + flare, 12.4, 4.0)
+    TOWER(c0 - 19.0 - 8.0 * rs.x, 5.5, 7.5 + 2.0 * rs.y, 2.5)
+    TOWER(c0 + 13.0 + 5.0 * rs.y, 6.0, 9.0 + 2.0 * rs.z, 3.0)
+    TOWER(c0 + 30.0 + 8.0 * rs.z, 4.5, 5.5 + 1.5 * rs.x, 2.0)
+    // ...all rising out of one lower mass, so it reads as one cell with several heads.
+    TOWER(c0 + 4.0 * rs.y, 32.0, 4.0 + 1.0 * rs.z, 8.0)
+    #undef TOWER
+    topk *= on;
+    float mass = smoothstep(1.5, 6.0, topk); // how much tower stands here, 0..1
+    topk += (1.6 * (und - 0.5) + 0.7 * (fbmL(vec2(skm * 0.45, 6.1) + uSeed, 0.0, 2) - 0.5)) * mass; // cauliflower heads
+    // Crisp towers (Elena): a hard edge a few hundred metres deep (never under about a
+    // pixel and a half), soft only where the column spreads downwind into the plume.
+    float edgeK = max(0.3 + 1.1 * smoothstep(9.0, 12.0, hkm) * step(0.0, xm), fwidth(hkm) * 1.5);
+    // No thin slivers where only the last few hundred metres of a tower clear the horizon.
+    float body = (1.0 - smoothstep(topk - edgeK, topk, hkm)) * smoothstep(1.3, 1.5, hkm) * smoothstep(drop + 0.4, drop + 1.4, topk);
+    float h01 = clamp((hkm - 1.4) / max(topk - 1.4, 0.1), 0.0, 1.0);
+    // The anvil: a flat-topped shelf about three times the column's width, thick over the
+    // tower and thinning to a fine edge, spread downwind (the wind across the line of sight).
+    // A long plume about 30 km downwind that thins out, a short blunt edge about 11 km
+    // upwind, a lumpy underside (Ines r4: never a smooth lens).
+    float ax = (skm - c0) * wSgn;
+    float rag = fbmL(vec2(skm * 0.07, 9.1) + uSeed, 0.0, 2);
+    bool down = ax > 0.0;
+    float q = abs(ax) / (down ? 30.0 : 11.0) + (down ? 0.3 : 0.1) * (rag - 0.5);
+    float lump = fbmL(vec2(skm * 0.2, 3.3) + uSeed * 1.3, 0.0, 2);
+    float lo = (down ? mix(9.2, 13.0, smoothstep(0.15, 1.0, q)) : mix(9.2, 11.6, smoothstep(0.2, 1.0, q)))
+      + 0.8 * (lump - 0.5) * smoothstep(0.1, 0.4, q);
+    float hi = down ? mix(13.6, 13.2, smoothstep(0.4, 1.0, q)) : 13.6;
+    float edge = down ? 1.0 - smoothstep(0.5, 1.0, q) : 1.0 - smoothstep(0.7, 1.0, q);
+    float anvil = edge * smoothstep(lo, lo + 0.5, hkm) * (1.0 - smoothstep(hi - (down ? 0.9 : 0.75), hi, hkm))
+      * (down ? 1.0 - 0.7 * smoothstep(0.25, 1.0, q) : 1.0) // the plume thins, so pales, downwind
+      * smoothstep(0.3, 0.8, uWall) * on;
+    // Rain under the base, only below the towers: a few broad, soft curtains of different
+    // widths and darkness, some ending before they reach the sea (Ines).
+    float curtains = smoothstep(0.35, 0.75, fbmL(vec2(skm * 0.06 + hkm * 0.15 + uTime * 0.001, 0.4) + uSeed * 2.0, 0.0, 2));
+    float reach = fbmL(vec2(skm * 0.08, 5.3) + uSeed, 0.0, 2); // how far down each one gets
+    float under = smoothstep(0.2, 0.6, mass); // the base and its rain stay inside the cell
+    float rain = under * (1.0 - smoothstep(1.4, 1.5, hkm)) * smoothstep(1.3 * (1.0 - reach) - 0.1, 1.3 * (1.0 - reach) + 0.1, hkm) * curtains;
+    // Grey rain shafts falling to the sea from under the main column, slanting with the wind
+    // (Elena: that is what makes it threatening).
+    float shafts = smoothstep(0.3, 0.65, fbmL(vec2(skm * 0.2 + hkm * 0.35 * wSgn + uTime * 0.002, 1.7) + uSeed, 0.0, 2));
+    float mainU = 1.0 - smoothstep(0.55, 1.05, abs(skm - c0) / 8.0);
+    float rainMain = mainU * on * (1.0 - smoothstep(1.4, 1.5, hkm)) * shafts;
+    rain = max(rain * 0.7, rainMain);
+    // Colours: a slate-dark lower body (trouble), the heads lit white-grey by the sun, the
+    // light climbing each lobe; everything hazier the further off it is.
+    vec3 dark = mix(uHaze * 0.66, uBelly * 0.4, smoothstep(0.05, 0.6, uWall));
+    vec3 lit = mix(uHaze, uLit * 1.8, 0.4 + 0.6 * sunUp); // sunlit tops brighter than the sky behind
+    // A low sun warms the heads facing it with the sky's rose and gold (Ines r4).
+    float facing = dot(nxz, normalize(uSunDir.xz + 1e-4));
+    float lowWarm = smoothstep(-0.06, 0.0, uSunDir.y) * (1.0 - smoothstep(0.08, 0.3, uSunDir.y));
+    lit = mix(lit, lit * 0.7 + uGlow * 0.55, lowWarm * (0.45 + 0.4 * smoothstep(-0.5, 0.8, facing)));
+    float lobe = fbmL(vec2(skm * 0.22, hkm * 0.3) + uSeed, 0.0, 2); // km-sized billows
+    float litK = smoothstep(0.2, 0.75, h01 + 0.2 * (lobe - 0.5) + 0.1 * (und - 0.5));
     vec3 wc = mix(dark, lit, litK);
-    wc *= 0.8 + 0.2 * mix(1.0, lump, smoothstep(0.1, 0.5, h01));
-    wc = mix(wc, lit * 1.05, anvil);
-    vec3 rc = mix(uHaze * 0.9, dark * 1.1, curtains);
-    float wa = max(body, anvil * 0.8) * mix(0.55, 0.97, uWall);
-    float ra = rain * mix(0.35, 0.8, uWall);
+    // Side light (Elena): a low sun across the line of sight lights the towers' sun side
+    // rose-gold with bright rims and leaves the far side blue-grey; front-lit it all glows,
+    // back-lit it all goes dark with a lit rim.
+    vec2 sXZ = normalize(uSunDir.xz + 1e-4);
+    float sAcross = dot(sXZ, vec2(uWallDir.y, -uWallDir.x)); // + : sun on the +tx side (checked in frames)
+    float sBehind = dot(sXZ, uWallDir);                       // + : sun behind the storm
+    // Which side the sun is on: full strength once it is more than about 15 degrees off.
+    float sSide = clamp(sAcross * 4.0, -1.0, 1.0);
+    float lowSun = 1.0 - smoothstep(0.25, 0.7, uSunDir.y);
+    float lam = clamp(0.5 + 0.7 * tx * sSide - 0.2 * sBehind, 0.0, 1.0);
+    vec3 cool = dark * 0.55 + uHaze * vec3(0.5, 0.6, 0.8) * 0.4; // the shadow side, blue-grey
+    float sideL = lowSun * smoothstep(0.1, 0.5, h01) * body;
+    wc = mix(wc, cool, sideL * (1.0 - smoothstep(0.1, 0.5, lam)) * 0.85);
+    wc = mix(wc, lit * 1.15 + uGlow * 0.35 * lowWarm, sideL * smoothstep(0.5, 0.95, lam) * 0.7); // the sun side glows
+    float nearTop = 1.0 - smoothstep(0.0, 0.9, topk - hkm);
+    float rimK = nearTop * (smoothstep(0.0, 0.7, tx * sSide) + 0.5 * smoothstep(0.5, 0.95, sBehind)) * lowSun * smoothstep(0.3, 0.7, h01);
+    wc += (uGlow * (0.5 + 1.0 * lowWarm) + lit * 0.4) * min(rimK, 1.0) * 1.2; // bright rims
+    // The base: dark and flat.
+    wc *= mix(0.62, 1.0, smoothstep(1.4, 3.4, hkm));
+    // The anvil: sunlit along its flat top, a shaded grey underside.
+    wc = mix(wc, mix(mix(dark, lit, 0.55), lit * 1.05, smoothstep(lo, hi, hkm)), anvil * (1.0 - body * 0.5));
+    // Seen through hundreds of km of air: paler and bluer with distance.
+    float air = 1.0 - exp(-D / 380.0);
+    wc = mix(wc, uHaze, 0.8 * air);
+    // Seen through gaps in nearer cumulus it is softened by their haze, not black shards.
+    wc = mix(wc, uHaze * 0.9, 0.45 * cuAmt * smoothstep(0.0, 0.5, uCover + 0.2));
+    vec3 rc = mix(mix(dark, uHaze, 0.5), dark, max(curtains * 0.6, shafts * mainU * 0.85));
+    rc = mix(rc, uHaze, 0.8 * air);
+    float wa = max(body, anvil * 0.8) * mix(0.55, 0.97, uWall) * (1.0 - 0.5 * air);
+    float ra = max(rain * mix(0.35, 0.85, uWall), rainMain * mix(0.5, 0.95, uWall)) * (1.0 - 0.5 * air);
     wc = mix(wc, rc, ra * (1.0 - max(body, anvil)));
     wa = max(wa, ra);
     col += (1.0 - alpha) * wa * wc; alpha += (1.0 - alpha) * wa;
@@ -493,7 +785,7 @@ void main() {
     // In a downpour the mist is all round: far curtains are lost in it, and the horizon is haze.
     rainC = curtain * hang * streak * smoothstep(0.05, 3.0, uRain) * 0.75 * deckAmt * (1.0 - 0.85 * smoothstep(2.0, 8.0, uRain));
   }
-  float hb = (1.0 - smoothstep(-0.01, 0.03, el)) * deckAmt;
+  float hb = (1.0 - smoothstep(-0.01, 0.025 + 0.035 * (frayN + 0.5), el)) * deckAmt;
   col += (1.0 - alpha) * uHaze * hb; alpha += (1.0 - alpha) * hb;
   col = mix(col, uBelly * 1.6 * alpha, rainC); // steel-grey curtains (Kai's, in the deck's colours)
   if (alpha < 0.004) discard;
@@ -505,13 +797,36 @@ void main() {
   // Where the sky is haze it is the fog's own colour, put on after tone mapping as three
   // puts fog on the sea, so the fogged-out sea meets the sky without a line.
   float asFog = max(hz2 * deckAmt, hb);
+  // At night the far sea's fog (the airglow band Yuki and I agreed) is lighter than the
+  // clear sky just above it: feather the sky down into it over a couple of degrees, so it
+  // reads as a glow, not a lit edge (Ines).
+  float glowN = 1.0 - smoothstep(0.0, 0.035, el);
+  asFog = max(asFog, glowN * glowN * (1.0 - uLight));
   // Under a deck the horizon settles on the tone the mist band above it draws (HORIZON_DECK x
   // haze), not the bare haze, which showed as a bright hairline over the sea (Ines, Priya).
-  vec3 hzC = uHaze * mix(1.0, 0.86, deckAmt);
+  vec3 hzC = uHaze; // the same colour three fogs the far sea to, so the sea's fully fogged edge is no brighter line
   // gl_FragColor is in the output space here (sRGB on screen or in an sRGB target), so the haze
   // must be converted too, as three does for the sea's fog; written raw it came out ~2.5x dark.
   hzC = linearToOutputTexel(vec4(hzC, 1.0)).rgb;
   gl_FragColor = vec4(mix(gl_FragColor.rgb, hzC, asFog), max(gl_FragColor.a, asFog));
+}`;
+
+// The new cumulus's own half-resolution pass: the same functions, one view ray per texel.
+const cuPassVert = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vWorld;
+void main() { vUv = uv; vWorld = vec3(0.0); gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const cuPassFrag =
+  cloudFrag.split("void main()")[0] +
+  /* glsl */ `
+uniform mat4 uInvProj, uCamWorld;
+varying vec2 vUv;
+void main() {
+  vec4 v = uInvProj * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+  vec3 dir = normalize(mat3(uCamWorld) * (v.xyz / v.w));
+  vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+  vec4 c = cumulusVol(dir, dot(dir, uSunDir), dot(normalize(dir.xz + 1e-5), sunH), smoothstep(-0.06, 0.12, uSunDir.y));
+  gl_FragColor = vec4(c.rgb * c.a, c.a); // premultiplied, for the read-back's filtering
 }`;
 
 const BANK_H = 70; // m, how tall a fog bank stands
@@ -557,8 +872,16 @@ export class Clouds {
   private banks: THREE.Mesh<THREE.CylinderGeometry, THREE.ShaderMaterial>[] = [];
   private drift = new THREE.Vector2();
   private snapped = false;
+  // The new cumulus: its half-resolution pass (see cuPassFrag).
+  private cuRT = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  private cuScene = new THREE.Scene();
+  private cuCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private cuOn = false;
+  private readonly heaps: boolean;
 
-  constructor(quality: CloudQuality = "high") {
+  /** atSea: a page out on the water (the helm, a replay, the race), not the title. */
+  constructor(quality: CloudQuality = "high", atSea = false) {
+    this.heaps = cumulusHeaps(atSea, quality);
     const layer = new THREE.ShaderMaterial({
       vertexShader: cloudVert,
       fragmentShader: cloudFrag,
@@ -587,7 +910,12 @@ export class Clouds {
         uMoon: { value: 0 },
         uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
         uWall: { value: 0 },
-        uCuNew: { value: CUMULUS_NEW ? 1 : 0 },
+        uWallKm: { value: 400 },
+        uCuNew: { value: this.heaps ? 1 : 0 },
+        uCuRT: { value: 0 },
+        uCuTex: { value: null },
+        uCuRes: { value: new THREE.Vector2(1, 1) },
+        uCuTexSize: { value: new THREE.Vector2(1, 1) },
         uWallDir: { value: new THREE.Vector2(1, 0) },
       },
       transparent: true,
@@ -600,6 +928,37 @@ export class Clouds {
     this.layer.renderOrder = 1; // over the sky and its grey lid, under the sea
     this.layer.frustumCulled = false;
     this.group.add(this.layer);
+    if (this.heaps) {
+      const pass = new THREE.ShaderMaterial({
+        vertexShader: cuPassVert,
+        fragmentShader: cuPassFrag,
+        uniforms: { ...layer.uniforms, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() } },
+        depthTest: false,
+        depthWrite: false,
+      });
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), pass);
+      quad.frustumCulled = false;
+      this.cuScene.add(quad);
+      layer.uniforms.uCuTex.value = this.cuRT.texture;
+      const size = new THREE.Vector2();
+      this.layer.onBeforeRender = (renderer, _scene, camera) => {
+        if (!this.cuOn) return;
+        const prev = renderer.getRenderTarget();
+        if (prev) size.set(prev.width, prev.height);
+        else renderer.getDrawingBufferSize(size);
+        const div = (layer.uniforms.uQ.value as number) < 0.5 ? 4 : 2; // Low: quarter resolution (Kai)
+        const w = Math.max(1, Math.ceil(size.x / div)), h = Math.max(1, Math.ceil(size.y / div));
+        if (this.cuRT.width !== w || this.cuRT.height !== h) this.cuRT.setSize(w, h);
+        (layer.uniforms.uCuTexSize.value as THREE.Vector2).set(w, h);
+        pass.uniforms.uInvProj.value.copy((camera as THREE.PerspectiveCamera).projectionMatrixInverse);
+        pass.uniforms.uCamWorld.value.copy(camera.matrixWorld);
+        (layer.uniforms.uCuRes.value as THREE.Vector2).copy(size);
+        renderer.setRenderTarget(this.cuRT);
+        renderer.clear();
+        renderer.render(this.cuScene, this.cuCam);
+        renderer.setRenderTarget(prev);
+      };
+    }
     // Two rings of banks at different distances, so they overlap with depth.
     for (const [r, seed] of [
       [420, 0],
@@ -696,6 +1055,12 @@ export class Clouds {
     u.uBrk.value.copy(sk.brk);
     u.uBreak.value = sk.brk_amount;
     this.layer.visible = true; // always a few fair-weather clouds, at least
+    {
+      const deck = Math.max(SM(this.cover, 0.55, 0.95), SM(storm, 0.15, 0.7), SM(this.rain, 0.05, 0.8));
+      const cuAmt = (1 - SM(Math.max(storm, this.cover), 0.55, 0.95)) * (1 - deck);
+      this.cuOn = this.heaps && cuAmt > 0.01; // as the shader's cuAmt
+      u.uCuRT.value = this.cuOn ? 1 : 0;
+    }
 
     for (const b of this.banks) {
       b.visible = this.fog > 0.02;
@@ -744,6 +1109,7 @@ export class Clouds {
   setStorm(storm: { bearing: number; km: number } | null): void {
     const u = this.layer.material.uniforms;
     u.uWall.value = storm ? stormWall(storm.km) : 0;
+    if (storm && Number.isFinite(storm.km)) u.uWallKm.value = storm.km;
     if (storm) {
       const b = THREE.MathUtils.degToRad(storm.bearing);
       (u.uWallDir.value as THREE.Vector2).set(Math.sin(b), -Math.cos(b)); // scene x east, z south

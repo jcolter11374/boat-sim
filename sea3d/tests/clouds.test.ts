@@ -1,7 +1,7 @@
 // Checks for the cloud and fog rules (clouds.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearSkyGhi, cloudFromSun, fogChance } from "../src/clouds";
+import { clearSkyGhi, cloudFromSun, cumulusHeaps, fogChance } from "../src/clouds";
 
 test("clear-sky sunlight is about 1000 W/m² with the sun high, nothing below the horizon", () => {
   assert.ok(clearSkyGhi(90) > 1000 && clearSkyGhi(90) < 1100);
@@ -28,4 +28,13 @@ test("fog: only on cold water in light wind, and only on some days", () => {
     assert.equal(fogChance(42, -25, 4, d), 0); // the warmer eastern Atlantic
   }
   assert.equal(fogChance(NaN, -55, 4, 18400), 0);
+});
+
+test("the cumulus heaps are on at sea, off on the title and on Low, and the address can force either", () => {
+  assert.equal(cumulusHeaps(true, "high", ""), true);
+  assert.equal(cumulusHeaps(true, "ultra", ""), true);
+  assert.equal(cumulusHeaps(true, "low", ""), false); // Low keeps the earlier cumulus
+  assert.equal(cumulusHeaps(false, "high", ""), false); // the title keeps its signed-off clouds
+  assert.equal(cumulusHeaps(true, "high", "?cumulus=old"), false);
+  assert.equal(cumulusHeaps(false, "low", "?cumulus=new"), true);
 });

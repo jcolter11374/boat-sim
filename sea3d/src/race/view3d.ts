@@ -52,7 +52,7 @@ export class BoatView {
   private readonly controls: OrbitControls;
   private readonly atmos: Atmosphere;
   private readonly sea: Sea;
-  private readonly clouds = new Clouds();
+  private readonly clouds = new Clouds("high", true);
   private readonly rain = new Rain();
   private readonly live: LiveSea;
   private readonly place: Placement = { x: 0, z: 0, yaw: 0 };
