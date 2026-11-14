@@ -376,7 +376,14 @@ def test_results_card_says_how_it_ended(env):
 
 @pytest.mark.parametrize(
     "base",
-    ["joke_canoe", "joke_flamingo", "stock_dinghy14", "stock_sail_drone7", "stock_ocean_rower45"],
+    [
+        "joke_canoe",
+        "joke_flamingo",
+        "stock_dinghy14",
+        "stock_beachcat16",
+        "stock_sail_drone7",
+        "stock_ocean_rower45",
+    ],
 )
 def test_stock_and_joke_boats_sail_in_the_helm(env, base):
     g = Game(env, choices={"base": base}, launch_index=MAY1, max_days=0.9)
