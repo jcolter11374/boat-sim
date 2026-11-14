@@ -12,7 +12,7 @@ import { Atmosphere, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { forcedSea } from "./seaTest";
 import { seaUniforms } from "./seaSurface";
-import { Mirror, reflectable } from "./mirror";
+import { MIRROR_LAYER, Mirror, reflectable } from "./mirror";
 import { LAND_HORIZON, NearbyLand } from "./land/nearby";
 import { BayDepths } from "./land/depth";
 import { ANNAPOLIS_COURSE, BAY_WINDS, BREEZES, HARBOUR_WINDS, harbourExit, LIGHT_FINISH_WORDS, LIGHT_STONES_M, THOMAS_POINT, bestKey, readBest, runTime, saveBest, toLatLon, toTheLight, toXY, triangle, type Breeze, type Course, type CourseKind, type LatLon, type XY } from "./helm/course";
@@ -4591,7 +4591,7 @@ function hideStandIn(): void {
   if (!model) return;
   const card = !page.ready && !$("start").hidden;
   const real = isStock(spec.key) ? hasDetailedStock(spec.key) : spec === KAYAK ? hasDetailedKayak() : spec === RANDOLPH ? hasDetailedRandolph() || randolphSettled() : true;
-  const show = (!card || real) && !boatGone;
+  const show = (!card || (real && boatWarm())) && !boatGone;
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
@@ -4718,24 +4718,99 @@ function aimAt(bearing: number): void {
 // Build the sailing view's shaders while the Set sail card is up (M1 start-up profile):
 // the first sailing frames otherwise build about a dozen at once (the boat again for the
 // calm-water reflection, which draws into its own picture), and the page waits for each.
-// Built here, once the card shows and the detailed boats are in, the graphics driver does that work while
-// the player reads the card. Once per page; nothing on screen changes.
+// A few per frame (speed list, 14 Nov): all at once was one frozen frame of 6.6 s on software drawing,
+// with the card deaf to clicks. Her boat goes first and stays hidden (an empty sea behind the card, as
+// for a stand-in) until her shaders are built, so her first drawn frame no longer builds them all at once
+// (a 3.6 s freeze there). Each frame builds what fits in WARM_MS; a real graphics card finishes in a frame or two.
+const WARM_MS = 40;
+/** Her own parts get longer per frame, so she isn't kept off screen for long on a slow machine. */
+const WARM_BOAT_MS = 200;
 let warmed = false;
+/** What's left to build: each part for the screen, and again for the calm-water reflection's picture if it's in it. */
+let warmQueue: { o: THREE.Object3D; mirror: boolean }[] | null = null;
+/** The boat whose shaders are being built first, and how many of her parts are still to build. */
+let warmRoot: THREE.Object3D | null = null;
+let warmRootLeft = 0;
+/** Her programs, which the graphics driver may still be building in the background (parallel compiling). */
+let warmRootPrograms: { isReady(): boolean }[] = [];
+const warmedRoots = new WeakSet<THREE.Object3D>();
+const parallel = renderer.extensions.has("KHR_parallel_shader_compile");
+function drawables(root: THREE.Object3D, out: { o: THREE.Object3D; mirror: boolean }[]): void {
+  root.traverse((o) => {
+    const r = o as THREE.Mesh;
+    // A light inside the object would be counted twice (once from the scene), building the wrong program:
+    // those few build on their first draw, as before.
+    if (!(r.isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) || !r.material) return;
+    let lit = false;
+    o.traverse((c) => {
+      if ((c as THREE.Light).isLight) lit = true;
+    });
+    if (lit) return;
+    out.push({ o, mirror: false });
+    // The reflection draws only what's on its layer: building the sea's or the clouds' shaders for it was
+    // about 3 s each on software drawing, for programs never used.
+    if (o.layers.isEnabled(MIRROR_LAYER)) out.push({ o, mirror: true });
+  });
+}
+/** Behind the Set sail card her boat waits for her shaders (see warmShaders). */
+function boatWarm(): boolean {
+  return !model || warmedRoots.has(model.root) || !warmWanted();
+}
+function warmWanted(): boolean {
+  return modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden;
+}
 function warmShaders(): void {
-  warmed = true;
+  if (!warmQueue) {
+    warmQueue = [];
+    drawables(scene, warmQueue);
+  }
+  if (model && warmRoot !== model.root && !warmedRoots.has(model.root)) {
+    const mine: { o: THREE.Object3D; mirror: boolean }[] = [];
+    drawables(model.root, mine);
+    // What appears with her: her wake, the prop's wash, the water at her hull.
+    for (const o of [wake?.points, propWash?.mesh, contact?.collar, contact?.spray]) if (o) drawables(o, mine);
+    warmQueue.unshift(...mine);
+    warmRoot = model.root;
+    warmRootLeft = mine.length;
+    warmRootPrograms = [];
+  }
+  const until = performance.now() + (warmRootLeft > 0 ? WARM_BOAT_MS : WARM_MS);
   const prev = renderer.getRenderTarget();
+  // Built as she'll be drawn: shown, so her lamp counts among the lights as it will at sea.
+  const shown = model?.root.visible ?? true;
+  if (model) model.root.visible = true;
   try {
-    renderer.compile(scene, camera);
-    renderer.setRenderTarget(mirror.target);
-    renderer.compile(scene, camera);
+    while (warmQueue.length && performance.now() < until) {
+      if (warmRootLeft === 0 && warmRoot && !warmedRoots.has(warmRoot) && performance.now() > until - WARM_BOAT_MS + WARM_MS) break; // her last part built: back to the short step
+      const { o, mirror: inMirror } = warmQueue.shift()!;
+      renderer.setRenderTarget(inMirror ? mirror.target : prev);
+      const built = renderer.compile(o, camera, scene);
+      renderer.setRenderTarget(prev);
+      // Without parallel compiling the driver only queues the work and it lands, all of it, on the next
+      // drawn frame: finishing each program here keeps that frame light and the budget honest. With it
+      // (most real graphics cards) the driver builds them in the background while the card is up.
+      for (const m of built)
+        for (const pr of (renderer.properties.get(m) as { programs?: Map<string, { getUniforms(): unknown; isReady(): boolean }> }).programs?.values() ?? []) {
+          if (!parallel) pr.getUniforms();
+          else if (warmRootLeft > 0) warmRootPrograms.push(pr);
+        }
+      if (warmRootLeft > 0) warmRootLeft--;
+    }
   } catch {
     /* only a head start: the first sailing frame builds whatever is missing */
+    warmQueue.length = 0;
+    warmRootLeft = 0;
+    warmRootPrograms = [];
   } finally {
     renderer.setRenderTarget(prev);
+    if (model) model.root.visible = shown;
   }
+  // Shown once her programs are ready, so her first frame doesn't wait on the driver.
+  if (warmRoot && warmRootLeft === 0 && warmRootPrograms.every((pr) => pr.isReady())) warmedRoots.add(warmRoot);
+  if (!warmQueue.length) warmed = true;
 }
 renderer.setAnimationLoop(() => {
-  if (!warmed && modelsIn && page.frames >= 3 && !page.ready && !$("start").hidden) warmShaders();
+  if ((!warmed || !boatWarm()) && warmWanted()) warmShaders();
   const t = clock.getElapsedTime();
   // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
   if (judging && !document.hidden && !page.busy) {
@@ -4766,6 +4841,9 @@ renderer.setAnimationLoop(() => {
   }
   if (tickClock(dt)) {
     // the clock moved the picture on
+  } else if (cine.on) {
+    // The film holds the picture where it is (John, 11 Nov: cinematic mode never moves the clock). A stop's
+    // play-on to its moment, or a skip's hours, used to carry on under the film: a night film turned to day in 8 s.
   } else if (drainRate > 0 && hour < shownTo) {
     hour = drainStep(drainRate, dt, hour, shownTo, slowNow(t), foresee?.from);
     if (hour >= shownTo) drainRate = 0;

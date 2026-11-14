@@ -21,6 +21,8 @@ import { SHORE, SHORE_REACH, shoreTurn } from "./titleShore";
 export const LANDMARK_SCALE = SHORE_REACH / 8600;
 /** The sun's height the lights are lit for (deg): a little before sunrise, so they are half on. */
 export const DAWN_LIGHTS_EL = -1;
+/** The bridge's steel against the dawn sky (a dark blue-grey silhouette). */
+export const BRIDGE_DAWN = 0x232a33;
 
 export class TitleLandmarks {
   readonly root = new THREE.Group();
@@ -34,6 +36,17 @@ export class TitleLandmarks {
     this.root.scale.setScalar(LANDMARK_SCALE);
     this.root.add(this.bridge.root, this.marks.root);
     this.bridge.update(SHORE.lat, SHORE.lon, DAWN_LIGHTS_EL);
+    // Against the dawn the bridge is a silhouette: darker than the practice course's daylight grey,
+    // which read pale and flat on the title (John, 14 Nov 2026), and its own haze rather than the
+    // scene's, which is set for the title's nearer sea.
+    this.bridge.root.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (m && (o as THREE.Mesh).isMesh && m.color) {
+        m.color.setHex(BRIDGE_DAWN);
+        m.fog = false;
+        m.needsUpdate = true;
+      }
+    });
   }
 
   /** Each frame: the buoys' lights flash in their own rhythms. */

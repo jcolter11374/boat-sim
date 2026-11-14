@@ -811,6 +811,57 @@ void main() {
   gl_FragColor = vec4(mix(gl_FragColor.rgb, hzC, asFog), max(gl_FragColor.a, asFog));
 }`;
 
+// The whole cloud at half resolution (Omar's speed list, 14 Nov: the cloud dome was a fifth of the
+// sailing screen's drawing at Medium and half of it at Low). The same body as cloudFrag, one view ray
+// per texel, written premultiplied before the full-resolution tail: the dome then reads it back and
+// only does the horizon haze, tone mapping and colour space per pixel, so the sea still meets the
+// sky without a line. Ultra keeps drawing it all at full resolution.
+const cloudHead = cloudFrag.split("void main()")[0];
+const cloudBody = cloudFrag.slice(cloudFrag.indexOf("  vec3 dir = normalize(vWorld - uCam);\n") + "  vec3 dir = normalize(vWorld - uCam);\n".length, cloudFrag.indexOf("  if (alpha < 0.004) discard;"));
+const cloudTail = cloudFrag.slice(cloudFrag.indexOf("  if (alpha < 0.004) discard;"));
+const skyPassFrag =
+  cloudHead +
+  /* glsl */ `
+uniform mat4 uInvProj, uCamWorld;
+varying vec2 vUv;
+void main() {
+  vec4 v = uInvProj * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+  vec3 dir = normalize(mat3(uCamWorld) * (v.xyz / v.w));
+` +
+  cloudBody +
+  /* glsl */ `
+  gl_FragColor = vec4(col, alpha); // premultiplied, for the read-back's filtering
+}`;
+const skyReadFrag =
+  cloudHead +
+  /* glsl */ `
+uniform sampler2D uSkyTex;
+uniform vec2 uSkyRes, uSkySize;
+void main() {
+  vec3 dir = normalize(vWorld - uCam);
+  if (dir.y < -0.02) discard;
+  float el = max(dir.y, 0.0);
+  // What the tail needs, as the body works it out (cheap: no clouds marched here).
+  float deckAmt = max(max(smoothstep(0.55, 0.95, uCover), smoothstep(0.15, 0.7, uStorm)), smoothstep(0.05, 0.8, uRain));
+  float frayN = fbmL(vec2(atan(dir.z, dir.x) * 7.0, el * 40.0) + uSeed * 1.9, 0.0, 3) - 0.5;
+  vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+  float toSunH = dot(normalize(dir.xz + 1e-5), sunH);
+  float brkSide = uBreak * smoothstep(0.35, 0.97, toSunH) * (1.0 - smoothstep(0.5, 4.0, uRain));
+  float hz = (1.0 - smoothstep(0.0, mix(0.16, 0.07, deckAmt) * (1.0 + 0.9 * deckAmt * frayN) + 0.3 * smoothstep(2.0, 8.0, uRain), el)) * (1.0 - 0.75 * brkSide);
+  float hz2 = hz * hz * (3.0 - 2.0 * hz);
+  float hb = (1.0 - smoothstep(-0.01, 0.025 + 0.035 * (frayN + 0.5), el)) * deckAmt;
+  // Bilinear by hand on premultiplied colour (half-float targets may only filter nearest).
+  vec2 st = gl_FragCoord.xy / uSkyRes * uSkySize - 0.5;
+  vec2 i0 = floor(st), fr = st - i0;
+  vec2 it = 1.0 / uSkySize;
+  vec4 c00 = texture2D(uSkyTex, (i0 + 0.5) * it), c10 = texture2D(uSkyTex, (i0 + vec2(1.5, 0.5)) * it);
+  vec4 c01 = texture2D(uSkyTex, (i0 + vec2(0.5, 1.5)) * it), c11 = texture2D(uSkyTex, (i0 + 1.5) * it);
+  vec4 sk = mix(mix(c00, c10, fr.x), mix(c01, c11, fr.x), fr.y);
+  vec3 col = sk.rgb;
+  float alpha = sk.a;
+` +
+  cloudTail;
+
 // The new cumulus's own half-resolution pass: the same functions, one view ray per texel.
 const cuPassVert = /* glsl */ `
 varying vec2 vUv;
@@ -877,6 +928,11 @@ export class Clouds {
   private cuScene = new THREE.Scene();
   private cuCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private cuOn = false;
+  /** The whole cloud at half resolution (below Ultra), and the full-resolution shader Ultra draws. */
+  private skyRT = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  private skyScene = new THREE.Scene();
+  private fullMat!: THREE.ShaderMaterial;
+  private readMat!: THREE.ShaderMaterial;
   private readonly heaps: boolean;
 
   /** atSea: a page out on the water (the helm, a replay, the race), not the title. */
@@ -917,48 +973,93 @@ export class Clouds {
         uCuRes: { value: new THREE.Vector2(1, 1) },
         uCuTexSize: { value: new THREE.Vector2(1, 1) },
         uWallDir: { value: new THREE.Vector2(1, 0) },
+        uSkyTex: { value: this.skyRT.texture },
+        uSkyRes: { value: new THREE.Vector2(1, 1) },
+        uSkySize: { value: new THREE.Vector2(1, 1) },
       },
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
       fog: false,
     });
-    this.layer = new THREE.Mesh(new THREE.SphereGeometry(DOME_R, 48, 24), layer);
     layer.side = THREE.BackSide;
+    this.fullMat = layer;
+    // The dome below Ultra: the same uniforms, reading the half-resolution sky back.
+    this.readMat = layer.clone();
+    this.readMat.uniforms = layer.uniforms;
+    this.readMat.fragmentShader = skyReadFrag;
+    this.layer = new THREE.Mesh(new THREE.SphereGeometry(DOME_R, 48, 24), quality === "ultra" ? layer : this.readMat);
     this.layer.renderOrder = 1; // over the sky and its grey lid, under the sea
     this.layer.frustumCulled = false;
     this.group.add(this.layer);
+    const skyPass = new THREE.ShaderMaterial({
+      vertexShader: cuPassVert,
+      fragmentShader: skyPassFrag,
+      uniforms: { ...layer.uniforms, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() } },
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.NoBlending,
+    });
+    const skyQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), skyPass);
+    skyQuad.frustumCulled = false;
+    this.skyScene.add(skyQuad);
+    let cuPass: THREE.ShaderMaterial | null = null;
     if (this.heaps) {
-      const pass = new THREE.ShaderMaterial({
+      cuPass = new THREE.ShaderMaterial({
         vertexShader: cuPassVert,
         fragmentShader: cuPassFrag,
         uniforms: { ...layer.uniforms, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() } },
         depthTest: false,
         depthWrite: false,
       });
-      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), pass);
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), cuPass);
       quad.frustumCulled = false;
       this.cuScene.add(quad);
       layer.uniforms.uCuTex.value = this.cuRT.texture;
-      const size = new THREE.Vector2();
-      this.layer.onBeforeRender = (renderer, _scene, camera) => {
-        if (!this.cuOn) return;
-        const prev = renderer.getRenderTarget();
-        if (prev) size.set(prev.width, prev.height);
-        else renderer.getDrawingBufferSize(size);
-        const div = (layer.uniforms.uQ.value as number) < 0.5 ? 4 : 2; // Low: quarter resolution (Kai)
-        const w = Math.max(1, Math.ceil(size.x / div)), h = Math.max(1, Math.ceil(size.y / div));
-        if (this.cuRT.width !== w || this.cuRT.height !== h) this.cuRT.setSize(w, h);
-        (layer.uniforms.uCuTexSize.value as THREE.Vector2).set(w, h);
-        pass.uniforms.uInvProj.value.copy((camera as THREE.PerspectiveCamera).projectionMatrixInverse);
-        pass.uniforms.uCamWorld.value.copy(camera.matrixWorld);
-        (layer.uniforms.uCuRes.value as THREE.Vector2).copy(size);
+    }
+    const size = new THREE.Vector2();
+    const skySize = new THREE.Vector2();
+    const clear = new THREE.Color();
+    const fit = (rt: THREE.WebGLRenderTarget, div: number): void => {
+      const w = Math.max(1, Math.ceil(size.x / div)), h = Math.max(1, Math.ceil(size.y / div));
+      if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+    };
+    this.layer.onBeforeRender = (renderer, _scene, camera) => {
+      const half = this.layer.material === this.readMat;
+      if (!this.cuOn && !half) return;
+      const prev = renderer.getRenderTarget();
+      if (prev) size.set(prev.width, prev.height);
+      else renderer.getDrawingBufferSize(size);
+      const low = (layer.uniforms.uQ.value as number) < 0.5;
+      const inv = (camera as THREE.PerspectiveCamera).projectionMatrixInverse;
+      if (half) fit(this.skyRT, 2);
+      if (this.cuOn && cuPass) {
+        // The heaps' march: a quarter of the screen's resolution on Low (Kai), else half.
+        fit(this.cuRT, low ? 4 : 2);
+        (layer.uniforms.uCuTexSize.value as THREE.Vector2).set(this.cuRT.width, this.cuRT.height);
+        // The heaps are read back by whichever pass draws the cloud: the half-resolution sky, or Ultra's dome.
+        (layer.uniforms.uCuRes.value as THREE.Vector2).copy(half ? skySize.set(this.skyRT.width, this.skyRT.height) : size);
+        cuPass.uniforms.uInvProj.value.copy(inv);
+        cuPass.uniforms.uCamWorld.value.copy(camera.matrixWorld);
         renderer.setRenderTarget(this.cuRT);
         renderer.clear();
         renderer.render(this.cuScene, this.cuCam);
-        renderer.setRenderTarget(prev);
-      };
-    }
+      }
+      if (half) {
+        (layer.uniforms.uSkyRes.value as THREE.Vector2).copy(size);
+        (layer.uniforms.uSkySize.value as THREE.Vector2).set(this.skyRT.width, this.skyRT.height);
+        skyPass.uniforms.uInvProj.value.copy(inv);
+        skyPass.uniforms.uCamWorld.value.copy(camera.matrixWorld);
+        renderer.setRenderTarget(this.skyRT);
+        renderer.getClearColor(clear);
+        const clearA = renderer.getClearAlpha();
+        renderer.setClearColor(0x000000, 0);
+        renderer.clear();
+        renderer.render(this.skyScene, this.cuCam);
+        renderer.setClearColor(clear, clearA);
+      }
+      renderer.setRenderTarget(prev);
+    };
     // Two rings of banks at different distances, so they overlap with depth.
     for (const [r, seed] of [
       [420, 0],
@@ -1135,6 +1236,7 @@ export class Clouds {
   /** Low draws one cheaper layer; High the deck and scud with shading; Ultra more detail. */
   setQuality(q: CloudQuality): void {
     this.layer.material.uniforms.uQ.value = q === "low" ? 0 : q === "ultra" ? 2 : 1;
+    this.layer.material = q === "ultra" ? this.fullMat : this.readMat;
   }
 
   /** How much the rain hides the sun, 0..1 (for the atmosphere's light): drizzle already
@@ -1166,7 +1268,14 @@ export class Clouds {
 
   dispose(): void {
     this.layer.geometry.dispose();
-    this.layer.material.dispose();
+    this.fullMat.dispose();
+    this.readMat.dispose();
+    this.skyRT.dispose();
+    this.cuRT.dispose();
+    for (const o of [...this.skyScene.children, ...this.cuScene.children] as THREE.Mesh[]) {
+      o.geometry.dispose();
+      (o.material as THREE.Material).dispose();
+    }
     for (const b of this.banks) {
       b.geometry.dispose();
       b.material.dispose();

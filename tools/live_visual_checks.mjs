@@ -149,7 +149,9 @@ export function judge(px, { boat = true } = {}) {
 export const PAGES = [
   {
     name: "sea (index)",
-    path: "?quality=low",
+    // The sea controls live on the sea demo (?title=0): since #579 "Just watch the sea" keeps the
+    // title's own shot with no panel.
+    path: "?quality=low&title=0",
     drawing: () => (window.__sea3d?.frames ?? 0) > 10,
     frames: () => window.__sea3d.frames,
     // The sea selector rebuilds the sea at the new wave height.

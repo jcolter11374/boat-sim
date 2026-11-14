@@ -101,3 +101,15 @@ test("the boat a recorded voyage is drawn as, and a Randolph boat is always our 
   assert.equal(watchName("v4 kayak"), "Our kayak");
   assert.equal(watchName("31 ft cruiser"), "31 ft cruiser");
 });
+
+test("a Boatyard launch replay plays too: its lean rows have no currents or sunshine (Nina, 14 Nov: stuck on Loading)", () => {
+  const lean = JSON.parse(readFileSync("public/boatyard/k-p25/2020-04-01.json", "utf8")) as Replay;
+  assert.equal(lean.current_u, undefined, "the fixture is a lean one");
+  const mid = lastHour(lean) / 2;
+  const cut = cutAt(lean, mid);
+  assert.ok(cut.h.length > 1 && cut.h.at(-1)! <= mid + 1e-9);
+  const st = statusAt(cut, mid);
+  assert.ok(Number.isFinite(st.boat.lat) && Number.isFinite(st.weather.hs));
+  assert.equal(st.weather.current_u, 0);
+  assert.equal(st.weather.ghi, 0);
+});
