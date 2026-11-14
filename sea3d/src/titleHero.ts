@@ -47,9 +47,18 @@ export interface HeroLight {
   glint: number;
   /** The lens's height above the water (m). A low boat is filmed from a little higher, so she sits on the water below the horizon and the far shore stands clear above her, not on the line of her deck (Elena, 13 Nov). */
   camH: number;
+  /**
+   * The sun's strength on her, times the sky's own (1 for none). With the dawn sun at 3 degrees
+   * (#581) the kayak's near side lost its light and the title's colour grade turned her a flat
+   * tomato red; a stronger, slightly less red sun brings back the warm orange on the side we see
+   * against the darker far side (Elena, 14 Nov).
+   */
+  sun: number;
+  /** How far the sun's colour on her goes from the low sun's red-orange towards plain warm white (0..1). */
+  sunWhite: number;
 }
-export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0.5, camH: 1.5 };
-export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.8, env: 0.8, back: 0, glint: 0.6, camH: 1.9 };
+export const HERO_LIGHT_SAILS: HeroLight = { sunOff: 30, fill: 0.35, env: 0.25, back: 1, glint: 0.5, camH: 1.5, sun: 1, sunWhite: 0 };
+export const HERO_LIGHT_LOW: HeroLight = { sunOff: 120, fill: 0.55, env: 0.55, back: 0, glint: 0.6, camH: 1.9, sun: 4.8, sunWhite: 0.65 };
 /**
  * How much of the backlight is left with the sun at el degrees: all of it while the sun is up, none
  * once it is well down. (The title's night view, for look reviews, kept the sunset's backlight: the

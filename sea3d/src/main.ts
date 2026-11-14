@@ -269,6 +269,7 @@ scene.add(clouds.group);
 let heroWas = false;
 let demoStale = false; // the detailed models came while the title was up: the demo boats are built when it goes
 let heroL = heroLightFor("kayak");
+const HERO_WARM_WHITE = new THREE.Color(0xffe2c4); // the low boat's sun, part way to white (titleHero.ts sunWhite)
 // The shore on the title's horizon (titleShore.ts): asked for once the title is drawing, never before.
 let shore: TitleShore | null = null;
 let shoreAsked = false;
@@ -296,6 +297,8 @@ function heroLight(): void {
   // sky. A boat without: the sun over the lens's shoulder, on the side we see (heroLightFor).
   heroPlace.yaw = titleHeading(atmos.sunDir, heroL.sunOff);
   setBacklight(atmos.sunDir, heroL.back * backAt(el), atmos.sun.color);
+  atmos.sun.intensity *= heroL.sun;
+  atmos.sun.color.lerp(HERO_WARM_WHITE, heroL.sunWhite);
   atmos.hemi.intensity *= heroL.fill;
   scene.environmentIntensity = heroL.env;
 }
