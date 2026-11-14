@@ -1130,18 +1130,26 @@ def _self_power(boat: str) -> dict[str, dict[str, Option]]:
                 (
                     "hydrovane",
                     "Hydrovane windvane",
-                    "Steers by the wind on its own rudder, with no power: she keeps "
-                    "sailing if the autopilot dies, or even the main rudder.",
-                    "Hydrovane specifications (own rudder, 37 kg); PBO windvane guide "
-                    "(emergency rudder); power saved our GUESS",
+                    (
+                        "Steers by the wind on its own rudder, with no power: she keeps "
+                        "sailing if the autopilot dies, or even the main rudder."
+                    ),
+                    (
+                        "Hydrovane specifications (own rudder, 37 kg); PBO windvane guide "
+                        "(emergency rudder); power saved our GUESS"
+                    ),
                 ),
                 (
                     "monitor",
                     "Monitor windvane",
-                    "A servo-pendulum vane working her own rudder, with no power: she "
-                    "keeps sailing if the autopilot dies.",
-                    "Scanmar Monitor (servo-pendulum, steers the main rudder); weight "
-                    "and power saved our GUESS",
+                    (
+                        "A servo-pendulum vane working her own rudder, with no power: she "
+                        "keeps sailing if the autopilot dies."
+                    ),
+                    (
+                        "Scanmar Monitor (servo-pendulum, steers the main rudder); weight "
+                        "and power saved our GUESS"
+                    ),
                 ),
             )
         },

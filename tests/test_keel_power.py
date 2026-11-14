@@ -5,7 +5,7 @@ bigger solar and a lithium bank (power block), T500 thrusters (vessel/propulsion
 """
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pytest
@@ -15,7 +15,7 @@ from boatsim.types import Command, EnvState
 from boatsim.vessel import make_vessel
 from boatsim.vessel.propulsion import ThrusterParams, thrust_one
 
-T0 = datetime(2020, 5, 1, 12)
+T0 = datetime(2020, 5, 1, 12, tzinfo=UTC)
 BEAM = EnvState(wind_u=0.0, wind_v=6.2, hs=1.0, tp=6, wave_dir=0, ghi=500)  # 12 kn from the south
 DEAD = {"electronics_main": True, "electronics_safe": True}
 
