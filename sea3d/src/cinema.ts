@@ -90,9 +90,11 @@ export type ShotKind =
   | "drone"
   | "stormlow"
   | "heel"
-  | "sunset";
+  | "sunset"
+  | "landfall"
+  | "company";
 
-export type SequenceKind = "passage" | "storm" | "knockdown" | "golden" | "night";
+export type SequenceKind = "passage" | "storm" | "knockdown" | "golden" | "night" | "landfall" | "company";
 
 /** What the azimuth is measured from: the bow, or the direction to the sun, land or a ship. */
 type Ref = "bow" | "sun" | "land" | "ship";
@@ -146,12 +148,18 @@ export const SHOTS: Record<ShotKind, ShotDef> = {
   heel: { ref: "bow", from: C(90, 0.5, 0.33, 2.2, 30), to: C(90, 0.6, 0.33, 2.2, 30), len: [6, 7], locked: true },
   // Into the low sun: the horizon on the upper third so the sun and its glitter path are in frame.
   sunset: { ref: "sun", from: { ...C(166, 0.4, 0.25, 1.0, 24), sunSide: true }, to: { ...C(168, 0.42, 0.25, 1.0, 24), sunSide: true }, len: [6, 8], low: true },
+  // Landfall (the shot plan's sequence 3): from behind the boat, looking past her at the land on the horizon; a slow
+  // pull back, 22% of the width to 16% (the plan said 12%, under the 6%-of-the-frame floor on the kayak), so the land grows in the frame as she shrinks (9-12 s).
+  landfall: { ref: "land", from: C(168, 0.22, 0.33, 2.5, 22), to: C(172, 0.16, 0.33, 3, 22), len: [9, 12] },
+  // Company (sequence 4): a ship within a few km. From behind the boat towards the ship, the boat near on one third,
+  // the ship far on the other; held (7-9 s).
+  company: { ref: "ship", from: C(160, 0.3, 0.33, 2, 26), to: C(163, 0.3, 0.33, 2, 26), len: [7, 9], locked: true },
 };
 
 /**
  * The sequences, as the plan sets them out: shots in order (a list = one of them,
- * varied). Five for launch (Elena): Landfall and Company come back once land and
- * ships pass the screenshot test themselves.
+ * varied). Five shipped first (Elena); Landfall and Company joined on 14 Nov (John: put
+ * the built pieces in), for Elena's look on live.
  */
 export const SEQUENCES: Record<SequenceKind, (ShotKind | ShotKind[])[]> = {
   passage: ["establish", ["alongside", "bowon", "stern", "skim"], ["alongside", "bowon", "stern", "skim"], ["panels", "sterndetail", "bowdetail"], "drone"],
@@ -161,10 +169,14 @@ export const SEQUENCES: Record<SequenceKind, (ShotKind | ShotKind[])[]> = {
   // Night is short and close: the boat's own light carries it (Elena, 12 Nov). Three shots, and each
   // night sequence films from the other side to the last, so a minute of night isn't one side view.
   night: ["light", "alongside", "sternlight"],
+  landfall: ["landfall", "alongside", "landfall"],
+  company: ["company", "stern", "alongside"],
 };
 
 /** How long shots run in each sequence: storms quicker, calm and night slower. */
-const PACE: Record<SequenceKind, number> = { passage: 1, storm: 0.7, knockdown: 1, golden: 1, night: 1.1 };
+const PACE: Record<SequenceKind, number> = { passage: 1, storm: 0.7, knockdown: 1, golden: 1, night: 1.1, landfall: 1, company: 1 };
+/** A ship this close (km) is company worth filming (the plan: "within a few km"). */
+export const COMPANY_KM = 5;
 
 const ease = (u: number) => u * u * (3 - 2 * u);
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
@@ -202,6 +214,10 @@ export function fitting(m: Moment, sunEl: number, cloud = 0): SequenceKind[] {
   const out: SequenceKind[] = [];
   if (m.knockdownAgo < 3 || m.recentKnockdown) out.push("knockdown");
   if (m.storm > 0.5) out.push("storm");
+  // By day, land or a landmark in sight, then a ship close by (the plan's order; never in a gale, where the land
+  // and the ship are lost in the murk).
+  if (sunEl > -3 && m.storm < 0.5 && m.land) out.push("landfall");
+  if (sunEl > -3 && m.storm < 0.5 && m.ship && m.ship.km < COMPANY_KM) out.push("company");
   // Golden hour only when there is one to see: the sun low AND the sky fairly clear. Under an overcast
   // the low sun is grey and flat, and the film shows the passage instead; never a faked glow (Elena, 14 Nov).
   if (sunEl > -3 && sunEl < 10 && m.storm < 0.7 && cloud <= GOLDEN_CLOUD) out.push("golden");
