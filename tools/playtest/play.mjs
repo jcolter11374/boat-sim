@@ -5233,7 +5233,7 @@ const CHECKS = {
     run: async (page) => {
       const browser = page.context().browser();
       const out = [];
-      for (const [name, path, ready] of [["title", "", "window.__sea3d && window.__sea3d.frames > 0"], ["helm", "helm.html?quality=low", "window.__helm && window.__helm.frames > 0"], ["voyage", "voyage.html?voyage=2020-04-15&quality=low", "window.__replay && window.__replay.frames > 0"], ["boatyard", "boatyard.html", "window.__yard && window.__yard.frames > 0"]]) {
+      for (const [name, path, ready] of [["title", "", "window.__sea3d && window.__sea3d.frames > 0"], ["helm", "helm.html?quality=low", "window.__helm && window.__helm.frames > 0"], ["helm-medium", "helm.html?quality=medium", "window.__helm && window.__helm.frames > 0"], ["voyage", "voyage.html?voyage=2020-04-15&quality=low", "window.__replay && window.__replay.frames > 0"], ["boatyard", "boatyard.html", "window.__yard && window.__yard.frames > 0"]]) {
         const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
         await ctx.addInitScript(() => {
           window.__ft = { frames: [], long: [] };
