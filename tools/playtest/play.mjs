@@ -4711,7 +4711,7 @@ const CHECKS = {
       await page.evaluate(() => document.getElementById("go")?.click());
       await page.waitForFunction(() => window.__helm && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 3 * MIN }).catch(() => {});
       const calls = [], stalls = [];
-      let waits = 0;
+      let waits = 0, noShow = 0;
       let last = null, stillSince = null, resumeAt = 0;
       const t0 = Date.now();
       await page.keyboard.press("5");
@@ -4735,8 +4735,14 @@ const CHECKS = {
         if (st.card || st.clock === 0) {
           // The clock stops for a route look or a call too, and the call shows only while it stays stopped:
           // give a call 4 s to come before carrying on, as a player who just watches would.
-          const came = await page.waitForFunction(() => { const d = document.getElementById("decide"); return d && !d.hidden && d.getClientRects().length > 0; }, null, { timeout: 4000 }).then(() => true, () => false);
-          if (came) continue;
+          // #575: the clock holds until a call's card is up, and __helm.callComing says one is on its way.
+          if (await page.evaluate(() => !!window.__helm.callComing)) {
+            const came = await page.waitForFunction(() => { const d = document.getElementById("decide"); return d && !d.hidden && d.getClientRects().length > 0; }, null, { timeout: 2 * MIN }).then(() => true, () => false);
+            if (!came) noShow++;
+            continue;
+          }
+          await page.waitForTimeout(500);
+          if (await page.evaluate(() => { const d = document.getElementById("decide"); return !!window.__helm.callComing || (d && !d.hidden && d.getClientRects().length > 0); })) continue;
           if (!(await page.evaluate(() => window.__helm.clock === 0 || !!window.__helm.card))) continue;
           waits++;
           await page.keyboard.press("5"); await page.waitForTimeout(300);
@@ -4749,11 +4755,13 @@ const CHECKS = {
         await page.waitForTimeout(250);
       }
       const secs = Math.round((Date.now() - t0) / 1000);
-      const dec = await page.evaluate(() => JSON.stringify((window.__helm.decisions || []).map((d) => [d.kind, Math.round(d.day * 100) / 100])));
+      const dec = await page.evaluate(() => JSON.stringify((window.__helm.decisions || []).map((d) => [d.kind, Math.round(d.day * 100) / 100, d.asked === false ? "note" : "card"])));
+      const cardsLogged = await page.evaluate(() => (window.__helm.decisions || []).filter((d) => d.asked !== false).length);
       const total = stalls.reduce((a, x) => a + parseFloat(x.split(" ")[1]), 0);
       const kinds = await page.evaluate(() => (window.__helm.decisions || []).map((d) => d.kind));
-      const res = `${end || "still sailing after 30 min"} in ${secs} s; calls ${calls.length}: ${calls.join(" | ")}; decisions ${dec}; pauses without a call I resumed: ${waits}; stalls of 1 s or more: ${stalls.length} totalling ${total.toFixed(1)} s (${stalls.slice(0, 12).join(", ")})`;
+      const res = `${end || "still sailing after 30 min"} in ${secs} s; calls ${calls.length}: ${calls.join(" | ")}; decisions ${dec}; cards logged ${cardsLogged}, cards seen ${calls.length}, calls on their way that never showed in 2 min ${noShow}; pauses without a call I resumed: ${waits}; stalls of 1 s or more: ${stalls.length} totalling ${total.toFixed(1)} s (${stalls.slice(0, 12).join(", ")})`;
       console.log(`FAST ${BROWSER}: ${res}`);
+      must(calls.length >= cardsLogged && !noShow, `cards seen ${calls.length} of ${cardsLogged} logged: ${res}`);
       must(kinds.some((k) => /gale|storm|wave/.test(k)) || calls.some((c) => /gale|waves/i.test(c)), `no gale call at 4 days a second: ${res}`);
       return res;
     },
