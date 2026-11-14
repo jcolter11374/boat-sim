@@ -284,6 +284,33 @@ export const point = (deg: number): string => POINTS[Math.round((((deg % 360) + 
 /** The wind cell's last values: speed (kn), where it blows to (degrees), wave height (m). */
 const wind: { kn: number | null; to: number | null; hs: number | null; shown: string } = { kn: null, to: null, hs: null, shown: "" };
 
+/**
+ * Wind and waves in the strip's cell, never cut off (Elena, Nina): the full "12 kn SW · 0.9 m"; if that
+ * doesn't fit the cell (a phone, a wide fallback typeface), without the wind's direction; then the bare
+ * numbers "12 · 0.9". The direction stays in the cell's title and the forecast. Called again on resize.
+ */
+function fitWind(): void {
+  const v = document.getElementById("c-windv");
+  if (!v) return;
+  if (wind.kn == null) {
+    v.textContent = "–";
+    return;
+  }
+  const sub = (t: string) => Object.assign(document.createElement("span"), { className: "sub", textContent: t });
+  const dir = wind.to == null ? "" : ` ${point(wind.to + 180)}`;
+  for (const k of [0, 1, 2]) {
+    v.replaceChildren(wind.kn.toFixed(0), ...(k < 2 ? [sub(` kn${k === 0 ? dir : ""}`)] : []));
+    if (wind.hs != null) v.append(` · ${wind.hs.toFixed(1)}`, ...(k < 2 ? [sub(" m")] : []));
+    if (v.scrollWidth <= v.clientWidth + 0.5) return;
+  }
+}
+if (typeof window !== "undefined") window.addEventListener("resize", () => fitWind());
+// The strip's real height, for the orders sheet that sits on it on a phone (--strip-h is a guess at it).
+if (typeof window !== "undefined" && typeof ResizeObserver !== "undefined") {
+  const strip = document.getElementById("strip");
+  if (strip) new ResizeObserver(() => document.documentElement.style.setProperty("--strip-live", `${Math.round(strip.getBoundingClientRect().height)}px`)).observe(strip);
+}
+
 /** A race's two boats, by name: the lead cell then says which is ahead (no "you", no ghost). */
 let racers: [string, string] | null = null;
 export function setRacers(names: [string, string] | null): void {
@@ -329,13 +356,7 @@ export function showStrip(d: StripData): void {
     const key = `${wind.kn?.toFixed(0)}|${wind.to == null ? "" : point(wind.to + 180)}|${wind.hs?.toFixed(1)}`;
     if (key !== wind.shown) {
       wind.shown = key;
-      const sub = (t: string) => Object.assign(document.createElement("span"), { className: "sub", textContent: t });
-      const v = $("c-windv");
-      if (wind.kn == null) v.textContent = "–";
-      else {
-        v.replaceChildren(wind.kn.toFixed(0), sub(` kn${wind.to == null ? "" : ` ${point(wind.to + 180)}`}`));
-        if (wind.hs != null) v.append(` · ${wind.hs.toFixed(1)}`, sub(" m"));
-      }
+      fitWind();
       $("c-wavel").textContent = wind.hs == null ? "wind" : "wind · waves";
     }
   }

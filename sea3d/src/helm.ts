@@ -4340,10 +4340,17 @@ function hideStandIn(): void {
   if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
 }
 /** On a phone, the band of sea above the Set sail card: from the bar's foot to the card's top (px). */
+/** The orders sheet, when it is open and showing on a phone (it is fixed, so it has no offsetParent). */
+function ordersSheet(): HTMLElement | null {
+  const o = document.getElementById("orders");
+  if (!o || window.innerWidth >= 700 || !o.classList.contains("open")) return null;
+  const cs = getComputedStyle(o);
+  return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) > 0 ? o : null;
+}
 function phoneBand(): { top: number; bottom: number } {
   const top = document.getElementById("topbar")?.getBoundingClientRect().bottom ?? 40;
   // The Set sail card, or the results card (which sits at the bottom on a phone too).
-  const card = [document.getElementById("ss-card"), document.querySelector<HTMLElement>("#result .rc")].find((c) => c && c.offsetParent);
+  const card = [document.getElementById("ss-card"), document.querySelector<HTMLElement>("#result .rc"), ordersSheet()].find((c) => c && (c.offsetParent || c.id === "orders"));
   const bottom = card ? card.getBoundingClientRect().top : window.innerHeight * 0.45;
   return { top, bottom };
 }
@@ -4388,7 +4395,9 @@ function frameBoat(dt: number): void {
   // The results card on a phone keeps the same rule: the boat whole in the band above it (Elena).
   // At the finish too: on a phone the card covers the arrival's view, so she sits in the band above it.
   const phoneResults = !$("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on;
-  if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults)) {
+  // Sailing with the orders sheet open on a phone: the same band rule, the boat whole above the sheet (Elena).
+  const phoneOrders = page.ready && $("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on && !!ordersSheet();
+  if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults || phoneOrders)) {
     // Her waterline, where she is: the world's middle on the crossing, off Annapolis on a practice page.
     here0.set(controls.target.x, 0, controls.target.z).project(camera); // includes the lens's current slide, so this settles on the target
     const phone = window.innerWidth < 700;
