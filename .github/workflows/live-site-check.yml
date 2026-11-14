@@ -16,6 +16,9 @@ on:
       site:
         description: "Site to check"
         default: "https://jcolter11374.github.io/boat-sim/"
+      helm_query:
+        description: "Added to every helm page's address, e.g. cumulus=old (to compare frame times)"
+        default: ""
   # No pull_request trigger: a PR that changes these checks is played by the
   # pre-release playtest (prerelease-playtest.yml), which runs the PR's own
   # tools/live_site_check.mjs against the PR's own build in Chrome and Firefox.
@@ -47,6 +50,7 @@ jobs:
         shard: [1, 2, 3, 4]
     env:
       SITE: ${{ inputs.site || 'https://jcolter11374.github.io/boat-sim/' }}
+      HELM_QUERY: ${{ inputs.helm_query }}
     steps:
       # The checks from the commit that deployed, not main's newest: a workflow_run
       # checks out main's head, so a check added by the next merge failed against
