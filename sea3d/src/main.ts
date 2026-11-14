@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { ownWetMaterials } from "./boats/inWater";
 import { detailFor } from "./seaDetail";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BOATS, STOCK_HULL, type BoatSpec } from "./boats/specs";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, type HullParams } from "./motion";
@@ -242,6 +242,8 @@ function buildHero(q: Quality): void {
     const k = spec.key as StockKey;
     void loadStockModel(k).then((ok) => ok && hero?.spec.key === k && buildHero(quality));
   }
+  // So does the Randolph boat's (boats/model.ts).
+  if (spec.key === "randolph" && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && hero?.spec.key === "randolph" && buildHero(quality));
 }
 const clouds = new Clouds(quality);
 clouds.group.visible = false;
@@ -278,6 +280,8 @@ function heroMode(): void {
   if (on === heroWas && (!on || hero)) return;
   heroWas = on;
   buildHero(quality);
+  // The demo's second boat is the Randolph boat: her detailed model is fetched when the demo is first seen.
+  if (!on && !hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && (heroOn() ? (demoStale = true) : buildBoats(quality)));
   if (!on && demoStale) {
     demoStale = false;
     buildBoats(quality); // the detailed demo boats, now the title's boat is gone

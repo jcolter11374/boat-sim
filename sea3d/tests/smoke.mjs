@@ -183,9 +183,10 @@ try {
       await page.waitForFunction(() => window.__replay?.ready || window.__replay?.error, null, { timeout: 30000 });
       const err = await page.evaluate(() => window.__replay.error);
       if (err) fail(`voyage page: ${err}`);
-      // The detailed Blender boats are used when the build has them.
+      // The detailed Blender boats are used when the build has them: our kayak always, the
+      // Randolph boat's when the voyage shows her (it loads on demand, boats/model.ts).
       for (const m of ["kayak", "randolph"]) {
-        if (!existsSync(`dist/models/${m}.glb`)) continue;
+        if (!existsSync(`dist/models/${m}.glb`) || (m === "randolph" && !/randolph/.test(v.file))) continue;
         await page.waitForFunction((name) => window.__replay.models?.includes(name), m, { timeout: 30000 }).catch(() => fail(`models/${m}.glb is in the build but the page didn't load it`));
       }
       // The page's position at every logged hour is the logged position.

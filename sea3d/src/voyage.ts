@@ -22,7 +22,7 @@ import * as THREE from "three";
 import { setRainOnSea } from "./rainRings";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BEACHCAT, CRUISER, DINGHY, KAYAK, OCEAN_ROWER, PEARSON, RANDOLPH, SAIL_DRONE, STOCK, STOCK_HULL, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
@@ -290,6 +290,12 @@ function buildBoat(q: Quality): void {
     drain.dispose();
   }
   const spec = SPEC[boatKey];
+  // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+  if (boatKey === "randolph" && !hasDetailedRandolph())
+    void loadRandolphModel().then((ok) => {
+      if (ok && !status.models.includes("randolph")) status.models.push("randolph");
+      if (ok && boatKey === "randolph") buildBoat(quality);
+    });
   model = BUILDERS[boatKey](q);
   // A bigger boat: stand the camera back so it all fits (a 31 ft yacht's mast is 14 m up).
   const k = THREE.MathUtils.clamp(spec.length / KAYAK.length, 1, 3.4);

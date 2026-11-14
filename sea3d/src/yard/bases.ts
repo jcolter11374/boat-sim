@@ -21,7 +21,7 @@ export const BASE_NAMES: Record<BaseKey, string> = {
   revc: "Randolph Rev C5 (our model)",
   revb: "Randolph Rev B (our model)",
   stock_pearson31_2: "Pearson 31-2 (our model)",
-  stock_cruiser31: "Beneteau First 31.7",
+  stock_cruiser31: "Beneteau First 31.7 (our model)",
 };
 /** The long name, for wherever the boat is described. */
 export const BASE_LONG: Record<BaseKey, string> = {
