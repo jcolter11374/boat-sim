@@ -179,3 +179,9 @@ export function onMyBoatChange(cb: (b: MyBoat | null) => void): () => void {
 export function myBoatYardLink(b: MyBoat): string {
   return b.kind === "yard" ? `boatyard.html${b.hash}` : "boatyard.html";
 }
+
+/** Our model of the Randolph team's Rev B, as built (no Boatyard changes): picked straight from the
+ * boat picker, saved as a Boatyard design on the Rev B base so every page sails it (John, 13 Nov:
+ * every built boat in Set sail). */
+export const REVB_AS_BUILT = { kind: "yard", base: "revb", hash: "#base=revb", name: "Randolph Rev B (our model)", choices: { base: "revb" } } as const;
+export const isRevbAsBuilt = (b: MyBoat | null): boolean => !!b && b.kind === "yard" && b.base === "revb" && b.hash === REVB_AS_BUILT.hash;

@@ -5,7 +5,8 @@ import { LINKS, RACE_HREF, WATCH_HREF, boatChip, helmEntry, isCurrent, pageName 
 import { raceItLink } from "../src/results";
 import { whoFromUrl } from "../src/helm/whoSteers";
 import { WATCH_DEFAULT_DAY } from "../src/helm/watchSource";
-import { pickedId, pickerEntries } from "../src/ui/boatPicker";
+import { choose, pickedId, pickerEntries } from "../src/ui/boatPicker";
+import { clearMyBoat, loadMyBoat } from "../src/myboat";
 import { shouldShowTitle } from "../src/title";
 
 // The shared top bar and title screen (one-game plan, step 2).
@@ -98,6 +99,16 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   assert.equal(pickedId(null), "kayak");
   assert.equal(pickedId({ kind: "stock", base: "stock_cruiser31", hash: "", name: "x", choices: {}, saved: "" }), "stock_cruiser31");
   assert.equal(pickedId({ kind: "yard", base: "kayak", hash: "", name: "Our kayak", choices: {}, saved: "" }), "kayak");
+  // Rev B, as built, is picked straight from the list (every built boat in Set sail, John 13 Nov).
+  const revb = none.find((e) => e.id === "revb")!;
+  assert.equal(revb.name, "Randolph Rev B (our model)");
+  assert.ok(!revb.href, "sailed from here, not a Boatyard link");
+  choose("revb");
+  const saved = loadMyBoat()!;
+  assert.deepEqual([saved.kind, saved.base, saved.hash, saved.choices], ["yard", "revb", "#base=revb", { base: "revb" }]);
+  assert.equal(pickedId(saved), "revb");
+  assert.ok(!pickerEntries(saved).some((e) => e.id === "mine"), "not listed twice as your design");
+  clearMyBoat();
 });
 
 test("Watch a voyage and Race it in every menu open the Set sail card, not the old pages (M3)", () => {

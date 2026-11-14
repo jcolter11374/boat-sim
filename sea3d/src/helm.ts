@@ -31,7 +31,7 @@ import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
-import { loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
+import { isRevbAsBuilt, loadMyBoat, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
@@ -3731,7 +3731,8 @@ if (startMine) {
     const input = Object.assign(document.createElement("input"), { type: "radio", name: "boat", value: MINE });
     // The name is the player's own text: textContent only.
     const b = Object.assign(document.createElement("b"), { textContent: startMine.name });
-    label.append(input, " ", b, startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.");
+    const words = isRevbAsBuilt(startMine) ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
+    label.append(input, " ", b, words);
     $("boats").querySelector("legend")!.after(label);
   }
   boatRow(v)!.checked = true;
