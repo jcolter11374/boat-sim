@@ -621,6 +621,7 @@ try {
       .catch(async () => fail(`helm: no ships in the English Channel (${await page.evaluate(() => JSON.stringify(window.__helm?.ships))})`));
     if (errors.length) fail(`page errors among the Channel traffic: ${errors.join("; ")}`);
     log.push(`ships in the Channel: ${await page.evaluate(() => JSON.stringify(window.__helm.ships.kinds))}`);
+    if (!(await page.evaluate(() => window.__helm.wildlife.known))) fail("helm: no wildlife map (wildlife.json not loaded?)");
     // Off Annapolis: Thomas Point Light stands on its shoal (the model, or its drawn stand-in), no page errors.
     await page.goto(`${URL}helm.html?quality=low&spot=38.91,-76.45`);
     await page.waitForFunction(() => window.__helm && window.__helm.frames > 2 && window.__helm.land.landmarks > 0, null, { timeout: 60000 })

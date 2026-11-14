@@ -25,6 +25,7 @@ import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
+import { Wildlife } from "./wildlife";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, randolphSettled, type BoatModel } from "./boats/model";
@@ -166,6 +167,12 @@ let traffic: Traffic | null = null;
 void Traffic.load().then((tr) => {
   traffic = tr;
   scene.add(tr.root);
+});
+// Dolphins, whales and seabirds, as often as they're met where the boat is (wildlife.json, from OBIS).
+let wildlife: Wildlife | null = null;
+void Wildlife.load().then((w) => {
+  wildlife = w;
+  scene.add(w.root);
 });
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
@@ -565,6 +572,7 @@ const page = {
   /** Spindrift blown off the crests, 0..1 (force 8 and up), and rain curtains in view. */
   spindrift: 0,
   bands: 0,
+  wildlife: { dolphins: 0, whales: 0, birds: 0, nearest: Infinity, bearing: 0, known: false } as Wildlife["shown"],
   ships: { ships: 0, inSight: 0, nearest: Infinity, bearing: 0, kinds: { container: 0, tanker: 0, bulk: 0, fishing: 0 } } as Traffic["shown"],
   /** The wreck showing through the water below, if any (its id). */
   wreck: "",
@@ -4951,6 +4959,8 @@ renderer.setAnimationLoop(() => {
   page.bands = bands.shown;
   traffic?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight);
   if (traffic) page.ships = traffic.shown;
+  wildlife?.update(lat, lon, ms / 1000, atmos.fog.far, sea.waveHeight, (a, b) => traffic?.water(a, b) ?? true, t);
+  if (wildlife) page.wildlife = wildlife.shown;
   renderer.getDrawingBufferSize(sprayBuf);
   spray.update(t, camera, sprayBuf.y, sprayFor(Math.hypot(wu, wv)), wu, -wv, sea.waveHeight, atmos.ambient);
   page.spindrift = spray.amount;
