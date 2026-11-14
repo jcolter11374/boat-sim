@@ -4430,7 +4430,10 @@ function frameBoat(dt: number): void {
     // One rule for every boat and every card height (a saved voyage's line, a race row, practice's course line make the
     // card taller): her waterline sits a set way down the band, so she is whole inside it with air between her and the card.
     const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
-    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
+    // A phone's band can be short (a storm call's card fills the lower 80%): her waterline then sits near the
+    // top, and a slide capped at 0.4 left her hull tucked under the card's edge (Elena). Up to half a screen there.
+    const cap = phone ? 0.5 : 0.4;
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -cap, cap);
   }
   // The finish scene is a cut to its own composed frame: no slide left over from the view before it
   // (it eased out over the first seconds, so the horizon sank and the banner's measured spot was off).
