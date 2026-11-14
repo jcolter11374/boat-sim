@@ -3548,6 +3548,7 @@ const CHECKS = {
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
         if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        { const txt = await p.evaluate(() => document.body.innerText); if (/Engine\s*\n?\s*Auto/.test(txt)) bad.push("an Engine row shows"); if (/↑↓ power/.test(txt)) bad.push(`the key hint says "↑↓ power"`); }
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
         out.push(`frames ${shots.join(", ")}`);
@@ -3831,6 +3832,7 @@ const CHECKS = {
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
         if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        { const txt = await p.evaluate(() => document.body.innerText); if (/Engine\s*\n?\s*Auto/.test(txt)) bad.push("an Engine row shows"); if (/↑↓ power/.test(txt)) bad.push(`the key hint says "↑↓ power"`); }
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         if (!/Rev B/.test(chip) || !/Rev B/.test(a.top)) bad.push(`top bar does not say Rev B (title "${chip}", helm "${a.top}")`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
@@ -3902,6 +3904,7 @@ const CHECKS = {
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
         if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        { const txt = await p.evaluate(() => document.body.innerText); if (/Engine\s*\n?\s*Auto/.test(txt)) bad.push("an Engine row shows"); if (/↑↓ power/.test(txt)) bad.push(`the key hint says "↑↓ power"`); }
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
         out.push(`frames ${shots.join(", ")}`);
@@ -3972,6 +3975,7 @@ const CHECKS = {
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
         if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        { const txt = await p.evaluate(() => document.body.innerText); if (/Engine\s*\n?\s*Auto/.test(txt)) bad.push("an Engine row shows"); if (/↑↓ power/.test(txt)) bad.push(`the key hint says "↑↓ power"`); }
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
         out.push(`frames ${shots.join(", ")}`);
@@ -4042,6 +4046,7 @@ const CHECKS = {
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
         if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        { const txt = await p.evaluate(() => document.body.innerText); if (/Engine\s*\n?\s*Auto/.test(txt)) bad.push("an Engine row shows"); if (/↑↓ power/.test(txt)) bad.push(`the key hint says "↑↓ power"`); }
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
         out.push(`frames ${shots.join(", ")}`);
