@@ -180,8 +180,17 @@ export function myBoatYardLink(b: MyBoat): string {
   return b.kind === "yard" ? `boatyard.html${b.hash}` : "boatyard.html";
 }
 
-/** Our model of the Randolph team's Rev B, as built (no Boatyard changes): picked straight from the
- * boat picker, saved as a Boatyard design on the Rev B base so every page sails it (John, 13 Nov:
- * every built boat in Set sail). */
-export const REVB_AS_BUILT = { kind: "yard", base: "revb", hash: "#base=revb", name: "Randolph Rev B (our model)", choices: { base: "revb" } } as const;
-export const isRevbAsBuilt = (b: MyBoat | null): boolean => !!b && b.kind === "yard" && b.base === "revb" && b.hash === REVB_AS_BUILT.hash;
+/** Our models of the Randolph team's boats, unchanged in the Boatyard: picked straight from the boat
+ * picker, saved as a Boatyard design on that base so every page sails it (John, 13 Nov: every built
+ * boat in Set sail). The Rev B is their earlier boat as built; the Rev C5 their current design. */
+export const RANDOLPH_AS_BUILT = {
+  revb: { kind: "yard", base: "revb", hash: "#base=revb", name: "Randolph Rev B (our model)", choices: { base: "revb" } },
+  revc: { kind: "yard", base: "revc", hash: "#base=revc", name: "Randolph Rev C5 (our model)", choices: { base: "revc" } },
+} as const;
+export type RandolphKey = keyof typeof RANDOLPH_AS_BUILT;
+/** Which Randolph boat this is, unchanged, or null for anything else (a changed design included). */
+export function randolphAsBuilt(b: MyBoat | null): RandolphKey | null {
+  if (!b || b.kind !== "yard") return null;
+  for (const k of Object.keys(RANDOLPH_AS_BUILT) as RandolphKey[]) if (b.base === k && b.hash === RANDOLPH_AS_BUILT[k].hash) return k;
+  return null;
+}

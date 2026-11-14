@@ -539,7 +539,9 @@
   #dialrow { display: flex; gap: 12px; align-items: center; }
   #dial { width: 132px; height: 132px; cursor: crosshair; touch-action: none; flex: none; }
   #dialrow .side { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
-  body.wind-only :is(#powerrow, #power, #powerhint) { display: none; }
+  body.wind-only :is(#powerrow, #power, #powerhint, #keyhint .powerkeys) { display: none; }
+  /* .seg sets display: flex, which beats the hidden attribute: a boat with no engine has no Engine row. */
+  #sailrow .seg[hidden] { display: none; }
   #powerrow { display: flex; justify-content: space-between; margin-top: 8px; }
   #orders-tab { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 6; width: 26px; height: 92px; padding: 0; border-radius: 0 9px 9px 0;
     border: 0; background: var(--hud); color: #ffb070; }
@@ -687,7 +689,7 @@
 </div>
 <div id="timestate" hidden></div>
 <div id="trimchip" hidden title="What your trimming at the wheel is worth this watch, against the autopilot's own trim"></div>
-<div id="keyhint" hidden>&larr;&rarr; steer · &uarr;&darr; power · Space pause · ? all keys</div>
+<div id="keyhint" hidden>&larr;&rarr; steer<span class="powerkeys"> · &uarr;&darr; power</span> · Space pause · ? all keys</div>
 <div id="ghosttag" hidden></div>
 <div id="baretip" hidden>H to show</div>
 

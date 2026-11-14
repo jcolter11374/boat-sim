@@ -221,8 +221,13 @@ def test_stock_vessels_never_rank_against_the_drones(monkeypatch):
     for stock in ("cruiser31", "dinghy14", "beachcat16"):
         assert L.boat_class(f"configs/stock_{stock}.yaml") == L.STOCK_CLASS
     assert {L.boat_class(BUILDS[b].design_path) for b in L.DEFAULT_ENTRIES} == {L.DRONE_CLASS}
-    # No Boatyard build (so nothing the board or the race view can pick) is a stock vessel.
-    assert all(L.boat_class(b.design_path) == L.DRONE_CLASS for b in BUILDS.values())
+    # The only Boatyard builds of stock vessels are the keelboats' (M4 wave 1), and they
+    # are classed as stock, so rule 7 keeps them off the drones' board.
+    from boatsim.sandbox.catalog import KEELBOATS
+
+    for bid, b in BUILDS.items():
+        keel = bid.split("-")[0] in KEELBOATS
+        assert L.boat_class(b.design_path) == (L.STOCK_CLASS if keel else L.DRONE_CLASS), bid
     _fixed_run(monkeypatch)
     builds = ["k-p25", "revc"]
     years = [2015, 2016, 2017, 2018, 2019]

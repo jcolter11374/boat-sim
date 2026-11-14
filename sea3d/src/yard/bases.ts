@@ -10,18 +10,26 @@
 
 import type { Catalog, CatalogOption, CatalogSlot, SimSlots } from "./design";
 
-export type BaseKey = "kayak" | "revc" | "revb";
-export const BASE_KEYS: BaseKey[] = ["kayak", "revc", "revb"];
+export type KeelKey = "stock_pearson31_2" | "stock_cruiser31";
+export type BaseKey = "kayak" | "revc" | "revb" | KeelKey;
+/** The two keelboats you can start a design from (M4 wave 1): their sails and rig. */
+export const KEEL_KEYS: KeelKey[] = ["stock_pearson31_2", "stock_cruiser31"];
+export const isKeel = (b: string): b is KeelKey => (KEEL_KEYS as string[]).includes(b);
+export const BASE_KEYS: BaseKey[] = ["kayak", "revc", "revb", ...KEEL_KEYS];
 export const BASE_NAMES: Record<BaseKey, string> = {
   kayak: "Our v4 kayak",
   revc: "Randolph Rev C5 (our model)",
   revb: "Randolph Rev B (our model)",
+  stock_pearson31_2: "Pearson 31-2 (our model)",
+  stock_cruiser31: "Beneteau First 31.7",
 };
 /** The long name, for wherever the boat is described. */
 export const BASE_LONG: Record<BaseKey, string> = {
   kayak: "our v4 kayak",
   revc: "our model of the Randolph team's Rev C5",
   revb: "our model of the Randolph team's Rev B",
+  stock_pearson31_2: "our model of Randolph and Becky's Pearson 31-2",
+  stock_cruiser31: "our model of a Beneteau First 31.7",
 };
 
 export const RANDOLPH_CREDIT = {
@@ -181,4 +189,63 @@ export function randolphCatalog(key: "revc" | "revb", sim: SimSlots | null, kaya
 export function baseFromHash(hash: string): BaseKey {
   const v = new URLSearchParams(hash.replace(/^#/, "")).get("base");
   return (BASE_KEYS as string[]).includes(v ?? "") ? (v as BaseKey) : "kayak";
+}
+
+/** What a keelboat carries that no slot changes (from its yaml), for the totals. */
+const KEEL_FIXED: Record<KeelKey, { kg: number; wp: number; bat: number; wh: number; label: string; waterplane: number }> = {
+  // configs/stock_pearson31_2.yaml: 4536 kg light ship; 400 W of panels; 2400 Wh bank; 960 Wh/day.
+  stock_pearson31_2: { kg: 4536, wp: 400, bat: 2400, wh: 960, label: "The boat as Pearson built her, with our autopilot fit", waterplane: 7.74 * 3.29 * 0.68 },
+  // configs/stock_cruiser31.yaml: 3887 kg as measured (ORC); same power fit as the Pearson.
+  stock_cruiser31: { kg: 3887, wp: 400, bat: 2400, wh: 960, label: "The boat as Beneteau built her, with our autopilot fit", waterplane: 8.8 * 3.23 * 0.68 },
+};
+
+/**
+ * The catalog for a keelboat base, from Theo's slot table ("stock" in sim-slots.json):
+ * its sails and rig, a spare autopilot and the sailing tactician. No prices (B7).
+ * null when the slot table has no such boat.
+ */
+export function keelCatalog(key: KeelKey, sim: SimSlots | null, kayak: Catalog): Catalog | null {
+  const b = sim?.stock?.[key];
+  if (!b) return null;
+  const f = KEEL_FIXED[key];
+  const NAMES: Record<string, Record<string, [string, string]>> = {
+    spare: {
+      none: ["One autopilot (as built)", "When it dies the boat drifts, tracked by its backup tracker."],
+      "spare-autopilot": ["Spare autopilot", "A second box that takes over the steering if the first dies, like our kayak's safe box."],
+    },
+    tactician: {
+      on: ["Sailing tactician on (as built)", "Software that tacks upwind and gybes downwind on the boat's own speed table."],
+      off: ["Tactician off", "Steers straight for the next waypoint, never closer to the wind than she can sail."],
+    },
+  };
+  const slots: CatalogSlot[] = b.slots.map((s) => ({
+    id: s.id,
+    name: s.name,
+    opts: s.opts.map((o) => {
+      const [n, d] = o.n ? [o.n, o.d ?? o.basis] : (NAMES[s.id]?.[o.id] ?? [o.id, o.basis]);
+      return {
+        id: o.id,
+        n,
+        d,
+        cost: 0,
+        kg: o.kg ?? 0,
+        def: b.defaults[s.id] === o.id ? 1 : undefined,
+        est: o.est ? 1 : undefined,
+        effect: o.effect,
+        basis: o.basis,
+        simEst: o.est,
+        simKeys: o.sim ?? [],
+      } as CatalogOption;
+    }),
+  }));
+  return {
+    note: `${BASE_NAMES[key]}: ${b.design}`,
+    key,
+    base: { label: f.label, cost: 0, kg: 0 },
+    plannedKg: f.kg,
+    fixed: { thr: 0, wp: f.wp, bat: f.bat, wh: f.wh, boxes: 1, beacon: 1, ais: 1, af: 1 },
+    mmPerKg: 1000 / (1025 * f.waterplane),
+    program: kayak.program,
+    slots,
+  };
 }

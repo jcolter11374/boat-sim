@@ -77,7 +77,8 @@ export const HERO_SEA: SeaState = { name: "Title", hs: 0.25, tp: 2.6, meanDirect
 /** The boat the hero shows: the player's own; our kayak when they haven't chosen one. */
 export function heroSpec(mine: MyBoat | null): BoatSpec {
   if (!mine) return KAYAK;
-  if (mine.kind === "stock" && mine.base in STOCK) return STOCK[mine.base as StockKey];
+  // A stock boat, or a Boatyard design that starts from one (the keelboats' sails, M4).
+  if (mine.base in STOCK) return STOCK[mine.base as StockKey];
   if (mine.base === "revb" || mine.base === "revc") return RANDOLPH;
   return KAYAK;
 }

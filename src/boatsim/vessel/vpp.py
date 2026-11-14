@@ -422,6 +422,35 @@ def beat(
     return best[1], best[0]
 
 
+def fingerprint(v: dict) -> str:
+    """A short fingerprint of everything in a design's `vpp:` block that the polar
+    depends on (VPPParams), so a variant polar (configs/polars/variants/, a sail or
+    keel part on a stock keelboat) can't be sailed with numbers it wasn't built
+    from. Same answer in CPython and Pyodide (JSON of the parsed values)."""
+    import hashlib
+    from dataclasses import asdict
+
+    p = asdict(VPPParams.from_config(v))
+    text = json.dumps(p, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
+def build_polar(v: dict, out: Path, source: str) -> Path:
+    """Write the autopilot polar for a `vpp:` block (no crew, as main() writes the
+    stock ones) to out, with its fingerprint; atomically, so parallel runs can share
+    a cache. About 20 s on a laptop."""
+    import os
+
+    table = polar(VPPParams.from_config(v))
+    table["source"] = source
+    table["fingerprint"] = fingerprint(v)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f"{out.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(table, separators=(",", ":")) + "\n")
+    os.replace(tmp, out)
+    return out
+
+
 def polar(p: VPPParams, tws_kn=TWS_KN, twa_deg=TWA_DEG) -> dict:
     """The simulator's polar: flat water (it adds the real sea itself, with
     resist_n, r_exp and waves_k). Speed (kn), heel and leeway (deg) by plan,
