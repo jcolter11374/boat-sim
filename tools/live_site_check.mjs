@@ -256,6 +256,12 @@ const CHECKS = {
       await clickNamed(page, "#share", "Copy a share link");
       await page.waitForFunction(() => !!window.__helm.share, null, { timeout: 2 * MIN });
       const link = await page.evaluate(() => window.__helm.share);
+      // Whoever opens a shared link does it on their own machine. Here both would be pages of one
+      // browser, and on a runner's software graphics two pages drawing the sea at once share one
+      // GPU process: the second draws a frame every few seconds, and its Set sail click took 40 s
+      // locally with the first still drawing, 13 s with it gone (Omar, 14 Nov). The sharer's day is
+      // already in st, so the sharer's page stops drawing before the link is opened.
+      await page.goto("about:blank");
       const o = await open(page.context().browser(), `${link.slice(SITE.length)}&quality=low`);
       try {
         await o.page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
