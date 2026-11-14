@@ -4852,16 +4852,19 @@ const CHECKS = {
           const frames0 = await p.evaluate(() => window.__sea3d?.frames ?? 0);
           shots.push(await emit(p, `${w}-watch`));
           // Speakers in step: the corner one, then N.
+          // The click on "Just watch the sea" was the first touch, so the sound may be on already: each press must flip it, and both speakers show it.
+          const on0 = s.on;
           await p.click("#t-sound2");
           await p.waitForTimeout(800);
           s = await st();
-          const a = `corner speaker: ${s.s1}/${s.s2} on ${s.on}`;
-          if (s.s1 !== s.s2 || s.s1 !== String(s.on) || !s.on) bad.push(`${w}: after the corner speaker the buttons disagree or sound is off (${a})`);
+          const a = `before ${on0}; corner speaker: ${s.s1}/${s.s2} on ${s.on}`;
+          if (s.s1 !== s.s2 || s.s1 !== String(s.on) || s.on === on0) bad.push(`${w}: the corner speaker didn't flip the sound, or the speakers disagree (${a})`);
+          const on1 = s.on;
           await p.keyboard.press("n");
           await p.waitForTimeout(800);
           s = await st();
           const b = `N: ${s.s1}/${s.s2} on ${s.on}`;
-          if (s.s1 !== s.s2 || s.s1 !== String(s.on) || s.on) bad.push(`${w}: after N the buttons disagree or sound stayed on (${b})`);
+          if (s.s1 !== s.s2 || s.s1 !== String(s.on) || s.on === on1) bad.push(`${w}: N didn't flip the sound, or the speakers disagree (${b})`);
           // Idle: the corner fades after the pointer rests.
           await p.waitForTimeout(4500);
           s = await st();
@@ -4907,10 +4910,15 @@ const CHECKS = {
           if (links.length) {
             const href = new URL(links[0].href, p.url()).href;
             const q = await page.context().newPage();
+            const qerr = [];
+            q.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") qerr.push(m.text().slice(0, 160)); });
+            q.on("pageerror", (e) => qerr.push(String(e.message || e).slice(0, 160)));
+            q.on("requestfailed", (r) => qerr.push(`failed ${r.url().slice(0, 100)} ${r.failure()?.errorText}`));
+            out.push(`replay param ${decodeURIComponent(href.split("replay=")[1] || "").slice(0, 120)}`);
             await q.goto(href, { waitUntil: "load", timeout: 2 * MIN });
             const ok = await q.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && window.__helm.frames > 10, null, { timeout: 4 * MIN }).then(() => true, () => false);
             const r = await q.evaluate(() => ({ err: window.__helm?.error ?? null, day: window.__helm?.status?.day ?? null, watch: !!window.__helm?.watch }));
-            opened = `${ok ? "loaded" : "NOT loaded"} ${JSON.stringify(r)}`;
+            opened = `${ok ? "loaded" : "NOT loaded"} ${JSON.stringify(r)}${qerr.length ? `; console ${qerr.slice(0, 4).join(" / ")}` : ""}`;
             if (!ok || r.err) bad.push(`boatyard Watch link didn't load on the sailing screen (${opened})`);
             shots.push(await emit(q, "yard-watch"));
             await q.close();
