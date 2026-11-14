@@ -268,3 +268,29 @@ test("a storage that throws doesn't stop a look or a leave", async () => {
   assert.equal(await k.look(0), true);
   assert.equal(k.leave(), true);
 });
+
+test("an order sent in the last moment is written when the page is left, though the code doesn't hold it yet", async () => {
+  const auto = { heading: "auto" as const, power: 0.25, sails: null, engine: null };
+  const { s, at, k } = rig({ order: auto });
+  await k.look(0);
+  assert.deepEqual(loadVoyage(s)!.order, auto);
+  // "To the finish" is sent; the simulator hasn't answered when the tab closes.
+  const finish = { heading: "finish" as const, power: 0.5, sails: null, engine: null };
+  at.st = { ...at.st, order: finish, orders: "finish" };
+  const asked = at.asked;
+  assert.equal(k.leave(), true);
+  assert.equal(at.asked, asked);
+  const v = loadVoyage(s)!;
+  assert.equal(v.code, CODE); // the code as last answered
+  assert.deepEqual(v.order, finish); // and the order to give again
+});
+
+test("a save made by a look carries the order on the helm then", async () => {
+  const steer = { heading: 120, power: 0.5, sails: null, engine: null };
+  const { s, k } = rig({ order: steer });
+  await k.look(0);
+  assert.deepEqual(loadVoyage(s)!.order, steer);
+  const none = rig({ order: null }); // from base, or no link: nothing to give again
+  await none.k.look(0);
+  assert.equal(loadVoyage(none.s)!.order, null);
+});

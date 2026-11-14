@@ -376,7 +376,38 @@ class SensitivityVoyage(MonthlyVoyage):
         v = self.spec()
         c = super().components(seed)
         design = patched_design(load_design(self.design_path), v.design)
-        if v.design:
+        # as vessel.make_vessel picks a keelboat or an odd boat over the kayak model
+        stock = bool(v.design) and (bool(design.vpp) or "odd" in design.stock)
+        if stock:
+            # A stock boat (keelboat, odd boat) with a part changed: its own physics,
+            # tactician and polar routing, as standard_components builds them for the
+            # unchanged boat. It used to be sailed as a kayak here, so every keelboat
+            # option sank to about a quarter whatever it was (Nina, 14 Nov).
+            from boatsim.runner.simulate import standard_components
+
+            alt = standard_components(
+                design,
+                c.env,
+                c.forecast.truth,
+                seed=seed,
+                forecast_error=self.forecast_error,
+                land=c.land,
+            )
+            inner = alt.vessel
+            if self.unknown_p_by_60_days is not None:  # same override as MonthlyVoyage
+                from dataclasses import replace as _replace
+
+                inner.hazards = _replace(
+                    inner.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days
+                )
+            c.vessel = MeteredVessel(inner)
+            c.autopilot, c.base, c.forecast, c.finish = (
+                alt.autopilot,
+                alt.base,
+                alt.forecast,
+                alt.finish,
+            )
+        elif v.design:
             inner = KayakVessel(design)
             if self.unknown_p_by_60_days is not None:  # same override as MonthlyVoyage
                 from dataclasses import replace as _replace
@@ -385,7 +416,7 @@ class SensitivityVoyage(MonthlyVoyage):
                     inner.hazards, unknown_p_by_60_days=self.unknown_p_by_60_days
                 )
             c.vessel = MeteredVessel(inner)
-        if v.design or v.safemode or v.guidance:
+        if (v.design and not stock) or v.safemode or v.guidance:
             from boatsim.autonomy import WaypointAutopilot
 
             prop = design.propulsion

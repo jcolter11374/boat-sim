@@ -12,6 +12,7 @@ import {
   offerWords,
   welcomeBack,
   packVoyage,
+  sameOrder,
   parseVoyage,
   saveVoyage,
   worthSaving,
@@ -52,6 +53,7 @@ test("a voyage packs to a versioned record, rounded, with the real time it was s
     boat: "Kayak",
     day: 12.44,
     left: null,
+    order: null,
     toGoKm: 4101,
     rate: 6,
     sim: "abc123",
@@ -183,6 +185,35 @@ test("the offer names the day the voyage comes back on, not where the simulator 
   assert.equal(endWords(packVoyage({ ...now, left: 11.9 }, WHEN)!), "End your voyage on day 11 and start a new one?");
   // A save from before the page was left: it comes back on the save's day.
   assert.equal(offerWords(packVoyage({ ...now, left: 14 }, WHEN)!), "Day 12 · 4,101 km to go · Kayak");
+});
+
+test("the order on the helm rides with the save; one that can't be given again is dropped, not the voyage", () => {
+  const steer = { heading: 95.5, power: 0.5, sails: null, engine: null };
+  const v = packVoyage({ ...now, order: steer }, WHEN)!;
+  assert.deepEqual(v.order, steer);
+  assert.deepEqual(parseVoyage(JSON.stringify(v))!.order, steer);
+  assert.deepEqual(packVoyage({ ...now, order: { heading: "finish", power: 0.25, sails: "reef1", engine: true } }, WHEN)!.order, { heading: "finish", power: 0.25, sails: "reef1", engine: true });
+  const old = { ...v } as Record<string, unknown>;
+  delete old.order;
+  assert.equal(parseVoyage(JSON.stringify(old))!.order, null); // a save from before this
+  for (const bad of [{ heading: 400, power: 0.5 }, { heading: "home", power: 0.5 }, { heading: 90, power: 7 }, { heading: 90 }, "steer 090", 5]) {
+    const got = parseVoyage(JSON.stringify({ ...v, order: bad }))!;
+    assert.equal(got.order, null);
+    assert.equal(got.code, CODE);
+  }
+});
+
+test("the same order isn't given twice; a different heading, power, sails or engine is", () => {
+  const a = { heading: 90, power: 0.5, sails: null, engine: null };
+  assert.equal(sameOrder(a, { ...a }), true);
+  assert.equal(sameOrder(a, { ...a, heading: 90.04 }), true);
+  assert.equal(sameOrder(a, { ...a, heading: 91 }), false);
+  assert.equal(sameOrder(a, { ...a, heading: "auto" }), false);
+  assert.equal(sameOrder({ ...a, heading: "finish" }, { ...a, heading: "finish" }), true);
+  assert.equal(sameOrder({ ...a, heading: "finish" }, { ...a, heading: "auto" }), false); // Omar's case
+  assert.equal(sameOrder(a, { ...a, power: 0.25 }), false);
+  assert.equal(sameOrder(a, { ...a, sails: "reef1" }), false);
+  assert.equal(sameOrder(a, { ...a, engine: true }), false);
 });
 
 test("welcome back says 'right where you left off' only when that is true", () => {
