@@ -176,6 +176,28 @@ function deepenSky(m: THREE.ShaderMaterial): void {
     );
 }
 
+/** Whether this graphics "card" is software drawing on the processor (no graphics card): ?gl=full draws everything anyway (slow; for screenshots). */
+function softwareGpu(gpu: string): boolean {
+  return /swiftshader|llvmpipe|software|basic render/i.test(gpu) && new URLSearchParams(location.search).get("gl") !== "full";
+}
+
+/**
+ * Software drawing, asked before a page makes its renderer (which must choose its smoothing of
+ * edges then): from a throwaway context, let go at once.
+ */
+export function softwareGraphics(): boolean {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    if (!gl) return false;
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return softwareGpu(gpu);
+  } catch {
+    return false;
+  }
+}
+
 export class Atmosphere {
   readonly sky = new Sky();
   readonly sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
@@ -267,7 +289,7 @@ export class Atmosphere {
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
     const gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
     // ?gl=full draws everything even on software graphics (slow; for screenshots).
-    this.software = /swiftshader|llvmpipe|software|basic render/i.test(gpu) && new URLSearchParams(location.search).get("gl") !== "full";
+    this.software = softwareGpu(gpu);
     this.sky.scale.setScalar(HORIZON * 3);
     deepenSky(this.sky.material);
     const su = this.sky.material.uniforms;
