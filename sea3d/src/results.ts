@@ -66,9 +66,6 @@ export function standing(build: string, board: Board | null, grid: Grid | null):
   return { kind: "none" };
 }
 
-/** The standing in plain words: one sentence, and a second line of detail.
- *  Board wording leads with the group, not the place (Ravi): boats in one group
- *  can't be told apart on the board's launches, so a place alone overclaims. */
 /**
  * One muted line for wherever a game's result sits beside the Boatyard's odds or a recorded voyage
  * (M5): since the game's autopilot went to policy 2 it sails better than the one those were run with,
@@ -78,6 +75,9 @@ export function autopilotNote(policy: number | null | undefined, besideOdds: boo
   return besideOdds && (policy ?? 1) > 1 ? "The autopilot in the game sails smarter than the one behind these odds and the recorded voyages." : "";
 }
 
+/** The standing in plain words: one sentence, and a second line of detail.
+ *  Board wording leads with the group, not the place (Ravi): boats in one group
+ *  can't be told apart on the board's launches, so a place alone overclaims. */
 export function standingText(s: Standing): { head: string; detail: string } {
   if (s.kind === "board") {
     const r = s.row;
