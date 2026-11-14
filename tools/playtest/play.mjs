@@ -5099,6 +5099,72 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #594: clouds at half resolution below Ultra. Helm frame time at Medium and Low, 1280 and a 390 phone,
+  // to set against this morning's cumulus-fps (phone Medium helm 0.24-0.27 fps on the runner). Sky frames for Elena.
+  "helm-frametime": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      for (const [tag, w, h, q] of [["1280-medium", 1280, 720, "medium"], ["1280-low", 1280, 720, "low"], ["390-medium", 390, 844, "medium"], ["390-low", 390, 844, "low"]]) {
+        const phone = w < 500;
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 3 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + `helm.html?quality=${q}`, { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => document.querySelector("#go") && window.__helm && window.__helm.frames > 3, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 5 * MIN }).catch(() => {});
+          await p.keyboard.press("1");
+          await p.waitForTimeout(5000);
+          const ms = await p.evaluate(() => new Promise((res) => { const t = []; let last = performance.now(); const end = last + 30000; const f = (now) => { t.push(now - last); last = now; if (now < end) requestAnimationFrame(f); else { t.sort((a, b) => a - b); res({ n: t.length, median: Math.round(t[t.length >> 1]), p95: Math.round(t[Math.floor(t.length * 0.95)]) }); } }; requestAnimationFrame(f); }));
+          out.push(`${tag}: ${ms.n} frames in 30 s, median ${ms.median} ms, p95 ${ms.p95} ms`);
+          if (BROWSER === "chromium" && (tag === "1280-medium" || tag === "390-medium")) { const path = `look-sky-chromium-${tag}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); } }
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`FRAMETIME ${BROWSER}: ${out.join(" || ")}`);
+      return out.join("; ");
+    },
+  },
+  // #593: the film no longer moves the clock, and a call waiting for the picture waits for the film:
+  // with a call on its way, start the film; no card while it runs; the card comes when it stops.
+  "call-after-film": {
+    manual: true,
+    path: "helm.html?quality=low",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForFunction(() => document.querySelector("#go") && window.__helm && window.__helm.frames > 3, null, { timeout: 3 * MIN }).catch(() => {});
+      await page.evaluate(() => document.getElementById("go")?.click());
+      await page.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 5 * MIN }).catch(() => {});
+      const card = () => page.evaluate(() => { const d = document.getElementById("decide"); return !!d && !d.hidden && d.getClientRects().length > 0; });
+      await page.keyboard.press("5");
+      const t0 = Date.now();
+      let caught = false;
+      while (Date.now() - t0 < 15 * MIN) {
+        const st = await page.evaluate(() => ({ coming: !!window.__helm.callComing, over: !!window.__helm.status?.over }));
+        if (st.over) break;
+        if (await card()) { await page.evaluate(() => document.querySelector("#decidebtns button")?.click()); await page.waitForTimeout(500); await page.keyboard.press("5"); continue; }
+        if (st.coming) {
+          await page.evaluate(() => window.__helm.cine.start());
+          caught = true;
+          break;
+        }
+        await page.waitForTimeout(100);
+      }
+      must(caught, "no call on its way within 15 min at 4 days a second");
+      const h0 = await page.evaluate(() => window.__helm.hour);
+      const during = [];
+      for (let i = 0; i < 6; i++) { await page.waitForTimeout(2000); during.push({ card: await card(), on: await page.evaluate(() => !!window.__helm.cine.on), hour: await page.evaluate(() => +window.__helm.hour.toFixed(2)) }); }
+      await page.evaluate(() => window.__helm.cine.stop());
+      const shown = await page.waitForFunction(() => { const d = document.getElementById("decide"); return d && !d.hidden && d.getClientRects().length > 0; }, null, { timeout: 2 * MIN }).then(() => true, () => false);
+      const text = await page.evaluate(() => (document.getElementById("decidetext")?.textContent || "").slice(0, 80));
+      const res = `call coming at hour ${h0.toFixed(2)}; during the film ${during.map((d) => `${d.on ? "film" : "no film"} ${d.card ? "CARD" : "no card"} h${d.hour}`).join(", ")}; after stopping the film: ${shown ? `card "${text}"` : "NO CARD in 2 min"}`;
+      must(!during.some((d) => d.card && d.on), `a card showed while the film ran: ${res}`);
+      must(shown, `the waiting call didn't show after the film: ${res}`);
+      return res;
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
