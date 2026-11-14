@@ -34,6 +34,7 @@ import { prefetchHelmOnIntent } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
 import { TitleLandmarks } from "./titleLandmarks";
+import { TitleCompany } from "./titleCompany";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 import { TitleTrack } from "./titleTrack";
@@ -270,9 +271,12 @@ let shoreAsked = false;
 const osmCredit = document.getElementById("osm");
 // The Bay Bridge and the buoys round the title's spot (titleLandmarks.ts), with the shore.
 let marks: TitleLandmarks | null = null;
+// Other boats about on the title's water, for life (titleCompany.ts): display only.
+let company: TitleCompany | null = null;
 function shoreShown(on: boolean): void {
   if (shore) shore.mesh.visible = on;
   if (marks) marks.root.visible = on;
+  if (company) company.root.visible = on;
   if (osmCredit) osmCredit.hidden = !(on && shore);
 }
 /** The title's light for the boat it shows now (again whenever the boat changes). */
@@ -565,6 +569,8 @@ const frame = (): void => {
     }
     if (!shoreAsked && status.frames > 3) {
       shoreAsked = true;
+      company = new TitleCompany(quality);
+      scene.add(company.root);
       void TitleShore.load(HERO_SUN.az, { sunDir: atmos.sunDir, sun: atmos.sun.color, haze: atmos.fog.color }).then((s) => {
         if (!s) return;
         shore = s;
@@ -575,6 +581,7 @@ const frame = (): void => {
       });
     }
     marks?.update(t);
+    company?.update(t, (x, z) => heightAt(comps, x, z, t));
     const under = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < under) camera.position.y = under;
     clouds.update(t, heroDt(t), camera, HERO_CLOUD, 0, 0, 3, 1, atmos.sunDir, atmos.fog.color, atmos.ambient);

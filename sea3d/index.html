@@ -174,6 +174,8 @@
   #t-sound2 .waves { opacity: 0; } #t-sound2 .off { opacity: 1; }
   #t-sound2[aria-pressed="true"] .waves { opacity: 1; } #t-sound2[aria-pressed="true"] .off { opacity: 0; }
   #t-sound2:hover { color: #d8b679; }
+  /* The title's grade (John, 14 Nov 2026: "drab and depressing"): a little more colour and snap in the dawn, title only. */
+  body.title #app canvas { filter: saturate(1.3) contrast(1.07) brightness(1.03); }
   /* A phone's title: the credits shrink to the one "Credits" link (the full list is behind it), so they don't print over the menu (Elena). */
   @media (max-width: 600px) { body.title #credits .long { display: none; } }
   /* The way into the game (src/sailLink.ts): sail this sea at the helm, or build a boat first. */
