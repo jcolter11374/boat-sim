@@ -219,60 +219,6 @@ const soundState = (page) =>
   });
 
 const CHECKS = {
-  // TEMPORARY probe (Omar, 14 Nov: Firefox Set sail 244 s): which WebGL calls stall the sailing screen in
-  // this browser, behind the Set sail card and after it. Every WebGL call over 150 ms, with its stack.
-  "gl-stalls": {
-    manual: true,
-    path: "",
-    run: async (page) => {
-      const browser = page.context().browser();
-      const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
-      await ctx.addInitScript(() => {
-        const g = (window.__st = { slow: [], tot: {}, n: {}, frames: [] });
-        const f = (t) => { g.frames.push(t); requestAnimationFrame(f); };
-        requestAnimationFrame(f);
-        for (const C of [WebGL2RenderingContext, WebGLRenderingContext]) for (const fn of Object.getOwnPropertyNames(C.prototype)) {
-          const d = Object.getOwnPropertyDescriptor(C.prototype, fn);
-          if (!d || typeof d.value !== "function") continue;
-          const o = d.value;
-          C.prototype[fn] = function (...a) {
-            const t = performance.now();
-            const r = o.apply(this, a);
-            const dd = performance.now() - t;
-            g.tot[fn] = (g.tot[fn] || 0) + dd;
-            g.n[fn] = (g.n[fn] || 0) + 1;
-            if (dd > 150) g.slow.push([fn, Math.round(t), Math.round(dd), (fn === "readPixels" ? a.slice(0, 4).join("x") + " " : "") + new Error().stack.split("\n").slice(1, 9).map((x) => x.replace(/https?:\/\/[^/]+\/[^ ]*\/assets\//, "").trim()).join(" < ")]);
-            return r;
-          };
-        }
-      });
-      const p = await ctx.newPage();
-      const out = [];
-      try {
-        await p.goto(SITE + "helm.html?quality=low", { waitUntil: "commit", timeout: 2 * MIN });
-        await p.waitForFunction(() => { const g = document.getElementById("go"); return g && g.getClientRects().length > 0; }, null, { timeout: 3 * MIN });
-        const cardAt = await p.evaluate(() => performance.now());
-        const ext = await p.evaluate(() => { const c = document.querySelector("canvas"); const gl = c && (c.getContext("webgl2") || c.getContext("webgl")); return gl ? { parallel: !!gl.getExtension("KHR_parallel_shader_compile"), renderer: (gl.getExtension("WEBGL_debug_renderer_info") && gl.getParameter(0x9246)) || gl.getParameter(gl.RENDERER) } : null; });
-        out.push(`card at ${(cardAt / 1000).toFixed(1)} s; ${JSON.stringify(ext)}`);
-        await p.waitForTimeout(90_000);
-        const goAt = await p.evaluate(() => performance.now());
-        await p.evaluate(() => document.getElementById("go")?.click());
-        await p.waitForFunction(() => (window.__helm?.hour ?? 0) > 0.02, null, { timeout: 5 * MIN, polling: 500 }).catch(() => {});
-        const movingAt = await p.evaluate(() => performance.now());
-        out.push(`go at ${(goAt / 1000).toFixed(1)} s, moving ${((movingAt - goAt) / 1000).toFixed(1)} s after`);
-        const r = await p.evaluate(() => window.__st);
-        let gaps = [];
-        for (let i = 1; i < r.frames.length; i++) gaps.push([Math.round(r.frames[i - 1]), Math.round(r.frames[i] - r.frames[i - 1])]);
-        gaps = gaps.sort((a, b) => b[1] - a[1]).slice(0, 8);
-        out.push(`frames ${r.frames.length}; longest gaps (start ms, ms): ${gaps.map((x) => x.join(":")).join(" ")}`);
-        out.push(`time per call type (ms, calls): ${Object.entries(r.tot).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `${k} ${Math.round(v)}/${r.n[k]}`).join(", ")}`);
-        out.push(`slow calls (${r.slow.length}):`);
-        for (const x of r.slow.sort((a, b) => b[2] - a[2]).slice(0, 25)) out.push(`  ${x[1]} ms: ${x[0]} ${x[2]} ms | ${x[3]}`);
-      } finally { await ctx.close().catch(() => {}); }
-      console.log(`GLSTALLS ${BROWSER}:\n${out.join("\n")}`);
-      return "see GLSTALLS";
-    },
-  },
   // The four pages load and draw in this browser.
   index: {
     path: "",
