@@ -131,7 +131,7 @@ const qstat = { ...startLevel(location.search, storedLevel, atmos.software), med
 const quality = qstat.level === "low" ? "low" : "high";
 const sea = new Sea(quality);
 scene.add(sea.mesh);
-const clouds = new Clouds(quality);
+const clouds = new Clouds(quality, true);
 scene.add(clouds.group);
 const rain = new Rain();
 scene.add(rain.mesh);
@@ -2486,7 +2486,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       return {
         kind,
         look: compassOf(-bad.wind_u, -bad.wind_v), // where it blows from
-        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
+        text: `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that. What will you do?`,
         choices,
       };
     }
@@ -2872,7 +2872,9 @@ function costWords(p: Preview, all: Preview[], waves = false, meaning = false): 
   // a knockdown gets likelier with bigger waves, and under 15% the motors stop to keep the
   // electronics and the radio going (autonomy/safemode.py hold_below_soc).
   if (p.hs_max != null && (waves || Math.max(...hs) - Math.min(...hs) >= 0.5))
-    out.push(`waves to ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
+    // The worst along this option's own way over the next 4 days, not the peak at her spot that the card's
+    // text gives (side by side, "up to 5.3 m" over "to 6.1 m" read as a contradiction: Elena).
+    out.push(`worst waves ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
   const soc = all.map((x) => x.soc_min ?? 1);
   if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08)
     out.push(`battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
@@ -4379,18 +4381,27 @@ function hideStandIn(): void {
   if (propWash) propWash.mesh.visible = show;
   if (contact) contact.collar.visible = contact.spray.visible = show && !model.twinHull && spec !== RANDOLPH;
 }
-/** On a phone, the band of sea above the Set sail card: from the bar's foot to the card's top (px). */
-/** The orders sheet, when it is open and showing on a phone (it is fixed, so it has no offsetParent). */
-function ordersSheet(): HTMLElement | null {
+/**
+ * The sheet on the strip while sailing on a phone: a "Your call" card when one is up (the open orders
+ * step aside for it), else the open orders. Both are fixed, so they have no offsetParent to test.
+ */
+function phoneSheet(): HTMLElement | null {
+  if (window.innerWidth >= 700) return null;
+  const shown = (o: HTMLElement | null) => {
+    if (!o) return false;
+    const cs = getComputedStyle(o);
+    return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) > 0;
+  };
+  const call = document.getElementById("decide");
+  if (call && !call.hidden && shown(call)) return call;
   const o = document.getElementById("orders");
-  if (!o || window.innerWidth >= 700 || !o.classList.contains("open")) return null;
-  const cs = getComputedStyle(o);
-  return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) > 0 ? o : null;
+  return o && o.classList.contains("open") && shown(o) ? o : null;
 }
+/** On a phone, the band of sea above the card or sheet at the bottom: from the bar's foot to the card's top (px). */
 function phoneBand(): { top: number; bottom: number } {
   const top = document.getElementById("topbar")?.getBoundingClientRect().bottom ?? 40;
   // The Set sail card, or the results card (which sits at the bottom on a phone too).
-  const card = [document.getElementById("ss-card"), document.querySelector<HTMLElement>("#result .rc"), ordersSheet()].find((c) => c && (c.offsetParent || c.id === "orders"));
+  const card = [document.getElementById("ss-card"), document.querySelector<HTMLElement>("#result .rc"), phoneSheet()].find((c) => c && (c.offsetParent || c.id === "orders" || c.id === "decide"));
   const bottom = card ? card.getBoundingClientRect().top : window.innerHeight * 0.45;
   return { top, bottom };
 }
@@ -4435,8 +4446,9 @@ function frameBoat(dt: number): void {
   // The results card on a phone keeps the same rule: the boat whole in the band above it (Elena).
   // At the finish too: on a phone the card covers the arrival's view, so she sits in the band above it.
   const phoneResults = !$("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on;
-  // Sailing with the orders sheet open on a phone: the same band rule, the boat whole above the sheet (Elena).
-  const phoneOrders = page.ready && $("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on && !!ordersSheet();
+  // Sailing on a phone with the orders or a "Your call" open as a sheet on the strip: the same band rule,
+  // the boat whole above the sheet (Elena).
+  const phoneOrders = page.ready && $("result").hidden && window.innerWidth < 700 && !wheel.on && !cine.on && !!phoneSheet();
   if (page.scene !== "arrival" && ((!page.ready && !$("start").hidden) || phoneResults || phoneOrders)) {
     // Her waterline, where she is: the world's middle on the crossing, off Annapolis on a practice page.
     here0.set(controls.target.x, 0, controls.target.z).project(camera); // includes the lens's current slide, so this settles on the target
@@ -4458,7 +4470,10 @@ function frameBoat(dt: number): void {
     // One rule for every boat and every card height (a saved voyage's line, a race row, practice's course line make the
     // card taller): her waterline sits a set way down the band, so she is whole inside it with air between her and the card.
     const at = !phone ? 0.5 : bandLine(band.top, band.bottom, spec.length > 5) / window.innerHeight;
-    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -0.4, 0.4);
+    // A phone's band can be short (a storm call's card fills the lower 80%): her waterline then sits near the
+    // top, and a slide capped at 0.4 left her hull tucked under the card's edge (Elena). Up to half a screen there.
+    const cap = phone ? 0.5 : 0.4;
+    ty = THREE.MathUtils.clamp(third.y + (0.5 - here0.y * 0.5 - at), -cap, cap);
   }
   // The finish scene is a cut to its own composed frame: no slide left over from the view before it
   // (it eased out over the first seconds, so the horizon sank and the banner's measured spot was off).
@@ -4671,7 +4686,7 @@ renderer.setAnimationLoop(() => {
       const yaw = smoothYaw ?? 0;
       model.gear.props.forEach((p, i) => p.getWorldPosition((propAt[i] ??= new THREE.Vector3())));
       propWash.surface = (x, z) => sea.surfaceAt(comps, x, z, t);
-      propWash.update(t, propAt, -Math.cos(yaw), Math.sin(yaw), model.gear.shown.spin, stw, spec.cruiseSpeed, hs, atmos.foamLight);
+      propWash.update(t, propAt, -Math.cos(yaw), Math.sin(yaw), model.gear.shown.spin, stw, spec.cruiseSpeed, hs, atmos.foamLight, power);
     }
     // The strip's equipment cell (the same icons as Watch a voyage): the watched boat's parts at the shown hour.
     equipmentIcons(equipmentParts(spec.key, r ? commsAt(r, h) : null, failedNow), true, "", false);

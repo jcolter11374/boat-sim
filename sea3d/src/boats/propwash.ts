@@ -19,11 +19,13 @@ function smooth(x: number, a: number, b: number): number {
 /**
  * How strong a motor's trail is, 0..1. spin: its propeller's speed (rad/s, the gear's);
  * speed: the boat's speed through the water over her cruising speed; hs: the sea's
- * significant wave height (m). A stopped propeller leaves none; a boat standing still
+ * significant wave height (m); power: the motors' power, 0..1 of full. A stopped propeller leaves none; a boat standing still
  * leaves none (nothing carries it aft); a rough sea breaks most of it up.
  */
-export function washStrength(spin: number, speed: number, hs = 0): number {
-  return Math.min(1, Math.max(0, spin / SPIN_FULL)) * smooth(speed, 0.05, 0.5) * (1 - 0.6 * smooth(hs, 1.5, 4));
+export function washStrength(spin: number, speed: number, hs = 0, power = 1): number {
+  // By the motor's power too (0..1 of full): barely there at a tenth, a little stronger at full (Elena).
+  const byPower = 0.3 + 0.7 * Math.min(1, Math.max(0, power));
+  return Math.min(1, Math.max(0, spin / SPIN_FULL)) * smooth(speed, 0.05, 0.5) * (1 - 0.6 * smooth(hs, 1.5, 4)) * byPower;
 }
 
 const vert = /* glsl */ `
@@ -55,9 +57,12 @@ const frag = /* glsl */ `
     // The pattern is fixed to the water: it streams aft as the boat moves on.
     vec2 q = vec2((uOdo - vUV.x * uLen) * 7.0, vUV.y * 1.6 + vI * 7.3);
     float n = 0.6 * vnoise(q) + 0.4 * vnoise(q * 2.7 + 3.1);
-    float body = (1.0 - smoothstep(0.3, 1.0, abs(vUV.y))) * pow(1.0 - vUV.x, 1.5) * smoothstep(0.0, 0.1, vUV.x);
-    float a = k * body * smoothstep(0.25, 0.7, n + 0.4 * (1.0 - vUV.x));
-    gl_FragColor = vec4(vec3(0.88, 0.93, 0.94) * uLight, 0.7 * a * mix(0.6, 1.0, smoothstep(0.1, 0.4, uLight)));
+    // A small thruster leaves a faint broken swirl that sits in the sea, not a pale ribbon on it
+    // (Elena, 14 Nov: no painted stripes): patches along its length, gone within about a boat length.
+    float brk = 0.12 + 0.88 * smoothstep(0.42, 0.6, 0.6 * vnoise(q * vec2(0.3, 0.9) + 21.0) + 0.4 * vnoise(q * vec2(0.8, 2.0) + 4.0));
+    float body = (1.0 - smoothstep(0.2, 1.0, abs(vUV.y))) * pow(1.0 - vUV.x, 2.0) * smoothstep(0.0, 0.12, vUV.x);
+    float a = k * body * brk * smoothstep(0.4, 0.62, n + 0.25 * (1.0 - vUV.x));
+    gl_FragColor = vec4(vec3(0.8, 0.88, 0.9) * uLight, 0.45 * a * mix(0.6, 1.0, smoothstep(0.1, 0.4, uLight)));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -109,26 +114,29 @@ export class PropWash {
   /**
    * props: each propeller's place in the world now; aftX, aftZ: the way astern (unit, world);
    * spin: each propeller's speed (rad/s, the gear's shown.spin); speedMs: water going past (m/s);
-   * cruiseMs: her cruising speed; hs: the sea's height (m); light: foam brightness 0..1.
+   * cruiseMs: her cruising speed; hs: the sea's height (m); light: foam brightness 0..1;
+   * power: the motors' power, 0..1 of full.
    */
-  update(t: number, props: THREE.Vector3[], aftX: number, aftZ: number, spin: number[], speedMs: number, cruiseMs: number, hs: number, light: number): void {
+  update(t: number, props: THREE.Vector3[], aftX: number, aftZ: number, spin: number[], speedMs: number, cruiseMs: number, hs: number, light: number, power = 1): void {
     if (this.lastT >= 0 && t > this.lastT) this.odo += speedMs * Math.min(t - this.lastT, 0.1);
     this.lastT = t;
-    const len = Math.min(2.2, Math.max(0.5, speedMs * 1.6));
+    const len = Math.min(1.6, Math.max(0.4, speedMs * 1.2)); // about half a kayak's length at her 2 knots
     const pos = this.mesh.geometry.attributes.position.array as Float32Array;
     const per = (ALONG + 1) * ACROSS;
     const k = this.mesh.material.uniforms.uK.value as THREE.Vector4;
     for (let m = 0; m < this.motors; m++) {
-      const s = washStrength(spin[m] ?? 0, cruiseMs > 0 ? speedMs / cruiseMs : 0, hs);
+      const s = washStrength(spin[m] ?? 0, cruiseMs > 0 ? speedMs / cruiseMs : 0, hs, power);
       this.shown.strength[m] = Math.round(s * 100) / 100;
       k.setComponent(m, s);
       const p = props[m];
       if (!p) continue;
       for (let i = 0; i <= ALONG; i++) {
         const d = START + (i / ALONG) * len;
-        const hw = 0.07 + 0.16 * (i / ALONG); // widens aft
+        const hw = 0.06 + 0.12 * (i / ALONG); // widens aft
         for (let j = 0; j < ACROSS; j++) {
-          const side = ((j / (ACROSS - 1)) * 2 - 1) * hw;
+          // It wanders as the water carries it off, fixed to the water like the pattern: never a ruled line.
+          const w = this.odo - d;
+          const side = ((j / (ACROSS - 1)) * 2 - 1) * hw + (i / ALONG) * (0.07 * Math.sin(w * 2.3 + m * 1.9) + 0.04 * Math.sin(w * 5.1 + m));
           const x = p.x + aftX * d - aftZ * side;
           const z = p.z + aftZ * d + aftX * side;
           const o = (m * per + i * ACROSS + j) * 3;

@@ -8,6 +8,9 @@ test("a motor's trail: full at cruising, none from a stopped propeller or a stan
   assert.equal(washStrength(0, 1), 0, "a dead motor leaves none");
   assert.equal(washStrength(29, 0), 0, "a boat standing still leaves none");
   assert.ok(washStrength(29, 1, 5) < 0.5 && washStrength(29, 1, 5) > 0.2, "a gale breaks most of it up, not all");
+  // By the motors' power: barely there at a tenth, the autopilot's quarter between, full a little stronger.
+  assert.ok(washStrength(29, 1, 0, 0.1) < 0.4 && washStrength(29, 1, 0, 0.1) > 0, "a tenth of full power");
+  assert.ok(washStrength(29, 1, 0, 0.25) < washStrength(29, 1, 0, 1), "more power, more wash");
   // A propeller running down: the trail dies with it, never jumps.
   let last = 1;
   for (let spin = 29; spin >= 0; spin -= 1) {
@@ -30,7 +33,7 @@ test("two motors, one dead: only the live motor's trail is drawn, and it runs as
   for (let i = 0; i < pos.length; i += 3) {
     assert.ok(pos[i] < -1.4 - 0.19, "astern of the propeller");
     assert.ok(Math.abs(pos[i + 1] - 0.43) < 1e-6, "on the water");
-    assert.ok(Math.abs(Math.abs(pos[i + 2]) - 0.2) < 0.24, "behind its own motor");
+    assert.ok(Math.abs(Math.abs(pos[i + 2]) - 0.2) < 0.3, "behind its own motor");
   }
   w.dispose();
 });
