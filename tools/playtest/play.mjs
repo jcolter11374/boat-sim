@@ -5209,6 +5209,10 @@ const CHECKS = {
           await p.evaluate(() => document.getElementById("go")?.click());
           await p.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy, null, { timeout: 5 * MIN }).catch(() => {});
           const sailAt = await p.evaluate(() => performance.now());
+          // #604/#606: click to moving (the voyage hour advancing) and the longest frame after the click.
+          await p.waitForFunction(() => (window.__helm.hour ?? 0) > 0.02, null, { timeout: 5 * MIN }).catch(() => {});
+          const movingAt = await p.evaluate(() => performance.now());
+          const after = await p.evaluate(([a, b]) => { const fr = window.__ft.frames.filter((t) => t >= a && t <= b + 2000); let w = 0; for (let i = 1; i < fr.length; i++) w = Math.max(w, fr[i] - fr[i - 1]); const lt = window.__ft.long.filter(([t]) => t >= a && t <= b + 2000).map(([, d]) => d); return { worst: Math.round(w), long: lt.length ? Math.round(Math.max(...lt)) : null }; }, [goAt, movingAt]);
           const r = await p.evaluate(([a, b]) => {
             const fr = window.__ft.frames.filter((t) => t >= a && t <= b);
             let worst = 0, at = 0;
@@ -5218,7 +5222,7 @@ const CHECKS = {
             return { longMax: lt.length ? Math.round(Math.max(...lt)) : null, longN: lt.length, frames: fr.length, worst: Math.round(worst), worstAfterCard: Math.round(at - a), lateMax: Math.round(Math.max(0, ...late)), lateOver500: late.filter((d) => d > 500).length };
           }, [cardAt, sailAt]);
           const boat = boatAt === null ? "not by the last click" : `${((boatAt - cardAt) / 1000).toFixed(1)} s after the card`;
-          out.push(`${tag}: card at ${((cardAt) / 1000).toFixed(1)} s after load; longest task ${r.longMax ?? "n/a"} ms (${r.longN} long tasks); longest frozen frame ${r.worst} ms (at ${(r.worstAfterCard / 1000).toFixed(1)} s); timer late up to ${r.lateMax} ms, ${r.lateOver500} times over 0.5 s; clicks ${clicks.join("/")} ms; boat ${boat}; Set sail to sailing ${((sailAt - goAt) / 1000).toFixed(1)} s; ${r.frames} frames`);
+          out.push(`${tag}: card at ${((cardAt) / 1000).toFixed(1)} s after load; longest task ${r.longMax ?? "n/a"} ms (${r.longN} long tasks); longest frozen frame ${r.worst} ms (at ${(r.worstAfterCard / 1000).toFixed(1)} s); timer late up to ${r.lateMax} ms, ${r.lateOver500} times over 0.5 s; clicks ${clicks.join("/")} ms; boat ${boat}; Set sail to sailing ${((sailAt - goAt) / 1000).toFixed(1)} s, to moving ${((movingAt - goAt) / 1000).toFixed(1)} s, after the click longest frame ${after.worst} ms, longest task ${after.long ?? "n/a"} ms; ${r.frames} frames`);
         } finally { await ctx.close().catch(() => {}); }
       }
       console.log(`CARDFREEZE ${BROWSER}: ${out.join(" || ")}`);
