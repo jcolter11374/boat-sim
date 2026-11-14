@@ -5020,6 +5020,70 @@ const CHECKS = {
       return res;
     },
   },
+  // Sweep of #583 (wet hull, deck drain, Watch from Pico), #586/#589 (Annapolis buoys, night glow),
+  // #590 (a rough start told on the card). Frames for Elena; plain checks where there's a hook.
+  "sweep-m5": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const out = [], bad = [];
+      const emit = async (name) => { if (BROWSER !== "chromium") return; const path = `look-m5-chromium-${name}.jpg`; if (await jpeg(page, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); } };
+      const open = async (q) => { await page.goto(SITE + "helm.html" + q, { waitUntil: "load", timeout: 2 * MIN }); await page.waitForFunction(() => document.querySelector("#go") && window.__helm && window.__helm.frames > 3, null, { timeout: 3 * MIN }).catch(() => {}); await page.waitForTimeout(2500); };
+      const sail = async () => { await page.evaluate(() => document.getElementById("go")?.click()); await page.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 20, null, { timeout: 5 * MIN }).catch(() => {}); await page.waitForTimeout(4000); };
+      const line = (id) => page.evaluate((id) => { const e = document.getElementById(id); return e && !e.hidden && e.getClientRects().length > 0 ? e.textContent.replace(/\s+/g, " ").trim() : null; }, id);
+      // #590: rough start.
+      await open("?when=rough");
+      const rough = await line("ss-rough");
+      out.push(`rough start card: ${rough ? `"${rough}"` : "NO LINE"}`);
+      if (!rough) bad.push("1 April: no rough-start line on the card");
+      await emit("rough-card");
+      await open("");
+      const calm = await line("ss-rough");
+      out.push(`calm day card: ${calm ? `"${calm}" (SHOWN)` : "no line"}`);
+      if (calm) bad.push(`the calm day shows a rough-start line: "${calm}"`);
+      // #583: wet and drain after a knockdown.
+      await sail();
+      const w0 = await page.evaluate(() => ({ wet: window.__helm.wet, drains: window.__helm.drains }));
+      const hasKnock = await page.evaluate(() => typeof window.__knock === "function");
+      if (!hasKnock) bad.push("no window.__knock (#583 not deployed?)");
+      else {
+        await page.evaluate(() => window.__knock());
+        await page.waitForTimeout(1200);
+        await emit("knock-a");
+        await page.waitForTimeout(2500);
+        await emit("knock-drain");
+        const w1 = await page.evaluate(() => ({ wet: window.__helm.wet, drains: window.__helm.drains }));
+        await page.waitForTimeout(6000);
+        const w2 = await page.evaluate(() => ({ wet: window.__helm.wet, drains: window.__helm.drains }));
+        out.push(`knockdown: wet ${(+w0.wet).toFixed(2)} -> ${(+w1.wet).toFixed(2)} -> ${(+w2.wet).toFixed(2)} after 10 s; drains ${w0.drains} -> ${w2.drains}`);
+        if (!(w1.wet > w0.wet + 0.2)) bad.push(`not soaked after a knockdown (${w0.wet} -> ${w1.wet})`);
+        if (!(w2.drains > w0.drains)) bad.push(`no deck drain counted (${w0.drains} -> ${w2.drains})`);
+      }
+      // #583: Watch from Pico.
+      await open("?who=autopilot");
+      const scene = await page.evaluate(() => { const r = document.getElementById("ss-scene"); return { shown: !!r && !r.hidden && r.getClientRects().length > 0, pills: [...(r?.querySelectorAll("button") ?? [])].map((b) => b.textContent.trim()) }; });
+      out.push(`Watch from on the card: ${scene.shown ? scene.pills.join(" / ") : "HIDDEN"}`);
+      if (!scene.shown || !scene.pills.some((p) => /Pico/.test(p))) bad.push(`no "Watch from" Pico on the autopilot card (${JSON.stringify(scene)})`);
+      await open("?who=autopilot&place=pico&quality=medium");
+      await sail();
+      await page.waitForTimeout(8000);
+      const land = await page.evaluate(() => ({ err: window.__helm.error ?? null, land: window.__helm.land ? JSON.stringify(window.__helm.land).slice(0, 120) : null, reach: Math.round(window.__helm.reach ?? 0) }));
+      out.push(`Pico: ${JSON.stringify(land)}`);
+      if (land.err) bad.push(`Pico watch failed: ${land.err}`);
+      await emit("pico");
+      // #586/#589: Annapolis buoys, day and night.
+      for (const hr of [10, 22]) {
+        await open(`?where=annapolis&hour=${hr}&quality=medium`);
+        await sail();
+        await page.waitForTimeout(6000);
+        await emit(`annapolis-${hr}h`);
+      }
+      out.push("annapolis frames at 10 h and 22 h");
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
