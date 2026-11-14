@@ -31,7 +31,8 @@ import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
-import { loadMyBoat, randolphAsBuilt, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
+import { paintMine } from "./boats/paintApply";
+import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
@@ -220,6 +221,7 @@ function buildBoat(): void {
     contact.dispose();
   }
   model = BUILDERS[spec.key](quality);
+  paintMine(model); // the player's own paint, looks only (boats/paintApply.ts)
   reflectable(model.root);
   contact = new Contact(model.form, spec, quality, model.root);
   ride = new ShortWaveRide(spec.length, spec.beam, contact.bow[0], model.stern.x);
@@ -289,6 +291,8 @@ function useBoat(base: string): void {
   if (k && !hasDetailedStock(k)) void loadStockModel(k).then((ok) => ok && spec.key === k && buildBoat());
 }
 buildBoat();
+// A new paint (the "Your boat" picker): repaint her where she floats, without a rebuild.
+onMyBoatChange(() => model && paintMine(model));
 let modelsIn = false; // the detailed boats have loaded (or failed to): the shader warm-up waits for them
 void loadDetailedModels().then((ok) => {
   if (ok) buildBoat();

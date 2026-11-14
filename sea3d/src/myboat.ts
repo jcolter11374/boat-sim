@@ -165,6 +165,7 @@ export function onMyBoatChange(cb: (b: MyBoat | null) => void): () => void {
     cb((e as CustomEvent<MyBoat | null>).detail ?? null);
   const other = (e: StorageEvent) => {
     if (e.key === MYBOAT_KEY || e.key === null) cb(parseMyBoat(e.newValue)); // key null: storage cleared
+    else if (e.key === PAINT_KEY) cb(loadMyBoat()); // another tab repainted her
   };
   window.addEventListener(MYBOAT_EVENT, here);
   window.addEventListener("storage", other);
@@ -172,6 +173,39 @@ export function onMyBoatChange(cb: (b: MyBoat | null) => void): () => void {
     window.removeEventListener(MYBOAT_EVENT, here);
     window.removeEventListener("storage", other);
   };
+}
+
+/**
+ * The player's paint (boats/paint.ts): the id of a scheme, or "" for the boat's own colours.
+ * Looks only. Kept beside the boat rather than inside it, so it stays when the player picks
+ * another boat and nothing that compares saved boats (the as-built Randolph designs, "our
+ * kayak" = nothing saved) has to know about it.
+ */
+export const PAINT_KEY = "boatsim.paint.v1";
+let paintMemory = "";
+export function loadPaint(s: StorageLike | null = store()): string {
+  if (s) {
+    try {
+      const v = s.getItem(PAINT_KEY);
+      if (v !== null) return /^[a-z0-9_-]{1,24}$/.test(v) ? v : "";
+    } catch {
+      // unreadable: use the in-memory copy
+    }
+  }
+  return paintMemory;
+}
+/** Remember the paint and tell the page as a change to the player's boat, so every view of her redraws. */
+export function savePaint(id: string, s: StorageLike | null = store()): void {
+  paintMemory = id;
+  if (s) {
+    try {
+      if (id) s.setItem(PAINT_KEY, id);
+      else s.removeItem(PAINT_KEY);
+    } catch {
+      // full or switched off: the in-memory copy carries it for this page
+    }
+  }
+  announce(loadMyBoat(s));
 }
 
 /** The Boatyard page that reopens this boat, relative to the site root
