@@ -5328,6 +5328,7 @@ const CHECKS = {
         const phone = w < 500;
         for (const after of ["setsail", "watch"]) {
           const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 2 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+          await ctx.addInitScript(() => { const f = (window.__rafT = []); const tick = (t) => { f.push(t); requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
           const p = await ctx.newPage();
           const errs = [];
           p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
@@ -5337,6 +5338,8 @@ const CHECKS = {
           const tag = `${w}-${after}`;
           if (after === "setsail") { const path = `look-titlefade-${BROWSER}-${w}-menu.jpg`; if (await jpeg(p, path)) send(path); }
           const t0 = Date.now();
+          const goAt = await p.evaluate(() => performance.now());
+          const before = await p.evaluate((a) => { const f = window.__rafT.filter((t) => t > a - 10000 && t < a); let m = 0; for (let i = 1; i < f.length; i++) m = Math.max(m, f[i] - f[i - 1]); return Math.round(m); }, goAt);
           await p.evaluate((id) => document.getElementById(id)?.click(), after === "setsail" ? "t-setsail" : "t-sea");
           const times = [];
           for (let i = 1; i <= 8; i++) {
@@ -5345,11 +5348,46 @@ const CHECKS = {
             times.push(ok ? ((Date.now() - t0) / 1000).toFixed(1) : "x");
           }
           const where = await p.evaluate(() => location.pathname.split("/").pop() || "title").catch(() => "?");
-          out.push(`${tag}: frames at ${times.join("/")} s, ended on ${where}${errs.length ? `, errors ${errs.join("; ")}` : ""}`);
+          let gap = "n/a";
+          if (after === "watch") gap = await p.evaluate((a) => { const f = window.__rafT.filter((t) => t >= a); let m = 0, first = f.length ? f[0] - a : 0; for (let i = 1; i < f.length; i++) m = Math.max(m, f[i] - f[i - 1]); return `first frame ${Math.round(first)} ms after the click, longest frame after ${Math.round(m)} ms (${f.length} frames)`; }, goAt).catch(() => "?");
+          out.push(`${tag}: longest frame in the 10 s before ${before} ms; ${gap}; frames at ${times.join("/")} s, ended on ${where}${errs.length ? `, errors ${errs.join("; ")}` : ""}`);
           await ctx.close();
         }
       }
       console.log(`TITLEFADE ${BROWSER}: ${out.join(" || ")}`);
+      return out;
+    },
+  },
+  // Maya (#614): Annapolis practice no longer draws the flat ground under open water. Frame time
+  // at Low and Medium, then the orbit camera pulled out to its 60 m limit: high oblique shots on
+  // four sides and straight down, to look for a hole or seam in the water near the shore.
+  "annapolis-614": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const out = [];
+      const send = (path) => { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); };
+      const shot = async (name) => { const path = `look-ann614-${BROWSER}-${name}.jpg`; if (await jpeg(page, path)) send(path); };
+      for (const q of ["low", "medium"]) {
+        await page.goto(`${SITE}helm.html?where=annapolis&hour=10&quality=${q}`, { waitUntil: "load", timeout: 3 * MIN });
+        await page.waitForFunction(() => window.__helm?.ready && (window.__helm.frames ?? 0) > 3, null, { timeout: 5 * MIN }).catch(() => {});
+        await page.waitForTimeout(5000);
+        const ft = await page.evaluate(() => new Promise((res) => { const f = []; const t0 = performance.now(); const tick = (t) => { f.push(t); if (t - t0 < 20000) requestAnimationFrame(tick); else { const d = f.slice(1).map((x, i) => x - f[i]).sort((a, b) => a - b); res(d.length ? `${d.length} frames in 20 s, median ${Math.round(d[d.length >> 1])} ms, longest ${Math.round(d[d.length - 1])} ms` : "no frames"); } }; requestAnimationFrame(tick); }));
+        out.push(`${q}: ${ft}`);
+        if (q === "low") continue;
+        const vw = page.viewportSize();
+        const cx = vw.width / 2, cy = vw.height / 2;
+        const view = async () => page.evaluate(() => { const v = window.__helm?.camView?.(); if (!v) return "?"; const d = Math.hypot(...v.cam.map((c, i) => c - v.target[i])); return `cam ${v.cam.map((x) => Math.round(x)).join(",")}, ${Math.round(d)} m out`; }).catch(() => "?");
+        await page.mouse.move(cx, cy);
+        for (let i = 0; i < 30; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(80); }
+        await page.waitForTimeout(3000);
+        const drag = async (dx, dy) => { await page.mouse.move(cx, cy); await page.mouse.down(); for (let k = 1; k <= 10; k++) await page.mouse.move(cx + (dx * k) / 10, cy + (dy * k) / 10); await page.mouse.up(); await page.waitForTimeout(2500); };
+        await drag(0, 60); // up and over a little: a high oblique
+        for (const side of ["a", "b", "c", "d"]) { out.push(`oblique-${side}: ${await view()}`); await shot(`oblique-${side}`); await drag(vw.width / 4, 0); }
+        await drag(0, 600); // over the top: looking straight down
+        out.push(`topdown: ${await view()}`); await shot("topdown");
+      }
+      console.log(`ANN614 ${BROWSER}: ${out.join(" || ")}`);
       return out;
     },
   },
