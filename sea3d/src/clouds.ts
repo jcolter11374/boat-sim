@@ -88,9 +88,14 @@ const EMBER = new THREE.Color(0.85, 0.32, 0.3); // the break after the sun has g
 /** Under a full deck the sky meets the sea at this share of the haze colour (shader hzC). */
 export const HORIZON_DECK = 1.0;
 
+/** How much brighter the deck is drawn, against the haze, after dark (the haze itself drops to a clear night's: atmosphere.ts STORM_NIGHT). */
+export const DECK_NIGHT_LIFT = 2.2;
 export function skyColours(haze: THREE.Color, sunEl: number, storm: number, cover: number) {
   const lum = Math.max(0.2126 * haze.r + 0.7152 * haze.g + 0.0722 * haze.b, 0.003);
-  const steel = STEEL.clone().multiplyScalar(lum * 1.4);
+  // After dark the far mist is no brighter than the deck (no twilight lights it), so the deck keeps
+  // nearly its old tone while the mist darkens to meet it (Elena, 14 Nov: no pale stripe on the horizon).
+  const dark = 1 - SM(sunEl, -12, -4);
+  const steel = STEEL.clone().multiplyScalar(lum * 1.4 * (1 + DECK_NIGHT_LIFT * dark));
   const belly = steel.clone().multiplyScalar(0.42);
   const deck = Math.max(SM(storm, 0.15, 0.7), SM(cover, 0.55, 0.95));
   const brk_amount = deck * SM(sunEl, -6, -0.5) * (1 - 0.6 * SM(sunEl, 14, 35));
@@ -376,20 +381,30 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
   for (int i = 0; i < 80; i++) {
     if (i >= cap || used >= M || T < 0.03 || tt > tEnd) break;
     vec3 P = uCam + dir * tt;
-    float inside = -cuIn(P, uQ < 0.5 ? 0.0 : 1.0); // Low: no bulges (Kai)
-    float thin = smoothstep(160.0, 400.0, gThick); // thin rims and thin heaps fade out softly instead of breaking into twinkling holes
-    // Stride through clear air, faster where no heap stands at all, so a ray that grazes one
-    // heap still reaches the next (else a whole heap came out as scattered dots).
-    float st = inside < -200.0 ? (cuMaybe(P.xz) > 0.0 ? 2.5 * fs : max(2.5 * fs, 0.5 * dt)) : (gThick > 0.0 ? min(fs, max(gThick / 8.0, 8.0)) : fs); // finer steps through thin cloud, so a thin heap isn't left to a few random samples; fine steps anywhere near a heap: long strides skipped thin edges at random
-    float dens = smoothstep(0.0, 20.0 + 1.2 * fs, inside) * thin; // crisp up close, soft far off // edge ramp wider than a step: no comb // crisp heads, a soft fringe
+    // The heap is sampled at P and three times towards the sun (the light reaching P), all at the
+    // one call site of this loop: each written-out call to cuIn() is compiled in whole, and with
+    // six of them the graphics driver took 1 to 2 s to set this pass up (Omar's speed list).
+    float inside = 0.0, thin = 0.0, st = fs, dens = 0.0, od = 0.0;
+    for (int j = 0; j < 4; j++) {
+      float v = -cuIn(P + sunD * (j == 1 ? 30.0 : j == 2 ? 90.0 : j == 3 ? 500.0 : 0.0), j == 3 || uQ < 0.5 ? 0.0 : 1.0); // Low: no bulges (Kai)
+      if (j == 0) {
+        inside = v;
+        thin = smoothstep(160.0, 400.0, gThick); // thin rims and thin heaps fade out softly instead of breaking into twinkling holes
+        // Stride through clear air, faster where no heap stands at all, so a ray that grazes one
+        // heap still reaches the next (else a whole heap came out as scattered dots).
+        st = inside < -200.0 ? (cuMaybe(P.xz) > 0.0 ? 2.5 * fs : max(2.5 * fs, 0.5 * dt)) : (gThick > 0.0 ? min(fs, max(gThick / 8.0, 8.0)) : fs); // finer steps through thin cloud, so a thin heap isn't left to a few random samples; fine steps anywhere near a heap: long strides skipped thin edges at random
+        dens = smoothstep(0.0, 20.0 + 1.2 * fs, inside) * thin; // crisp up close, soft far off // edge ramp wider than a step: no comb // crisp heads, a soft fringe
+        if (dens <= 0.001) break;
+      }
+      // Light reaching this point from the sun, through the heap towards it.
+      // (samples out to 500 m, so a heap backlit by a low sun is dark on the side we see)
+      else if (j == 1) od += smoothstep(-40.0, 80.0, v) * 60.0; // the silver line stays thin
+      else if (j == 2) od += smoothstep(-30.0, 120.0, v) * 260.0; // bulges shade each other
+      else od += smoothstep(-30.0, 120.0, v) * 700.0; // only the thinnest edges let the sun through: a thin silver line, not a halo
+    }
     if (dens > 0.001) {
       used++;
       if (dFirst < 0.0) dFirst = tt;
-      // Light reaching this point from the sun, through the heap towards it.
-      // (samples out to 500 m, so a heap backlit by a low sun is dark on the side we see)
-      float od = smoothstep(-40.0, 80.0, -cuIn(P + sunD * 30.0, uQ < 0.5 ? 0.0 : 1.0)) * 60.0 // the silver line stays thin
-               + smoothstep(-30.0, 120.0, -cuIn(P + sunD * 90.0, uQ < 0.5 ? 0.0 : 1.0)) * 260.0 // bulges shade each other
-               + smoothstep(-30.0, 120.0, -cuIn(P + sunD * 500.0, 0.0)) * 700.0; // only the thinnest edges let the sun through: a thin silver line, not a halo
       float Tl = exp(-od * 0.014) * 0.88 + 0.12 * exp(-od * 0.003); // more multiple scattering: brilliant white, not smoke (Elena r5) // a little multiple scattering
       float hf = clamp((P.y - CU_BASE) / CU_TOP, 0.0, 1.0);
       float low = smoothstep(0.0, 320.0, P.y - CU_BASE);
@@ -498,7 +513,9 @@ void main() {
                       + texture2D(uCuTex, ic + vec2(0.0, it.y)) + texture2D(uCuTex, ic - vec2(0.0, it.y)));
       cu = mix(cu, nb, smoothstep(0.15, 0.45, nb.a - cu.a));
       cu.rgb /= max(cu.a, 1e-4);
-    } else cu = cumulusVol(dir, facing, toSunH, sunUp);
+    } else cu = vec4(0.0); // never: the heaps are drawn only in their own pass (uCuRT is 1 whenever they show).
+    // (The march used to be written in here too, as a spare: unused, but compiled into the sky,
+    // where it was most of the 1 to 4 s the graphics driver took to set the sky up: Omar's list.)
     col += (1.0 - alpha) * cu.a * cuAmt * cu.rgb; alpha += (1.0 - alpha) * cu.a * cuAmt;
   }
   if (cuAmt > 0.01 && alpha < 0.99 && dir.y > 0.0) {
