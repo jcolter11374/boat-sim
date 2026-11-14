@@ -25,7 +25,7 @@ import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
-import { Wildlife } from "./wildlife";
+import { standIns, Wildlife } from "./wildlife";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, randolphSettled, type BoatModel } from "./boats/model";
@@ -95,7 +95,7 @@ import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
-import { intoTarget, startWhenBuilt } from "./warmup";
+import { drawEach, intoTarget, startWhenBuilt } from "./warmup";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -177,6 +177,9 @@ void Wildlife.load().then((w) => {
   wildlife = w;
   scene.add(w.root);
 });
+// Hidden: one of each animal, built and drawn behind the Set sail card (warmShaders), so the first
+// animals met don't build their shaders mid-voyage.
+scene.add(standIns());
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
@@ -4876,6 +4879,9 @@ function warmShaders(): void {
           if (!parallel) pr.getUniforms();
           else if (warmRootLeft > 0) warmRootPrograms.push(pr);
         }
+      // And without it, draw it once too (into a corner, alone): the driver sets each shader up for
+      // drawing on its first use, which was most of the 4 to 10 s wait after Set sail (rank 12).
+      if (!parallel && !seeThrough) drawEach(renderer, scene, camera, [o], inMirror ? mirror.target : prev);
       if (warmRootLeft > 0) warmRootLeft--;
     }
   } catch {

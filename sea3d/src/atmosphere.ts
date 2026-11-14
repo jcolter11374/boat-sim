@@ -280,6 +280,16 @@ export class Atmosphere {
     // Real topsides mirror the dark water below and the bright haze at the horizon.
     this.envScene.add(this.envSea);
     this.pmrem = new THREE.PMREMGenerator(renderer);
+    // Each re-light (pmrem.fromScene) makes a new background material for the cube faces and throws
+    // it away after, and three throws away its shader with it: so every re-light built that shader
+    // again, and on software graphics the first sailing frames waited on it (Omar's speed list, rank
+    // 12). A twin that is never seen (nothing to draw) keeps the shader alive between re-lights.
+    const keep = new THREE.Mesh(
+      new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([], 3)),
+      new THREE.MeshBasicMaterial({ name: "PMREM.Background", side: THREE.BackSide, depthWrite: false, depthTest: false }),
+    );
+    keep.frustumCulled = false;
+    this.envScene.add(keep);
 
     // Stars, placed on the sky's own sphere (equator and pole): setCelestial()
     // turns the whole sphere to the right time and place. Faint ones at random
