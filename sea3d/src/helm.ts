@@ -522,7 +522,7 @@ const page = {
   },
 };
 /** For pictures and reviews: where the camera looks from and at, and where the boat is, in world metres. */
-(page as unknown as { view: () => { cam: number[]; target: number[]; boat: number[] | null } }).view = () => {
+(page as unknown as { camView: () => { cam: number[]; target: number[]; boat: number[] | null } }).camView = () => {
   const r = (v: THREE.Vector3) => v.toArray().map((x) => Math.round(x * 10) / 10);
   return { cam: r(camera.position), target: r(controls.target), boat: model ? r(model.root.getWorldPosition(new THREE.Vector3())) : null };
 };
