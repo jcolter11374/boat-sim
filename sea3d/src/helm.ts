@@ -3945,7 +3945,7 @@ async function begin(): Promise<void> {
       const pick = chosenBoat();
       const mine = loadMyBoat();
       const boat = pick === MINE && mine ? mine.choices : pick || undefined;
-      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort);
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort, mode === "hands_on" ? { heading: order, power, sails: sailOrder, engine: engineOrder } : undefined);
       useBoat(game.boatBase);
       rememberBoat(pick, mine);
       if (mode !== (page.status.mode ?? "hands_on")) {
@@ -3953,7 +3953,7 @@ async function begin(): Promise<void> {
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
       }
       // Hands on: the first order goes at once. From base, the boat sails the launch route until base sends one.
-      if (mode === "hands_on") await game.order(order, power, sailOrder, engineOrder);
+      if (mode === "hands_on" && !game.firstOrderSent) await game.order(order, power, sailOrder, engineOrder);
       else draft = true; // ready to send
       page.status = game.status;
     }
