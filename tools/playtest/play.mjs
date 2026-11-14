@@ -4550,7 +4550,7 @@ const CHECKS = {
   // Iris's M5 film contact sheet (tools/playtest/film/README.md): one sequence each, at a real
   // moment of the kayak's voyage, nothing forced. Chromium only; the twelve stills and the .json
   // files go to the log as LOOK blocks, named film-<seq>-*.
-  ...Object.fromEntries([["passage", "day"], ["storm", "hour:209.5"], ["knockdown", "after-knockdown"], ["golden", "golden"], ["night", "night"]].map(([seq, when]) => [`film-${seq}`, {
+  ...Object.fromEntries([["passage", "day"], ["storm", "gale"], ["knockdown", "after-knockdown"], ["golden", "golden"], ["night", "night"]].map(([seq, when]) => [`film-${seq}`, {
     manual: true,
     path: "",
     run: async (page) => {
@@ -4559,7 +4559,7 @@ const CHECKS = {
       const { spawnSync } = await import("node:child_process");
       const { readdirSync, existsSync } = await import("node:fs");
       const dir = `film-out/${seq}`;
-      const r = spawnSync("node", ["tools/playtest/film/live_sheet.mjs", "kayak", seq, when, dir], { env: { ...process.env, BASE: SITE, SHEET_ONLY: "1" }, encoding: "utf8", maxBuffer: 64 << 20, timeout: 140 * MIN });
+      const r = spawnSync("node", ["tools/playtest/film/live_sheet.mjs", "kayak", seq, when, dir], { env: { ...process.env, BASE: SITE, SHEET_ONLY: "1", MAX_MIN: "80" }, encoding: "utf8", maxBuffer: 64 << 20, timeout: 140 * MIN });
       const out = (r.stdout || "") + (r.stderr || "");
       console.log(out.split("\n").filter((l) => !/^\s*$/.test(l)).slice(-12).join("\n"));
       const emit = (file, name) => { const b64 = readFileSync(file).toString("base64"); console.log(`LOOK-BEGIN ${name}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${name}`); };

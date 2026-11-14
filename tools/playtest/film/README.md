@@ -8,8 +8,8 @@ Run once PR #561 is live, so the sheets show the build players get.
 
 ## The script
 `live_sheet.mjs <boat> <sequence> <when> <outdir> [secs=60] [fps=8]`, with `BASE` set to the site.
-It opens the sailing screen at High quality, sets sail on the default launch day, sails on at 6 hours a
-second (clicking the first choice on any "Your call" card) until the voyage reaches the moment asked
+It opens the sailing screen at High quality, sets sail on the default launch day, sails on (a day a
+second while an hour target is far off, then 6 hours a second, then 1 hour a second near the moment) (clicking the first choice on any "Your call" card) until the voyage reaches the moment asked
 for, pauses the clock, starts the film on that sequence and steps the page clock 1/8 s a frame. So it
 films in the page's own time, not wall-clock time: a slow runner only takes longer.
 
@@ -18,27 +18,28 @@ films in the page's own time, not wall-clock time: a slow runner only takes long
 - `VW`/`VH`: window size, default 960x540 (the sheet maker's percentages assume 960 wide).
 - Writes `<outdir>/fNNNNN.jpg`, `<outdir>.boxes.json` (which shot each frame is, and the boat's box) and
   `<outdir>.info.json` (voyage hour, speed, sun height, wind and waves at the moment filmed).
-- Exit 3 with "NEVER REACHED THE MOMENT" if the voyage ends or 25 minutes pass first.
+- Exit 3 with "NEVER REACHED THE MOMENT" if the voyage ends or `MAX_MIN` minutes (default 25) pass first. On a runner set `MAX_MIN=120`.
 
 ## The five commands (one part each)
 ```
-export BASE=https://jcolter11374.github.io/boat-sim/ SHEET_ONLY=1
+export BASE=https://jcolter11374.github.io/boat-sim/ SHEET_ONLY=1 MAX_MIN=120
 node live_sheet.mjs kayak passage   day              out/passage
-node live_sheet.mjs kayak storm     hour:209.5       out/storm
+node live_sheet.mjs kayak storm     gale             out/storm
 node live_sheet.mjs kayak knockdown after-knockdown  out/knockdown
 node live_sheet.mjs kayak golden    golden           out/golden
 node live_sheet.mjs kayak night     night            out/night
 ```
 What each moment is, from my local runs of the same voyage (default launch, 23 Apr 2020):
 - passage: some hours out, by day (sun more than 15 degrees up), making about 2 knots.
-- storm: voyage hour 209.5, the roughest hour I found: about 33 knots of wind, 5.3 m waves.
+- storm: the first daylight hour with 27 knots of wind or more (sun over 10 degrees up). Not hour 209.5 as
+  first written: that hour is at night, so the sheet would have been black.
 - knockdown: just after the first knockdown the voyage records, about hour 123.5 (28 knots, 4.0 m).
   The script stops the clock there, waits for the knockdown's own camera move to finish, then starts the film.
-- golden: the first hour after 6 with the sun 1 to 6 degrees up.
+- golden: the first hour after 6 with the sun 1 to 6 degrees up. Locally this was the next sunrise (hour 22.4):
+  the first evening went by between two looks at 6 hours a second.
 - night: the first hour after 6 with the sun more than 12 degrees under the horizon (about hour 13).
 
-If the live voyage differs from my local one (it should not: same launch day, same choices), storm
-still films whatever hour 209.5 holds; check `out/storm.info.json` says a gale.
+Each `.info.json` records the hour, sun height, wind and waves actually filmed; check them against the above.
 
 ## The sheets
 ```
@@ -54,3 +55,10 @@ The five sheets, the five `.info.json` files and the stills, in a folder for Ele
 I could not run this against the live site (my machine cannot reach it). Locally, against my own build,
 the night command ran clean for 12 s of film; the other four moments were reached by the same loop
 in my knockdown and gale proofs, but not by this exact script.
+
+## Changes after the first live run (14 Nov, Nina's run 43598778218)
+- The page now checks for the moment and stops its own clock in the same step, and the script drops to 1 hour a
+  second when the sun gets low (golden, night) or an hour target is near, so a slow runner cannot sail past it.
+- `MAX_MIN` sets the cap; hour targets far off start at a day a second (storm at hour 209.5 was still at 158 after 25 min).
+- The knockdown wait steps the page's own time until the knockdown's camera move ends, instead of waiting in real time.
+- storm now uses `gale` (a daylight gale found by the wind reading), since the roughest hour I had named is at night.

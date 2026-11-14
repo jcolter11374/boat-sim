@@ -4,7 +4,7 @@ import { readFileSync, mkdirSync } from "node:fs";
 // One film sequence at a real moment of a voyage, nothing forced (John's C4), for the M5 contact sheet.
 // usage: BASE=https://.../boat-sim/ node live_sheet.mjs <boat> <sequence> <when> <outdir> [secs=60] [fps=8]
 //   when: "day" (some hours out, by day), "golden" (sun 1-6 deg up), "night" (sun under -12 deg),
-//         "hour:<h>" (that voyage hour), "after-knockdown" (just after the first knockdown the voyage records)
+//         "gale" (the first daylight hour with 27 knots of wind or more), "hour:<h>" (that voyage hour), "after-knockdown" (just after the first knockdown the voyage records)
 const [boat, seq, when, dir, secs = "60", fps = "8"] = process.argv.slice(2);
 const BASE = process.env.BASE ?? "http://localhost:4182/";
 const FPS = Number(fps);
@@ -47,25 +47,42 @@ if (boat !== "kayak") {
 if (process.env.LAUNCH) await p.evaluate((v) => { const s = document.getElementById("launch"); s.value = v; s.dispatchEvent(new Event("change", { bubbles: true })); }, process.env.LAUNCH);
 await p.click("#go");
 await p.waitForFunction(() => window.__helm?.ready, null, { timeout: 300000 });
-// Sail on (6 h a second, then 1 h a second near the moment) until the voyage itself reaches the moment wanted.
+// Sail on until the voyage itself reaches the moment wanted: a day a second while it is far off (hour targets only),
+// 6 h a second, then 1 h a second near it. The page checks the moment and stops its own clock in the same step,
+// so a slow machine cannot sail past it (Nina's live run, 14 Nov: golden hour overshot by 0.6 h at 6 h a second).
 const want = when.startsWith("hour:") ? Number(when.slice(5)) : null;
-await p.click(`button.rate[data-rate="${when === "day" ? 1 : 6}"]`);
+const MAX_MIN = Number(process.env.MAX_MIN ?? 25);
+let rate = when === "day" ? "1" : want != null && want > 40 ? "24" : "6";
+await p.click(`button.rate[data-rate="${rate}"]`);
 const t0 = Date.now();
-let slow = when === "day";
 for (;;) {
-  const st = await p.evaluate(() => { const h = window.__helm; const d = document.getElementById("decide"); if (d && !d.hidden) d.querySelector("#decidebtns button")?.click(); if (h.clock === 0 && !h.busy && !h.card) document.getElementById("t-pause")?.click(); return { hour: h.hour, over: !!h.status?.over, el: h.cine.host.sunEl(), kn: h.cine.host.speed(), k: h.knockdown()?.start ?? null, wind: document.getElementById("c-windv")?.textContent }; });
-  if (st.over || Date.now() - t0 > 25 * 60e3) { console.log("NEVER REACHED THE MOMENT:", JSON.stringify(st)); process.exit(3); }
-  if (want != null && !slow && st.hour >= want - 9) { slow = true; await p.click('button.rate[data-rate="1"]'); }
-  const there = when === "day" ? st.hour >= 7 && st.el > 15 : when === "golden" ? st.hour > 6 && st.el > 1 && st.el < 6 : when === "night" ? st.hour > 6 && st.el < -12 : when === "after-knockdown" ? st.k != null : st.hour >= want;
-  if (there && st.kn > 0.3) { console.log("moment:", JSON.stringify(st)); break; }
-  await p.waitForTimeout(slow ? 60 : 150);
+  const st = await p.evaluate(([when, want]) => {
+    const h = window.__helm;
+    const d = document.getElementById("decide");
+    if (d && !d.hidden) d.querySelector("#decidebtns button")?.click();
+    const el = h.cine.host.sunEl();
+    const kn = h.cine.host.speed();
+    const k = h.knockdown()?.start ?? null;
+    const windKn = Number(/([\d.]+) kn/.exec(document.getElementById("c-windv")?.textContent ?? "")?.[1] ?? 0);
+    const there = (when === "gale" ? h.hour > 6 && windKn >= 27 && el > 10 : when === "day" ? h.hour >= 7 && el > 15 : when === "golden" ? h.hour > 6 && el > 1 && el < 6 : when === "night" ? h.hour > 6 && el < -12 : when === "after-knockdown" ? k != null : h.hour >= want) && kn > 0.3;
+    if (there) { if (h.clock !== 0) document.getElementById("t-pause")?.click(); }
+    else if (h.clock === 0 && !h.busy && !h.card) document.getElementById("t-pause")?.click();
+    return { there, windKn, hour: h.hour, over: !!h.status?.over, el, kn, k, wind: document.getElementById("c-windv")?.textContent };
+  }, [when, want]);
+  if (st.there) { console.log("moment:", JSON.stringify(st)); break; }
+  if (st.over || Date.now() - t0 > MAX_MIN * 60e3) { console.log("NEVER REACHED THE MOMENT:", JSON.stringify(st)); process.exit(3); }
+  // Slow down near the moment: an hour target by the hours left; golden hour and night by the sun getting low.
+  const near = want != null ? (st.hour >= want - 9 ? "1" : st.hour >= want - 40 ? "6" : rate) : (when === "golden" || when === "night") && st.hour > 6 && st.el < 14 ? "1" : when === "gale" ? (st.windKn >= 22 && st.el > 0 ? "1" : "6") : rate;
+  if (near !== rate) { rate = near; await p.click(`button.rate[data-rate="${rate}"]`); }
+  await p.waitForTimeout(rate === "1" ? 40 : 120);
 }
 await p.evaluate(() => window.__helm.clock !== 0 && document.getElementById("t-pause")?.click());
-// The clock is stopped first, so the voyage stays at the knockdown's hour; then let the knockdown's own camera move finish before the film starts.
-if (when === "after-knockdown") await p.waitForFunction(() => !window.__helm.knockCut(), null, { timeout: 120000 });
 await p.waitForTimeout(3000);
 await p.evaluate(() => window.__virtual());
 await p.evaluate(() => { for (let k = 0; k < 40; k++) window.__tick(0.05); });
+// The clock is stopped at the knockdown's hour; step the page's own time until the knockdown's camera move has finished
+// (on a slow machine waiting in real time took over two minutes), then the film starts.
+if (when === "after-knockdown") for (let k = 0; k < 600 && (await p.evaluate(() => { window.__tick(0.1); return window.__helm.knockCut(); })); k++);
 const info = await p.evaluate(() => ({ hour: window.__helm.hour, kn: window.__helm.cine.host.speed(), el: window.__helm.cine.host.sunEl(), wind: document.getElementById("c-windv")?.textContent, day: document.getElementById("clock")?.textContent }));
 console.log("filming at", JSON.stringify(info));
 await p.evaluate((s) => { window.__helm.cine.start(s); }, seq);
