@@ -62,19 +62,36 @@ export function worthAskingAgain(gainDays: number, turnedDown: number | null): b
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-/** The card's words. One sentence of what the forecast says, with the price in it; the options'
- * forecast tags carry the numbers. */
-export function pushCard(order: Heading, power: number, soc: number, push: Staked): { text: string; push: string; pushTitle: string; stay: string; did: string } {
+/** The card's words (Elena's ruling, 14 Nov: plain, no "would gain on"). One sentence of what the
+ * forecast says, with the price in it; the options' forecast tags carry the numbers. `ago`: what
+ * the note four days later opens with, before "she's now N km ahead of the ghost". */
+export function pushCard(order: Heading, power: number, soc: number, push: Staked): { text: string; push: string; pushTitle: string; stay: string; did: string; ago: string } {
   const to = pct(push.power ?? 0);
   const low = pct(push.soc_min ?? 0);
-  const than = order === "auto" ? "the autopilot" : `your ${pct(power)} power`;
+  const faster = order === "auto" ? "pull ahead of the autopilot" : `go faster than at your ${pct(power)}`;
   return {
-    text: `Navigator's check: the battery is at ${pct(soc)}. The forecast says ${to} power would gain on ${than} over the next 4 days, but run the battery down to ${low}.`,
-    push: order === "auto" ? `Push: ${to} power, straight at the finish` : `Push: ${to} power`,
-    pushTitle: "More power from the battery. Ease off, or hand her back to the autopilot, before it runs low",
-    stay: order === "auto" ? "Stay on the autopilot (what the ghost does)" : `Keep ${pct(power)} power`,
+    text: `Navigator's check: the battery is at ${pct(soc)}. At ${to} power she'd ${faster} over the next 4 days, but the battery would drop to ${low}.`,
+    push: `Push: ${to} power`,
+    pushTitle: "Faster, but it drains the battery. Ease off, or hand her back to the autopilot, before it runs low.",
+    stay: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${pct(power)} power`,
     did: `pushed to ${to} power`,
+    ago: `You pushed to ${to} power 4 days ago`,
   };
+}
+
+/** How the night call opens (Elena, 14 Nov). "Night is coming" only when dark is about 3 hours
+ * off or less; earlier in the day it gives the time instead, because after a push the call can
+ * come around midday. hoursToDark: to the first forecast row with no sun; the rows are 6 hours
+ * apart, so it is "dark in about", not a sunset time. */
+export function nightOpener(soc: number, hoursToDark: number): string {
+  if (hoursToDark <= 3) return `The battery is at ${pct(soc)} and night is coming, with no sun to charge it.`;
+  return `The battery is at ${pct(soc)}, and it will be dark in about ${Math.round(hoursToDark)} hours, with no sun to charge it.`;
+}
+
+/** The note when you steer and the forecast puts the autopilot ahead of your order. */
+export function handBackNote(km: number): string {
+  const n = Math.max(5, Math.round(Math.abs(km) / 5) * 5);
+  return `Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about ${n} km more on the ghost). To hand her back, open Orders.`;
 }
 
 /** The night call may follow a push this soon (hours): the push is what runs the battery down,

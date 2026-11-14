@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PUSH_LEVELS, nightLine, pickPush, powerAfter, pushCard, pushHeading, pushOrders, worthAskingAgain } from "../src/helm/powerCall.ts";
+import { PUSH_LEVELS, handBackNote, nightLine, nightOpener, pickPush, powerAfter, pushCard, pushHeading, pushOrders, worthAskingAgain } from "../src/helm/powerCall.ts";
 
 const sail = (lead_km: number, soc_min: number, power?: number) => ({ hours: 96, stw: 1, soc: 0, km: 400, outcome: "at_sea", lead_km, soc_min, power });
 
@@ -30,16 +30,28 @@ test("a push is a call only when it gains a quarter of a day and the battery pay
   assert.equal(pickPush(now, [sail(40, 0.1, 0.5)], 0), null, "no pace to measure by");
 });
 
-test("the card says what the forecast says and what it costs, in plain words", () => {
-  const c = pushCard("auto", 0.25, 0.83, sail(40, 0.004, 0.5));
-  assert.equal(c.text, "Navigator's check: the battery is at 83%. The forecast says 50% power would gain on the autopilot over the next 4 days, but run the battery down to 0%.");
-  assert.equal(c.push, "Push: 50% power, straight at the finish");
-  assert.equal(c.stay, "Stay on the autopilot (what the ghost does)");
+test("the card says what the forecast says and what it costs, in plain words (Elena, 14 Nov)", () => {
+  const c = pushCard("auto", 0.25, 0.97, sail(40, 0.42, 0.5));
+  assert.equal(c.text, "Navigator's check: the battery is at 97%. At 50% power she'd pull ahead of the autopilot over the next 4 days, but the battery would drop to 42%.");
+  assert.equal(c.push, "Push: 50% power");
+  assert.equal(c.pushTitle, "Faster, but it drains the battery. Ease off, or hand her back to the autopilot, before it runs low.");
+  assert.equal(c.stay, "Stay on the autopilot (same as the ghost)");
+  assert.equal(c.ago, "You pushed to 50% power 4 days ago");
   const mine = pushCard(95, 0.3, 0.7, sail(40, 0.2, 0.8));
-  assert.match(mine.text, /would gain on your 30% power/);
+  assert.equal(mine.text, "Navigator's check: the battery is at 70%. At 80% power she'd go faster than at your 30% over the next 4 days, but the battery would drop to 20%.");
   assert.equal(mine.push, "Push: 80% power");
   assert.equal(mine.stay, "Keep 30% power");
   assert.equal(mine.did, "pushed to 80% power");
+});
+
+test("the night call says \"night is coming\" only when it is, and the time otherwise", () => {
+  assert.equal(nightOpener(0.3, 2), "The battery is at 30% and night is coming, with no sun to charge it.");
+  assert.equal(nightOpener(0.3, 3), "The battery is at 30% and night is coming, with no sun to charge it.");
+  assert.equal(nightOpener(0.54, 6), "The battery is at 54%, and it will be dark in about 6 hours, with no sun to charge it.");
+});
+
+test("the hand-back note, in whole fives of km", () => {
+  assert.equal(handBackNote(61), "Navigator's note: for the next 4 days the forecast favours the autopilot over your order (about 60 km more on the ghost). To hand her back, open Orders.");
 });
 
 test("the night call's line: 35% at the autopilot's cruise, higher the harder she is pushed", () => {
