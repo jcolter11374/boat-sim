@@ -320,8 +320,23 @@ for (const b of STOCK_BOATS)
     path: HELM,
     optional: true, // only if the live picker offers it; the list of offered boats is checked in helm-boats
     // Every stock boat but the dinghy lasts the first day of the usual launch. The open dinghy
-    // doesn't (helm-dinghy-rolled below), so her game is played from 15 June, a kind summer start.
-    run: b === "stock_dinghy14" ? helm(async (p) => { await pickBoat(b)(p); await pickLaunch(/^15 Jun/, "5", "15 June")(p); }) : helm(pickBoat(b)),
+    // doesn't (helm-dinghy-rolled below), so her game is played from 1 May, the first of five
+    // launch days in a row she sails on from for three days or more (Theo's run of every 2020
+    // launch day), and the check holds her to it: still sailing after the day.
+    run:
+      b === "stock_dinghy14"
+        ? helm(
+            async (p) => {
+              await pickBoat(b)(p);
+              await pickLaunch(/^1 May/, "2", "1 May")(p);
+            },
+            async (p) => {
+              const st = await p.evaluate(() => window.__helm.status);
+              must(st && !st.over, `the dinghy didn't last her first day from 1 May: over on day ${st?.day}`);
+              return ", still sailing";
+            },
+          )
+        : helm(pickBoat(b)),
   };
 // The dinghy on the usual launch (23 April 2020): the wind builds to 28 kn and the sea to 3.7 m
 // by the first evening, a breaking wave rolls her over on day 0.93, and with nobody aboard she
