@@ -828,11 +828,21 @@ const CHECKS = {
       await page.click("#t-sea", { noWaitAfter: true, timeout: T(10_000) }).catch(() => {
         throw new CheckFail(`couldn't click "Just watch the sea"`);
       });
-      await page.waitForFunction(() => document.getElementById("title").hidden, null, { timeout: 10_000 }).catch(() => {
+      // Since #579 "Just watch the sea" keeps the title's own shot: the menu goes (body.sea-only), a quiet
+      // corner Menu link stays, and no sea panel comes back (that's the sea demo at ?title=0).
+      await page.waitForFunction(() => document.body.classList.contains("sea-only") || document.getElementById("title").hidden, null, { timeout: T(10_000) }).catch(() => {
         throw new CheckFail(`"Just watch the sea" didn't close the menu`);
       });
-      must(await page.locator("#panel").isVisible(), `"Just watch the sea" didn't bring the sea panel back`);
-      const way = await page.locator("#sail").isVisible().catch(() => false);
+      must(!(await page.locator("#title").isVisible()), `"Just watch the sea" left the menu on screen`);
+      const corner = await page.locator("#t-back").isVisible().catch(() => false);
+      if (corner) {
+        await page.click("#t-back", { timeout: T(10_000) });
+        await page.waitForFunction(() => !document.body.classList.contains("sea-only"), null, { timeout: T(10_000) }).catch(() => {
+          throw new CheckFail(`the corner "Menu" didn't bring the menu back`);
+        });
+        must(await page.locator("#title").isVisible(), `the corner "Menu" didn't bring the menu back`);
+      } else must(await page.locator("#panel").isVisible(), `"Just watch the sea" didn't bring the sea panel back`);
+      const way = !corner && (await page.locator("#sail").isVisible().catch(() => false));
       // The bar's own links plus the ones in its More menu (since #437 the bar shows three and keeps the rest under More).
       const BAR = "#topbar a.nav, #topbar .more .menu a:not([target])";
       const links = await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((a) => ({ href: a.href, text: (a.querySelector(".l") ?? a).textContent.trim() })), BAR);
@@ -848,7 +858,7 @@ const CHECKS = {
         if (st !== 200 || bar < 5) bad.push(`${l.text} (${l.href}): HTTP ${st}, ${bar} bar links`);
       }
       must(!bad.length, `top bar links that don't open a page with the bar: ${bad.join("; ")}`);
-      return `menu: ${menu.join(" / ")}; sea panel back${way ? ' with "Sail this sea"' : ""}; ${links.length} bar links all open (${links.map((l) => l.text).join(", ")})`;
+      return `menu: ${menu.join(" / ")}; ${corner ? "watch the sea and back to the menu" : `sea panel back${way ? ' with "Sail this sea"' : ""}`}; ${links.length} bar links all open (${links.map((l) => l.text).join(", ")})`;
     },
   },
   // Not a pass/fail check: run by name only (`play.mjs look`, or the playtest dispatch's
