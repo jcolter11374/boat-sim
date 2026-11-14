@@ -280,6 +280,20 @@ class KeelboatVessel(KayakVessel):
         self.polar = polar or Polar.load(polar_path(design))
         v, prop = design.vpp, design.propulsion
         self.reef_heel_deg = float(v.get("reef_heel_deg", 25.0))
+        # Reefing by the wind as well as the heel (Elena, Iris's gale frame: full sail
+        # on a reach in 38 kn). The VPP eases a sail to hold the heel down, so on a
+        # reach or a run the heel alone never asks for a reef; a crew reefs by the
+        # apparent wind. reef_aws_kn: the apparent wind the full plan is carried to.
+        # A smaller plan holds more, as its heeling force goes with its area times
+        # the wind squared: limit = reef_aws_kn / sqrt(its share of the full area).
+        # 0 (the default): heel only, as before.
+        self.reef_aws_kn = float(v.get("reef_aws_kn", 0.0))
+        full = float(v.get("main_m2", 0.0)) + float(v.get("jib_m2", 0.0))
+        self.plan_share = {
+            q["name"]: (q["main"] * v["main_m2"] + q["jib"] * v["jib_m2"]) / full
+            for q in v.get("plans", [])
+            if full > 0.0
+        }
         # Baked into the polar's speeds by vpp.py (the file doesn't carry it): a
         # Command.trim_share replaces it for a helm spell's watch.
         self.autopilot_factor = float(v.get("autopilot_factor", 1.0))
@@ -328,8 +342,26 @@ class KeelboatVessel(KayakVessel):
         for name in self.polar.plans:
             pt = self.polar.at(name, tws_kn, twa_deg)
             if pt.heel_deg <= self.reef_heel_deg and pt.speed > best_v:
+                if self.reef_aws_kn > 0.0 and self.aws_kn(
+                    tws_kn, twa_deg, pt.speed
+                ) > self.aws_limit_kn(name):
+                    continue
                 best, best_v = name, pt.speed
         return best
+
+    def aws_limit_kn(self, plan: str) -> float:
+        """The apparent wind this plan is carried to (kn); inf with no wind rule."""
+        share = self.plan_share.get(plan, 0.0)
+        if self.reef_aws_kn <= 0.0 or share <= 0.0:
+            return math.inf
+        return self.reef_aws_kn / math.sqrt(share)
+
+    @staticmethod
+    def aws_kn(tws_kn: float, twa_deg: float, speed_ms: float) -> float:
+        """Apparent wind speed (kn) at this true wind angle and boat speed."""
+        v = speed_ms / KNOT
+        c = math.cos(math.radians(abs(twa_deg)))
+        return math.sqrt(max(tws_kn * tws_kn + v * v + 2.0 * tws_kn * v * c, 0.0))
 
     def added_resistance(self, hs: float, wave_rel_deg: float) -> float:
         """vpp.added_resistance with the polar file's fitted size."""

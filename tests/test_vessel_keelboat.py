@@ -285,3 +285,21 @@ def test_trim_share_scales_sail_speed_only_and_none_is_unchanged(boat):
     m0 = _run(boat, calm, Command(90, 0.7, sail_plan="down", engine=True))
     m1 = _run(boat, calm, Command(90, 0.7, sail_plan="down", engine=True, trim_share=1.0))
     assert m1.speed_through_water == m0.speed_through_water > 0.0
+
+
+@pytest.mark.parametrize("base", ["stock_pearson31_2", "stock_cruiser31"])
+def test_reefs_by_the_wind_on_a_reach_and_a_run_too(base):
+    """Elena / Iris's frame: full sail on a reach in a 38 kn gale. The VPP eases the
+    sails to hold the heel, so the heel alone never reefed her off the wind; a crew
+    reefs by the apparent wind (vpp.reef_aws_kn)."""
+    from boatsim.sandbox import catalog as C
+
+    v = KeelboatVessel(C.design_for({"base": base}))
+    assert v.reef_aws_kn == 20
+    for twa in (100, 140, 170):
+        assert v.choose_plan(12, twa, None) == "full"  # a nice day: all sail
+        assert v.choose_plan(38, twa, None) == "storm"  # a gale: the smallest plan
+    assert v.choose_plan(30, 140, None) in ("reef1", "reef2")
+    limits = [v.aws_limit_kn(p) for p in v.polar.plans]
+    assert limits == sorted(limits) and limits[0] == 20  # smaller sails hold more wind
+    assert v.choose_plan(38, 100, "full") == "full"  # the player's own order still stands
