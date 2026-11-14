@@ -14,7 +14,7 @@
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 // Replies that move time carry both boats' voyages so far as replays (hourly rows).
 
-import { FIRST_WEATHER, HELM_PACKAGES } from "./prefetch";
+import { FIRST_WEATHER, HELM_PACKAGES, WARM_NAME } from "./prefetch";
 
 // Pass the folder too: Firefox can't work it out from a module imported in a worker
 // ("Could not extract indexURL path from pyodide module location", #294).
@@ -41,6 +41,8 @@ interface WeatherParts {
 let weatherParts: WeatherParts | null = null;
 let weatherBase = "";
 const partAdded = new Map<string, Promise<void>>(); // each month: fetched and added once
+/** Months whose download was started before Python was up (start()): their bytes, once. */
+const partEarly = new Map<string, Promise<Uint8Array>>();
 
 /** Fetch one month of the 2020 weather and add it to the simulator's weather. */
 function addPart(py: Py, key: string): Promise<void> {
@@ -48,7 +50,11 @@ function addPart(py: Py, key: string): Promise<void> {
   if (!p) {
     const part = weatherParts?.parts.find((x) => x.key === key);
     if (!part) return Promise.reject(new Error(`no weather for ${key}`));
-    p = fetchBytes(`${weatherBase}${part.file}`).then((bytes) => {
+    // A month fetched beside Python's start is used once; if that fetch failed, fetch it again here.
+    const early = partEarly.get(key);
+    partEarly.delete(key);
+    const url = `${weatherBase}${part.file}`;
+    p = (early ? early.catch(() => fetchBytes(url)) : fetchBytes(url)).then((bytes) => {
       py.FS.writeFile("/sandbox/part.npz", bytes);
       py.globals.set("part_key", key);
       py.runPython(`ENVS[""].add_part(part_key, "part.npz")`);
@@ -125,6 +131,14 @@ function start(base: string): Promise<Py> {
       .then((r) => (r.ok ? (r.json() as Promise<WeatherParts>) : null))
       .catch(() => null);
     const weather = weatherParts ? weatherParts.static : "forcing_2020.npz";
+    // The months the usual launch reads first download beside Python's start, as the whole season
+    // used to, not after it: on a slow link that is 5 MB in step with Python's 8 instead of behind it.
+    for (const part of weatherParts?.parts ?? []) {
+      if (!FIRST_WEATHER.includes(part.key) || partEarly.has(part.key)) continue;
+      const early = fetchBytes(`${base}${part.file}`);
+      early.catch(() => undefined); // read again in addPart, which fetches it afresh
+      partEarly.set(part.key, early);
+    }
     const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`, tick(0)), fetchBytes(`${base}${weather}`, tick(1))]);
     say("Loading the simulator... 85%");
     await py.loadPackage(HELM_PACKAGES);
@@ -238,6 +252,12 @@ def voyages():
   return ready;
 }
 
+// Start loading as soon as this worker runs (Rosa, 14 Nov). The page names the worker "warm <base>"
+// and sends "warm" too, but its message only gets here once the page's main thread is free, and the
+// page builds its whole scene first: on a computer with no graphics card that held the loading back
+// about 3 s. A worker that isn't named so (the race's, the watched voyage's, tests) waits for messages.
+if (self.name.startsWith(WARM_NAME)) start(self.name.slice(WARM_NAME.length)).catch(() => undefined); // errors: Set sail reports them
+
 const loaded = new Set<string>([""]);
 
 /** Point ENV at the weather a game needs: the 2020 bundle, or a challenge's own
@@ -302,7 +322,17 @@ except KeyError as err:
     if choices:
         raise RuntimeError("NO_BOAT " + str(err))  # an older simulator without this boat
     raise
-json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), **voyages(), **code()}, default=_f)
+# The first order and the forecast strip come back with the new game, not as two more turns of
+# the worker: the page reads each answer only between frames, and on a slow picture each turn
+# cost a frame of up to 2 s (Rosa, speed, 14 Nov). If the order fails here the page sends it again.
+first = None
+o = m.get("order")
+if o and G.mode == "hands_on":
+    try:
+        first = G.order(o["heading"], o["power"], *([o["sails"], o["engine"]] if "sails" in o else []))
+    except Exception:
+        first = None
+json.dumps({"launches": [s.isoformat(timespec="minutes") for s, _ in launches(ENV)], "status": G.status(), "first_order": first, **voyages(), **code(), **ahead_forecast()}, default=_f)
 `;
     } else if (m.type === "load") {
       say(m.mine ? "Sailing back to where you left off..." : "Sailing the shared game back to where it was...");

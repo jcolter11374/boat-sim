@@ -25,7 +25,7 @@ import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
-import { Wildlife } from "./wildlife";
+import { standIns, Wildlife } from "./wildlife";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
 import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, randolphSettled, type BoatModel } from "./boats/model";
@@ -65,6 +65,7 @@ import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
 import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
+import { ROUTE_BIG_KM, routeBigText } from "./helm/routeCall";
 import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
@@ -95,7 +96,7 @@ import { OceanSound, rigFor as rigOf } from "./sound";
 import { loadPois, passes, PoiCards, wreckBelow, type Poi } from "./pois";
 import { autopilotNote, maybeJson, standing, standingText, type Board, type Grid } from "./results";
 import { callLines, callName, headline, leaves, numbers, story, type Call } from "./helm/story";
-import { intoTarget, startWhenBuilt } from "./warmup";
+import { drawEach, intoTarget, startWhenBuilt } from "./warmup";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -177,6 +178,9 @@ void Wildlife.load().then((w) => {
   wildlife = w;
   scene.add(w.root);
 });
+// Hidden: one of each animal, built and drawn behind the Set sail card (warmShaders), so the first
+// animals met don't build their shaders mid-voyage.
+scene.add(standIns());
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
@@ -2872,11 +2876,15 @@ function maybeRouteCheck(st: Status): boolean {
       askAt(() => showDecision(d, view, [true, true]));
       return;
     }
-    if (better && !ask) {
-      // Better and no dearer: nothing to weigh, so no card; a navigator's note instead.
-      const text = `Navigator's note: the forecast favours ${fmtDeg(b.best)} over ${orderWords(order)} for the next 4 days (${timeChange(gainKm, pace)}), in no worse seas. Change it in Orders.`;
+    if (better && !ask && gainKm >= ROUTE_BIG_KM) {
+      // A line the forecast puts far ahead, in no worse seas: the note says it is a gamble, with the
+      // odds measured (routing-findings.md: forecast gains of 90 km or more paid 7 times in 8).
+      const text = routeBigText(fmtDeg(b.best), gainKm);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
-    } else if (!ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
+    }
+    // A smaller free line is no longer told (routing-findings.md): steered for days, lines the forecast
+    // put under 90 km ahead lost on the median (34 km from day 15 on), as the autopilot re-routes all the time.
+    if (!(better && !ask) && !ask && order !== "auto" && pace > 1 && (auto.lead_km - now.lead_km) / pace >= ROUTE_GAIN_DAYS) {
       // Steering yourself and the autopilot now looks better, at no price: a note, not a question.
       const text = handBackNote(auto.lead_km - now.lead_km);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
@@ -3114,8 +3122,11 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       // For the results card's "your calls": what was chosen, and the lead on the ghost then.
       const ghost = c.order?.heading === "auto" || /same as the ghost/i.test(`${c.label} ${c.plain ?? ""}`);
       if (game.status) calls.push({ day: game.status.day, chose: callName(c.label), lead: game.status.lead_km, ghost });
-      await c.act();
+      // The clock runs on at once (Rosa, responsiveness, 14 Nov): the choice's order is already first in the
+      // simulator's queue, ahead of the next run, so waiting for its answer only held the picture a frame.
+      const acted = c.act();
       setRate(lastRate);
+      await acted;
       if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
     });
     box.append(b);
@@ -3945,7 +3956,7 @@ async function begin(): Promise<void> {
       const pick = chosenBoat();
       const mine = loadMyBoat();
       const boat = pick === MINE && mine ? mine.choices : pick || undefined;
-      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort);
+      page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort, mode === "hands_on" ? { heading: order, power, sails: sailOrder, engine: engineOrder } : undefined);
       useBoat(game.boatBase);
       rememberBoat(pick, mine);
       if (mode !== (page.status.mode ?? "hands_on")) {
@@ -3953,7 +3964,7 @@ async function begin(): Promise<void> {
         note("This copy of the simulator only has the hands-on helm, so that's what you've got.", "Day 0", TONE_COLOUR.warn);
       }
       // Hands on: the first order goes at once. From base, the boat sails the launch route until base sends one.
-      if (mode === "hands_on") await game.order(order, power, sailOrder, engineOrder);
+      if (mode === "hands_on" && !game.firstOrderSent) await game.order(order, power, sailOrder, engineOrder);
       else draft = true; // ready to send
       page.status = game.status;
     }
@@ -4876,6 +4887,9 @@ function warmShaders(): void {
           if (!parallel) pr.getUniforms();
           else if (warmRootLeft > 0) warmRootPrograms.push(pr);
         }
+      // And without it, draw it once too (into a corner, alone): the driver sets each shader up for
+      // drawing on its first use, which was most of the 4 to 10 s wait after Set sail (rank 12).
+      if (!parallel && !seeThrough) drawEach(renderer, scene, camera, [o], inMirror ? mirror.target : prev);
       if (warmRootLeft > 0) warmRootLeft--;
     }
   } catch {

@@ -10,6 +10,8 @@ import { sandboxThere } from "../sandbox";
 export const PYODIDE_DIR = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 /** The Python packages the helm's worker loads (helm/worker.ts). */
 export const HELM_PACKAGES = ["numpy", "pyyaml"];
+/** The helm's worker is named this plus the simulator files' folder, and starts loading at once (helm/worker.ts). */
+export const WARM_NAME = "warm ";
 
 type Lock = { packages?: Record<string, { file_name?: string; depends?: string[] }> };
 

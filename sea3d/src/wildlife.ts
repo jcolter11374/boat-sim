@@ -231,6 +231,22 @@ interface Shown {
   members: Member[];
 }
 
+/**
+ * One of each animal's parts, for a page to build and draw once behind its start card (Omar's speed
+ * list: the first seabirds met built their shader in the middle of sailing, a freeze of a second on
+ * software graphics). Hidden: the page shows it only while it warms it. The materials are shared,
+ * so what is built here serves every animal met later.
+ */
+export function standIns(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = "wildlife_stand_ins";
+  g.visible = false;
+  const p = birdParts();
+  const blow = new THREE.Sprite(blowMaterial());
+  g.add(new THREE.Mesh(dolphinGeometry(), material), new THREE.Mesh(p.body, birdMaterial), blow);
+  return g;
+}
+
 function build(e: Encounter): Shown {
   const root = new THREE.Group();
   root.name = `wildlife_${e.kind}`;
