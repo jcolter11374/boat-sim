@@ -69,8 +69,8 @@ def test_every_slot_has_its_default_and_a_badge():
 
 def test_odds_grid_is_the_catalog_builds_and_nearest_finds_them():
     ids = [C.grid_id(g) for g in C.GRID]
-    assert len(set(ids)) == len(ids) == 56  # 40, plus 8 per keelboat (M4 wave 1)
-    assert len(Y.BUILDS) == 59 and Y.CURRENT in Y.BUILDS
+    assert len(set(ids)) == len(ids) == 62  # 40, plus 11 per keelboat (M4 waves 1 and 2)
+    assert len(Y.BUILDS) == 65 and Y.CURRENT in Y.BUILDS
     for g in C.GRID:
         assert C.nearest(g) == (C.grid_id(g), True)
     assert C.nearest({"ais": "none", "cruise_w": 20}) in (

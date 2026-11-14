@@ -22,7 +22,7 @@ import * as THREE from "three";
 import { setRainOnSea } from "./rainRings";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { BEACHCAT, CRUISER, DINGHY, KAYAK, OCEAN_ROWER, PEARSON, RANDOLPH, SAIL_DRONE, STOCK, STOCK_HULL, isStock, stockKeyOf, type BoatSpec, type StockKey } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
@@ -77,6 +77,7 @@ import { loadMyBoat } from "./myboat";
 import { equipmentParts } from "./replay/equipment";
 import { VoyageHud, equipmentIcons, type Part } from "./replay/hud";
 import { focusBoat, type Focus } from "./focus";
+import { applyPaint, myPaint } from "./boats/paintApply";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -259,6 +260,17 @@ let drain: Drain | null = null;
 /** How much bigger than our 3 m kayak the shown boat is (cameras stand back by this much). */
 let viewScale = 1;
 let photoBoat = false; // the "low" test view (status.view)
+/** Is the boat on screen the player's own kind, on a voyage of her own (not the race against the Randolph boat)? No boat saved = our kayak. */
+function isMine(): boolean {
+  if (lanes.length > 1) return false;
+  const mine = loadMyBoat();
+  const key = !mine ? "kayak" : mine.base === "revb" ? "randolph" : mine.base === "revc" ? "randolph_c" : mine.base;
+  return laneRev === key;
+}
+/** The player's paint on their own boat (looks only); any other boat keeps her own colours. */
+function repaint(): void {
+  if (model) applyPaint(model.root, boatKey, isMine() ? myPaint() : null, model.form);
+}
 function buildBoat(q: Quality): void {
   setForecastLook(false); // materials can be shared with the next model: put them back first
   if (model) {
@@ -278,6 +290,12 @@ function buildBoat(q: Quality): void {
     drain.dispose();
   }
   const spec = SPEC[boatKey];
+  // The Randolph boat's detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+  if (boatKey === "randolph" && !hasDetailedRandolph())
+    void loadRandolphModel().then((ok) => {
+      if (ok && !status.models.includes("randolph")) status.models.push("randolph");
+      if (ok && boatKey === "randolph") buildBoat(quality);
+    });
   model = BUILDERS[boatKey](q);
   // A bigger boat: stand the camera back so it all fits (a 31 ft yacht's mast is 14 m up).
   const k = THREE.MathUtils.clamp(spec.length / KAYAK.length, 1, 3.4);
@@ -297,6 +315,7 @@ function buildBoat(q: Quality): void {
   wake = new Wake(q, spec.cruiseSpeed, spec.beam, model.stern.x);
   wake.surface = (c, x, z, t) => sea.surfaceAt(c, x, z, t);
   shadowsOn(model.root);
+  repaint();
   scene.add(model.root, wake.points);
   reflectable(model.root);
   wet = new Wetness(model.root);
@@ -853,6 +872,7 @@ function setFocus(i: number, force = false): void {
     boatKey = MODEL[laneRev];
     buildBoat(quality);
   }
+  repaint();
   if (isStock(boatKey) && !hasDetailedStock(boatKey)) {
     const k = boatKey;
     void loadStockModel(k).then((ok) => {

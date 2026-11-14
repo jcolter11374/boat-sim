@@ -13,7 +13,7 @@ import { tidyCatalog } from "./yard/words";
 import { tierOf, type BoardTiers } from "./yard/tier";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Atmosphere } from "./atmosphere";
-import { BUILDERS, loadDetailedModels, type BoatModel } from "./boats/model";
+import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
 import { RANDOLPH_REVB, RANDOLPH_REVC } from "./motion";
@@ -127,6 +127,8 @@ function build(): void {
   if (base !== "kayak") {
     // Our model of the Randolph boat (their Rev B and Rev C share a hull shape in our model).
     controls.maxDistance = 25;
+    // Her detailed model loads when she is first built (boats/model.ts): swap it in when it arrives.
+    if (!hasDetailedRandolph()) void loadRandolphModel().then((ok) => ok && base !== "kayak" && !isKeel(base) && build());
     model = BUILDERS.randolph(quality);
     shadowsOn(model.root);
     scene.add(model.root);
@@ -202,7 +204,7 @@ const GROUPS: [string, string[]][] = [
   ["Power", ["sol", "rsol", "bat", "rbat", "mppt"]],
   ["Brains and radio", ["brain", "spare", "tactician", "sat", "beacon", "tracker"]],
   ["Being seen by ships", ["ais", "radar", "light"]],
-  ["Hull and keel", ["lead", "keel", "paint"]],
+  ["Hull and keel", ["lead", "keel", "paint", "drogue"]],
   ["Before launch", ["spares"]],
 ];
 
@@ -360,6 +362,7 @@ function drawSlots(): void {
       body.className = "sl-body";
       body.id = `sl-body-${slot.id}`;
       for (const o of shown) body.append(optionButton(slot, o));
+      if (slot.note) body.append(Object.assign(document.createElement("p"), { className: "muted sl-note", textContent: slot.note }));
       const hints = document.createElement("ul");
       hints.className = "hints";
       hints.id = `hints-${slot.id}`;
@@ -650,7 +653,7 @@ function drawDeltas(model: OddsModel | null): void {
 // sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
 // slow computer; without it, the page shows the precomputed voyages at once.
 void sandboxReady.then((inBrowser) => {
-  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see its simulated voyages";
+  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see how her voyages go";
   $("launch").title = inBrowser
     ? "The autopilot sails your design from 6 real spring 2020 start dates, in this browser, and sails the boat you started from on the same dates to compare"
     : "Shows the voyages our servers sailed for the closest tested build";

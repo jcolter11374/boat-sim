@@ -40,7 +40,6 @@ def test_the_spare_figures_are_the_parts_lists_second_box():
     cat = json.loads(Path("sea3d/public/parts-catalog.json").read_text())
     brain = {o["id"]: o for o in next(s for s in cat["slots"] if s["id"] == "brain")["opts"]}
     two, one = brain["two-box"], brain["one-box"]
-    assert C.SPARE_BOX.cost == two["cost"] - one["cost"]
     assert C.SPARE_BOX.kg == pytest.approx(two["kg"] - one["kg"])
     assert C.SPARE_BOX.hotel_wh == two["wh"] - one["wh"]
 
@@ -57,7 +56,7 @@ def test_the_page_table_matches_the_catalog():
     assert set(t) == set(SPARE_BASES)
     spare = next(s for s in t["stock_cruiser31"]["slots"] if s["id"] == "spare")
     opts = {o["id"]: o for o in spare["opts"]}
-    assert opts["spare-autopilot"]["cost"] == 83
+    assert "cost" not in opts["spare-autopilot"]  # no prices (M4)
     assert opts["spare-autopilot"]["sim"] == [
         "hazards.electronics_boxes", "electronics.hotel_load_wh_per_day", "hull.mass_kg",
     ]  # fmt: skip

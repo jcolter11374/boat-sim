@@ -50,8 +50,8 @@ test("the boat chip: Our kayak by default on every page, my boat named safely", 
     assert.equal(d.href, "./boatyard.html");
   }
   assert.equal(boatChip(null).name, "Our kayak");
-  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Beneteau First 31.7");
-  assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Beneteau First 31.7");
+  assert.equal(boatChip(null, "practice").prefix + boatChip(null, "practice").name, "Practice boat: Beneteau First 31.7 (our model)");
+  assert.equal(boatChip({ name: "Mine", href: "#" }, "practice").name, "Beneteau First 31.7 (our model)");
   const c = boatChip({ name: 'Rev C <b>"x"</b> & co', href: "./boatyard.html#base=revc" });
   assert.equal(c.href, "./boatyard.html#base=revc");
   // the name is passed through untouched; mountTopbar only ever sets it as textContent
@@ -85,7 +85,7 @@ test("the boat picker: Our kayak, our models and stock boats, your design, the B
   const names = none.map((e) => e.name);
   assert.ok(names.includes("Pearson 31-2 (our model)"));
   assert.ok(names.includes("Randolph Rev C5 (our model)"));
-  assert.ok(names.includes("Beneteau First 31.7"), "stock boats by their real make and model (John, B4)");
+  assert.ok(names.includes("Beneteau First 31.7 (our model)"), "stock boats by their real make and model (John, B4)");
   assert.ok(!none.some((e) => /\bdrone\b|\bft\b/.test(e.name + e.fact)), "player words: robot boat, metric");
   assert.ok(!none.some((e) => e.id === "mine"));
   assert.equal(none.at(-1)!.href, "./boatyard.html");
@@ -128,6 +128,8 @@ test("Watch a voyage and Race it in every menu open the Set sail card, not the o
   assert.ok(more.includes(`href="${WATCH_HREF}">Watch a voyage<`), "title: Watch a voyage");
   assert.ok(more.includes(`href="${RACE_HREF.replace("&", "&amp;")}">Race it<`), "title: Race it");
   assert.doesNotMatch(more, /voyage\.html|race\.html/);
+  // The Boatyard's own "Watch a voyage" line goes to the card too (its replay links open one particular voyage and stay).
+  assert.ok(readFileSync(ROOT + "boatyard.html", "utf8").includes(`<a href="${WATCH_HREF}">Watch a voyage &rarr;</a>`), "Boatyard: Watch a voyage");
 });
 
 test("the menu marks the one helm entry you are on", () => {

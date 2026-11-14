@@ -54,6 +54,8 @@ export const GROUPS: Record<string, string> = {
   cloth: "sails",
   reef: "sails",
   storm: "sails",
+  // A drogue or sea anchor answers the same gale as storm sails (M4 wave 2).
+  drogue: "sails",
   spare: "links",
 };
 /** A part that only changes the weight by this little (kg) can't move the odds measurably. */

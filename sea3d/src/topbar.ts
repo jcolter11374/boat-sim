@@ -122,7 +122,7 @@ export function pageName(pathname: string): string {
  *  where a new player first meets the chip, and "build one" there read as broken). */
 export function boatChip(boat: { name: string; href: string } | null, page = ""): { prefix: string; name: string; href: string; title: string } {
   // Practice sailing always sails the club's cruiser, whatever boat is yours (Elena: no nag there).
-  if (page === "practice") return { prefix: "Practice boat: ", name: "Beneteau First 31.7", href: "./boatyard.html", title: "Practice sails a Beneteau First 31.7, a 9.5 m yacht; your own boat sails the voyages" };
+  if (page === "practice") return { prefix: "Practice boat: ", name: "Beneteau First 31.7 (our model)", href: "./boatyard.html", title: "Practice sails a Beneteau First 31.7, a 9.5 m yacht; your own boat sails the voyages" };
   if (!boat) return { prefix: "My boat: ", name: "Our kayak", href: "./boatyard.html", title: "Our kayak, until you build your own in the Boatyard" };
   return { prefix: "My boat: ", name: boat.name, href: boat.href, title: "Open my boat in the Boatyard" };
 }

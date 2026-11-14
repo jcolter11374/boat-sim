@@ -21,7 +21,7 @@ export const BASE_NAMES: Record<BaseKey, string> = {
   revc: "Randolph Rev C5 (our model)",
   revb: "Randolph Rev B (our model)",
   stock_pearson31_2: "Pearson 31-2 (our model)",
-  stock_cruiser31: "Beneteau First 31.7",
+  stock_cruiser31: "Beneteau First 31.7 (our model)",
 };
 /** The long name, for wherever the boat is described. */
 export const BASE_LONG: Record<BaseKey, string> = {
@@ -221,6 +221,7 @@ export function keelCatalog(key: KeelKey, sim: SimSlots | null, kayak: Catalog):
   const slots: CatalogSlot[] = b.slots.map((s) => ({
     id: s.id,
     name: s.name,
+    ...(s.note ? { note: s.note } : {}),
     opts: s.opts.map((o) => {
       const [n, d] = o.n ? [o.n, o.d ?? o.basis] : (NAMES[s.id]?.[o.id] ?? [o.id, o.basis]);
       return {

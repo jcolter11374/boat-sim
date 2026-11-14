@@ -1236,6 +1236,8 @@
     "cloth": "dacron",
     "reef": "slab2",
     "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
     "spare": "none",
     "tactician": "on"
    },
@@ -1251,7 +1253,6 @@
        "basis": "ORC certificate 038800017LU; Beneteau sail plan",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Fractional sloop, genoa (as built)",
        "d": "The 28.9 m² overlapping genoa Beneteau fitted."
       },
@@ -1265,7 +1266,6 @@
         "vpp.jib_m2"
        ],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Solent jib",
        "d": "Beneteau's smaller non-overlapping jib, 21 m²: less sail in light air, easier in a blow."
       }
@@ -1282,7 +1282,6 @@
        "basis": "the cruising sails these boats were sold with",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Woven polyester, Dacron (as built)",
        "d": "Tough and long-lived; it stretches, so the sails get fuller as the wind rises."
       },
@@ -1297,7 +1296,6 @@
         "hazards.p_part"
        ],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Laminate",
        "d": "Film and fibres glued in layers: holds its shape, a little faster, but it delaminates and tears sooner."
       }
@@ -1314,7 +1312,6 @@
        "basis": "standard on both boats",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Slab reefing, two reefs (as built)",
        "d": "Two rows of reef points in the mainsail."
       },
@@ -1328,7 +1325,6 @@
         "vpp.plans"
        ],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Slab reefing, three reefs",
        "d": "A third, deep reef: a smaller main for a gale."
       },
@@ -1346,7 +1342,6 @@
         "hull.mass_kg"
        ],
        "kg": 8.0,
-       "cost": 0.0,
        "n": "In-mast furling",
        "d": "The mainsail rolls up inside the mast to any size; no battens, so it is smaller, and it can jam."
       }
@@ -1363,7 +1358,6 @@
        "basis": "as built",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "No storm sails (as built)",
        "d": "Deepest reef, then sails down and run off before a gale."
       },
@@ -1380,9 +1374,87 @@
         "hull.mass_kg"
        ],
        "kg": 10.0,
-       "cost": 0.0,
        "n": "Storm jib and trysail",
        "d": "Two small, very strong sails at the racing rules' sizes, so she keeps sailing in a gale."
+      }
+     ]
+    },
+    {
+     "id": "keel",
+     "name": "Keel",
+     "opts": [
+      {
+       "id": "deep",
+       "effect": "wired",
+       "est": false,
+       "basis": "ORC certificate 038800017LU; boat-specs.com",
+       "sim": [],
+       "kg": 0.0,
+       "n": "Deep keel, 1.90 m (as built)",
+       "d": "Beneteau's deep-draft fin and bulb."
+      },
+      {
+       "id": "shoal",
+       "effect": "wired",
+       "est": true,
+       "basis": "boat-specs.com First 31.7 shoal draft (1.45 m, 1,025 kg ballast); lift and stability our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.clr_depth_m",
+        "vpp.keel_te_m",
+        "vpp.keel_slope_area_m2",
+        "vpp.gz",
+        "hull.keel_lift_slope_area_m2"
+       ],
+       "kg": 0.0,
+       "n": "Shoal-draft keel, 1.45 m",
+       "d": "Beneteau's own shallow version, same ballast: less grip upwind and less stiffness."
+      }
+     ]
+    },
+    {
+     "id": "drogue",
+     "name": "Drogue or sea anchor",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: in a big sea she runs off under bare poles",
+       "sim": [],
+       "kg": 0.0,
+       "n": "None (as built)",
+       "d": "Sails down and run off before a big sea."
+      },
+      {
+       "id": "jordan",
+       "effect": "wired",
+       "est": true,
+       "basis": "Jordan series drogue (US Coast Guard report, DTIC ADA158907), sized by displacement; how much it helps is our GUESS",
+       "sim": [
+        "hazards.drogue_hs_m",
+        "hazards.drogue_beam_on_share",
+        "hazards.drogue_kn",
+        "hull.mass_kg"
+       ],
+       "kg": 20.0,
+       "n": "Jordan series drogue",
+       "d": "A long line of small cones off the stern, streamed when waves reach 5 m: holds her stern to the breakers at about 2 knots."
+      },
+      {
+       "id": "para",
+       "effect": "wired",
+       "est": true,
+       "basis": "Para-Tech parachute sea anchor, 12 ft (sized to displace twice the boat, Practical Sailor); how much it helps is our GUESS",
+       "sim": [
+        "hazards.drogue_hs_m",
+        "hazards.drogue_beam_on_share",
+        "hazards.drogue_kn",
+        "hull.mass_kg"
+       ],
+       "kg": 25.0,
+       "n": "Parachute sea anchor",
+       "d": "A big parachute off the bow, set when waves reach 5 m: she lies head to the seas and barely drifts."
       }
      ]
     },
@@ -1396,8 +1468,7 @@
        "est": false,
        "basis": "as the boat comes: one autopilot",
        "sim": [],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "spare-autopilot",
@@ -1409,8 +1480,7 @@
         "electronics.hotel_load_wh_per_day",
         "hull.mass_kg"
        ],
-       "kg": 0.4,
-       "cost": 83.0
+       "kg": 0.4
       }
      ]
     },
@@ -1426,8 +1496,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "off",
@@ -1437,8 +1506,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       }
      ]
     }
@@ -1461,8 +1529,7 @@
        "est": false,
        "basis": "as the boat comes: one autopilot",
        "sim": [],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "spare-autopilot",
@@ -1474,8 +1541,7 @@
         "electronics.hotel_load_wh_per_day",
         "hull.mass_kg"
        ],
-       "kg": 0.4,
-       "cost": 83.0
+       "kg": 0.4
       }
      ]
     },
@@ -1491,8 +1557,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "off",
@@ -1502,8 +1567,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       }
      ]
     }
@@ -1526,8 +1590,7 @@
        "est": false,
        "basis": "as the boat comes: one autopilot",
        "sim": [],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "spare-autopilot",
@@ -1539,8 +1602,7 @@
         "electronics.hotel_load_wh_per_day",
         "hull.mass_kg"
        ],
-       "kg": 0.4,
-       "cost": 83.0
+       "kg": 0.4
       }
      ]
     },
@@ -1556,8 +1618,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "off",
@@ -1567,8 +1628,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       }
      ]
     }
@@ -1591,8 +1651,7 @@
        "est": false,
        "basis": "as the boat comes: one autopilot",
        "sim": [],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "spare-autopilot",
@@ -1604,8 +1663,7 @@
         "electronics.hotel_load_wh_per_day",
         "hull.mass_kg"
        ],
-       "kg": 0.4,
-       "cost": 83.0
+       "kg": 0.4
       }
      ]
     },
@@ -1621,8 +1679,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "off",
@@ -1632,8 +1689,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       }
      ]
     }
@@ -1646,6 +1702,8 @@
     "cloth": "dacron",
     "reef": "slab2",
     "storm": "none",
+    "keel": "deep",
+    "drogue": "none",
     "spare": "none",
     "tactician": "on"
    },
@@ -1661,7 +1719,6 @@
        "basis": "Pearson spec sheet; genoa from goodoldboat sail data",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Masthead sloop, 135 % genoa (as built)",
        "d": "One big headsail on a roller, as Pearson built her."
       },
@@ -1679,7 +1736,6 @@
         "hull.mass_kg"
        ],
        "kg": 12.0,
-       "cost": 0.0,
        "n": "Cutter: yankee and staysail",
        "d": "An inner forestay and a small staysail under a high-cut yankee: in a blow she sails on the staysail alone, low and strong."
       }
@@ -1696,7 +1752,6 @@
        "basis": "the cruising sails these boats were sold with",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Woven polyester, Dacron (as built)",
        "d": "Tough and long-lived; it stretches, so the sails get fuller as the wind rises."
       },
@@ -1711,7 +1766,6 @@
         "hazards.p_part"
        ],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Laminate",
        "d": "Film and fibres glued in layers: holds its shape, a little faster, but it delaminates and tears sooner."
       }
@@ -1728,7 +1782,6 @@
        "basis": "standard on both boats",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Slab reefing, two reefs (as built)",
        "d": "Two rows of reef points in the mainsail."
       },
@@ -1742,7 +1795,6 @@
         "vpp.plans"
        ],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "Slab reefing, three reefs",
        "d": "A third, deep reef: a smaller main for a gale."
       },
@@ -1760,7 +1812,6 @@
         "hull.mass_kg"
        ],
        "kg": 8.0,
-       "cost": 0.0,
        "n": "In-mast furling",
        "d": "The mainsail rolls up inside the mast to any size; no battens, so it is smaller, and it can jam."
       }
@@ -1777,7 +1828,6 @@
        "basis": "as built",
        "sim": [],
        "kg": 0.0,
-       "cost": 0.0,
        "n": "No storm sails (as built)",
        "d": "Deepest reef, then sails down and run off before a gale."
       },
@@ -1794,9 +1844,89 @@
         "hull.mass_kg"
        ],
        "kg": 10.0,
-       "cost": 0.0,
        "n": "Storm jib and trysail",
        "d": "Two small, very strong sails at the racing rules' sizes, so she keeps sailing in a gale."
+      }
+     ]
+    },
+    {
+     "id": "keel",
+     "name": "Keel",
+     "opts": [
+      {
+       "id": "deep",
+       "effect": "wired",
+       "est": false,
+       "basis": "Pearson spec sheet",
+       "sim": [],
+       "kg": 0.0,
+       "n": "Deep fin keel, 5.6 ft (as built)",
+       "d": "Pearson's deep elliptical fin."
+      },
+      {
+       "id": "wing",
+       "effect": "wired",
+       "est": true,
+       "basis": "Pearson spec sheet (draft 4.0 ft, ballast 4,000 lb); lift and stability our GUESS",
+       "sim": [
+        "vpp.polar_file",
+        "vpp.disp_kg",
+        "vpp.clr_depth_m",
+        "vpp.keel_te_m",
+        "vpp.keel_slope_area_m2",
+        "vpp.gz",
+        "hull.keel_lift_slope_area_m2",
+        "hull.mass_kg"
+       ],
+       "kg": 91.0,
+       "n": "Wing keel, 4.0 ft",
+       "d": "Pearson's shoal keel with winglets at the tip and 200 lb more lead: 1.5 ft less draft, a little less grip and stiffness."
+      }
+     ]
+    },
+    {
+     "id": "drogue",
+     "name": "Drogue or sea anchor",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: in a big sea she runs off under bare poles",
+       "sim": [],
+       "kg": 0.0,
+       "n": "None (as built)",
+       "d": "Sails down and run off before a big sea."
+      },
+      {
+       "id": "jordan",
+       "effect": "wired",
+       "est": true,
+       "basis": "Jordan series drogue (US Coast Guard report, DTIC ADA158907), sized by displacement; how much it helps is our GUESS",
+       "sim": [
+        "hazards.drogue_hs_m",
+        "hazards.drogue_beam_on_share",
+        "hazards.drogue_kn",
+        "hull.mass_kg"
+       ],
+       "kg": 20.0,
+       "n": "Jordan series drogue",
+       "d": "A long line of small cones off the stern, streamed when waves reach 5 m: holds her stern to the breakers at about 2 knots."
+      },
+      {
+       "id": "para",
+       "effect": "wired",
+       "est": true,
+       "basis": "Para-Tech parachute sea anchor, 12 ft (sized to displace twice the boat, Practical Sailor); how much it helps is our GUESS",
+       "sim": [
+        "hazards.drogue_hs_m",
+        "hazards.drogue_beam_on_share",
+        "hazards.drogue_kn",
+        "hull.mass_kg"
+       ],
+       "kg": 25.0,
+       "n": "Parachute sea anchor",
+       "d": "A big parachute off the bow, set when waves reach 5 m: she lies head to the seas and barely drifts."
       }
      ]
     },
@@ -1810,8 +1940,7 @@
        "est": false,
        "basis": "as the boat comes: one autopilot",
        "sim": [],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "spare-autopilot",
@@ -1823,8 +1952,7 @@
         "electronics.hotel_load_wh_per_day",
         "hull.mass_kg"
        ],
-       "kg": 0.4,
-       "cost": 83.0
+       "kg": 0.4
       }
      ]
     },
@@ -1840,8 +1968,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       },
       {
        "id": "off",
@@ -1851,8 +1978,7 @@
        "sim": [
         "electronics.tactician"
        ],
-       "kg": 0.0,
-       "cost": 0.0
+       "kg": 0.0
       }
      ]
     }
