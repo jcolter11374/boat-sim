@@ -127,9 +127,10 @@ with `sea3d/scripts/stars.py`.
   them unmodified from the jsDelivr CDN at run time. We don't copy or change
   them.
 - **Fraunces** (SIL Open Font License 1.1, Copyright 2020 The Fraunces Project
-  Authors), the typeface of the Bluewater wordmark. We ship the Latin subset
-  unmodified as `sea3d/public/fonts/fraunces-latin-full-normal.woff2`, with its
-  licence beside it in `sea3d/public/fonts/Fraunces-OFL.txt`.
+  Authors), the typeface of the Bluewater wordmark and the title menu. We ship the
+  Latin subsets unmodified as `sea3d/public/fonts/fraunces-latin-full-normal.woff2`
+  and `sea3d/public/fonts/fraunces-latin-italic.woff2` (from Google Fonts), with
+  their licence beside them in `sea3d/public/fonts/Fraunces-OFL.txt`.
 - **Blender** (GPL) is used only as a tool in CI to build the boat models.
   Models made with Blender belong to whoever made them, so the GPL doesn't
   cover our `.glb` files. Our build scripts that call Blender's Python API are

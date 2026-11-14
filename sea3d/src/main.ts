@@ -174,7 +174,7 @@ titleMusic.on = new URLSearchParams(location.search).get("music") !== "0";
   sound.onChange = () => {
     if (!btn) return;
     btn.setAttribute("aria-pressed", String(sound.on));
-    btn.textContent = sound.on ? "Sound: on" : "Sound: off"; // the state, not an order (Elena)
+    btn.setAttribute("aria-label", sound.on ? "Sound: on" : "Sound: off"); // the state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov)
   };
   sound.onChange();
   btn?.addEventListener("click", () => sound.toggle());
