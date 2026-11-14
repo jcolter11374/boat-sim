@@ -4155,6 +4155,72 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #525 paint jobs: pick "Navy" in the Boatyard (the kayak), then see it on the stand, after a reload, on the title,
+  // on the Set sail card, sailing, and in a race (the other boat stays unpainted). No money anywhere.
+  // Frames look-paint-<browser>-<w>-*.jpg.
+  "yard-paint": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-paint-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const money = (p) => p.evaluate(() => (document.body.innerText.match(/[$€£]\s?\d|\bUSD\b|\bprice\b/gi) || []).slice(0, 3));
+      const settle = async (p, fn, ms = 6000) => { await p.waitForFunction(fn, null, { timeout: 3 * MIN }).catch(() => {}); await p.waitForLoadState("networkidle").catch(() => {}); await p.waitForTimeout(ms); };
+      for (const [w, h] of [[1280, 720], [390, 844]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 160)));
+        const m = [];
+        try {
+          await p.goto(SITE + "boatyard.html?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await settle(p, () => window.__yard?.ready && window.__yard.frames > 30);
+          shots.push(await emit(p, `${w}-yard-before`));
+          const sw = await p.evaluate(() => [...document.querySelectorAll("#yard-paint button[data-paint]")].map((b) => `${b.dataset.paint || "own"}:${b.getAttribute("aria-label") || b.title || b.textContent.trim()}`));
+          if (!sw.length) throw new CheckFail("no paint swatches in the Boatyard (#yard-paint)");
+          await p.evaluate(() => { const b = document.querySelector('#yard-paint button[data-paint="navy"]'); b?.scrollIntoView({ block: "center" }); b?.click(); });
+          await p.waitForTimeout(3000);
+          const saved = await p.evaluate(() => localStorage.getItem("boatsim.paint.v1"));
+          if (saved !== "navy") bad.push(`${w}: paint not saved (${saved})`);
+          await p.evaluate(() => window.scrollTo(0, 0));
+          shots.push(await emit(p, `${w}-yard-after`));
+          m.push(...(await money(p)));
+          await p.reload({ waitUntil: "load", timeout: 2 * MIN });
+          await settle(p, () => window.__yard?.ready && window.__yard.frames > 30);
+          const kept = await p.evaluate(() => document.querySelector('#yard-paint button[aria-pressed="true"]')?.dataset.paint ?? null);
+          if (kept !== "navy") bad.push(`${w}: after a reload the pressed swatch is "${kept}"`);
+          shots.push(await emit(p, `${w}-yard-reload`));
+          await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await settle(p, () => window.__sea3d && window.__sea3d.frames > 10, 8000);
+          shots.push(await emit(p, `${w}-title`));
+          m.push(...(await money(p)));
+          await p.evaluate(() => document.getElementById("t-setsail")?.click());
+          await p.waitForURL(/helm\.html/, { timeout: MIN }).catch(() => {});
+          await settle(p, () => document.querySelector("#go") && window.__helm && !window.__helm.busy && window.__helm.frames > 10, 5000);
+          shots.push(await emit(p, `${w}-setsail-card`));
+          m.push(...(await money(p)));
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await settle(p, () => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, 6000);
+          shots.push(await emit(p, `${w}-sailing`));
+          m.push(...(await money(p)));
+          await p.goto(SITE + "helm.html?quality=high&race=kayak,revc&launch=4", { waitUntil: "load", timeout: 2 * MIN });
+          await settle(p, () => window.__helm && window.__helm.frames > 10 && !window.__helm.busy, 3000);
+          await p.evaluate(() => (document.getElementById("go") || document.getElementById("start"))?.click());
+          await settle(p, () => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, 8000);
+          shots.push(await emit(p, `${w}-race`));
+          m.push(...(await money(p)));
+          if (m.length) bad.push(`${w}: money shows (${[...new Set(m)].join(", ")})`);
+          if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
+          out.push(`${w}: swatches ${sw.join(" | ")}; saved "${saved}", after reload "${kept}"; money ${m.length ? m.join(",") : "none"}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`PAINT ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
