@@ -125,6 +125,7 @@ test("the bridge runs from Sandy Point towards Kent Island, and is only drawn ne
 test("the town's lights on the water: full in the harbour, a faint shimmer from the course", () => {
   assert.equal(reflectFade(300), 1);
   assert.equal(reflectFade(REFLECT_FULL_M), 1);
-  assert.ok(reflectFade(3500) < 0.2 && reflectFade(3500) > 0.1, `${reflectFade(3500)}`);
+  assert.ok(Math.abs(reflectFade(3500) - 0.33) < 0.01, `about a third from the course: ${reflectFade(3500)}`);
+  assert.ok(reflectFade(20000) >= 0.33);
   for (let d = 100; d < 8000; d += 100) assert.ok(reflectFade(d + 100) <= reflectFade(d));
 });
