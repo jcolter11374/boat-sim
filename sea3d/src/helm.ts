@@ -539,6 +539,8 @@ const page = {
   /** Where the finished build stands on Results: "board", "odds" or "none" ("" until shown; for tests). */
   standing: "" as "" | "board" | "odds" | "none",
   status: null as Status | null,
+  /** Every shader queued behind the Set sail card is built, her boat's too (for the speed guard, tests/speedguard.mjs). */
+  warmed: false,
   frames: 0,
   /** Where the lens has slid the boat (fractions of the screen; Leo's plan item 1). */
   third: [0, 0] as number[],
@@ -4916,6 +4918,7 @@ function warmShaders(): void {
 // Drawing starts once the shaders are built, after the page has painted (warmup.ts).
 startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if ((!warmed || !boatWarm()) && warmWanted()) warmShaders();
+  page.warmed = warmed && modelsIn && (!model || warmedRoots.has(model.root));
   const t = clock.getElapsedTime();
   // Only drawing is timed: not a hidden tab, and not while the simulator's results are being taken in (Kai).
   if (judging && !document.hidden && !page.busy) {
