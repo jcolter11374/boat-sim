@@ -41,6 +41,8 @@ interface WeatherParts {
 let weatherParts: WeatherParts | null = null;
 let weatherBase = "";
 const partAdded = new Map<string, Promise<void>>(); // each month: fetched and added once
+/** Months whose download was started before Python was up (start()): their bytes, once. */
+const partEarly = new Map<string, Promise<Uint8Array>>();
 
 /** Fetch one month of the 2020 weather and add it to the simulator's weather. */
 function addPart(py: Py, key: string): Promise<void> {
@@ -48,7 +50,11 @@ function addPart(py: Py, key: string): Promise<void> {
   if (!p) {
     const part = weatherParts?.parts.find((x) => x.key === key);
     if (!part) return Promise.reject(new Error(`no weather for ${key}`));
-    p = fetchBytes(`${weatherBase}${part.file}`).then((bytes) => {
+    // A month fetched beside Python's start is used once; if that fetch failed, fetch it again here.
+    const early = partEarly.get(key);
+    partEarly.delete(key);
+    const url = `${weatherBase}${part.file}`;
+    p = (early ? early.catch(() => fetchBytes(url)) : fetchBytes(url)).then((bytes) => {
       py.FS.writeFile("/sandbox/part.npz", bytes);
       py.globals.set("part_key", key);
       py.runPython(`ENVS[""].add_part(part_key, "part.npz")`);
@@ -125,6 +131,14 @@ function start(base: string): Promise<Py> {
       .then((r) => (r.ok ? (r.json() as Promise<WeatherParts>) : null))
       .catch(() => null);
     const weather = weatherParts ? weatherParts.static : "forcing_2020.npz";
+    // The months the usual launch reads first download beside Python's start, as the whole season
+    // used to, not after it: on a slow link that is 5 MB in step with Python's 8 instead of behind it.
+    for (const part of weatherParts?.parts ?? []) {
+      if (!FIRST_WEATHER.includes(part.key) || partEarly.has(part.key)) continue;
+      const early = fetchBytes(`${base}${part.file}`);
+      early.catch(() => undefined); // read again in addPart, which fetches it afresh
+      partEarly.set(part.key, early);
+    }
     const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`, tick(0)), fetchBytes(`${base}${weather}`, tick(1))]);
     say("Loading the simulator... 85%");
     await py.loadPackage(HELM_PACKAGES);
