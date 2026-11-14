@@ -117,6 +117,7 @@ class HazardParams:
     # Per-knockdown odds, at the reference wave height; scale with (Hs/ref)^2.
     damage_ref_hs_m: float = 3.0
     p_inverted_stuck: float = 4.0e-5  # GUESS: dome damaged or keel lost; FMEA 0.7 %/voyage
+    lost_why: str = ""  # the ending's words for that loss ("" = the kayak's)
     p_part: dict[str, float] = field(
         default_factory=lambda: {
             "panel_100w_a": 4.0e-5,  # GUESS: delamination or torn off, ~0.7 %/voyage
@@ -440,7 +441,7 @@ def sample_hazards(
             why = (
                 "capsized and stayed upside down (not self-righting)"
                 if p.p_capsize_stays_over
-                else "stuck inverted or keel lost"
+                else (p.lost_why or "stuck inverted or keel lost")
             )
             events.append(Event(t, EventKind.LOST, why))
             lost = True
