@@ -88,3 +88,11 @@ export const NIGHT_AFTER_PUSH_H = 12;
 export function nightLine(power: number): number {
   return Math.min(0.9, Math.max(0.35, 0.15 + 0.8 * power));
 }
+
+/** The power an order leaves on the Orders panel. A push raises it; handing her back to the
+ * autopilot puts it back to what it was before the push (`before`, null if there was none), so a
+ * heading ordered days later does not quietly sail at the pushed power. On the autopilot the
+ * power is the autopilot's own, so this is only what your next order of your own starts from. */
+export function powerAfter(heading: Heading, asked: number, before: number | null): number {
+  return heading === "auto" && before !== null ? before : asked;
+}

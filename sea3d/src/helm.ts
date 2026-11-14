@@ -74,7 +74,7 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "./helm/powerCall";
+import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -389,6 +389,8 @@ const done = (): boolean => voyageDone(!!page.status?.over, SPECTATE, hour, show
 let watch: "boat" | "ghost" = "boat";
 let busy = false;
 let order: Heading = "auto"; // every game starts on the ghost's own autopilot (#327)
+/** The power before a "Push" call raised it, to put back when she is handed back to the autopilot. */
+let powerBeforePush: number | null = null;
 let mode: Mode = "hands_on";
 /** Base mode: the dial and slider make a draft until it's sent. */
 let draft = false;
@@ -665,6 +667,12 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     return;
   }
   order = h;
+  // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
+  p = powerAfter(h, p, powerBeforePush);
+  if (h === "auto" && powerBeforePush !== null) {
+    powerBeforePush = null;
+    $<HTMLInputElement>("power").value = String(Math.round(p * 100));
+  }
   power = p;
   if (mode === "base" && page.ready) {
     // From base an order is a satellite message, one a day: draft it, then send.
@@ -2710,6 +2718,7 @@ function maybeRouteCheck(st: Status): boolean {
           { label: words.push, title: words.pushTitle, order: to, act: () => {
             // What it bought, told when the forecast's 4 days are up, as the chase does.
             pushTurnedDown = null;
+            powerBeforePush ??= power;
             if (streamCall) alsoCalled(words.did);
             else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(to.heading, to.power);
