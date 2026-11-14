@@ -45,7 +45,7 @@ import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
 import { angleAt, commsAt, describeEvent, failedPart, failuresAt, isNotable, lastHour, loadIndex, loadReplay, planAt, positionAt, stayedOver, toneOf, valueAt, type Replay, type ReplayEvent } from "./replay/data";
 import { pickVoyage, watchWorker, type WatchInfo } from "./helm/watchSource";
 import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/whoSteers";
-import { runOutStep, voyageDone } from "./helm/timebar";
+import { drainStep, inStretch, runOutStep, stopStretch, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
@@ -1362,7 +1362,7 @@ function flash(kind: "spray" | "alarm"): void {
 
 /** Play at an hour a second: during a moment, and over the last hours before the end. */
 function slowNow(t: number): boolean {
-  return t < slowUntil || (finishing && shownTo - hour < 3) || (!!foresee && hour >= foresee.from && hour < foresee.h);
+  return t < slowUntil || (finishing && shownTo - hour < 3) || inStretch(foresee, hour);
 }
 
 // ---------- running time ----------
@@ -1538,6 +1538,8 @@ async function clockRun(): Promise<void> {
     } else if (stopped !== "time" && !(SPECTATE && stopped === "over")) {
       setRate(0, true);
       const d = `Day ${game.status!.day.toFixed(1)}`;
+      // The end has its own slow last hours (slowNow); every other stop gets them here.
+      if (stopped !== "over") foresee = { ...stopStretch(game.status!.day * 24), look: null };
       if (stopped === "breakdown") {
         const e = game.boat!.events.filter(isNotable).at(-1);
         const cut = e ? linkCutBy(e) : null;
@@ -4467,7 +4469,7 @@ renderer.setAnimationLoop(() => {
   if (tickClock(dt)) {
     // the clock moved the picture on
   } else if (drainRate > 0 && hour < shownTo) {
-    hour = Math.min(shownTo, hour + dt * (slowNow(t) ? Math.min(drainRate, 1) : drainRate));
+    hour = drainStep(drainRate, dt, hour, shownTo, slowNow(t), foresee?.from);
     if (hour >= shownTo) drainRate = 0;
   } else if (hopPlay && hour < shownTo) {
     const span = Math.max(shownTo - hour, 1);

@@ -16,3 +16,23 @@ export function runOutStep(rate: number, dt: number, hour: number, shownTo: numb
   const r = shownTo - hour < 3 ? Math.min(rate, 1) : rate;
   return Math.min(shownTo, hour + dt * r);
 }
+
+/** A stop with no call in it (a part failing, a pass, a silence): the picture plays its last
+ * hours at an hour a second, so at speed the stop is seen arriving, not jumped to (M5, D3). */
+export const STOP_SLOW_H = 3;
+/** The slow stretch before a stop at voyage hour `h`: where it starts and ends. */
+export function stopStretch(h: number, lead = STOP_SLOW_H): { from: number; h: number } {
+  return { from: h - lead, h };
+}
+/** The picture is inside a slow stretch (before a call or a stop). */
+export function inStretch(s: { from: number; h: number } | null, hour: number): boolean {
+  return !!s && hour >= s.from && hour < s.h;
+}
+/** Hours of picture to play this frame while the clock is stopped and the picture catches up to
+ * the stop: the speed the clock had, an hour a second inside a slow moment or stretch. A fast
+ * frame stops at the start of the stretch ahead (`slowFrom`) rather than jumping into it: at four
+ * days a second one frame is over an hour and a half. */
+export function drainStep(rate: number, dt: number, hour: number, shownTo: number, slow: boolean, slowFrom?: number): number {
+  const to = !slow && slowFrom !== undefined && slowFrom > hour ? Math.min(shownTo, slowFrom) : shownTo;
+  return Math.min(to, hour + dt * (slow ? Math.min(rate, 1) : rate));
+}
