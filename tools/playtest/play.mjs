@@ -5225,6 +5225,43 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #600: the start-up shader build after the first paint. The longest freeze in the first 30 s on
+  // each page: the longest task (Chrome) and the longest gap between drawn frames (both browsers).
+  "page-freeze": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      for (const [name, path, ready] of [["title", "", "window.__sea3d && window.__sea3d.frames > 0"], ["helm", "helm.html?quality=low", "window.__helm && window.__helm.frames > 0"], ["voyage", "voyage.html?voyage=2020-04-15&quality=low", "window.__replay && window.__replay.frames > 0"], ["boatyard", "boatyard.html", "window.__yard && window.__yard.frames > 0"]]) {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
+        await ctx.addInitScript(() => {
+          window.__ft = { frames: [], long: [] };
+          const f = (t) => { window.__ft.frames.push(t); requestAnimationFrame(f); };
+          requestAnimationFrame(f);
+          try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__ft.long.push([e.startTime, e.duration]); }).observe({ type: "longtask", buffered: true }); } catch {}
+        });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(SITE + path, { waitUntil: "commit", timeout: 2 * MIN });
+          await p.waitForFunction(ready, null, { timeout: 3 * MIN }).catch(() => {});
+          const first = await p.evaluate(() => performance.now());
+          await p.waitForTimeout(30000);
+          const r = await p.evaluate((a) => {
+            const fr = window.__ft.frames;
+            let worst = 0, at = 0;
+            for (let i = 1; i < fr.length; i++) if (fr[i] - fr[i - 1] > worst) { worst = fr[i] - fr[i - 1]; at = fr[i - 1]; }
+            const lt = window.__ft.long.map(([, d]) => d);
+            const fcp = performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null;
+            return { worst: Math.round(worst), at: Math.round(at), longMax: lt.length ? Math.round(Math.max(...lt)) : null, longN: lt.length, fcp: fcp && Math.round(fcp), first: Math.round(a), frames: fr.length };
+          }, first);
+          out.push(`${name}: longest task ${r.longMax ?? "n/a"} ms (${r.longN}), longest frame gap ${r.worst} ms at ${(r.at / 1000).toFixed(1)} s, first paint ${r.fcp ?? "?"} ms, first 3D frame ${r.first} ms, ${r.frames} frames`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      console.log(`PAGEFREEZE ${BROWSER}: ${out.join(" || ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
