@@ -192,6 +192,9 @@ vpp:
   waves_k: 0.0038            # GUESS: the cruiser's fitted value (per unit weight)
   autopilot_factor: 0.93     # GUESS: autopilot steering and set-and-forget trim vs a race crew
   reef_heel_deg: 25          # GUESS: the boat reefs to stay under this heel
+  # GUESS (cruising practice): the first reef goes in at about 20 kn of apparent wind,
+  # the top of Force 5, whatever the heel; smaller plans hold more (keelboat.py).
+  reef_aws_kn: 20
   p_sink_given_leak: 0.3     # GUESS: a leak the electric bilge pump can't keep up with
   gz:                        # GZ (righting lever, m). GUESS: no published curve. GM about 1.0 m
     # (the cruiser's 1.15 m scaled by waterplane L x B^3 / volume, with a similar ballast

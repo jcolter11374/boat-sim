@@ -183,6 +183,9 @@ vpp:
   waves_k: 0.0038            # added resistance per m^2 of wave height, x weight
   autopilot_factor: 0.93     # GUESS: autopilot steering and set-and-forget trim vs a race crew
   reef_heel_deg: 25          # GUESS: the boat reefs to stay under this heel
+  # GUESS (cruising practice): the first reef goes in at about 20 kn of apparent wind,
+  # the top of Force 5, whatever the heel; smaller plans hold more (keelboat.py).
+  reef_aws_kn: 20
   p_sink_given_leak: 0.3     # GUESS: a leak the electric bilge pump can't keep up with
   gz:                        # GZ (righting lever, m). GM 1.15 m from orc RM 78 kg.m at 1 deg;
     deg: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]   # the curve's shape is a
