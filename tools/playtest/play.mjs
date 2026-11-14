@@ -4812,6 +4812,112 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #579: the sunrise title over the Bay Bridge; "Just watch the sea" keeps the title shot with a
+  // corner Menu and speaker (Menu or Esc back), and the two speakers stay in step. #578: a launch's
+  // Watch links open helm.html?replay= and that screen loads the voyage.
+  "title-watch": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-title2-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      for (const [w, h] of [[1280, 720], [390, 844]]) {
+        const phone = w < 500;
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: phone ? 2 : 1, ...(phone && BROWSER === "chromium" ? { isMobile: true, hasTouch: true } : {}), serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        const st = () => p.evaluate(() => {
+          const vis = (e) => !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden" && getComputedStyle(e).display !== "none";
+          const b1 = document.getElementById("t-sound"), b2 = document.getElementById("t-sound2"), wv = document.getElementById("t-watch");
+          return { seaOnly: document.body.classList.contains("sea-only"), menu: vis(document.querySelector("#title nav")), corner: vis(wv), cornerOpacity: wv ? +getComputedStyle(wv).opacity : null, s1: b1?.getAttribute("aria-pressed"), s2: b2?.getAttribute("aria-pressed"), on: !!window.__sound?.on };
+        });
+        try {
+          await p.goto(SITE, { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 5, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.waitForTimeout(6000);
+          shots.push(await emit(p, `${w}-title`));
+          if (!(await p.locator("#t-sea").count())) { bad.push(`${w}: no "Just watch the sea"`); continue; }
+          await p.evaluate(() => { const d = document.querySelector("#title nav details"); if (d) d.open = true; });
+          await p.click("#t-sea", { timeout: 15000 });
+          await p.waitForTimeout(2500);
+          let s = await st();
+          if (!s.seaOnly || s.menu || !s.corner) bad.push(`${w}: Just watch the sea didn't swap the menu for the corner (${JSON.stringify(s)})`);
+          const frames0 = await p.evaluate(() => window.__sea3d?.frames ?? 0);
+          shots.push(await emit(p, `${w}-watch`));
+          // Speakers in step: the corner one, then N.
+          await p.click("#t-sound2");
+          await p.waitForTimeout(800);
+          s = await st();
+          const a = `corner speaker: ${s.s1}/${s.s2} on ${s.on}`;
+          if (s.s1 !== s.s2 || s.s1 !== String(s.on) || !s.on) bad.push(`${w}: after the corner speaker the buttons disagree or sound is off (${a})`);
+          await p.keyboard.press("n");
+          await p.waitForTimeout(800);
+          s = await st();
+          const b = `N: ${s.s1}/${s.s2} on ${s.on}`;
+          if (s.s1 !== s.s2 || s.s1 !== String(s.on) || s.on) bad.push(`${w}: after N the buttons disagree or sound stayed on (${b})`);
+          // Idle: the corner fades after the pointer rests.
+          await p.waitForTimeout(4500);
+          s = await st();
+          const idle = s.cornerOpacity;
+          if (!phone && !(idle < 0.2)) bad.push(`${w}: the corner didn't fade when idle (opacity ${idle})`);
+          await p.mouse.move(w / 2, h / 2); await p.mouse.move(w / 2 + 20, h / 2 + 10);
+          await p.waitForTimeout(900);
+          // Menu brings the menu back.
+          await p.click("#t-back");
+          await p.waitForTimeout(1500);
+          s = await st();
+          if (s.seaOnly || !s.menu) bad.push(`${w}: Menu didn't bring the menu back`);
+          const back1 = `menu back, speakers ${s.s1}/${s.s2}`;
+          if (s.s1 !== s.s2) bad.push(`${w}: speakers disagree after Menu (${s.s1}/${s.s2})`);
+          // Esc does too.
+          await p.evaluate(() => { const d = document.querySelector("#title nav details"); if (d) d.open = true; });
+          await p.click("#t-sea");
+          await p.waitForTimeout(1500);
+          await p.keyboard.press("Escape");
+          await p.waitForTimeout(1500);
+          s = await st();
+          if (s.seaOnly || !s.menu) bad.push(`${w}: Esc didn't bring the menu back`);
+          shots.push(await emit(p, `${w}-back`));
+          const frames1 = await p.evaluate(() => window.__sea3d?.frames ?? 0);
+          out.push(`${w}: watch ok; ${a}; ${b}; idle corner opacity ${idle}; ${back1}; Esc ${s.menu ? "back" : "NOT back"}; sea frames ${frames0}->${frames1}`);
+          if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      // #578: a launch's Watch links.
+      {
+        const p = await page.context().newPage();
+        try {
+          await p.goto(SITE + "boatyard.html", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 2, null, { timeout: 2 * MIN });
+          await p.click("#launch");
+          await p.waitForFunction(() => window.__yard.launch || window.__yard.launchError, null, { timeout: 15 * MIN });
+          await p.waitForTimeout(2000);
+          const links = await p.evaluate(() => [...document.querySelectorAll("a[href*='replay=']")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent.trim().slice(0, 40) })));
+          const old = links.filter((l) => /voyage\.html/.test(l.href));
+          if (!links.length) bad.push("boatyard: no Watch links after a launch");
+          if (old.length) bad.push(`boatyard: ${old.length} links still open voyage.html`);
+          let opened = "not tried";
+          if (links.length) {
+            const href = new URL(links[0].href, p.url()).href;
+            const q = await page.context().newPage();
+            await q.goto(href, { waitUntil: "load", timeout: 2 * MIN });
+            const ok = await q.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && window.__helm.frames > 10, null, { timeout: 4 * MIN }).then(() => true, () => false);
+            const r = await q.evaluate(() => ({ err: window.__helm?.error ?? null, day: window.__helm?.status?.day ?? null, watch: !!window.__helm?.watch }));
+            opened = `${ok ? "loaded" : "NOT loaded"} ${JSON.stringify(r)}`;
+            if (!ok || r.err) bad.push(`boatyard Watch link didn't load on the sailing screen (${opened})`);
+            shots.push(await emit(q, "yard-watch"));
+            await q.close();
+          }
+          out.push(`boatyard: ${links.length} Watch links (${links.slice(0, 2).map((l) => `${l.text} -> ${l.href.split("?")[0]}`).join("; ")}); first ${opened}`);
+        } finally { await p.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
