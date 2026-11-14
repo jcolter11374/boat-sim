@@ -130,8 +130,12 @@ export const REFLECT_FULL_M = 1400;
  * row of pin-prick lights.)
  */
 export function reflectFade(d: number): number {
-  return Math.min(1, (REFLECT_FULL_M / Math.max(d, 1)) ** 2);
+  return Math.min(1, Math.max(REFLECT_FAR, (REFLECT_FULL_M / Math.max(d, 1)) ** 2));
 }
+/** ...but never fainter than this: a calm bay at night does show short glints under a far town's brightest lights (Elena, 14 Nov: about a third of the harbour's). */
+export const REFLECT_FAR = 0.33;
+/** A far light's glints are short: the streak's spread narrows to this much of the harbour's, from REFLECT_FULL_M out to three times it. */
+export const REFLECT_SHORT = 0.6;
 
 /**
  * Reflections of lights on the water: one flat streak per light, lying on the sea and
@@ -184,7 +188,8 @@ export class Reflections {
           // facets tilted up to a couple of slopes either way catch it at nearby angles,
           // so the glitter runs from near the light towards the viewer, longer in a chop.
           float th0 = atan((aSrc.z + Hc) / D);
-          float sig = 0.03 + 0.12 * uRough;
+          // Far lights throw short glints, not long bars: a narrower spread past the harbour's range.
+          float sig = (0.03 + 0.12 * uRough) * mix(1.0, ${REFLECT_SHORT.toFixed(2)}, smoothstep(${REFLECT_FULL_M.toFixed(1)}, ${(3 * REFLECT_FULL_M).toFixed(1)}, D));
           float rNear = Hc / tan(th0 + 2.5 * sig);
           float rFar = min(Hc / tan(max(th0 - 2.5 * sig, 1e-4)), D - 0.5);
           float r = mix(rFar, rNear, position.y);
@@ -197,7 +202,7 @@ export class Reflections {
           vTh = vec3(Hc, th0, sig);
           vCol = aCol;
           float fade = ${REFLECT_FULL_M.toFixed(1)} / max(D, 1.0);
-          vEnd = vec2(min(1.0, fade * fade), position.y);
+          vEnd = vec2(min(1.0, max(${REFLECT_FAR.toFixed(2)}, fade * fade)), position.y);
           vec4 mvPosition = viewMatrix * vec4(transformed, 1.0);
           gl_Position = projectionMatrix * mvPosition;
           #include <fog_vertex>
