@@ -93,7 +93,20 @@ def test_an_unsaved_combination_builds_its_polar_on_first_use(tmp_path, monkeypa
 def test_the_page_table_names_each_part_and_lists_what_it_sets():
     t = C.stock_table()["stock_pearson31_2"]
     slots = {s["id"]: s for s in t["slots"]}
-    assert set(slots) == {"rig", "cloth", "reef", "storm", "keel", "drogue", "spare", "tactician"}
+    assert set(slots) == {
+        "rig",
+        "cloth",
+        "reef",
+        "storm",
+        "keel",
+        "drogue",
+        "vane",
+        "ksol",
+        "kbat",
+        "hydro",
+        "spare",
+        "tactician",
+    }
     lam = next(o for o in slots["cloth"]["opts"] if o["id"] == "laminate")
     assert lam["n"] == "Laminate" and lam["est"] and "vpp.cl_max" in lam["sim"]
     for s in slots.values():

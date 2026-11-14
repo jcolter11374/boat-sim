@@ -218,6 +218,14 @@ export function keelCatalog(key: KeelKey, sim: SimSlots | null, kayak: Catalog):
       off: ["Tactician off", "Steers straight for the next waypoint, never closer to the wind than she can sail."],
     },
   };
+  // The figures the build card shows (Solar panels, Battery, Runs through the night):
+  // configs/stock_*.yaml and the wave 3 parts (sandbox/catalog.py _self_power).
+  const FIG: Record<string, Record<string, Partial<Pick<CatalogOption, "wp" | "bat" | "wh">>>> = {
+    ksol: { "400w": { wp: 400 }, "600w": { wp: 600 } },
+    kbat: { lead: { bat: 2400 }, lfp: { bat: 5120 } },
+    // A windvane steers instead of the autopilot: 960 Wh/day down to 400 (catalog VANE_HOTEL_WH).
+    vane: { hydrovane: { wh: 400 - f.wh }, monitor: { wh: 400 - f.wh } },
+  };
   const slots: CatalogSlot[] = b.slots.map((s) => ({
     id: s.id,
     name: s.name,
@@ -236,6 +244,7 @@ export function keelCatalog(key: KeelKey, sim: SimSlots | null, kayak: Catalog):
         basis: o.basis,
         simEst: o.est,
         simKeys: o.sim ?? [],
+        ...(FIG[s.id]?.[o.id] ?? {}),
       } as CatalogOption;
     }),
   }));
