@@ -1,4 +1,4 @@
-// The second-half routing card (Rosa, 14 Nov; John's mid-ocean pick: weather routing only).
+// The second-half routing note (Rosa, 14 Nov; John's mid-ocean pick: weather routing only).
 // Measured in gameplay/m5-cards/routing-findings.md with callsim.py's "router" player, who took
 // every faster line the route check found at no price and steered it until the next look:
 // lines the forecast put under 90 km ahead over 4 days lost on the median (34 km from day 15 on),
@@ -9,11 +9,13 @@
 /** A free line the forecast puts this far ahead (km, over the 4-day look) is still told. Measured, 8 cases. */
 export const ROUTE_BIG_KM = 90;
 
-/** The card's words. `deg` like "095°", `ours` like "the autopilot's line", `change` from timeChange. */
-export function routeBigText(deg: string, ours: string, change: string): string {
+/** The note's words (Elena, 14 Nov). `deg` like "095°"; `km` the forecast's gain on the ghost over 4 days.
+ *  Plain heading words, right whether she is on the autopilot or a set heading. */
+export function routeBigText(deg: string, km: number): string {
+  const n = Math.max(5, Math.round(km / 5) * 5);
   return (
-    `Navigator's note: the forecast puts ${deg} well ahead of ${ours}, ${change} over the next 4 days, in no worse seas. ` +
-    "It's a gamble: she'd leave the autopilot's line for days, and a forecast is a guess. " +
-    "In our test crossings, lines forecast this far ahead paid off 7 times in 8; the other lost about 95 km. To take it, change it in Orders."
+    `Navigator's note: the forecast says steering ${deg} would gain about ${n} km on the ghost over the next 4 days, in no worse seas. ` +
+    "It's a gamble: she'd hold that heading for days, and forecasts can be wrong. " +
+    "In our test crossings, a lead forecast this big paid off 7 times in 8; the other time she lost about 95 km. To try it, change her heading in Orders."
   );
 }

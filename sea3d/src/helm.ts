@@ -2879,7 +2879,7 @@ function maybeRouteCheck(st: Status): boolean {
     if (better && !ask && gainKm >= ROUTE_BIG_KM) {
       // A line the forecast puts far ahead, in no worse seas: the note says it is a gamble, with the
       // odds measured (routing-findings.md: forecast gains of 90 km or more paid 7 times in 8).
-      const text = routeBigText(fmtDeg(b.best), orderWords(order), timeChange(gainKm, pace));
+      const text = routeBigText(fmtDeg(b.best), gainKm);
       whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info));
     }
     // A smaller free line is no longer told (routing-findings.md): steered for days, lines the forecast
