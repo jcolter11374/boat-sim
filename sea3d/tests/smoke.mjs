@@ -106,12 +106,14 @@ try {
       bar: [...document.querySelectorAll("#topbar a.nav")].map((a) => a.getAttribute("href")),
       barH: document.getElementById("topbar")?.getBoundingClientRect().height,
       barShown: [...document.querySelectorAll("#topbar a.nav, #topbar .more")].filter((a) => a.offsetParent).length,
-      more: [...document.querySelectorAll("#topbar .more .menu a")].map((a) => a.textContent),
+      // The menu's own links, and the ones that only show on a phone, where they leave the bar for More (topbar.ts .ph, .ph2).
+      more: [...document.querySelectorAll("#topbar .more .menu a:not(.ph):not(.ph2)")].map((a) => a.textContent),
+      morePhone: [...document.querySelectorAll("#topbar .more .menu a.ph, #topbar .more .menu a.ph2")].map((a) => a.textContent),
       setsail: document.getElementById("t-setsail").classList.contains("main"),
       chip: document.getElementById("topbar-boat")?.textContent,
     }));
     // One-game step 1: Set sail, Boatyard, Practice in the bar, the rest under More; on the title the bar is bare (Elena).
-    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.barH !== 40 || !ts.setsail)
+    if (!ts.title || ts.panel !== "none" || ts.bar.join() !== "./helm.html,./boatyard.html,./helm.html?practice" || ts.barShown !== 0 || ts.more.join() !== "Watch a voyage,Race it,Leaderboard,Credits" || ts.morePhone.join() !== "Boatyard,Practice" || ts.barH !== 40 || !ts.setsail)
       fail(`title screen: ${JSON.stringify(ts)}`);
     // The chip opens the boat picker; picking the Pearson makes it my boat, and Our kayak puts it back.
     await page.click("#topbar-boat");
@@ -640,7 +642,9 @@ try {
     if ((await page.textContent("#go")).trim() !== "Set sail") fail(`helm: the start button says "${await page.textContent("#go")}"`);
     // The boat picker: our kayak and the stock boats cleared for play (the game below sails the kayak).
     const picks = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="boat"]')).map((r) => r.value));
-    if (picks.join() !== ",stock_cruiser31,stock_pearson31_2") fail(`helm: boat picker offers ${JSON.stringify(picks)}`);
+    // The list the deploy holds the simulator to (sandbox-needs.json "bases", checked by check-page): the kayak is "".
+    const bases = JSON.parse(readFileSync(new URL("../sandbox-needs.json", import.meta.url), "utf8")).bases.map((b) => (b === "kayak" ? "" : b));
+    if (bases.length < 3 || picks.join() !== bases.join()) fail(`helm: boat picker offers ${JSON.stringify(picks)}, sandbox-needs.json lists ${JSON.stringify(bases)}`);
     // Ports to start from (public/ports.json): the picker lists the ports west of the start line (24 in Nov 2026).
     await page.waitForFunction(() => window.__helm.ports >= 20 && !document.querySelector("#portpick").hidden, null, { timeout: 30000 })
       .catch(async () => fail(`no port picker: ${await page.evaluate(() => window.__helm.ports)} ports`));

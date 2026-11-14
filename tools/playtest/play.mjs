@@ -555,7 +555,8 @@ const CHECKS = {
       await page.goto(SITE + "helm.html?quality=low", { waitUntil: "load", timeout: 2 * MIN });
       await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 2 * MIN });
       await page.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
-      await page.locator('input[name="boat"][value="stock_cruiser31"]').check();
+      await tickBoat(page.locator('input[name="boat"][value="stock_cruiser31"]')); // the card keeps the boat rows hidden (My boat picks)
+      must((await page.evaluate(() => document.getElementById("ss-boatname")?.textContent ?? "")).includes("31.7"), "the Set sail card doesn't show the cruiser after picking her");
       await page.waitForFunction(() => !document.querySelector("#portpick").hidden, null, { timeout: MIN });
       await page.selectOption("#port", "annapolis");
       const offered = await page.waitForFunction(() => !document.getElementById("prologuepick").hidden, null, { timeout: 30_000 }).then(() => true).catch(() => false);
