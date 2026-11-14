@@ -27,6 +27,20 @@
       "hull.mass_kg"
      ],
      "kg": -0.45
+    },
+    {
+     "id": "two-t500",
+     "effect": "wired",
+     "est": true,
+     "basis": "Blue Robotics T500 datasheet (114.5 mm propeller, 6.0 kgf for 202 W at 12 V, 1157 g); same 50 W each; low-power efficiency our GUESS",
+     "sim": [
+      "propulsion.thruster_count",
+      "propulsion.max_drive_w",
+      "propulsion.thruster_diameter_m",
+      "propulsion.thruster_efficiency",
+      "hull.mass_kg"
+     ],
+     "kg": 1.626
     }
    ]
   },
@@ -1238,6 +1252,10 @@
     "storm": "none",
     "keel": "deep",
     "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
     "spare": "none",
     "tactician": "on"
    },
@@ -1455,6 +1473,143 @@
        "kg": 25.0,
        "n": "Parachute sea anchor",
        "d": "A big parachute off the bow, set when waves reach 5 m: she lies head to the seas and barely drifts."
+      }
+     ]
+    },
+    {
+     "id": "vane",
+     "name": "Self-steering",
+     "opts": [
+      {
+       "id": "autopilot",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: a below-deck autopilot steers all the time",
+       "sim": [],
+       "kg": 0.0,
+       "n": "Electric autopilot (as built)",
+       "d": "Steers all the time on battery power; if it dies she drifts."
+      },
+      {
+       "id": "hydrovane",
+       "effect": "wired",
+       "est": true,
+       "basis": "Hydrovane specifications (own rudder, 37 kg); PBO windvane guide (emergency rudder); power saved our GUESS",
+       "sim": [
+        "electronics.windvane",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 37.0,
+       "n": "Hydrovane windvane",
+       "d": "Steers by the wind on its own rudder, with no power: she keeps sailing if the autopilot dies, or even the main rudder."
+      },
+      {
+       "id": "monitor",
+       "effect": "wired",
+       "est": true,
+       "basis": "Scanmar Monitor (servo-pendulum, steers the main rudder); weight and power saved our GUESS",
+       "sim": [
+        "electronics.windvane",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 25.0,
+       "n": "Monitor windvane",
+       "d": "A servo-pendulum vane working her own rudder, with no power: she keeps sailing if the autopilot dies."
+      }
+     ]
+    },
+    {
+     "id": "ksol",
+     "name": "Solar panels",
+     "opts": [
+      {
+       "id": "400w",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: two 200 W panels",
+       "sim": [],
+       "kg": 0.0,
+       "n": "400 W solar (as built)",
+       "d": "Two 200 W panels on a stern arch."
+      },
+      {
+       "id": "600w",
+       "effect": "wired",
+       "est": true,
+       "basis": "rigid 300 W panel datasheets; weight our GUESS",
+       "sim": [
+        "power.solar_wp",
+        "power.panels_w",
+        "hull.mass_kg"
+       ],
+       "kg": 8.0,
+       "n": "600 W solar",
+       "d": "Two 300 W panels in place of the 200 W ones."
+      }
+     ]
+    },
+    {
+     "id": "kbat",
+     "name": "Battery",
+     "opts": [
+      {
+       "id": "lead",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: two 100 Ah lead-acid",
+       "sim": [],
+       "kg": 0.0,
+       "n": "2 x 100 Ah lead-acid (as built)",
+       "d": "A 2,400 Wh house bank."
+      },
+      {
+       "id": "lfp",
+       "effect": "wired",
+       "est": true,
+       "basis": "Battle Born BB10012 datasheet x 4 (12.8 V 100 Ah, 31 lb, 99 % efficient, charges from 25 F); the lead-acid weight is our GUESS",
+       "sim": [
+        "power.battery_wh",
+        "power.charge_eff",
+        "power.discharge_eff",
+        "power.min_charge_temp_c",
+        "hull.mass_kg"
+       ],
+       "kg": -3.75,
+       "n": "4 x 100 Ah LiFePO4",
+       "d": "Lithium: over twice the stored energy, lighter, and it takes a charge faster."
+      }
+     ]
+    },
+    {
+     "id": "hydro",
+     "name": "Hydrogenerator",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: none",
+       "sim": [],
+       "kg": 0.0,
+       "n": "None (as built)",
+       "d": "Sun and engine only."
+      },
+      {
+       "id": "pod600",
+       "effect": "wired",
+       "est": true,
+       "basis": "Watt&Sea POD 600 (maker: 120 W at 5 knots, 600 W rated, 9 kg with converter and dump load); curve shape and drag our GUESS",
+       "sim": [
+        "power.hydro_w_at_5kn",
+        "power.hydro_rated_w",
+        "power.hydro_efficiency",
+        "hull.mass_kg"
+       ],
+       "kg": 9.05,
+       "n": "Watt&Sea POD 600 hydrogenerator",
+       "d": "A small propeller under the hull that charges from her speed, day and night, for a little drag."
       }
      ]
     },
@@ -1704,6 +1859,10 @@
     "storm": "none",
     "keel": "deep",
     "drogue": "none",
+    "vane": "autopilot",
+    "ksol": "400w",
+    "kbat": "lead",
+    "hydro": "none",
     "spare": "none",
     "tactician": "on"
    },
@@ -1927,6 +2086,143 @@
        "kg": 25.0,
        "n": "Parachute sea anchor",
        "d": "A big parachute off the bow, set when waves reach 5 m: she lies head to the seas and barely drifts."
+      }
+     ]
+    },
+    {
+     "id": "vane",
+     "name": "Self-steering",
+     "opts": [
+      {
+       "id": "autopilot",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: a below-deck autopilot steers all the time",
+       "sim": [],
+       "kg": 0.0,
+       "n": "Electric autopilot (as built)",
+       "d": "Steers all the time on battery power; if it dies she drifts."
+      },
+      {
+       "id": "hydrovane",
+       "effect": "wired",
+       "est": true,
+       "basis": "Hydrovane specifications (own rudder, 37 kg); PBO windvane guide (emergency rudder); power saved our GUESS",
+       "sim": [
+        "electronics.windvane",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 37.0,
+       "n": "Hydrovane windvane",
+       "d": "Steers by the wind on its own rudder, with no power: she keeps sailing if the autopilot dies, or even the main rudder."
+      },
+      {
+       "id": "monitor",
+       "effect": "wired",
+       "est": true,
+       "basis": "Scanmar Monitor (servo-pendulum, steers the main rudder); weight and power saved our GUESS",
+       "sim": [
+        "electronics.windvane",
+        "electronics.hotel_load_wh_per_day",
+        "hull.mass_kg"
+       ],
+       "kg": 25.0,
+       "n": "Monitor windvane",
+       "d": "A servo-pendulum vane working her own rudder, with no power: she keeps sailing if the autopilot dies."
+      }
+     ]
+    },
+    {
+     "id": "ksol",
+     "name": "Solar panels",
+     "opts": [
+      {
+       "id": "400w",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: two 200 W panels",
+       "sim": [],
+       "kg": 0.0,
+       "n": "400 W solar (as built)",
+       "d": "Two 200 W panels on a stern arch."
+      },
+      {
+       "id": "600w",
+       "effect": "wired",
+       "est": true,
+       "basis": "rigid 300 W panel datasheets; weight our GUESS",
+       "sim": [
+        "power.solar_wp",
+        "power.panels_w",
+        "hull.mass_kg"
+       ],
+       "kg": 8.0,
+       "n": "600 W solar",
+       "d": "Two 300 W panels in place of the 200 W ones."
+      }
+     ]
+    },
+    {
+     "id": "kbat",
+     "name": "Battery",
+     "opts": [
+      {
+       "id": "lead",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: two 100 Ah lead-acid",
+       "sim": [],
+       "kg": 0.0,
+       "n": "2 x 100 Ah lead-acid (as built)",
+       "d": "A 2,400 Wh house bank."
+      },
+      {
+       "id": "lfp",
+       "effect": "wired",
+       "est": true,
+       "basis": "Battle Born BB10012 datasheet x 4 (12.8 V 100 Ah, 31 lb, 99 % efficient, charges from 25 F); the lead-acid weight is our GUESS",
+       "sim": [
+        "power.battery_wh",
+        "power.charge_eff",
+        "power.discharge_eff",
+        "power.min_charge_temp_c",
+        "hull.mass_kg"
+       ],
+       "kg": -3.75,
+       "n": "4 x 100 Ah LiFePO4",
+       "d": "Lithium: over twice the stored energy, lighter, and it takes a charge faster."
+      }
+     ]
+    },
+    {
+     "id": "hydro",
+     "name": "Hydrogenerator",
+     "opts": [
+      {
+       "id": "none",
+       "effect": "wired",
+       "est": false,
+       "basis": "as built: none",
+       "sim": [],
+       "kg": 0.0,
+       "n": "None (as built)",
+       "d": "Sun and engine only."
+      },
+      {
+       "id": "pod600",
+       "effect": "wired",
+       "est": true,
+       "basis": "Watt&Sea POD 600 (maker: 120 W at 5 knots, 600 W rated, 9 kg with converter and dump load); curve shape and drag our GUESS",
+       "sim": [
+        "power.hydro_w_at_5kn",
+        "power.hydro_rated_w",
+        "power.hydro_efficiency",
+        "hull.mass_kg"
+       ],
+       "kg": 9.05,
+       "n": "Watt&Sea POD 600 hydrogenerator",
+       "d": "A small propeller under the hull that charges from her speed, day and night, for a little drag."
       }
      ]
     },

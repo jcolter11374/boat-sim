@@ -289,6 +289,13 @@ class KeelboatVessel(KayakVessel):
         self.engine_below_wind_kn = float(prop.get("engine_below_wind_kn", 5.0))
         self.engine_idle_frac = float(prop.get("engine_idle_frac", 0.2))  # GUESS
         self.alternator_w = float(prop.get("alternator_w", 0.0))
+        # A towed or pod hydrogenerator (M4 wave 3; power.hydro_*): charges from her
+        # speed under sail, at hydro_w_at_5kn x (speed / 5 kn)^3 up to hydro_rated_w,
+        # and the propeller's pull costs drag = power / (efficiency x speed).
+        pw = design.power
+        self.hydro_w5 = float(pw.get("hydro_w_at_5kn", 0.0))
+        self.hydro_rated_w = float(pw.get("hydro_rated_w", 0.0))
+        self.hydro_eff = float(pw.get("hydro_efficiency", 0.5))
         self.charge_below_soc = float(prop.get("charge_below_soc", 0.35))  # GUESS
         self.charge_until_soc = float(prop.get("charge_until_soc", 0.8))  # GUESS
         self.fuel_reserve_l = float(prop.get("fuel_reserve_l", 5.0))  # GUESS
@@ -345,6 +352,12 @@ class KeelboatVessel(KayakVessel):
         sigma = self.gust_sigma_at(rain_mm_h)
         p = 0.5 * math.erfc((g - 1.0) / (sigma * math.sqrt(2.0)))
         return 1.0 - (1.0 - p) ** (self.gusts_per_hour * hours)
+
+    def hydro_power_w(self, speed_ms: float) -> float:
+        """The hydrogenerator's output at this speed through the water (W)."""
+        if self.hydro_w5 <= 0.0 or speed_ms <= 0.0:
+            return 0.0
+        return min(self.hydro_w5 * (speed_ms / KNOT / 5.0) ** 3, self.hydro_rated_w)
 
     def wants_charge(self, state: BoatState, fuel: float) -> bool:
         """Does the autopilot computer run the engine to charge the battery?"""
@@ -413,6 +426,13 @@ class KeelboatVessel(KayakVessel):
             if share is not None:  # a player's watch: their share of the crew's best speed
                 sail_v *= share / self.autopilot_factor
             heel, lee = pt.heel_deg, pt.leeway_deg
+            if self.hydro_w5 > 0.0 and sail_v > 0.0:
+                # Its drag at her speed slows her a little: solve once more with it.
+                w = self.hydro_power_w(sail_v)
+                pull = w / (self.hydro_eff * sail_v)
+                sail_v = pt.speed * (drag + (aw + pull) / pt.resist_n) ** (-1.0 / pt.r_exp)
+                if share is not None:
+                    sail_v *= share / self.autopilot_factor
         motor_v = 0.0
         if self._step.get("motoring"):
             f = self._step["engine"]
@@ -428,6 +448,8 @@ class KeelboatVessel(KayakVessel):
         self._step.update(plan=plan, heel=side * heel, engine_used=motor_v > sail_v, m0=m0)
         self._step["overload"] = max(heel / self.reef_heel_deg - 1.0, 0.0) if plan != DOWN else 0.0
         surge = max(sail_v, motor_v)
+        # Under engine the hydrogenerator is lifted (and it can't charge drifting).
+        self._step["hydro_w"] = self.hydro_power_w(sail_v) if sail_v >= motor_v else 0.0
         if surge <= 0.0:  # bare poles, no engine: drift like any hull
             return solve_speed(
                 self.hull, self.thrusters, heading, 0.0, 0, env, foul, cur_e, cur_n, extra_drag_mult
@@ -467,6 +489,10 @@ class KeelboatVessel(KayakVessel):
             cap = new.battery_capacity_wh
             put = self.alternator_w * hours * self.battery.charge_eff
             new.battery_wh = min(new.battery_wh + put, cap)
+        hydro = self._step.get("hydro_w", 0.0)
+        if hydro > 0.0:
+            cap = new.battery_capacity_wh
+            new.battery_wh = min(new.battery_wh + hydro * hours * self.battery.charge_eff, cap)
         out = KeelboatState(
             **{f.name: getattr(new, f.name) for f in fields(new)},
             fuel_l=max(fuel - burn, 0.0),

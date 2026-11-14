@@ -57,6 +57,12 @@ export const GROUPS: Record<string, string> = {
   // A drogue or sea anchor answers the same gale as storm sails (M4 wave 2).
   drogue: "sails",
   spare: "links",
+  // M4 wave 3: a windvane answers the autopilot dying, as a spare autopilot does;
+  // the keelboats' solar, battery and hydrogenerator all answer a flat battery.
+  vane: "links",
+  ksol: "power",
+  kbat: "power",
+  hydro: "power",
 };
 /** A part that only changes the weight by this little (kg) can't move the odds measurably. */
 const NEGLIGIBLE_KG = 1;
