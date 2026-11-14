@@ -3729,6 +3729,8 @@ const CHECKS = {
           i.click();
           return { found: true, value: i.value, name: label?.querySelector("b")?.textContent.trim(), fact: label?.querySelector("small")?.textContent.trim(), box: d ? { summary: d.querySelector("summary")?.textContent.trim(), nums: d.querySelectorAll("dt").length, words: [...d.querySelectorAll("p:not(.src)")].map((x) => x.textContent).join(" ").length, links: d.querySelectorAll(".src a").length, h: Math.round(d.getBoundingClientRect().height) } : null };
         });
+        const revcRows = await p.evaluate(() => [...document.querySelectorAll("#boatpick label, #boatpick a.row")].filter((e) => /Rev C5/.test(e.textContent)).length);
+        out.push(`Rev C5 rows in the picker: ${revcRows}`);
         if (!pick.found) throw new CheckFail(`the picker has no Rev C5 (rows: ${pick.names.join(" / ")})`);
         await p.waitForTimeout(600);
         shots.push(await emit(p, "picker"));
@@ -3761,7 +3763,8 @@ const CHECKS = {
         shots.push(await emit(p, "later"));
         if (a.err || b.err) bad.push(`helm error: ${a.err ?? b.err}`);
         if (!(b.day > (a.day ?? 0))) bad.push(`she did not sail (day ${a.day} then ${b.day})`);
-        // She has a motor: the power control may show.
+        if (a.power.length || b.power.length) bad.push(`power control shows: ${[...new Set([...a.power, ...b.power])].join(", ")}`);
+        if (revcRows !== 1) bad.push(`the picker lists the Rev C5 ${revcRows} times`);
         if (errs.length) bad.push(`page errors: ${errs.slice(0, 3).join(" / ")}`);
         if (!/Rev/.test(chip) || !/Rev/.test(a.top)) bad.push(`top bar does not say Rev C5 (title "${chip}", helm "${a.top}")`);
         out.push(`chip after picking "${chip}"; helm ${a.url}, top bar "${a.top}", wind-only ${a.windOnly}, power controls shown: ${a.power.join(",") || "none"}; day ${a.day} -> ${b.day}${b.over ? " (ended)" : ""}`);
