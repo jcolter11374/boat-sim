@@ -1270,6 +1270,8 @@ const CHECKS = {
       await page.waitForTimeout(3000);
       t = await leave();
       must(t.v, "an order: nothing was saved on leaving");
+      // The save carries the order on the helm as the page goes (#555), whether or not the simulator had answered it.
+      must(t.v.order?.heading === "finish", `an order: sent "${sent}", the save's order on leaving is ${JSON.stringify(t.v.order ?? null)}`);
       out.push(await comeBack(t, "after an order"));
       await play();
       await page.waitForTimeout(3000);
