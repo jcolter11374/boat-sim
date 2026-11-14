@@ -120,6 +120,7 @@ OUTLOOK_HOURS = 48.0
 # (forecasts and outlooks look 5 days on). A missing month then stops the call
 # before anything has changed, and the page fetches it and asks again.
 COVER_AHEAD = timedelta(days=7)
+GHOST_HOP = timedelta(days=20)  # result(): the ghost sails on this far at a time
 TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
@@ -795,6 +796,7 @@ class Game:
         """Step `v` (once, or up to `until`). Sailing off the edge of the weather
         bundle ends that voyage, as in run_voyage ("left_data_box")."""
         from boatsim.oceandata.grid import OutsideCoverage
+        from boatsim.sandbox.forcing import WeatherNotLoaded
 
         try:
             v.step() if until is None else v.run_until(until)
@@ -802,6 +804,13 @@ class Game:
             v.done = True
             v.log.end = v.state.t
             self.left_data.add(id(v))
+        except WeatherNotLoaded as need:
+            # Whoever moved the boats should have asked first (_cover): half a
+            # step can't be sailed again. Not the error the page answers by
+            # fetching the month and asking again, so this is never papered over.
+            raise RuntimeError(
+                f"the boats moved before the weather for {need.part} was loaded"
+            ) from None
 
     def _outcome(self, v: Voyage) -> str:
         if id(v) in self.left_data:
@@ -1198,10 +1207,15 @@ class Game:
         design = getattr(self, "design", None)  # QA's stand-in games have none
         label = design.stock.get("label") if design is not None else None
 
-        if self.mine.done:
-            self._advance(
-                self.ghost, self.start + timedelta(days=10_000)
-            )  # the game is over: the rest of the ghost's voyage can be shown
+        # The game is over: the rest of the ghost's voyage can be shown. It sails
+        # on in hops, each asking for its months first (_cover): a step that met a
+        # missing month half way couldn't be asked again (Sam, #540: the report
+        # is taken from the link before base reads the forecast). Hops or one
+        # run, the steps are the same.
+        while self.mine.done and not self.ghost.done:
+            hop = self.ghost.state.t + GHOST_HOP
+            self._cover(hop)
+            self._advance(self.ghost, hop)
         me, gh = card(self.mine), card(self.ghost)
         both = me["outcome"] == gh["outcome"] == Outcome.ARRIVED.value
         margin = gh["days"] - me["days"] if both else None

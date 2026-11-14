@@ -45,6 +45,31 @@ def files(tmp_path_factory):
     return whole, d / "parts", index
 
 
+@pytest.fixture(scope="module")
+def calm(tmp_path_factory):
+    """The same span with the fake sources' own steady weather, so boats sail for
+    weeks and the games below cross the month ends (Sam, #540: on the random
+    bundle both boats are lost within a day)."""
+    d = tmp_path_factory.mktemp("calm")
+    era5, glorys, ships = _fake_sources()
+    whole = d / "forcing_2020.npz"
+    with open(whole, "wb") as f:
+        F.cut(2020, f, era5, glorys, ships, log=lambda *_: None, first=(4, 25), last=(6, 8))
+    return whole, d / "parts", F.split(whole, d / "parts")
+
+
+def _voyage(v) -> str:
+    """Everything a voyage has done so far, exactly."""
+    return json.dumps(
+        {
+            "t": v.state.t.isoformat(),
+            "at": [v.state.lat.hex(), v.state.lon.hex(), float(v.state.soc).hex()],
+            "events": [(e.t.isoformat(), e.kind.value) for e in v.log.events],
+            "rows": len(v.log.rows),
+        }
+    )
+
+
 def _times(n=400):
     rng = np.random.default_rng(11)
     t0 = datetime(2020, 4, 25)
@@ -140,15 +165,18 @@ def test_missing_names_the_months_a_span_could_read(files):
     assert F.BundleEnvironment(whole).missing(datetime(2020, 1, 1), datetime(2021, 1, 1)) == []
 
 
-def test_open_bundle_reads_a_split_bundle_and_a_game_sails_it_the_same(files):
-    whole, parts, _index = files
+def test_open_bundle_reads_a_split_bundle_and_a_game_sails_it_the_same(calm):
+    whole, parts, _index = calm
     a = R.open_bundle(whole)
     b = R.open_bundle(parts / "forcing_2020_parts.json")
     out = []
     for env in (a, b):
-        g = Game(env, day="2020-04-27", max_days=6.0)
+        g = Game(env, day="2020-04-27", max_days=40.0)
         g.run(hours=96)
-        out.append((g.save(), json.dumps(g.status(), default=float), json.dumps(g.forecast(hours=120), default=float)))  # fmt: skip
+        g.order(80.0, 0.6)
+        g.run(hours=30 * 24, land_within_km=None, ghost_passes=False, silence=False)
+        assert g.mine.state.t > datetime(2020, 5, 10), "the boat should sail on past the month end"
+        out.append((g.save(), json.dumps(g.status(), default=float), json.dumps(g.forecast(hours=120), default=float), _voyage(g.mine), _voyage(g.ghost)))  # fmt: skip
     assert out[0] == out[1]
 
 
@@ -161,12 +189,8 @@ def test_split_command(files, tmp_path, capsys):
     )
 
 
-def test_a_game_asks_for_its_months_before_it_moves(files):
-    """The page's loop: a call that needs a month raises before anything has
-    changed, the month is added, and the same call then gives the whole
-    bundle's answer."""
-    whole, parts, index = files
-    env = R.open_bundle(parts / index["static"])
+def _asking(env, parts):
+    """The page's loop: fetch the month a call asks for and call again."""
 
     def retry(call):
         asked = []
@@ -177,36 +201,84 @@ def test_a_game_asks_for_its_months_before_it_moves(files):
                 asked.append(need.part)
                 env.add_part(need.part, parts / f"forcing_2020_{need.part}.npz")
 
-    g, asked = retry(lambda: Game(env, day="2020-04-27", max_days=30.0))
+    return retry
+
+
+def test_a_game_asks_for_its_months_before_it_moves(calm):
+    """A call that needs a month raises before anything has changed, the month
+    is added, and the same call then gives the whole bundle's answer."""
+    whole, parts, index = calm
+    env = R.open_bundle(parts / index["static"])
+    retry = _asking(env, parts)
+    quiet = {"land_within_km": None, "ghost_passes": False, "silence": False}
+
+    g, asked = retry(lambda: Game(env, day="2020-04-27", max_days=40.0))
     assert asked == []  # nothing is read until the boats move
-    t0, n0 = g.mine.state.t, len(g.mine.log.events)
+    before = (_voyage(g.mine), _voyage(g.ghost))
     with pytest.raises(F.WeatherNotLoaded, match="2020-04"):
         g.run(hours=24)
     env.add_part("2020-04", parts / "forcing_2020_2020-04.npz")
     with pytest.raises(F.WeatherNotLoaded, match="2020-05"):
         g.run(hours=24)  # 28 April + 7 days of forecasts reaches into May
-    assert g.mine.state.t == t0 and g.ghost.state.t == t0 and len(g.mine.log.events) == n0
     with pytest.raises(F.WeatherNotLoaded, match="2020-05"):
         g.order(90.0, 0.5)
-    assert g.orders == []
-    _, asked = retry(lambda: g.run(hours=24))
+    assert (_voyage(g.mine), _voyage(g.ghost)) == before and g.orders == []
+    _, asked = retry(lambda: g.run(hours=24, **quiet))
     assert asked == ["2020-05"]
-    g.order(90.0, 0.5)
-    g.run(hours=20 * 24)  # to 18 May at the latest: June isn't needed yet
-    assert env.loaded == {"2020-04", "2020-05"}
+    g.order(80.0, 0.6)
+    g.run(hours=20 * 24, **quiet)
+    assert g.mine.state.t > datetime(2020, 5, 5)  # sailed across the month end
+    assert env.loaded == {"2020-04", "2020-05"}  # June isn't needed yet
+    before = (_voyage(g.mine), _voyage(g.ghost))
     with pytest.raises(F.WeatherNotLoaded, match="2020-06"):
-        g.run(hours=45 * 24)
+        g.run(hours=30 * 24, **quiet)
+    assert (_voyage(g.mine), _voyage(g.ghost)) == before
     code = g.save()
 
-    ref = Game(R.open_bundle(whole), day="2020-04-27", max_days=30.0)
-    ref.run(hours=24)
-    ref.order(90.0, 0.5)
-    ref.run(hours=20 * 24)
+    ref = Game(R.open_bundle(whole), day="2020-04-27", max_days=40.0)
+    ref.run(hours=24, **quiet)
+    ref.order(80.0, 0.6)
+    ref.run(hours=20 * 24, **quiet)
     assert ref.save() == code
+    assert (_voyage(ref.mine), _voyage(ref.ghost)) == before
     assert json.dumps(ref.status(), default=float) == json.dumps(g.status(), default=float)
 
     # Continue from a save on a fresh page: both months are asked for up front.
     env = R.open_bundle(parts / index["static"])
-    back, asked = retry(lambda: Game.load(env, code))
+    back, asked = _asking(env, parts)(lambda: Game.load(env, code))
     assert asked == ["2020-04", "2020-05"]
-    assert back.save() == code
+    assert back.save() == code and (_voyage(back.mine), _voyage(back.ghost)) == before
+
+
+def test_the_ghost_sailing_on_after_the_game_is_over_asks_first(calm):
+    """result() sails the ghost to its end once the player's boat is done. A step
+    that met a missing month half way couldn't be asked again (Sam, #540), so it
+    must ask before each hop; the ghost then ends exactly as on the whole bundle."""
+    whole, parts, index = calm
+    env = R.open_bundle(parts / index["static"])
+    retry = _asking(env, parts)
+    g = Game(env, day="2020-04-27", max_days=40.0)
+    ref = Game(R.open_bundle(whole), day="2020-04-27", max_days=40.0)
+    for game in (g, ref):
+        retry(lambda game=game: game.run(hours=48, land_within_km=None))
+        game.mine.done = True  # the player's boat is lost; the ghost has weeks to sail
+    assert env.loaded == {"2020-04", "2020-05"}
+    card, asked = retry(g.result)
+    assert asked == ["2020-06"]
+    assert g.ghost.done and g.ghost.state.t > datetime(2020, 5, 25)
+    theirs = ref.result()
+    assert _voyage(g.ghost) == _voyage(ref.ghost) != _voyage(g.mine)
+    assert json.dumps(card, default=float) == json.dumps(theirs, default=float)
+
+
+def test_a_month_missing_in_the_middle_of_a_step_is_never_asked_again(calm):
+    """If the boats ever move without asking first, the page must not fetch the
+    month and repeat the call (half a step has already happened): the error is
+    not the one it answers that way."""
+    _whole, parts, index = calm
+    env = R.open_bundle(parts / index["static"])
+    env.add_part("2020-04", parts / "forcing_2020_2020-04.npz")
+    g = Game(env, day="2020-04-27", max_days=40.0)
+    with pytest.raises(RuntimeError, match="before the weather for 2020-05") as err:
+        g._advance(g.ghost, g.start + timedelta(days=30))
+    assert "WEATHER_PART" not in str(err.value) and err.value.__suppress_context__
