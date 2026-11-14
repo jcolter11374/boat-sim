@@ -11,11 +11,11 @@ import type { GridBuild } from "../src/yard/launch";
 const sim = JSON.parse(readFileSync("public/sim-slots.json", "utf8")) as SimSlots;
 const kayak = withSim(JSON.parse(readFileSync("public/parts-catalog.json", "utf8")) as Catalog, sim);
 
-test("each keelboat starts as built, with her sails, rig, spare autopilot and tactician", () => {
+test("each keelboat starts as built, with her sails, rig, keel, drogue, spare autopilot and tactician", () => {
   for (const key of KEEL_KEYS) {
     const c = keelCatalog(key, sim, kayak)!;
     assert.ok(c, key);
-    assert.deepEqual(c.slots.map((s) => s.id), ["rig", "cloth", "reef", "storm", "spare", "tactician"]);
+    assert.deepEqual(c.slots.map((s) => s.id), ["rig", "cloth", "reef", "storm", "keel", "drogue", "spare", "tactician"]);
     const d = plannedDesign(c);
     assert.equal(d.base, key);
     assert.deepEqual(d.picks, sim.stock![key].defaults);
@@ -58,4 +58,12 @@ test("a sail part moves the quick odds once the grid has tested it", () => {
   assert.ok(both > 0.7 && both < 0.75, String(both));
   // A part the grid hasn't tested says so rather than guess.
   assert.equal(m.odds({ ...plan, picks: { ...plan.picks, cloth: "laminate" } })!.p, null);
+});
+
+test("the drogue slot says what the odds don't count yet (Maya, #526)", () => {
+  for (const key of KEEL_KEYS) {
+    const c = keelCatalog(key, sim, kayak)!;
+    assert.match(c.slots.find((s) => s.id === "drogue")!.note ?? "", /rolled by a breaking wave/);
+    assert.equal(c.slots.find((s) => s.id === "keel")!.note, undefined);
+  }
 });

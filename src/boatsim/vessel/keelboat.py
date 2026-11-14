@@ -91,7 +91,7 @@ import numpy as np
 from boatsim.config import Design
 from boatsim.types import BoatState, Command, EnvState, Event, EventKind, Sensors
 from boatsim.vessel import hull as H
-from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT
+from boatsim.vessel.hazards import MAX_THRUSTERS, SLOT, drogue_out
 from boatsim.vessel.kayak import (
     KayakState,
     KayakVessel,
@@ -387,6 +387,21 @@ class KeelboatVessel(KayakVessel):
         wave_rel = abs((env.wave_dir - heading + 180.0) % 360.0 - 180.0)
         aw = self.added_resistance(env.hs, wave_rel)
         drag = (1.0 + foul) * extra_drag_mult
+        if drogue_out(self.hazards, env.hs):
+            # Drogue or sea anchor streamed (M4 wave 2): sails down, engine off, held
+            # end-on to the seas, drifting downwind no faster than it lets her.
+            self._step.update(
+                plan=DOWN, heel=0.0, engine_used=False, motoring=False, m0=0.0, overload=0.0
+            )
+            sol = solve_speed(
+                self.hull, self.thrusters, heading, 0.0, 0, env, foul, cur_e, cur_n, extra_drag_mult
+            )
+            v = math.hypot(sol.surge, sol.sway)
+            cap = self.hazards.drogue_kn * KNOT
+            if v > cap > 0.0:
+                f = cap / v
+                sol = replace(sol, surge=sol.surge * f, sway=sol.sway * f)
+            return sol
         plan = DOWN
         sail_v = heel = lee = 0.0
         if sail_alpha_max > 0.0:

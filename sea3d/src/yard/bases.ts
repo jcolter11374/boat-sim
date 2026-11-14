@@ -221,6 +221,7 @@ export function keelCatalog(key: KeelKey, sim: SimSlots | null, kayak: Catalog):
   const slots: CatalogSlot[] = b.slots.map((s) => ({
     id: s.id,
     name: s.name,
+    ...(s.note ? { note: s.note } : {}),
     opts: s.opts.map((o) => {
       const [n, d] = o.n ? [o.n, o.d ?? o.basis] : (NAMES[s.id]?.[o.id] ?? [o.id, o.basis]);
       return {
