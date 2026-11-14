@@ -19,6 +19,13 @@ export const ARRIVAL_AT: [number, number] = [38.74, -9.56];
 export const ARRIVAL_S = 12;
 /** The frame: a 16 degree lens 1.6 m off the water, the horizon a third up (sky above for the banner and a mast), the boat a fifth of the width. */
 export const ARRIVAL: Look = { az: 180, f: 0.2, H: -0.3, B: 0, fov: 16, h: 1.6, x: 0.45 };
+/**
+ * On an upright phone (Elena, 14 Nov: at a fifth of a narrow frame the kayak was tiny, with half the
+ * screen empty sea below her): the camera comes in until she is about half the width, nearer the
+ * middle so neither end leaves the frame. The horizon stays a third up, which puts her and the cape
+ * in the middle of what the banner leaves free.
+ */
+export const ARRIVAL_UPRIGHT: Look = { ...ARRIVAL, f: 0.45, x: 0.3 };
 /** How far across the frame the cape sits from the boat (in half-widths), so it is beside her, not behind her. */
 export const CAPE_APART = 0.6;
 
@@ -55,7 +62,8 @@ export function arrivalShot(
   // A slow push in: the boat a tenth bigger by the end.
   // Round from the cape's line by what CAPE_APART is of this frame's width (a phone's upright frame is narrow).
   const off = Math.atan(CAPE_APART * Math.tan((ARRIVAL.fov * D2R) / 2) * host.camera.aspect) / D2R;
-  const look: Look = { ...ARRIVAL, az: 180 - off, f: ARRIVAL.f * (1 + 0.1 * ease) };
+  const base = host.camera.aspect < 1 ? ARRIVAL_UPRIGHT : ARRIVAL;
+  const look: Look = { ...base, az: 180 - off, f: base.f * (1 + 0.1 * ease) };
   let best: { c: Composed; cape: number; boat: number; score: number; held: [number, number] } | null = null;
   // Either hand, and the boat on either third: sailing straight at the cape or away from it, the usual
   // third (behind where she's heading) would put the cape out of the frame, so then she takes the other.

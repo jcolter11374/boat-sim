@@ -14,7 +14,7 @@
 // Messages out: {id, ok: true, value} | {id, ok: false, error} | {type: "progress", text}
 // Replies that move time carry both boats' voyages so far as replays (hourly rows).
 
-import { HELM_PACKAGES } from "./prefetch";
+import { FIRST_WEATHER, HELM_PACKAGES } from "./prefetch";
 
 // Pass the folder too: Firefox can't work it out from a module imported in a worker
 // ("Could not extract indexURL path from pyodide module location", #294).
@@ -29,6 +29,47 @@ interface Py {
 }
 
 let ready: Promise<Py> | null = null;
+
+// The 2020 weather split by month (boatsim.sandbox split, in the site build): the
+// page loads the small static file, then only the months a voyage sails through.
+// The values are the whole file's, bit for bit (tests/test_sandbox_split.py). A
+// site without the split files (an older ?sandbox= folder) loads the whole file.
+interface WeatherParts {
+  static: string;
+  parts: { key: string; file: string; bytes: number }[];
+}
+let weatherParts: WeatherParts | null = null;
+let weatherBase = "";
+const partAdded = new Map<string, Promise<void>>(); // each month: fetched and added once
+
+/** Fetch one month of the 2020 weather and add it to the simulator's weather. */
+function addPart(py: Py, key: string): Promise<void> {
+  let p = partAdded.get(key);
+  if (!p) {
+    const part = weatherParts?.parts.find((x) => x.key === key);
+    if (!part) return Promise.reject(new Error(`no weather for ${key}`));
+    p = fetchBytes(`${weatherBase}${part.file}`).then((bytes) => {
+      py.FS.writeFile("/sandbox/part.npz", bytes);
+      py.globals.set("part_key", key);
+      py.runPython(`ENVS[""].add_part(part_key, "part.npz")`);
+    });
+    p.catch(() => partAdded.delete(key)); // a failed fetch can be tried again
+    partAdded.set(key, p);
+  }
+  return p;
+}
+
+/** Fetch the months the next 30 days could read, behind the game's back, so the
+ *  clock doesn't wait at a month's end even at 4 days a second. */
+function fetchAhead(py: Py): void {
+  if (!weatherParts) return;
+  try {
+    const keys = JSON.parse(py.runPython(`json.dumps(ahead())`) as string) as string[];
+    for (const k of keys) addPart(py, k).catch(() => undefined); // asked for again when it's needed
+  } catch {
+    // an older simulator: the months come when a call asks for them
+  }
+}
 const say = (text: string) => postMessage({ type: "progress", text });
 
 async function fetchBytes(url: string, progress?: (n: number, total: number) => void): Promise<Uint8Array> {
@@ -79,7 +120,12 @@ function start(base: string): Promise<Py> {
       const pct = known ? Math.floor((80 * (got[0] + got[1])) / (size[0] + size[1])) : 0;
       if (known && pct !== shown) say(`Loading the simulator... ${(shown = pct)}%`);
     };
-    const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`, tick(0)), fetchBytes(`${base}forcing_2020.npz`, tick(1))]);
+    weatherBase = base;
+    weatherParts = await fetch(`${base}forcing_2020_parts.json`)
+      .then((r) => (r.ok ? (r.json() as Promise<WeatherParts>) : null))
+      .catch(() => null);
+    const weather = weatherParts ? weatherParts.static : "forcing_2020.npz";
+    const [py, zip, bundle] = await Promise.all([mod.loadPyodide({ indexURL: PYODIDE_DIR }), fetchBytes(`${base}boatsim.zip`, tick(0)), fetchBytes(`${base}${weather}`, tick(1))]);
     say("Loading the simulator... 85%");
     await py.loadPackage(HELM_PACKAGES);
     py.FS.mkdirTree("/sandbox");
@@ -102,9 +148,18 @@ try:
 except ImportError:
     UNTIL_CAP = 240.0
 from boatsim.runner.replay import to_replay, QUIET_EVENTS
-ENVS = {"": open_bundle("forcing.npz")}  # weather bundles by URL; "" = 2020
+ENVS = {"": open_bundle("forcing.npz")}  # weather bundles by URL; "" = 2020 (whole, or split by month and filled as she sails)
 ENV = ENVS[""]
 G = None
+
+def ahead(days=30.0):
+    # The months of a split bundle the next \`days\` could read and that aren't here yet.
+    from datetime import timedelta
+    missing = getattr(ENV, "missing", None)
+    if missing is None or G is None:
+        return []
+    t = G.mine.state.t
+    return missing(t, t + timedelta(days=days))
 
 def takes_challenges():
     import inspect
@@ -191,6 +246,8 @@ self.onmessage = async (ev: MessageEvent) => {
     const py = await start(m.base ?? "");
     if (m.type === "warm") {
       // Loaded while the player reads the start card (#322: no silent wait after Set sail).
+      // The months the usual launch reads first come in behind it.
+      if (weatherParts) for (const k of FIRST_WEATHER) addPart(py, k).catch(() => undefined);
       postMessage({ id: m.id, ok: true, value: null });
       return;
     }
@@ -285,7 +342,22 @@ json.dumps(G.best_heading(hours=m.get("hours", 48.0)) if hasattr(G, "best_headin
     } else {
       code = `json.dumps({"card": G.result(), **voyages()}, default=_f)`;
     }
-    postMessage({ id: m.id, ok: true, value: JSON.parse(py.runPython(code) as string) });
+    // A game on the split weather stops a call that needs a month it doesn't have,
+    // before anything has moved (sandbox/helm.py Game._cover): fetch it and ask again.
+    let out: string;
+    for (let tries = 0; ; tries++) {
+      try {
+        out = py.runPython(code) as string;
+        break;
+      } catch (e) {
+        const need = weatherParts && tries < 16 ? /WEATHER_PART (\d{4}-\d{2})/.exec(String(e instanceof Error ? e.message : e)) : null;
+        if (!need) throw e;
+        say(m.type === "run" ? "Loading the weather ahead..." : "Loading the weather for the voyage...");
+        await addPart(py, need[1]);
+      }
+    }
+    postMessage({ id: m.id, ok: true, value: JSON.parse(out) });
+    if (m.type === "new" || m.type === "load" || m.type === "run") fetchAhead(py);
   } catch (e) {
     postMessage({ id: m.id, ok: false, error: String(e instanceof Error ? e.message : e) });
   }

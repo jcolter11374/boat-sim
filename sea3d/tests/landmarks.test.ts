@@ -130,3 +130,13 @@ test("coast lights stand on the land, near their towns, the same every time", as
   }
   assert.ok(LISBON_COAST.reduce((n, t) => n + t.lights, 0) < 200, "sparse");
 });
+
+test("a landmark only names a model file the site's build makes (others are drawn, with nothing fetched)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const build = readFileSync(new URL("../../tools/build_boats.sh", import.meta.url), "utf8");
+  for (const lm of LANDMARKS) {
+    if (lm.file) assert.ok(build.includes(`public/models/${lm.file}.glb`), `${lm.key}: tools/build_boats.sh does not build ${lm.file}.glb, so the page would ask for a file that is not there`);
+  }
+  assert.equal(LANDMARKS.find((l) => l.key === "cabodaroca")!.file, undefined);
+  assert.equal(LANDMARKS.find((l) => l.key === "thomaspoint")!.file, "landmark_thomaspoint");
+});

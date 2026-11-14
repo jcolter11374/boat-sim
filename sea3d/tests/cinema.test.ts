@@ -386,6 +386,9 @@ test("the helm's knockdown cut: side on, from the side she is thrown towards, th
         const flat = new THREE.Vector3(o.pos.x, 0, o.pos.z);
         assert.ok(flat.dot(lee) > 0.9 * flat.length(), `${tag}: camera off her beam on the side she falls to`);
         assert.ok(o.pos.y >= 0.5 && o.pos.y < 4, `${tag}: camera ${o.pos.y.toFixed(1)} m up`);
+        // A boat with no rig is filmed from above (25 to 30 degrees down), where her upturned side shows.
+        const down = (Math.atan2(o.pos.y, Math.hypot(o.pos.x, o.pos.z)) * 180) / Math.PI;
+        if (mast <= len) assert.ok(down > 23 && down < 32, `${tag}: looking down ${down.toFixed(0)} degrees`);
         // Bow, stern, and the masthead lying flat towards the lens all stay in the picture.
         const pts = [bow.clone().multiplyScalar(len / 2), bow.clone().multiplyScalar(-len / 2), lee.clone().multiplyScalar(mast)];
         for (const p of pts) {

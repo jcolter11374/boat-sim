@@ -66,3 +66,19 @@ test("the title's white boats sit a touch deeper, with a soft wet line at the wa
   assert.ok(kay.wet > 0 && kay.wet < rev.wet);
   assert.deepEqual(heroWaterlineFor("stock_pearson31_2"), { sink: 0, wet: 0 });
 });
+
+test("the title's backlight goes out with the sun: full at the title's dusk, none at night", async () => {
+  const { backAt } = await import("../src/titleHero");
+  assert.equal(backAt(HERO_SUN.el), 1);
+  assert.equal(backAt(55), 1);
+  assert.equal(backAt(-18), 0);
+  assert.equal(backAt(-6), 0);
+  for (let el = -8; el < 4; el += 0.5) assert.ok(backAt(el + 0.5) >= backAt(el));
+});
+
+test("a yacht's lamps at night light the cockpit, not the sails", async () => {
+  const { COCKPIT_REACH_M, BACK_FILL } = await import("../src/boats/nightlook");
+  // The Pearson's boom is about 2.5 m above the cockpit lamp: out of its reach.
+  assert.ok(COCKPIT_REACH_M <= 2.4 && COCKPIT_REACH_M >= 1.5);
+  assert.ok(BACK_FILL > 0 && BACK_FILL <= 1.5, "the fill lifts dark paint without matching the sky");
+});

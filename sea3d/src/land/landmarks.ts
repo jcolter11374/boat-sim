@@ -39,8 +39,8 @@ export interface Landmark {
   name: string;
   lat: number;
   lon: number;
-  /** The model's file name in ./models, without ".glb". */
-  file: string;
+  /** The model's file name in ./models, without ".glb". Left out when no model is built for it: it is drawn in code and nothing is fetched. */
+  file?: string;
   light?: Light;
   /** The ground it stands on, metres above the sea (a clifftop light); the light's focal height is above this. */
   base?: number;
@@ -82,7 +82,7 @@ export const LANDMARKS: Landmark[] = [
     name: "Cabo da Roca lighthouse",
     lat: 38.782,
     lon: -9.4973,
-    file: "landmark_cabodaroca",
+    // No built model (tools/build_boats.sh builds Thomas Point only): the tower is drawn in code, so no file is asked for.
     kind: "tower",
     base: 113, // where our land's heights put the ground under it (the real cliff top is about 143 m: our 19 m grid rounds the edge off)
     far: true,
@@ -289,7 +289,7 @@ export class Landmarks {
   private async load(lm: Landmark): Promise<void> {
     this.loading.add(lm.key);
     let model: THREE.Group | null = null;
-    for (const f of [`${lm.file}.glb`, `${lm.file}.json`]) {
+    for (const f of lm.file ? [`${lm.file}.glb`, `${lm.file}.json`] : []) {
       try {
         model = (await gltfLoader().loadAsync(`${this.base}/${f}`)).scene;
         break;
