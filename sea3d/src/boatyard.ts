@@ -651,7 +651,7 @@ function drawDeltas(model: OddsModel | null): void {
 // sails six spring 2020 launches (and our kayak's, to compare), a few minutes on a
 // slow computer; without it, the page shows the precomputed voyages at once.
 void sandboxReady.then((inBrowser) => {
-  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see its simulated voyages";
+  $("launch").textContent = inBrowser ? "Test it: sail 6 launches (a few minutes)" : "Test it: see how her voyages go";
   $("launch").title = inBrowser
     ? "The autopilot sails your design from 6 real spring 2020 start dates, in this browser, and sails the boat you started from on the same dates to compare"
     : "Shows the voyages our servers sailed for the closest tested build";

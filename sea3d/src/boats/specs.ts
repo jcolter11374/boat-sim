@@ -186,14 +186,15 @@ export const PLAYABLE_STOCK: StockKey[] = ["stock_cruiser31", "stock_pearson31_2
 export const isStock = (k: string): k is StockKey => k in STOCK;
 /** The names a player sees for the stock boats: their real make and model (John's decision B4, 12 Nov:
  * "brands are in"), each our own model of it. The same in the boat picker, on the Set sail card and as
- * "my boat". Randolph and Becky's boat always says "(our model)" (B2). */
+ * "my boat". Every one says "(our model)", as Randolph and Becky's boat always has (B2; Elena,
+ * 14 Nov: one rule for all real makes). */
 const PLAYER_NAME: Record<StockKey, string> = {
   stock_pearson31_2: "Pearson 31-2 (our model)",
-  stock_cruiser31: "Beneteau First 31.7",
-  stock_dinghy14: "Sunfish",
-  stock_beachcat16: "Hobie 16",
-  stock_sail_drone7: "Saildrone Explorer",
-  stock_ocean_rower45: "Rannoch R45 ocean rowing boat",
+  stock_cruiser31: "Beneteau First 31.7 (our model)",
+  stock_dinghy14: "Sunfish (our model)",
+  stock_beachcat16: "Hobie 16 (our model)",
+  stock_sail_drone7: "Saildrone Explorer (our model)",
+  stock_ocean_rower45: "Rannoch R45 ocean rowing boat (our model)",
 };
 export const playerName = (k: StockKey): string => PLAYER_NAME[k];
 /** The stock boat a replay's boat name is ("31 ft cruiser"), or null. */

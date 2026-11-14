@@ -1047,10 +1047,8 @@ def _under_water(boat: str) -> dict[str, dict[str, Option]]:
 KEEL_WATER_DEFAULTS = {"keel": "deep", "drogue": "none"}
 KEEL_WATER_NAMES = {"keel": "Keel", "drogue": "Drogue or sea anchor"}
 # A muted line under a slot on the page: what the odds don't count yet (Maya, #526).
-STOCK_SLOT_NOTES = {
-    "drogue": "The odds don't yet count a keelboat being rolled by a breaking wave, so for "
-    "now they show what a drogue costs (a slow drift in big seas), not what it saves.",
-}
+# The drogue had one until the keelboats' knockdown model counted rolls (M4).
+STOCK_SLOT_NOTES: dict[str, str] = {}  # the drogue's went when keelboats could be rolled
 
 
 def _sail_changes(boat: str, picked: dict, design: Design) -> tuple:
