@@ -35,7 +35,10 @@ export const SEA_SIZE = 400; // m, side of the patch of moving sea
 export const HORIZON = PLACE ? 60000 : 3000;
 const GRID: Record<Quality, { n: number; centre: number }> = {
   low: { n: 110, centre: 0.45 }, // segments per side, grid spacing at the centre (m)
-  high: { n: 288, centre: 0.2 },
+  // Medium and up. 200 per side, not 288: the same 0.2 m cells round the boat, larger ones further
+  // out, where the trains they no longer carry go to the shading (seaCarry, swellSlope) as they
+  // already did past the grid. Half the vertices: about a quarter off the sea's drawing (Iris, 14 Nov).
+  high: { n: 200, centre: 0.2 },
 };
 // Whitecaps and lighting change to their far-off look between these distances (m).
 const FADE_IN = 100;
@@ -781,6 +784,11 @@ export class Sea {
       opacity: SEA_OPACITY,
       side: THREE.DoubleSide,
     });
+    // One pass, not two: three draws a see-through double-sided mesh twice (its back faces, then
+    // its front), which ran the whole wave sum for every vertex twice a frame. At full opacity the
+    // front faces cover the back exactly, so one pass draws the same picture; "See under the
+    // water" (setSeeThrough) goes back to two, where the order shows through.
+    material.forceSinglePass = SEA_OPACITY >= 1;
     material.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.uniforms, seaUniforms, rainUniforms, washUniforms);
       sh.vertexShader =
@@ -982,6 +990,7 @@ export class Sea {
 
   setSeeThrough(on: boolean): void {
     this.mesh.material.opacity = on ? 0.45 : SEA_OPACITY;
+    this.mesh.material.forceSinglePass = !on && SEA_OPACITY >= 1;
   }
 
   /** Mirror the land and boats (mirror.ts): its texture, world-to-texture matrix and strength (0 off). */
