@@ -197,9 +197,9 @@ const plannedRuns = new Map<string, LaunchResult>(); // per back end
 
 /** Slots by theme, in the order a builder thinks about them. Unknown slots go at the end. */
 const GROUPS: [string, string[]][] = [
-  ["Driving", ["thr", "drive", "rudder"]],
+  ["Driving", ["thr", "drive", "rudder", "vane"]],
   ["Sails and rig", ["rig", "cloth", "reef", "storm"]],
-  ["Power", ["sol", "rsol", "bat", "rbat", "mppt"]],
+  ["Power", ["sol", "rsol", "ksol", "bat", "rbat", "kbat", "mppt", "hydro"]],
   ["Brains and radio", ["brain", "spare", "tactician", "sat", "beacon", "tracker"]],
   ["Being seen by ships", ["ais", "radar", "light"]],
   ["Hull and keel", ["lead", "keel", "paint", "drogue"]],
