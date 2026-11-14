@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { HelmGame } from "../src/helm/game.ts";
-import { raceBase, raceCard, raceGone, raceHeadline, raceLabel, raceName, racePick, raceStatus, raceWorker, swapSides, type RaceCard, type RaceCardBoat, type RaceInfo, type RaceStatus } from "../src/helm/raceSource.ts";
+import { raceBase, raceCard, raceGone, raceHeadline, raceLabel, raceName, racePick, raceStatus, raceWorker, seasonCell, seasonWords, swapSides, type RaceCard, type SeasonVerdict, type RaceCardBoat, type RaceInfo, type RaceStatus } from "../src/helm/raceSource.ts";
 import { cutAt } from "../src/helm/watchSource.ts";
 import type { Replay } from "../src/replay/data.ts";
 
@@ -28,6 +28,8 @@ function fakeRace(seen: Record<string, unknown>[], replays = true) {
         day += (m.hours as number) / 24;
         value = { stopped: "time", status: status(day, day >= 3), track: [], replays: replays && m.replays ? [cutAt(repA, day * 24), cutAt(repB, day * 24)] : null };
       } else if (m.type === "result") value = { card, status: status(150, true), track: [], replays: reps };
+      else if (m.type === "season_launch") value = { a: { start: "2020-04-01T12:00", seed: 1, outcome: "arrived", days: 61.4 }, b: { start: "2020-04-01T12:00", seed: 1, outcome: "sunk", days: 9 } };
+      else if (m.type === "season_verdict") value = { finished: [1, 0] };
       queueMicrotask(() => {
         if (m.type === "new") w.onmessage?.({ data: { type: "progress", text: "Getting both boats ready..." } } as MessageEvent);
         w.onmessage?.({ data: { id: m.id, ok: true, value } } as MessageEvent);
@@ -149,4 +151,41 @@ test("following the other boat swaps the sides once, even when the page's two st
   swapSides(a, b, null);
   assert.equal(a.boat.soc, 0.9);
   assert.equal(b.boat.soc, 0.9);
+});
+
+test("Race all 6 launch days: the season's two asks pass through a race untouched", async () => {
+  const seen: Record<string, unknown>[] = [];
+  const game = new HelmGame("base/", () => raceWorker(() => fakeRace(seen), { a: {}, b: { base: "revc" }, launch: 0, breakdowns: true }));
+  await game.start(0, false, false);
+  const r = await game.raceSeasonLaunch<{ a: { outcome: string }; b: { outcome: string } }>(3);
+  assert.deepEqual(seen.at(-1), { id: seen.at(-1)!.id, base: "base/", type: "season_launch", i: 3 });
+  assert.equal(r.a.outcome, "arrived");
+  assert.equal(r.b.outcome, "sunk");
+  assert.deepEqual(await game.raceSeasonVerdict(), { finished: [1, 0] });
+  assert.equal(seen.at(-1)!.type, "season_verdict");
+});
+
+const verdict = (a_only: number, b_only: number, clear: boolean): SeasonVerdict => ({
+  launches: Array.from({ length: 6 }, () => ({ launch: "2020-04-01T12:00", a: { outcome: "arrived", days: 60 }, b: { outcome: "sunk", days: 9 } })),
+  finished: [4, 2],
+  pair: { n: 6, a_only, b_only, clear, gap: (a_only - b_only) / 6 },
+});
+const NAMES2: [string, string] = ["Our kayak", "Randolph Rev C5 (our model)"];
+
+test("the season in plain words: a clear winner, too close to call, or no difference; full names (B2)", () => {
+  const [fin, clear] = seasonWords(verdict(4, 0, true), NAMES2);
+  assert.equal(fin, "Finished: Our kayak 4 of 6 launch days, Randolph Rev C5 (our model) 2 of 6.");
+  assert.equal(clear, "Our kayak is the better boat this spring: she finished on 4 launch days where Randolph Rev C5 (our model) didn't, and Randolph Rev C5 (our model) on 0 where she didn't.");
+  assert.match(seasonWords(verdict(0, 3, true), NAMES2)[1], /^Randolph Rev C5 \(our model\) is the better boat/);
+  assert.match(seasonWords(verdict(2, 1, false), NAMES2)[1], /^Too close to call: Our kayak finished on 2 launch days where .* on 1 where she didn't\. 6 days is a small sample/);
+  assert.match(seasonWords(verdict(1, 1, false), NAMES2)[1], /1 launch day where/);
+  assert.match(seasonWords(verdict(0, 0, false), NAMES2)[1], /^Every launch day ended the same way for both/);
+  for (const line of seasonWords(verdict(2, 1, false), NAMES2)) assert.doesNotMatch(line, /p =|95%|sign test/, "no statistics on the card");
+});
+
+test("a season cell: days for a finish, the fate otherwise", () => {
+  assert.equal(seasonCell({ outcome: "arrived", days: 61.4 }), "finished, 61 days");
+  assert.equal(seasonCell({ outcome: "sunk", days: 9 }), "sank");
+  assert.equal(seasonCell({ outcome: "timeout", days: 150 }), "still at sea");
+  assert.equal(seasonCell({ outcome: "left_data_box" }), "sailed off the edge of our weather map");
 });

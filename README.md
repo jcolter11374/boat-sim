@@ -1,46 +1,85 @@
-# boat-sim
+# Bluewater (boat-sim)
 
-Engineering simulator for a single autonomous solar-electric kayak drone crossing
-from the Chesapeake Bay mouth to Europe. It replays the boat through real
-historical Atlantic weather and currents and reports the odds of arrival, by
-launch month, and what kills the boat when it fails.
+**Bluewater** is a sailing game in the browser: pick a boat, set sail on a
+real sea in real past weather, and see what happens, in real time if you like.
+It grew out of an engineering simulator for one real boat, a 3 m
+solar-electric kayak drone meant to cross the Atlantic on its own from the
+Chesapeake Bay to Europe, and that simulator still decides everything that
+happens in the game.
 
-Plan, architecture and milestones: [Voyage Simulator Plan](https://claude.ai/artifact/4mgi1LeuFF2wfQGRBnXRDR).
-Boat design: [design doc](https://claude.ai/artifact/SUbeMhqMATokuTdqpmWhj6).
-(Both links are private team docs; the code and issues here stand on their own.)
+**Play it:** https://jcolter11374.github.io/boat-sim/
 
-## Status
+## How it is built, in one paragraph
 
-**M0 skeleton.** Every package has its interface and a deliberately dumb stub, so
-the whole loop runs end to end. The numbers it prints are meaningless until the
-real physics, data and autopilot land (M1 to M3).
+Two halves. `src/boatsim/` is a Python simulator (the referee): boat physics,
+real weather (ERA5 wind and waves, GLORYS12 currents), the autopilot,
+satellite comms, and the Microtransat race rules. `sea3d/` is the game:
+TypeScript and three.js pages that draw the sea, sky and boats and run the
+same Python simulator inside the browser through Pyodide. GitHub Actions runs
+the tests, the big offline simulations, and the deploy to GitHub Pages. Start
+with **[docs/architecture.md](docs/architecture.md)**.
 
 ## Run it
+
+Simulator (Python 3.12):
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
 pytest
-python -m boatsim configs/v4_kayak.yaml
+python -m boatsim configs/v4_kayak.yaml     # smoke run: a small batch in steady made-up weather
 ```
 
-Everything runs in the cloud (Claude thread sandboxes and GitHub Actions);
-nothing needs a local machine except a browser to read reports.
+Game (Node 22):
+
+```bash
+cd sea3d
+npm ci
+npm run dev          # http://localhost:5173
+npm run test:unit
+```
+
+A bare dev server has no weather data, so the sailing pages say they can't
+start; `tools/build_site.sh` builds the full site the way the deploy does.
+More in [docs/guides/testing-and-deploy.md](docs/guides/testing-and-deploy.md).
+
+## Documentation
+
+| Read | For |
+| --- | --- |
+| [docs/game-design.md](docs/game-design.md) | What the game is: pillars, the core loop, modes, the rules the code must keep |
+| [docs/architecture.md](docs/architecture.md) | How the pages and modules fit together, and where everything lives |
+| [docs/guides/boats.md](docs/guides/boats.md) | Boat design files, which physics each boat gets, 3D models, adding a boat |
+| [docs/guides/physics.md](docs/guides/physics.md) | Simulator physics (the referee) and display physics (the look) |
+| [docs/guides/weather.md](docs/guides/weather.md) | Weather and ocean data: sources, caching, the browser bundle, checks |
+| [docs/guides/boatyard.md](docs/guides/boatyard.md) | The Boatyard: parts catalog, where the odds come from, adding a part |
+| [docs/guides/rendering.md](docs/guides/rendering.md) | How the 3D world is drawn: sea, sky, land, cameras, quality, sound |
+| [docs/guides/testing-and-deploy.md](docs/guides/testing-and-deploy.md) | Tests, CI, the deploy to GitHub Pages, data workflows |
+| [docs/glossary.md](docs/glossary.md) | One name for each thing, in the words players see |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | The team's rules |
+
+Deeper references: [docs/sandbox.md](docs/sandbox.md) (simulator in the
+browser), [docs/boatyard.md](docs/boatyard.md) (odds grid format),
+[src/boatsim/oceandata/README.md](src/boatsim/oceandata/README.md) (weather
+data in detail), [sea3d/README.md](sea3d/README.md) (3D file notes),
+[docs/qa/](docs/qa/) (studies and checks).
 
 ## Layout
 
-| Package | What | Owner |
-| --- | --- | --- |
-| `src/boatsim/types.py`, `config.py`, `geo.py` | Shared types and helpers (the contracts) | Maya (Lead) |
-| `src/boatsim/runner/` | Steps one voyage; arrival rule | Maya (Lead) |
-| `src/boatsim/vessel/` | Drag, thrust, solar, battery, hazards | Theo (Physics) |
-| `src/boatsim/oceandata/` | ERA5, GLORYS12, ship density, forecast error | Priya (Ocean data) |
-| `src/boatsim/autonomy/`, `comms/`, `basestation/` | Autopilot, satellite link, base policy | Sam (Autopilot and comms) |
-| `src/boatsim/mc/` | Monte Carlo batches, QA | Ravi (QA) |
-| `src/boatsim/viz/` | Reports and dashboard | Iris (Graphics) |
-| `configs/` | One YAML per boat design | everyone, via PR |
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the team rules.
+| Path | What |
+| --- | --- |
+| `src/boatsim/types.py`, `config.py`, `geo.py` | Shared types and helpers (the contracts between packages) |
+| `src/boatsim/runner/` | Steps one voyage; the finish rule; land; replay files |
+| `src/boatsim/vessel/` | Drag, thrust, solar, battery, sails, polars, hazards |
+| `src/boatsim/oceandata/` | ERA5, GLORYS12, ship traffic, storms, sea state, land, challenges |
+| `src/boatsim/autonomy/`, `comms/`, `basestation/` | Autopilot, satellite link, shore base re-planning |
+| `src/boatsim/mc/` | Monte Carlo batches: odds, studies, Boatyard grid, leaderboard |
+| `src/boatsim/sandbox/` | What the browser runs: weather bundle, parts catalog, helm game, race |
+| `src/boatsim/viz/` | Static reports and result cards |
+| `configs/` | One YAML per boat |
+| `sea3d/` | The game: six pages, three.js, Vite |
+| `tools/` | Site build, live-site checks, playtest bots |
+| `.github/workflows/` | CI, deploy, data and study workflows |
 
 ## Contributing from outside the team
 

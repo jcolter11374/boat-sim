@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { AUTO_DAYS, RACE_DAYS, RACE_IDS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, raceLink, rivalName, sailLink, watchDay, watchDays, watchLink, whoFromUrl } from "../src/helm/whoSteers.ts";
+import { AUTO_DAYS, RACE_DAYS, RACE_IDS, RIVAL_WORDS, SCENERY, WHO_WORDS, dayLabel, defaultRival, raceId, raceLink, rivalName, sailLink, watchDay, watchDays, watchLink, whoFromUrl } from "../src/helm/whoSteers.ts";
 import { RACE_BOATS, racePick } from "../src/helm/raceSource.ts";
 import { WATCH_DEFAULT_DAY, pickVoyage } from "../src/helm/watchSource.ts";
 import type { IndexEntry } from "../src/replay/data.ts";
@@ -90,4 +90,12 @@ test("the autopilot's named days are days she sails and races, and Usual is the 
   assert.equal(AUTO_DAYS.rough, "2020-04-01");
   for (const d of Object.values(AUTO_DAYS)) assert.ok(RACE_DAYS.includes(d), d);
   assert.equal(RIVAL_WORDS.soon, "Racing another boat: watch mode only, for now");
+});
+
+test("Watch from a real coast: the link carries ?place= for the coasts only, and a new link drops an old one", () => {
+  assert.equal(watchLink("?quality=low", "voyage_2020-05-15.json", "pico"), "helm.html?quality=low&watch=voyage_2020-05-15.json&place=pico");
+  assert.equal(watchLink("?place=lisbon", "voyage_2020-05-15.json"), "helm.html?watch=voyage_2020-05-15.json");
+  assert.equal(watchLink("", "voyage_2020-05-15.json", "annapolis"), "helm.html?watch=voyage_2020-05-15.json", "Annapolis harbour is practice's, not a watch spot");
+  assert.equal(watchLink("", "voyage_2020-05-15.json", "atlantis"), "helm.html?watch=voyage_2020-05-15.json");
+  assert.deepEqual(SCENERY.map((s) => s.key), ["", "pico", "horta", "lisbon", "baymouth"]);
 });

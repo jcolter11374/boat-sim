@@ -1,5 +1,11 @@
 # sea3d: the 3D view of boat-sim
 
+> **Start here instead:** this file is the original file-by-file notes from the
+> early phases. For how the game's pages and systems fit together today, read
+> [docs/architecture.md](../docs/architecture.md) and the guides in
+> [docs/guides/](../docs/guides/), especially
+> [rendering.md](../docs/guides/rendering.md).
+
 A web page that shows the boats on the sea in 3D. It runs in any modern
 desktop browser; nothing to install.
 

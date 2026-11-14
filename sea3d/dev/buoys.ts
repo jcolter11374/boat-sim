@@ -21,8 +21,8 @@ const comps = components(SEA_STATES.calm);
 sea.setSea(0.4);
 scene.add(sea.mesh);
 BUOY_KINDS.forEach((k, i) => {
-  const b = makeBuoy(k, String([3, 4, 6, 7, 10, 11][i]));
-  b.position.set((i - 2.5) * 4.5, 0, 0);
+  const b = makeBuoy(k, String([3, 4, 6, 7, "AN", 10, 11][i]));
+  b.position.set((i - 3) * 4.5, 0, 0);
   b.rotation.y = 0.25;
   scene.add(b);
 });

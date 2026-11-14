@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PUSH_LEVELS, handBackNote, nightLine, nightOpener, pickPush, powerAfter, pushCard, pushHeading, pushOrders, worthAskingAgain } from "../src/helm/powerCall.ts";
+import { EASE_POWER, PUSH_LEVELS, SUNRISE_GHI, morningPower, handBackNote, nightLine, nightOpener, pickPush, powerAfter, pushCard, pushHeading, pushOrders, worthAskingAgain } from "../src/helm/powerCall.ts";
 
 const sail = (lead_km: number, soc_min: number, power?: number) => ({ hours: 96, stw: 1, soc: 0, km: 400, outcome: "at_sea", lead_km, soc_min, power });
 
@@ -68,6 +68,17 @@ test("after \"stay\" a push is asked again only when the offer is clearly better
   assert.equal(worthAskingAgain(0.4, 0.3), false, "about the same offer: not asked twice");
   assert.equal(worthAskingAgain(0.54, 0.3), false);
   assert.equal(worthAskingAgain(0.55, 0.3), true, "a quarter of a day better than the one turned down");
+});
+
+test("eased off for the night: the power goes back in the morning, unless you changed it (Nina, 14 Nov)", () => {
+  const eased = { order: 95 as const, power: 0.5, dark: 20 };
+  assert.equal(EASE_POWER, 0.1);
+  assert.equal(morningPower(eased, 95, 0.1, SUNRISE_GHI, 31), 0.5, "morning: back to 50%");
+  assert.equal(morningPower(eased, 95, 0.1, 300, 14), null, "the afternoon before the night is not morning");
+  assert.equal(morningPower(eased, 95, 0.1, 0, 26), null, "still dark");
+  assert.equal(morningPower(eased, 95, 0.3, 400, 31), null, "you set another power: yours stands");
+  assert.equal(morningPower(eased, "auto", 0.1, 400, 31), null, "you changed the order: yours stands");
+  assert.equal(morningPower(null, 95, 0.1, 400, 31), null, "never eased off");
 });
 
 test("handing her back after a push puts the panel's power back to what it was", () => {
