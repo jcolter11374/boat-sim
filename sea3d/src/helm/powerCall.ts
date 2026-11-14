@@ -51,6 +51,15 @@ export function pickPush<T extends Staked>(now: Staked, pushes: T[], paceKmPerDa
   return gainDays >= PUSH_GAIN_DAYS && drains ? { push, gainDays } : null;
 }
 
+/** After "stay" the same question is not asked again (Maya, 14 Nov; the storm call's rule): only
+ * an offer clearly better than the one turned down, by this many days of forecast gain. */
+export const PUSH_BETTER_DAYS = 0.25;
+/** turnedDown: the forecast gain (days) of the last push you said "stay" to, or null if you took
+ * the last one or none has been asked. */
+export function worthAskingAgain(gainDays: number, turnedDown: number | null): boolean {
+  return turnedDown === null || gainDays >= turnedDown + PUSH_BETTER_DAYS;
+}
+
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** The card's words. One sentence of what the forecast says, with the price in it; the options'

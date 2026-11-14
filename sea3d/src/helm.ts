@@ -73,7 +73,7 @@ import { sandboxThere } from "./sandbox";
 import { OPTION_COLOURS, drawCallMap, type LandMask, type Line } from "./helm/callmap";
 import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/challenges";
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
-import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders } from "./helm/powerCall";
+import { NIGHT_AFTER_PUSH_H, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "./helm/powerCall";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -2549,6 +2549,8 @@ const ROUTE_GAIN_DAYS = 0.25; // a quarter of a day on the ghost over the 4-day 
 const ROUTE_MIN_TURN = 10; // degrees: smaller is not a different line
 let lastCallH = -Infinity; // the first call of a voyage is never held back
 let lastCallKind = ""; // the night call may follow a push sooner than the usual gap (helm/powerCall.ts)
+/** The forecast gain (days) of the last push you said "stay" to: only a clearly better one asks again. */
+let pushTurnedDown: number | null = null;
 let routeLookedH = -Infinity;
 let callCount = 0;
 /** Hours of quiet before the next route check: 72 to 120, fixed by the voyage and the call count. */
@@ -2658,7 +2660,8 @@ function maybeRouteCheck(st: Status): boolean {
     }
     if (!quiet) return resume(); // an early look that found no chase: nothing to say
     // No route call: is more power a real trade? (helm/powerCall.ts)
-    const push = ask ? null : pickPush(now, pushed, pace);
+    const offer = ask ? null : pickPush(now, pushed, pace);
+    const push = offer && worthAskingAgain(offer.gainDays, pushTurnedDown) ? offer : null;
     if (push) {
       lastCallH = h;
       lastCallKind = "push";
@@ -2672,11 +2675,12 @@ function maybeRouteCheck(st: Status): boolean {
         choices: [
           { label: words.push, title: words.pushTitle, order: to, act: () => {
             // What it bought, told when the forecast's 4 days are up, as the chase does.
+            pushTurnedDown = null;
             if (streamCall) alsoCalled(words.did);
             else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(to.heading, to.power);
           } },
-          { label: words.stay, title: "Carry on as you are", act: () => undefined, order: mine },
+          { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
         ],
       };
       const view: Outlook = { ...o, orders: [push.push, now] };

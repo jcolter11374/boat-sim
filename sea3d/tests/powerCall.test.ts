@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PUSH_LEVELS, nightLine, pickPush, pushCard, pushHeading, pushOrders } from "../src/helm/powerCall.ts";
+import { PUSH_LEVELS, nightLine, pickPush, pushCard, pushHeading, pushOrders, worthAskingAgain } from "../src/helm/powerCall.ts";
 
 const sail = (lead_km: number, soc_min: number, power?: number) => ({ hours: 96, stw: 1, soc: 0, km: 400, outcome: "at_sea", lead_km, soc_min, power });
 
@@ -47,4 +47,11 @@ test("the night call's line: 35% at the autopilot's cruise, higher the harder sh
   assert.equal(nightLine(0.1), 0.35);
   assert.ok(Math.abs(nightLine(0.5) - 0.55) < 1e-9);
   assert.equal(nightLine(1), 0.9);
+});
+
+test("after \"stay\" a push is asked again only when the offer is clearly better", () => {
+  assert.equal(worthAskingAgain(0.3, null), true, "never turned one down");
+  assert.equal(worthAskingAgain(0.4, 0.3), false, "about the same offer: not asked twice");
+  assert.equal(worthAskingAgain(0.54, 0.3), false);
+  assert.equal(worthAskingAgain(0.55, 0.3), true, "a quarter of a day better than the one turned down");
 });
