@@ -151,8 +151,9 @@ export function callLines(calls: Call[], endLead: number, asked = true): string[
   if (!calls.length) return [asked ? "You let the autopilot sail. Next time, make a call when the clock stops." : "No call came up before the voyage ended."];
   const lines = calls.map((k, i) => {
     const gain = Math.round((i + 1 < calls.length ? calls[i + 1].lead : endLead) - k.lead);
-    // The ghost's own choice and no gap opened: say so, not "level", which read as "your call did nothing".
-    const worth = Math.abs(gain) < 1 ? (k.ghost ? "same as the ghost's choice" : "level with the ghost") : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
+    // The ghost's own choice and no gap opened: say so, not "level with the ghost", which read as "your call did nothing".
+    if (k.ghost && Math.abs(gain) < 1) return `Day ${d1(k.day)} · ${k.chose} (same as the ghost)`; // Elena, 14 Nov
+    const worth = Math.abs(gain) < 1 ? "level with the ghost" : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
     return `Day ${d1(k.day)} · ${k.chose} · ${worth}`;
   });
   // The gamble's real odds (Maya, 14 Nov): over the six launch days a push's forecast gain came to
@@ -163,7 +164,7 @@ export function callLines(calls: Call[], endLead: number, asked = true): string[
 
 /** A choice's button label, short: "Hold course: fastest, but…" -> "Held course". */
 /** Under "Your calls" when you pushed: what pushing is worth, honestly. */
-export const PUSH_ODDS = "Pushing rarely pays: the autopilot already spends the battery well, so the forecast's gain often never comes.";
+export const PUSH_ODDS = "Pushing rarely pays: the autopilot already uses the battery well, so the gain the forecast promised often never comes.";
 
 export function callName(label: string): string {
   const pushed = /^Push: (\d+)% power/.exec(label);
@@ -177,6 +178,10 @@ export function callName(label: string): string {
     [/^Keep the power up/i, "Kept the power up"],
     [/^Follow the planned route.*/i, "Took the route that rides the Stream"],
     [/^Carry on as I am/i, "Carried on"],
+    [/^Stay on (.*)/i, "Stayed on $1"],
+    [/^Hand her back (.*)/i, "Handed her back $1"],
+    [/^Keep (\d+% power)/i, "Kept $1"],
+    [/^Let the autopilot decide/i, "Let the autopilot decide"],
   ];
   for (const [re, to] of past) if (re.test(head)) return head.replace(re, to);
   return head;

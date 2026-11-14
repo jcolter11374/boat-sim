@@ -62,9 +62,9 @@ export function worthAskingAgain(gainDays: number, turnedDown: number | null): b
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 /** Under this the motors stop to keep the electronics and the radio going (autonomy/safemode.py
- * hold_below_soc), so a forecast low under it is said as "the 15% where her motors stop". */
+ * hold_below_soc), so a forecast low under it is said as "15%, where her motors stop" (Elena). */
 export const MOTORS_STOP_SOC = 0.15;
-const lowWords = (x: number) => (x < MOTORS_STOP_SOC ? "the 15% where her motors stop" : pct(x));
+const lowWords = (x: number) => (x < MOTORS_STOP_SOC ? "15%, where her motors stop" : pct(x));
 
 /** The card's words (Elena's ruling, 14 Nov: plain, no "would gain on"). One sentence of what the
  * forecast says, with the price in it; the options' forecast tags carry the numbers. `ago`: what

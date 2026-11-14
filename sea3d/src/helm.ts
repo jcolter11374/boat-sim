@@ -2944,9 +2944,9 @@ function costWords(p: Preview, all: Preview[], waves = false, meaning = false): 
     out.push(`worst waves ${p.hs_max.toFixed(1)} m${meaning && p.hs_max >= CHASE_SEAS_M ? ": a knockdown is likelier" : ""}`);
   const soc = all.map((x) => x.soc_min ?? 1);
   if (p.soc_min != null && Math.max(...soc) - Math.min(...soc) >= 0.08)
-    // Under 15% the motors stop, so "down to 0%" read as a bug (Rosa's feel write-up, 14 Nov): name the 15% instead.
+    // Under 15% the motors stop, so "down to 0%" read as a bug (Rosa's feel write-up; Elena's words, 14 Nov).
     out.push(p.soc_min < MOTORS_STOP_SOC
-      ? `battery down to the 15% where her motors stop to save the radio${meaning ? ", so a cloudy spell could leave her drifting" : ""}`
+      ? `battery down to 15%, where her motors stop to save power for the radio${meaning ? ", so a cloudy spell could leave her drifting" : ""}`
       : `battery down to ${Math.round(p.soc_min * 100)}%${meaning && p.soc_min < CHASE_SOC ? ": near the 15% where her motors stop to save the radio, so a cloudy spell could leave her drifting" : ""}`);
   return out.length ? ` · ${out.join(" · ")}` : "";
 }
