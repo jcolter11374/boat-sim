@@ -4866,10 +4866,12 @@ const CHECKS = {
           const b = `N: ${s.s1}/${s.s2} on ${s.on}`;
           if (s.s1 !== s.s2 || s.s1 !== String(s.on) || s.on === on1) bad.push(`${w}: N didn't flip the sound, or the speakers disagree (${b})`);
           // Idle: the corner fades after the pointer rests.
+          // The idle class comes about 3 s after the last input; the 0.6 s fade only moves on drawn frames, slow on a GPU-less runner.
           await p.waitForTimeout(4500);
+          const idleClass = await p.evaluate(() => document.body.classList.contains("idle"));
           s = await st();
-          const idle = s.cornerOpacity;
-          if (!phone && !(idle < 0.2)) bad.push(`${w}: the corner didn't fade when idle (opacity ${idle})`);
+          const idle = `class ${idleClass}, opacity ${s.cornerOpacity}`;
+          if (!idleClass) bad.push(`${w}: the page didn't go idle 4.5 s after the last input`);
           await p.mouse.move(w / 2, h / 2); await p.mouse.move(w / 2 + 20, h / 2 + 10);
           await p.waitForTimeout(900);
           // Menu brings the menu back.
@@ -4889,7 +4891,7 @@ const CHECKS = {
           if (s.seaOnly || !s.menu) bad.push(`${w}: Esc didn't bring the menu back`);
           shots.push(await emit(p, `${w}-back`));
           const frames1 = await p.evaluate(() => window.__sea3d?.frames ?? 0);
-          out.push(`${w}: watch ok; ${a}; ${b}; idle corner opacity ${idle}; ${back1}; Esc ${s.menu ? "back" : "NOT back"}; sea frames ${frames0}->${frames1}`);
+          out.push(`${w}: watch ok; ${a}; ${b}; idle ${idle}; ${back1}; Esc ${s.menu ? "back" : "NOT back"}; sea frames ${frames0}->${frames1}`);
           if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
         } finally { await ctx.close().catch(() => {}); }
       }
