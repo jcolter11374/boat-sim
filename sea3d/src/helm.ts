@@ -130,7 +130,7 @@ const qstat = { ...startLevel(location.search, storedLevel, atmos.software), med
 const quality = qstat.level === "low" ? "low" : "high";
 const sea = new Sea(quality);
 scene.add(sea.mesh);
-const clouds = new Clouds(quality);
+const clouds = new Clouds(quality, true);
 scene.add(clouds.group);
 const rain = new Rain();
 scene.add(rain.mesh);
