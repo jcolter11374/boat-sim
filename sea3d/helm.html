@@ -46,6 +46,12 @@
     padding: 14px 16px; border-left: 4px solid #3ddc97; z-index: 7; animation: arrive-in 1.2s ease-out; }
   body.arriving #strip, body.arriving #orders, body.arriving #orders-tab, body.arriving #fcbox, body.arriving #mapbox, body.arriving #notes,
   body.arriving #keylist, body.arriving #keyhint, body.arriving #decide { visibility: hidden; }
+  /* On a wide screen: low on the empty sea, on the side the boat isn't, so the sky, the cape and a yacht's
+     mast are all clear of it. A phone held upright keeps it in its tall sky; she sits below it there. */
+  @media (min-width: 900px) {
+    #arrive.toright { top: auto; bottom: 28px; left: auto; right: 16px; transform: none; width: min(440px, 44vw); animation: none; }
+    #arrive.toleft { top: auto; bottom: 28px; left: 16px; transform: none; width: min(440px, 44vw); animation: none; }
+  }
   #arrive .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #3ddc97; }
   #arrivehead { font-size: 20px; font-weight: 650; margin: 2px 0 6px; }
   #arrive p { margin: 0 0 10px; font-size: 13px; color: var(--dim); }
@@ -870,7 +876,7 @@
 <div id="arrive" class="glass" role="status" hidden>
   <div class="t">Finish</div>
   <div id="arrivehead"></div>
-  <p>The finish circle is 330 km out to sea, too far to see land. So this is where she was headed, not where she is: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse on the cliff and the Sintra hills behind.</p>
+  <p>The finish line is 330 km out to sea, too far to see land. Ahead is where she was headed: Cabo da Roca, the westernmost point of mainland Europe, with its lighthouse and the Sintra hills behind.</p>
   <button id="arrivego">See the results</button>
 </div>
 <div id="goalcard" role="status" aria-live="polite" hidden>
