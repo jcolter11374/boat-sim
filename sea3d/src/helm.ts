@@ -48,7 +48,8 @@ import { raceLink, sailLink, watchLink, whoFromUrl, type RaceId } from "./helm/w
 import { runOutStep, voyageDone } from "./helm/timebar";
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
-import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot } from "./helm/arrivalShot";
+import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
 import { outcomeLine } from "./replay/story";
@@ -499,6 +500,8 @@ const page = {
   arrival: false,
   /** The finish scene's shot: where the cape and the boat sit across the frame, -1 left .. 1 right (for tests). */
   arrivalShot: null as { cape: number; boat: number } | null,
+  /** Where the finish banner was put, and how much of the boat or the cape it still covers in square pixels (0 when clear; for tests). */
+  arrivalBanner: null as { where: string; covers: number } | null,
   /** Play the finish scene now, as after a crossing of `days`, for `seconds` (for pictures and tests). */
   arrive: (days = 59.3, seconds = ARRIVAL_S) => arrivalScene({ boat: { days }, margin_days: null } as Card, seconds),
   /** "arrival" while the finish scene plays, before the results card (for tests). */
@@ -3410,6 +3413,42 @@ function showArrival(): void {
   page.arrival = true;
 }
 
+/** Put the finish banner in the empty sky, clear of the boat (mast and all), the cape and its lighthouse, for the whole push in. */
+function placeArrivalBanner(banner: HTMLElement): void {
+  if (!arrival) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  const capeBearing = bearing(arrival, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]);
+  const light = LANDMARKS.find((l) => l.key === "cabodaroca");
+  const o = light ? landmarkOffset(light, arrival[0], arrival[1]) : { x: 0, z: 0 };
+  const lightTop = new THREE.Vector3(o.x, (light?.base ?? 0) + (light?.light?.focal ?? 0) + 6, o.z);
+  const yaw = smoothYaw ?? 0;
+  const half = spec.length / 2;
+  const tall = filmHost.height?.() ?? 0;
+  const keep: Box[] = [];
+  let boatSide = -1;
+  let held: [number, number] | undefined;
+  for (const t of [0, ARRIVAL_S]) {
+    const s = arrivalShot(filmHost, capeBearing, arrivalStill ? 0 : t, held);
+    held = s.held;
+    boatSide = s.boat < 0 ? -1 : 1;
+    const at = (p: THREE.Vector3) => onScreen(s, r.width, r.height, p);
+    const tg = controls.target;
+    const pts = [-1, 1].map((k) => at(new THREE.Vector3(tg.x + k * half * Math.cos(yaw), 0, tg.z - k * half * Math.sin(yaw))));
+    pts.push(at(new THREE.Vector3(tg.x, Math.max(tall, 0.8), tg.z)));
+    const pad = 16;
+    keep.push({ x0: Math.min(...pts.map((p) => p.x)) - pad, y0: Math.min(...pts.map((p) => p.y)) - pad, x1: Math.max(...pts.map((p) => p.x)) + pad, y1: Math.max(...pts.map((p) => p.y)) + pad });
+    // The cape: from its tip (left of the light) along the land to the frame's right edge, the light's top down to the sea.
+    const l = at(lightTop);
+    const sea = at(new THREE.Vector3(o.x, 0, o.z));
+    keep.push({ x0: l.x - 0.3 * r.width, y0: l.y - 14, x1: r.width, y1: sea.y + 10 });
+  }
+  const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0;
+  const spot = bannerSpot({ w: r.width, h: r.height, top: bar }, { w: banner.offsetWidth, h: banner.offsetHeight }, keep, boatSide);
+  banner.style.left = `${Math.round(r.left + spot.x)}px`;
+  banner.style.top = `${Math.round(r.top + spot.y)}px`;
+  page.arrivalBanner = { where: spot.where, covers: spot.covers };
+}
+
 /** The finish scene: the view cuts to the coast the finish points at, the camera
  *  swings slowly round the boat, and a banner says so. The results follow after a
  *  few seconds, or at once on a click or key. */
@@ -3422,13 +3461,12 @@ async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
   arrivalStill = matchMedia("(prefers-reduced-motion: reduce)").matches;
   arrivalT = 0;
   arrivalHeld = null;
-  // The banner goes to the side away from the boat: a yacht's mast and sails stand as tall as the frame.
-  const first = arrivalShot(filmHost, bearing(arrival!, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]), 0);
-  $("arrive").classList.toggle("toleft", first.boat > 0);
-  $("arrive").classList.toggle("toright", first.boat <= 0);
   const hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
   const banner = $("arrive");
   banner.hidden = false;
+  placeArrivalBanner(banner);
+  const replace = () => placeArrivalBanner(banner);
+  addEventListener("resize", replace);
   document.body.classList.add("arriving"); // the panels step aside for the view
   await new Promise<void>((done) => {
     const end = () => {
@@ -3442,6 +3480,7 @@ async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
     $("arrivego").addEventListener("click", end);
   });
   banner.hidden = true;
+  removeEventListener("resize", replace);
   document.body.classList.remove("arriving");
   page.scene = "";
   // Back to the hand camera where it was, looking the same way: the coast stays behind the card.

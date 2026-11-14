@@ -51,3 +51,39 @@ test("a yacht's mast fits: the camera stands back for a tall boat", () => {
   const yacht = arrivalShot(host(70, 16 / 9, 9.6, 14), cape, 0).pos.length();
   assert.ok(yacht > 2 * kayak, `${kayak} ${yacht}`);
 });
+
+test("the finish banner goes in the empty sky and never covers the boat or the cape", async () => {
+  const { bannerSpot } = await import("../src/helm/arrivalShot");
+  const frame = { w: 1280, h: 720, top: 40 };
+  const banner = { w: 430, h: 150 };
+  // A kayak low on the left, the cape low on the right: the sky is free, so the top, away from the boat.
+  const kayak = { x0: 250, y0: 440, x1: 480, y1: 520 };
+  const cape = { x0: 420, y0: 380, x1: 1280, y1: 470 };
+  const a = bannerSpot(frame, banner, [kayak, cape], -1);
+  assert.equal(a.where, "top, away from the boat");
+  assert.equal(a.covers, 0);
+  assert.ok(a.x + banner.w <= 1280 && a.y >= 40);
+  // A yacht's mast up the left of the frame: still top right, clear of her rig.
+  const yacht = { x0: 300, y0: 30, x1: 640, y1: 520 };
+  const b = bannerSpot(frame, banner, [yacht, cape], -1);
+  assert.equal(b.where, "top, away from the boat");
+  assert.equal(b.covers, 0);
+  // The cape standing high on the right (a boat close in): the middle or her side of the sky, never the cape.
+  const high = { x0: 700, y0: 60, x1: 1280, y1: 470 };
+  const c = bannerSpot(frame, banner, [kayak, high], -1);
+  assert.equal(c.covers, 0);
+  assert.notEqual(c.where, "top, away from the boat");
+  // A phone held upright: a tall rig and the cape leave no sky, so the banner goes low over the sea, below the boat.
+  const phone = { w: 390, h: 760, top: 40 };
+  const pb = { w: 366, h: 190 };
+  const d = bannerSpot(phone, pb, [{ x0: 40, y0: 60, x1: 250, y1: 500 }, { x0: 60, y0: 380, x1: 390, y1: 470 }], -1);
+  assert.ok(d.where.startsWith("bottom"), d.where);
+  assert.equal(d.covers, 0);
+  // A kayak on a phone: the tall sky is free.
+  const e = bannerSpot(phone, pb, [{ x0: 40, y0: 470, x1: 250, y1: 520 }, { x0: 60, y0: 400, x1: 390, y1: 470 }], -1);
+  assert.ok(e.where.startsWith("top"), e.where);
+  assert.equal(e.covers, 0);
+  // Nowhere clear: the spot that covers least, and it says how much.
+  const f = bannerSpot({ w: 400, h: 300, top: 0 }, { w: 380, h: 200 }, [{ x0: 0, y0: 0, x1: 400, y1: 300 }], -1);
+  assert.ok(f.covers > 0);
+});
