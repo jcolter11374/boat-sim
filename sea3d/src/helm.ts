@@ -38,7 +38,7 @@ import { mountSetSailCard } from "./helm/setsailCard";
 import { Wake } from "./wake";
 import { ShortWaveRide, type KnockdownTiming } from "./boats/ride";
 import { Contact } from "./contact";
-import { heightAt, MixedSea as LiveSea } from "./waves";
+import { heightAt, MixedSea as LiveSea, type WaveComponent } from "./waves";
 import { SeaStateFeed, type Systems } from "./seastate";
 import type { Placement } from "./standin";
 import { Chart, TONE_COLOUR, TRACK, type LandBounds } from "./replay/chart";
@@ -4214,9 +4214,11 @@ function poisReached(): void {
 }
 
 /** Land near the boat: load it, keep it in place, and reach the view out to it (gently, over a few seconds). */
-function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: number, hs: number, wu: number, wv: number): void {
+function updateLand(t: number, dt: number, lat: number, lon: number, sunEl: number, hs: number, wu: number, wv: number, comps?: WaveComponent[]): void {
   if (!land) return;
-  land.update(lat, lon, t, { haze: atmos.fog.color, light: atmos.ambient, sunEl, hs, storm, wu, wv });
+  // The buoys off Annapolis float on the same sea as the boat.
+  const seaAt = comps?.length ? (x: number, z: number) => heightAt(comps, x, z, t) : undefined;
+  land.update(lat, lon, t, { haze: atmos.fog.color, light: atmos.ambient, sunEl, hs, storm, wu, wv, sea: seaAt });
   page.land = land.shown;
   const want = land.active ? LAND_HORIZON : HORIZON;
   if (want > sea.horizon) sea.setHorizon(want);
@@ -4704,7 +4706,7 @@ renderer.setAnimationLoop(() => {
   page.spindrift = spray.amount;
   sea.setSun(atmos.glintDir, atmos.glintLight);
   wake?.setLight(atmos.foamLight);
-  updateLand(t, dt, lat, lon, sp.el, hs, wu, wv);
+  updateLand(t, dt, lat, lon, sp.el, hs, wu, wv, comps);
   sound.rig = rigOf(spec.key);
   sound.length = spec.length;
   if (contact?.splash) sound.splash(contact.splash);

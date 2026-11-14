@@ -10,6 +10,8 @@ import { reflectable } from "../mirror";
 import { Island, type LandGrid } from "./island";
 import { Landmarks, glowTexture } from "./landmarks";
 import { CoastLights } from "./coastLights";
+import { Seamarks } from "./seamarks";
+import { BayBridge } from "./bayBridge";
 import { PLACES, type Place } from "./place";
 import { CoastSquares, SQUARE_CREDIT } from "./squares";
 import { metresPerDegree } from "./shader";
@@ -101,13 +103,16 @@ export class NearbyLand {
   /** The place's land, moved each frame so it stays put as the boat sails. */
   private readonly placeRoot = new THREE.Group();
   /** What's loaded (for tests and the page): the place's key, its distance (km), the town and trees. */
-  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0 };
+  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0, seamarks: 0, bridge: false };
   /** The Bay's coast squares (squares.ts), around and between the places. */
   private squares: CoastSquares | null = null;
   /** Lighthouses and the like at their true spots (landmarks.ts). */
   private readonly landmarks = new Landmarks();
   /** Town lights along the coast after dark (coastLights.ts). */
   private readonly lights = new CoastLights();
+  /** The real buoys and beacons off Annapolis (seamarks.ts) and the Bay Bridge beyond them (bayBridge.ts). */
+  private readonly seamarks = new Seamarks();
+  private readonly bridge = new BayBridge();
   private tiles: Tile[] = [];
   private now: Loaded | null = null;
   private loading = false;
@@ -118,7 +123,7 @@ export class NearbyLand {
     private readonly base: string,
   ) {
     this.root.name = "nearby-land";
-    this.root.add(this.placeRoot, this.landmarks.root, this.lights.root);
+    this.root.add(this.placeRoot, this.landmarks.root, this.lights.root, this.seamarks.root, this.bridge.root);
   }
 
   /** Learn where the land files reach (their small meta files); none published means no land. */
@@ -162,7 +167,7 @@ export class NearbyLand {
    * Each frame, with the boat at (lat, lon): load or drop land, keep it in place, and
    * run its own animation (light, surf, windows, swaying trees).
    */
-  update(lat: number, lon: number, t: number, a: { haze: THREE.Color; light: number; sunEl: number; hs: number; storm: number; wu: number; wv: number }): void {
+  update(lat: number, lon: number, t: number, a: { haze: THREE.Color; light: number; sunEl: number; hs: number; storm: number; wu: number; wv: number; sea?: (x: number, z: number) => number }): void {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     const near = nearestTile(this.tiles, lat, lon);
     const cur = this.now;
@@ -174,6 +179,10 @@ export class NearbyLand {
     if (!this.now && !this.loading && near && near.km < LOAD_KM) void this.load(near.tile);
     this.landmarks.update(lat, lon, t, a.sunEl);
     this.shown.landmarks = this.landmarks.count;
+    this.seamarks.update(lat, lon, t, a.sunEl, a.sea);
+    this.shown.seamarks = this.seamarks.count;
+    this.bridge.update(lat, lon, a.sunEl);
+    this.shown.bridge = this.bridge.shown;
     const l = this.now;
     this.lights.update(l ? (l.tile.place.land ?? l.tile.place.key) : "", l ? l.island.grid : null, lat, lon, a.sunEl, glowTexture());
     // The squares wait while a place loads: they leave a hole for its finer land, so they'd only be laid out twice.
@@ -252,5 +261,7 @@ export class NearbyLand {
     this.squares?.dispose();
     this.landmarks.dispose();
     this.lights.dispose();
+    this.seamarks.dispose();
+    this.bridge.dispose();
   }
 }
