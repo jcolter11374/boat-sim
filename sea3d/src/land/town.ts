@@ -121,6 +121,18 @@ float h11(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); 
   return bendWithEarth(m, "boatsim-town-walls-v1");
 }
 
+/** Lights nearer than this throw their full streak (m): the harbour view, where the look was set. */
+export const REFLECT_FULL_M = 1400;
+/**
+ * How bright a light's streak is at d metres, against one close by: the light reaching the water
+ * near you thins with the square of the distance. (From the practice course, 3.5 km out, the town's
+ * streaks were as bright as from the harbour mouth: bars of gold hundreds of metres long under a
+ * row of pin-prick lights.)
+ */
+export function reflectFade(d: number): number {
+  return Math.min(1, (REFLECT_FULL_M / Math.max(d, 1)) ** 2);
+}
+
 /**
  * Reflections of lights on the water: one flat streak per light, lying on the sea and
  * running from near the light towards the viewer (the glitter path), brightest where a
@@ -159,6 +171,7 @@ export class Reflections {
         varying float vAcross;
         varying vec3 vTh;     // viewer height, mirror angle, slope spread
         varying vec4 vCol;
+        varying vec2 vEnd;    // how bright for its distance (reflectFade), and 0 far end .. 1 near end
         #include <fog_pars_vertex>
         void main() {
           vec3 src = (modelMatrix * vec4(aSrc.x, 0.0, aSrc.y, 1.0)).xyz;
@@ -183,6 +196,8 @@ export class Reflections {
           vAcross = position.x;
           vTh = vec3(Hc, th0, sig);
           vCol = aCol;
+          float fade = ${REFLECT_FULL_M.toFixed(1)} / max(D, 1.0);
+          vEnd = vec2(min(1.0, fade * fade), position.y);
           vec4 mvPosition = viewMatrix * vec4(transformed, 1.0);
           gl_Position = projectionMatrix * mvPosition;
           #include <fog_vertex>
@@ -194,6 +209,7 @@ export class Reflections {
         varying float vAcross;
         varying vec3 vTh;
         varying vec4 vCol;
+        varying vec2 vEnd;
         #include <fog_pars_fragment>
         ${NOISE}
         void main() {
@@ -206,7 +222,8 @@ export class Reflections {
           float scale = 1.2 / (1.0 + vR * 0.01);
           float dash = lnoise(vec2(vR * scale + vCol.a * 40.0, vAcross * 1.5 + uTime * 1.3));
           dash = smoothstep(0.45, 0.85, dash);
-          float a = 0.22 * core * across * dash * uNight;
+          // Thinner with distance, and the end nearest the viewer fades out (it stopped at a hard edge).
+          float a = 0.22 * core * across * dash * uNight * vEnd.x * smoothstep(1.0, 0.75, vEnd.y);
           if (a < 0.003) discard;
           vec3 c = vCol.rgb * a;
           #ifdef USE_FOG
