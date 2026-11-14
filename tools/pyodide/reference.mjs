@@ -3,7 +3,11 @@
 // browser's bit for bit (Ravi's gate, docs/sandbox.md).
 //
 //   node reference.mjs --pack boatsim.zip --bundle forcing_2020.npz --out ref.json \
-//       [--builds k-p25 ...] [--launches 0 1 ...] [--trace] [--packages DIR]
+//       [--builds k-p25 ...] [--launches 0 1 ...] [--trace] [--packages DIR] [--parts DIR]
+//
+// --parts DIR: sail on the bundle split by month instead (`python -m boatsim.sandbox
+// split`; DIR holds forcing_*_parts.json and its files), as the helm page reads it.
+// The rows must come out the same as on the whole bundle, bit for bit.
 //
 // --pack is the zip from `python -m boatsim.sandbox pack`, unpacked into
 // Pyodide's file system as the page does. --packages: a folder with the numpy
@@ -34,7 +38,10 @@ await py.loadPackage(pkgs);
 py.FS.mkdirTree("/sandbox");
 try {
   py.FS.writeFile("/sandbox/boatsim.zip", readFileSync(a.pack));
-  py.FS.writeFile("/sandbox/forcing.npz", readFileSync(a.bundle));
+  if (a.parts) {
+    py.FS.mkdirTree("/sandbox/parts");
+    for (const f of readdirSync(a.parts).filter((f) => /^forcing_.*\.(npz|json)$/.test(f))) py.FS.writeFile(`/sandbox/parts/${f}`, readFileSync(join(a.parts, f)));
+  } else py.FS.writeFile("/sandbox/forcing.npz", readFileSync(a.bundle));
   py.runPython(`import zipfile; zipfile.ZipFile("/sandbox/boatsim.zip").extractall("/sandbox")`);
 } catch (e) {
   console.error(e.message);
@@ -45,6 +52,7 @@ console.error(`pyodide ${py.version} ready in ${Date.now() - t0} ms`);
 py.globals.set("builds", py.toPy(a.builds));
 py.globals.set("which", py.toPy(a.launches.map(Number)));
 py.globals.set("trace", Boolean(a.trace));
+py.globals.set("bundle", a.parts ? `parts/${readdirSync(a.parts).find((f) => f.endsWith("_parts.json"))}` : "forcing.npz");
 let rows;
 try {
   rows = py.runPython(`
@@ -54,7 +62,7 @@ sys.path.insert(0, "/sandbox")
 os.chdir("/sandbox")
 from boatsim.sandbox.__main__ import reference
 import numpy
-rows = reference("forcing.npz", list(builds) or None, list(which) or None, trace=trace)
+rows = reference(bundle, list(builds) or None, list(which) or None, trace=trace)
 for r in rows:
     r["runtime"] = f"pyodide {sys.version.split()[0]} numpy {numpy.__version__}"
 json.dumps(rows)

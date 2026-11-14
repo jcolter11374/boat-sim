@@ -65,6 +65,17 @@ function slowLink(): boolean {
   return !mayPrefetch((navigator as Navigator & { connection?: Link }).connection);
 }
 
+/** The months of the 2020 weather a game reads first: the usual launch is 23 April, and a
+ *  call asks for the week after its last step (sandbox/helm.py COVER_AHEAD), which reaches May. */
+export const FIRST_WEATHER = ["2020-04", "2020-05"];
+
+/** The weather files to warm: of a split season (forcing_2020_parts.json), the static file and
+ *  the first months; without the list, the whole season. */
+export function weatherFiles(list: { static: string; parts: { key: string; file: string }[] } | null): string[] {
+  if (!list?.static || !Array.isArray(list.parts)) return ["forcing_2020.npz"];
+  return [list.static, ...list.parts.filter((p) => FIRST_WEATHER.includes(p.key)).map((p) => p.file)];
+}
+
 let started = false;
 let kicked = false;
 
@@ -79,7 +90,12 @@ export function prefetchHelm(sandboxBase: string, now = false): void {
     const lock = lockR ? ((await lockR.json().catch(() => null)) as Lock | null) : null;
     for (const f of lock ? wheelFiles(lock, HELM_PACKAGES) : []) await drain(await warmOne(PYODIDE_DIR + f));
     if (!(await sandboxThere(sandboxBase))) return;
-    for (const f of ["boatsim.zip", "forcing_2020.npz"]) await drain(await warmOne(new URL(f, sandboxBase).href));
+    await drain(await warmOne(new URL("boatsim.zip", sandboxBase).href));
+    // The weather: split by month, the list, the static file and the months the usual launch
+    // reads first; on a site without the split files, the whole season as before.
+    const listR = await warmOne(new URL("forcing_2020_parts.json", sandboxBase).href);
+    const list = listR?.ok ? ((await listR.json().catch(() => null)) as { static: string; parts: { key: string; file: string }[] } | null) : null;
+    for (const f of weatherFiles(list)) await drain(await warmOne(new URL(f, sandboxBase).href));
   };
   const kick = () => {
     if (kicked) return;

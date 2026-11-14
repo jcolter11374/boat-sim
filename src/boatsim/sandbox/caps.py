@@ -49,6 +49,10 @@ def capabilities() -> list[str]:
             caps.add("helm.until_cap")
         if hasattr(helm, "BREAKDOWNS"):
             caps.add("helm.breakdowns")
+        from boatsim.sandbox import forcing
+
+        if hasattr(forcing, "split") and hasattr(game, "_cover"):
+            caps.add("helm.weather_parts")  # the weather split by month, a month at a time
     try:
         from boatsim.sandbox import race
     except ImportError:

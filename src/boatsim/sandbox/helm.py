@@ -115,6 +115,11 @@ PASS_QUIET_H = 1.0  # no "passed" stops in the first hour after the drop (Maya, 
 # felt like spam. GUESS (Leo): 25 km, about half a day's sailing for the kayak.
 PASS_STOP_SWING_KM = 25.0
 OUTLOOK_HOURS = 48.0
+# A weather bundle split by month (sandbox/forcing.py): before a call moves the
+# boats it asks for every month it could read, to this far past its last step
+# (forecasts and outlooks look 5 days on). A missing month then stops the call
+# before anything has changed, and the page fetches it and asks again.
+COVER_AHEAD = timedelta(days=7)
 TRACK_EVERY_H = 3.0  # outlook()/preview() track spacing; 17 points for 2 days  # a call's stake against the ghost: 2 days of forecast (helm decisions plan)
 
 
@@ -448,6 +453,7 @@ class Game:
         reaches the boat at the boat's next mailbox check ("arrives")."""
         v = self.mine
         t = v.state.t
+        self._cover(t)
         if (sails is not None or engine is not None) and not self.sailboat:
             raise ValueError("this boat has no sails or engine to order")
         share = self._check_trim(trim)
@@ -983,6 +989,7 @@ class Game:
         v = self.mine
         t0 = v.state.t
         until = t0 + timedelta(hours=hours if hours is not None else max_hours)
+        self._cover(until)
         n_events = len(v.log.events)
         near = (
             land_within_km is not None
@@ -1333,6 +1340,7 @@ class Game:
                 mode=p["m"],
                 policy=p.get("ap", ODDS_POLICY),  # older codes: the autopilot they were sailed with
             )
+            g._cover(g.start + timedelta(minutes=p["at"]))  # the whole voyage so far, at once
             for minute, heading, power, *sail_orders in p["o"]:
                 g._advance_to(g.start + timedelta(minutes=minute))
                 sails, engine, trim = (*sail_orders[:3], None, None, None)[:3]
@@ -1345,6 +1353,14 @@ class Game:
         if here != p["p"]:
             raise ValueError("this saved game was sailed by a different simulator version")
         return g
+
+    def _cover(self, until: datetime) -> None:
+        """Raise forcing.WeatherNotLoaded now if a split bundle lacks a month
+        this game could read up to `until` (+ COVER_AHEAD), before anything
+        moves. Whole bundles and other weather: nothing."""
+        require = getattr(self.mine.c.env, "require", None)
+        if require is not None:
+            require(min(self.start, self.mine.state.t), until + COVER_AHEAD)
 
     def _advance_to(self, t: datetime) -> None:
         while not self.mine.done and self.mine.state.t < t:
