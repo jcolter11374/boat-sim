@@ -24,6 +24,9 @@ export const BACK = {
   colour: { value: new THREE.Color(0xffc68a) },
 };
 
+/** The sky's bounce on a dark hull's shadowed side under the title's backlight (times the paint's own colour). */
+export const BACK_FILL = 0.7;
+
 /** Rim strength on a moonless night, and added under a full moon. */
 export const RIM_DARK = 0.12;
 export const RIM_MOON = 0.6;
@@ -31,6 +34,13 @@ export const RIM_MOON = 0.6;
 const cockpits = new Set<THREE.PointLight>();
 /** The cockpit lamp's brightness at full night (candela-ish, three.js units). */
 export const COCKPIT_CD = 0.9;
+
+/**
+ * How far the cockpit lamp reaches (m): the cockpit and the crew, no further. At 4 m and more it
+ * reached the mainsail and the topsides, and at night the sails went warm brown-orange and the hull
+ * had an orange edge (Elena, 14 Nov: they should be a dim cool grey).
+ */
+export const COCKPIT_REACH_M = 2.2;
 
 /** Give a material the night rim (patched once; works alongside other patches such as sailcloth). */
 export function rimLit<M extends THREE.MeshStandardMaterial>(m: M, cloth = false): M {
@@ -67,6 +77,11 @@ export function rimLit<M extends THREE.MeshStandardMaterial>(m: M, cloth = false
     // The sun's edge light: strong where the surface turns away from us towards the sun.
     float edge = pow(1.0 - abs(dot(n, -toPt)), 3.0) * smoothstep(-0.1, 0.7, dot(n, uBackDir) + 0.55);
     totalEmissiveRadiance += uBackCol * (uBack * 6.0 * edge * pow(behind, 2.0));
+    ${cloth ? "" : `// Sky bounce on her shadowed side: a dark hull (navy, deep red, racing green) keeps its colour against the bright
+    // sky instead of going black. Only dark paint is lifted, so a white hull and the deck stay as they were,
+    // and it stays well under the sky's brightness.
+    float fillLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    totalEmissiveRadiance += vec3(0.8, 0.78, 0.8) * diffuseColor.rgb * (uBack * ${BACK_FILL.toFixed(2)} * pow(1.0 - fillLum, 3.0));`}
     ${cloth ? "// Sailcloth: the sun shines through it, warm, brightest straight down the sun's line.\n    totalEmissiveRadiance += uBackCol * diffuseColor.rgb * (uBack * (0.1 + 0.5 * pow(behind, 40.0) + 1.4 * pow(behind, 400.0)));" : ""}
   }`,
       );
