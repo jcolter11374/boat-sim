@@ -33,6 +33,7 @@ import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN,
 import { prefetchHelmOnIntent } from "./helm/prefetch";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
+import { TitleLandmarks } from "./titleLandmarks";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 import { TitleTrack } from "./titleTrack";
@@ -175,21 +176,23 @@ const titleTrack = new TitleTrack(sound);
 titleTrack.on = musicParam !== "0" && musicParam !== "air";
 (window as unknown as { __titleMusic: TitleMusic }).__titleMusic = titleMusic; // read-only, for the live sound checks (Nina)
 {
-  const btn = document.getElementById("t-sound");
+  // The menu's speaker and the one in "Just watch the sea"'s corner (title.ts) show the same state.
+  const btns = Array.from(document.querySelectorAll<HTMLButtonElement>("#t-sound, #t-sound2"));
   sound.onChange = () => {
-    if (!btn) return;
-    btn.setAttribute("aria-pressed", String(sound.on));
-    btn.setAttribute("aria-label", sound.on ? "Sound: on" : "Sound: off"); // the state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov)
+    for (const btn of btns) {
+      btn.setAttribute("aria-pressed", String(sound.on));
+      btn.setAttribute("aria-label", sound.on ? "Sound: on" : "Sound: off"); // the state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov)
+    }
   };
   sound.onChange();
-  btn?.addEventListener("click", () => sound.toggle());
+  for (const btn of btns) btn.addEventListener("click", () => sound.toggle());
   const touch = (e: Event) => {
     if (!document.body.classList.contains("title")) return;
     const el = e.target as Element | null;
     if (e instanceof KeyboardEvent) {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
       if (e.code === "KeyN" && !el?.closest?.("input, select, textarea")) return sound.toggle();
-    } else if (el?.closest?.("#t-sound")) return; // the button says what it does itself
+    } else if (el?.closest?.("#t-sound, #t-sound2")) return; // the button says what it does itself
     if (startsAtFirstTouch(sound.on, sound.muted)) sound.enable(false); // on for now; not recorded as their choice
   };
   addEventListener("pointerdown", touch, true);
@@ -265,8 +268,11 @@ let heroL = heroLightFor("kayak");
 let shore: TitleShore | null = null;
 let shoreAsked = false;
 const osmCredit = document.getElementById("osm");
+// The Bay Bridge and the buoys round the title's spot (titleLandmarks.ts), with the shore.
+let marks: TitleLandmarks | null = null;
 function shoreShown(on: boolean): void {
   if (shore) shore.mesh.visible = on;
+  if (marks) marks.root.visible = on;
   if (osmCredit) osmCredit.hidden = !(on && shore);
 }
 /** The title's light for the boat it shows now (again whenever the boat changes). */
@@ -563,9 +569,12 @@ const frame = (): void => {
         if (!s) return;
         shore = s;
         scene.add(s.mesh);
+        marks = new TitleLandmarks(HERO_SUN.az);
+        scene.add(marks.root);
         shoreShown(heroOn());
       });
     }
+    marks?.update(t);
     const under = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
     if (camera.position.y < under) camera.position.y = under;
     clouds.update(t, heroDt(t), camera, HERO_CLOUD, 0, 0, 3, 1, atmos.sunDir, atmos.fog.color, atmos.ambient);

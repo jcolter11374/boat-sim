@@ -1,6 +1,6 @@
 """The title's shore (Hana, 13 Nov 2026; John: "Maybe the boat is in a marina?").
 
-The title shows the boat off Annapolis at sunset. The helm page's real land there is about
+The title shows the boat off Annapolis at sunrise. The helm page's real land there is about
 7 MB and 40,000 objects, too much for the first screen every visitor sees, so the title gets
 only the skyline: for each compass bearing from one fixed spot on the water, how far off the
 shore is and how high the land, trees and roofs behind it stand above the horizon. This tool
@@ -35,10 +35,11 @@ FILES = [
     "annapolisbay_cover.png",
     "annapolis.json",
 ]
-# Where the title's boat floats: in Annapolis Roads off Greenbury Point, the Severn's mouth
-# to the west (the town and the State House about 3.4 km off), Bay Ridge 3 km to the south.
-# Keep in step with SHORE in src/titleShore.ts.
-LAT, LON = 38.97403, -76.45254
+# Where the title's boat floats: out in Annapolis Roads, Greenbury Point and the Severn's mouth
+# 1.5 to 3 km to the north-west, the Bay Bridge 6.6 km to the north-east (moved here 14 Nov 2026
+# for the sunrise title: from the old spot, just off Greenbury Point, the kayak's view was the
+# point's trees 160 m away). Keep in step with SHORE in src/titleShore.ts.
+LAT, LON = 38.9655, -76.4405
 EYE_M = 1.5  # the title's camera height
 N = 7200  # bearings: every 0.05 degrees (about 2 m at the shore's distance)
 STEP_M = 5.0
