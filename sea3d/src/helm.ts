@@ -3400,6 +3400,10 @@ async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
   arrivalStill = matchMedia("(prefers-reduced-motion: reduce)").matches;
   arrivalT = 0;
   arrivalHeld = null;
+  // The banner goes to the side away from the boat: a yacht's mast and sails stand as tall as the frame.
+  const first = arrivalShot(filmHost, bearing(arrival!, [CABO_DA_ROCA.lat, CABO_DA_ROCA.lon]), 0);
+  $("arrive").classList.toggle("toleft", first.boat > 0);
+  $("arrive").classList.toggle("toright", first.boat <= 0);
   const hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
   const banner = $("arrive");
   banner.hidden = false;

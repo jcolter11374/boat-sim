@@ -19,6 +19,8 @@ export interface Place {
   town?: string;
   /** "plain" for a shore without Pico's black basalt band (bulkheads, lawns, marsh). */
   shore?: "basalt" | "plain";
+  /** Sea cliffs: steep faces are drawn as warm, darker rock (the photo stretched down a cliff is pale and flat). */
+  cliffs?: boolean;
   /**
    * A sheltered harbour: the waves are the local wind's chop over this many metres
    * of open water (the fetch), not the ocean swell the replay logged offshore.
@@ -66,6 +68,7 @@ export const PLACES: Record<string, Place> = {
     lon: -9.42,
     look: 340,
     credit: CREDIT,
+    cliffs: true, // Cabo da Roca's 140 m face, in the finish scene
   },
   annapolis: {
     key: "annapolis",

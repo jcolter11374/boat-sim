@@ -39,7 +39,7 @@ test("the finish shot is low, level and long-lensed, and looks towards the cape"
 });
 
 test("a slow push in: closer by the end, never a jump, and it stops when the scene's time is up", () => {
-  const h = host(70);
+  const h = host(cape + 90); // side-on to the lens (end-on she is already as close as her bow allows)
   const d = (t: number) => arrivalShot(h, cape, t).pos.length();
   assert.ok(d(ARRIVAL_S) < d(0) * 0.96, `${d(0)} to ${d(ARRIVAL_S)}`);
   for (let t = 0; t < ARRIVAL_S; t += 0.5) assert.ok(Math.abs(d(t + 0.5) - d(t)) < 0.02 * d(0), `step at ${t}`);

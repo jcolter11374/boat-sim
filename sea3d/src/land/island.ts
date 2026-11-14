@@ -45,10 +45,11 @@ export interface LandOptions {
 export class Island {
   readonly group = new THREE.Group();
   private surfMat: THREE.ShaderMaterial | null = null;
-  private landUniforms: { uHaze: { value: THREE.Color }; uHazeK: { value: number }; uRock: { value: number } } = {
+  private landUniforms: { uHaze: { value: THREE.Color }; uHazeK: { value: number }; uRock: { value: number }; uCliff: { value: number } } = {
     uHaze: { value: new THREE.Color(0.7, 0.8, 0.9) },
     uHazeK: { value: 1 },
     uRock: { value: 1 },
+    uCliff: { value: 0 },
   };
   /** Surf sheet size (for tests). */
   surfTriangles = 0;
@@ -152,13 +153,14 @@ export class Island {
     const mat = new THREE.MeshStandardMaterial({ map, roughness: 0.93, metalness: 0, color: new THREE.Color(1.2, 1.2, 1.2) });
     const lu = this.landUniforms;
     lu.uRock.value = place.shore === "plain" ? 0 : 1;
+    lu.uCliff.value = place.cliffs ? 1 : 0;
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, lu);
       sh.vertexShader = sh.vertexShader
         .replace("void main() {", "varying float vH;\nvarying vec3 vW;\nvoid main() {")
         .replace("#include <begin_vertex>", `#include <begin_vertex>\nvH = transformed.y;\n${CURVE}\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", `uniform vec3 uHaze;\nuniform float uHazeK;\nuniform float uRock;\nvarying float vH;\nvarying vec3 vW;\n${NOISE}\nvoid main() {`)
+        .replace("void main() {", `uniform vec3 uHaze;\nuniform float uHazeK;\nuniform float uRock;\nuniform float uCliff;\nvarying float vH;\nvarying vec3 vW;\n${NOISE}\nvoid main() {`)
         .replace(
           "#include <map_fragment>",
           `#include <map_fragment>
@@ -167,6 +169,11 @@ export class Island {
           float rock = (1.0 - smoothstep(4.0 + 9.0 * br, 12.0 + 14.0 * br, vH)) * smoothstep(-3.0, -0.5, vH);
           vec3 basalt = vec3(0.045, 0.043, 0.042) * (0.7 + 0.6 * br);
           diffuseColor.rgb = mix(diffuseColor.rgb, basalt, rock * 0.85 * uRock);
+          // Sea cliffs: a steep face is weathered rock, warm and darker than the fields above it.
+          vec3 fn = normalize(cross(dFdx(vW), dFdy(vW)));
+          float steep = (1.0 - smoothstep(0.45, 0.8, abs(fn.y))) * smoothstep(3.0, 14.0, vH);
+          vec3 stone = vec3(0.2, 0.155, 0.115) * (0.75 + 0.5 * br);
+          diffuseColor.rgb = mix(diffuseColor.rgb, stone, steep * 0.7 * uCliff);
           diffuseColor.rgb *= mix(1.0, 0.55, 1.0 - smoothstep(0.0, 2.5, vH)); // wet`,
         )
         .replace(

@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { boatAt, compose, type Composed, type FramingHost, type Look } from "../framing";
 
 /** Cabo da Roca lighthouse (the westernmost point of mainland Europe). */
-export const CABO_DA_ROCA = { lat: 38.7804, lon: -9.4989 };
+export const CABO_DA_ROCA = { lat: 38.782, lon: -9.4973 };
 /**
  * Where the finish scene is set: about 7 km south-west of the cape, on the way in from the open
  * Atlantic. From there the cliff and its lighthouse stand clear on the horizon with the Sintra
@@ -17,8 +17,8 @@ export const CABO_DA_ROCA = { lat: 38.7804, lon: -9.4989 };
 export const ARRIVAL_AT: [number, number] = [38.74, -9.56];
 /** How long the scene plays before the results (s); a click or a key ends it sooner. */
 export const ARRIVAL_S = 12;
-/** The frame: a 16 degree lens 1.6 m off the water, the horizon two fifths up, the boat a fifth of the width. */
-export const ARRIVAL: Look = { az: 180, f: 0.2, H: -0.2, B: 0, fov: 16, h: 1.6, x: 0.45 };
+/** The frame: a 16 degree lens 1.6 m off the water, the horizon a third up (sky above for the banner and a mast), the boat a fifth of the width. */
+export const ARRIVAL: Look = { az: 180, f: 0.2, H: -0.3, B: 0, fov: 16, h: 1.6, x: 0.45 };
 /** How far across the frame the cape sits from the boat (in half-widths), so it is beside her, not behind her. */
 export const CAPE_APART = 0.6;
 
