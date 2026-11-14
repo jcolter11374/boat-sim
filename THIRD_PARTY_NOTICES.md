@@ -117,6 +117,11 @@ with `sea3d/scripts/stars.py`.
 
 - **three.js** (MIT, Copyright 2010-2024 Three.js Authors). It is bundled into
   the page scripts, and its licence header is kept in the built files.
+- **Draco** (Apache License 2.0, Copyright Google Inc.). The build compresses the
+  boat models' geometry with the Draco encoder that ships inside three.js
+  (`sea3d/scripts/draco_models.mjs`), and copies three.js's Draco decoder files,
+  unmodified, to `draco/` beside the pages, where they are loaded when a
+  compressed model arrives.
 - **Pyodide** (Mozilla Public License 2.0), with the CPython (PSF licence) and
   NumPy, pandas and PyYAML (BSD and MIT) builds it carries. The Boatyard loads
   them unmodified from the jsDelivr CDN at run time. We don't copy or change

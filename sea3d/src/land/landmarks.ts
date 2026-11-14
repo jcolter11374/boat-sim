@@ -6,7 +6,7 @@
 // Display only: the boat's physics never sees them.
 
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { gltfLoader } from "../gltf";
 import { reflectable } from "../mirror";
 import { R_EARTH, metresPerDegree } from "./shader";
 import { nightOf } from "./town";
@@ -286,7 +286,7 @@ export class Landmarks {
     let model: THREE.Group | null = null;
     for (const f of [`${lm.file}.glb`, `${lm.file}.json`]) {
       try {
-        model = (await new GLTFLoader().loadAsync(`${this.base}/${f}`)).scene;
+        model = (await gltfLoader().loadAsync(`${this.base}/${f}`)).scene;
         break;
       } catch {
         // try the next one, then the drawn stand-in
