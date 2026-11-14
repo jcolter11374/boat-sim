@@ -24,7 +24,7 @@ async function pickSource(page, id, value) {
  *  press "Start a new one". */
 async function setSail(page) {
   await page.click("#go");
-  if (await page.isVisible("#ss-ask")) {
+  if (await page.isVisible("#ss-ask").catch(() => false)) {
     const q = (await page.textContent("#ss-ask-q")).trim();
     if (!/^End your voyage on (its first day|day \d+) and start a new one\?$/.test(q)) fail(`Set sail with a voyage at sea asks ${JSON.stringify(q)}`);
     await page.click("#ss-ask-new");
@@ -903,12 +903,15 @@ try {
       name: window.__helm.watch?.name,
       first: document.querySelector("#timebar .rate")?.textContent,
       pressed: document.querySelector("#timebar .rate[aria-pressed=true]")?.textContent,
-      orders: getComputedStyle(document.getElementById("orders-tab")).display,
+      // The drawer stays as a compass to read (#464): its tab says so, and nothing in it steers.
+      tab: document.querySelector("#orders-tab span")?.textContent,
+      steer: [...document.querySelectorAll("#orders > :not(h2):not(#dialrow), #dialrow .side button")].filter((e) => getComputedStyle(e).display !== "none").map((e) => e.id || e.tagName),
+      dial: getComputedStyle(document.getElementById("dial")).pointerEvents,
       start: !document.getElementById("start").hidden,
     }));
     if (wv.err || wv.view !== "watch" || wv.start || wv.name !== "Our kayak") fail(`helm?watch didn't open the recorded voyage: ${JSON.stringify(wv)}`);
     if (Math.abs(wv.clock - 1 / 3600) > 1e-9 || wv.first !== "Real time" || wv.pressed !== "Real time") fail(`a watched voyage must open in real time, Real time first on the bar: ${JSON.stringify(wv)}`);
-    if (wv.orders !== "none") fail("a watched voyage showed the orders drawer");
+    if (wv.tab !== "Compass" || wv.steer.length || wv.dial !== "none") fail(`a watched voyage's drawer should be a compass to read, with nothing to steer: ${JSON.stringify({ tab: wv.tab, steer: wv.steer, dial: wv.dial })}`);
     await page.keyboard.press("Digit4");
     await page.waitForFunction(() => window.__helm.hour > 12, null, { timeout: 60000 }).catch(() => fail("a watched voyage didn't sail on at a day a second"));
     log.push("helm?watch: a recorded voyage on the sailing screen, in real time, nothing to steer");
