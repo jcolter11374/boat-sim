@@ -4357,6 +4357,67 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // #538/#541 finish scene with the Pearson as my boat at dusk and at night, 1280 and 390: banner clear of the mast,
+  // and a burst of frames at night to catch the lighthouse flash (look-fin-<browser>-<w>-*.jpg).
+  "finish-pearson": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [], bad = [], shots = [];
+      const emit = async (p, name) => { const path = `look-fin-${BROWSER}-${name}.jpg`; if (await jpeg(p, path)) { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${path}`); return name; } return `${name} (not taken)`; };
+      const local = (p) => p.evaluate(() => { const m = document.body.innerText.match(/(\d{1,2}):(\d\d) UTC/); return m ? +m[1] + +m[2] / 60 : null; });
+      for (const [w, h] of [[1280, 720], [390, 844]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        try {
+          await p.goto(SITE + "?quality=high", { waitUntil: "load", timeout: 2 * MIN });
+          await p.waitForFunction(() => window.__sea3d && window.__sea3d.frames > 10, null, { timeout: 3 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("t-change")?.click());
+          await p.waitForFunction(() => document.querySelector('#boatpick input[value="stock_pearson31_2"]'), null, { timeout: MIN });
+          await p.evaluate(() => { document.querySelector('#boatpick input[value="stock_pearson31_2"]').click(); document.querySelector("#boatpick .go").click(); });
+          await p.waitForTimeout(1500);
+          await p.evaluate(() => document.getElementById("t-setsail")?.click());
+          await p.waitForURL(/helm\.html/, { timeout: MIN }).catch(() => {});
+          await p.waitForFunction(() => document.querySelector("#go") && window.__helm && !window.__helm.busy, null, { timeout: 2 * MIN }).catch(() => {});
+          await p.evaluate(() => document.getElementById("go")?.click());
+          await p.waitForFunction(() => window.__helm && window.__helm.frames > 20 && !window.__helm.busy, null, { timeout: 3 * MIN }).catch(() => {});
+          const top = await p.evaluate(() => document.getElementById("topbar-boat")?.textContent.trim() ?? "");
+          for (const [label, want] of [["dusk", 18.6], ["night", 22]]) {
+            // Run the clock at an hour a second to the wanted local time, then pause.
+            await p.keyboard.press("2");
+            const t0 = Date.now();
+            let now = await local(p);
+            while (Date.now() - t0 < 4 * MIN && (now == null || Math.abs(now - want) > 0.4)) { await p.waitForTimeout(300); now = await local(p); }
+            await p.keyboard.press("Space");
+            await p.waitForTimeout(1500);
+            now = await local(p);
+            await p.evaluate(() => window.__helm.arrive(59.3, 60));
+            await p.waitForTimeout(3000);
+            shots.push(await emit(p, `${w}-${label}-a`));
+            const ban = await p.evaluate(() => ({ spot: window.__helm.arrivalBanner ?? null, text: document.getElementById("arrive")?.innerText.replace(/\s+/g, " ").slice(0, 90) ?? "" }));
+            if (ban.spot?.covers?.length) bad.push(`${w} ${label}: banner covers ${JSON.stringify(ban.spot.covers)}`);
+            if (label === "night") for (let i = 1; i <= 8; i++) { await p.waitForTimeout(700); shots.push(await emit(p, `${w}-night-flash-${i}`)); }
+            else { await p.waitForTimeout(6000); shots.push(await emit(p, `${w}-${label}-b`)); }
+            out.push(`${w} ${label}: local ${now?.toFixed(2)} h; banner ${JSON.stringify(ban.spot)} "${ban.text}"`);
+            await p.keyboard.press("Escape");
+            await p.waitForTimeout(3000);
+            await p.evaluate(() => { const r = document.getElementById("result"); const b = r && !r.hidden ? [...r.querySelectorAll("button")].find((x) => /keep|back|close|sail on/i.test(x.textContent)) : null; b?.click(); });
+            await p.waitForTimeout(1500);
+          }
+          out.push(`${w}: top bar "${top}"`);
+          if (!/Pearson/.test(top)) bad.push(`${w}: my boat is "${top}", not the Pearson`);
+          if (errs.length) bad.push(`${w}: page errors ${errs.slice(0, 2).join(" / ")}`);
+        } finally { await ctx.close().catch(() => {}); }
+      }
+      out.push(`frames ${shots.join(", ")}`);
+      console.log(`FINISH ${BROWSER}: ${out.join(" || ")}`);
+      must(!bad.length, `${bad.join(" | ")} [[ ${out.join(" || ")} ]]`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
