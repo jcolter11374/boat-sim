@@ -408,7 +408,9 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
       float Tl = exp(-od * 0.014) * 0.88 + 0.12 * exp(-od * 0.003); // more multiple scattering: brilliant white, not smoke (Elena r5) // a little multiple scattering
       float hf = clamp((P.y - CU_BASE) / CU_TOP, 0.0, 1.0);
       float low = smoothstep(0.0, 320.0, P.y - CU_BASE);
-      vec3 L = sunC * Tl * phase * (0.5 + 0.5 * low) + sky * (0.2 + 0.3 * gold + 0.25 * low + 0.5 * hf); // at dusk the shadows stay a lit blue-grey, never dark blotches // grey, shaded undersides on the shared base; bright tops
+      vec3 L = sunC * Tl * phase * (0.5 + 0.5 * low) + sky * (0.2 + 0.3 * gold + 0.25 * low + 0.5 * hf);
+      // Sun just down: the heads still catch a little of the twilight's rose (Elena, 14 Nov: not near-black smears at -5 degrees).
+      L += uGlow * uWarm * (1.0 - smoothstep(-0.01, 0.05, uSunDir.y)) * 0.6 * hf; // at dusk the shadows stay a lit blue-grey, never dark blotches // grey, shaded undersides on the shared base; bright tops
       float sig = dens * 0.026;
       float aStep = 1.0 - exp(-sig * st);
       acc += T * aStep * L;

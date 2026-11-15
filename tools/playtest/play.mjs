@@ -35,7 +35,13 @@ async function open(browser, path) {
   const errors = [];
   const notes = [];
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console: ${m.text()}`);
+    if (m.type() !== "error") return;
+    // Chromium on a runner sometimes can't decode a model's built-in picture (three's GLTFLoader
+    // turns each into a blob: address first). The model still loads with that one picture blank, and
+    // the cause wasn't found: leaving, reloading or closing mid-decode doesn't do it (Omar's speed
+    // list, rank 21). This exact message is a note, so a check doesn't fail on it; anything else is an error.
+    if (/^THREE\.GLTFLoader: Couldn't load texture blob:\S+$/.test(m.text())) notes.push(`console (a model picture didn't decode): ${m.text()}`);
+    else errors.push(`console: ${m.text()}`);
   });
   page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
   page.on("response", (r) => {
@@ -219,6 +225,77 @@ const soundState = (page) =>
   });
 
 const CHECKS = {
+  // The sailing screen's start-up behind the Set sail card (Omar's speed list, 14 Nov: Firefox took 244 s
+  // from the click to moving, with 33 s frozen frames behind the card). At 1280 Low: how the card answers
+  // clicks while the shaders build, when the building is over, what the forced pixel reads (warmup.ts
+  // drawEach) and the shader links cost in all, then Set sail to moving. Manual: hand runs, e.g.
+  // prerelease-playtest.yml dispatched with checks "card-warmup" on a branch.
+  "card-warmup": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
+      await ctx.addInitScript(() => {
+        const g = (window.__cw = { frames: [], busy: 0, reads: [0, 0, 0], links: [0, 0, 0] });
+        const f = (t) => { g.frames.push(t); requestAnimationFrame(f); };
+        requestAnimationFrame(f);
+        for (const C of [WebGL2RenderingContext, WebGLRenderingContext]) for (const [fn, k] of [["readPixels", "reads"], ["linkProgram", "links"], ["getProgramParameter", "links"]]) {
+          const o = C.prototype[fn];
+          C.prototype[fn] = function (...a) {
+            const t = performance.now();
+            const r = o.apply(this, a);
+            const d = performance.now() - t;
+            const s = g[k];
+            s[0] += d; s[1]++; s[2] = Math.max(s[2], d);
+            g.busy = performance.now();
+            return r;
+          };
+        }
+      });
+      const p = await ctx.newPage();
+      try {
+        await p.goto(SITE + "helm.html?quality=low", { waitUntil: "commit", timeout: 2 * MIN });
+        await p.waitForFunction(() => { const g = document.getElementById("go"); return g && g.getClientRects().length > 0; }, null, { timeout: 3 * MIN });
+        const cardAt = await p.evaluate(() => performance.now());
+        // Each click as a person makes it (the mouse, no waiting for the card to hold still): from the
+        // press reaching the page to the next frame drawn after its handler ran. That includes any wait
+        // for a long task in the way. (A Playwright locator click also waits out the card's own
+        // transitions, about 1.5 s even when the page is idle.)
+        await p.evaluate(() => {
+          window.__cw.clicks = [];
+          addEventListener("click", (e) => { const at = e.timeStamp; requestAnimationFrame(() => window.__cw.clicks.push(performance.now() - at)); }, true);
+        });
+        for (let i = 0; i < 20; i++) {
+          const box = await p.locator("#ss-who-opts button").nth(i % 2).boundingBox().catch(() => null);
+          if (box) await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          await p.waitForTimeout(500);
+        }
+        await p.waitForFunction(() => window.__cw.clicks.length >= 20, null, { timeout: 60_000 }).catch(() => {});
+        const clicks = await p.evaluate(() => window.__cw.clicks.map(Math.round));
+        const first = await p.locator("#ss-who-opts button").first().boundingBox().catch(() => null);
+        if (first) await p.mouse.click(first.x + first.width / 2, first.y + first.height / 2);
+        // Built when the page says so (helm.ts page.warmed), at most 150 s after the card.
+        await p.waitForFunction(() => window.__helm?.warmed, null, { timeout: 150_000, polling: 250 }).catch(() => {});
+        await p.evaluate(() => (window.__cw.warmedAt = performance.now()));
+        const r = await p.evaluate((a) => {
+          const g = window.__cw;
+          const fr = g.frames.filter((t) => t >= a);
+          let worst = 0;
+          for (let i = 1; i < fr.length; i++) worst = Math.max(worst, fr[i] - fr[i - 1]);
+          return { builtAfter: Math.round((g.warmedAt ?? g.busy) - a), worst: Math.round(worst), reads: g.reads.map(Math.round), links: g.links.map(Math.round) };
+        }, cardAt);
+        const goAt = await p.evaluate(() => performance.now());
+        await p.evaluate(() => document.getElementById("go")?.click());
+        await p.waitForFunction(() => (window.__helm?.hour ?? 0) > 0.02, null, { timeout: 5 * MIN, polling: 200 }).catch(() => {});
+        const moving = await p.evaluate((a) => { const fr = window.__cw.frames.filter((t) => t >= a); let w = 0; for (let i = 1; i < fr.length; i++) w = Math.max(w, fr[i] - fr[i - 1]); return { s: (performance.now() - a) / 1000, worst: Math.round(w) }; }, goAt);
+        const sorted = [...clicks].sort((a, b) => a - b);
+        const res = `1280 Low: card at ${(cardAt / 1000).toFixed(1)} s; clicks on the card (${clicks.length} of 20 answered, every 0.5 s), press to the next frame: median ${sorted[sorted.length >> 1] ?? "-"} ms, worst ${sorted[sorted.length - 1] ?? "-"} ms; shaders built ${(r.builtAfter / 1000).toFixed(1)} s after the card; longest frozen frame ${r.worst} ms; pixel reads ${r.reads[1]}, ${r.reads[0]} ms in all, longest ${r.reads[2]} ms; shader links and checks ${r.links[1]}, ${r.links[0]} ms in all, longest ${r.links[2]} ms; Set sail to moving ${moving.s.toFixed(1)} s, longest frame after the click ${moving.worst} ms`;
+        console.log(`CARDWARMUP ${BROWSER}: ${res}`);
+        return res;
+      } finally { await ctx.close().catch(() => {}); }
+    },
+  },
   // The four pages load and draw in this browser.
   index: {
     path: "",

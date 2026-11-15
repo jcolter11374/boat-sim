@@ -31,6 +31,7 @@ import type { StockKey } from "./boats/specs";
 import { setBacklight } from "./boats/nightlook";
 import { HERO_CLOUD, HERO_GLOW, HERO_SEA, HERO_SEA_WARM, HERO_SKY_DAY, HERO_SUN, backAt, cardBelowOf, cardRightOf, heroLightFor, heroSpec, heroWaterlineFor } from "./titleHero";
 import { prefetchHelmOnIntent } from "./helm/prefetch";
+import { saveStill } from "./helm/still";
 import { OceanSound, rigFor } from "./sound";
 import { TitleShore } from "./titleShore";
 import { TitleLandmarks } from "./titleLandmarks";
@@ -111,6 +112,9 @@ prefetchHelmOnIntent(
   [document.getElementById("t-setsail"), document.getElementById("t-continue")],
   document.getElementById("title"),
 );
+// Leaving for the helm: its sea takes seconds to come on a slow computer, so it shows this picture meanwhile (helm/still.ts).
+for (const [id, kind] of [["t-setsail", "setsail"], ["t-continue", "continue"]] as const)
+  document.getElementById(id)?.addEventListener("click", () => saveStill(renderer.domElement, kind));
 mountSailLink(); // "Sail this sea" follows the sea-state and quality pickers (after ?quality= is read)
 let quality: Quality = geometryOf(look);
 const sea = new Sea(quality);
@@ -269,6 +273,7 @@ scene.add(clouds.group);
 let heroWas = false;
 let demoStale = false; // the detailed models came while the title was up: the demo boats are built when it goes
 let heroL = heroLightFor("kayak");
+const HERO_WARM_WHITE = new THREE.Color(0xffe2c4); // the low boat's sun, part way to white (titleHero.ts sunWhite)
 // The shore on the title's horizon (titleShore.ts): asked for once the title is drawing, never before.
 let shore: TitleShore | null = null;
 let shoreAsked = false;
@@ -296,6 +301,8 @@ function heroLight(): void {
   // sky. A boat without: the sun over the lens's shoulder, on the side we see (heroLightFor).
   heroPlace.yaw = titleHeading(atmos.sunDir, heroL.sunOff);
   setBacklight(atmos.sunDir, heroL.back * backAt(el), atmos.sun.color);
+  atmos.sun.intensity *= heroL.sun;
+  atmos.sun.color.lerp(HERO_WARM_WHITE, heroL.sunWhite);
   atmos.hemi.intensity *= heroL.fill;
   scene.environmentIntensity = heroL.env;
 }

@@ -76,6 +76,9 @@
   #title nav small { display: none; } /* the one-line descriptions go: the words are the menu (brief) */
   #title nav a[hidden] { display: none; }
   #title nav .main#t-continue { color: var(--gold); font-weight: 520; font-size: clamp(27px, 2.6vw, 44px); }
+  /* Set sail is the main action: the gold of the wordmark's "Blue", the menu's one accent (Elena, live look). A returning
+     player's Continue takes the gold instead, so there is only ever one gold line. */
+  #title nav #t-continue[hidden] + #t-setsail { color: var(--gold); font-weight: 520; }
   #title nav #t-continue small { display: block; text-transform: none; letter-spacing: 0; margin-top: 6px;
     font: italic 400 clamp(15px, 1.25vw, 21px)/1.2 "Fraunces", Georgia, serif; color: rgba(242,232,213,.85); }
   #title a:focus-visible, #title button:focus-visible, #title summary:focus-visible { outline: 1px solid var(--gold); outline-offset: 4px; }
@@ -125,7 +128,8 @@
     #title { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 64dvh; justify-content: flex-end;
       padding: 34px 20px 34px; border-right: 0; border-top: 1px solid rgba(216,182,121,.55); }
     #title h1 { font-size: 46px; }
-    #title .tag { display: none; }
+    /* The one-line intro stays under the wordmark on a phone (Elena, live look): smaller, one or two lines. */
+    #title .tag { display: block; font-size: 14px; line-height: 1.35; margin-top: 14px; max-width: 24em; }
     #title nav { gap: 10px; margin-top: 18px; }
     #title nav a, #title nav button { font-size: 25px; padding: 4px 4px 7px; min-height: 30px; }
     #title nav .main#t-continue { font-size: 26px; }
@@ -136,7 +140,7 @@
     #title .fine { display: none; }
     #t-sound { top: 16px; left: auto; right: 14px; color: rgba(242,232,213,.8); filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
   }
-  @media (max-width: 699px) and (max-height: 700px) { #title { max-height: 70dvh; padding-top: 24px; } #title h1 { font-size: 38px; } #title nav { gap: 6px; margin-top: 12px; } #title nav a, #title nav button { font-size: 22px; } }
+  @media (max-width: 699px) and (max-height: 700px) { #title { max-height: 70dvh; padding-top: 24px; } #title h1 { font-size: 38px; } #title .tag { display: none; } #title nav { gap: 6px; margin-top: 12px; } #title nav a, #title nav button { font-size: 22px; } }
   /* Water in the menu (John, 14 Nov 2026: "some animation with water like effects"). All slow and quiet:
      light runs along the gold rules like a glint crossing the swell, the half sun throws a broken
      reflection that shimmers under the horizon, and the hover rule is a small moving wave. */

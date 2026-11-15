@@ -34,6 +34,12 @@ on:
       - "tools/live_visual_checks.mjs"
       - ".github/workflows/prerelease-playtest.yml"
   workflow_dispatch:
+    inputs:
+      checks:
+        # A hand run of a few playtest checks on this ref's own build, e.g. "card-warmup" (manual checks
+        # included): then only Nina's playtest runs, in both browsers; no smoke, no live-site checks.
+        description: "Only these playtest checks, space-separated (empty: the full suite)"
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -127,7 +133,7 @@ jobs:
   # The full suite: nightly on main and on a hand dispatch, not on pull requests.
   smoke:
     needs: build
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !inputs.checks
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -198,11 +204,13 @@ jobs:
           for i in $(seq 1 30); do curl -sf "$SITE" > /dev/null && break; sleep 1; done
           curl -sf "$SITE" > /dev/null
       - name: Ravi's live-site checks
-        if: matrix.suite == 'live-check'
+        if: matrix.suite == 'live-check' && !inputs.checks
         run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/live_site_check.mjs
       - name: Nina's playtest
         if: matrix.suite == 'playtest'
-        run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs
+        run: ${{ matrix.browser == 'firefox' && 'HEADED=1 xvfb-run -a' || '' }} node tools/playtest/play.mjs $CHECKS
+        env:
+          CHECKS: ${{ inputs.checks }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
