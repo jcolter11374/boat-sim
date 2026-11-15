@@ -5453,6 +5453,48 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Elena (#627, one-sided boat parts): Boatyard close-ups at 1280, High, looking for holes where a
+  // face is missing. Kayak lifted and inside; Pearson 31-2 and the Beneteau (stock_cruiser31) as
+  // they open and from low on the quarter. Frames: look-yard627-<browser>-<name>.jpg.
+  "yard-627": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const send = (path) => { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); };
+      for (const [base, views] of [["kayak", ["lifted", "inside"]], ["stock_pearson31_2", ["afloat", "quarter"]], ["stock_cruiser31", ["afloat", "quarter"]]]) {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        const errs = [];
+        p.on("pageerror", (e) => errs.push(String(e.message || e).slice(0, 140)));
+        await p.goto(SITE + `boatyard.html?quality=high#base=${base}`, { waitUntil: "load", timeout: 3 * MIN });
+        await p.waitForFunction(() => window.__yard?.ready && window.__yard.frames > 20, null, { timeout: 6 * MIN }).catch(() => {});
+        await p.waitForFunction(() => window.__yard?.models !== "loading", null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForTimeout(4000);
+        for (const v of views) {
+          if (v === "quarter") {
+            const cx = 820, cy = 380;
+            await p.mouse.move(cx, cy); await p.mouse.down();
+            for (let k = 1; k <= 12; k++) await p.mouse.move(cx + (270 * k) / 12, cy - (40 * k) / 12);
+            await p.mouse.up();
+          } else {
+            await p.evaluate((x) => window.__yard.setView(x), v);
+          }
+          await p.waitForFunction((x) => x === "quarter" || window.__yard.view === x, v, { timeout: MIN }).catch(() => {});
+          await p.waitForTimeout(6000); // the lift and camera moves take ~1.2 s of drawn frames
+          const st = await p.evaluate(() => ({ view: window.__yard.view, lift: +(+window.__yard.lift).toFixed(2), models: window.__yard.models, base: window.__yard.base }));
+          const path = `look-yard627-${BROWSER}-${base.replace("stock_", "")}-${v}.jpg`;
+          const ok = await jpeg(p, path); if (ok) send(path);
+          out.push(`${base} ${v}: view ${st.view}, lift ${st.lift}, models ${st.models}${ok ? "" : ", frame not taken"}`);
+        }
+        if (errs.length) out.push(`${base} errors: ${errs.join("; ")}`);
+        await ctx.close();
+      }
+      console.log(`YARD627 ${BROWSER}: ${out.join(" || ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
