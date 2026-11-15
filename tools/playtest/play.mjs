@@ -4551,7 +4551,7 @@ const CHECKS = {
   // moment (Landfall and Company in Practice at Annapolis, Elena 14 Nov: they almost never come on a crossing);
   // moment of the kayak's voyage, nothing forced. Chromium only; the twelve stills and the .json
   // files go to the log as LOOK blocks, named film-<seq>-*.
-  ...Object.fromEntries([["passage", "day"], ["storm", "gale"], ["knockdown", "after-knockdown"], ["golden", "golden"], ["night", "night"], ["landfall", "coast"], ["company", "ship"]].map(([seq, when]) => [`film-${seq}`, {
+  ...Object.fromEntries([["passage", "day"], ["storm", "gale"], ["knockdown", "after-knockdown"], ["golden", "golden"], ["night", "night"], ["landfall", "coast"], ["company", "ship"], ["golden", "day", "practice-golden"]].map(([seq, when, name]) => [name ? `film-${name}` : `film-${seq}`, {
     manual: true,
     path: "",
     run: async (page) => {
@@ -4560,7 +4560,8 @@ const CHECKS = {
       const { spawnSync } = await import("node:child_process");
       const { readdirSync, existsSync } = await import("node:fs");
       const dir = `film-out/${seq}`;
-      const r = spawnSync("node", ["tools/playtest/film/live_sheet.mjs", "kayak", seq, when, dir], { env: { ...process.env, BASE: SITE, SHEET_ONLY: "1", MAX_MIN: "80", ...(seq === "landfall" || seq === "company" ? { PRACTICE: "1" } : {}), ...(process.env.FILM_LAUNCH ? { LAUNCH: process.env.FILM_LAUNCH } : {}) }, encoding: "utf8", maxBuffer: 64 << 20, timeout: 140 * MIN });
+      const r = spawnSync("node", ["tools/playtest/film/live_sheet.mjs", "kayak", seq, when, dir], { env: { ...process.env, BASE: SITE, SHEET_ONLY: "1", MAX_MIN: "80", ...(seq === "landfall" || seq === "company" || name ? { PRACTICE: "1" } : {}), ...(name ? { HOURS: "7.5,8,8.5,17,17.5" } : {}), // practice-golden: Elena, the First 31.7 alongside with a low sun behind her
+ ...(process.env.FILM_LAUNCH ? { LAUNCH: process.env.FILM_LAUNCH } : {}) }, encoding: "utf8", maxBuffer: 64 << 20, timeout: 140 * MIN });
       const out = (r.stdout || "") + (r.stderr || "");
       console.log(out.split("\n").filter((l) => !/^\s*$/.test(l)).slice(-12).join("\n"));
       const emit = (file, name) => { const b64 = readFileSync(file).toString("base64"); console.log(`LOOK-BEGIN ${name}`); for (let i = 0; i < b64.length; i += 4000) console.log(b64.slice(i, i + 4000)); console.log(`LOOK-END ${name}`); };
