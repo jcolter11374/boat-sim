@@ -32,6 +32,12 @@ export const SEA_TESTS: Record<string, SeaTest> = {
   f8: { name: "Force 8", wind: 19, ws: { hs: 5.5, tp: 10.5, dirFrom: 250 }, s1: { hs: 1.5, tp: 13, dirFrom: 300 } },
 };
 
+/** ?sun=-8: any sun elevation in degrees (on the evening side), for dusk looks. */
+function sunAt(v: string | null): { el: number; az: number } | null {
+  const el = v === null || v.trim() === "" ? NaN : Number(v);
+  return Number.isFinite(el) && el >= -90 && el <= 90 ? { el, az: 250 } : null;
+}
+
 export const SUN_TESTS: Record<string, { el: number; az: number }> = {
   noon: { el: 60, az: 200 },
   dusk: { el: 3, az: 250 },
@@ -49,5 +55,5 @@ export function forcedSea(hs: number, wu: number, wv: number): { hs: number; tp:
 /** The test sea and sun this page was asked for, if any. */
 export function seaTestFrom(search: string): { sea: SeaTest | null; sun: { el: number; az: number } | null } {
   const q = new URLSearchParams(search);
-  return { sea: SEA_TESTS[q.get("seatest") ?? ""] ?? null, sun: SUN_TESTS[q.get("sun") ?? ""] ?? null };
+  return { sea: SEA_TESTS[q.get("seatest") ?? ""] ?? null, sun: SUN_TESTS[q.get("sun") ?? ""] ?? sunAt(q.get("sun")) };
 }
