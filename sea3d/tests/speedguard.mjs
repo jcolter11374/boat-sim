@@ -39,7 +39,9 @@ function instrument() {
     if (g.after) {
       const src = (this.getAttachedShaders(p) || []).map((x) => this.getShaderSource(x) || "").join("\n");
       const name = [(src.match(/#define SHADER_TYPE (.*)/) || [])[1], (src.match(/#define SHADER_NAME (.*)/) || [])[1]].filter(Boolean).join(" ");
-      g.after.push(name || (src.match(/#define (USE_\w+|\w+_MATERIAL|STANDARD|PHYSICAL)/g) || []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4).join(" ") || `${src.length} characters`);
+      // A ShaderMaterial without a name: its own uniforms (after three's built-in ones) say which it is.
+      const own = [...src.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]).filter((u, i, a) => !/^(modelMatrix|modelViewMatrix|projectionMatrix|viewMatrix|normalMatrix|cameraPosition|isOrthographic)$/.test(u) && a.indexOf(u) === i).slice(0, 6);
+      g.after.push([name, (src.match(/#define (USE_\w+|STANDARD|PHYSICAL)/g) || []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 3).join(" "), own.length ? `uniforms ${own.join(" ")}` : ""].filter(Boolean).join("; ") || `${src.length} characters`);
     }
     return link.call(this, p);
   };
@@ -110,7 +112,9 @@ try {
     env = await page.evaluate(() => {
       const gl = document.createElement("canvas").getContext("webgl2");
       const dbg = gl?.getExtension("WEBGL_debug_renderer_info");
-      return `${navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent}; ${dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "?"}; parallel compile ${!!gl?.getExtension("KHR_parallel_shader_compile")}`;
+      const out = `${navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent}; ${dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "?"}; parallel compile ${!!gl?.getExtension("KHR_parallel_shader_compile")}`;
+      gl?.getExtension("WEBGL_lose_context")?.loseContext(); // a throwaway context (Maya, #615)
+      return out;
     });
     await page.waitForFunction(() => (window.__sea3d?.frames ?? 0) > 10, null, { timeout: 60_000 });
     counts.titlePrograms = await settled(page);
@@ -122,6 +126,9 @@ try {
   {
     const { ctx, page } = await open("helm.html?quality=low");
     await page.waitForFunction(() => window.__helm && document.getElementById("go") && !document.getElementById("go").disabled, null, { timeout: 60_000 });
+    // The page's own word that everything queued behind the card is built (helm.ts page.warmed): on a
+    // slow runner a 3 s lull came mid-warm-up and the click beat its last shader (Maya, #616).
+    await page.waitForFunction(() => window.__helm.warmed, null, { timeout: 180_000, polling: 250 }).catch(() => console.log("  (the sailing screen never said its shaders were built: clicking anyway)"));
     const before = await settled(page);
     const h0 = await page.evaluate(() => window.__helm.hour);
     await page.evaluate(() => {

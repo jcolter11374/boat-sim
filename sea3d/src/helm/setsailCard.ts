@@ -425,13 +425,18 @@ export function mountSetSailCard(hooks: CardHooks): void {
   document.getElementById("boats")?.addEventListener("change", draw);
   draw();
   void hooks.challengesReady.then(draw);
-  void loadToday().then((f) => {
+  const todayIn = loadToday().then((f) => {
     if (!f) return;
     today = todayWords(f.header, samplesAt(f.header, f.data, DROP_POINT[0], DROP_POINT[1]), Date.now());
     if (today) draw();
   });
-  void hooks.voyages?.then((v) => {
+  const sailedIn = hooks.voyages?.then((v) => {
     sailed = v;
     draw();
   });
+  // From the title the card opens at its full size, its rows' places kept (helm.html, ss-filling) until
+  // all three of these have filled them; then the places nobody filled close up, once.
+  const filled = () => requestAnimationFrame(() => document.body.classList.remove("ss-filling"));
+  void Promise.allSettled([hooks.challengesReady, todayIn, sailedIn]).then(filled);
+  setTimeout(filled, 20_000); // a fetch that never answers
 }
