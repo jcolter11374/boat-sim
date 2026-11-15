@@ -35,7 +35,13 @@ async function open(browser, path) {
   const errors = [];
   const notes = [];
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console: ${m.text()}`);
+    if (m.type() !== "error") return;
+    // Chromium on a runner sometimes can't decode a model's built-in picture (three's GLTFLoader
+    // turns each into a blob: address first). The model still loads with that one picture blank, and
+    // the cause wasn't found: leaving, reloading or closing mid-decode doesn't do it (Omar's speed
+    // list, rank 21). This exact message is a note, so a check doesn't fail on it; anything else is an error.
+    if (/^THREE\.GLTFLoader: Couldn't load texture blob:\S+$/.test(m.text())) notes.push(`console (a model picture didn't decode): ${m.text()}`);
+    else errors.push(`console: ${m.text()}`);
   });
   page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
   page.on("response", (r) => {
