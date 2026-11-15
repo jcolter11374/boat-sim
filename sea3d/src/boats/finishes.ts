@@ -308,7 +308,12 @@ export function skyShade(m: THREE.MeshStandardMaterial): void {
     float up = smoothstep(-0.75, 0.6, normalize(vSkyN).y);
     // Low on the topsides the hull sees the sea, not the sky: less light, a cool blue cast.
     float near = 1.0 - smoothstep(-0.1, 1.1, vSkyY);
-    reflectedLight.indirectDiffuse *= mix(0.4, 1.1, up) * mix(1.0, 0.72, near) * mix(vec3(1.0), vec3(0.7, 0.9, 1.15), 0.7 * near);
+    // The sky's light in shade, half its colour: white gelcoat facing away from a low sun took the
+    // clear sky's full blue and read as a blue boat (Elena, 15 Nov), where the bright haze and the
+    // sea's grey bounce keep a real white hull a pale blue-grey. Reflections keep the sky's colour.
+    float skyL = dot(reflectedLight.indirectDiffuse, vec3(0.2126, 0.7152, 0.0722));
+    reflectedLight.indirectDiffuse = mix(vec3(skyL), reflectedLight.indirectDiffuse, 0.5);
+    reflectedLight.indirectDiffuse *=mix(0.4, 1.1, up) * mix(1.0, 0.72, near) * mix(vec3(1.0), vec3(0.7, 0.9, 1.15), 0.7 * near);
     reflectedLight.directDiffuse *= mix(0.68, 1.0, up) * mix(1.0, 0.86, near);
   }`,
       );
