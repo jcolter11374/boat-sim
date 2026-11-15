@@ -427,6 +427,8 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
   float sunward = smoothstep(-0.4, 0.8, toSunH);
   col = mix(col, col * vec3(0.85, 0.85, 0.95), lowS * (1.0 - sunward) * 0.25); // a touch only: the shadows carry the cool (sky term)
   col += uGlow * uWarm * 0.5 * smoothstep(-0.2, 0.8, facing) * (1.0 - smoothstep(0.0, 0.06, uSunDir.y));
+  // Civil twilight: a touch dimmer, so they sit in the twilight rather than glow against it (Elena, 15 Nov: about 15% at -4 degrees; right as they were by -12).
+  col *= 1.0 - 0.15 * (1.0 - smoothstep(-0.05, 0.0, uSunDir.y)) * smoothstep(-0.21, -0.1, uSunDir.y);
   col = mix(col, uHaze, 0.93 * smoothstep(3500.0, 15000.0, distH)); // the far rows go soft and pale, into the horizon's band
   a *= 1.0 - 0.9 * smoothstep(9000.0, 18000.0, distH);
   return vec4(col, a);

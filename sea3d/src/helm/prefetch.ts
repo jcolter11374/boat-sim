@@ -114,16 +114,27 @@ export function prefetchHelm(sandboxBase: string, now = false): void {
   else addEventListener("load", later, { once: true });
 }
 
-/** How long a desktop visitor may sit on the title before the simulator is fetched anyway (ms). */
+/** How long a desktop visitor may watch the title's sea before the simulator is fetched anyway (ms). */
 export const IDLE_PREFETCH_MS = 8000;
+/** How often the title is asked whether its sea is on screen yet (ms). */
+const SEA_POLL_MS = 250;
 
 /** The title's way of warming the helm (Omar's speed baseline, 14 Nov: fetched on every title
  *  visit it was 31 MB whether or not the visitor ever sailed). It starts at the first sign the
  *  visitor means to sail: the pointer or the keyboard's focus on Set sail or Continue, a touch
  *  or click anywhere on the title's card, or, on a desktop (a mouse, not a touch screen), eight
- *  seconds on the title. Never on Save-Data, a 2G or 3G link, or mobile data (prefetchHelm).
- *  `sure` are the links that go sailing; `card` is the whole title card. */
-export function prefetchHelmOnIntent(sandboxBase: string, sure: (Element | null)[], card: Element | null, desktop = matchMedia("(hover: hover) and (pointer: fine)").matches): void {
+ *  seconds of the title's sea on screen. Never on Save-Data, a 2G or 3G link, or mobile data (prefetchHelm).
+ *  `sure` are the links that go sailing; `card` is the whole title card; `seaShown` says when the
+ *  title's sea is on screen. The eight seconds count from then, not from opening the page: on a slow
+ *  computer the sea took longer than eight seconds to come, and 3 MB of Python downloaded ahead of
+ *  its first frame (Omar's speed list, rank 23, 15 Nov). */
+export function prefetchHelmOnIntent(
+  sandboxBase: string,
+  sure: (Element | null)[],
+  card: Element | null,
+  seaShown: () => boolean = () => true,
+  desktop = matchMedia("(hover: hover) and (pointer: fine)").matches,
+): void {
   if (typeof window === "undefined" || slowLink()) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const go = (e?: Event) => {
@@ -133,5 +144,10 @@ export function prefetchHelmOnIntent(sandboxBase: string, sure: (Element | null)
   const once = { once: true, passive: true } as const;
   for (const el of sure) for (const ev of ["pointerenter", "focus"]) el?.addEventListener(ev, go, once);
   for (const ev of ["pointerdown", "keydown"]) card?.addEventListener(ev, go, once);
-  if (desktop) timer = setTimeout(() => go(), IDLE_PREFETCH_MS);
+  if (!desktop) return;
+  const wait = () => {
+    if (kicked) return;
+    timer = seaShown() ? setTimeout(() => go(), IDLE_PREFETCH_MS) : setTimeout(wait, SEA_POLL_MS);
+  };
+  timer = setTimeout(wait, SEA_POLL_MS); // first asked once the page's own script has run
 }
