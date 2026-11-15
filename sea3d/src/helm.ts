@@ -4931,6 +4931,17 @@ function warmShaders(): void {
   if (warmRoot && warmRootLeft === 0 && warmRootPrograms.every((pr) => pr.isReady())) warmedRoots.add(warmRoot);
   if (!warmQueue.length) warmed = true;
 }
+/** Fade the title's picture out over the helm's first frames, then take it away. */
+function fadeStill(): void {
+  const still = document.getElementById("still");
+  if (!still) return;
+  if (!still.classList.contains("on")) return still.remove();
+  $("app").after(still);
+  requestAnimationFrame(() => still.classList.add("gone"));
+  const done = () => still.remove();
+  still.addEventListener("transitionend", done, { once: true });
+  setTimeout(done, 1500); // a tab in the background runs no transition
+}
 // Drawing starts once the shaders are built, after the page has painted (warmup.ts).
 startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if ((!warmed || !boatWarm()) && warmWanted()) warmShaders();
@@ -5353,8 +5364,9 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     showStrip(live);
   }
   page.frames++;
-  // The title's picture behind the page while it loaded (helm/still.ts): the sea is drawn over it now.
-  if (page.frames === 1) document.getElementById("still")?.remove();
+  // The title's picture behind the page while it loaded (helm/still.ts): the sea is drawn now, so it
+  // moves over the sea (still under the card and the bars) and fades out over half a second.
+  if (page.frames === 1) fadeStill();
   page.hour = hour;
   page.simHour = shownTo;
 }), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
