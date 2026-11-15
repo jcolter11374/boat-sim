@@ -12,8 +12,10 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1726; color: var(--ink);
     font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
   #app { position: fixed; inset: 0; }
-  #still { position: fixed; top: 0; display: none; background: no-repeat center / cover; }
+  #still { position: fixed; top: 0; display: none; background: no-repeat center / cover; pointer-events: none; }
   #still.on { display: block; }
+  /* The helm's sea is drawn: the title's picture, now over it, fades out (Elena: a cut was a jump). */
+  #still.gone { opacity: 0; transition: opacity .5s ease; }
   .glass { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
   a { color: #8ab4ff; }
