@@ -240,7 +240,7 @@ float cellD(vec2 p) {
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     vec2 g = vec2(float(x), float(y));
     vec2 o = vec2(h21(i + g), h21(i + g + 31.7));
-    float r = 0.6 + 0.55 * h21(i + g + 57.1); // sizes vary, but no giant among them (Elena, 14 Nov)
+    float r = 0.45 + 0.9 * h21(i + g + 57.1); // sizes vary widely (Elena, 15 Nov: not rows of like cotton balls), the cap on Rb keeps out giants
     d1 = min(d1, length(g + 0.1 + 0.8 * o - f) / r);
   }
   return d1;
@@ -259,6 +259,9 @@ float cuPatch(vec2 p) { return 1.25 * smoothstep(0.22, 0.5, vnoise(p * 0.11 + uS
 // Where the heaps gather (Elena, 14 Nov: a field over a quarter to a third of the sky, not five puffs in empty blue).
 float cuClump(vec2 p) { return min(1.0, cuPatch(p)) * smoothstep(0.18, 0.48, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)); }
 float cuCov() { return 0.1 + 0.5 * uCover; }
+// In a cloudier sky some heaps run together into long, low banks on the same flat base (Elena, 15 Nov:
+// a cloud deck, not a pattern). 0 in a fair sky; how much of a bank stands here.
+float cuBank(vec2 p) { return smoothstep(0.25, 0.55, uCover) * smoothstep(0.46, 0.68, fbmL(p * 0.2 + uSeed * 1.1 + 4.0, 0.0, 2)); }
 // Medium heaps (400 to 700 m across) between the big ones, over a wider stretch of the field.
 float cuMid(vec2 p) { return cuPatch(p) * (0.4 + 0.9 * cuCov()) * smoothstep(0.05, 0.35, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)) * smoothstep(0.1, 0.45, vnoise(p * 0.7 + 3.3)); }
 vec2 cuShape(vec2 x, float detail) {
@@ -287,9 +290,13 @@ vec2 cuShape(vec2 x, float detail) {
   float dm = Rm > 0.25 ? cuDome(dM, Rm * grow) : 0.0;
   float k = max(max(1.0 - dB / max(Rb, 1e-3), 0.9 * (ds > 0.0 ? 1.0 - dS / max(Rs, 1e-3) : 0.0)), dm > 0.0 ? 1.0 - dM / Rm : 0.0);
   float tall = 0.55 + 0.7 * vnoise(p * 0.6 + uSeed * 1.7); // some heaps grow, some stay low
+  tall *= mix(1.0, 0.55, smoothstep(5000.0, 16000.0, length(x - uCam.xz))); // the far ones flatter, as a deck seen edge on (Elena, 15 Nov)
   // Never taller than wide (Elena r5: no cones): height capped by the heap's own radius in m.
   float top = max(db * min(360.0 * (0.6 + 0.4 * clump) * tall, 1.0 * Rb * 1667.0), ds * min(220.0 * (0.6 + 0.6 * clump), 0.7 * Rs * 500.0));
   top = max(top, dm * min(300.0 * tall, 0.9 * Rm * 770.0));
+  float bank = cuBank(p) * nearK;
+  top = max(top, bank * (200.0 + 140.0 * tall)); // broad and low: a bank, not a tower
+  k = max(k, bank);
   // Heads: narrower round domes rising off the big heap, offset from its middle.
   float dH = cellD(p * 2.4 + uSeed * 4.3 + 2.2);
   float qh = clamp(dH / 0.7, 0.0, 1.0);
@@ -305,6 +312,7 @@ float cuMaybe(vec2 x) {
   float clump = cuClump(p);
   float cov = cuCov();
   float Rm = cuMid(p);
+  if (cuBank(p) > 0.02) return 700.0;
   if (cov * 1.3 * clump < 0.12 && Rm < 0.25) return 0.0; // outside the groups: open sky (Kai)
   if (cellD(p * 0.6 + uSeed * 1.3) < cov * 1.3 * clump * 1.5 + 0.2) return 1200.0;
   if (Rm >= 0.25 && cellD(p * 1.3 + uSeed * 2.1 + 3.7) < Rm * 1.5 + 0.2) return 700.0;
@@ -943,7 +951,8 @@ export class Clouds {
   private rain = 0;
   private banks: THREE.Mesh<THREE.CylinderGeometry, THREE.ShaderMaterial>[] = [];
   private drift = new THREE.Vector2();
-  private snapped = false;
+  private snapped = true; // the first update starts at the weather (a film's first shots showed a bare sky while the heaps eased in; Elena, 15 Nov)
+  private hadCover = false;
   // The new cumulus: its half-resolution pass (see cuPassFrag).
   private cuRT = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
   private cuScene = new THREE.Scene();
@@ -1129,7 +1138,11 @@ export class Clouds {
     light: number,
     rainMmH: number | null = null,
   ): void {
-    if (cover != null) this.dayCover = cover;
+    if (cover != null) {
+      this.dayCover = cover;
+      if (!this.hadCover) this.snapped = true; // the first real reading (it can arrive after the page opens): straight to it
+      this.hadCover = true;
+    }
     // Rain, mm/h: the logged rate, or (older replays) what the storm suggests.
     const rainWant = rainMmH ?? 6 * SM(storm, 0.4, 1);
     // Rain falls from a deck: steady rain covers the sky (and so dims the sun and its glitter on the sea).
