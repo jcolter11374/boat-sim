@@ -40,7 +40,7 @@ import { TitleCompany } from "./titleCompany";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 import { TitleTrack } from "./titleTrack";
-import { addWhenBuilt, startWhenBuilt } from "./warmup";
+import { startWhenBuilt } from "./warmup";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -628,16 +628,14 @@ const frame = (now?: number): void => {
     }
     if (!shoreAsked && status.frames > 3) {
       shoreAsked = true;
-      // Each shown once its shaders are built (warmup.ts addWhenBuilt): added straight in, they froze
-      // the title for 5.6 s a few seconds after it opened on John's graphics card (15 Nov).
       company = new TitleCompany(quality);
-      void addWhenBuilt(renderer, scene, camera, company.root, () => atmos.sceneTarget());
+      scene.add(company.root);
       void TitleShore.load(HERO_SUN.az, { sunDir: atmos.sunDir, sun: atmos.sun.color, haze: atmos.fog.color }).then((s) => {
         if (!s) return;
         shore = s;
-        void addWhenBuilt(renderer, scene, camera, s.mesh, () => atmos.sceneTarget());
+        scene.add(s.mesh);
         marks = new TitleLandmarks(HERO_SUN.az);
-        void addWhenBuilt(renderer, scene, camera, marks.root, () => atmos.sceneTarget());
+        scene.add(marks.root);
         shoreShown(heroOn());
       });
     }
