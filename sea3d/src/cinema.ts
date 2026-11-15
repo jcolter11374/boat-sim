@@ -150,7 +150,9 @@ export const SHOTS: Record<ShotKind, ShotDef> = {
   sunset: { ref: "sun", from: { ...C(166, 0.4, 0.25, 1.0, 24), sunSide: true }, to: { ...C(168, 0.42, 0.25, 1.0, 24), sunSide: true }, len: [6, 8], low: true },
   // Landfall (the shot plan's sequence 3): from behind the boat, looking past her at the land on the horizon; a slow
   // pull back, 22% of the width to 16% (the plan said 12%, under the 6%-of-the-frame floor on the kayak), so the land grows in the frame as she shrinks (9-12 s).
-  landfall: { ref: "land", from: C(168, 0.22, 0.33, 2.5, 22), to: C(172, 0.16, 0.33, 3, 22), len: [9, 12] },
+  // The longest lens of the film, from further back (Elena, 15 Nov: at 22 degrees the shore was a thin line like
+  // any horizon): at 9 degrees the shore band stands about 2.4 times taller behind her, real telephoto compression.
+  landfall: { ref: "land", from: C(168, 0.22, 0.33, 2.5, 9), to: C(172, 0.16, 0.33, 3, 9), len: [9, 12] },
   // Company (sequence 4): a ship within a few km. From behind the boat towards the ship, the boat near on one third,
   // the ship far on the other; held (7-9 s).
   company: { ref: "ship", from: C(160, 0.3, 0.33, 2, 26), to: C(163, 0.3, 0.33, 2, 26), len: [7, 9], locked: true },
