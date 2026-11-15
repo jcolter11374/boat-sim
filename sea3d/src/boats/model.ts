@@ -18,6 +18,7 @@ import { Kit, type HullForm, type Quality } from "./parts";
 import { KAYAK, RANDOLPH, type BoatSpec } from "./specs";
 import { buildStock, type StockRig } from "./stock";
 import { holdThinParts, holdWidth } from "./wire";
+import { cullHiddenFaces } from "./cull";
 
 export interface BoatModel {
   spec: BoatSpec;
@@ -63,7 +64,9 @@ async function loadOne(base: string, name: string): Promise<THREE.Group | null> 
   // for hosts that won't serve .glb files.
   for (const file of [`${name}.glb`, `${name}.json`]) {
     try {
-      return (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
+      const g = (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
+      cullHiddenFaces(g); // solid parts one-sided, before the finishes (boats/cull.ts)
+      return g;
     } catch {
       // try the next one
     }
