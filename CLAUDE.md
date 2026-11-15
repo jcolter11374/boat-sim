@@ -19,3 +19,11 @@
 - Explain nautical terms plainly in anything John reads; he isn't a sailor.
 - Never ask John for money or a budget without an itemised plan; never hunt for reasons
   to spend. Costs like satellite airtime are outputs to minimise (CONTRIBUTING.md rule 9).
+- Leave notes (John, 15 Nov 2026: "maybe the most important thing in this project"): every
+  change, finding or measurement gets written up in the repo so others can follow it. Say what
+  changed, why, how it was measured and the numbers before and after, in docs/ (QA results in
+  docs/qa/) and in the PR description. Reusable test scripts go in the repo, not only on one machine.
+- Current focus (John, 15 Nov 2026): a fast title screen with no stutter. The crossing realism
+  stays in but is not the priority right now. See docs/qa/title-load-2026-11.md.
+- Exception to "cloud only": the cloud has no graphics card, so stutter and load time are measured
+  on John's PC (sea3d/tools/real-gpu/, see that note).
