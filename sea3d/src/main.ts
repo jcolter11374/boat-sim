@@ -126,6 +126,7 @@ prefetchHelmOnIntent(
   new URL(new URLSearchParams(location.search).get("sandbox") ?? "./sandbox/", location.href).href,
   [document.getElementById("t-setsail"), document.getElementById("t-continue")],
   document.getElementById("title"),
+  () => status.frames >= 3, // the title's sea on screen
 );
 // Leaving for the helm: its sea takes seconds to come on a slow computer, so it shows this picture meanwhile (helm/still.ts).
 for (const [id, kind] of [["t-setsail", "setsail"], ["t-continue", "continue"]] as const)
