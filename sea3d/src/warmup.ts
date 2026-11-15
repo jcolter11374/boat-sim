@@ -12,7 +12,7 @@ type Program = { isReady(): boolean; getUniforms(): unknown };
  * page froze for 2 to 7 s just after it opened, while the first frame built its shaders in one go
  * and waited for each; the cloud's alone took most of a second). The page paints first; then the
  * shaders are all handed to the graphics driver at once, and waited for between tasks, so the page
- * stays responsive: with KHR_parallel_shader_compile (most browsers) by asking whether each is
+ * stays responsive (handed over a few a frame, see below): with KHR_parallel_shader_compile (most browsers) by asking whether each is
  * ready, which never blocks, and without it one shader's wait per task. The drawing starts when
  * they're all built, or after `maxMs` at the most. `extras` build passes the scene doesn't hold.
  */
@@ -39,48 +39,79 @@ export function startWhenBuilt(
   requestAnimationFrame(() =>
     setTimeout(() => {
       setTimeout(go, maxMs);
-      let built: THREE.Material[] = [];
-      const prev = renderer.getRenderTarget();
-      try {
-        renderer.setRenderTarget(target());
-        built = [...renderer.compile(scene, camera)];
-        for (const w of extras) built.push(...w(renderer, scene, camera));
-      } catch {
-        return go();
-      } finally {
-        renderer.setRenderTarget(prev);
-      }
-      let left = [...new Set(built.flatMap(programs))];
-      const next = (): void => {
+      // The shaders are handed over a few a frame, not all at once: the graphics process builds
+      // them ahead of the next picture, so 23 in one go held the screen still for 0.8 s on John's
+      // card (15 Nov: the title card's fade-in stopped). Each step builds one thing's materials as
+      // the scene's (its fog and lights); a thing holding a light waits for the last step, the
+      // whole scene, which also catches anything missed (already-built ones cost nothing there).
+      const steps: (() => Iterable<THREE.Material>)[] = [];
+      scene.traverse((o) => {
+        if (!drawable(o) || !(o as THREE.Mesh).material) return;
+        let lit = false;
+        o.traverse((q) => {
+          if ((q as THREE.Light).isLight) lit = true;
+        });
+        if (!lit) steps.push(() => renderer.compile(o, camera, scene));
+      });
+      steps.push(() => renderer.compile(scene, camera));
+      for (const w of extras) steps.push(() => w(renderer, scene, camera));
+      const built: THREE.Material[] = [];
+      let step = 0;
+      const count = (): number => renderer.info.programs?.length ?? 0;
+      const build = (): void => {
         if (started) return;
-        if (parallel) {
-          left = left.filter((p) => !p.isReady());
-          if (!left.length) return draw();
-          setTimeout(next, 10);
+        const before = count();
+        const t0 = performance.now();
+        const prev = renderer.getRenderTarget();
+        try {
+          renderer.setRenderTarget(target());
+          // Until a shader is new or a few ms are spent: then the screen gets its frame.
+          while (step < steps.length && count() === before && performance.now() - t0 < 4) built.push(...steps[step++]());
+        } catch {
+          return go();
+        } finally {
+          renderer.setRenderTarget(prev);
+        }
+        if (step < steps.length) {
+          requestAnimationFrame(build);
           return;
         }
-        const p = left.shift();
-        if (!p) return draw();
-        try {
-          p.getUniforms(); // waits for this one shader only
-        } catch {
-          /* the first frame builds it instead */
-        }
-        setTimeout(next, 0);
+        waitAll();
       };
-      // Then draw each visible thing once, a few per task (drawEach).
-      const things: THREE.Object3D[] = [];
-      scene.traverseVisible((o) => {
-        if (drawable(o)) things.push(o);
-      });
-      let at = 0;
-      const draw = (): void => {
-        if (started) return;
-        at = drawEach(renderer, scene, camera, things, target(), at);
-        if (at >= things.length) return go();
-        setTimeout(draw, 0);
+      const waitAll = (): void => {
+        let left = [...new Set(built.flatMap(programs))];
+        const next = (): void => {
+          if (started) return;
+          if (parallel) {
+            left = left.filter((p) => !p.isReady());
+            if (!left.length) return draw();
+            setTimeout(next, 10);
+            return;
+          }
+          const p = left.shift();
+          if (!p) return draw();
+          try {
+            p.getUniforms(); // waits for this one shader only
+          } catch {
+            /* the first frame builds it instead */
+          }
+          setTimeout(next, 0);
+        };
+        // Then draw each visible thing once, a few per task (drawEach).
+        const things: THREE.Object3D[] = [];
+        scene.traverseVisible((o) => {
+          if (drawable(o)) things.push(o);
+        });
+        let at = 0;
+        const draw = (): void => {
+          if (started) return;
+          at = drawEach(renderer, scene, camera, things, target(), at);
+          if (at >= things.length) return go();
+          setTimeout(draw, 0);
+        };
+        next();
       };
-      next();
+      build();
     }, 0),
   );
 }

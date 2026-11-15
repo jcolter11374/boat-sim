@@ -773,7 +773,7 @@ export class Atmosphere {
    * pause about 7 s in). Each is built for where it draws: the last pass to the screen, the rest
    * into a picture. Returns them, so the page can wait for them as for the scene's.
    */
-  warmPost(renderer: THREE.WebGLRenderer): THREE.Material[] {
+  warmPost(renderer: THREE.WebGLRenderer, only?: THREE.Material): THREE.Material[] {
     const composer = this.composer;
     if (!composer) return [];
     const out: THREE.Material[] = [];
@@ -791,6 +791,7 @@ export class Atmosphere {
         if (pass instanceof OutputPass) outputDefines(pass, renderer);
         renderer.setRenderTarget(i === last ? null : composer.readBuffer);
         for (const m of mats) {
+          if (only && m !== only) continue;
           quad.material = m;
           out.push(...renderer.compile(holder, cam));
         }
@@ -800,6 +801,14 @@ export class Atmosphere {
       quad.geometry.dispose();
     }
     return out;
+  }
+
+  /** warmPost a material at a time, for startWhenBuilt to hand over one a frame (the glow alone is seven shaders). */
+  postWarms(): ((renderer: THREE.WebGLRenderer) => THREE.Material[])[] {
+    const mats = new Set<THREE.Material>();
+    for (const pass of this.composer?.passes ?? [])
+      for (const v of Object.values(pass)) for (const m of Array.isArray(v) ? v : [v]) if (m instanceof THREE.Material) mats.add(m);
+    return [...mats].map((m) => (renderer) => this.warmPost(renderer, m));
   }
 
   setPixelRatio(r: number): void {
