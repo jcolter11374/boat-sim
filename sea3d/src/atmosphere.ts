@@ -212,6 +212,31 @@ export function softwareGraphics(): boolean {
   }
 }
 
+/**
+ * The defines OutputPass sets itself on its first render (three r170 OutputPass.render), set ahead
+ * so its shader can be built before then; it then finds them already right and keeps them.
+ */
+function outputDefines(pass: OutputPass, renderer: THREE.WebGLRenderer): void {
+  const p = pass as unknown as { _outputColorSpace: string; _toneMapping: THREE.ToneMapping; material: THREE.ShaderMaterial };
+  if (p._outputColorSpace === renderer.outputColorSpace && p._toneMapping === renderer.toneMapping) return;
+  p._outputColorSpace = renderer.outputColorSpace;
+  p._toneMapping = renderer.toneMapping;
+  const d: Record<string, string> = {};
+  if (THREE.ColorManagement.getTransfer(renderer.outputColorSpace) === THREE.SRGBTransfer) d.SRGB_TRANSFER = "";
+  const tone: Partial<Record<THREE.ToneMapping, string>> = {
+    [THREE.LinearToneMapping]: "LINEAR_TONE_MAPPING",
+    [THREE.ReinhardToneMapping]: "REINHARD_TONE_MAPPING",
+    [THREE.CineonToneMapping]: "CINEON_TONE_MAPPING",
+    [THREE.ACESFilmicToneMapping]: "ACES_FILMIC_TONE_MAPPING",
+    [THREE.AgXToneMapping]: "AGX_TONE_MAPPING",
+    [THREE.NeutralToneMapping]: "NEUTRAL_TONE_MAPPING",
+  };
+  const t = tone[renderer.toneMapping];
+  if (t) d[t] = "";
+  p.material.defines = d;
+  p.material.needsUpdate = true;
+}
+
 export class Atmosphere {
   readonly sky = new Sky();
   readonly sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
@@ -739,6 +764,42 @@ export class Atmosphere {
   /** The picture the scene is drawn into before the post-processing (null: straight to the screen). For building shaders ahead (warmup.ts). */
   sceneTarget(): THREE.WebGLRenderTarget | null {
     return this.composer ? this.composer.readBuffer : null;
+  }
+
+  /**
+   * The post-processing passes' materials (the glow, its blurs, the final colour pass), built ahead
+   * for warmup.ts: they draw no scene, so building the scene's shaders doesn't reach them, and the
+   * first frame built them all at once (on John's graphics card, 15 Nov: 10 shaders, a 0.3 s
+   * pause about 7 s in). Each is built for where it draws: the last pass to the screen, the rest
+   * into a picture. Returns them, so the page can wait for them as for the scene's.
+   */
+  warmPost(renderer: THREE.WebGLRenderer): THREE.Material[] {
+    const composer = this.composer;
+    if (!composer) return [];
+    const out: THREE.Material[] = [];
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+    quad.frustumCulled = false;
+    const holder = new THREE.Scene();
+    holder.add(quad);
+    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const prev = renderer.getRenderTarget();
+    const last = composer.passes.reduce((a, p, i) => (p.enabled ? i : a), -1);
+    try {
+      composer.passes.forEach((pass, i) => {
+        const mats = new Set<THREE.Material>();
+        for (const v of Object.values(pass)) for (const m of Array.isArray(v) ? v : [v]) if (m instanceof THREE.Material) mats.add(m);
+        if (pass instanceof OutputPass) outputDefines(pass, renderer);
+        renderer.setRenderTarget(i === last ? null : composer.readBuffer);
+        for (const m of mats) {
+          quad.material = m;
+          out.push(...renderer.compile(holder, cam));
+        }
+      });
+    } finally {
+      renderer.setRenderTarget(prev);
+      quad.geometry.dispose();
+    }
+    return out;
   }
 
   setPixelRatio(r: number): void {

@@ -5381,7 +5381,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if (page.frames === 1) fadeStill();
   page.hour = hour;
   page.simHour = shownTo;
-}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
+}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target), (r) => atmos.warmPost(r)], () => atmos.sceneTarget());
 
 // ---------- Set sail (the one-game plan, step 1; Rosa) ----------
 // One entry for every way to start: the ocean crossing, Annapolis practice, a weather
