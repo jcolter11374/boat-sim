@@ -261,7 +261,7 @@ float cuClump(vec2 p) { return min(1.0, cuPatch(p)) * smoothstep(0.18, 0.48, fbm
 float cuCov() { return 0.1 + 0.5 * uCover; }
 // In a cloudier sky some heaps run together into long, low banks on the same flat base (Elena, 15 Nov:
 // a cloud deck, not a pattern). 0 in a fair sky; how much of a bank stands here.
-float cuBank(vec2 p) { return smoothstep(0.25, 0.55, uCover) * smoothstep(0.46, 0.68, fbmL(p * 0.2 + uSeed * 1.1 + 4.0, 0.0, 2)); }
+float cuBank(vec2 p) { return smoothstep(0.25, 0.55, uCover) * smoothstep(0.54, 0.72, fbmL(p * 0.2 + uSeed * 1.1 + 4.0, 0.0, 2)); }
 // Medium heaps (400 to 700 m across) between the big ones, over a wider stretch of the field.
 float cuMid(vec2 p) { return cuPatch(p) * (0.4 + 0.9 * cuCov()) * smoothstep(0.05, 0.35, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)) * smoothstep(0.1, 0.45, vnoise(p * 0.7 + 3.3)); }
 vec2 cuShape(vec2 x, float detail) {
@@ -295,7 +295,9 @@ vec2 cuShape(vec2 x, float detail) {
   float top = max(db * min(360.0 * (0.6 + 0.4 * clump) * tall, 1.0 * Rb * 1667.0), ds * min(220.0 * (0.6 + 0.6 * clump), 0.7 * Rs * 500.0));
   top = max(top, dm * min(300.0 * tall, 0.9 * Rm * 770.0));
   float bank = cuBank(p) * nearK;
-  top = max(top, bank * (200.0 + 140.0 * tall)); // broad and low: a bank, not a tower
+  // Broad and low: a bank, not a tower. Its height rises to full within the first part of its field, so its
+  // tops end as crisply as a single heap's, not in a long thin smear (Elena, 15 Nov).
+  top = max(top, smoothstep(0.0, 0.3, bank) * (200.0 + 140.0 * tall));
   k = max(k, bank);
   // Heads: narrower round domes rising off the big heap, offset from its middle.
   float dH = cellD(p * 2.4 + uSeed * 4.3 + 2.2);
