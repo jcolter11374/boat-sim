@@ -175,3 +175,67 @@ export const intoTarget =
       renderer.setRenderTarget(prev);
     }
   };
+
+/**
+ * Add something to a running page's scene once its own shaders are built, so its first frame
+ * doesn't build them (a graphics card takes a quarter of a second or more per shader there, and the
+ * picture stops meanwhile). Its materials are built as the scene's (its fog and lights) for the
+ * picture `target` it will be drawn into; with KHR_parallel_shader_compile the driver builds them
+ * off this thread and the page waits between frames, without it they are added at once as before.
+ * Added after `maxMs` at the latest. Only its own materials: the scene's are built already.
+ */
+export function addWhenBuilt(
+  renderer: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  thing: THREE.Object3D,
+  target: () => THREE.WebGLRenderTarget | null = () => null,
+  maxMs = 10000,
+): Promise<void> {
+  const t0 = performance.now();
+  const add = (): void => {
+    if (!thing.parent) scene.add(thing);
+  };
+  if (!renderer.getContext().getExtension("KHR_parallel_shader_compile")) {
+    add();
+    return Promise.resolve();
+  }
+  const programs = (m: THREE.Material): Program[] => [...((renderer.properties.get(m) as { programs?: Map<string, Program> }).programs?.values() ?? [])];
+  let left: Program[] = [];
+  const prev = renderer.getRenderTarget();
+  try {
+    renderer.setRenderTarget(target());
+    // Its hidden parts are left out (taken out of their parents' lists for the call, no events): the
+    // page may never show them, and built here they'd be shaders nobody sees (the company's bow
+    // waves on the title, speed guard).
+    const out: [THREE.Object3D[], number, THREE.Object3D][] = [];
+    thing.traverse((o) => {
+      if (o.visible || !o.parent || o === thing) return;
+      const list = o.parent.children;
+      const i = list.indexOf(o);
+      out.push([list, i, o]);
+    });
+    try {
+      for (let j = out.length - 1; j >= 0; j--) out[j][0].splice(out[j][1], 1);
+      left = [...new Set([...renderer.compile(thing, camera, scene)].flatMap(programs))];
+    } finally {
+      for (const [list, i, o] of out) list.splice(i, 0, o);
+    }
+  } catch {
+    add();
+    return Promise.resolve();
+  } finally {
+    renderer.setRenderTarget(prev);
+  }
+  return new Promise((done) => {
+    const wait = (): void => {
+      left = left.filter((p) => !p.isReady());
+      if (!left.length || performance.now() - t0 > maxMs) {
+        add();
+        return done();
+      }
+      setTimeout(wait, 20);
+    };
+    wait();
+  });
+}
