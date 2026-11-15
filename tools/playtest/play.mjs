@@ -5411,23 +5411,43 @@ const CHECKS = {
     manual: true,
     path: "",
     run: async (page) => {
+      // ?sun= only works on the replay page (voyage.ts), so the helm's sun is stepped with
+      // __helm.force.skyHours instead, in one voyage at one hour; the replay page gets ?sun= too.
       const browser = page.context().browser();
       const out = [];
+      const send = (path) => { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); };
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, serviceWorkers: "block" });
+      const p = await ctx.newPage();
+      await p.goto(`${SITE}helm.html?who=you&day=2020-04-15&quality=high`, { waitUntil: "load", timeout: 3 * MIN });
+      await p.waitForFunction(() => document.querySelector("#go") && (window.__helm?.frames ?? 0) > 3, null, { timeout: 5 * MIN }).catch(() => {});
+      await p.evaluate(() => document.getElementById("go")?.click());
+      await p.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 10, null, { timeout: 8 * MIN }).catch(() => {});
+      await p.evaluate(() => { if (window.__helm.clock !== 0) document.getElementById("t-pause")?.click(); document.getElementById("orders-x")?.click(); });
+      const sunAt = async (x) => { const f0 = await p.evaluate((v) => { window.__helm.force.skyHours = v; return window.__helm.frames; }, x); await p.waitForFunction((f) => window.__helm.frames >= f + 2, f0, { timeout: 3 * MIN }).catch(() => {}); return p.evaluate(() => window.__helm.cine.host.sunEl()); };
+      let sh = 0;
+      for (let x = 0; x < 30; x += 0.5) { const a = await sunAt(x), b2 = await sunAt(x + 0.5); if (a > 0 && a < 15 && b2 < a) { sh = x; break; } }
+      out.push(`helm hour ${await p.evaluate(() => +(window.__helm.hour ?? 0).toFixed(2))}, evening at sky +${sh.toFixed(1)} h`);
+      for (const target of [-5, -8, -25]) {
+        let el = 99;
+        for (let i = 0; i < 300 && el > target; i++) { el = await sunAt(sh); if (el > target) sh += 0.05; }
+        await p.evaluate(() => { const d = document.getElementById("decide"); if (d && !d.hidden) document.querySelector("#decidebtns button")?.click(); });
+        await p.waitForTimeout(12000); // reflections re-light every 5 s on software graphics (#623)
+        const now = await p.evaluate(() => +window.__helm.cine.host.sunEl().toFixed(1));
+        const path = `look-sun-${BROWSER}-helm-${-target}.jpg`;
+        if (await jpeg(p, path)) send(path);
+        out.push(`helm ${target}: sky +${sh.toFixed(2)} h, sun ${now}`);
+      }
+      await ctx.close();
       for (const sun of [-5, -8, -25]) {
-        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, serviceWorkers: "block" });
-        const p = await ctx.newPage();
-        await p.goto(`${SITE}helm.html?who=you&day=2020-04-15&quality=high&sun=${sun}`, { waitUntil: "load", timeout: 3 * MIN });
-        await p.waitForFunction(() => document.querySelector("#go") && (window.__helm?.frames ?? 0) > 3, null, { timeout: 5 * MIN }).catch(() => {});
-        await p.evaluate(() => document.getElementById("go")?.click());
-        await p.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 10, null, { timeout: 8 * MIN }).catch(() => {});
-        await p.evaluate(() => { if (window.__helm.clock !== 0) document.getElementById("t-pause")?.click(); document.getElementById("orders-x")?.click(); });
-        await p.waitForTimeout(12000); // the reflections re-light every 5 s on software graphics (#623)
-        const st = await p.evaluate(() => ({ hour: +(window.__helm.hour ?? 0).toFixed(2), el: +(window.__helm.cine?.host?.sunEl?.() ?? NaN).toFixed(1), clock: window.__helm.clock }));
-        const path = `look-sun-${BROWSER}-${-sun}.jpg`;
-        let ok = false;
-        if (await jpeg(p, path)) { ok = true; const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); }
-        out.push(`sun=${sun}: hour ${st.hour}, sun reads ${st.el}, clock ${st.clock}${ok ? "" : ", frame not taken"}`);
-        await ctx.close();
+        const c2 = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, serviceWorkers: "block" });
+        const q = await c2.newPage();
+        await q.goto(`${SITE}voyage.html?voyage=2020-04-15&quality=high&sun=${sun}`, { waitUntil: "load", timeout: 3 * MIN });
+        await q.waitForFunction(() => (window.__sea3d?.frames ?? window.__voyage?.frames ?? 0) > 5, null, { timeout: 5 * MIN }).catch(() => {});
+        await q.waitForTimeout(15000);
+        const path = `look-sun-${BROWSER}-replay-${-sun}.jpg`;
+        if (await jpeg(q, path)) send(path);
+        out.push(`replay ${sun}: shot`);
+        await c2.close();
       }
       console.log(`SUN ${BROWSER}: ${out.join(" || ")}`);
       return out.join("; ");
