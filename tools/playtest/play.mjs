@@ -5405,6 +5405,34 @@ const CHECKS = {
       return out;
     },
   },
+  // Elena (#623): the helm at dusk and night through the ?sun= test hook, same voyage and hour for
+  // each, 1280, fresh browser, High. Frames: look-sun-<browser>-<deg>.jpg.
+  "sun-dusk": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      for (const sun of [-5, -8, -25]) {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        await p.goto(`${SITE}helm.html?who=you&day=2020-04-15&quality=high&sun=${sun}`, { waitUntil: "load", timeout: 3 * MIN });
+        await p.waitForFunction(() => document.querySelector("#go") && (window.__helm?.frames ?? 0) > 3, null, { timeout: 5 * MIN }).catch(() => {});
+        await p.evaluate(() => document.getElementById("go")?.click());
+        await p.waitForFunction(() => window.__helm && (window.__helm.ready || window.__helm.error) && !window.__helm.busy && window.__helm.frames > 10, null, { timeout: 8 * MIN }).catch(() => {});
+        await p.evaluate(() => { if (window.__helm.clock !== 0) document.getElementById("t-pause")?.click(); document.getElementById("orders-x")?.click(); });
+        await p.waitForTimeout(12000); // the reflections re-light every 5 s on software graphics (#623)
+        const st = await p.evaluate(() => ({ hour: +(window.__helm.hour ?? 0).toFixed(2), el: +(window.__helm.cine?.host?.sunEl?.() ?? NaN).toFixed(1), clock: window.__helm.clock }));
+        const path = `look-sun-${BROWSER}-${-sun}.jpg`;
+        let ok = false;
+        if (await jpeg(p, path)) { ok = true; const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); }
+        out.push(`sun=${sun}: hour ${st.hour}, sun reads ${st.el}, clock ${st.clock}${ok ? "" : ", frame not taken"}`);
+        await ctx.close();
+      }
+      console.log(`SUN ${BROWSER}: ${out.join(" || ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
