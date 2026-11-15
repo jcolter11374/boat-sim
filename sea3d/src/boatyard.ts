@@ -71,6 +71,8 @@ controls.enableDamping = true;
 controls.minDistance = 1.8;
 controls.maxDistance = 25;
 controls.maxPolarAngle = Math.PI * 0.6; // can look under the waterline at the keel
+/** The camera stays this far (m) over the waves (the frame loop): from under the sea she can't be seen. */
+const CAMERA_OVER_SEA_M = 0.25;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.4;
 renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false));
@@ -1151,6 +1153,11 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     }
   }
   controls.update();
+  // Never under the sea: from below its surface the water hides all of her above it, and a low orbit
+  // round the 31 ft cruiser showed only a keel and rudder hanging in a pale field (Nina, 15 Nov). The
+  // orbit may still dip below level to look up at her keel, but stops this far over the waves.
+  const seaY = heightAt(comps, camera.position.x, camera.position.z, t) + CAMERA_OVER_SEA_M;
+  if (camera.position.y < seaY) camera.position.y = seaY;
   sea.setSun(atmos.glintDir, atmos.glintLight);
   atmos.render();
   drawLabels();
