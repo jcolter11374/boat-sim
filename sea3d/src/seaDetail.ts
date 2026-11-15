@@ -1,4 +1,4 @@
-// The short-wave layer on the page: runs the FFT (seaFFT.ts) in a worker,
+// The short-wave layer on the page: runs the FFT (seaFFT.ts), in a worker for High,
 // hands the results to every sea-reading shader as textures (seaSurface.ts
 // seaUniforms), and keeps the same grids for heightAt() on the CPU.
 //
@@ -60,7 +60,11 @@ export class ShortWaveLayer {
     u.uSeaDetB1.value = (this.tex[1] ?? this.tex[0]).b;
     u.uSeaDetOff0.value = this.off[0];
     u.uSeaDetOff1.value = this.off[1];
-    const useWorker = opts.worker ?? typeof Worker !== "undefined";
+    // Medium (High's look) works its frame out here, every frame, for the frame's own time: about 3 ms
+    // on a slow processor. In the worker its answer came a frame late or two, at its own pace, so the
+    // ripples stood still for a frame and then jumped (John, 15 Nov: the title's sea jerked on his
+    // graphics card). High (Ultra only, ~12 ms) stays in the worker.
+    const useWorker = opts.worker ?? (typeof Worker !== "undefined" && detail === "high");
     if (useWorker) {
       try {
         this.worker = new Worker(new URL("./seaFFT.worker.ts", import.meta.url), { type: "module" });
