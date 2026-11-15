@@ -100,7 +100,22 @@ const atmos = new Atmosphere(renderer, scene, camera);
 atmos.set(10, 330, 0, true);
 
 // ---------- sea, boats, wakes ----------
-const clock = new THREE.Clock();
+// The title's clock runs on each frame's own time (the browser's vsync time for the frame), not on
+// when the frame's script happened to run: the script starts a few ms early or late from frame to
+// frame, and with the camera close on a moving boat that showed as a judder (John, 15 Nov).
+const clock = {
+  start: performance.now(),
+  t: 0,
+  /** Seconds since the page started, as of the frame being drawn. */
+  getElapsedTime(): number {
+    return this.t;
+  },
+  /** Called once a frame with the frame's time (ms, rAF's clock); never runs backwards. */
+  frame(now: number | undefined): void {
+    const t = ((Number.isFinite(now) ? (now as number) : performance.now()) - this.start) / 1000;
+    if (t > this.t) this.t = t;
+  },
+};
 // ?quality=low|high|ultra picks the starting look; without a graphics card it starts Low, as
 // the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
 // the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
@@ -549,7 +564,8 @@ const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) /
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
 let soundT = 0;
-const frame = (): void => {
+const frame = (now?: number): void => {
+  clock.frame(now);
   const t = clock.getElapsedTime();
   // The title's sound runs while the title is up, and fades out when it goes.
   if (document.body.classList.contains("title")) {
