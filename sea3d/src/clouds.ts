@@ -261,7 +261,8 @@ float cuClump(vec2 p) { return min(1.0, cuPatch(p)) * smoothstep(0.18, 0.48, fbm
 float cuCov() { return 0.1 + 0.5 * uCover; }
 // In a cloudier sky some heaps run together into long, low banks on the same flat base (Elena, 15 Nov:
 // a cloud deck, not a pattern). 0 in a fair sky; how much of a bank stands here.
-float cuBank(vec2 p) { return smoothstep(0.25, 0.55, uCover) * smoothstep(0.54, 0.72, fbmL(p * 0.2 + uSeed * 1.1 + 4.0, 0.0, 2)); }
+// Nothing to work out in a fair sky (Omar's speed list, 15 Nov: its noise cost every search step of the march).
+float cuBank(vec2 p) { return uCover < 0.3 ? 0.0 : smoothstep(0.3, 0.6, uCover) * smoothstep(0.54, 0.72, fbmL(p * 0.2 + uSeed * 1.1 + 4.0, 0.0, 2)); }
 // Medium heaps (400 to 700 m across) between the big ones, over a wider stretch of the field.
 float cuMid(vec2 p) { return cuPatch(p) * (0.4 + 0.9 * cuCov()) * smoothstep(0.05, 0.35, fbmL(p * 0.16 + uSeed * 0.7, 0.0, 2)) * smoothstep(0.1, 0.45, vnoise(p * 0.7 + 3.3)); }
 vec2 cuShape(vec2 x, float detail) {
@@ -297,7 +298,12 @@ vec2 cuShape(vec2 x, float detail) {
   float bank = cuBank(p) * nearK;
   // Broad and low: a bank, not a tower. Its height rises to full within the first part of its field, so its
   // tops end as crisply as a single heap's, not in a long thin smear (Elena, 15 Nov).
-  top = max(top, smoothstep(0.0, 0.3, bank) * (200.0 + 140.0 * tall));
+  float sb = smoothstep(0.0, 0.3, bank);
+  // On the bank's flat body, a ragged row of small domes and turrets (Elena, 15 Nov: lumpy tops, not smooth sausages).
+  if (sb > 0.0) {
+    float turret = cuDome(cellD(p * 3.2 + uSeed * 5.1 + 1.9), 0.75) * (0.5 + 0.8 * vnoise(p * 2.3 + uSeed * 2.9));
+    top = max(top, sb * (140.0 + 90.0 * tall + 260.0 * tall * turret));
+  }
   k = max(k, bank);
   // Heads: narrower round domes rising off the big heap, offset from its middle.
   float dH = cellD(p * 2.4 + uSeed * 4.3 + 2.2);
@@ -394,11 +400,12 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
     // The heap is sampled at P and three times towards the sun (the light reaching P), all at the
     // one call site of this loop: each written-out call to cuIn() is compiled in whole, and with
     // six of them the graphics driver took 1 to 2 s to set this pass up (Omar's speed list).
-    float inside = 0.0, thin = 0.0, st = fs, dens = 0.0, od = 0.0;
+    float inside = 0.0, thin = 0.0, st = fs, dens = 0.0, od = 0.0, thick = 0.0;
     for (int j = 0; j < 4; j++) {
       float v = -cuIn(P + sunD * (j == 1 ? 30.0 : j == 2 ? 90.0 : j == 3 ? 500.0 : 0.0), j == 3 || uQ < 0.5 ? 0.0 : 1.0); // Low: no bulges (Kai)
       if (j == 0) {
         inside = v;
+        thick = gThick; // this spot's own heap thickness (the sun probes overwrite gThick)
         thin = smoothstep(160.0, 400.0, gThick); // thin rims and thin heaps fade out softly instead of breaking into twinkling holes
         // Stride through clear air, faster where no heap stands at all, so a ray that grazes one
         // heap still reaches the next (else a whole heap came out as scattered dots).
@@ -416,7 +423,9 @@ vec4 cumulusVol(vec3 dir, float facing, float toSunH, float sunUp) {
       used++;
       if (dFirst < 0.0) dFirst = tt;
       float Tl = exp(-od * 0.014) * 0.88 + 0.12 * exp(-od * 0.003); // more multiple scattering: brilliant white, not smoke (Elena r5) // a little multiple scattering
-      float hf = clamp((P.y - CU_BASE) / CU_TOP, 0.0, 1.0);
+      // How high up its own heap this point is, as well as in the layer: a low bank's sunlit top is as white as a
+      // tall heap's, its grey kept low and on the shaded side (Elena, 15 Nov).
+      float hf = max(clamp((P.y - CU_BASE) / CU_TOP, 0.0, 1.0), 0.7 * clamp((P.y - CU_BASE) / max(thick, 200.0), 0.0, 1.0));
       float low = smoothstep(0.0, 320.0, P.y - CU_BASE);
       vec3 L = sunC * Tl * phase * (0.5 + 0.5 * low) + sky * (0.2 + 0.3 * gold + 0.25 * low + 0.5 * hf);
       // Sun just down: the heads still catch a little of the twilight's rose (Elena, 14 Nov: not near-black smears at -5 degrees).
