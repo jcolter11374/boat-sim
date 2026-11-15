@@ -636,10 +636,22 @@ export class BoatMotion {
     const moved = (s: { x: number; z: number; yaw: number }) => s.x !== x || s.z !== z || s.yaw !== yaw;
     let a = this.seaA;
     let b = this.seaB;
-    if (!a || !b || t < a.t || t > b.t + BoatMotion.SEA_DT || moved(b)) {
+    if (!a || !b || t < a.t || t > b.t + BoatMotion.SEA_DT) {
       const t0 = Math.floor(t / BoatMotion.SEA_DT) * BoatMotion.SEA_DT;
       a = { t: t0, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, t0) };
       b = { t: t0 + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, t0 + BoatMotion.SEA_DT) };
+    } else if (moved(b)) {
+      // She has moved since the last sample (a page moves her once a frame): go on from the sea as
+      // it is under her now, and take one new sample a step ahead where she is. It was two fresh
+      // samples every frame, and those sums were three quarters of the title's time on John's
+      // graphics card (15 Nov), enough to drop every third frame. Her place changes by centimetres
+      // a frame, so the sea she feels is the same to well under a millimetre.
+      const ta = Math.min(t, b.t);
+      const f = (ta - a.t) / (b.t - a.t);
+      const lerp = (u: number, v: number) => u + (v - u) * f;
+      const now = { eta: lerp(a.s.eta, b.s.eta), slopeX: lerp(a.s.slopeX, b.s.slopeX), slopeZ: lerp(a.s.slopeZ, b.s.slopeZ) };
+      a = { t: ta, x: b.x, z: b.z, yaw: b.yaw, s: now };
+      b = { t: ta + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, ta + BoatMotion.SEA_DT) };
     } else if (t > b.t) {
       a = b;
       b = { t: a.t + BoatMotion.SEA_DT, x, z, yaw, s: seaUnderHull(this.p, sea, x, z, yaw, a.t + BoatMotion.SEA_DT) };

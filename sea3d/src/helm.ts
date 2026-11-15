@@ -4,6 +4,7 @@
 // boatsim.sandbox.helm); this page draws the boat, the chart, the forecast and
 // the results card. Display only: the physics is all in the simulator.
 
+import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { setRainOnSea } from "./rainRings";
 import { FOAM_LAMP_UNIFORMS, NAV_NIGHT } from "./boats/navlights";

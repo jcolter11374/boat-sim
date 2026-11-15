@@ -5,6 +5,7 @@
 // model (motion.ts): heave, pitch and roll from each hull's own stability.
 // The simple surface follower (standin.ts) is kept as a fallback.
 
+import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { ownWetMaterials } from "./boats/inWater";
 import { detailFor } from "./seaDetail";
