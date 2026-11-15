@@ -40,6 +40,10 @@ export interface MappedTrees {
   rows?: [number, number][][];
 }
 
+/** Trees are drawn in blocks this size (m), so the ones out of view are skipped. */
+export const TREE_BLOCK_M = 2500;
+/** How far the earth's curve can lower a far tree after culling (m): 9 km out it's 6 m (squares load within 13 km). */
+const CURVE_MARGIN_M = 30;
 const STRIDE = 5; // x, y, z, height, kind (0 broadleaf, 1 pine)
 
 /**
@@ -249,23 +253,38 @@ export class Trees {
     const col = new THREE.Color();
     const r = rnd(5);
     for (const kind of [0, 1]) {
-      const idx: number[] = [];
-      for (let k = 0; k < this.count; k++) if (spots[k * STRIDE + 4] === kind) idx.push(k);
-      if (!idx.length) continue;
-      const im = new THREE.InstancedMesh(treeGeometry(kind), mat, idx.length);
-      idx.forEach((k, n) => {
+      const geo = treeGeometry(kind);
+      // The trees in blocks of land, each block its own draw that's skipped when it's out of view: the
+      // trees behind the camera and to the sides were drawn too, and on a computer with no graphics card
+      // each tree costs the same whether it's seen or not (speed rank 20, 15 Nov: about 160 of the
+      // Annapolis practice's 557 ms of drawing at Low). Each tree keeps its own look (same order of luck).
+      const blocks = new Map<string, { m: number[]; c: number[] }>();
+      for (let k = 0; k < this.count; k++) {
+        if (spots[k * STRIDE + 4] !== kind) continue;
         const h = spots[k * STRIDE + 3];
         q.setFromAxisAngle(up, r() * Math.PI * 2);
-        m.compose(pos.set(spots[k * STRIDE], spots[k * STRIDE + 1], spots[k * STRIDE + 2]), q, sc.set(h * (0.85 + 0.3 * r()), h, h * (0.85 + 0.3 * r())));
-        im.setMatrixAt(n, m);
+        pos.set(spots[k * STRIDE], spots[k * STRIDE + 1], spots[k * STRIDE + 2]);
+        m.compose(pos, q, sc.set(h * (0.85 + 0.3 * r()), h, h * (0.85 + 0.3 * r())));
         // Summer greens, a few darker or yellower; pines darker still.
         if (kind === 0) col.setHSL(0.22 + 0.06 * r(), 0.35 + 0.2 * r(), 0.13 + 0.07 * r());
         else col.setHSL(0.3 + 0.04 * r(), 0.3 + 0.1 * r(), 0.09 + 0.04 * r());
-        im.setColorAt(n, col);
-      });
-      im.name = kind ? "pines" : "broadleaf";
-      im.frustumCulled = false; // the curve moves vertices after culling's bounds
-      this.group.add(im);
+        const key = `${Math.floor(pos.x / TREE_BLOCK_M)},${Math.floor(pos.z / TREE_BLOCK_M)}`;
+        let b = blocks.get(key);
+        if (!b) blocks.set(key, (b = { m: [], c: [] }));
+        b.m.push(...m.elements);
+        b.c.push(col.r, col.g, col.b);
+      }
+      for (const b of blocks.values()) {
+        const n = b.c.length / 3;
+        const im = new THREE.InstancedMesh(geo, mat, n);
+        im.instanceMatrix.array.set(b.m);
+        im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(b.c), 3);
+        im.name = kind ? "pines" : "broadleaf";
+        // The earth's curve lowers far trees after culling has looked at the bounds: a margin covers it.
+        im.computeBoundingSphere();
+        im.boundingSphere!.radius += CURVE_MARGIN_M;
+        this.group.add(im);
+      }
     }
   }
 

@@ -283,8 +283,9 @@ vec2 swellSlope(vec2 p, float t, float fp) {
     if (i >= uN) break;
     vec4 a = uWa[i];
     vec2 u = uWd[i];
-    float th = a.y * dot(u, p) - a.z * t + a.w;
     float L = 6.2831853 / a.y;
+    if (L < 1.5 * fp) break; // longest first (update()): every train after this one is too short for the pixel too
+    float th = a.y * dot(u, p) - a.z * t + a.w;
 #ifdef SEA_LITE
     float left = 1.0; // Low: weighted once, outside the loop (as main)
 #else
@@ -732,6 +733,7 @@ export class Sea {
   private hs = 1;
   private bayKnown = false;
   readonly steepness = 0.5;
+  private readonly order: number[] = []; // update(): the trains in the order the shader takes them
   /** Shader inputs: set sunDir/sunIntensity from the scene's light. */
   readonly uniforms = {
     uTime: { value: 0 },
@@ -1034,12 +1036,19 @@ export class Sea {
     // Packed by waves.ts so the shader uses exactly displace()'s numbers.
     const w = gpuWaves(comps, this.steepness);
     u.uQ.value = w.q;
-    for (let i = 0; i < w.n; i++) {
-      u.uWa.value[i].fromArray(w.wa, i * 4);
-      u.uWd.value[i].fromArray(w.wd, i * 2);
+    // To the shader longest first, leaving out trains with no height (a swell
+    // system that isn't there): the shading then stops at the first train too
+    // short for its pixel (swellSlope), so far water and calm swell cost nothing.
+    // The sum doesn't depend on the order, so the picture is the same.
+    const order = this.order;
+    order.length = 0;
+    for (let i = 0; i < w.n; i++) if (w.wa[i * 4] > 1e-5) order.push(i);
+    order.sort((a, b) => w.wa[a * 4 + 1] - w.wa[b * 4 + 1]);
+    for (let j = 0; j < order.length; j++) {
+      u.uWa.value[j].fromArray(w.wa, order[j] * 4);
+      u.uWd.value[j].fromArray(w.wd, order[j] * 2);
     }
-    const n = w.n;
-    u.uN.value = n;
+    u.uN.value = order.length;
     u.uAmp.value = this.hs / 2;
     u.uFoamAmt.value = this.foamAmount;
     // The same sea for every material that reads it (seaSurface.ts: boats' waterline, underwater fade).
