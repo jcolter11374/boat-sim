@@ -10,6 +10,7 @@
 // the close-up sea runs in real time, so the waves always move naturally while
 // their size and direction follow the voyage hour by hour.
 
+import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";

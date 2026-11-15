@@ -7,6 +7,7 @@
 // Launching goes through a Launcher (yard/launch.ts), so the same page works
 // with Theo's precomputed grid now and the simulator in the browser later.
 
+import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
 import { tidyCatalog } from "./yard/words";

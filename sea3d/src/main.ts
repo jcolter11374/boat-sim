@@ -5,6 +5,7 @@
 // model (motion.ts): heave, pitch and roll from each hull's own stability.
 // The simple surface follower (standin.ts) is kept as a fallback.
 
+import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { ownWetMaterials } from "./boats/inWater";
 import { detailFor } from "./seaDetail";
@@ -39,7 +40,7 @@ import { TitleCompany } from "./titleCompany";
 import { TitleSound, startsAtFirstTouch } from "./titleSound";
 import { TitleMusic } from "./titleMusic";
 import { TitleTrack } from "./titleTrack";
-import { startWhenBuilt } from "./warmup";
+import { addWhenBuilt, startWhenBuilt } from "./warmup";
 
 // Which motion model moves the boats. Physics by default; ?motion=standin for the fallback.
 const PHYSICS = new URLSearchParams(location.search).get("motion") !== "standin";
@@ -627,14 +628,16 @@ const frame = (now?: number): void => {
     }
     if (!shoreAsked && status.frames > 3) {
       shoreAsked = true;
+      // Each shown once its shaders are built (warmup.ts addWhenBuilt): added straight in, they froze
+      // the title for 5.6 s a few seconds after it opened on John's graphics card (15 Nov).
       company = new TitleCompany(quality);
-      scene.add(company.root);
+      void addWhenBuilt(renderer, scene, camera, company.root, () => atmos.sceneTarget());
       void TitleShore.load(HERO_SUN.az, { sunDir: atmos.sunDir, sun: atmos.sun.color, haze: atmos.fog.color }).then((s) => {
         if (!s) return;
         shore = s;
-        scene.add(s.mesh);
+        void addWhenBuilt(renderer, scene, camera, s.mesh, () => atmos.sceneTarget());
         marks = new TitleLandmarks(HERO_SUN.az);
-        scene.add(marks.root);
+        void addWhenBuilt(renderer, scene, camera, marks.root, () => atmos.sceneTarget());
         shoreShown(heroOn());
       });
     }

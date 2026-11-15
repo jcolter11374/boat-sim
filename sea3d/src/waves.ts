@@ -410,14 +410,80 @@ export function heightAt(
   steepness = 0.5,
   iterations = 4,
 ): number {
+  // The same sums as displace(), with each train's constants worked out once per sea and moment
+  // instead of in every pass of every call: the boats, wakes and hulls ask this hundreds of times
+  // a frame, and on John's PC (15 Nov) displace() was three quarters of the title's time. Same
+  // numbers to the last bit (tests/waves.test.ts).
+  const c = trainConstants(comps, t, steepness);
+  const n = c.n;
+  const { k, ux, uz, wt, ph, qa, a } = c;
   let x0 = x;
   let z0 = z;
   for (let i = 0; i < iterations; i++) {
-    const [dx, , dz] = displace(comps, x0, z0, t, steepness);
+    let dx = 0;
+    let dz = 0;
+    for (let j = 0; j < n; j++) {
+      const s = Math.sin(k[j] * (ux[j] * x0 + uz[j] * z0) - wt[j] + ph[j]);
+      dx -= qa[j] * ux[j] * s;
+      dz -= qa[j] * uz[j] * s;
+    }
     x0 = x - dx;
     z0 = z - dz;
   }
-  return displace(comps, x0, z0, t, steepness)[1];
+  let y = 0;
+  for (let j = 0; j < n; j++) y += a[j] * Math.cos(k[j] * (ux[j] * x0 + uz[j] * z0) - wt[j] + ph[j]);
+  return y;
+}
+
+/** Per-train constants for heightAt, kept while the sea, the moment and the steepness stay the same. */
+const tc = {
+  comps: null as WaveComponent[] | null,
+  t: NaN,
+  steep: NaN,
+  n: 0,
+  key: new Float64Array(0), // amplitude, wavelength, direction, phase of each train, as last seen
+  k: new Float64Array(0),
+  ux: new Float64Array(0),
+  uz: new Float64Array(0),
+  wt: new Float64Array(0),
+  ph: new Float64Array(0),
+  qa: new Float64Array(0),
+  a: new Float64Array(0),
+};
+function trainConstants(comps: WaveComponent[], t: number, steepness: number): typeof tc {
+  const n = comps.length;
+  let same = tc.comps === comps && tc.t === t && tc.steep === steepness && tc.n === n;
+  if (same)
+    for (let j = 0; j < n && same; j++) {
+      const c = comps[j];
+      same = tc.key[4 * j] === c.amplitude && tc.key[4 * j + 1] === c.wavelength && tc.key[4 * j + 2] === c.direction && tc.key[4 * j + 3] === c.phase;
+    }
+  if (same) return tc;
+  if (tc.k.length < n) {
+    tc.key = new Float64Array(4 * n);
+    for (const f of ["k", "ux", "uz", "wt", "ph", "qa", "a"] as const) tc[f] = new Float64Array(n);
+  }
+  let ka = 0;
+  for (const c of comps) ka += ((2 * Math.PI) / c.wavelength) * c.amplitude;
+  const q = ka > 0 ? Math.min(1, steepness / ka) : 0;
+  for (let j = 0; j < n; j++) {
+    const c = comps[j];
+    const k = (2 * Math.PI) / c.wavelength;
+    const w = Math.sqrt(G * k);
+    tc.k[j] = k;
+    tc.ux[j] = Math.cos(c.direction);
+    tc.uz[j] = Math.sin(c.direction);
+    tc.wt[j] = w * t;
+    tc.ph[j] = c.phase;
+    tc.qa[j] = q * c.amplitude;
+    tc.a[j] = c.amplitude;
+    tc.key.set([c.amplitude, c.wavelength, c.direction, c.phase], 4 * j);
+  }
+  tc.comps = comps;
+  tc.t = t;
+  tc.steep = steepness;
+  tc.n = n;
+  return tc;
 }
 
 /** One wave system: significant height (m), PEAK period (s), and the compass
