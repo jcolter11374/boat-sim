@@ -1637,7 +1637,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   atmos.render();
   chart?.draw(rep ? hour : 0, performance.now());
   status.frames++;
-}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target)], () => atmos.sceneTarget());
+}), [(r, sc, cam) => clouds.warm(r, sc, cam), intoTarget(() => mirror.target), (r) => atmos.warmPost(r)], () => atmos.sceneTarget());
 
 // ---------- "Pick your launch day" ----------
 function showBeat(b: Beat): void {

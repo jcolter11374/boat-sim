@@ -1162,4 +1162,4 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   atmos.render();
   drawLabels();
   status.frames++;
-}), [], () => atmos.sceneTarget());
+}), [(r) => atmos.warmPost(r)], () => atmos.sceneTarget());
