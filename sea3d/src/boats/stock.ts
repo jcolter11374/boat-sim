@@ -18,6 +18,7 @@ import { applyStockFinishes } from "./finishes";
 import { DACRON, clotheSails, tickSails } from "./sailcloth";
 import { gltfLoader } from "../gltf";
 import { holdWires } from "./wire";
+import { cullHiddenFaces } from "./cull";
 import { Gear, idleGear } from "./gear";
 import { Kit, type HullForm, type Quality } from "./parts";
 import { BEACHCAT, CRUISER, DINGHY, OCEAN_ROWER, PEARSON, SAIL_DRONE, STOCK, type StockKey } from "./specs";
@@ -129,6 +130,7 @@ export function loadStockModel(key: StockKey, base = "./models"): Promise<boolea
       for (const file of [`${FILE[key]}.glb`, `${FILE[key]}.json`]) {
         try {
           const g = (await gltfLoader().loadAsync(`${base}/${file}`)).scene;
+          cullHiddenFaces(g); // solid parts one-sided (boats/cull.ts)
           g.traverse((o) => {
             const m = o as THREE.Mesh;
             if (m.isMesh && /^(sail|batten)/.test(o.name)) {
