@@ -5169,7 +5169,9 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     aimAt(VISIT.look); // look past her at the land, as the old page did
   }
   const [lat, lon] = arrival ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
-  if (practiceAt && wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
+  // Every practice's marks, the drill's included: it has no course start (practiceAt), and its mark
+  // never left the scene's origin, inside her hull at the foot of the mast (Elena, 15 Nov).
+  if (wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
   if (practiceAt && wheelNow && ghostTrack && wheel.wheel) {
     const g = ghostAt(ghostTrack, wheel.wheel.s.t)!;
     const dx = g.x - wheelNow.x;

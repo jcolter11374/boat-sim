@@ -45,6 +45,20 @@ export function spotAt(bearing: number, dist: number): { x: number; z: number } 
 /** A compass heading (deg) as a model's yaw (its bow along +x). */
 export const yawOf = (heading: number) => THREE.MathUtils.degToRad(90 - heading);
 
+/**
+ * Take a boat's own lamps out (the cockpit lamp, boats/nightlook.ts): seen from hundreds of metres
+ * it lights nothing, and each lamp added to a running scene changes every lit shader's light count,
+ * so all of them are built again. On John's graphics card (15 Nov) the company's three lamps
+ * arriving a few seconds in rebuilt 21 shaders in one frame: the title froze for 5 s.
+ */
+export function dropLamps(root: THREE.Object3D): void {
+  const lamps: THREE.Light[] = [];
+  root.traverse((o) => {
+    if ((o as THREE.Light).isLight) lamps.push(o as THREE.Light);
+  });
+  for (const l of lamps) l.removeFromParent();
+}
+
 export class TitleCompany {
   readonly root = new THREE.Group();
   private yachts: { plan: YachtPlan; model: BoatModel; at: { x: number; z: number } }[] = [];
@@ -55,6 +69,7 @@ export class TitleCompany {
     this.root.name = "title-company";
     for (const plan of YACHTS) {
       const model = BUILDERS[plan.key](quality);
+      dropLamps(model.root);
       this.root.add(model.root);
       this.yachts.push({ plan, model, at: spotAt(plan.bearing, plan.dist) });
     }
