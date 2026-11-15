@@ -267,3 +267,28 @@ test("flow: the sea moves past the boat by exactly the distance sailed", () => {
   c.advance(0);
   assert.deepEqual(c.advance(1 / 60), ca);
 });
+
+test("heightAt gives exactly what four passes of displace() give (its sped-up sums, 15 Nov)", async () => {
+  const { components, displace, heightAt, SEA_STATES } = await import("../src/waves");
+  const ref = (comps: ReturnType<typeof components>, x: number, z: number, t: number, s = 0.5) => {
+    let x0 = x;
+    let z0 = z;
+    for (let i = 0; i < 4; i++) {
+      const [dx, , dz] = displace(comps, x0, z0, t, s);
+      x0 = x - dx;
+      z0 = z - dz;
+    }
+    return displace(comps, x0, z0, t, s)[1];
+  };
+  for (const st of Object.values(SEA_STATES)) {
+    const comps = components(st, 24);
+    for (let i = 0; i < 50; i++) {
+      const x = Math.sin(i) * 300, z = Math.cos(i * 1.7) * 200, t = i * 0.37;
+      assert.equal(heightAt(comps, x, z, t), ref(comps, x, z, t));
+      assert.equal(heightAt(comps, x + 1, z, t, 0.3), ref(comps, x + 1, z, t, 0.3));
+    }
+    // A train changed in place (a live sea easing) is seen at once.
+    comps[3].direction += 0.2;
+    assert.equal(heightAt(comps, 5, 7, 1), ref(comps, 5, 7, 1));
+  }
+});
