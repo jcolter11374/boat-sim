@@ -41,6 +41,19 @@ const DAY_HAZE = new THREE.Color(0xabc3d7);
 const DUSK_HAZE = new THREE.Color(0xd8a58a);
 export const NIGHT_HAZE = new THREE.Color(0x0a1424);
 export const STORM_HAZE = new THREE.Color(0x7d8a94);
+/** The far haze in civil twilight, sun a few degrees down: a soft mauve-grey, as the sky low on the horizon is then. */
+export const TWILIGHT_HAZE = new THREE.Color(0x4c4558);
+/**
+ * How much light is left for the sea, the haze and the boat at a sun elevation (degrees), 0..1:
+ * the day's own curve, but with twilight's glow kept until about 12 degrees down (Elena, 14 Nov:
+ * at -5 degrees the sky was still bright mauve while the sea had gone black, darker than full
+ * night; the scene should be dim but readable then, and black only by about -12).
+ */
+export function twilightLit(elDeg: number): number {
+  return Math.max(smooth(elDeg, -5, 6), TWILIGHT_LIT * smooth(elDeg, -12, -3));
+}
+/** The share of daylight civil twilight keeps (sun 3 to 5 degrees down). GUESS by eye against the sky's own glow. */
+export const TWILIGHT_LIT = 0.3;
 /** The storm haze's brightness after dark, as a share of its daytime grey: about a clear night's haze. */
 export const STORM_NIGHT = 0.06;
 const NOON_SUN = new THREE.Color(0xfff1dc);
@@ -161,9 +174,10 @@ function deepenSky(m: THREE.ShaderMaterial): void {
         float low = 1.0 - smoothstep(0.0, 0.35, hgt);
         vec3 tw = vec3(0.025, 0.05, 0.11) * (1.0 - 0.5 * low);                 // twilight blue
         tw += vec3(0.32, 0.13, 0.04) * pow(sunward, 3.0) * low * low;          // afterglow
-        float belt = smoothstep(0.03, 0.09, hgt) * (1.0 - smoothstep(0.09, 0.22, hgt));
+        // Down to the horizon, softly: ending at 2 degrees it left a hard blue band under it (Elena, 14 Nov).
+        float belt = smoothstep(-0.01, 0.07, hgt) * (1.0 - smoothstep(0.09, 0.22, hgt));
         tw += vec3(0.11, 0.06, 0.08) * belt * (1.0 - sunward);                // rose band
-        tw += vec3(0.01, 0.02, 0.05) * (1.0 - smoothstep(0.0, 0.05, hgt)) * (1.0 - sunward); // earth's shadow
+        tw += vec3(0.02, 0.02, 0.035) * (1.0 - smoothstep(0.0, 0.05, hgt)) * (1.0 - sunward); // earth's shadow, a grey-violet blend, not a blue stripe
         retColor += tw * uTwilight;
         // Full night: the stock model leaves a muddy brown glow; a clear night at sea
         // is a deep navy, a shade lighter down by the horizon.
@@ -407,6 +421,7 @@ export class Atmosphere {
     su.rayleigh.value = 1.4 + 1.2 * (1 - smooth(elDeg, 0, 15)); // redder near the horizon
 
     const day = smooth(elDeg, -5, 6); // 0 night .. 1 day
+    const lit = twilightLit(elDeg); // the same, with twilight's glow kept to about -12 degrees
     const dusk = day * (1 - smooth(elDeg, 2, 22)); // low-sun warmth
     const night = 1 - smooth(elDeg, -10, -2);
     // Under thick cloud the sun is blocked and the day goes grey and dim (overcast light is a
@@ -427,7 +442,7 @@ export class Atmosphere {
     this.moonlight = moonlight;
     this.moon.intensity = 0.9 * night * moonlight;
     // Starlight alone is very dim: a moonless night at sea is nearly black.
-    this.hemi.intensity = (0.022 + 0.1 * moonlight) * (1 - day) + 0.5 * day * (1 - 0.3 * overcast);
+    this.hemi.intensity = (0.022 + 0.1 * moonlight) * (1 - lit) + 0.5 * lit * (1 - 0.3 * overcast);
     this.hemi.color.set(0xcfe6ff).lerp(MOON, 1 - day);
     for (const m of this.starMats) m.opacity = night * (1 - storm);
     NAV_NIGHT.value = 1 - smooth(elDeg, -6, 2); // boats' lights show from dusk
@@ -442,16 +457,19 @@ export class Atmosphere {
     this.moonDisc.material.uniforms.uGlow.value = 1.2 + 1.4 * (1 - day);
     this.overcast.material.opacity = 0.88 * smooth(storm, 0.15, 0.9);
     const dark = 0.05 + 0.13 * moonlight; // what the night leaves, moonless .. full moon
-    this.ambient = dark + (1 - dark) * day * (1 - Math.max(0.4 * storm, 0.35 * overcast));
-    this.foamLight = this.ambient - 0.7 * dark * (1 - day); // GUESS: 0.3 of the night's level
+    this.ambient = dark + (1 - dark) * lit * (1 - Math.max(0.4 * storm, 0.35 * overcast));
+    this.foamLight = this.ambient - 0.7 * dark * (1 - lit); // GUESS: 0.3 of the night's level
 
     this.fog.color.copy(DAY_HAZE).lerp(DUSK_HAZE, dusk).lerp(NIGHT_HAZE, 1 - day);
+    // Civil twilight: the far haze takes the sky's low mauve-grey rather than night's navy, which
+    // drew a hard bright blue band between the mauve sky and the sea (Elena, 14 Nov).
+    this.fog.color.lerp(TWILIGHT_HAZE, smooth(elDeg, -12, -3) * (1 - smooth(elDeg, -3, 1)));
     // A blow or a full overcast turns the haze cold grey quickly (Hana): at force 8 the dusk's
     // orange is gone from the murk and stays only in the break under the deck, towards the sun.
     // After dark under cloud there is no twilight left to light the far mist: at a quarter of the grey
     // it stood out as a pale stripe on the horizon, ten times the clear night's haze (Elena, 14 Nov).
     // Now it goes about as dark as a clear night's, so the horizon sits within a shade of the deck.
-    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(STORM_NIGHT + (1 - STORM_NIGHT) * day), Math.max(smooth(storm, 0, 0.6), 0.85 * overcast));
+    this.fog.color.lerp(STORM_HAZE.clone().multiplyScalar(STORM_NIGHT + (1 - STORM_NIGHT) * lit), Math.max(smooth(storm, 0, 0.6), 0.85 * overcast));
     this.fog.near = 300 * (1 - 0.9 * storm);
     this.fog.far = this.horizon * (0.9 - 0.77 * storm);
     // Spindrift in a severe gale closes the view in further (storm.ts sprayVisibility).
@@ -462,7 +480,7 @@ export class Atmosphere {
     this.renderer.toneMappingExposure = this.exposure;
     this.overcast.material.color.copy(this.fog.color);
     this.envSeaU.uHaze.value.copy(this.fog.color);
-    this.envSeaU.uDeep.value.set(0x0a2a44).multiplyScalar(0.15 + 0.85 * day).lerp(this.fog.color, 0.25 * storm);
+    this.envSeaU.uDeep.value.set(0x0a2a44).multiplyScalar(0.15 + 0.85 * lit).lerp(this.fog.color, 0.25 * storm);
 
     // The moon makes the glints at night.
     if (day > 0.15 || this.moonEl < 0) {
@@ -484,7 +502,10 @@ export class Atmosphere {
     // Reflections fade with the light: on a moonless night the boat is barely there (Elena,
     // 12 Nov: glossy panels must not glow as if under a spotlight); a full moon gives some back.
     const nightEnv = 0.03 + 0.17 * moonlight;
-    this.scene.environmentIntensity = nightEnv + (1 - nightEnv) * day;
+    // In twilight the sea and the boat mirror the sky at its own (already dimming) brightness, so they
+    // darken with it: the env map holds the twilight sky, and turning it down too made the sea black under
+    // a still-bright sky (Elena, 14 Nov). Night's low reflections are kept from about -12 degrees.
+    this.scene.environmentIntensity = nightEnv + (1 - nightEnv) * Math.max(day, smooth(elDeg, -12, -3));
 
     // Re-light reflections when the sky has changed enough, a few times a second at most
     // (every few seconds on software graphics, where each re-light costs about a frame).
