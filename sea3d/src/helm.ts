@@ -4362,7 +4362,8 @@ const filmHost: CinemaHost = {
   // The moment on screen: cinematic mode never moves the clock (John, 11 Nov).
   sunEl: () => {
     const r = game.boat;
-    if (!r) return 0;
+    // Practice has no voyage: the sun's height from the sky itself (0 made every practice film a sunset).
+    if (!r) return (Math.asin(THREE.MathUtils.clamp(atmos.sunDir.y, -1, 1)) * 180) / Math.PI;
     const h = Math.min(hour, lastHour(r));
     const [la, lo] = positionAt(r, h);
     return sunPosition(utc(r.start) + (h + page.force.skyHours) * 3600e3, la, lo).el;
@@ -4386,6 +4387,14 @@ const filmHost: CinemaHost = {
   },
 };
 const cine = new Cinema(filmHost);
+// The film frames the boat at controls.target, but sailing by hand the chase camera looks at a point
+// well ahead of her: start from the boat herself (Nina, Practice landfall, 15 Nov: she was out of frame).
+// The film puts the old target back when it stops.
+cine.onStart = () => {
+  if (!model) return;
+  const p = model.root.getWorldPosition(new THREE.Vector3());
+  controls.target.set(p.x, controls.target.y, p.z);
+};
 const sound = new OceanSound();
 /** A knockdown on demand, for the proof frames and tests (the wet look and the deck draining). */
 (window as unknown as { __knock: () => void }).__knock = () => moment({ h: hour, kind: "capsize" } as ReplayEvent);
