@@ -1173,3 +1173,20 @@ export function dressShip(s: THREE.Group, kind: ShipKind, seed: number, anchored
   bow.position.y = -s.userData.lift; // she rides higher in ballast; the wave stays on the sea
   s.getObjectByName("floods")!.visible = anchored && kind !== "fishing";
 }
+
+/**
+ * One ship under way, bow wave and spray showing, for a page to build and draw once behind its
+ * start card, as wildlife.ts standIns() does for the animals (Omar's speed list, rank 19: the first
+ * ship met on the sailing screen built 4 shaders about 2 s after Set sail). Hidden: the page shows it
+ * only while it warms it. Every ship's hull, bow wave and spray share these programs.
+ */
+export function shipStandIn(): THREE.Group {
+  const s = makeShip("fishing", { value: 1 });
+  s.name = "ship_stand_in";
+  dressShip(s, "fishing", 0.5, false, 6);
+  const bow = s.getObjectByName("bowWave")!;
+  bow.visible = true;
+  bow.getObjectByName("bowSpray")!.visible = true;
+  s.visible = false;
+  return s;
+}

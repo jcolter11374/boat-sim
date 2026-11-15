@@ -1,0 +1,34 @@
+{
+  "about": "Speed guard baseline (tests/speedguard.mjs), measured on the PR runner (Chromium with SwiftShader software graphics, 1280x720, Low) on main plus #615, with the Blender boats the runner builds; a local build without them counts fewer programs and draws. A count may go up by its margin: add (a number) or share (a fraction of the baseline), whichever is larger. To update when an increase is intended: npm run build && npm run test:speed -- --update, or copy the counts the failed quick job printed.",
+  "margins": {
+    "default": {
+      "add": 2,
+      "share": 0.05
+    },
+    "sailProgramsAfterSetSail": {
+      "add": 0
+    },
+    "titleDraws": {
+      "add": 3,
+      "share": 0.1
+    },
+    "sailDraws": {
+      "add": 3,
+      "share": 0.1
+    },
+    "voyageDraws": {
+      "add": 3,
+      "share": 0.1
+    }
+  },
+  "counts": {
+    "titlePrograms": 56,
+    "titleDraws": 78,
+    "sailProgramsAfterSetSail": 0,
+    "sailPrograms": 100,
+    "sailDraws": 58,
+    "voyagePrograms": 67,
+    "voyageDraws": 52
+  },
+  "measured": "2026-11-14"
+}

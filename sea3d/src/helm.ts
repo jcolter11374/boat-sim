@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { setRainOnSea } from "./rainRings";
 import { FOAM_LAMP_UNIFORMS, NAV_NIGHT } from "./boats/navlights";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Atmosphere, sunPosition } from "./atmosphere";
+import { Atmosphere, softwareGraphics, sunPosition } from "./atmosphere";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { forcedSea } from "./seaTest";
 import { seaUniforms } from "./seaSurface";
@@ -25,6 +25,7 @@ import { Clouds, cloudFromSun, fogChance } from "./clouds";
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
 import { Traffic } from "./traffic";
+import { shipStandIn } from "./boats/ships";
 import { standIns, Wildlife } from "./wildlife";
 import { spindrift as sprayFor, sprayVisibility } from "./storm";
 import { Rain, rainFromRate, rainFromStorm } from "./rain";
@@ -108,7 +109,9 @@ const KN = 1.94384;
 const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : iso + "Z");
 
 // ---------- 3D ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+// No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
+// times (as on the title, #608); graphics cards keep it.
+const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
@@ -181,6 +184,8 @@ void Wildlife.load().then((w) => {
 // Hidden: one of each animal, built and drawn behind the Set sail card (warmShaders), so the first
 // animals met don't build their shaders mid-voyage.
 scene.add(standIns());
+// And one ship: the first ship met built 4 shaders a couple of seconds after Set sail.
+scene.add(shipStandIn());
 const spray = new Spindrift(quality === "high" ? 5000 : 2000);
 scene.add(spray.points);
 const sprayBuf = new THREE.Vector2();
@@ -514,6 +519,8 @@ const page = {
   /** The picture's level, where it came from, and the timed median frame (ms) if it was judged (for tests). */
   quality: qstat,
   ready: false,
+  /** Her boat is on screen (behind the Set sail card she waits for her shaders first; for tests). */
+  boatShown: false,
   /** Which mode the one sailing screen is in (M2): you at the helm, a recorded voyage, or a race. */
   view: (WATCH ? "watch" : RACE ? "race" : "helm") as "helm" | "watch" | "race",
   /** A race's two boats (their names, the helm's keys for their models) and its launch, once it has started. */
@@ -4672,6 +4679,7 @@ function hideStandIn(): void {
     fadedRoot = model.root;
     startFade(model.root);
   }
+  page.boatShown = show;
   if (model.root.visible === show) return;
   model.root.visible = show;
   if (wake) wake.points.visible = show;
