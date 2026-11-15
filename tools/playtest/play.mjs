@@ -5496,6 +5496,37 @@ const CHECKS = {
       return out.join("; ");
     },
   },
+  // Elena (#636 drill mark, #635/#633 cloud banks): a Drills practice with the First 31.7 on Low and
+  // High at 1280: her mast (no orange block), the drill mark far off, and the sky. Frames look-drill-*.
+  "practice-drill": {
+    manual: true,
+    path: "",
+    run: async (page) => {
+      const browser = page.context().browser();
+      const out = [];
+      const send = (path) => { const b64 = readFileSync(path).toString("base64"); console.log(`LOOK-BEGIN ${path}`); for (let k = 0; k < b64.length; k += 4000) console.log(b64.slice(k, k + 4000)); console.log(`LOOK-END ${path}`); };
+      for (const q of ["low", "high"]) {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, serviceWorkers: "block" });
+        const p = await ctx.newPage();
+        await p.goto(`${SITE}helm.html?practice&quality=${q}&hour=11`, { waitUntil: "load", timeout: 3 * MIN });
+        await p.waitForFunction(() => window.__helm && window.__helm.frames > 10, null, { timeout: 6 * MIN }).catch(() => {});
+        await p.waitForFunction(() => document.querySelector("#ss-course-opts .ss-pill"), null, { timeout: 3 * MIN }).catch(() => {});
+        const picked = await p.evaluate(() => { const b = [...document.querySelectorAll("#ss-course-opts .ss-pill")].find((e) => /drill/i.test(e.textContent)); b?.click(); return b ? b.textContent.trim() : "no Drills pill"; });
+        await p.waitForFunction(() => !window.__helm?.busy, null, { timeout: 3 * MIN }).catch(() => {});
+        const boat = await p.evaluate(() => document.querySelector("#ss-card")?.innerText.match(/Beneteau[^\n]*|Pearson[^\n]*/)?.[0] ?? "?");
+        await p.evaluate(() => document.getElementById("go")?.click());
+        await p.waitForFunction(() => window.__wheel?.on, null, { timeout: 3 * MIN }).catch(() => {});
+        await p.waitForTimeout(10000);
+        const st = await p.evaluate(() => ({ wheel: !!window.__wheel?.on, cover: +(window.__helm.cine?.host?.cloud?.() ?? -1).toFixed(2), mark: document.querySelector("#next, .next-mark, #mark")?.textContent?.trim()?.slice(0, 80) ?? "" }));
+        const path = `look-drill-${BROWSER}-${q}.jpg`;
+        if (await jpeg(p, path)) send(path);
+        out.push(`${q}: ${picked}, ${boat}, at the wheel ${st.wheel}, cloud ${st.cover}, ${st.mark}`);
+        await ctx.close();
+      }
+      console.log(`DRILL ${BROWSER}: ${out.join(" || ")}`);
+      return out.join("; ");
+    },
+  },
   "look-marks": {
     manual: true,
     path: "helm.html?practice",
