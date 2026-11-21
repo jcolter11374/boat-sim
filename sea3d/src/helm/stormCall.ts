@@ -6,6 +6,8 @@
 //
 // Pure rules, no page: tests/stormCall.test.ts.
 
+import type { Heading } from "./game";
+
 /** Turning away is a choice only if its worst waves over the look are this much lower. */
 export const DODGE_CALMER_M = 0.75;
 
@@ -21,4 +23,34 @@ export function stormKeep(hsMax: (number | null | undefined)[]): boolean[] {
 /** When only "hold course" is left there is nothing to ask: a note, and she holds course. */
 export function stormNote(intro: string): string {
   return `${intro} The forecast shows no calmer way round, so she holds course.`;
+}
+
+// "Slow down and ride it out" ends when the blow has passed (#654). It used to leave the boat at
+// 10% power for the rest of the crossing, with only a tooltip saying "turn them back up after the
+// blow": in the live play-through of 21 Nov 2026 the Orders panel then read "about 583 days to go
+// at that pace". Now the order and power from before the call come back once the weather has
+// passed, as the night call's "ease off till sunrise" does in the morning (helm/powerCall.ts).
+
+/** The power "slow down and ride it out" sets. */
+export const SLOW_POWER = 0.1;
+
+/** What to go back to after riding it out: the order and power from before, and the heading the
+ * slow order steers (`to`: the planned route when she was on the autopilot, else her own heading). */
+export interface Slowed {
+  order: Heading;
+  power: number;
+  to: Heading;
+}
+
+/** Once the blow has passed: the order and power to go back to, or null to leave things alone.
+ * She goes back only if she is still sailing the slow order as it was given; any order of the
+ * player's own since then (a new heading, more or less power) stands. */
+export function afterBlow(slowed: Slowed | null, order: Heading, power: number): { order: Heading; power: number } | null {
+  if (!slowed) return null;
+  return order === slowed.to && Math.abs(power - SLOW_POWER) < 1e-6 ? { order: slowed.order, power: slowed.power } : null;
+}
+
+/** The "it has passed" note's last sentence when the power comes back. */
+export function backWords(back: { order: Heading; power: number }): string {
+  return back.order === "auto" ? "She's back on the autopilot, as before." : `Back to ${Math.round(back.power * 100)}% power, as before.`;
 }

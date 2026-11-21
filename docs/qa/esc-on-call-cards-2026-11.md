@@ -1,0 +1,85 @@
+# Esc on the "Your call" cards (issue #654), 21 Nov 2026
+
+## What was wrong
+
+The live play-through of 21 Nov found that pressing Esc on the big-waves card left the boat at 10%
+power for the rest of the crossing (1,456 km behind the ghost at day 53; the Orders panel read
+"about 583 days to go at that pace"). The card's foot said "Esc for the autopilot".
+
+Three separate faults:
+
+1. **Esc picked by the words on the button.** It looked for a button with "autopilot" in its text
+   and, finding none, pressed the last button. On the storm cards (big waves, gale) no button says
+   "autopilot" ("Hold course (same as the ghost)"), so Esc pressed the last one: "Slow down to 10%
+   power", or "Turn south-east" on a boat with no motors.
+2. **"Ride it out" never ended.** Slowing down set 10% power and left it there. Only a tooltip said
+   to turn the motors back up.
+3. **The Results card's "Your calls" list said "ahead of" for a gain.** Each line gives the change
+   in the lead since that call, but worded it as a position: "Day 8.2 · Kept 10% power · 122 km
+   ahead of the ghost" for a boat that was 122 km behind at the call and level at the finish.
+
+## Every card, checked
+
+What Esc pressed before, and what it presses now (`sea3d/src/helm/escChoice.ts`):
+
+| Card | Options | Esc before | Esc now |
+|---|---|---|---|
+| Big waves or gale, on the autopilot | hold course, (turn away), slow down | last: slow down to 10% (**wrong**) | 1, hold course: she stays on the autopilot |
+| Big waves or gale, steering yourself | hold course, (turn away), slow down | last: slow down to 10% (**wrong**) | 1, hold course: nothing changes |
+| Navigator's check (route), on the autopilot, when the best line is about the autopilot's | "Take 095° (about what the autopilot does)", stay on the autopilot | 1: took her off the autopilot onto a fixed heading (**wrong**) | 2, stay on the autopilot |
+| Navigator's check (route), steering yourself, same case | "Take 095° (about what the autopilot does)", keep yours | 1: a new heading (**wrong**) | 2, keep yours |
+| Navigator's check (route), other cases | take it, keep yours, the autopilot | the autopilot | the same |
+| Navigator's check (more power) | push, stay or keep your power | last: stay or keep (right, by luck of the order) | the same, by rule |
+| Night battery | ease off, keep the power up, the autopilot | the autopilot | the same |
+| Gulf Stream | ride it, cut across, the autopilot | the autopilot | the same |
+| First chase | bend, the autopilot | the autopilot | the same |
+| A challenge's big call | the challenge's own options | "autopilot" in the text, else the last | the autopilot option if there is one, else the first |
+
+The rule now uses what each option does, not its words: the option that puts her on the autopilot;
+if the card has none, the option that changes nothing; if neither, the first. The card's foot names
+the option by number: "Keys 1-2, or Esc for the autopilot (1)." or "Esc to carry on as you are (2)."
+
+## "Ride it out" now ends
+
+Once the blow has passed (the same test the "The big waves have passed" note uses), the order and
+power from before the call come back, and the note says so: "She's back on the autopilot, as
+before." or "Back to 40% power, as before." If the player has given an order of their own in the
+meantime (a new heading, another power), that stands and nothing is changed. This is the same
+behaviour as the night card's "ease off till sunrise" (`sea3d/src/helm/stormCall.ts`, `afterBlow`).
+
+Nothing in the simulator changed: both are ordinary orders, sailed in the real weather.
+
+## "Your calls" wording
+
+"gained 122 km on the ghost", "lost 40 km to the ghost", "no gain or loss on the ghost"
+(`sea3d/src/helm/story.ts`, `callLines`).
+
+## How it was measured
+
+`sea3d/tools/qa/esc-on-cards.mjs` plays the default crossing (23 April 2020, our kayak, "You"
+steering) in a headless browser at a day a second for 12 days, pressing Esc on every card, and
+prints each card, its foot, and the order before and after. Software graphics in a cloud sandbox;
+the cards that come up vary a little from run to run with how far the simulator is ahead of the
+picture, as they do for a player.
+
+| | Before (main, 405fe39) | After (this change) |
+|---|---|---|
+| Esc on the big-waves card (day 4.3 to 4.7) | "Autopilot, 25% power" became "The route, 10% power" | stays "Autopilot, 25% power" |
+| Next card | day 8.7: "At 50% power she'd go faster than at your 10%"; Esc kept 10% | none of that kind |
+| Order at day 12 | The route, 10% power | Autopilot, 25% power |
+| Script result | FAIL (exit 1) | pass |
+
+With `--slow` (key 2, "Slow down to 10% power and ride it out", on the day 4.7 card): she slowed,
+made 23 km in the next day, and at day 5.7 the note read "The big waves have passed. You slowed
+down to ride it out: you were knocked flat once, and made 23 km towards the finish since. She's
+back on the autopilot, as before." Order at day 12: Autopilot, 25% power.
+
+One thing to know: the order strip shows the simulator's order, and the simulator runs ahead of the
+picture. So after "ride it out" the strip can read "Autopilot" again a moment before the "passed"
+note appears. All orders have always shown this way; it is not new here.
+
+Unit tests: `sea3d/tests/escChoice.test.ts` (the Esc rule for each card above, the foot's words,
+and the ride-it-out rule) and the calls wording in `sea3d/tests/story.test.ts`. 635 unit tests pass.
+
+Not measured: a real graphics card (not needed, no drawing changed) and a whole crossing to the
+finish with Esc on every card.
