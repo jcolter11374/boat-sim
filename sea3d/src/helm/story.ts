@@ -145,7 +145,7 @@ export interface Call {
   ghost?: boolean;
 }
 
-/** "Day 2 · Rode the Gulf Stream · 120 km ahead of the ghost": what each call was worth, until the next one or the end. */
+/** "Day 2 · Rode the Gulf Stream · gained 120 km on the ghost": what each call was worth, until the next one or the end. */
 export function callLines(calls: Call[], endLead: number, asked = true): string[] {
   // No card ever came (the voyage ended first, or nothing was worth asking): no telling-off (Rosa's feel write-up, 14 Nov).
   if (!calls.length) return [asked ? "You let the autopilot sail. Next time, make a call when the clock stops." : "No call came up before the voyage ended."];
@@ -153,7 +153,9 @@ export function callLines(calls: Call[], endLead: number, asked = true): string[
     const gain = Math.round((i + 1 < calls.length ? calls[i + 1].lead : endLead) - k.lead);
     // The ghost's own choice and no gap opened: say so, not "level with the ghost", which read as "your call did nothing".
     if (k.ghost && Math.abs(gain) < 1) return `Day ${d1(k.day)} · ${k.chose} (same as the ghost)`; // Elena, 14 Nov
-    const worth = Math.abs(gain) < 1 ? "level with the ghost" : `${Math.abs(gain).toLocaleString("en-US")} km ${gain > 0 ? "ahead of" : "behind"} the ghost`; // no signs (Elena)
+    // The change since the call, said as a change (#654): "122 km ahead of the ghost" was printed for a boat
+    // that was 122 km BEHIND at the call and caught up by the finish.
+    const worth = Math.abs(gain) < 1 ? "no gain or loss on the ghost" : gain > 0 ? `gained ${gain.toLocaleString("en-US")} km on the ghost` : `lost ${(-gain).toLocaleString("en-US")} km to the ghost`; // no signs (Elena)
     return `Day ${d1(k.day)} · ${k.chose} · ${worth}`;
   });
   // The gamble's real odds (Maya, 14 Nov): over the six launch days a push's forecast gain came to
