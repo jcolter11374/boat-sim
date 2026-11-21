@@ -966,8 +966,8 @@ function showOrder(): void {
     order === "auto"
       ? WATCH ? "The autopilot is steering." : "Autopilot steering, like the ghost"
       : order === "finish"
-        ? "Straight at the finish"
-        : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+        ? "Aiming at the finish"
+        : order === "route" ? "Following the route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
   $("c-orderv").textContent = linkCut ? "No link" : document.body.classList.contains("at-wheel") ? "At the wheel" : order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
   $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
