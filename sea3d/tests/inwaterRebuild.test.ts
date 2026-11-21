@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { putInWater } from "../src/boats/inWater";
+import { putInWater, sameWater } from "../src/boats/inWater";
 
 // A boat built again from the same loaded model shares its materials with the one before, and a
 // material is patched for the water only once. The rebuilt boat must still drive the uniforms that
@@ -37,4 +37,26 @@ test("a boat with materials of her own drives only hers", () => {
   two.update(look(-0.6));
   assert.equal(compiled(a).uniforms.uSeaPlaneY.value, 0.3);
   assert.equal(compiled(b).uniforms.uSeaPlaneY.value, -0.6);
+});
+
+test("a boat rebuilt at a higher quality on materials patched on Low still needs, and moves, the sea plane", () => {
+  const shared = new THREE.MeshStandardMaterial();
+  putInWater(hull(shared), true).update(look(0.3));
+  const sh = compiled(shared);
+  const second = putInWater(hull(shared), false);
+  assert.equal(second.needsPlane, true);
+  second.update(look(-0.6));
+  assert.equal(sh.uniforms.uSeaPlaneY.value, -0.6);
+  assert.equal(putInWater(hull(new THREE.MeshStandardMaterial()), false).needsPlane, false);
+});
+
+test("a boat built on a painted copy of a patched material drives the uniforms the copy's shader reads", () => {
+  const orig = new THREE.MeshStandardMaterial();
+  putInWater(hull(orig), true).update(look(0.3));
+  const copy = orig.clone(); // as paintApply.ts copyOf: the hook comes along, so the shader reads the original's uniforms
+  copy.onBeforeCompile = orig.onBeforeCompile;
+  sameWater(copy, orig);
+  const sh = compiled(copy);
+  putInWater(hull(copy), true).update(look(-0.6));
+  assert.equal(sh.uniforms.uSeaPlaneY.value, -0.6);
 });
