@@ -5,6 +5,7 @@
  */
 import * as THREE from "three";
 import { loadPaint } from "../myboat";
+import { sameWater } from "./inWater";
 import { BUILT, PAINTED_PARTS, paintOf, repaintHull, retint, type PaintForm, type PaintScheme } from "./paint";
 
 /** Each painted mesh's own materials, to give back (not in userData: a clone would copy them as text). */
@@ -54,6 +55,7 @@ function copyOf<M extends THREE.Material>(m: M): M {
   const c = m.clone() as M;
   c.onBeforeCompile = m.onBeforeCompile;
   c.customProgramCacheKey = m.customProgramCacheKey;
+  sameWater(c, m); // her copy reads the same water uniforms as the original (inWater.ts)
   return c;
 }
 
