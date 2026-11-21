@@ -154,6 +154,10 @@ export const PAGES = [
     path: "?quality=low&title=0",
     drawing: () => (window.__sea3d?.frames ?? 0) > 10,
     frames: () => window.__sea3d.frames,
+    // Printed when the picture is judged wrong: where each boat is in the water (a NaN or a huge
+    // heave hides her), the title hero and the page's classes (18-20 Nov: "no boat in view" on the
+    // scheduled run only, three days running, with the site unchanged and green by hand).
+    state: () => JSON.stringify({ frames: window.__sea3d.frames, hero: window.__sea3d.hero, quality: window.__sea3d.quality, boats: window.__sea3d.boats, body: document.body.className }),
     // The sea selector rebuilds the sea at the new wave height.
     // The title screen hides the sea panel until "Just watch the sea", which sits under the
     // title's "More" (older deploys: straight on the title, or no title at all).
@@ -251,6 +255,7 @@ export async function checkPage(page, base, p, { readyMs = 120000, startMs = 300
       if (shots) await writeFile(`live-judged-${p.name.replace(/\W+/g, "-")}.png`, px.png).catch(() => {});
       const bad = judge(px);
       if (bad.length) bad.push(describe(px));
+      if (bad.length && p.state) bad.push(`page state ${await page.evaluate(p.state).catch((e) => String(e))}`);
       problems.push(...bad);
     }
     const was = p.before ? await page.evaluate(p.before) : undefined;
