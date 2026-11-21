@@ -962,6 +962,10 @@ function watchLook(): void {
 function showOrder(): void {
   compass.set({ order });
   $("b-wheel").hidden = !wheelOffered() || wheel.on;
+  // From base the bold line is an order, not what she's doing: it reaches her at the next check-in, once sent.
+  $("ordernow").textContent = mode === "base" ? (draft ? "Your order (not sent yet)" : "Last order sent") : "Steering now";
+  // On the autopilot or the route the order is wherever the bow points, so the two lines are one: don't name a line that can't be seen.
+  $("dk-bow").hidden = order === "auto" || order === "route";
   $("ordertext").textContent =
     order === "auto"
       ? WATCH ? "The autopilot is steering." : "Autopilot steering, like the ghost"

@@ -18,10 +18,28 @@ was checked on a local build of main (f596eba) at 1400x900.
 - The bold line uses the button's own words: "Aiming at the finish" (was "Straight at the
   finish") and "Following the route" (was "Following the autopilot's route"). "Steering 075°"
   and the autopilot line are unchanged.
-- "Aim at the finish" has a hover tip like the other two: "Points her straight at the finish
-  line".
-- A key under the compass names its four lines: your order, the bow, the finish, the wind.
+- "Aim at the finish" has a hover tip like the other two: "Aims at the finish, and keeps
+  re-aiming as she goes".
+- A key under the compass names its lines: your order, the bow, the finish, the wind.
   When watching a recorded voyage the existing three-line key is used and this one is hidden.
+
+## After an independent review (21 Nov)
+
+A fresh reviewer read the change. Fixed from its findings:
+
+- **"Steering now" was untrue when steering from home by satellite.** There the bold line is
+  an order that reaches the boat at the next check-in, and only once sent. The heading now
+  reads "Your order (not sent yet)" or "Last order sent" in that mode.
+- **The key named a white "bow" line that can't be seen on the autopilot or the route**,
+  where the order is wherever the bow points and the orange line covers the white one. The
+  key drops "the bow" in those two states.
+- **The first hover tip overclaimed** ("Points her straight at the finish line"): a sailboat
+  tacks towards it, and from home the order is followed as a one-point route.
+- The key now dims with the rest of the panel when the satellite link is cut.
+
+Left alone: "Steering now / Steering 075°" says "steering" twice, but the playtest reads
+"Steering 075°", so that wording stays. The panel is about 50 px taller; on a phone the
+drawer scrolls, and that was not measured at phone size here.
 
 ![The orders panel](screens/set-sail-leftovers-2026-11-21/orders.png)
 
