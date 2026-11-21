@@ -44,13 +44,40 @@ then a text table, with no way on to sailing the boat you had just built.
 ## How it was checked
 
 - `npm run test:unit`: 638 pass, including the new `tests/launchChart.test.ts` (every
-  published planned-kayak voyage fits on the chart; only a finish gets a tick; the gauge
+  published voyage starts and ends on the chart; only a finish gets a tick; the gauge
   never overfills).
 - `SMOKE_PART=2 npm test`: passes. New steps: a "Sail it yourself" button after a test; the
   Rev C test draws its voyages on the chart and shows gauges; pressing the button opens
   helm.html with that exact design saved as the player's boat (hash, base, parts) and the
-  picture quality carried over.
+  picture quality carried over; a part swapped mid-test shows no result and no button.
 - By eye at 1400x900 on a local build, with the grid's results (the screenshot above).
+
+## After an independent review (21 Nov)
+
+A fresh reviewer read the change. Fixed from its findings:
+
+- **A part swapped while the test was running** left the old design's result under the new
+  design, with a "Sail it yourself" button that would have saved and sailed the new, untested
+  one. The test now remembers which design it is testing. If the design on the stand is a
+  different one when the test ends, no result is shown; the card says "You changed the boat
+  while she was being tested ... Press Test it again". The button also re-checks before saving.
+  A track still being fetched for an earlier test can no longer land on a later chart.
+- **After a crash of the simulator in the browser** the result comes from our servers, but
+  tracks already drawn live stayed. The chart now keeps only voyages that are in the final
+  result with the same ending.
+- **Two published voyages ended east of the chart's edge** (the Pearson 31-2 with a wind vane,
+  lost in the Bay of Biscay at 1.9 W), so they got no cross. The chart now runs to 0 degrees,
+  and the unit test checks every published voyage (486 under `public/boatyard`, plus
+  `public/voyages`), not one build.
+- **The orange tracks were called "Yours" even when they were the closest tested build's**
+  (results from our servers for a design they haven't sailed). The key and the line under the
+  chart now say "Closest tested boat" then. The browser's own runs are always yours.
+- Each voyage file was fetched twice on the servers' path; now once. The "To compare" key
+  only shows when there is a boat to compare with.
+
+Left for later: if the browser won't store anything (private mode), the boat is kept for
+this page only, so the sailing screen opens with our kayak; and the tally and status lines
+are not announced to screen readers as they change.
 
 ## Not checked here
 

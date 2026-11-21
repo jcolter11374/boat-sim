@@ -9,7 +9,7 @@ test("the chart's corners and the finish land where they should", () => {
   assert.deepEqual(project(CHART_BOX.latMax, CHART_BOX.lonMin, 300, 112), [0, 0]);
   assert.deepEqual(project(CHART_BOX.latMin, CHART_BOX.lonMax, 300, 112), [300, 112]);
   const [x, y] = project(FINISH.lat, FINISH.lon, 300, 112);
-  assert.ok(x > 250 && x < 300 && y > 40 && y < 80, `finish at ${x}, ${y}`); // far right, mid height: west of Lisbon
+  assert.ok(x > 235 && x < 300 && y > 40 && y < 80, `finish at ${x}, ${y}`); // far right, mid height: west of Lisbon
 });
 
 test("a track keeps its good points only", () => {
@@ -20,14 +20,19 @@ test("a track keeps its good points only", () => {
   assert.deepEqual(trackPoints({ lat: "x", lon: [] } as never, 300, 112), []);
 });
 
-test("every published kayak voyage fits on the chart, start to end", () => {
-  const dir = "public/boatyard/k-p25";
-  for (const f of readdirSync(dir)) {
-    const rp = JSON.parse(readFileSync(`${dir}/${f}`, "utf8"));
-    const pts = trackPoints(trackOf(rp), 300, 112);
-    assert.ok(pts.length > 1, f);
-    for (const [x, y] of pts) assert.ok(x >= 0 && x <= 300 && y >= 0 && y <= 112, `${f}: ${x}, ${y} is off the chart`);
+test("every published voyage starts and ends on the chart, so its tick or cross can be seen", () => {
+  let n = 0;
+  for (const root of ["public/boatyard", "public/voyages"]) {
+    const files = readdirSync(root, { recursive: true, encoding: "utf8" }).filter((f) => /\d{4}-\d\d-\d\d[^/]*\.json$/.test(f));
+    for (const f of files) {
+      const rp = JSON.parse(readFileSync(`${root}/${f}`, "utf8"));
+      const pts = trackPoints(trackOf(rp), 300, 105);
+      if (!pts.length) continue;
+      n++;
+      for (const [x, y] of [pts[0], pts[pts.length - 1]]) assert.ok(x >= 0 && x <= 300 && y >= 0 && y <= 105, `${root}/${f}: ${x.toFixed(0)}, ${y.toFixed(0)} is off the chart`);
+    }
   }
+  assert.ok(n > 100, `only ${n} voyages found`);
 });
 
 test("a replay without positions has no track", () => {
@@ -50,6 +55,8 @@ test("the line under the chart counts the player's voyages in plain words", () =
   assert.match(tally([], 6), /^Your 6 voyages will appear/);
   assert.equal(tally([{ who: "yours", outcome: "arrived" }, { who: "yours", outcome: "capsized" }, { who: "planned", outcome: "arrived" }], 6), "2 of 6 of your voyages drawn: 1 made it, 1 didn't.");
   assert.equal(tally([{ who: "yours", outcome: "arrived" }], 1), "1 of your voyages drawn: 1 made it.");
+  // Another build's voyages are never called the player's.
+  assert.equal(tally([{ who: "yours", outcome: "arrived" }], 1, false), "1 of the closest tested boat's voyages drawn: 1 made it.");
 });
 
 test("the gauge fills in step with the odds and never overfills", () => {

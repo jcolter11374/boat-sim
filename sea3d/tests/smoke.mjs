@@ -533,6 +533,12 @@ try {
     // #332: the test draws its voyages on a chart, and "Sail it yourself" takes this very design to the sailing screen as the player's boat.
     await page.evaluate(() => window.__yard.setBase("revc"));
     await page.evaluate(() => window.__yard.pick("rudder", "single"));
+    // A part swapped while the test runs: the result was for the old boat, so it isn't shown and there is nothing to "sail".
+    await page.evaluate(() => { document.querySelector("#launch").click(); window.__yard.pick("rudder", "twin"); });
+    await page.waitForFunction(() => !document.querySelector("#launch").disabled && window.__yard.changedMidTest, null, { timeout: 30000 }).catch(() => fail("boatyard: a design changed mid-test still got the old design's result"));
+    const mid = await page.evaluate(() => ({ btn: !!document.querySelector("#sail-it"), text: document.querySelector("#result").textContent, charted: window.__yard.charted() }));
+    if (mid.btn || mid.charted || !/Test it/.test(mid.text)) fail(`boatyard: after a mid-test change: ${JSON.stringify(mid)}`);
+    await page.evaluate(() => window.__yard.pick("rudder", "single"));
     await page.click("#launch");
     await page.waitForFunction(() => window.__yard.launch && !document.querySelector("#launch").disabled && document.querySelector("#result #sail-it"), null, { timeout: 30000 }).catch(() => fail("boatyard: no \"Sail it yourself\" button after the Rev C test"));
     await page.waitForFunction(() => window.__yard.charted() >= 1, null, { timeout: 30000 }).catch(() => fail("boatyard: the test drew no voyages on its chart"));

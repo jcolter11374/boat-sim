@@ -34,6 +34,9 @@ export interface LaunchResult {
   note: string;
   odds: LaunchOdds | null;
   replays: LaunchReplay[];
+  /** True when the voyages are this exact design's own (the browser's runs always are, whatever build the odds
+   *  come from); unset means "as `exact`". */
+  ownVoyages?: boolean;
   /** A second, smaller result shown folded away under the main one (the browser's own
    *  six-launch run, when the server grid has the figure to trust; Omar's sweep). */
   detail?: { summary: string; text: string };
@@ -368,6 +371,7 @@ export class SandboxLauncher implements Launcher {
               "We haven't tested this boat on our computers yet, so treat it as a rough guide.",
           }),
       credits: SANDBOX_CREDITS,
+      ownVoyages: true,
       odds: grid?.odds ?? null,
       replays,
       fingerprints: runs.map((r) => r.fingerprint),

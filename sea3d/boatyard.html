@@ -58,10 +58,11 @@
   #result .credits { font-size: 10.5px; opacity: .8; }
   /* #332: the test's voyages on a chart, the odds as gauges, and the way on to sailing her. */
   .launch-chart { margin: 0 0 8px; }
-  .launch-chart canvas { display: block; width: 100%; aspect-ratio: 75 / 28; border-radius: 8px; border: 1px solid var(--line); background: #0e2238; }
+  .launch-chart canvas { display: block; width: 100%; aspect-ratio: 80 / 28; border-radius: 8px; border: 1px solid var(--line); background: #0e2238; }
   .chart-key { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; font-size: 11px; }
   .chart-key .k { display: inline-block; width: 12px; height: 2px; margin-right: 4px; vertical-align: 3px; background: var(--orange); }
   .chart-key .k.planned { background: #8fa9c4; }
+  .chart-key [hidden] { display: none; }
   .chart-key .ok { color: var(--good); } .chart-key .no { color: var(--bad); }
   .gauge { position: relative; max-width: 130px; }
   .gauge svg { display: block; width: 100%; }

@@ -13,7 +13,7 @@ export interface Track {
 export type Who = "yours" | "planned";
 
 /** The part of the Atlantic the chart shows (the land mask covers 25..62 N, -82..5 E). */
-export const CHART_BOX = { latMin: 28, latMax: 56, lonMin: -80, lonMax: -5 } as const;
+export const CHART_BOX = { latMin: 28, latMax: 56, lonMin: -80, lonMax: 0 } as const;
 /** The finish: the target on the race's eastern line, west of Lisbon (runner/arrival.py). */
 export const FINISH = { lat: 39.5, lon: -13.5 } as const;
 
@@ -43,12 +43,14 @@ export const endMark = (outcome: string): "tick" | "cross" => (outcome === "arri
 export const voyageKey = (who: Who, start: string): string => `${who}|${start.slice(0, 16)}`;
 
 /** The sentence under the chart while it fills, and once it has. */
-export function tally(done: { who: Who; outcome: string }[], total: number | null): string {
+export function tally(done: { who: Who; outcome: string }[], total: number | null, own = true): string {
   const mine = done.filter((d) => d.who === "yours");
   if (!mine.length) return total ? `Your ${total} voyages will appear here as each one ends.` : "Each voyage appears here as it ends.";
   const made = mine.filter((d) => d.outcome === "arrived").length;
   const of = total && total > mine.length ? ` of ${total}` : "";
-  return `${mine.length}${of} of your voyages drawn: ${made} made it${mine.length - made ? `, ${mine.length - made} didn't` : ""}.`;
+  // Voyages of another build (the closest one our servers have tested) are never called the player's.
+  const whose = own ? "your voyages" : "the closest tested boat's voyages";
+  return `${mine.length}${of} of ${whose} drawn: ${made} made it${mine.length - made ? `, ${mine.length - made} didn't` : ""}.`;
 }
 
 // ---------- the gauge ----------
@@ -114,6 +116,11 @@ export class LaunchChart {
   private w = 268;
   private h = 100;
   private still: boolean;
+  private own = true;
+  /** Goes up each time the chart is cleared: a track still being fetched for an earlier test checks it and stays off. */
+  gen = 0;
+  private keyYours = document.createElement("span");
+  private keyPlanned = document.createElement("span");
 
   constructor(landUrl = "./land.png") {
     this.el.className = "launch-chart";
@@ -121,8 +128,13 @@ export class LaunchChart {
     this.line.className = "muted";
     const key = document.createElement("div");
     key.className = "muted chart-key";
-    key.innerHTML =
-      '<span><i class="k yours"></i>Yours</span><span><i class="k planned"></i>To compare</span><span><b class="ok">&#10003;</b> made it</span><span><b class="no">&#10007;</b> didn\'t</span>';
+    const dash = (cls: string) => Object.assign(document.createElement("i"), { className: `k ${cls}` });
+    this.keyYours.append(dash("yours"), "Yours");
+    this.keyPlanned.append(dash("planned"), "To compare");
+    this.keyPlanned.hidden = true; // until there is a boat to compare with on the chart
+    const ends = document.createElement("span");
+    ends.innerHTML = '<b class="ok">&#10003;</b> made it &nbsp;<b class="no">&#10007;</b> didn\'t';
+    key.append(this.keyYours, this.keyPlanned, ends);
     this.el.append(this.canvas, key, this.line);
     this.still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const img = new Image();
@@ -140,10 +152,32 @@ export class LaunchChart {
     this.say();
   }
 
+  /** Whose voyages the orange tracks are: the player's own design (true), or the closest build our servers have tested. */
+  whose(own: boolean): void {
+    this.own = own;
+    this.keyYours.lastChild!.textContent = own ? "Yours" : "Closest tested boat";
+    this.say();
+  }
+
+  /**
+   * Keep only the voyages of `who` that are in the final result, with the same ending. After a
+   * crash mid-run the result comes from our servers, and a track drawn live from the browser's
+   * own run must not stand beside a table that says otherwise.
+   */
+  keep(who: Who, result: { start: string; outcome: string }[]): void {
+    const ok = new Map(result.map((r) => [voyageKey(who, r.start), r.outcome]));
+    for (const [k, d] of [...this.drawn]) if (d.who === who && ok.get(k) !== d.outcome) this.drawn.delete(k);
+    this.say();
+    this.paint();
+  }
+
   /** Start again for a new test. */
   clear(): void {
+    this.gen++;
     this.drawn.clear();
     this.total = null;
+    this.own = true;
+    this.keyYours.lastChild!.textContent = "Yours";
     this.say();
     this.paint();
   }
@@ -168,11 +202,12 @@ export class LaunchChart {
 
   private say(): void {
     const done = [...this.drawn.values()];
-    this.line.textContent = tally(done, this.total);
+    this.line.textContent = tally(done, this.total, this.own);
+    this.keyPlanned.hidden = !done.some((d) => d.who === "planned");
     const mine = done.filter((d) => d.who === "yours");
     this.canvas.setAttribute(
       "aria-label",
-      `Chart of the North Atlantic with the test voyages' tracks. ${mine.length ? `${mine.filter((d) => d.outcome === "arrived").length} of ${mine.length} of yours reached the finish.` : "None drawn yet."}`,
+      `Chart of the North Atlantic with the test voyages' tracks. ${mine.length ? `${mine.filter((d) => d.outcome === "arrived").length} of ${mine.length} ${this.own ? "of yours" : "of the closest tested boat's"} reached the finish.` : "None drawn yet."}`,
     );
   }
 

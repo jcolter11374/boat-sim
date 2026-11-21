@@ -209,6 +209,8 @@ const isAsBuilt = (d: Design) => !!cat && encodeDesign(cat, d) === "";
 const sandbox = new SandboxLauncher(grid, undefined, () => (cat ? plannedDesign(cat) : null));
 const sandboxReady = sandbox.available();
 let launching = false;
+/** The test, drawn (#332): the chart the voyages' tracks appear on. */
+const launchChart = new LaunchChart();
 let chanceTurn = 0; // the latest "chance of finishing" lookup (a part changed since: drop the older)
 let planned: LaunchResult | null = null;
 const plannedRuns = new Map<string, LaunchResult>(); // per back end
@@ -238,6 +240,8 @@ const status = {
   yaml: "",
   launch: null as unknown,
   launchError: "",
+  /** True when the last test's result was dropped because the design changed while it ran. */
+  changedMidTest: false,
   /** How many voyages the test's chart has drawn (#332). */
   charted: () => launchChart.count,
   planned: null as unknown,
@@ -572,6 +576,7 @@ function redraw(): void {
   status.summary = { ...s };
   status.share = hash;
   $("result").replaceChildren();
+  launchChart.clear(); // the result is gone, and so are its tracks
   drawMine();
 }
 
@@ -852,7 +857,11 @@ $("launch").addEventListener("click", async () => {
     const s = Math.round((Date.now() - t0) / 1000);
     words.textContent = line + (s >= 3 ? ` (${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} so far)` : "");
   };
+  // The design under test. Nothing stops the player changing a part while it runs, so everything
+  // below checks it is still the one on the stand before drawing or showing anything.
+  const tested = status.share;
   const live = (who: Who) => (v: LaunchReplay, total: number) => {
+    if (status.share !== tested) return;
     if (who === "yours") launchChart.expect(total);
     launchChart.add(who, v.start, v.outcome, v.track);
   };
@@ -879,8 +888,6 @@ $("launch").addEventListener("click", async () => {
       launcher = asBuilt[base];
       r = await launcher.launch(design, summarise(cat, design), onProgress, live("yours"));
     }
-    // Voyages that came all at once (our servers' results) go on the chart now, one after another.
-    if (r) void drawVoyages("yours", r.replays);
     status.backend = launcher.name;
     // The planned (or as-built) build on the same launches, to compare with (once per back end and boat).
     if (r && launcher !== asBuilt.revc && launcher !== asBuilt.revb && encodeDesign(cat, design) !== "") {
@@ -905,29 +912,41 @@ $("launch").addEventListener("click", async () => {
     launching = false;
     btn.disabled = false;
   }
+  if (status.share !== tested) {
+    // The result is for a boat that is no longer the one on the stand: showing it, with a way to
+    // sail "it", would pass one boat's test off as another's.
+    launchChart.clear();
+    status.launch = null;
+    status.planned = null;
+    status.changedMidTest = true;
+    box.replaceChildren(Object.assign(document.createElement("p"), { className: "muted", textContent: "You changed the boat while she was being tested, so that test was of the old one. Press \"Test it\" again to test her as she is now." }));
+    return;
+  }
+  status.changedMidTest = false;
   status.launch = r;
   status.planned = planned;
   showResult(box, r, planned);
 });
 
 // ---------- the test, drawn (#332) ----------
-const launchChart = new LaunchChart();
 /** Put these voyages on the chart, a beat apart, fetching a track the launcher didn't hand over. */
 async function drawVoyages(who: Who, replays: LaunchReplay[]): Promise<void> {
   if (who === "yours") launchChart.expect(replays.length);
   const tested = status.share;
+  const gen = launchChart.gen;
   let i = 0;
   for (const rp of replays) {
     if (launchChart.has(who, rp.start)) continue;
     const track = rp.track ?? (await fetch(rp.url).then((x) => (x.ok ? x.json() : null)).then(trackOf, () => undefined));
-    if (status.share !== tested) return; // the design changed while the file came
+    if (status.share !== tested || launchChart.gen !== gen) return; // the design changed, or another test began, while the file came
     launchChart.add(who, rp.start, rp.outcome, track, 220 * i++);
   }
 }
 
 /** "Sail it yourself": this design becomes the player's boat (the same save as "Save as my boat"), and the sailing screen opens with her. */
-function sailItYourself(): void {
+function sailItYourself(tested: string): void {
   if (!cat) return;
+  if (status.share !== tested) return toast("This boat has changed since the test. Press \"Test it\" again first.");
   const mine = loadMyBoat();
   const typed = $<HTMLInputElement>("mb-name").value.trim();
   const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
@@ -939,7 +958,8 @@ function sailButton(): HTMLElement {
   wrap.className = "sail-it";
   const b = Object.assign(document.createElement("button"), { id: "sail-it", textContent: "Sail it yourself" });
   b.title = "Saves this design as your boat and opens the sailing screen with her";
-  b.addEventListener("click", sailItYourself);
+  const tested = status.share;
+  b.addEventListener("click", () => sailItYourself(tested));
   const mine = loadMyBoat();
   const other = !!mine && !(mine.kind === "yard" && mine.hash === status.share);
   wrap.append(
@@ -1032,6 +1052,9 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
   }
   // The chart the voyages drew themselves on stays above the result; the boat it's compared with joins it.
   box.append(launchChart.el);
+  launchChart.whose(r.ownVoyages ?? r.exact);
+  launchChart.keep("yours", r.replays);
+  if (p) launchChart.keep("planned", p.replays);
   void drawVoyages("yours", r.replays);
   if (p) void drawVoyages("planned", p.replays);
   if (p) showCompare(box, r, p);
