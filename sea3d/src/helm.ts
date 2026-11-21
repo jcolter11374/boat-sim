@@ -1350,8 +1350,9 @@ function showMiles(toGo: number, here: [number, number], guess: boolean): void {
     if (RACE || PRACTICE || mission()) return;
     const target = rep.course.target as [number, number];
     const radius = (rep.course.target_radius_m ?? 25000) / 1000;
-    milesStartKm = Math.max(kmTo([rep.lat[0] as number, rep.lon[0] as number], target) - radius, 0);
-    const list = crossingMilestones(milesStartKm, target, radius);
+    const from: [number, number] = [rep.lat[0] as number, rep.lon[0] as number];
+    milesStartKm = Math.max(kmTo(from, target) - radius, 0);
+    const list = crossingMilestones(from, target, radius);
     if (!list.length) return;
     miles = new MilestoneWatch(list);
     const bar = $("mile-bar");
@@ -1368,11 +1369,14 @@ function showMiles(toGo: number, here: [number, number], guess: boolean): void {
   }
   if (!miles) return;
   const passed = miles.see(toGo);
+  let rang = false;
   for (const m of passed) {
-    const n = milestoneNote(m, here, milesStartKm);
+    const n = milestoneNote(m, here, milesStartKm, guess);
     if (!n) continue;
     note(n.text, `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.good, n.hl);
-    sound.bell(1);
+    // One strike however many she passed in a long hop: not a peal.
+    if (!rang) sound.bell(1);
+    rang = true;
   }
   const next = nextWords(miles.milestones, toGo, guess);
   const key = `${(fraction(milesStartKm, toGo) * 100).toFixed(1)}|${next}`;
@@ -3663,7 +3667,7 @@ async function finish(): Promise<void> {
 }
 
 /** Which crossing a personal best belongs to: the launch day, the start, and whether parts could break. */
-const crossingId = (launch: string, breakdowns: boolean) => ({ launch, port: page.startPort, breakdowns });
+const crossingId = (launch: string, breakdowns: boolean) => ({ launch, start: [(game.boat?.lat[0] ?? Number.NaN) as number, (game.boat?.lon[0] ?? Number.NaN) as number] as [number, number], breakdowns });
 
 /** Results, "where this leaves you" (one-game plan step 3): the build's place on
  *  the design leaderboard, or the Boatyard's odds for it, and the ways on. Fills

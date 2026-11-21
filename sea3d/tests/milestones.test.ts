@@ -5,7 +5,7 @@ import { HORTA, MilestoneWatch, TITANIC, crossingMilestones, fraction, kmBetween
 const FINISH: [number, number] = [39.5, -13.5];
 const DROP: [number, number] = [36.65, -74.94];
 const START_KM = kmBetween(DROP, FINISH) - 25;
-const list = () => crossingMilestones(START_KM, FINISH, 25);
+const list = () => crossingMilestones(DROP, FINISH, 25);
 
 test("the crossing from the drop point passes the shelf, the Gulf Stream's end, halfway, the Azores, then the finish", () => {
   const ms = list();
@@ -20,11 +20,22 @@ test("the crossing from the drop point passes the shelf, the Gulf Stream's end, 
   assert.equal(ms[4].kmToGo, 0);
 });
 
-test("a start further east leaves out the places already behind it; a short voyage has no strip", () => {
-  const fromMidOcean = crossingMilestones(2000, FINISH, 25);
-  assert.deepEqual(fromMidOcean.map((m) => m.id), ["azores", "half", "finish"]);
-  assert.deepEqual(crossingMilestones(900, FINISH, 25), []);
-  assert.deepEqual(crossingMilestones(Number.NaN, FINISH, 25), []);
+test("another start is only told of places that lie on its way; a short voyage has no strip", () => {
+  const ids = (start: [number, number]) => crossingMilestones(start, FINISH, 25).map((m) => m.id);
+  // Charleston: the shelf edge off the Chesapeake is 600 km up the coast, not hers to pass.
+  assert.deepEqual(ids([32.78, -79.93]), ["gulfstream", "half", "azores", "finish"]);
+  // New York: the same.
+  assert.deepEqual(ids([40.5, -73.9]), ["gulfstream", "half", "azores", "finish"]);
+  // St John's, Newfoundland starts east of the Grand Banks and north of the Gulf Stream's end.
+  assert.deepEqual(ids([47.56, -52.71]), ["half", "finish"]);
+  // Nanortalik, Greenland: nowhere near the Gulf Stream or the Azores.
+  assert.deepEqual(ids([60.14, -45.24]), ["half", "finish"]);
+  // Galway: far enough for a strip, but she never passes the Azores.
+  assert.deepEqual(ids([53.27, -9.05]), ["half", "finish"]);
+  // Mid-ocean on the usual course: only what is still ahead.
+  assert.deepEqual(ids([40.5, -40]), ["azores", "half", "finish"]);
+  assert.deepEqual(ids([39.5, -24]), []);
+  assert.deepEqual(crossingMilestones([Number.NaN, 0], FINISH, 25), []);
 });
 
 test("how far along, and what comes next", () => {
@@ -78,6 +89,8 @@ test("the notes say where the place is from the boat, in plain words, and never 
   const az = milestoneNote(by("azores"), [41.5, -28.63], START_KM)!;
   assert.match(az.text, /^Passing the Azores\. The island of Faial is about 330 km to the south\./);
   assert.equal(milestoneNote(by("finish"), FINISH, START_KM), null);
+  // From base, the note says it goes by base's guess.
+  assert.equal(milestoneNote(by("half"), [40, -44], START_KM, true)!.text, `${half.text} (Going by base's guess at where she is.)`);
   for (const m of ms) {
     const n = milestoneNote(m, [40, -40], START_KM);
     if (!n) continue;

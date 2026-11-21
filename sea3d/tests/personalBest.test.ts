@@ -6,14 +6,27 @@ const box = () => {
   const m = new Map<string, string>();
   return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k), m };
 };
-const DAY = { launch: "2020-04-23T00:00:00", breakdowns: true };
+const DROP: [number, number] = [36.65, -74.94];
+const DAY = { launch: "2020-04-23T00:00:00", start: DROP, breakdowns: true };
 
 test("each launch day, start and breakdowns setting has its own best", () => {
-  assert.equal(bestId(DAY), "2020-04-23");
-  assert.equal(bestId({ ...DAY, port: "" }), "2020-04-23");
-  assert.equal(bestId({ ...DAY, port: "new york!" }), "2020-04-23_newyork");
-  assert.equal(bestId({ ...DAY, breakdowns: false }), "2020-04-23_easy");
-  assert.equal(bestId({ launch: "0", breakdowns: true }), null);
+  assert.equal(bestId(DAY), "2020-04-23_367_-749");
+  // The same start to within a few km is the same crossing; another port is not.
+  assert.equal(bestId({ ...DAY, start: [36.652, -74.941] }), "2020-04-23_367_-749");
+  assert.equal(bestId({ ...DAY, start: [47.56, -52.71] }), "2020-04-23_476_-527");
+  assert.equal(bestId({ ...DAY, breakdowns: false }), "2020-04-23_367_-749_easy");
+  assert.equal(bestId({ ...DAY, launch: "0" }), null);
+  assert.equal(bestId({ ...DAY, start: [Number.NaN, 0] }), null);
+});
+
+test("the same ending shown again after a reload is not another finish", () => {
+  const s = box();
+  const run = { finished: true, days: 73.8 };
+  const a = savePersonalBest(DAY, run, { at: "2026-11-21T08:00:00Z" }, s);
+  const b = savePersonalBest(DAY, run, {}, s);
+  assert.deepEqual(b, a);
+  assert.equal(bestWords(b, run), "Your first finish from this launch day: 73.8 days is now your time to beat.");
+  assert.equal(loadPersonalBest(DAY, s)?.finishes, 1);
 });
 
 test("the first finish is the time to beat, a faster one replaces it, a slower one only counts", () => {
@@ -59,7 +72,7 @@ test("a near tie reads as level, and a small win is never '0.0 days faster'", ()
 
 test("nothing odd is kept or read back", () => {
   const s = box();
-  assert.equal(savePersonalBest({ launch: "nonsense", breakdowns: true }, { finished: true, days: 5 }, {}, s).now, null);
+  assert.equal(savePersonalBest({ ...DAY, launch: "nonsense" }, { finished: true, days: 5 }, {}, s).now, null);
   assert.equal(savePersonalBest(DAY, { finished: true, days: Number.NaN }, {}, s).now, null);
   assert.equal(savePersonalBest(DAY, { finished: true, days: -1 }, {}, s).now, null);
   assert.equal(s.m.size, 0);
@@ -72,10 +85,10 @@ test("nothing odd is kept or read back", () => {
 
 test("with storage off, this page still remembers", () => {
   const off = { getItem: () => null, setItem: () => { throw new Error("full"); }, removeItem: () => {} };
-  savePersonalBest({ launch: "2021-05-05", breakdowns: true }, { finished: true, days: 66 }, {}, off);
-  assert.equal(loadPersonalBest({ launch: "2021-05-05", breakdowns: true }, off)?.days, 66);
+  savePersonalBest({ ...DAY, launch: "2021-05-05" }, { finished: true, days: 66 }, {}, off);
+  assert.equal(loadPersonalBest({ ...DAY, launch: "2021-05-05" }, off)?.days, 66);
   // A save that stores again clears the fallback.
   const s = box();
   savePersonalBest(DAY, { finished: true, days: 70 }, {}, s);
-  assert.equal(loadPersonalBest({ launch: "2021-05-05", breakdowns: true }, s)?.days, 66);
+  assert.equal(loadPersonalBest({ ...DAY, launch: "2021-05-05" }, s)?.days, 66);
 });

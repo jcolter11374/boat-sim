@@ -17,6 +17,8 @@ interface Place {
   /** The strip's short label. */
   name: string;
   at: LatLon;
+  /** Only for a start within this many km of the place (the shelf edge means nothing to a start far along the coast). */
+  startWithinKm?: number;
 }
 
 // GUESS (chart positions, not from a dataset): the edge of the continental shelf east of the
@@ -30,7 +32,7 @@ export const HORTA: LatLon = [38.53, -28.63];
 export const TITANIC: LatLon = [41.73, -49.95];
 
 const PLACES: Place[] = [
-  { id: "shelf", name: "Off the shelf", at: SHELF_EDGE },
+  { id: "shelf", name: "Off the shelf", at: SHELF_EDGE, startWithinKm: 150 }, // GUESS
   { id: "gulfstream", name: "End of the Gulf Stream", at: GULF_STREAM_END },
   { id: "azores", name: "The Azores", at: HORTA },
 ];
@@ -56,25 +58,44 @@ function bearingTo(a: LatLon, b: LatLon): number {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
+/** How far `p` lies to one side of the straight (great-circle) course from `a` to `b`, km. */
+function offCourseKm(a: LatLon, b: LatLon, p: LatLon): number {
+  const R = 6371;
+  const turn = ((bearingTo(a, p) - bearingTo(a, b)) * Math.PI) / 180;
+  return Math.abs(Math.asin(Math.sin(kmBetween(a, p) / R) * Math.sin(turn)) * R);
+}
+
 const compassWord = (deg: number) => ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 
 /** A crossing shorter than this has no strip: a start most of the way over has nothing left to pass (GUESS). */
 export const MIN_CROSSING_KM = 1500;
+/** A place is on the way when going by it adds no more than this share to the straight course (GUESS). */
+export const ON_THE_WAY = 0.05;
+/** And when it lies no further than this (km) to one side of the straight course (GUESS: from the drop point Faial is about 400 km off it, from Newfoundland 700). */
+export const BESIDE_KM = 550;
+/** A place this close (km) to the halfway mark or the finish is left out: two moments at once (GUESS). */
+const TOO_CLOSE_KM = 100;
 
 /**
- * The milestones for a crossing that starts with `startKm` to the finish, in the order she
- * passes them, the finish last. A place she starts beyond (a start from a port further east)
- * is left out, as is one within a day's sail of the start line or of halfway. Empty for a
- * short voyage.
+ * The milestones for a crossing from `start` to `finish`, in the order she passes them, the
+ * finish last. A place counts only when it lies on the way: a start from another port (the
+ * Carolinas, Newfoundland, Ireland) doesn't sail by the same places, and must not be told it
+ * did. A place already behind her at the start is left out too. Empty for a short voyage.
  */
-export function crossingMilestones(startKm: number, finish: LatLon, radiusKm: number): Milestone[] {
+export function crossingMilestones(start: LatLon, finish: LatLon, radiusKm: number): Milestone[] {
+  const straight = kmBetween(start, finish);
+  const startKm = straight - radiusKm;
   if (!(startKm >= MIN_CROSSING_KM)) return [];
   const half = startKm / 2;
   const out: Milestone[] = [{ id: "half", name: "Halfway", kmToGo: half }];
   for (const p of PLACES) {
+    const fromStart = kmBetween(start, p.at);
     const km = Math.max(kmBetween(p.at, finish) - radiusKm, 0);
-    // Not one she has already passed at the start, and not one on top of the halfway mark.
-    if (km < startKm - 5 && km > 100 && Math.abs(km - half) > 100) out.push({ id: p.id, name: p.name, kmToGo: km });
+    if (fromStart + kmBetween(p.at, finish) > straight * (1 + ON_THE_WAY)) continue; // not on the way
+    if (offCourseKm(start, finish, p.at) > BESIDE_KM) continue; // too far to one side to be "passing" it
+    if (p.startWithinKm != null && fromStart > p.startWithinKm) continue;
+    // Not one already behind her at the start, and not one on top of the halfway mark or the finish.
+    if (km < startKm && km > TOO_CLOSE_KM && Math.abs(km - half) > TOO_CLOSE_KM) out.push({ id: p.id, name: p.name, kmToGo: km });
   }
   out.sort((a, b) => b.kmToGo - a.kmToGo);
   out.push({ id: "finish", name: "The finish", kmToGo: 0 });
@@ -112,7 +133,13 @@ function away(here: LatLon, place: LatLon): string {
  * words, and one true thing about it. `hl` is the part to pick out in colour. The finish has no
  * note: the arrival is its moment.
  */
-export function milestoneNote(m: Milestone, here: LatLon, startKm: number): { text: string; hl: string } | null {
+export function milestoneNote(m: Milestone, here: LatLon, startKm: number, guess = false): { text: string; hl: string } | null {
+  const n = noteFor(m, here, startKm);
+  // From base the page only has base's guess at where she is: say so, as the strip does.
+  return n && guess ? { hl: n.hl, text: `${n.text} (Going by base's guess at where she is.)` } : n;
+}
+
+function noteFor(m: Milestone, here: LatLon, startKm: number): { text: string; hl: string } | null {
   switch (m.id) {
     case "shelf":
       return {

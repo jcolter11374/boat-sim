@@ -7,7 +7,9 @@
 // race, practice and someone else's shared game are never kept here.
 //
 // A crossing with breakdowns switched off, or one from another start, is an easier or a
-// different voyage, so each has its own best.
+// different voyage, so each has its own best. The start is where the track begins, not the
+// port picked on the card: a voyage picked up later no longer knows its port. Any boat counts:
+// a faster design earning a better time is the game.
 //
 // Pure: no page code. The results card calls savePersonalBest once when a crossing ends.
 
@@ -30,8 +32,8 @@ export interface PersonalBest {
 export interface CrossingId {
   /** The launch day, "2020-04-23" or a full timestamp. */
   launch: string;
-  /** The start port's id, or "" for the usual drop point. */
-  port?: string;
+  /** Where the track begins, [lat, lon]. */
+  start: [number, number];
   breakdowns: boolean;
 }
 
@@ -39,8 +41,10 @@ export interface CrossingId {
 export function bestId(c: CrossingId): string | null {
   const day = c.launch.slice(0, 10);
   if (!/^\d{4}-\d\d-\d\d$/.test(day)) return null;
-  const port = (c.port ?? "").replace(/[^\w-]/g, "").slice(0, 30);
-  return `${day}${port ? `_${port}` : ""}${c.breakdowns ? "" : "_easy"}`;
+  const [lat, lon] = c.start;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  // To a tenth of a degree (about 10 km): the same start every time, apart from any other.
+  return `${day}_${Math.round(lat * 10)}_${Math.round(lon * 10)}${c.breakdowns ? "" : "_easy"}`;
 }
 
 function tidy(x: unknown): PersonalBest | null {
@@ -115,6 +119,44 @@ export function savePersonalBest(c: CrossingId, run: { finished: boolean; days: 
   const id = bestId(c);
   const all = loadAll(s);
   const before = id ? all[id] ?? null : null;
+  // The same ending shown again (the page reloaded on a finished voyage) is not another finish.
+  const ending = `${id}|${run.finished}|${run.days}`;
+  const last = readLast(s);
+  if (last && last.ending === ending) return last.result;
+  const result = saveRun(id, all, before, run, about, s);
+  // Only an ending that was counted needs remembering.
+  if (result.now === result.before) return result;
+  lastSeen = { ending, result };
+  if (s) {
+    try {
+      s.setItem(LAST_ENDING_KEY, JSON.stringify(lastSeen));
+      lastSeen = null;
+    } catch {
+      /* quota full or storage off: this page's memory keeps it */
+    }
+  }
+  return result;
+}
+
+/** The last ending counted, and what the card said of it: a reload on a finished voyage shows the same line and counts nothing. */
+export const LAST_ENDING_KEY = "boatsim.crossing.best.last.v1";
+// The fallback when the browser won't store anything.
+let lastSeen: { ending: string; result: BestResult } | null = null;
+
+function readLast(s: StorageLike | null): { ending: string; result: BestResult } | null {
+  if (lastSeen) return lastSeen;
+  try {
+    const raw = s?.getItem(LAST_ENDING_KEY);
+    const x = raw ? (JSON.parse(raw) as { ending?: unknown; result?: Record<string, unknown> }) : null;
+    if (x && typeof x.ending === "string" && x.result && typeof x.result === "object")
+      return { ending: x.ending, result: { before: tidy(x.result.before), now: tidy(x.result.now), isBest: x.result.isBest === true } };
+  } catch {
+    /* unreadable: as if there were none */
+  }
+  return null;
+}
+
+function saveRun(id: string | null, all: Record<string, PersonalBest>, before: PersonalBest | null, run: { finished: boolean; days: number }, about: { boat?: string; at?: string }, s: StorageLike | null): BestResult {
   if (!id || !run.finished || !Number.isFinite(run.days) || run.days <= 0 || run.days > 1000) return { before, now: before, isBest: false };
   const isBest = !before || run.days < before.days;
   const now: PersonalBest = isBest
