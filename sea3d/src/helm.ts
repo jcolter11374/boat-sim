@@ -37,6 +37,7 @@ import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
 import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
 import { paintMine } from "./boats/paintApply";
+import { resultsBoatName, resultsRowLabel, saveMyCrossing } from "./myCrossing";
 import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
 import { mountSetSailCard } from "./helm/setsailCard";
@@ -1911,6 +1912,12 @@ const PRACTICE = SS.where === "annapolis" && !SPECTATE; // ?where=annapolis, or 
 /** The boat's name on the offer: the Set sail card's (the player's own words for their design);
  * for a voyage that came back, the name it was saved with. */
 let keptBoat: string | null = null;
+/** The boat's name as the Set sail card showed it when this voyage began. Taken then, not read later: the card's
+ *  name follows "my boat", which the player can change from the top bar, or another tab, while she is at sea. */
+let sailedName = "";
+/** The name of the boat this voyage is sailed in (a continued voyage keeps the name it began with). Empty when it
+ *  isn't known: someone else's shared voyage, or a continued one whose save is gone. */
+const sailedAs = (): string => keptBoat || sailedName;
 /** The day that was on the screen when a voyage that came back was left (null if its save doesn't say). */
 let keptLeft: number | null = null;
 if (!SPECTATE && !PRACTICE && !THEIRS)
@@ -1919,7 +1926,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: sailedAs(), toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
     () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();
@@ -3537,7 +3544,8 @@ async function finish(): Promise<void> {
   };
   const table = $("r-table");
   table.innerHTML = "<tr><th></th><th>Outcome</th><th>Time</th><th>Battery low point</th><th>Trouble</th><th>Satellite messages</th></tr>";
-  table.append(line("You", me), line("Autopilot ghost", gh));
+  // Her own name on her row (#653): a boat built in the Boatyard is not "Our kayak".
+  table.append(line(resultsRowLabel(sailedAs()), me), line("Autopilot ghost", gh));
   // How it ends, in the boat's own words (#234). textContent only: the words come from the simulator.
   const ends = $("r-ends");
   ends.replaceChildren();
@@ -3587,8 +3595,11 @@ async function finish(): Promise<void> {
   if (ch && !THEIRS) {
     const st = c as Card & { stars?: Stars; ghost_stars?: Stars };
     const run = (x: Card["boat"], s?: Stars) => ({ stars: s ? s.stars : null, finished: x.outcome === "arrived" || x.outcome === "goal", days: x.days });
-    saveChallengeRun(ch.id, run(me, st.stars), { boat: $("ss-boatname").textContent ?? "", autopilot: run(gh, st.ghost_stars) });
+    saveChallengeRun(ch.id, run(me, st.stars), { boat: sailedAs(), autopilot: run(gh, st.ghost_stars) });
   }
+  // The crossing is kept in this browser so the leaderboard can list the boat under her name (#653).
+  // Not a challenge (its own tab keeps those), and not someone else's shared voyage.
+  if (!ch && !THEIRS && page.started.me && sailedAs()) saveMyCrossing({ boat: resultsBoatName(sailedAs()), build: c.build, finished: me.outcome === "arrived", days: me.days, day: String(c.launch ?? "").slice(0, 10) });
   openResults(ch ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch }, nums, { calls: mode === "hands_on" && !THEIRS });
   void showStanding(c.build);
 }
@@ -3603,8 +3614,8 @@ async function showStanding(build: string): Promise<void> {
   if (page.card?.build !== build) return; // a newer game has finished since
   const s = standing(build, board, grid);
   const rate = s.kind === "board" ? s.row.finish_rate : s.kind === "odds" ? (s.build.odds?.odds ?? null) : null;
-  const mine = loadMyBoat();
-  const name = !mine || !mine.base || mine.base === "kayak" ? "Our kayak" : "This build";
+  // The boat that sailed, under the name she sailed with (#653): a design saved from our kayak used to be called "Our kayak" here.
+  const name = resultsBoatName(sailedAs());
   const p = document.createElement("p");
   p.className = "standing";
   p.textContent = leaves(page.card, rate, name, page.started.me);
@@ -3980,6 +3991,7 @@ async function begin(): Promise<void> {
     } else {
       const pick = chosenBoat();
       const mine = loadMyBoat();
+      sailedName = $("ss-boatname").textContent ?? "";
       const boat = pick === MINE && mine ? mine.choices : pick || undefined;
       page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort, mode === "hands_on" ? { heading: order, power, sails: sailOrder, engine: engineOrder } : undefined);
       useBoat(game.boatBase);
