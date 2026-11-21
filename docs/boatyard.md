@@ -71,6 +71,14 @@ change, not the weather. Voyages are scored by the Microtransat rules on our
 target, with the "unknown failure" guess off. Headline `odds`, and show
 `low95`–`high95` beside it.
 
+Compare builds only within one run of the grid. The same code on two GitHub
+runners can give slightly different voyages (numpy picks different vector
+instructions for each CPU, and a long voyage magnifies a last-bit difference),
+so odds from different runs can differ by about 1 point with no change to the
+boat (#197). The design leaderboard guards against this: one job scores every
+entry, and each entry records its `job`, `commit`, `numpy` and `cpu`
+(`boatsim.mc.leaderboard`).
+
 ## Replay files (`<id>/<date>.json`)
 
 These use the same schema as `sea3d/public/voyages/*.json` (`replay/data.ts`
