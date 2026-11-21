@@ -44,8 +44,14 @@ the option by number: "Keys 1-2, or Esc for the autopilot (1)." or "Esc to carry
 Once the blow has passed (the same test the "The big waves have passed" note uses), the order and
 power from before the call come back, and the note says so: "She's back on the autopilot, as
 before." or "Back to 40% power, as before." If the player has given an order of their own in the
-meantime (a new heading, another power), that stands and nothing is changed. This is the same
-behaviour as the night card's "ease off till sunrise" (`sea3d/src/helm/stormCall.ts`, `afterBlow`).
+meantime (a new heading, another power, another card's choice), that stands and nothing is changed.
+This is the same behaviour as the night card's "ease off till sunrise"
+(`sea3d/src/helm/stormCall.ts`, `afterBlow`). "Still the same order" is told by counting orders,
+not by comparing power, because the night card's "ease off" is 10% too.
+
+If a worse blow brings a second storm card while she is still slowed: holding course keeps her
+slowed and carries the "give it back" over to the new blow; turning away sails the new heading at
+the power from before, not at 10%. With no link to the boat, the hand-back waits for the link.
 
 Nothing in the simulator changed: both are ordinary orders, sailed in the real weather.
 
@@ -70,7 +76,7 @@ picture, as they do for a player.
 | Script result | FAIL (exit 1) | pass |
 
 With `--slow` (key 2, "Slow down to 10% power and ride it out", on the day 4.7 card): she slowed,
-made 23 km in the next day, and at day 5.7 the note read "The big waves have passed. You slowed
+made 23 km in the next day (holding course made 51 km over the same day), and at day 5.7 the note read "The big waves have passed. You slowed
 down to ride it out: you were knocked flat once, and made 23 km towards the finish since. She's
 back on the autopilot, as before." Order at day 12: Autopilot, 25% power.
 
@@ -79,7 +85,20 @@ picture. So after "ride it out" the strip can read "Autopilot" again a moment be
 note appears. All orders have always shown this way; it is not new here.
 
 Unit tests: `sea3d/tests/escChoice.test.ts` (the Esc rule for each card above, the foot's words,
-and the ride-it-out rule) and the calls wording in `sea3d/tests/story.test.ts`. 635 unit tests pass.
+the ride-it-out rule, and a check that `helm.ts` still uses them on each card) and the calls
+wording in `sea3d/tests/story.test.ts`. 636 unit tests pass.
+
+## Independent review
+
+A fresh reviewer read the first commit and found the Esc rule right on every card, and three narrow
+ways the ride-it-out hand-back could go wrong. Fixed in the second commit: turning away on a second
+storm card stayed at 10%; the storm's and the night card's hand-backs could each take the other's
+10% for its own; the note could promise a hand-back while the link was down. The unit test now also
+pins the wiring in `helm.ts`.
+
+Left for a follow-up issue: a page reload in the middle of a blow forgets that she was only slowed
+for the blow (the save keeps the order, not the reason), so she stays at 10% until the player turns
+the power up. The night card's "ease off" has had the same gap since before this change.
 
 Not measured: a real graphics card (not needed, no drawing changed) and a whole crossing to the
 finish with Esc on every card.

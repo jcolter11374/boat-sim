@@ -750,6 +750,8 @@ function lockOrders(why: string, announce: boolean): void {
   if (announce) note(NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.", `Day ${(shown ?? page.status)!.day.toFixed(1)}`, TONE_COLOUR.bad);
 }
 
+/** How many orders have been given this voyage: "ride it out" goes back only if its own was the last (helm/stormCall.ts). */
+let orderSeq = 0;
 async function setOrder(h: Heading, p = power): Promise<void> {
   if (SPECTATE) return; // a recorded voyage or a race sails itself
   if (linkCut) {
@@ -757,6 +759,7 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     return;
   }
   order = h;
+  orderSeq++;
   // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
   p = powerAfter(h, p, powerBeforePush);
   if (h === "auto" && powerBeforePush !== null) {
@@ -2603,7 +2606,8 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   const ahead = (fc ?? []).map((r) => ({ ...r, ah: (utc(r.t) - t0) / 3.6e6 }));
   const rough = (r: ForecastRow) => Math.hypot(r.wind_u, r.wind_v) >= GALE_MS || r.hs >= BIG_WAVES_M;
   // After a storm call: once it has blown over, say how the choice went.
-  if (spell && h - spell.h >= 18 && nowWind < GALE_MS - 4 && (w?.hs ?? 0) < BIG_WAVES_M - 1 && !ahead.some((r) => r.ah > 0 && r.ah <= 12 && rough(r))) {
+  // With no link she can't hear an order: a "ride it out" waits for the link before it is told and undone.
+  if (spell && !(linkCut && afterBlow(spell.back ?? null, orderSeq)) && h - spell.h >= 18 && nowWind < GALE_MS - 4 && (w?.hs ?? 0) < BIG_WAVES_M - 1 && !ahead.some((r) => r.ah > 0 && r.ah <= 12 && rough(r))) {
     const flat = (game.boat?.events ?? []).filter((e) => e.kind === "capsize" && e.h >= spell!.h).length;
     const verb: Record<string, string> = { hold: "held your course", dodge: "dodged south-east", slow: "slowed down to ride it out" };
     const gone = spell.kind === "gale" ? "The gale has passed" : "The big waves have passed";
@@ -2611,7 +2615,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
     const made = Math.round(spell.km - st.boat.km_to_finish);
     const progress = made > 0 ? `made ${made.toLocaleString()} km towards the finish since` : `the weather pushed you back ${(-made).toLocaleString()} km`;
     // "Ride it out" ends when it has passed (#654): back to the order from before, unless you changed it since.
-    const back = afterBlow(spell.back ?? null, order, power);
+    const back = afterBlow(spell.back ?? null, orderSeq);
     const restored = back ? ` ${backWords(back)}` : "";
     const text = `${gone}. You ${verb[spell.chose] ?? "carried on"}: ${how}, and ${progress}.${spell.chose === "dodge" ? " Aim at the finish again when you're ready." : ""}${restored}`;
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, flat ? TONE_COLOUR.warn : TONE_COLOUR.good));
@@ -2647,12 +2651,23 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       const what = kind === "gale" ? "the gale" : "the waves";
       const did: Record<string, string> = { hold: `held course through ${what}`, dodge: `dodged ${what}`, slow: `slowed for ${what}` };
       const slowTo: Heading = order === "auto" ? "route" : order;
-      const call = (chose: string, act: () => Promise<void> | void) => () => {
-        // Slowed for an earlier blow and still slowed: what to go back to carries over to this one.
-        spell = { kind, h, chose, km: st.boat.km_to_finish, back: chose === "slow" ? { order, power, to: slowTo } : (spell?.back ?? undefined) };
+      // Still slowed from an earlier blow (its "ride it out" order is the last one given): what she goes back to.
+      const slowedNow = () => afterBlow(spell?.back ?? null, orderSeq);
+      const call = (chose: string, act: (was: { order: Heading; power: number } | null) => Promise<void> | void) => () => {
+        // Still slowed from an earlier blow and holding course through this one: what to go back to carries over.
+        const was = slowedNow();
+        const carried = chose === "hold" && was ? spell!.back : undefined;
+        const before = { order, power };
+        spell = { kind, h, chose, km: st.boat.km_to_finish, back: carried };
         lastStorm = { kind, peakH, chose };
         alsoCalled(did[chose]);
-        return act();
+        const done = act(was);
+        // The slow order is in (setOrder counts it at once): hers to undo only while it is the last one given.
+        if (chose === "slow") {
+          spell.back = { ...before, seq: orderSeq };
+          nightEase = null; // a night's "ease off" before it: the storm's order has taken its place
+        }
+        return done;
       };
       const choices: Choice[] = [
         // Stakes from the same 4-day look; "waves to X m" beside each is the risk side (Maya).
@@ -2660,10 +2675,10 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
         // forecast 214 km gained AND 0.6 m bigger waves, so "safer, a longer way round" was
         // wrong on both counts (Sam, 12 Nov). The tag says which is faster and which rougher.
         { label: "Hold course: fastest, but a knockdown is likelier", plain: order === "auto" ? "Hold course (same as the ghost)" : "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power }, esc: "keep" },
-        { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
+        { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", (was) => setOrder(south, was?.power ?? power)), order: { heading: south, power: slowedNow()?.power ?? power } },
       ];
       if (motors && power > SLOW_POWER)
-        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off, and go back to what they were once it has passed", act: call("slow", () => setOrder(slowTo, SLOW_POWER)), order: { heading: slowTo, power: SLOW_POWER } });
+        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off, and go back to what they were once it has passed", act: call("slow", () => setOrder(order === "auto" ? "route" : order, SLOW_POWER)), order: { heading: slowTo, power: SLOW_POWER } });
       const intro = `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that.`;
       return {
         kind,

@@ -34,20 +34,21 @@ export function stormNote(intro: string): string {
 /** The power "slow down and ride it out" sets. */
 export const SLOW_POWER = 0.1;
 
-/** What to go back to after riding it out: the order and power from before, and the heading the
- * slow order steers (`to`: the planned route when she was on the autopilot, else her own heading). */
+/** What to go back to after riding it out: the order and power from before, and the count of
+ * orders given (`seq`) once the slow order was in. Any order after it moves the count on. */
 export interface Slowed {
   order: Heading;
   power: number;
-  to: Heading;
+  seq: number;
 }
 
 /** Once the blow has passed: the order and power to go back to, or null to leave things alone.
- * She goes back only if she is still sailing the slow order as it was given; any order of the
- * player's own since then (a new heading, more or less power) stands. */
-export function afterBlow(slowed: Slowed | null, order: Heading, power: number): { order: Heading; power: number } | null {
-  if (!slowed) return null;
-  return order === slowed.to && Math.abs(power - SLOW_POWER) < 1e-6 ? { order: slowed.order, power: slowed.power } : null;
+ * She goes back only if the slow order is still the last order given (`seq`: the count of orders
+ * now). Any order since then (a new heading, more or less power, another card's choice) stands.
+ * Counted, not compared by value: the night call's "ease off" is 10% power too, and the two must
+ * not take each other's 10% for their own (review of #656). */
+export function afterBlow(slowed: Slowed | null, seq: number): { order: Heading; power: number } | null {
+  return slowed && slowed.seq === seq ? { order: slowed.order, power: slowed.power } : null;
 }
 
 /** The "it has passed" note's last sentence when the power comes back. */

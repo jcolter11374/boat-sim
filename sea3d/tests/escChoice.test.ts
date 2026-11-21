@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { escFoot, escPick } from "../src/helm/escChoice.ts";
 import { SLOW_POWER, afterBlow, backWords } from "../src/helm/stormCall.ts";
 
@@ -45,18 +46,35 @@ test("the card's foot names the option Esc picks", () => {
 
 test("#654: 'ride it out' gives the power back once the blow has passed", () => {
   assert.equal(SLOW_POWER, 0.1);
-  // On the autopilot at 25% before: slowed onto the planned route at 10%. Back to the autopilot.
-  const auto = { order: "auto" as const, power: 0.25, to: "route" as const };
-  assert.deepEqual(afterBlow(auto, "route", 0.1), { order: "auto", power: 0.25 });
+  // On the autopilot at 25% before; the slow order was the 7th order of the voyage and still the last.
+  const auto = { order: "auto" as const, power: 0.25, seq: 7 };
+  assert.deepEqual(afterBlow(auto, 7), { order: "auto", power: 0.25 });
   // Steering 095° at 40% before: back to 095° at 40%.
-  const own = { order: 95, power: 0.4, to: 95 };
-  assert.deepEqual(afterBlow(own, 95, 0.1), { order: 95, power: 0.4 });
-  // An order of your own since then stands: a new heading, or a different power.
-  assert.equal(afterBlow(auto, 120, 0.1), null);
-  assert.equal(afterBlow(auto, "route", 0.3), null);
-  assert.equal(afterBlow(auto, "auto", 0.1), null);
+  assert.deepEqual(afterBlow({ order: 95, power: 0.4, seq: 3 }, 3), { order: 95, power: 0.4 });
+  // Any order since then stands: a new heading, another power, a night card's "ease off" (10% too).
+  assert.equal(afterBlow(auto, 8), null);
   // Held course or dodged: nothing to give back.
-  assert.equal(afterBlow(null, "route", 0.1), null);
+  assert.equal(afterBlow(null, 7), null);
   assert.equal(backWords({ order: "auto", power: 0.25 }), "She's back on the autopilot, as before.");
   assert.equal(backWords({ order: 95, power: 0.4 }), "Back to 40% power, as before.");
+});
+
+// The rules above are pure; these pin how the page uses them, so a change in helm.ts that brings
+// #654 back fails here and not only in tools/qa/esc-on-cards.mjs (review of #656).
+test("the page's wiring: Esc goes by what an option does, and the cards mark their options", () => {
+  const helm = readFileSync(new URL("../src/helm.ts", import.meta.url), "utf8");
+  const key = helm.slice(helm.indexOf("function decisionKey("), helm.indexOf("/** Things to say once the picture reaches a voyage hour"));
+  assert.match(key, /btns\[escOption\.index\]\?\.click\(\)/, "Esc presses the option escPick chose");
+  assert.doesNotMatch(key, /autopilot\/i|\.at\(-1\)/, "Esc no longer reads the button's words or falls back to the last button");
+  assert.match(helm, /escOption = escPick\(d\.choices\.map\(\(c\) => \(\{ auto: c\.esc === "auto" \|\| c\.order\?\.heading === "auto", keep: c\.esc === "keep" \}\)\)\)/);
+  const line = (start: string) => helm.split("\n").find((l) => l.includes(start)) ?? "";
+  assert.match(line('label: "Hold course: fastest'), /esc: "keep"/, "storm card: hold course changes nothing");
+  assert.match(line('label: "Hand her back to the autopilot (same as the ghost)"'), /esc: "auto"/, "night card");
+  assert.match(line("label: words.stay"), /esc: "keep"/, "more-power card");
+  assert.match(line('"Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`'), /esc: "keep"/, "route card");
+  assert.match(line("const carryOn: Choice"), /esc: "keep"/);
+  // Ride it out: the slow order is stamped, and the "passed" note gives the order back.
+  assert.match(helm, /spell\.back = \{ \.\.\.before, seq: orderSeq \}/);
+  assert.match(helm, /const back = afterBlow\(spell\.back \?\? null, orderSeq\);/);
+  assert.match(helm, /void setOrder\(back\.order, back\.power\);/);
 });
