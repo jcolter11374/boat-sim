@@ -91,6 +91,9 @@ class Variant:
     forecast_error: float | None = None
     # The row this variant is paired against in the report.
     against: str = "baseline"
+    # (month, day): every voyage ends that day of its launch year at the latest, instead
+    # of after max_days (the Randolph team's season end, 30 November).
+    until: tuple[int, int] | None = None
 
 
 BAY_MOUTH = DROP_POINT  # first waypoint of every route, as in default_mission (the drop)
@@ -180,6 +183,7 @@ VARIANTS: dict[str, Variant] = {
         "Randolph team's scoring: Ocean City to SW Ireland, any landfall in Europe counts",
         route=((38.32, -74.97), (51.4, -10.0)),
         finish="europe",
+        until=(11, 30),
     ),
     # Finish targets along the Microtransat eastern line (Maya, Nov 2026), each
     # sailed straight there (great circle, which passes north of the Azores).
@@ -370,6 +374,15 @@ class SensitivityVoyage(MonthlyVoyage):
     def spec(self) -> Variant:
         """The variant's settings (subclasses may look them up elsewhere)."""
         return VARIANTS[self.variant]
+
+    def __call__(self, start: datetime, seed: int):
+        until = self.spec().until
+        if until is None:
+            return super().__call__(start, seed)
+        from dataclasses import replace as _replace
+
+        end = datetime(start.year, *until, 23, 59)
+        return MonthlyVoyage.__call__(_replace(self, max_days=(end - start).total_seconds() / 86400.0), start, seed)
 
     def drop_point(self) -> tuple[float, float]:
         from boatsim.config import load_design
