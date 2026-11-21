@@ -56,6 +56,7 @@ import { Atmosphere, softwareGraphics, sunPosition } from "./atmosphere";
 import { forcedSea, seaTestFrom } from "./seaTest";
 import { moonEquatorial, moonPhase, toHorizon } from "./sky";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
+import { JUDGE, SlowWatch } from "./helm/autoQuality";
 import { HORIZON, Sea, inChesapeake } from "./water";
 import { seaUniforms } from "./seaSurface";
 import { detailFor } from "./seaDetail";
@@ -230,6 +231,12 @@ let laneRev: Rev = "kayak";
 // title, the helm and the Boatyard do (at High, software graphics drew 407,000 triangles a frame here).
 let look: Look = startLook($<HTMLSelectElement>("quality"), atmos.software);
 let quality: Quality = geometryOf(look);
+// High on a graphics card steps down to Low by itself, once, if this computer draws it too slowly
+// (two 3 s windows of frames slower than about 36 ms, the helm's rule: helm/autoQuality.ts), unless
+// ?quality= or the viewer's own pick set it. Timed from the replay's arrival (its boats, land and
+// ships build their shaders as they come), and never while the tab is hidden.
+let autoLook = look === "high" && !new URLSearchParams(location.search).has("quality");
+const slowWatch = new SlowWatch({ ...JUDGE, skipFrames: 60, skipMs: 5000 });
 const sea = new Sea(quality);
 // The land, town and boats mirrored in calm water.
 const mirror = new Mirror(quality === "high" ? 0.5 : 0.35);
@@ -512,6 +519,8 @@ const status = {
   models: [] as string[],
   /** low, high or ultra. */
   look: "high" as string,
+  /** True once the page stepped itself down to Low (too slow at High). */
+  stepped: false,
   /** The close-up boat's moving parts and what they show now. */
   gear: {} as Record<string, unknown>,
   /** Foam collar strength and live spray drops. */
@@ -973,7 +982,10 @@ $<HTMLSelectElement>("boat").addEventListener("change", (e) => {
 document.querySelectorAll<HTMLButtonElement>("#focus button").forEach((b) =>
   b.addEventListener("click", () => setFocus(Number(b.dataset.lane))),
 );
-$<HTMLSelectElement>("quality").addEventListener("change", (e) => setQuality((e.target as HTMLSelectElement).value as Look));
+$<HTMLSelectElement>("quality").addEventListener("change", (e) => {
+  autoLook = false; // the viewer's pick is never changed for them
+  setQuality((e.target as HTMLSelectElement).value as Look);
+});
 $("o-again").addEventListener("click", () => {
   if (GAME) {
     $("outcome").classList.remove("show");
@@ -1622,6 +1634,13 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if (atmos.ultra) {
     atmos.setFocus(camera.position.distanceTo(controls.target));
     atmos.shadowAround(controls.target, 4);
+  }
+  if (slowWatch.tick(performance.now(), autoLook && status.ready && !document.hidden)) {
+    autoLook = false;
+    $<HTMLSelectElement>("quality").value = "low";
+    setQuality("low");
+    status.stepped = true;
+    toast("Switched to Low quality: High was running slowly on this computer.", "Quality", "#8ab4ff");
   }
   if (guard.tick(t, look === "ultra")) {
     $<HTMLSelectElement>("quality").value = "high";

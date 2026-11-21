@@ -81,3 +81,48 @@ test("each level's cost", () => {
   assert.deepEqual(levelSettings("low", 2, false), { ratio: 0.75, bloom: false, sea: "low" });
   assert.deepEqual(levelSettings("low", 1, true).ratio, 0.5);
 });
+
+import { SlowWatch } from "../src/helm/autoQuality";
+const O = { skipFrames: 0, skipMs: 0, windowMs: 1000, slowMs: 36, pauseMs: 500 };
+/** Feed frames dt ms apart from t; returns the frame index of each "step down". */
+function feed(w: SlowWatch, dts: number[], on: (i: number) => boolean = () => true): number[] {
+  let t = 0;
+  const steps: number[] = [];
+  dts.forEach((d, i) => {
+    t += d;
+    if (w.tick(t, on(i))) steps.push(i);
+  });
+  return steps;
+}
+
+test("SlowWatch: fast all along never steps down", () => {
+  assert.deepEqual(feed(new SlowWatch(O), Array(600).fill(16.7)), []);
+});
+
+test("SlowWatch: slowness that starts later steps down after two slow windows in a row", () => {
+  const dts = [...Array(300).fill(16.7), ...Array(60).fill(50)];
+  const steps = feed(new SlowWatch(O), dts);
+  assert.equal(steps.length, 1, String(steps));
+  // The window running when it got slow is mostly fast; then two slow windows of 1 s (20 frames each).
+  assert.ok(steps[0] > 300 && steps[0] <= 300 + 60, String(steps));
+});
+
+test("SlowWatch: one heavy moment between fast stretches doesn't step down", () => {
+  const dts = [...Array(120).fill(16.7), ...Array(25).fill(60), ...Array(200).fill(16.7), ...Array(25).fill(60), ...Array(200).fill(16.7)];
+  assert.deepEqual(feed(new SlowWatch(O), dts), []);
+});
+
+test("SlowWatch: skipped frames (hidden, busy, building) neither count nor end the window", () => {
+  const dts = Array(400).fill(50);
+  // Every other frame skipped: what's timed is still 50 ms frames, minus the gaps over the skipped ones.
+  assert.equal(feed(new SlowWatch(O), dts, (i) => i % 2 === 0).length, 0, "a skipped frame breaks the pair, so nothing is timed");
+  assert.equal(feed(new SlowWatch(O), dts, (i) => i % 10 !== 0).length > 0, true);
+  assert.deepEqual(feed(new SlowWatch(O), dts, () => false), []);
+});
+
+test("SlowWatch: after a step it starts over, its skip included", () => {
+  const w = new SlowWatch({ ...O, skipFrames: 10, skipMs: 500 });
+  const steps = feed(w, Array(400).fill(50));
+  assert.ok(steps.length >= 2);
+  assert.ok(steps[1] - steps[0] >= 40 + 10, String(steps));
+});

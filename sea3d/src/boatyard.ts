@@ -54,6 +54,7 @@ import { chanceFor, type Chance } from "./yard/chance";
 import { OddsModel } from "./yard/estimate";
 import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
 import { startWhenBuilt } from "./warmup";
+import { JUDGE, SlowWatch } from "./helm/autoQuality";
 
 const clock = new THREE.Clock();
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -87,6 +88,12 @@ atmos.setBloom(quality === "high");
 atmos.setPixelRatio(renderer.getPixelRatio());
 const sea = new Sea(quality);
 scene.add(sea.mesh);
+// High on a graphics card steps down by itself, once, if this computer draws it too slowly (two 3 s
+// windows of frames slower than about 36 ms, the helm's rule: helm/autoQuality.ts), unless ?quality=
+// set it: the Low sea and resolution, no glow. The boat keeps the model it was built with (her
+// details are what the Boatyard is for). Not timed until the Blender models are in.
+let autoLook = quality === "high" && !askedQuality;
+const slowWatch = new SlowWatch({ ...JUDGE, skipFrames: 60, skipMs: 5000 });
 const comps = components(SEA_STATES.calm);
 sea.setSea(SEA_STATES.calm.hs);
 const place = { x: 0, z: 0, yaw: -0.5 };
@@ -233,6 +240,8 @@ const status = {
   frames: 0,
   /** The Blender models: "loading" until they arrive (or don't). Their rebuild is a long frame on slow graphics. */
   models: "loading" as "loading" | "detailed" | "simple",
+  /** True once the page stepped itself down (too slow at High). */
+  stepped: false,
   view: "afloat" as View,
   lift: 0,
   setView: (v: View) => setView(v),
@@ -1119,6 +1128,14 @@ const labelBox = $("labels");
 let lastT = 0;
 // Drawing starts once the shaders are built, after the page has painted (warmup.ts).
 startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
+  if (slowWatch.tick(performance.now(), autoLook && status.models !== "loading" && !document.hidden)) {
+    autoLook = false;
+    sea.setQuality("low");
+    renderer.setPixelRatio(1);
+    atmos.setBloom(false);
+    atmos.setPixelRatio(1);
+    status.stepped = true;
+  }
   const t = clock.getElapsedTime();
   const dt = Math.min(t - lastT, 0.3);
   lastT = t;
