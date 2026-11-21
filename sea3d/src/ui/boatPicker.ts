@@ -43,7 +43,7 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     const name = nameOf(k);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
-  out.push({ id: "revc", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revc.name, fact: "their current wing-sail robot boat design, as drawn: wind only, no motor" });
+  out.push({ id: "revc", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revc.name, fact: "their Rev C5 wing-sail robot boat as drawn (since replaced by Rev E1): wind only, no motor" });
   out.push({ id: "revb", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revb.name, fact: "their earlier 1.5 m wing-sail robot boat, as built: wind only, no motor" });
   if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === "") && !randolphAsBuilt(mine))
     out.push({ id: "mine", group: "Your designs", name: mine.name, fact: "your boat from the Boatyard" });

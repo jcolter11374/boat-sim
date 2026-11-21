@@ -81,9 +81,9 @@ def build(out: Path) -> None:
     spar = material("spar", base=hexcol(0x2A2D31), rough=0.35, metal=0.4)
     teal = material("teal", base=hexcol(TEAL), rough=0.4)
 
-    # Keel fin (root 170, tip 150 mm chord, 430 mm deep) and 8.2 kg lead bulb.
+    # Keel fin (root 170, tip 150 mm chord, 430 mm deep) and the Rev C D72 lead bulb (about 9.2 kg; Rev B had D68, 8.2 kg).
     foil("keel", 0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12, fin)
-    lathe("bulb", bulb_profile(0.32, 0.068, 0.4), 40, lead, (0.579, -0.434, 0))
+    lathe("bulb", bulb_profile(0.32, 0.072, 0.4), 40, lead, (0.579, -0.434, 0))
     # Rudder, stock at x = 1400 mm.
     foil(
         "rudder",
@@ -136,7 +136,8 @@ def build(out: Path) -> None:
         n_span=4,
         parent=wp,
     )
-    cylinder("wing_spar", 0.0125, x, 0.05, 1.11, 0, spar, segs=20, parent=wp)
+    # Rev C3: 30 mm spar (was 25).
+    cylinder("wing_spar", 0.015, x, 0.05, 1.11, 0, spar, segs=20, parent=wp)
     rod("boom", (x, 0.276, 0), (x + 0.6, 0.276, 0), 0.006, spar, parent=wp)
     cylinder("flap_hinge", 0.016, x + 0.6, 0.255, 0.3, 0, dark, segs=20, parent=wp)
     foil("tail_flap", 0.12, 0.12, x + 0.576, x + 0.576, 0.3, 0.5, 0.12, teal, n_span=2, parent=wp)

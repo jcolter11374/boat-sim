@@ -10,6 +10,7 @@
 // the close-up sea runs in real time, so the waves always move naturally while
 // their size and direction follow the voyage hour by hour.
 
+import { pauseWhileUnsized } from "./shown";
 import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import { Spindrift } from "./spindrift";
 import { RainBands } from "./rainbands";
@@ -124,6 +125,7 @@ const FEED = (() => {
 // No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
 // times (as on the title, #608); graphics cards keep it.
 const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
+pauseWhileUnsized(renderer);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;

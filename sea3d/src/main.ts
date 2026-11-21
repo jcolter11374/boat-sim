@@ -5,6 +5,7 @@
 // model (motion.ts): heave, pitch and roll from each hull's own stability.
 // The simple surface follower (standin.ts) is kept as a fallback.
 
+import { pauseWhileUnsized } from "./shown";
 import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { ownWetMaterials } from "./boats/inWater";
@@ -82,6 +83,7 @@ if (PHYSICS) $("motion-label").className = "muted";
 // four times there, half of each frame (Omar's speed list, rank 13: the runner showed 0.7 fps).
 // Low already draws at half resolution there; graphics cards keep it.
 const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
+pauseWhileUnsized(renderer);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
@@ -214,7 +216,10 @@ titleTrack.on = musicParam !== "0" && musicParam !== "air";
   sound.onChange = () => {
     for (const btn of btns) {
       btn.setAttribute("aria-pressed", String(sound.on));
-      btn.setAttribute("aria-label", sound.on ? "Sound: on" : "Sound: off"); // the state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov)
+      // The state, not an order (Elena); the speaker shows it (John's almanac title, 14 Nov). Before
+      // the first click it says it's waiting for one (browsers allow no sound until then), not "off",
+      // which then read as flipping to "on" by itself (the Randolph team, #50, 13 Nov).
+      btn.setAttribute("aria-label", sound.on ? "Sound: on" : startsAtFirstTouch(sound.on, sound.muted) ? "Sound: starts at your first click" : "Sound: off");
     }
   };
   sound.onChange();
