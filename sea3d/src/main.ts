@@ -423,6 +423,43 @@ function setQuality(l: Look): void {
   atmos.setPixelRatio(ratio);
 }
 
+/** Build the scene's shaders a few a frame, off the drawing, then start (or carry on) the drawing. */
+function drawWhenBuilt(): void {
+  startWhenBuilt(
+    renderer,
+    scene,
+    camera,
+    () => {
+      if (heldAt) clock.start += performance.now() - heldAt; // the sea carries on from where it stood
+      heldAt = 0;
+      renderer.setAnimationLoop(frame);
+    },
+    [(r, sc, cam) => clouds.warm(r, sc, cam), ...atmos.postWarms()],
+    () => atmos.sceneTarget(),
+    8000,
+    true,
+  );
+}
+/** True once the first picture's shaders have been asked for (before that, a new look just waits for them). */
+let drawing = false;
+/** When the drawing was held for a change of look (ms, performance.now), or 0. */
+let heldAt = 0;
+/**
+ * Change the look on a running page. Another look means other shaders for nearly everything (35 on
+ * the title), and drawn straight away they were all built inside one frame: 6.7 s of a locked page
+ * on John's GTX 1660 Ti when the title stepped itself down to Low (21 Nov 2026). So the drawing is
+ * held on its last picture while they are built as at the start (startWhenBuilt, a few a frame,
+ * the page answering meanwhile), and carries on when they are ready.
+ */
+function changeLook(l: Look): void {
+  if (drawing) {
+    renderer.setAnimationLoop(null);
+    if (!heldAt) heldAt = performance.now();
+  }
+  setQuality(l);
+  if (drawing) drawWhenBuilt();
+}
+
 // ---------- camera presets ----------
 interface Shot {
   pos: [number, number, number]; // in the boats' frame: +x ahead, +z to starboard
@@ -465,7 +502,7 @@ seaSelect.addEventListener("change", () => {
 });
 qualitySelect.addEventListener("change", () => {
   autoLook = false; // the visitor's pick is never changed for them
-  setQuality(qualitySelect.value as Look);
+  changeLook(qualitySelect.value as Look);
 });
 headingSelect.addEventListener("change", () => {
   placeBoats();
@@ -589,8 +626,9 @@ const frame = (now?: number): void => {
   if (slowWatch.tick(t * 1000, autoLook && !document.hidden)) {
     autoLook = false;
     qualitySelect.value = "low";
-    setQuality("low");
     status.stepped = true;
+    changeLook("low");
+    return; // no picture this frame: the next one is drawn when the new shaders are built
   }
   // The title's sound runs while the title is up, and fades out when it goes.
   if (document.body.classList.contains("title")) {
@@ -731,4 +769,7 @@ const frame = (now?: number): void => {
 };
 // Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
 // in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
-void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(frame), [(r, sc, cam) => clouds.warm(r, sc, cam), ...atmos.postWarms()], () => atmos.sceneTarget(), 8000, true));
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => {
+  drawing = true;
+  drawWhenBuilt();
+});
