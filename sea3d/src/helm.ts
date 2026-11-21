@@ -1912,8 +1912,12 @@ const PRACTICE = SS.where === "annapolis" && !SPECTATE; // ?where=annapolis, or 
 /** The boat's name on the offer: the Set sail card's (the player's own words for their design);
  * for a voyage that came back, the name it was saved with. */
 let keptBoat: string | null = null;
-/** The name of the boat this voyage is sailed in, as the Set sail card showed it (a continued voyage keeps the name it began with). */
-const sailedAs = (): string => keptBoat || $("ss-boatname").textContent || "";
+/** The boat's name as the Set sail card showed it when this voyage began. Taken then, not read later: the card's
+ *  name follows "my boat", which the player can change from the top bar, or another tab, while she is at sea. */
+let sailedName = "";
+/** The name of the boat this voyage is sailed in (a continued voyage keeps the name it began with). Empty when it
+ *  isn't known: someone else's shared voyage, or a continued one whose save is gone. */
+const sailedAs = (): string => keptBoat || sailedName;
 /** The day that was on the screen when a voyage that came back was left (null if its save doesn't say). */
 let keptLeft: number | null = null;
 if (!SPECTATE && !PRACTICE && !THEIRS)
@@ -1922,7 +1926,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: keptBoat ?? $("ss-boatname").textContent ?? "", toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: sailedAs(), toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
     },
     () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();
@@ -3591,11 +3595,11 @@ async function finish(): Promise<void> {
   if (ch && !THEIRS) {
     const st = c as Card & { stars?: Stars; ghost_stars?: Stars };
     const run = (x: Card["boat"], s?: Stars) => ({ stars: s ? s.stars : null, finished: x.outcome === "arrived" || x.outcome === "goal", days: x.days });
-    saveChallengeRun(ch.id, run(me, st.stars), { boat: $("ss-boatname").textContent ?? "", autopilot: run(gh, st.ghost_stars) });
+    saveChallengeRun(ch.id, run(me, st.stars), { boat: sailedAs(), autopilot: run(gh, st.ghost_stars) });
   }
   // The crossing is kept in this browser so the leaderboard can list the boat under her name (#653).
   // Not a challenge (its own tab keeps those), and not someone else's shared voyage.
-  if (!ch && !THEIRS && page.started.me) saveMyCrossing({ boat: resultsBoatName(sailedAs()), build: c.build, finished: me.outcome === "arrived", days: me.days, day: String(c.launch ?? "").slice(0, 10) });
+  if (!ch && !THEIRS && page.started.me && sailedAs()) saveMyCrossing({ boat: resultsBoatName(sailedAs()), build: c.build, finished: me.outcome === "arrived", days: me.days, day: String(c.launch ?? "").slice(0, 10) });
   openResults(ch ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch }, nums, { calls: mode === "hands_on" && !THEIRS });
   void showStanding(c.build);
 }
@@ -3987,6 +3991,7 @@ async function begin(): Promise<void> {
     } else {
       const pick = chosenBoat();
       const mine = loadMyBoat();
+      sailedName = $("ss-boatname").textContent ?? "";
       const boat = pick === MINE && mine ? mine.choices : pick || undefined;
       page.status = await game.start(launch, safe, breakdowns, mode, ch && { id: ch.id, bundle: bundleUrl(ch, challengesBase) }, boat, page.startPort, mode === "hands_on" ? { heading: order, power, sails: sailOrder, engine: engineOrder } : undefined);
       useBoat(game.boatBase);

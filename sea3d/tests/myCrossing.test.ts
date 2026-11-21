@@ -43,7 +43,7 @@ test("the leaderboard lists a built boat under her name, with the Boatyard's odd
   assert.equal(y.onBoard, false);
   assert.deepEqual(y.odds, { rate: 0.84, words: "Boatyard odds, over 100 launch days" });
   assert.equal(y.crossing, "Your crossing: finished in 55.3 days (launched 23 Apr 2020).");
-  assert.match(y.why, /Not ranked/);
+  assert.match(y.why, /^The boat you last sailed across\. Not ranked/);
 });
 
 test("a build our servers haven't tested gets no odds; one the board ranks marks that row", () => {

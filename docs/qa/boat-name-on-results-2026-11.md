@@ -48,6 +48,24 @@ and says why.
   the first row of the leaderboard, as text and not as HTML, with "Not ranked" and the days.
 - By eye on a local build (the picture above).
 
+## After an independent review (21 Nov)
+
+A fresh reviewer read the change. Fixed from its findings:
+
+- **The name was read when Results opened, not when the voyage began.** The Set sail card's
+  name follows "my boat", and the top bar lets the player change that while at sea, so picking
+  Our kayak mid-voyage would have brought the bug back, and stored the wrong name. The name is
+  now taken once, when the voyage starts. The saved voyage and the challenge board use it too.
+- **Someone else's shared voyage** was called "Our kayak" (the card's default text). It now
+  reads "This build". A continued voyage whose save is gone does the same, and is not stored.
+- On the leaderboard: a link to a ranked build still scrolls to that row, not the player's;
+  the row says "The boat you last sailed across", which stays true after the player builds
+  another; it no longer says "Not tested on our computers yet" when the Boatyard's file simply
+  didn't load; and that file is only fetched when there is a crossing to show.
+
+Worth knowing: if the boat last sailed across is one the board ranks (our kayak as planned,
+say), a plain visit to the leaderboard now marks that row and opens with where it stands.
+
 ## Not checked here
 
 A full crossing to the Results card needs the simulator files, which the cloud test build

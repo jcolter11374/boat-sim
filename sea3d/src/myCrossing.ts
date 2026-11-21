@@ -71,7 +71,7 @@ export function saveMyCrossing(c: Omit<MyCrossing, "at"> & { at?: string }, s: S
   return kept;
 }
 
-/** The boat's name on the Results card: the one she sailed under, never another boat's. */
+/** The boat's name on the Results card: the one she sailed under, or "This build" when that isn't known. */
 export function resultsBoatName(sailedAs: string | null | undefined): string {
   const n = (sailedAs ?? "").trim();
   return n || "This build";
@@ -122,6 +122,6 @@ export function yourRow(c: MyCrossing | null, boardBuilds: string[], grid: GridB
     onBoard: boardBuilds.includes(c.build),
     odds: g?.odds ? { rate: g.odds.odds, words: `Boatyard odds, over ${g.odds.voyages} launch days` } : null,
     crossing: `Your crossing: ${c.finished ? `finished in ${days}` : `didn't finish (${days} at sea)`}${dayWords(c.day)}.`,
-    why: "Your boat. Not ranked: the board tests a fixed list of boats, each sailed by the autopilot on the same launch days.",
+    why: "The boat you last sailed across. Not ranked: the board tests a fixed list of boats, each sailed by the autopilot on the same launch days.",
   };
 }
