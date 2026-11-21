@@ -4,6 +4,7 @@ import { standing, standingText } from "./results";
 import { CHALLENGE_BOARD_WORDS, boardTab, challengeRows, type BoardTab } from "./challengeBoard";
 import { loadChallengeBests } from "./helm/challengeBest";
 import { loadChallenges } from "./helm/challenges";
+import { loadMyCrossing, yourRow, type YourRow } from "./myCrossing";
 // Design leaderboard page: draws the board JSON the "Design leaderboard"
 // workflow publishes (boatsim.mc.leaderboard). All statistics are worked out in
 // Python (summary()); this page only lays them out. Every piece of data goes in
@@ -161,7 +162,26 @@ function holdoutCell(r: Row): HTMLElement {
   return td;
 }
 
-function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
+/** The player's own boat, under her name (#653): a row of its own above the groups, marked as theirs and never given a place. */
+function yourBoatRow(y: YourRow): HTMLElement {
+  const tr = el("tr", "mine yours");
+  tr.append(el("td", "tier", "Yours"));
+  const name = el("td");
+  name.append(el("div", "name", y.name)); // the player's own text: textContent only
+  name.append(el("div", "muted", y.why));
+  const fin = el("td");
+  if (y.odds) fin.append(el("span", "rate", pct(y.odds.rate)), el("div", "muted", y.odds.words));
+  else fin.append(el("span", "muted", "Not tested on our computers yet"));
+  const run = el("td", "verdict", y.crossing);
+  tr.append(name, fin, run, el("td", "stat"));
+  return tr;
+}
+
+/** The player's boat as drawn, for tests. */
+let yoursShown: { name: string; onBoard: boolean } | null = null;
+type GridOdds = { id: string; odds?: { voyages: number; odds: number } | null }[];
+
+function draw(b: Board, names: Map<string, BuildName> = new Map(), grid: GridOdds | null = null): void {
   // Player names from the Boatyard grid (names.ts): older boards carry the old labels.
   if (b.summary)
     for (const r of b.summary.rows) {
@@ -219,6 +239,12 @@ function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
   }
   // Each group is one row that opens in place (Milo M6); only the top group, and the
   // group with a marked build, start open. Groups are named, not numbered (M7).
+  // The boat the player last took across, in this browser (#653). If the board already ranks that
+  // build, its row is marked and carries her name; otherwise she gets a row of her own on top.
+  const you = yourRow(loadMyCrossing(), s.rows.map((r) => r.design), grid);
+  if (you?.onBoard && !mine) mine = loadMyCrossing()!.build;
+  if (you && !you.onBoard) tbody.append(yourBoatRow(you));
+  yoursShown = you ? { name: you.name, onBoard: you.onBoard } : null;
   const groups = Math.max(0, ...s.rows.map((r) => r.tier));
   const open = new Set<number>([1, ...s.rows.filter((r) => mine && r.design === mine).map((r) => r.tier)]);
   let lastTier = 0;
@@ -253,15 +279,16 @@ function draw(b: Board, names: Map<string, BuildName> = new Map()): void {
     fin.append(el("span", "rate", pct(r.finish_rate)), el("span", "muted", ` ${r.finished} of ${r.launches}`), bar(r.finish_rate, r.ci95));
     tr.append(fin, verdictCell(r, s), holdoutCell(r));
     if (mine && r.design === mine) tr.classList.add("mine");
+    if (you?.onBoard && r.design === loadMyCrossing()?.build && you.name !== r.label) nm.append(" ", el("span", "chip", `your boat: ${you.name}`), el("div", "muted", you.crossing));
     tbody.append(tr);
   }
   tbody.querySelector("tr.mine")?.scrollIntoView({ block: "center" });
-  drawYou(b, s, mine);
+  drawYou(b, s, mine, you);
 }
 
 /** The first thing a player sees (#318 item 21): where their build stands, in the
  *  Results card's own words (results.ts); else who is in the top group. */
-function drawYou(b: Board, s: Summary, mine: string): void {
+function drawYou(b: Board, s: Summary, mine: string, you: YourRow | null = null): void {
   const box = document.getElementById("you")!;
   const head = el("div", "head");
   const sub = el("div", "muted");
@@ -277,7 +304,8 @@ function drawYou(b: Board, s: Summary, mine: string): void {
     const top = s.rows.filter((r) => r.tier === 1).sort((x, y) => Number(y.design === s.reference) - Number(x.design === s.reference));
     const groups = Math.max(0, ...s.rows.map((r) => r.tier));
     head.textContent = s.fair ? bestHeadline(top, groups) : "Not ranked yet: this leaderboard didn't pass its fairness check.";
-    if (mine) sub.textContent = "Your boat isn't on the leaderboard yet. The board tests a fixed list of boats. The Boatyard gives the odds for others.";
+    if (you && !you.onBoard) sub.textContent = `${you.name} is listed below as your boat. She has no place: the board tests a fixed list of boats, and the Boatyard gives the odds for others.`;
+    else if (mine) sub.textContent = "Your boat isn't on the leaderboard yet. The board tests a fixed list of boats. The Boatyard gives the odds for others.";
     else {
       sub.textContent = "Boats in the same group can't be told apart with this many launch days. ";
       const n = s.rows[0]?.launches ?? 0;
@@ -300,7 +328,7 @@ wireStats();
 
 declare global {
   interface Window {
-    __leaderboard?: { ready: boolean; rows: number; error: string | null; sample: boolean; sea?: { frames: number; quality: string } | null; tab?: BoardTab; challenges?: number };
+    __leaderboard?: { ready: boolean; rows: number; error: string | null; sample: boolean; yours?: { name: string; onBoard: boolean } | null; sea?: { frames: number; quality: string } | null; tab?: BoardTab; challenges?: number };
   }
 }
 
@@ -308,11 +336,16 @@ async function main(): Promise<void> {
   window.__leaderboard = { ready: false, rows: 0, error: null, sample: false };
   const url = boardUrl();
   try {
-    const [r, names] = await Promise.all([fetch(url), loadNames()]);
+    const gridUrl = "./boatyard/index.json";
+    const [r, names, grid] = await Promise.all([
+      fetch(url),
+      loadNames(),
+      fetch(gridUrl).then((x) => (x.ok && !/text\/html/.test(x.headers.get("content-type") ?? "") ? (x.json() as Promise<{ builds?: GridOdds }>) : null)).then((j) => j?.builds ?? null, () => null),
+    ]);
     if (!r.ok || /text\/html/.test(r.headers.get("content-type") ?? "")) throw new Error("NO_BOARD");
     const b = (await r.json()) as Board;
-    draw(b, names);
-    window.__leaderboard = { ready: true, rows: b.summary?.rows.length ?? 0, error: null, sample: !!b.board.sample };
+    draw(b, names, grid);
+    window.__leaderboard = { ready: true, rows: b.summary?.rows.length ?? 0, error: null, sample: !!b.board.sample, yours: yoursShown };
   } catch (e) {
     const banner = document.getElementById("banner")!;
     banner.className = "glass banner";
