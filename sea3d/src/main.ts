@@ -18,6 +18,7 @@ import { SurfaceFollower, toWorld, type Placement } from "./standin";
 import { Wake } from "./wake";
 import { Contact } from "./contact";
 import { FpsGuard, geometryOf, shadowsOn, startLook, type Look } from "./ultra";
+import { JUDGE, SlowWatch } from "./helm/autoQuality";
 import { Atmosphere, softwareGraphics } from "./atmosphere";
 import { Sea } from "./water";
 import { SEA_STATES, components, heightAt, hsOf, type SeaState, type WaveComponent } from "./waves";
@@ -121,6 +122,12 @@ const clock = {
 // the helm and the Boatyard do: at High, software graphics queued so many frames that leaving
 // the title for the helm took 40-50 s after a few seconds on it (M1 start-up profile).
 let look: Look = startLook(qualitySelect, atmos.software);
+// High on a graphics card steps down to Low by itself, once, if this computer draws it too slowly
+// (two 3 s windows of frames slower than about 36 ms, as the helm judges: helm/autoQuality.ts),
+// unless ?quality= or the visitor's own pick set it. Its first 5 s aren't timed: the title's boats,
+// shore and landmarks arrive then and build their shaders.
+let autoLook = look === "high" && !new URLSearchParams(location.search).has("quality");
+const slowWatch = new SlowWatch({ ...JUDGE, skipFrames: 60, skipMs: 5000 });
 // The title screen's Set sail: fetch its simulator ahead so Set sail is quick (F2), once the
 // visitor shows they mean to sail, or after eight seconds on a desktop (helm/prefetch.ts).
 prefetchHelmOnIntent(
@@ -451,7 +458,10 @@ seaSelect.addEventListener("change", () => {
   setSea(seaSelect.value);
   placeBoats();
 });
-qualitySelect.addEventListener("change", () => setQuality(qualitySelect.value as Look));
+qualitySelect.addEventListener("change", () => {
+  autoLook = false; // the visitor's pick is never changed for them
+  setQuality(qualitySelect.value as Look);
+});
 headingSelect.addEventListener("change", () => {
   placeBoats();
   goTo(document.querySelector<HTMLButtonElement>('#shots button[aria-pressed="true"]')?.dataset.shot ?? "side");
@@ -536,6 +546,8 @@ const status = {
   maxRoll: {} as Record<string, number>, // largest |roll| seen since the sea state was set, rad
   /** The boat the title hero shows ("" when the title is off). */
   hero: "",
+  /** True once the title stepped itself down to Low (too slow at High). */
+  stepped: false,
 };
 (window as unknown as { __sea3d: typeof status }).__sea3d = status;
 seaSelect.addEventListener("change", () => (status.maxRoll = {}));
@@ -569,6 +581,12 @@ let soundT = 0;
 const frame = (now?: number): void => {
   clock.frame(now);
   const t = clock.getElapsedTime();
+  if (slowWatch.tick(t * 1000, autoLook && !document.hidden)) {
+    autoLook = false;
+    qualitySelect.value = "low";
+    setQuality("low");
+    status.stepped = true;
+  }
   // The title's sound runs while the title is up, and fades out when it goes.
   if (document.body.classList.contains("title")) {
     titleSound.update(t - soundT);

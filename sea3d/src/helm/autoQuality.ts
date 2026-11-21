@@ -108,3 +108,51 @@ export function levelSettings(level: Level, devicePixelRatio: number, software: 
   if (level === "medium") return { ratio: Math.min(devicePixelRatio, 1), bloom: false, sea: "high" };
   return { ratio: software ? 0.5 : 0.75, bloom: false, sea: "low" };
 }
+
+/**
+ * Keeps judging after the start, on every page whose level is still the automatic one (Omar's speed
+ * list, rank 22): a computer that gets slow later (a long practice, a storm's rain, a hot laptop),
+ * or a page with no goal card to judge under, still steps down. Window after window of `windowMs`
+ * judged as FrameJudge does; two slow windows in a row (about 6 s of slow drawing) say "step down",
+ * so one heavy moment doesn't. Frames the page says not to time (hidden, busy, still building its
+ * shaders) are skipped without ending the window. After a step it starts over, skip included.
+ */
+export class SlowWatch {
+  private judge: FrameJudge;
+  private slowInRow = 0;
+  private last = NaN;
+  /** The last window's typical frame (ms), for the page's test hooks. */
+  typical = NaN;
+  constructor(
+    private readonly o: JudgeOptions = JUDGE,
+    private readonly need = 2,
+  ) {
+    this.judge = new FrameJudge(o);
+  }
+
+  /** Start over: after a level change (its first frames build shaders) or the player's own pick. */
+  reset(): void {
+    this.judge = new FrameJudge(this.o);
+    this.slowInRow = 0;
+    this.last = NaN;
+  }
+
+  /** Once a frame: the time (ms) and whether this frame may be timed. True means: step down now. */
+  tick(nowMs: number, on: boolean): boolean {
+    if (!on) {
+      this.last = NaN; // the gap over skipped frames isn't a frame
+      return false;
+    }
+    const dt = nowMs - this.last;
+    this.last = nowMs;
+    if (!(dt > 0)) return false;
+    const v = this.judge.tick(dt);
+    if (v !== "slow" && v !== "ok") return false;
+    this.typical = Math.round(this.judge.typical() * 10) / 10;
+    this.judge = new FrameJudge({ ...this.o, skipFrames: 0, skipMs: 0 }); // the next window straight on
+    this.slowInRow = v === "slow" ? this.slowInRow + 1 : 0;
+    if (this.slowInRow < this.need) return false;
+    this.reset();
+    return true;
+  }
+}

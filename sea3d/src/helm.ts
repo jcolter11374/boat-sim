@@ -68,7 +68,7 @@ import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
 import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
 import { ROUTE_BIG_KM, routeBigText } from "./helm/routeCall";
-import { FrameJudge, PREF_KEY, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
+import { FrameJudge, PREF_KEY, SlowWatch, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
 import { Rival, rivalOffset } from "./helm/rival";
 import { LIGHT_WIND_FROM, MEDAL_WORDS, ROBOT_SECS, clock as trialClock, ghostAt, medalFor, medalTime, readGhost, saveGhost, turnTrack, type Medal, type Track } from "./helm/trial";
@@ -138,7 +138,17 @@ try {
 } catch {
   /* private mode: nothing remembered */
 }
-const qstat = { ...startLevel(location.search, storedLevel, atmos.software), median: NaN, typical: NaN, frames: 0, stepped: false };
+const qstat = {
+  ...startLevel(location.search, storedLevel, atmos.software),
+  median: NaN,
+  typical: NaN,
+  frames: 0,
+  stepped: false,
+  /** Why it stepped down: "goal" (timed under the goal card) or "later" (the watch since: practice, a long session). */
+  steppedBy: "" as "" | "goal" | "later",
+  /** The watch's last window, typical frame (ms). */
+  watchTypical: NaN,
+};
 /** Geometry is built once: Low builds the light versions, Medium and High the full ones. */
 const quality = qstat.level === "low" ? "low" : "high";
 const sea = new Sea(quality);
@@ -232,13 +242,16 @@ applyLevel(qstat.level);
 /** Times the frames under the goal card, once, while the level is still the automatic one. */
 const judge = new FrameJudge();
 let judging = false;
+/** And after it, or with no goal card at all (practice, a challenge, watching), the watch that keeps
+ * timing while the level is automatic: a computer that turns slow later still steps down, once. */
+const slowWatch = new SlowWatch();
 // The player's own pick (the keys panel): it wins from now on, and is remembered.
 $<HTMLSelectElement>("picq").value = qstat.level;
 $<HTMLSelectElement>("picq").addEventListener("change", (e) => {
   const v = (e.currentTarget as HTMLSelectElement).value;
   if (!isLevel(v)) return;
   judging = false;
-  qstat.source = "player";
+  qstat.source = "player"; // the watch stops too: the player's pick is never changed for them
   applyLevel(v);
   try {
     localStorage.setItem(PREF_KEY, v);
@@ -4969,10 +4982,21 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
       // Too slow for Medium: Low, once, while the goal card still covers the switch. Never up.
       if (v === "slow" && qstat.source === "auto" && qstat.level !== "low") {
         qstat.stepped = true;
+        qstat.steppedBy = "goal";
         applyLevel("low");
       }
     }
   }
+  // Timed only once her shaders are built, never while the goal card's judge is timing, the tab is
+  // hidden or the simulator's results are coming in.
+  const watchOn = qstat.source === "auto" && !qstat.stepped && qstat.level !== "low" && !judging && page.warmed && !document.hidden && !page.busy;
+  if (slowWatch.tick(t * 1000, watchOn)) {
+    qstat.stepped = true;
+    qstat.steppedBy = "later";
+    applyLevel("low");
+    note("Picture set to Low: this computer was drawing slowly. Press K to pick another.", "Picture", TONE_COLOUR.info);
+  }
+  qstat.watchTypical = slowWatch.typical;
   const dt = Math.min(t - last, 0.1);
   last = t;
   // Play the hours just sailed: about 2.5 s a day, at most 6 s.
