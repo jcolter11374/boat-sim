@@ -78,7 +78,7 @@
   #nolink { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid #ff6b5a; border-radius: 8px; background: rgba(255,107,90,.12); font-size: 12.5px; line-height: 1.35; }
   #nolink b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #ff8a7a; margin-bottom: 2px; }
   /* Only the steering locks: the clock (Jump ahead) and the share link keep working (Maya). */
-  #orders.locked > :is(#coach, #dialrow, #powerrow, #power, #sailrow, #preview, #powerhint, #sendrow) { opacity: .35; pointer-events: none; filter: grayscale(1); }
+  #orders.locked > :is(#coach, #dialrow, #dialkeys, #powerrow, #power, #sailrow, #preview, #powerhint, #sendrow) { opacity: .35; pointer-events: none; filter: grayscale(1); }
   /* "Orders: no link" is longer than "Orders": a taller tab, the words centred inside it (Ines). */
   #orders-tab.nolink { height: 150px; }
   #orders-tab.nolink span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); color: #ff8a7a; }
@@ -205,6 +205,13 @@
   body.watching #dialrow .side { font-size: 13px; }
   #dialkey { color: var(--dim); font-size: 11.5px; line-height: 1.45; }
   #dialkey i { display: inline-block; width: 9px; height: 3px; margin-right: 5px; vertical-align: middle; }
+  /* #314 item 6: what's a label and what's a button, and what the compass's lines are. */
+  #dialrow .olabel { font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--dim); margin-bottom: -4px; }
+  #dialrow .olabel.change { margin-top: 4px; margin-bottom: -2px; }
+  body.watching #dialrow .olabel { display: none; }
+  #dialkeys { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 6px; color: var(--dim); font-size: 11px; }
+  #dialkeys [hidden] { display: none; }
+  #dialkeys i { display: inline-block; width: 9px; height: 3px; margin-right: 5px; vertical-align: middle; }
   @media (min-width: 1101px) { body.watching #strip { grid-template-columns: minmax(max-content, 2.05fr) 1.25fr .9fr .75fr .95fr minmax(max-content, 1.35fr) max-content 2.2em; } }
   @media (max-width: 760px) { body.watching #strip #c-wind { grid-column: span 7; } }
   /* A race (M2, R3): nobody steers either, but the lead cell stays: it's boat A against boat B. */
@@ -800,13 +807,16 @@
   <div id="dialrow">
     <canvas id="dial" title="Tap or drag to steer. Orange: your order · white: where the bow points · green: the finish · blue: the wind"></canvas>
     <div class="side">
+      <div class="olabel" id="ordernow">Steering now</div>
       <div id="ordertext">Autopilot steering, like the ghost</div>
+      <div class="olabel change" id="orderpick">Change it</div>
       <button id="b-auto" aria-pressed="true" title="The autopilot sails your boat exactly as it sails the ghost. Leave it on and the two boats stay level.">Autopilot</button>
-      <button id="b-finish" aria-pressed="false">Aim at the finish</button>
+      <button id="b-finish" aria-pressed="false" title="Aims at the finish, and keeps re-aiming as she goes">Aim at the finish</button>
       <button id="b-route" aria-pressed="false" title="The autopilot's planned route, which allows for the current">Follow the route</button>
       <button id="b-wheel" hidden title="Sail her yourself in real time: steer, trim the sail, reef (Enter)">Take the wheel ⏎</button>
     </div>
   </div>
+  <div id="dialkeys" aria-label="What the lines on the compass mean"><span><i style="background:#ff8a2a"></i>your order</span><span id="dk-bow"><i style="background:#fff"></i>the bow</span><span><i style="background:#3ddc97"></i>the finish</span><span><i style="background:#8ab4ff"></i>the wind</span></div>
   <label class="muted" for="power" id="powerrow"><span id="powerlabel">Motor power</span> <b id="powertext"></b></label>
   <input id="power" type="range" min="0" max="100" step="5" value="25">
   <div id="sailrow" hidden>
