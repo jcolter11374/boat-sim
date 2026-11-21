@@ -25,6 +25,8 @@ export function startWhenBuilt(
   /** The picture the scene is drawn into (the atmosphere's post-processing target), which the shaders are built for. */
   target: () => THREE.WebGLRenderTarget | null = () => null,
   maxMs = 8000,
+  /** Hand the shaders over a few a frame (the title, whose card fades in meanwhile); otherwise all in one task, as before. */
+  paced = false,
 ): void {
   let started = false;
   const go = (): void => {
@@ -46,7 +48,7 @@ export function startWhenBuilt(
       // whole scene, which also catches anything missed (already-built ones cost nothing there).
       const steps: (() => Iterable<THREE.Material>)[] = [];
       scene.traverse((o) => {
-        if (!drawable(o) || !(o as THREE.Mesh).material) return;
+        if (!paced || !drawable(o) || !(o as THREE.Mesh).material) return;
         let lit = false;
         o.traverse((q) => {
           if ((q as THREE.Light).isLight) lit = true;
@@ -66,7 +68,7 @@ export function startWhenBuilt(
         try {
           renderer.setRenderTarget(target());
           // Until a shader is new or a few ms are spent: then the screen gets its frame.
-          while (step < steps.length && count() === before && performance.now() - t0 < 4) built.push(...steps[step++]());
+          while (step < steps.length && (!paced || (count() === before && performance.now() - t0 < 4))) built.push(...steps[step++]());
         } catch {
           return go();
         } finally {

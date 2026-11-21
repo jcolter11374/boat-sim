@@ -708,4 +708,4 @@ const frame = (now?: number): void => {
 };
 // Under the title the first frame waits (3 s at most) for the detailed boat, so her shaders are prepared
 // in the one pause before the first picture, with the sea's, not in a freeze just after it first moves.
-void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(frame), [(r, sc, cam) => clouds.warm(r, sc, cam), ...atmos.postWarms()], () => atmos.sceneTarget()));
+void Promise.race([heroOn() ? detailed : null, new Promise((r) => setTimeout(r, 3000))]).finally(() => startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(frame), [(r, sc, cam) => clouds.warm(r, sc, cam), ...atmos.postWarms()], () => atmos.sceneTarget(), 8000, true));
