@@ -425,14 +425,16 @@ function setQuality(l: Look): void {
 
 /** Build the scene's shaders a few a frame, off the drawing, then start (or carry on) the drawing. */
 function drawWhenBuilt(): void {
+  const g = ++builds;
   startWhenBuilt(
     renderer,
     scene,
     camera,
     () => {
+      if (g !== builds) return; // the look changed again meanwhile: that change's own build starts the drawing
       if (heldAt) clock.start += performance.now() - heldAt; // the sea carries on from where it stood
       heldAt = 0;
-      renderer.setAnimationLoop(frame);
+      renderer.setAnimationLoop(frame); // the first start; after a hold it is running already
     },
     [(r, sc, cam) => clouds.warm(r, sc, cam), ...atmos.postWarms()],
     () => atmos.sceneTarget(),
@@ -444,6 +446,8 @@ function drawWhenBuilt(): void {
 let drawing = false;
 /** When the drawing was held for a change of look (ms, performance.now), or 0. */
 let heldAt = 0;
+/** How many builds have been asked for: only the latest one starts the drawing. */
+let builds = 0;
 /**
  * Change the look on a running page. Another look means other shaders for nearly everything (35 on
  * the title), and drawn straight away they were all built inside one frame: 6.7 s of a locked page
@@ -452,10 +456,9 @@ let heldAt = 0;
  * the page answering meanwhile), and carries on when they are ready.
  */
 function changeLook(l: Look): void {
-  if (drawing) {
-    renderer.setAnimationLoop(null);
-    if (!heldAt) heldAt = performance.now();
-  }
+  // Held by a flag the frame reads, not by stopping the loop: stopped from inside its own frame,
+  // three's loop keeps its old request going, and the restart would then draw every frame twice.
+  if (drawing && !heldAt) heldAt = performance.now();
   setQuality(l);
   if (drawing) drawWhenBuilt();
 }
@@ -620,7 +623,24 @@ const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) /
 const v = new THREE.Vector3();
 let rigHeave = 0; // camera height offset that follows the swell
 let soundT = 0;
+let heldSoundAt = 0;
+/** The title's sound runs while the title is up, and fades out when it goes. `dt`: seconds since the last call. */
+function titleSounds(dt: number): void {
+  if (document.body.classList.contains("title")) {
+    titleSound.update(dt);
+    titleMusic.update();
+    titleTrack.update();
+  } else if (sound.on) sound.disable(false);
+}
 const frame = (now?: number): void => {
+  if (heldAt) {
+    // Held while a new look's shaders are built (changeLook): no picture, but the title's sound carries on.
+    const n = performance.now();
+    titleSounds(Math.min(0.1, (n - heldSoundAt) / 1000));
+    heldSoundAt = n;
+    return;
+  }
+  heldSoundAt = performance.now();
   clock.frame(now);
   const t = clock.getElapsedTime();
   if (slowWatch.tick(t * 1000, autoLook && !document.hidden)) {
@@ -630,12 +650,7 @@ const frame = (now?: number): void => {
     changeLook("low");
     return; // no picture this frame: the next one is drawn when the new shaders are built
   }
-  // The title's sound runs while the title is up, and fades out when it goes.
-  if (document.body.classList.contains("title")) {
-    titleSound.update(t - soundT);
-    titleMusic.update();
-    titleTrack.update();
-  } else if (sound.on) sound.disable(false);
+  titleSounds(t - soundT);
   soundT = t;
   sea.update(comps, t);
   status.boats = boats.map((b) => {
@@ -747,7 +762,8 @@ const frame = (now?: number): void => {
   }
   if (guard.tick(t, look === "ultra")) {
     qualitySelect.value = "high";
-    setQuality("high");
+    changeLook("high");
+    return; // as the step down to Low: the next picture when its shaders are built
   }
   atmos.render();
   // Name tags above each boat.
