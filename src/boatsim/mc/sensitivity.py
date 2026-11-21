@@ -382,7 +382,9 @@ class SensitivityVoyage(MonthlyVoyage):
         from dataclasses import replace as _replace
 
         end = datetime(start.year, *until, 23, 59)
-        return MonthlyVoyage.__call__(_replace(self, max_days=(end - start).total_seconds() / 86400.0), start, seed)
+        return MonthlyVoyage.__call__(
+            _replace(self, max_days=(end - start).total_seconds() / 86400.0), start, seed
+        )
 
     def drop_point(self) -> tuple[float, float]:
         from boatsim.config import load_design
