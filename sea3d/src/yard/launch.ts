@@ -9,6 +9,7 @@
 
 import { sailOnly, simChoices, type Catalog, type Design, type Summary } from "./design";
 import { sandboxThere } from "../sandbox";
+import type { Track } from "./launchChart";
 
 export interface LaunchOdds {
   voyages: number;
@@ -23,6 +24,8 @@ export interface LaunchReplay {
   start: string; // ISO UTC
   outcome: string;
   days: number;
+  /** The voyage's path, when the launcher already holds it (the browser's own runs); else it's in the file at `url`. */
+  track?: Track;
 }
 export interface LaunchResult {
   /** True when the odds are this exact build's own; false for the nearest grid build. */
@@ -40,10 +43,12 @@ export interface LaunchResult {
   fingerprints?: Record<string, unknown>[];
 }
 export type Progress = (text: string, done: number, total: number) => void;
+/** Called as each voyage ends, by a launcher that sails them one by one (the browser's simulator), so the page can draw it (#332). */
+export type OnVoyage = (v: LaunchReplay, total: number) => void;
 export interface Launcher {
   readonly name: string;
   /** null when this back end can't say anything about the design. */
-  launch(design: Design, summary: Summary, progress?: Progress): Promise<LaunchResult | null>;
+  launch(design: Design, summary: Summary, progress?: Progress, onVoyage?: OnVoyage): Promise<LaunchResult | null>;
 }
 
 // ---------- the precomputed grid (schema 2) ----------
@@ -258,6 +263,13 @@ export const SANDBOX_CREDITS = {
   url: "https://github.com/jcolter11374/boat-sim/blob/main/docs/sandbox.md#data-sources-and-attribution",
 };
 
+/** A replay's path over the ground (schema 1: lat and lon lists), or nothing if it has none. */
+export function trackOf(replay: Record<string, unknown> | null | undefined): Track | undefined {
+  const lat = replay?.lat;
+  const lon = replay?.lon;
+  return Array.isArray(lat) && Array.isArray(lon) && lat.length ? { lat: lat as number[], lon: lon as number[] } : undefined;
+}
+
 export class SandboxLauncher implements Launcher {
   readonly name = "simulator in the browser";
   private pool: Pool | null = null;
@@ -271,9 +283,9 @@ export class SandboxLauncher implements Launcher {
   async available(): Promise<boolean> {
     return sandboxThere(new URL(this.base, location.href).href);
   }
-  async launch(d: Design, _s: Summary, progress: Progress = () => {}): Promise<LaunchResult | null> {
+  async launch(d: Design, _s: Summary, progress: Progress = () => {}, onVoyage: OnVoyage = () => {}): Promise<LaunchResult | null> {
     try {
-      return await this.sail(d, progress);
+      return await this.sail(d, progress, onVoyage);
     } catch (e) {
       // The published simulator can lag the page (a new part the page knows and it doesn't
       // yet answers "unknown slot"): fall back to the grid rather than fail the launch.
@@ -289,7 +301,7 @@ export class SandboxLauncher implements Launcher {
       return r;
     }
   }
-  private async sail(d: Design, progress: Progress): Promise<LaunchResult | null> {
+  private async sail(d: Design, progress: Progress, onVoyage: OnVoyage): Promise<LaunchResult | null> {
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
     if (!this.pool || this.pool.broken) this.pool = new Pool(Math.max(1, Math.min(3, cores - 1)));
     const pool = this.pool;
@@ -314,6 +326,7 @@ export class SandboxLauncher implements Launcher {
             const i = nextLaunch++;
             runs[i] = await pool.ask<SandboxRun>(w, { type: "run", base, choices, index: i });
             done++;
+            onVoyage({ url: "", start: runs[i].result.start, outcome: runs[i].result.outcome, days: Number(runs[i].result.days ?? 0), track: trackOf(runs[i].replay) }, total);
             progress(`Sailed ${done} of ${total} launches`, done, total);
           }
         }),
@@ -332,6 +345,7 @@ export class SandboxLauncher implements Launcher {
         start: r.result.start,
         outcome: r.result.outcome,
         days: Number(r.result.days ?? 0),
+        track: trackOf(r.replay),
       }));
     return {
       exact: meta.exact,

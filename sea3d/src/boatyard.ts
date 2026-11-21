@@ -53,7 +53,8 @@ import { paintPicker } from "./ui/paintPicker";
 import { loadMyBoat, myBoatYardLink, onMyBoatChange, saveMyBoat, type MyBoat } from "./myboat";
 import { chanceFor, type Chance } from "./yard/chance";
 import { OddsModel } from "./yard/estimate";
-import { AsBuiltLauncher, GridLauncher, SandboxLauncher, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
+import { AsBuiltLauncher, GridLauncher, SandboxLauncher, trackOf, type Launcher, type LaunchOdds, type LaunchReplay, type LaunchResult } from "./yard/launch";
+import { LaunchChart, gauge, type Who } from "./yard/launchChart";
 import { startWhenBuilt } from "./warmup";
 import { JUDGE, SlowWatch } from "./helm/autoQuality";
 
@@ -237,6 +238,8 @@ const status = {
   yaml: "",
   launch: null as unknown,
   launchError: "",
+  /** How many voyages the test's chart has drawn (#332). */
+  charted: () => launchChart.count,
   planned: null as unknown,
   backend: "",
   frames: 0,
@@ -841,10 +844,17 @@ $("launch").addEventListener("click", async () => {
   // A clock beside the status, so a long run in the browser never looks frozen.
   const t0 = Date.now();
   let line = "";
+  // The voyages draw themselves on a chart as each one ends (#332); the words and the clock sit under it.
+  const words = Object.assign(document.createElement("div"), { className: "muted" });
+  launchChart.clear();
+  box.replaceChildren(launchChart.el, words);
   const draw = () => {
     const s = Math.round((Date.now() - t0) / 1000);
-    const clock = s >= 3 ? ` (${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} so far)` : "";
-    box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: line + clock }));
+    words.textContent = line + (s >= 3 ? ` (${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} so far)` : "");
+  };
+  const live = (who: Who) => (v: LaunchReplay, total: number) => {
+    if (who === "yours") launchChart.expect(total);
+    launchChart.add(who, v.start, v.outcome, v.track);
   };
   const say = (text: string) => {
     line = text;
@@ -864,11 +874,13 @@ $("launch").addEventListener("click", async () => {
     // Plain words: the autopilot sails the design, once per real 2020 start date.
     const onProgress = (text: string, done: number, total: number) =>
       say(done ? `The autopilot is sailing your design from ${total} real 2020 start dates: ${done} done so far.` : `${text} This takes a minute or two.`);
-    r = await launcher.launch(design, summarise(cat, design), onProgress);
+    r = await launcher.launch(design, summarise(cat, design), onProgress, live("yours"));
     if (!r && (base === "revc" || base === "revb")) {
       launcher = asBuilt[base];
-      r = await launcher.launch(design, summarise(cat, design), onProgress);
+      r = await launcher.launch(design, summarise(cat, design), onProgress, live("yours"));
     }
+    // Voyages that came all at once (our servers' results) go on the chart now, one after another.
+    if (r) void drawVoyages("yours", r.replays);
     status.backend = launcher.name;
     // The planned (or as-built) build on the same launches, to compare with (once per back end and boat).
     if (r && launcher !== asBuilt.revc && launcher !== asBuilt.revb && encodeDesign(cat, design) !== "") {
@@ -879,7 +891,7 @@ $("launch").addEventListener("click", async () => {
         p = (await launcher.launch(plan, summarise(cat, plan), (text, done, total) => {
           const who = base === "kayak" ? "the planned build" : "the boat as built";
           say(`Now the autopilot sails ${who} from the same dates, to compare${done ? `: ${done} of ${total} done` : ""}.`);
-        })) ?? undefined;
+        }, live("planned"))) ?? undefined;
         if (p) plannedRuns.set(key, p);
       }
       planned = p ?? null;
@@ -898,6 +910,48 @@ $("launch").addEventListener("click", async () => {
   showResult(box, r, planned);
 });
 
+// ---------- the test, drawn (#332) ----------
+const launchChart = new LaunchChart();
+/** Put these voyages on the chart, a beat apart, fetching a track the launcher didn't hand over. */
+async function drawVoyages(who: Who, replays: LaunchReplay[]): Promise<void> {
+  if (who === "yours") launchChart.expect(replays.length);
+  const tested = status.share;
+  let i = 0;
+  for (const rp of replays) {
+    if (launchChart.has(who, rp.start)) continue;
+    const track = rp.track ?? (await fetch(rp.url).then((x) => (x.ok ? x.json() : null)).then(trackOf, () => undefined));
+    if (status.share !== tested) return; // the design changed while the file came
+    launchChart.add(who, rp.start, rp.outcome, track, 220 * i++);
+  }
+}
+
+/** "Sail it yourself": this design becomes the player's boat (the same save as "Save as my boat"), and the sailing screen opens with her. */
+function sailItYourself(): void {
+  if (!cat) return;
+  const mine = loadMyBoat();
+  const typed = $<HTMLInputElement>("mb-name").value.trim();
+  const here = !!mine && mine.kind === "yard" && mine.hash === status.share;
+  if (!here || (typed && typed !== mine.name)) saveMine();
+  location.href = askedQuality && askedQuality !== "high" ? `./helm.html?quality=${encodeURIComponent(askedQuality)}` : "./helm.html";
+}
+function sailButton(): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "sail-it";
+  const b = Object.assign(document.createElement("button"), { id: "sail-it", textContent: "Sail it yourself" });
+  b.title = "Saves this design as your boat and opens the sailing screen with her";
+  b.addEventListener("click", sailItYourself);
+  const mine = loadMyBoat();
+  const other = !!mine && !(mine.kind === "yard" && mine.hash === status.share);
+  wrap.append(
+    b,
+    Object.assign(document.createElement("div"), {
+      className: "muted",
+      textContent: other ? "You take this boat to sea and steer her. She becomes your boat, in place of the one saved now." : "You take this boat to sea and steer her.",
+    }),
+  );
+  return wrap;
+}
+
 /** One launch's ending in a few words. */
 const ending = (rp: LaunchReplay | undefined) =>
   !rp ? "-" : rp.outcome === "arrived" ? `finished in ${Math.round(rp.days)} d` : rp.outcome.replace(/_/g, " ");
@@ -911,7 +965,6 @@ const replayLink = (rp: LaunchReplay, text: string) =>
     target: "_blank",
     textContent: text,
   });
-const oddsText = (o: LaunchOdds) => `${Math.round(o.odds * 100)}%`;
 const rangeText = (o: LaunchOdds) =>
   `likely ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%` + (o.median_days ? `, typically ${Math.round(o.median_days)} days` : "");
 
@@ -923,7 +976,7 @@ function showCompare(box: HTMLElement, r: LaunchResult, p: LaunchResult): void {
     const col = document.createElement("div");
     col.append(
       Object.assign(document.createElement("div"), { className: "muted", textContent: who }),
-      Object.assign(document.createElement("div"), { className: "odds", textContent: res.odds ? oddsText(res.odds) : "?" }),
+      gauge(res.odds ? res.odds.odds : null, res === r ? "yours" : "planned"),
       Object.assign(document.createElement("div"), { className: "muted", textContent: res.odds ? rangeText(res.odds) : "No odds for this boat yet." }),
     );
     grid.append(col);
@@ -973,13 +1026,20 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
         textContent:
           "Launch results aren't published yet: Theo is running every combination through the simulator. Until then, share the link or download the design file.",
       }),
+      sailButton(), // she can still be sailed
     );
     return;
   }
+  // The chart the voyages drew themselves on stays above the result; the boat it's compared with joins it.
+  box.append(launchChart.el);
+  void drawVoyages("yours", r.replays);
+  if (p) void drawVoyages("planned", p.replays);
   if (p) showCompare(box, r, p);
   else if (r.odds) {
     const o = r.odds;
-    const big = Object.assign(document.createElement("div"), { className: "odds", textContent: `${Math.round(o.odds * 100)}% finish` });
+    const big = gauge(o.odds, "yours");
+    big.classList.add("solo");
+    big.querySelector(".odds")!.textContent = `${Math.round(o.odds * 100)}% finish`;
     const range = Object.assign(document.createElement("div"), {
       className: "muted",
       textContent: `${o.finished} of ${o.voyages} launches made it, likely range ${Math.round(o.low95 * 100)}–${Math.round(o.high95 * 100)}%` +
@@ -988,6 +1048,7 @@ function showResult(box: HTMLElement, r: LaunchResult | null, p: LaunchResult | 
     box.append(big, range);
   }
   box.append(Object.assign(document.createElement("p"), { className: "muted", textContent: r.note }));
+  box.append(sailButton());
   if (r.detail) {
     const d = document.createElement("details");
     d.className = "muted result-detail";
