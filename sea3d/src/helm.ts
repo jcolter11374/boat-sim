@@ -4,6 +4,7 @@
 // boatsim.sandbox.helm); this page draws the boat, the chart, the forecast and
 // the results card. Display only: the physics is all in the simulator.
 
+import { pauseWhileUnsized } from "./shown";
 import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { setRainOnSea } from "./rainRings";
@@ -113,6 +114,7 @@ const utc = (iso: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : 
 // No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
 // times (as on the title, #608); graphics cards keep it.
 const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
+pauseWhileUnsized(renderer);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
@@ -4184,7 +4186,7 @@ if (startMine) {
     // The name is the player's own text: textContent only.
     const b = Object.assign(document.createElement("b"), { textContent: startMine.name });
     const asBuilt = randolphAsBuilt(startMine);
-    const words = asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's current wing-sail robot boat design. Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
+    const words = asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's Rev C5 wing-sail robot boat design (they have since moved on to Rev E1). Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
     label.append(input, " ", b, words);
     $("boats").querySelector("legend")!.after(label);
   }

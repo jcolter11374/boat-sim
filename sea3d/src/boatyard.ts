@@ -7,6 +7,7 @@
 // Launching goes through a Launcher (yard/launch.ts), so the same page works
 // with Theo's precomputed grid now and the simulator in the browser later.
 
+import { pauseWhileUnsized } from "./shown";
 import "./perfLog"; // ?perf: the frame recorder (first, so it sees the graphics context made below)
 import * as THREE from "three";
 import { livePicks, partFigure, shownOptions } from "./yard/nomoney";
@@ -63,6 +64,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 // No smoothing of edges (multisampling) on software graphics, where it drew every pixel four
 // times (as on the title, #608); graphics cards keep it.
 const renderer = new THREE.WebGLRenderer({ antialias: !softwareGraphics(), preserveDrawingBuffer: true });
+pauseWhileUnsized(renderer);
 renderer.setSize(window.innerWidth, window.innerHeight);
 $("app").appendChild(renderer.domElement);
 const scene = new THREE.Scene();

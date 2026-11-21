@@ -72,8 +72,9 @@ class Variant:
     link: tuple[tuple[str, object], ...] = ()  # IridiumSBDLink attribute overrides
     # Launch route as (lat, lon) waypoints; empty keeps runner.default_mission.
     route: tuple[tuple[float, float], ...] = ()
-    # Finish: (lat, lon) of a Microtransat target on the eastern line, or
-    # "old_rule" for the pre-#80 rule (any landfall in Europe, Azores included).
+    # Finish: (lat, lon) of a Microtransat target on the eastern line, "old_rule"
+    # for the pre-#80 rule (any landfall in Europe, Azores included), or "europe"
+    # for any landfall in Europe without the Azores (the Randolph team's scoring).
     finish: tuple[float, float] | str | None = None
     # Hours a forecast detour must save before the base sends it (base="replan"
     # only; None keeps the policy default, 6 h). Land and keep-out detours
@@ -90,6 +91,9 @@ class Variant:
     forecast_error: float | None = None
     # The row this variant is paired against in the report.
     against: str = "baseline"
+    # (month, day): every voyage ends that day of its launch year at the latest, instead
+    # of after max_days (the Randolph team's season end, 30 November).
+    until: tuple[int, int] | None = None
 
 
 BAY_MOUTH = DROP_POINT  # first waypoint of every route, as in default_mission (the drop)
@@ -102,6 +106,15 @@ _OLD_EUROPE_BOXES = [  # rough sea areas next to European coasts (old arrival.py
     (49.5, 59.5, -11.0, -5.0),  # Ireland, west Scotland
     (59.5, 71.0, 4.0, 15.0),  # Norway
 ]
+
+
+class EuropeLandfallFinish:
+    """The Randolph team's own scoring (#50, 12 Nov 2026), for a like-for-like re-score of their
+    boat: any landfall in Europe counts (a sea box next to a European coast, as in the old rule),
+    the Azores don't. The silence limit from #80 still applies here."""
+
+    def reached(self, lat: float, lon: float) -> bool:
+        return any(a <= lat <= b and c <= lon <= d for a, b, c, d in _OLD_EUROPE_BOXES)
 
 
 class OldRuleFinish:
@@ -161,6 +174,16 @@ VARIANTS: dict[str, Variant] = {
         "Old rule: any landfall in Europe, Azores included (old route via the Azores)",
         route=OLD_ROUTE,
         finish="old_rule",
+    ),
+    # The Randolph team's way (#50, 12 Nov 2026): from their drop 10 km off Ocean City, aimed at
+    # SW Ireland (their destination study's best), any landfall in Europe counts. Run it on their
+    # design (configs/randolph_rev_c.yaml), launches 1 May to 15 June, voyages ending 30 November.
+    "randolph_way": Variant(
+        "finish rule",
+        "Randolph team's scoring: Ocean City to SW Ireland, any landfall in Europe counts",
+        route=((38.32, -74.97), (51.4, -10.0)),
+        finish="europe",
+        until=(11, 30),
     ),
     # Finish targets along the Microtransat eastern line (Maya, Nov 2026), each
     # sailed straight there (great circle, which passes north of the Azores).
@@ -352,6 +375,17 @@ class SensitivityVoyage(MonthlyVoyage):
         """The variant's settings (subclasses may look them up elsewhere)."""
         return VARIANTS[self.variant]
 
+    def __call__(self, start: datetime, seed: int):
+        until = self.spec().until
+        if until is None:
+            return super().__call__(start, seed)
+        from dataclasses import replace as _replace
+
+        end = datetime(start.year, *until, 23, 59)
+        return MonthlyVoyage.__call__(
+            _replace(self, max_days=(end - start).total_seconds() / 86400.0), start, seed
+        )
+
     def drop_point(self) -> tuple[float, float]:
         from boatsim.config import load_design
 
@@ -470,6 +504,8 @@ class SensitivityVoyage(MonthlyVoyage):
             c.base = ForecastReplanPolicy(route=route, **kw)
         if v.finish == "old_rule":
             c.finish = OldRuleFinish()
+        elif v.finish == "europe":
+            c.finish = EuropeLandfallFinish()
         elif v.finish is not None:
             c.finish = FinishTarget(*v.finish)
         for attr, value in v.link:
