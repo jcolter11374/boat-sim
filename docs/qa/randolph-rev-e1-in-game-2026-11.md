@@ -45,6 +45,12 @@ Rev E1 is a third Randolph base, key `reve1`, beside `revc` and `revb`.
   Boatyard shows "not tested yet" until a player presses "Test it", which sails her in the
   browser. The Boatyard grid workflow adds six `reve1` builds the next time it runs.
 - **No recorded voyage replays or leaderboard entry.**
+- **The old voyage replay page** (`voyage.ts`, no longer in any menu) has no Rev E1 lane:
+  when Rev E1 replays are recorded, give `revOf` and the two `mine.base` mappings a Rev E1
+  key first, or she will be shown there as Rev B. The helm's replays (`watchBase`) already
+  know her.
+- **Default rivals and "Race it" links** still point at Rev C5, on purpose: Rev C5 has saved
+  odds and replays and Rev E1 has none yet.
 - **Her start in the Boatyard runs** is the yaml's: 45 km off Hatteras. Our land map has no
   Diamond Shoals (they told us theirs didn't either), so groundings there are not counted.
 

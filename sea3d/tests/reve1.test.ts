@@ -30,6 +30,7 @@ test("Rev E1 is a boat to pick, first of the Randolph team's, and always our mod
   assert.equal(watchBase("Randolph Rev E1"), "reve1");
   assert.equal(watchName("Randolph Rev E1"), "Randolph Rev E1 (our model)");
   assert.equal(watchBase("Randolph Rev C"), "revc");
+  assert.equal(watchBase("Randolph Rev B, reversed rudder"), "revb", "only a whole \"Rev E\" counts");
 });
 
 test("Rev E1 is a Boatyard base with Rev C5's slots, as built by default", () => {
