@@ -12,6 +12,7 @@ import {
   offerWords,
   welcomeBack,
   packVoyage,
+  backOnResume,
   sameOrder,
   parseVoyage,
   saveVoyage,
@@ -54,6 +55,7 @@ test("a voyage packs to a versioned record, rounded, with the real time it was s
     day: 12.44,
     left: null,
     order: null,
+    back: null,
     toGoKm: 4101,
     rate: 6,
     sim: "abc123",
@@ -241,4 +243,56 @@ test("the continue link carries only the code and the challenge, and says it is 
   assert.equal(continueLink(ch, "./helm.html"), `./helm.html?g=${CODE}&c=sandys-shadow&continue=1`);
   // Nothing of the boat's state rides in the link: the simulator sails it again from the code.
   assert.equal(/day|toGo|12\.4|4101/.test(continueLink(v)), false);
+});
+
+// #657: a slow-down that is only for a while (the storm card's "ride it out", the night card's
+// "ease off") is kept with the voyage, so a reload while slowed doesn't leave her at 10% for good.
+test("#657: a temporary slow-down is saved with the voyage and taken up again on coming back", () => {
+  const slow = { heading: "route" as const, power: 0.1, sails: null, engine: null };
+  const storm = { why: "storm" as const, heading: "auto" as const, power: 0.25, h: 112.8, kind: "waves" as const, chose: "slow" as const, km: 4890 };
+  const v = packVoyage({ ...now, order: slow, back: storm }, WHEN)!;
+  assert.deepEqual(v.back, storm);
+  assert.deepEqual(parseVoyage(JSON.stringify(v))!.back, storm, "it survives the browser's storage");
+  // The helm came back with the slow order on it: the hand-back is taken up again.
+  assert.deepEqual(backOnResume(v, CODE, slow), storm);
+  // The helm came back with another order (the player's own), or it is another voyage: nothing.
+  assert.equal(backOnResume(v, CODE, { ...slow, power: 0.3 }), null);
+  assert.equal(backOnResume(v, CODE, { ...slow, heading: 95 }), null);
+  assert.equal(backOnResume(v, "anothercode", slow), null);
+  assert.equal(backOnResume(null, CODE, slow), null);
+  // The night card: back to 40% on 095° once it is morning.
+  const eased = { heading: 95, power: 0.1, sails: null, engine: null };
+  const night = { why: "night" as const, heading: 95, power: 0.4, h: 250.5, kind: null, chose: null, km: null };
+  const n = packVoyage({ ...now, order: eased, back: night }, WHEN)!;
+  assert.deepEqual(backOnResume(parseVoyage(JSON.stringify(n)), CODE, eased), night);
+});
+
+test("#657: a save without one, or with a broken one, has none; an older save still loads", () => {
+  const slow = { heading: "route" as const, power: 0.1, sails: null, engine: null };
+  assert.equal(packVoyage({ ...now, order: slow }, WHEN)!.back, null);
+  // No order on the helm to match it against (from base, or no link): not kept.
+  assert.equal(packVoyage({ ...now, order: null, back: { why: "storm", heading: "auto", power: 0.25, h: 100, kind: "waves", chose: "slow", km: 4000 } }, WHEN)!.back, null);
+  const bad = [{ why: "tide", heading: "auto", power: 0.25, h: 1 }, { why: "storm", heading: "moon", power: 0.25, h: 1 }, { why: "storm", heading: "auto", power: 7, h: 1 }, { why: "night", heading: 95, power: 0.4, h: -3 }, "storm", 12];
+  for (const back of bad) assert.equal(parseVoyage(JSON.stringify({ ...packVoyage({ ...now, order: slow }, WHEN)!, back }))!.back, null, JSON.stringify(back));
+  // A save written before this field existed.
+  const old = { ...packVoyage({ ...now, order: slow }, WHEN)! } as Record<string, unknown>;
+  delete old.back;
+  const loaded = parseVoyage(JSON.stringify(old))!;
+  assert.equal(loaded.back, null);
+  assert.deepEqual(loaded.order, slow);
+  // Odd extras are dropped, not carried.
+  const messy = parseVoyage(JSON.stringify({ ...packVoyage({ ...now, order: slow }, WHEN)!, back: { why: "storm", heading: "auto", power: 0.25, h: 100, kind: "tsunami", chose: "dodge", km: -1, extra: "x" } }))!;
+  assert.deepEqual(messy.back, { why: "storm", heading: "auto", power: 0.25, h: 100, kind: null, chose: null, km: null });
+});
+
+// How the page uses it (#657), pinned so the wiring can't quietly go: the keeper is told of a
+// slow-down still on, writes it when the page is left, and a continued voyage takes it up.
+test("#657: the page saves a slow-down still on and takes it up when the voyage is continued", async () => {
+  const { readFileSync } = await import("node:fs");
+  const helm = readFileSync(new URL("../src/helm.ts", import.meta.url), "utf8");
+  const keeper = readFileSync(new URL("../src/helm/voyageKeeper.ts", import.meta.url), "utf8");
+  assert.match(helm, /engine: engineOrder \} : null, back: slowedFor\(\) \};/);
+  assert.match(helm, /backOnResume\(was, shared, \{ heading: order, power, sails: sailOrder, engine: engineOrder \}\)/);
+  assert.match(helm, /if \(slowed\) takeUpSlowdown\(slowed,/);
+  assert.match(keeper, /order: st\.order, back: st\.back \}, new Date\(\)\)/, "written on leaving too");
 });

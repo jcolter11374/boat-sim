@@ -96,9 +96,46 @@ storm card stayed at 10%; the storm's and the night card's hand-backs could each
 10% for its own; the note could promise a hand-back while the link was down. The unit test now also
 pins the wiring in `helm.ts`.
 
-Left for a follow-up issue: a page reload in the middle of a blow forgets that she was only slowed
-for the blow (the save keeps the order, not the reason), so she stays at 10% until the player turns
-the power up. The night card's "ease off" has had the same gap since before this change.
+Left for a follow-up issue (#657, fixed below): a page reload in the middle of a blow forgot that
+she was only slowed for the blow (the save kept the order, not the reason), so she stayed at 10%
+until the player turned the power up. The night card's "ease off" had the same gap from before.
 
 Not measured: a real graphics card (not needed, no drawing changed) and a whole crossing to the
 finish with Esc on every card.
+
+## A reload while slowed (issue #657), 23 Nov 2026
+
+**What was wrong.** "Slow down and ride it out" (storm card) and "Ease off to 10%" (night card)
+give the old order back by themselves, but what to go back to was kept only in the page's memory.
+Close or reload the page while slowed, press "Continue your voyage", and she stayed at 10% power
+for good.
+
+**What changed.** The saved voyage (`sea3d/src/helm/voyageSave.ts`) has a new optional part,
+`back`: which card slowed her, the order and power to go back to, and when. The page writes it
+with every save and when the page is left (`slowedFor` in `helm.ts`, `voyageKeeper.ts`). A
+continued voyage takes the slow-down up again (`backOnResume`, `takeUpSlowdown`), but only if the
+helm comes back with the very order the save was written with; any other order is the player's own
+and stands. Older saves have no `back` and load as before. Like the saved order, `back` is not the
+boat's state: it is an order the page gives later, and the simulator sails it in the real weather.
+
+Also: giving the same order again (the Orders panel re-sending what it already shows) no longer
+counts as a new order for the "is the slow order still the last one" test.
+
+**How it was measured.** `sea3d/tools/qa/reload-while-slowed.mjs` plays the default crossing to the
+first storm card, presses "Slow down to 10% power and ride it out", leaves the page while slowed,
+opens the saved voyage as "Continue your voyage" does, and sails 6 more days.
+
+| | Before (main with #656) | After |
+|---|---|---|
+| Saved with the voyage at day 4.4 | order "the route, 10%"; nothing to go back to | the same order, plus: go back to the autopilot at 25% |
+| Just after the reload | The route, 10% power | The route, 10% power |
+| When the waves had passed | no change; at day 9.4 a card: "At 50% power she'd go faster than at your 10%" | day 6.4: "The big waves have passed. You slowed down to ride it out ... She's back on the autopilot, as before." |
+| Order at day 10.4 | The route, 10% power | Autopilot, 25% power |
+| Script result | FAIL (exit 1) | pass |
+
+Unit tests in `sea3d/tests/voyageSave.test.ts`: the record keeps and reads `back`, refuses a broken
+one, loads an older save, takes it up only when the helm matches, and the page's wiring. 668 pass.
+
+Not measured in a browser: the night card's "ease off" across a reload (same code path, covered by
+the unit tests only), and a real "Continue your voyage" click on the title page (the script opens
+the same link the button opens).
