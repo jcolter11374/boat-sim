@@ -1035,6 +1035,19 @@ try {
     }));
     const leaked = lb.names.filter((n) => /Drive:|: [a-z0-9]+-|W cruise|\(our model\)|GUESS/.test(n));
     if (leaked.length) fail(`leaderboard shows internal build names: ${JSON.stringify(leaked)}`);
+    // #653: a boat built in the Boatyard and sailed across is listed under her own name, as the player's, with no place.
+    await page.evaluate(() => localStorage.setItem("boatsim.lastcrossing.v1", JSON.stringify({ v: 1, boat: "Test <b>boat</b>", build: "k-p25-sol.solar-300", finished: true, days: 55.3, day: "2020-04-23", at: "" })));
+    await page.goto(`${URL}leaderboard.html?board=leaderboard-sample/board.json&yours=1`);
+    await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 30000 });
+    const yb = await page.evaluate(() => {
+      const tr = document.querySelector("#rows tr.yours");
+      return { yours: window.__leaderboard.yours, first: document.querySelector("#rows tr") === tr, name: tr?.querySelector(".name")?.textContent, tags: tr?.querySelectorAll(".name b").length, text: tr?.textContent ?? "", you: document.querySelector("#you").textContent };
+    });
+    await page.evaluate(() => localStorage.removeItem("boatsim.lastcrossing.v1"));
+    await page.goto(`${URL}leaderboard.html?board=leaderboard-sample/board.json`); // as it was, for the steps below
+    await page.waitForFunction(() => window.__leaderboard?.ready, null, { timeout: 30000 });
+    if (!yb.yours || yb.yours.onBoard || !yb.first || yb.name !== "Test <b>boat</b>" || yb.tags || !/finished in 55\.3 days/.test(yb.text) || !/Not ranked/.test(yb.text) || !yb.you.includes("Test <b>boat</b>"))
+      fail(`leaderboard: the player's own boat isn't listed under her name: ${JSON.stringify(yb)}`);
     const sorted = lb.tiers.every((t, i) => i === 0 || t >= lb.tiers[i - 1]);
     if (lb.error || lb.rows < 2 || !lb.sample || !/not results/.test(lb.banner) || !sorted || lb.ref !== 1 || !lb.model.some((t) => /^Our model of the Randolph team/.test(t)) || lb.tags < 1 || lb.untagged)
       fail(`leaderboard sample: ${JSON.stringify(lb)}`);

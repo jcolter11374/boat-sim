@@ -74,7 +74,7 @@ test("off the board: the Boatyard's odds, with no place (another launch set)", (
   const s = standing("k-p15", board(), grid);
   assert.equal(s.kind, "odds");
   const t = standingText(s);
-  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launch days (2012 to 2021).");
+  assert.equal(t.head, "Not one of the boats the leaderboard ranks. The simulator gives it 69% over 100 launch days (2012 to 2021).");
   assert.doesNotMatch(t.head + t.detail, /\d(st|nd|rd|th) of/);
   assert.equal(standing("k-p15", null, grid).kind, "odds");
 });
@@ -87,7 +87,7 @@ test("no board and no odds: says so; a grid build without odds doesn't count", (
 
 test("odds without the years still read cleanly", () => {
   const t = standingText(standing("k-p15", null, { builds: grid.builds }));
-  assert.equal(t.head, "Not on the leaderboard yet. The simulator gives it 69% over 100 launch days.");
+  assert.equal(t.head, "Not one of the boats the leaderboard ranks. The simulator gives it 69% over 100 launch days.");
 });
 
 test("ordinals", () => {
