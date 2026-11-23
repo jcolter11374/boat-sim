@@ -295,4 +295,11 @@ test("#657: the page saves a slow-down still on and takes it up when the voyage 
   assert.match(helm, /backOnResume\(was, shared, \{ heading: order, power, sails: sailOrder, engine: engineOrder \}\)/);
   assert.match(helm, /if \(slowed\) takeUpSlowdown\(slowed,/);
   assert.match(keeper, /order: st\.order, back: st\.back \}, new Date\(\)\)/, "written on leaving too");
+  // A slow-down starting or ending makes a save due, like an order going.
+  assert.match(helm, /orders: JSON\.stringify\(\[order, power, sailOrder, engineOrder, slowedFor\(\)\]\)/);
+  // Every order of the player's counts against the hand-back, the slider's and the arrow keys' too:
+  // they write `order` and `power` before setOrder runs, so it must count without comparing.
+  const setOrder = helm.slice(helm.indexOf("async function setOrder("), helm.indexOf("const dayOf ="));
+  assert.match(setOrder, /\n  order = h;\n(  \/\/[^\n]*\n)*  orderSeq\+\+;\n/);
+  assert.doesNotMatch(setOrder, /if \([^\n]*\) orderSeq\+\+/);
 });

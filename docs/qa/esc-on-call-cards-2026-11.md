@@ -118,9 +118,6 @@ helm comes back with the very order the save was written with; any other order i
 and stands. Older saves have no `back` and load as before. Like the saved order, `back` is not the
 boat's state: it is an order the page gives later, and the simulator sails it in the real weather.
 
-Also: giving the same order again (the Orders panel re-sending what it already shows) no longer
-counts as a new order for the "is the slow order still the last one" test.
-
 **How it was measured.** `sea3d/tools/qa/reload-while-slowed.mjs` plays the default crossing to the
 first storm card, presses "Slow down to 10% power and ride it out", leaves the page while slowed,
 opens the saved voyage as "Continue your voyage" does, and sails 6 more days.
@@ -132,6 +129,18 @@ opens the saved voyage as "Continue your voyage" does, and sails 6 more days.
 | When the waves had passed | no change; at day 9.4 a card: "At 50% power she'd go faster than at your 10%" | day 6.4: "The big waves have passed. You slowed down to ride it out ... She's back on the autopilot, as before." |
 | Order at day 10.4 | The route, 10% power | Autopilot, 25% power |
 | Script result | FAIL (exit 1) | pass |
+
+With `--own` the player drags the power slider to 30% just after the reload. That order stood: the
+"passed" note came at day 6.4 with no hand-back, and at day 10.9 she was still on "The route, 30%
+power".
+
+**Independent review.** A fresh reviewer found one real fault in the first commit, fixed in the
+second: I had made "the same order given again" not count as a new order, but the slider and the
+arrow keys write the order before it is sent, so the player's own change while slowed did not
+count either and would have been overruled when the blow passed. Every order counts again. Two
+smaller points were also fixed (a slow-down starting or ending now makes a save due; the night
+card's heading is matched as the helm has it). One is left: with the satellite link cut, a reload
+while slowed still forgets the hand-back (no order is saved while the link is down).
 
 Unit tests in `sea3d/tests/voyageSave.test.ts`: the record keeps and reads `back`, refuses a broken
 one, loads an older save, takes it up only when the helm matches, and the page's wiring. 668 pass.

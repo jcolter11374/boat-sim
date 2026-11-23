@@ -761,12 +761,12 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     note("No link: she can't hear you.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.warn);
     return;
   }
-  const before: [Heading, number] = [order, power];
   order = h;
+  // Every order counts, whatever it says: the slider and the arrow keys write `order` and `power`
+  // before they get here, so "did it change?" cannot be told from them (review of #660).
+  orderSeq++;
   // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
   p = powerAfter(h, p, powerBeforePush);
-  // The same order given again (the panel re-sending what it shows) is not a new order.
-  if (h !== before[0] || Math.abs(p - before[1]) > 1e-9) orderSeq++;
   if (h === "auto" && powerBeforePush !== null) {
     powerBeforePush = null;
     $<HTMLInputElement>("power").value = String(Math.round(p * 100));
@@ -2001,7 +2001,8 @@ function slowedFor(): SavedBack | null {
 }
 /** Coming back to a voyage left while slowed: take the slow-down up again, so it ends as it would have. */
 function takeUpSlowdown(b: SavedBack, kmToFinish: number): void {
-  if (b.why === "night") nightEase = { order: b.heading, power: b.power, dark: b.h };
+  // The night's heading is the one on the helm now (the save's, to a tenth of a degree): morning compares it exactly.
+  if (b.why === "night") nightEase = { order, power: b.power, dark: b.h };
   else spell = { kind: b.kind ?? "waves", h: b.h, chose: b.chose ?? "slow", km: b.km ?? kmToFinish, back: { order: b.heading, power: b.power, seq: orderSeq } };
 }
 /** The day that was on the screen when a voyage that came back was left (null if its save doesn't say). */
@@ -2012,7 +2013,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: sailedAs(), toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null, back: slowedFor() };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: sailedAs(), toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder, slowedFor()]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null, back: slowedFor() };
     },
     () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();

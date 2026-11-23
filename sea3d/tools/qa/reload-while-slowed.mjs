@@ -4,13 +4,18 @@
 // after it the power comes back once the blow has passed, as it does without a reload.
 //
 //   tools/build_site.sh   (from the repo root, for the simulator and its weather)
-//   [PYODIDE_DIR=...] node tools/qa/reload-while-slowed.mjs
+//   [PYODIDE_DIR=...] node tools/qa/reload-while-slowed.mjs [--own]
 //
-// Exits 1 if she is still at 10% power and off the autopilot 6 voyage days after the reload.
+// --own: after the reload, the player sets the power slider to 30% themselves. That order is
+// theirs and must stand: no hand-back to the autopilot when the blow has passed.
+//
+// Exits 1 if she is still at 10% power and off the autopilot 6 voyage days after the reload
+// (or, with --own, if she is not still at the player's 30%).
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
+const own = process.argv.includes("--own");
 const PORT = 4178;
 const URL = `http://localhost:${PORT}/`;
 const server = spawn("node_modules/.bin/vite", ["preview", "--port", String(PORT), "--strictPort"], { stdio: "ignore" });
@@ -88,6 +93,17 @@ await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null
 await ready();
 const back = await state();
 console.log(`After the reload, day ${back.day.toFixed(1)}: ${back.order}`);
+if (own) {
+  // As a drag of the slider does: the panel's value first, then the order.
+  await page.evaluate(() => {
+    const p = document.getElementById("power");
+    p.value = "30";
+    p.dispatchEvent(new Event("input", { bubbles: true }));
+    p.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(1000);
+  console.log(`The player sets 30% power: ${(await state()).order}`);
+}
 await run(24);
 let last = back.order;
 let passed = "";
@@ -111,4 +127,6 @@ console.log(`Day ${end.day.toFixed(1)}: ${end.order}`);
 await browser.close();
 const stuck = !/Autopilot/.test(end.order) && /\b10% power/.test(end.order);
 if (stuck) console.error("FAIL: she is still at 10% power, off the autopilot, after the reload.");
-done(stuck ? 1 : 0);
+const overruled = own && !/\b30% power/.test(end.order);
+if (overruled) console.error("FAIL: the player's own 30% did not stand.");
+done(stuck || overruled ? 1 : 0);
