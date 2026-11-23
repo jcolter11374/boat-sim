@@ -964,12 +964,16 @@ function watchLook(): void {
 function showOrder(): void {
   compass.set({ order });
   $("b-wheel").hidden = !wheelOffered() || wheel.on;
+  // From base the bold line is an order, not what she's doing: it reaches her at the next check-in, once sent.
+  $("ordernow").textContent = mode === "base" ? (draft ? "Your order (not sent yet)" : "Last order sent") : "Steering now";
+  // On the autopilot or the route the order is wherever the bow points, so the two lines are one: don't name a line that can't be seen.
+  $("dk-bow").hidden = order === "auto" || order === "route";
   $("ordertext").textContent =
     order === "auto"
       ? WATCH ? "The autopilot is steering." : "Autopilot steering, like the ghost"
       : order === "finish"
-        ? "Straight at the finish"
-        : order === "route" ? "Following the autopilot's route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
+        ? "Aiming at the finish"
+        : order === "route" ? "Following the route" : `Steering ${String(Math.round(order)).padStart(3, "0")}°`;
   $("c-orderv").textContent = linkCut ? "No link" : document.body.classList.contains("at-wheel") ? "At the wheel" : order === "auto" ? "Autopilot" : order === "finish" ? "To the finish" : order === "route" ? "The route" : `Steer ${String(Math.round(order)).padStart(3, "0")}°`;
   $("b-auto").setAttribute("aria-pressed", String(order === "auto"));
   $("b-auto").hidden = mode === "base"; // base can't hand the boat to the ghost's autopilot
