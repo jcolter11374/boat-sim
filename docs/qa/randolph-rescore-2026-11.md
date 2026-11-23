@@ -57,5 +57,10 @@ Their set-up is in their comment on #50 of 21 Nov 2026 and in
   `randolph_way` row ignores it and runs to 30 November.
 - Run artifacts can't be downloaded from a thread sandbox. Read the per-voyage rows from
   the log: `gh run view <id> --log | grep "randolph_way 2023-"`.
+- `randolph_way` is for Rev C5 only: its route starts at the Ocean City drop. Rev E1 drops
+  45 km off Hatteras (34.95N 75.35W) and sails via 35.0N 74.9W, 42.0N 48.0W, 49.6N 7.2W,
+  49.7N 6.4W and 49.83N 5.8W to a holding point at 49.85N 5.20W (their comment on #50,
+  21 Nov 2026). Scoring Rev E1 needs a variant with that route; running it through
+  `randolph_way` would send it 376 km up the coast first.
 - Open question: our crossings are about 9 days slower at the median and 9 boats were
   still at sea on 30 November.
