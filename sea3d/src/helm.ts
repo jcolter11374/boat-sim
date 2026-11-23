@@ -60,6 +60,8 @@ import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
+import { MilestoneWatch, crossingMilestones, fraction, milestoneNote, nextWords } from "./helm/milestones";
+import { bestWords, loadPersonalBest, savePersonalBest, toBeatWords } from "./helm/personalBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, seasonCell, seasonWords, swapSides, type RaceCard, type RaceInfo, type SeasonRun, type SeasonVerdict } from "./helm/raceSource";
@@ -1321,6 +1323,7 @@ function showReadings(raw: Status): void {
         },
   );
   $("m-togo").textContent = `${est ? "about " : ""}${Math.round(toGo).toLocaleString()} km to go`;
+  showMiles(toGo, here, !!est);
   $("c-wind").title = `${$("weather").textContent}. Click for the 5-day forecast (F)`;
   if (s.mode === "base" && s.base) {
     const last = dayOf(s.base.last_report.t);
@@ -1330,6 +1333,66 @@ function showReadings(raw: Status): void {
   $("sailline").hidden = !s.sailing;
   if (s.sailing) $("sailline").textContent = sailText(s);
   $("ghostline").textContent = WATCH ? "" : `${other ? bareRacer(other) : "Ghost"}: battery ${Math.round(s.ghost.soc * 100)}%, ${Math.round(s.ghost.km_to_finish).toLocaleString()} km to go${s.ghost.outcome !== "at_sea" ? `, ${OUTCOME[s.ghost.outcome] ?? s.ghost.outcome}` : ""}`;
+}
+
+// ---------- milestones (#331) ----------
+/** The crossing's milestones and which are behind her (helm/milestones.ts); null until the first reading, or with no strip. */
+let miles: MilestoneWatch | null = null;
+let milesStartKm = 0;
+let milesTried = false;
+let milesShown = "";
+/**
+ * The strip under the chart's heading, and the moment when she passes a place: a bell and a note.
+ * An ocean crossing only: a race has two boats to follow, practice has no ocean, and a challenge
+ * with its own goal isn't about the far shore.
+ */
+function showMiles(toGo: number, here: [number, number], guess: boolean): void {
+  if (!milesTried) {
+    const rep = game.boat;
+    if (!rep || !rep.lat.length) return;
+    milesTried = true;
+    if (RACE || PRACTICE || mission()) return;
+    const target = rep.course.target as [number, number];
+    const radius = (rep.course.target_radius_m ?? 25000) / 1000;
+    const from: [number, number] = [rep.lat[0] as number, rep.lon[0] as number];
+    milesStartKm = Math.max(kmTo(from, target) - radius, 0);
+    const list = crossingMilestones(from, target, radius);
+    if (!list.length) return;
+    miles = new MilestoneWatch(list);
+    const bar = $("mile-bar");
+    for (const m of list.slice(0, -1)) {
+      const tick = document.createElement("i");
+      tick.className = "tick";
+      tick.dataset.id = m.id;
+      tick.title = m.name;
+      tick.style.left = `${(fraction(milesStartKm, m.kmToGo) * 100).toFixed(1)}%`;
+      bar.append(tick);
+    }
+    bar.setAttribute("aria-label", `Milestones on the way: ${list.map((m) => m.name).join(", ")}`);
+    $("mile").hidden = false;
+  }
+  if (!miles) return;
+  const passed = miles.see(toGo);
+  let rang = false;
+  for (const m of passed) {
+    const n = milestoneNote(m, here, milesStartKm, guess);
+    if (!n) continue;
+    note(n.text, `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.good, n.hl);
+    // One strike however many she passed in a long hop: not a peal.
+    if (!rang) sound.bell(1);
+    rang = true;
+  }
+  const next = nextWords(miles.milestones, toGo, guess);
+  const key = `${(fraction(milesStartKm, toGo) * 100).toFixed(1)}|${next}`;
+  if (key === milesShown && !passed.length) return;
+  milesShown = key;
+  $("mile-fill").style.width = `${key.slice(0, key.indexOf("|"))}%`;
+  $("mile-next").textContent = next;
+  const watch = miles;
+  $("mile-bar").querySelectorAll<HTMLElement>(".tick").forEach((tick) => {
+    const m = watch.milestones.find((x) => x.id === tick.dataset.id);
+    tick.classList.toggle("done", !!m && watch.passed(m));
+  });
 }
 
 // ---------- notes ----------
@@ -3623,9 +3686,22 @@ async function finish(): Promise<void> {
     const run = (x: Card["boat"], s?: Stars) => ({ stars: s ? s.stars : null, finished: x.outcome === "arrived" || x.outcome === "goal", days: x.days });
     saveChallengeRun(ch.id, run(me, st.stars), { boat: $("ss-boatname").textContent ?? "", autopilot: run(gh, st.ghost_stars) });
   }
+  // An ocean crossing of your own: your fastest finish from this launch day is kept in this browser (#331; helm/personalBest.ts).
+  const pb = $("r-best");
+  pb.hidden = true;
+  if (!ch && !THEIRS && !WATCH && !RACE) {
+    const run = { finished: me.outcome === "arrived", days: me.days };
+    const r = savePersonalBest(crossingId(game.boat?.start ?? c.launch, c.breakdowns_on), run, { boat: $("ss-boatname").textContent ?? "" });
+    pb.textContent = bestWords(r, run);
+    pb.classList.toggle("new", r.isBest && !!r.before);
+    pb.hidden = !pb.textContent;
+  }
   openResults(ch ? "challenge" : "crossing", { build: c.build, boatyard: mine ? `./${myBoatYardLink(mine)}` : undefined, raceId: myRaceId(), day: c.launch }, nums, { calls: mode === "hands_on" && !THEIRS });
   void showStanding(c.build);
 }
+
+/** Which crossing a personal best belongs to: the launch day, the start, and whether parts could break. */
+const crossingId = (launch: string, breakdowns: boolean) => ({ launch, start: [(game.boat?.lat[0] ?? Number.NaN) as number, (game.boat?.lon[0] ?? Number.NaN) as number] as [number, number], breakdowns });
 
 /** Results, "where this leaves you" (one-game plan step 3): the build's place on
  *  the design leaderboard, or the Boatyard's odds for it, and the ways on. Fills
@@ -4052,6 +4128,11 @@ async function begin(): Promise<void> {
     else if (shared) note(`A shared game, back where it was left on day ${page.status!.day.toFixed(1)}. The helm is yours.`, d, TONE_COLOUR.info);
     else if (mode === "base")
       note("You're at the base station. Pick a heading and a power and send it: it reaches the boat at its next check-in. Until then the boat follows the launch route.", d, TONE_COLOUR.info);
+    // A crossing of your own that you have finished before from this day: the time to beat (#331).
+    if (!RESUMED && !shared && !WATCH && !RACE && !ch && game.boat) {
+      const best = loadPersonalBest(crossingId(game.boat.start, $<HTMLInputElement>("breakdowns").checked));
+      if (best) note(toBeatWords(best), d, TONE_COLOUR.info);
+    }
     // The game's hints are one coach line in the orders drawer, open for the first seconds (Leo's plan).
     if (page.status?.over) await finish();
     // Time runs from the start, at the speed a hop used to play at. A shared game opens
