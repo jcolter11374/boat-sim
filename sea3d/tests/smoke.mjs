@@ -510,6 +510,8 @@ try {
     await page.waitForFunction(() => window.__yard.backend && !document.querySelector("#launch").disabled, null, { timeout: 30000 });
     const how = await page.evaluate(() => ({ backend: window.__yard.backend, text: document.querySelector("#result").textContent }));
     if (!how.text || /failed/.test(how.text)) fail(`boatyard launch: ${JSON.stringify(how)}`);
+    // #332: after a test, the way on to sailing her is one big button.
+    if ((await page.locator("#result #sail-it").count()) !== 1) fail("boatyard: no \"Sail it yourself\" button after the test");
     log.push(`boatyard ${y1.share}, no money on screen, launch via ${how.backend}`);
     // Start from the Randolph boat: its own slots and totals, the model dressing to the picks, a share link with the base.
     await page.goto(`${URL}boatyard.html?quality=low&base-test=1#base=revc&rudder=single`); // a new query: a hash-only change would not reload
@@ -530,6 +532,27 @@ try {
     await page.evaluate(() => window.__yard.setBase("kayak"));
     if ((await page.evaluate(() => window.__yard.share)) !== "") fail("boatyard: switching back to the kayak should give the planned build");
     log.push(`boatyard Rev C base, ${rl.n} as-built voyages`);
+    // #332: the test draws its voyages on a chart, and "Sail it yourself" takes this very design to the sailing screen as the player's boat.
+    await page.evaluate(() => window.__yard.setBase("revc"));
+    await page.evaluate(() => window.__yard.pick("rudder", "single"));
+    // A part swapped while the test runs: the result was for the old boat, so it isn't shown and there is nothing to "sail".
+    await page.evaluate(() => { document.querySelector("#launch").click(); window.__yard.pick("rudder", "twin"); });
+    await page.waitForFunction(() => !document.querySelector("#launch").disabled && window.__yard.changedMidTest, null, { timeout: 30000 }).catch(() => fail("boatyard: a design changed mid-test still got the old design's result"));
+    const mid = await page.evaluate(() => ({ btn: !!document.querySelector("#sail-it"), text: document.querySelector("#result").textContent, charted: window.__yard.charted() }));
+    if (mid.btn || mid.charted || !/Test it/.test(mid.text)) fail(`boatyard: after a mid-test change: ${JSON.stringify(mid)}`);
+    await page.evaluate(() => window.__yard.pick("rudder", "single"));
+    await page.click("#launch");
+    await page.waitForFunction(() => window.__yard.launch && !document.querySelector("#launch").disabled && document.querySelector("#result #sail-it"), null, { timeout: 30000 }).catch(() => fail("boatyard: no \"Sail it yourself\" button after the Rev C test"));
+    await page.waitForFunction(() => window.__yard.charted() >= 1, null, { timeout: 30000 }).catch(() => fail("boatyard: the test drew no voyages on its chart"));
+    const sy = await page.evaluate(() => ({ share: window.__yard.share, chart: !!document.querySelector("#result .launch-chart canvas"), gauges: document.querySelectorAll("#result .gauge").length, charted: window.__yard.charted() }));
+    if (!sy.chart || sy.gauges < 1) fail(`boatyard: the test's chart or gauge is missing: ${JSON.stringify(sy)}`);
+    await page.click("#sail-it");
+    await page.waitForURL(/helm\.html/, { timeout: 30000, waitUntil: "commit" }).catch(() => fail("boatyard: \"Sail it yourself\" didn't open the sailing screen"));
+    const sailed = await page.evaluate(() => ({ boat: JSON.parse(localStorage.getItem("boatsim.myboat.v1") || "null"), q: new URLSearchParams(location.search).get("quality") }));
+    if (sailed.boat?.hash !== sy.share || sailed.boat?.base !== "revc" || sailed.boat?.choices?.rudder !== "single" || sailed.q !== "low")
+      fail(`boatyard: "Sail it yourself" didn't carry the design: ${JSON.stringify({ ...sailed, share: sy.share })}`);
+    await page.evaluate(() => localStorage.removeItem("boatsim.myboat.v1"));
+    log.push(`boatyard test chart drew ${sy.charted} voyages, ${sy.gauges} gauge(s); "Sail it yourself" opened the helm with ${sy.share}`);
   }
 
   if (runA) {
