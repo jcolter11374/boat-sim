@@ -87,7 +87,8 @@ import { bundleUrl, loadChallenges, startLabel, type Challenge } from "./helm/ch
 import { CALLS, HONEST, briefing, callAllowed, callToast, goalChip, missionHead, starsText, type Stars } from "./helm/mission";
 import { START_H, knockdownNote } from "./helm/roughStart";
 import { EASE_POWER, MOTORS_STOP_SOC, SUNRISE_GHI, morningPower, NIGHT_AFTER_PUSH_H, handBackNote, nightLine, nightOpener, pickPush, pushCard, pushHeading, powerAfter, pushOrders, worthAskingAgain } from "./helm/powerCall";
-import { stormKeep, stormNote } from "./helm/stormCall";
+import { afterBlow, backWords, SLOW_POWER, stormKeep, stormNote, type Slowed } from "./helm/stormCall";
+import { escFoot, escPick, type EscWhy } from "./helm/escChoice";
 import { loadPorts, portHint, portName } from "./helm/ports";
 import { localTime, shortLocal, zoneLabel } from "./replay/localtime";
 import { tapeItems, type TapeMark } from "./replay/skytape";
@@ -752,6 +753,8 @@ function lockOrders(why: string, announce: boolean): void {
   if (announce) note(NO_LINK_WORDS[why] ?? "Your orders can't reach the boat any more.", `Day ${(shown ?? page.status)!.day.toFixed(1)}`, TONE_COLOUR.bad);
 }
 
+/** How many orders have been given this voyage: "ride it out" goes back only if its own was the last (helm/stormCall.ts). */
+let orderSeq = 0;
 async function setOrder(h: Heading, p = power): Promise<void> {
   if (SPECTATE) return; // a recorded voyage or a race sails itself
   if (linkCut) {
@@ -759,6 +762,7 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     return;
   }
   order = h;
+  orderSeq++;
   // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
   p = powerAfter(h, p, powerBeforePush);
   if (h === "auto" && powerBeforePush !== null) {
@@ -2597,6 +2601,9 @@ type Choice = {
   plain?: string;
   /** The option in running text, for a note ("Riding it"). */
   gist?: string;
+  /** What it does, for Esc (helm/escChoice.ts): hands her to the autopilot, or changes nothing.
+   * An option whose order is the autopilot's needs no mark. */
+  esc?: "auto" | "keep";
 };
 /** look: the compass bearing of the problem (the gale, the Stream), for the camera to turn to as the call nears. */
 type Decision = { kind: string; text: string; choices: Choice[]; look?: number; intro?: string };
@@ -2629,7 +2636,8 @@ function inWords(hours: number): string {
   return d <= 1 ? "in about a day" : d === 1.5 ? "in about a day and a half" : `in about ${d % 1 ? `${Math.floor(d)} and a half` : d} days`;
 }
 /** The storm being sailed through after a "Your call", to say how it went once it's past (Leo). */
-let spell: { kind: string; h: number; chose: string; km: number } | null = null;
+/** back: the order and power from before "slow down and ride it out", to go back to once it has passed (#654). */
+let spell: { kind: string; h: number; chose: string; km: number; back?: Slowed } | null = null;
 /** The last blow you answered, so a second like it isn't asked again (Leo). */
 let lastStorm: { kind: string; peakH: number; chose: string } | null = null;
 /** At most one "Your call" per 2 voyage days (Leo's cadence guard), bar a clearly worse threat. */
@@ -2641,7 +2649,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   const h = st.day * 24;
   const w = st.weather;
   const motors = !st.sailboat && st.power_w > 0;
-  const carryOn: Choice = { label: "Carry on as I am", title: "Keep the order you have", act: () => undefined };
+  const carryOn: Choice = { label: "Carry on as I am", title: "Keep the order you have", act: () => undefined, esc: "keep" };
   // A challenge's one big call (Sandy: run east, or south-east?), once, on its day.
   const m = mission();
   const call = m && CALLS[m.id];
@@ -2653,6 +2661,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       choices: call.options.map((o) => ({
         label: o.label,
         title: o.title,
+        esc: o.heading === "auto" ? ("auto" as const) : undefined,
         act: () => {
           missionCall = { key: o.key, h };
           return o.heading === "auto" ? setOrder("auto") : setOrder(o.heading, o.power ?? power);
@@ -2671,16 +2680,24 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   const ahead = (fc ?? []).map((r) => ({ ...r, ah: (utc(r.t) - t0) / 3.6e6 }));
   const rough = (r: ForecastRow) => Math.hypot(r.wind_u, r.wind_v) >= GALE_MS || r.hs >= BIG_WAVES_M;
   // After a storm call: once it has blown over, say how the choice went.
-  if (spell && h - spell.h >= 18 && nowWind < GALE_MS - 4 && (w?.hs ?? 0) < BIG_WAVES_M - 1 && !ahead.some((r) => r.ah > 0 && r.ah <= 12 && rough(r))) {
+  // With no link she can't hear an order: a "ride it out" waits for the link before it is told and undone.
+  if (spell && !(linkCut && afterBlow(spell.back ?? null, orderSeq)) && h - spell.h >= 18 && nowWind < GALE_MS - 4 && (w?.hs ?? 0) < BIG_WAVES_M - 1 && !ahead.some((r) => r.ah > 0 && r.ah <= 12 && rough(r))) {
     const flat = (game.boat?.events ?? []).filter((e) => e.kind === "capsize" && e.h >= spell!.h).length;
     const verb: Record<string, string> = { hold: "held your course", dodge: "dodged south-east", slow: "slowed down to ride it out" };
     const gone = spell.kind === "gale" ? "The gale has passed" : "The big waves have passed";
     const how = flat ? `you were knocked flat ${flat === 1 ? "once" : `${flat} times`}` : "you stayed upright";
     const made = Math.round(spell.km - st.boat.km_to_finish);
     const progress = made > 0 ? `made ${made.toLocaleString()} km towards the finish since` : `the weather pushed you back ${(-made).toLocaleString()} km`;
-    const text = `${gone}. You ${verb[spell.chose] ?? "carried on"}: ${how}, and ${progress}.${spell.chose === "dodge" ? " Aim at the finish again when you're ready." : ""}`;
+    // "Ride it out" ends when it has passed (#654): back to the order from before, unless you changed it since.
+    const back = afterBlow(spell.back ?? null, orderSeq);
+    const restored = back ? ` ${backWords(back)}` : "";
+    const text = `${gone}. You ${verb[spell.chose] ?? "carried on"}: ${how}, and ${progress}.${spell.chose === "dodge" ? " Aim at the finish again when you're ready." : ""}${restored}`;
     whenAt(h, () => note(text, `Day ${st.day.toFixed(1)}`, flat ? TONE_COLOUR.warn : TONE_COLOUR.good));
     spell = null;
+    if (back) {
+      $<HTMLInputElement>("power").value = String(Math.round(back.power * 100));
+      void setOrder(back.order, back.power);
+    }
   }
   // Gale or big waves in the next 2 days, while it's not blowing yet.
   if (fc && nowWind < GALE_MS - 2 && (w?.hs ?? 0) < BIG_WAVES_M - 0.5 && h - asked.gale >= 48) {
@@ -2707,22 +2724,35 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       const south = Math.round(((toFinish + 50) % 360) / 5) * 5;
       const what = kind === "gale" ? "the gale" : "the waves";
       const did: Record<string, string> = { hold: `held course through ${what}`, dodge: `dodged ${what}`, slow: `slowed for ${what}` };
-      const call = (chose: string, act: () => Promise<void> | void) => () => {
-        spell = { kind, h, chose, km: st.boat.km_to_finish };
+      const slowTo: Heading = order === "auto" ? "route" : order;
+      // Still slowed from an earlier blow (its "ride it out" order is the last one given): what she goes back to.
+      const slowedNow = () => afterBlow(spell?.back ?? null, orderSeq);
+      const call = (chose: string, act: (was: { order: Heading; power: number } | null) => Promise<void> | void) => () => {
+        // Still slowed from an earlier blow and holding course through this one: what to go back to carries over.
+        const was = slowedNow();
+        const carried = chose === "hold" && was ? spell!.back : undefined;
+        const before = { order, power };
+        spell = { kind, h, chose, km: st.boat.km_to_finish, back: carried };
         lastStorm = { kind, peakH, chose };
         alsoCalled(did[chose]);
-        return act();
+        const done = act(was);
+        // The slow order is in (setOrder counts it at once): hers to undo only while it is the last one given.
+        if (chose === "slow") {
+          spell.back = { ...before, seq: orderSeq };
+          nightEase = null; // a night's "ease off" before it: the storm's order has taken its place
+        }
+        return done;
       };
       const choices: Choice[] = [
         // Stakes from the same 4-day look; "waves to X m" beside each is the risk side (Maya).
         // With the forecast beside them the labels carry no claims: on 23 Apr the 120° "dodge"
         // forecast 214 km gained AND 0.6 m bigger waves, so "safer, a longer way round" was
         // wrong on both counts (Sam, 12 Nov). The tag says which is faster and which rougher.
-        { label: "Hold course: fastest, but a knockdown is likelier", plain: order === "auto" ? "Hold course (same as the ghost)" : "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power } },
-        { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", () => setOrder(south)), order: { heading: south, power } },
+        { label: "Hold course: fastest, but a knockdown is likelier", plain: order === "auto" ? "Hold course (same as the ghost)" : "Hold course", title: "Sail on through it", act: call("hold", () => undefined), order: { heading: order, power }, esc: "keep" },
+        { label: `Dodge south-east (${south}°): safer, but a longer way round`, plain: `Turn south-east (${south}°)`, title: "Steer away from the worst of it; aim at the finish again once it has passed", act: call("dodge", (was) => setOrder(south, was?.power ?? power)), order: { heading: south, power: slowedNow()?.power ?? power } },
       ];
-      if (motors && power > 0.1)
-        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off; turn them back up after the blow", act: call("slow", () => setOrder(order === "auto" ? "route" : order, 0.1)), order: { heading: order === "auto" ? "route" : order, power: 0.1 } });
+      if (motors && power > SLOW_POWER)
+        choices.push({ label: "Slow down and ride it out (10% power): less pounding, saves battery, loses time", plain: "Slow down to 10% power and ride it out", title: "The motors ease off, and go back to what they were once it has passed", act: call("slow", () => setOrder(order === "auto" ? "route" : order, SLOW_POWER)), order: { heading: slowTo, power: SLOW_POWER } });
       const intro = `${kind === "gale" ? "A gale is" : "Big waves are"} forecast here ${inWords(bad.ah)}: at the peak here, wind up to ${kmh(peakW)} and waves up to ${peakH.toFixed(1)} m. A small boat can be knocked flat in that.`;
       return {
         kind,
@@ -2749,7 +2779,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
           } },
           { ...carryOn, label: "Keep the power up: faster, but may run flat overnight", act: () => void alsoCalled("kept the power up overnight") },
           // The third way out of a push (M5, D2): the autopilot sets the power by the battery, as it does for the ghost.
-          { label: "Hand her back to the autopilot (same as the ghost)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")) },
+          { label: "Hand her back to the autopilot (same as the ghost)", title: "The autopilot sets the power by the battery, as it does for the ghost", act: () => (alsoCalled("handed her back to the autopilot for the night"), setOrder("auto")), esc: "auto" },
         ],
       };
     }
@@ -2968,7 +2998,7 @@ function maybeRouteCheck(st: Status): boolean {
             else streamCall = { h, chose: `Since you ${words.did}`, since: `Since you ${words.did}`, now: words.ago, lead: st.lead_km, later: [], after: LOOK_H };
             return setOrder(to.heading, to.power);
           } },
-          { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine },
+          { label: words.stay, title: "Carry on as you are", act: () => void (pushTurnedDown = push.gainDays), order: mine, esc: "keep" },
         ],
       };
       const view: Outlook = { ...o, orders: [push.push, now] };
@@ -3001,7 +3031,7 @@ function maybeRouteCheck(st: Status): boolean {
       text: `Navigator's check: the forecast says ${fmtDeg(b.best)} would gain on ${orderWords(order)} over the next 4 days, but through ${price}.`,
       choices: [
         { label: `Take ${fmtDeg(b.best)}${same ? " (about what the autopilot does)" : ""}`, title: "Hold this heading; check again in a couple of days", act: () => setOrder(b.best), order: { heading: b.best, power } },
-        { label: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine },
+        { label: order === "auto" ? "Stay on the autopilot (same as the ghost)" : `Keep ${orderWords(order)}`, title: "Carry on as you are", act: () => undefined, order: mine, esc: "keep" },
         { label: "Let the autopilot decide (same as the ghost)", title: "Back on the autopilot", act: () => setOrder("auto"), order: { heading: "auto" } },
       ],
     };
@@ -3167,6 +3197,8 @@ function costWords(p: Preview, all: Preview[], waves = false, meaning = false): 
   return out.length ? ` · ${out.join(" · ")}` : "";
 }
 
+/** The option Esc picks on the open call (helm/escChoice.ts). */
+let escOption: { index: number; why: EscWhy } = { index: -1, why: "first" };
 /** The open call's map, redrawn when an option is hovered or focused (-1: none). */
 let drawDecisionMap: ((lit: number) => void) | null = null;
 
@@ -3186,7 +3218,9 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
   // The map's key, in the card's own words (Ines): the band is named only when there is one.
   const fast = !!o?.current?.u.some((u, k) => Math.hypot(u, o.current!.v[k]) >= 1);
   const band = fast ? ` Grey band: ${d.kind === "stream" ? "the Stream" : "a strong current"} (forecast).` : "";
-  $("decidefoot").textContent = `Time is paused until you choose.${withMap ? ` Dashed: the ghost.${band}` : ""} Keys 1-${d.choices.length}, or Esc for the autopilot.`;
+  // Esc's option is worked out from what the options do, and the foot names it by number (#654).
+  escOption = escPick(d.choices.map((c) => ({ auto: c.esc === "auto" || c.order?.heading === "auto", keep: c.esc === "keep" })));
+  $("decidefoot").textContent = `Time is paused until you choose.${withMap ? ` Dashed: the ghost.${band}` : ""} ${escFoot(d.choices.length, escOption)}`;
   drawDecisionMap = withMap
     ? (lit) => drawCallMap(map, chartLand, [st!.boat.lat, st!.boat.lon], lines, o?.ghost.track ?? null, lit, o?.current ?? null)
     : null;
@@ -3245,7 +3279,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
   }
 }
 
-/** 1, 2, 3 pick a call's options; Esc takes the autopilot's (always one key away). */
+/** 1, 2, 3 pick a call's options; Esc takes the autopilot's, or failing that the one that changes nothing (the card's foot says which). */
 function decisionKey(e: KeyboardEvent): boolean {
   if ($("decide").hidden) return false;
   const btns = Array.from($("decidebtns").querySelectorAll("button"));
@@ -3255,7 +3289,7 @@ function decisionKey(e: KeyboardEvent): boolean {
     return true;
   }
   if (e.key === "Escape") {
-    (btns.find((b) => /autopilot/i.test(b.textContent ?? "")) ?? btns.at(-1))?.click();
+    btns[escOption.index]?.click();
     return true;
   }
   return false;

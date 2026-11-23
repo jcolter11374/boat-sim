@@ -66,16 +66,19 @@ test("each call says what it was worth until the next one", () => {
     ],
     80,
   );
-  assert.deepEqual(lines, ["Day 2.0 · Took the route that rides the Stream · 120 km ahead of the ghost", "Day 9.0 · Dodged south-east (115°) · 40 km behind the ghost"]);
+  assert.deepEqual(lines, ["Day 2.0 · Took the route that rides the Stream · gained 120 km on the ghost", "Day 9.0 · Dodged south-east (115°) · lost 40 km to the ghost"]);
+  // #654: 122 km behind at the call, level at the finish. That is 122 km gained, not "122 km ahead".
+  assert.deepEqual(callLines([{ day: 8.2, chose: "Kept 10% power", lead: -122 }], 0), ["Day 8.2 · Kept 10% power · gained 122 km on the ghost"]);
+  assert.deepEqual(callLines([{ day: 3, chose: "Held course", lead: 7 }], 7.4), ["Day 3.0 · Held course · no gain or loss on the ghost"]);
   assert.match(callLines([], 10)[0], /You let the autopilot sail/);
   assert.deepEqual(callLines([], 10, false), ["No call came up before the voyage ended."]);
   assert.deepEqual(callLines([{ day: 9.4, chose: callName("Stay on the autopilot (same as the ghost)"), lead: 0, ghost: true }], 0), ["Day 9.4 · Stayed on the autopilot (same as the ghost)"]);
-  assert.deepEqual(callLines([{ day: 9.4, chose: "Held course", lead: 0, ghost: true }], 50), ["Day 9.4 · Held course · 50 km ahead of the ghost"], "a gap opened: km, as before");
+  assert.deepEqual(callLines([{ day: 9.4, chose: "Held course", lead: 0, ghost: true }], 50), ["Day 9.4 · Held course · gained 50 km on the ghost"], "a gap opened: km, as before");
   assert.equal(callName("Stay on the autopilot (same as the ghost)"), "Stayed on the autopilot");
   assert.equal(callName("Hand her back to the autopilot (same as the ghost)"), "Handed her back to the autopilot");
   assert.equal(callName("Keep 30% power"), "Kept 30% power");
   assert.equal(callName("Push: 50% power"), "Pushed to 50% power");
-  assert.deepEqual(callLines([{ day: 20.2, chose: "Pushed to 50% power", lead: 0 }], -5), ["Day 20.2 · Pushed to 50% power · 5 km behind the ghost", PUSH_ODDS], "a push: the odds said under the calls");
+  assert.deepEqual(callLines([{ day: 20.2, chose: "Pushed to 50% power", lead: 0 }], -5), ["Day 20.2 · Pushed to 50% power · lost 5 km to the ghost", PUSH_ODDS], "a push: the odds said under the calls");
   assert.equal(callName("Hold course: fastest, but a knockdown is likelier"), "Held course");
   assert.equal(callName("Dodge south-east (115°): safer, but a longer way round"), "Dodged south-east (115°)");
 });
