@@ -43,6 +43,7 @@ export function pickerEntries(mine: MyBoat | null): PickerEntry[] {
     const name = nameOf(k);
     out.push({ id: k, group: "Stock boats", name, fact: STOCK_FACT[k] ?? "a ready-made boat, sailed as it comes" });
   }
+  out.push({ id: "reve1", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.reve1.name, fact: "their current 1.5 m wing-sail robot boat design: wind only, no motor" });
   out.push({ id: "revc", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revc.name, fact: "their Rev C5 wing-sail robot boat as drawn (since replaced by Rev E1): wind only, no motor" });
   out.push({ id: "revb", group: "The Randolph team's boats", name: RANDOLPH_AS_BUILT.revb.name, fact: "their earlier 1.5 m wing-sail robot boat, as built: wind only, no motor" });
   if (mine && mine.kind === "yard" && !(mine.base === "kayak" && mine.hash === "") && !randolphAsBuilt(mine))
@@ -162,7 +163,7 @@ export function openBoatPicker(doc: Document = document, use?: PickerUse): void 
   }
   // Paint for the player's own boat (not when the picker is choosing some other boat).
   if (!use) {
-    const builtOf = (id: string) => (id === "revb" || id === "revc" ? "randolph" : isStock(id) ? id : id === "mine" && mine && mine.base !== "kayak" ? "randolph" : "kayak");
+    const builtOf = (id: string) => (id in RANDOLPH_AS_BUILT ? "randolph" : isStock(id) ? id : id === "mine" && mine && mine.base !== "kayak" ? "randolph" : "kayak");
     let pick = paintPicker(builtOf(picked), doc);
     card.append(pick);
     // The "own colours" swatch follows the boat ticked above.

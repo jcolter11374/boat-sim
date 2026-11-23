@@ -101,7 +101,7 @@ export function heroSpec(mine: MyBoat | null): BoatSpec {
   if (!mine) return KAYAK;
   // A stock boat, or a Boatyard design that starts from one (the keelboats' sails, M4).
   if (mine.base in STOCK) return STOCK[mine.base as StockKey];
-  if (mine.base === "revb" || mine.base === "revc") return RANDOLPH;
+  if (mine.base === "revb" || mine.base === "revc" || mine.base === "reve1") return RANDOLPH;
   return KAYAK;
 }
 

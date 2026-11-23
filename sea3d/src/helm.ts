@@ -35,7 +35,7 @@ import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, lo
 import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, RANDOLPH_REVE1, type HullParams } from "./motion";
 import { paintMine } from "./boats/paintApply";
 import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
 import { LAUNCH, SET_SAIL, fromUrl, implied, withChoices, type SetSail } from "./helm/setsail";
@@ -210,6 +210,7 @@ const HULL: Partial<Record<string, HullParams>> = {
   kayak: KAYAK_V4,
   revc: RANDOLPH_REVC,
   revb: RANDOLPH_REVB,
+  reve1: RANDOLPH_REVE1,
   ...STOCK_HULL,
 };
 let hull: HullParams = KAYAK_V4;
@@ -367,7 +368,7 @@ function placeDeckLight(): void {
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
 function useBoat(base: string): void {
   const k = isStock(base) ? base : null;
-  const next = k ? STOCK[k] : base === "revc" || base === "revb" ? RANDOLPH : KAYAK;
+  const next = k ? STOCK[k] : base === "revc" || base === "revb" || base === "reve1" ? RANDOLPH : KAYAK;
   const nextHull = HULL[base] ?? KAYAK_V4;
   if (next === spec && nextHull === hull) return;
   const scale = (b: BoatSpec) => THREE.MathUtils.clamp(b.length / KAYAK.length, 1, 3.4);
@@ -3324,7 +3325,7 @@ function myRaceId(): string | null {
   const b = loadMyBoat();
   if (!b) return "kayak";
   if (b.kind !== "yard") return null;
-  return b.hash ? "mine" : ["kayak", "revc", "revb"].includes(b.base) ? b.base : null;
+  return b.hash ? "mine" : ["kayak", "reve1", "revc", "revb"].includes(b.base) ? b.base : null;
 }
 /** The ways on from this ending, the same ones in the same order on every card (M3): buttons first, the quiet links under them. */
 function showWays(mode: EndMode, ctx: Omit<WayCtx, "search">): void {
@@ -4186,7 +4187,7 @@ if (startMine) {
     // The name is the player's own text: textContent only.
     const b = Object.assign(document.createElement("b"), { textContent: startMine.name });
     const asBuilt = randolphAsBuilt(startMine);
-    const words = asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's Rev C5 wing-sail robot boat design (they have since moved on to Rev E1). Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
+    const words = asBuilt === "reve1" ? ": the Randolph team's current wing-sail robot boat design. Wind only: you steer." : asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's Rev C5 wing-sail robot boat design (they have since moved on to Rev E1). Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
     label.append(input, " ", b, words);
     $("boats").querySelector("legend")!.after(label);
   }
@@ -5218,7 +5219,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if (her && (her.h.length ? !page.status?.over || h <= lastHour(her) + 1e-6 : !!her0) && page.race && modelsIn) {
     if (!rival.built) {
       const b = page.race.bases[1];
-      const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
+      const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" || b === "reve1" ? RANDOLPH : KAYAK;
       // Her detailed model first, if she is the Randolph boat (it loads on demand): she is drawn once it is in.
       if (rs === RANDOLPH && !randolphSettled()) void loadRandolphModel();
       else {

@@ -66,6 +66,7 @@ BOAT_NAMES = {
     "kayak": "v4 kayak",
     "revc": "Randolph Rev C",
     "revb": "Randolph Rev B",
+    "reve1": "Randolph Rev E1",
     "stock_pearson31_2": "Pearson 31-2",
     "stock_cruiser31": "Beneteau First 31.7",
 }
@@ -75,12 +76,14 @@ LABEL_NAMES = {
     "kayak": "Our kayak",
     "revc": "Randolph Rev C5",
     "revb": "Randolph Rev B",
+    "reve1": "Randolph Rev E1",
     "stock_pearson31_2": "Pearson 31-2",
     "stock_cruiser31": "Beneteau First 31.7",
 }
 MODEL_NOTE = {
     "revc": "Our model of the Randolph team's Rev C5, from their published design.",
     "revb": "Our model of the Randolph team's earlier Rev B, from their published design.",
+    "reve1": "Our model of the Randolph team's current Rev E1, from the file they wrote for us. It leaves out their bilge pump, tail detent, backup controller and weed-shedding manoeuvre.",
     "stock_pearson31_2": "Our model of Randolph and Becky's own boat, from Pearson's published specs.",
     "stock_cruiser31": "Our model, from Beneteau's published specs and an ORC certificate.",
 }

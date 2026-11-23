@@ -216,8 +216,9 @@ export function myBoatYardLink(b: MyBoat): string {
 
 /** Our models of the Randolph team's boats, unchanged in the Boatyard: picked straight from the boat
  * picker, saved as a Boatyard design on that base so every page sails it (John, 13 Nov: every built
- * boat in Set sail). The Rev B is their earlier boat as built; the Rev C5 their design of 12 Nov (since replaced by Rev E1). */
+ * boat in Set sail). The Rev E1 is their current design (21 Nov 2026). The Rev B is their earlier boat as built; the Rev C5 their design of 12 Nov (since replaced by Rev E1). */
 export const RANDOLPH_AS_BUILT = {
+  reve1: { kind: "yard", base: "reve1", hash: "#base=reve1", name: "Randolph Rev E1 (our model)", choices: { base: "reve1" } },
   revb: { kind: "yard", base: "revb", hash: "#base=revb", name: "Randolph Rev B (our model)", choices: { base: "revb" } },
   revc: { kind: "yard", base: "revc", hash: "#base=revc", name: "Randolph Rev C5 (our model)", choices: { base: "revc" } },
 } as const;

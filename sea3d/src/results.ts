@@ -130,7 +130,7 @@ export function ordinal(n: number): string {
 // Every ending offers Leaderboard and Race it. These say where each one leads, so the results
 // card (helm/ending.ts) and any other page ask one place. Neither leads to the old pages.
 
-const RACE_BOATS = ["kayak", "revc", "revb", "mine"];
+const RACE_BOATS = ["kayak", "reve1", "revc", "revb", "mine"];
 
 /**
  * Where "Leaderboard" leads from an ending. A weather challenge has its own tab (John, W5), so

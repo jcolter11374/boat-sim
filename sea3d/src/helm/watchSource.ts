@@ -19,13 +19,14 @@ export const WATCH_DEFAULT_DAY = "2020-06-01";
 
 /** The helm's boat key for a recorded voyage's boat name: "" our kayak, "revb"/"revc" our model of the Randolph boat, or a stock id. */
 export function watchBase(boat: string): string {
-  return stockKeyOf(boat) ?? (!/randolph/i.test(boat) ? "" : /rev[\s_-]*c\b/i.test(boat) ? "revc" : "revb");
+  return stockKeyOf(boat) ?? (!/randolph/i.test(boat) ? "" : /rev[\s_-]*e/i.test(boat) ? "reve1" : /rev[\s_-]*c\b/i.test(boat) ? "revc" : "revb");
 }
 
 /** The boat's name for a player. A Randolph boat is always "(our model)" (John, B2). */
 export function watchName(boat: string): string {
   const base = watchBase(boat);
   if (base === "revc") return "Randolph Rev C (our model)";
+  if (base === "reve1") return "Randolph Rev E1 (our model)";
   if (base === "revb") return "Randolph Rev B (our model)";
   if (base === "stock_pearson31_2") return "Randolph's Pearson 31-2 (our model)";
   if (base === "") return "Our kayak";
