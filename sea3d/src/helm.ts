@@ -70,7 +70,7 @@ import { copyText } from "./helm/share";
 import { HEADING, HeldAxis, POWER, keyAxis, latestOnly } from "./helm/keys";
 import { rollFromWheel } from "./helm/wheel";
 import { VoyageKeeper } from "./helm/voyageKeeper";
-import { REAL_TIME as SAVED_REAL_TIME, clearVoyage, loadVoyage, sameOrder, welcomeBack } from "./helm/voyageSave";
+import { REAL_TIME as SAVED_REAL_TIME, backOnResume, clearVoyage, loadVoyage, sameOrder, welcomeBack, type SavedBack } from "./helm/voyageSave";
 import { ROUTE_BIG_KM, routeBigText } from "./helm/routeCall";
 import { FrameJudge, PREF_KEY, SlowWatch, isLevel, levelSettings, startLevel, type Level } from "./helm/autoQuality";
 import { Ghost } from "./helm/ghost";
@@ -762,6 +762,8 @@ async function setOrder(h: Heading, p = power): Promise<void> {
     return;
   }
   order = h;
+  // Every order counts, whatever it says: the slider and the arrow keys write `order` and `power`
+  // before they get here, so "did it change?" cannot be told from them (review of #660).
   orderSeq++;
   // Back on the autopilot after a push: the panel's power goes back to what it was (helm/powerCall.ts).
   p = powerAfter(h, p, powerBeforePush);
@@ -1989,6 +1991,20 @@ let sailedName = "";
 /** The name of the boat this voyage is sailed in (a continued voyage keeps the name it began with). Empty when it
  *  isn't known: someone else's shared voyage, or a continued one whose save is gone. */
 const sailedAs = (): string => keptBoat || sailedName;
+/** A slow-down that is only for a while and still on (the storm card's "ride it out", the night
+ * card's "ease off"): what to go back to, for the save, so a reload doesn't forget it (#657). */
+function slowedFor(): SavedBack | null {
+  const storm = spell ? afterBlow(spell.back ?? null, orderSeq) : null;
+  if (spell && storm) return { why: "storm", heading: storm.order, power: storm.power, h: spell.h, kind: spell.kind === "gale" ? "gale" : "waves", chose: spell.chose === "hold" ? "hold" : "slow", km: spell.km };
+  if (nightEase && order === nightEase.order && Math.abs(power - EASE_POWER) < 1e-6) return { why: "night", heading: nightEase.order, power: nightEase.power, h: nightEase.dark, kind: null, chose: null, km: null };
+  return null;
+}
+/** Coming back to a voyage left while slowed: take the slow-down up again, so it ends as it would have. */
+function takeUpSlowdown(b: SavedBack, kmToFinish: number): void {
+  // The night's heading is the one on the helm now (the save's, to a tenth of a degree): morning compares it exactly.
+  if (b.why === "night") nightEase = { order, power: b.power, dark: b.h };
+  else spell = { kind: b.kind ?? "waves", h: b.h, chose: b.chose ?? "slow", km: b.km ?? kmToFinish, back: { order: b.heading, power: b.power, seq: orderSeq } };
+}
 /** The day that was on the screen when a voyage that came back was left (null if its save doesn't say). */
 let keptLeft: number | null = null;
 if (!SPECTATE && !PRACTICE && !THEIRS)
@@ -1997,7 +2013,7 @@ if (!SPECTATE && !PRACTICE && !THEIRS)
       const st = page.ready ? page.status : null;
       if (!st) return null;
       // `seen` is the picture's day (the simulator runs ahead of it); `orders` changes when an order goes.
-      return { day: st.day, seen: hour / 24, over: st.over, boat: sailedAs(), toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null };
+      return { day: st.day, seen: hour / 24, over: st.over, boat: sailedAs(), toGoKm: st.boat.km_to_finish, rate: rate === REAL_TIME ? SAVED_REAL_TIME : rate, challenge: page.challenge, orders: JSON.stringify([order, power, sailOrder, engineOrder, slowedFor()]), order: mode === "hands_on" && !linkCut ? { heading: order, power, sails: sailOrder, engine: engineOrder } : null, back: slowedFor() };
     },
     () => game.savedCode(), // the code rides on the last run or order: no turn of the worker (speed, 14 Nov)
   ).start();
@@ -4094,6 +4110,9 @@ async function begin(): Promise<void> {
           await game.order(order, power, sailOrder, engineOrder);
           page.status = game.status;
         }
+        // Left while slowed for a blow or a night: the hand-back is taken up again (#657).
+        const slowed = mode === "hands_on" && !v.status.over ? backOnResume(was, shared, { heading: order, power, sails: sailOrder, engine: engineOrder }) : null;
+        if (slowed) takeUpSlowdown(slowed, (page.status ?? v.status).boat.km_to_finish);
       }
     } else if (SPECTATE) {
       // A recorded voyage (its file is the game) or a race (the source knows its boats and launch).

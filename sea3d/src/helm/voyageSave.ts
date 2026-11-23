@@ -39,6 +39,26 @@ export interface SavedOrder {
   engine: boolean | null;
 }
 
+/** A slow-down that is only for a while (#657): the storm card's "slow down and ride it out" and
+ *  the night card's "ease off till sunrise" both set 10% power and give the old order back by
+ *  themselves. This is what to go back to, kept with the voyage so that closing the page while
+ *  slowed doesn't leave her at 10% for good. Like `order`, it is not the boat's state: it is an
+ *  order the page will give later, and only if the helm comes back as it was left. */
+export interface SavedBack {
+  /** Which card slowed her. */
+  why: "storm" | "night";
+  /** The order and power from before, to go back to. */
+  heading: SavedOrder["heading"];
+  power: number;
+  /** Voyage hour: when the storm call was made, or (night) the hour it gets dark. */
+  h: number;
+  /** Storm only, for the "it has passed" note: gale or big waves, what was chosen on the last
+   *  storm card, and the km to the finish at the call. */
+  kind: "gale" | "waves" | null;
+  chose: "slow" | "hold" | null;
+  km: number | null;
+}
+
 export interface SavedVoyage {
   v: typeof VOYAGE_VERSION;
   /** The simulator's save code: launch, boat, seeds and the orders so far. The only part
@@ -58,6 +78,9 @@ export interface SavedVoyage {
    *  the page closed may not be in it yet. Coming back sends this one again if the voyage
    *  came back without it (see sameOrder). Not the boat's state: an order, given again. */
   order: SavedOrder | null;
+  /** A slow-down still on when the page was last written to, and what to go back to after it;
+   *  null if none (or an older save). Used only if the helm comes back with `order` on it. */
+  back: SavedBack | null;
   /** Km left to the finish when saved, for the offer's words only; null if not known. */
   toGoKm: number | null;
   /** The speed the clock was at: hours of voyage per second, REAL_TIME, or 0 for paused. */
@@ -77,6 +100,7 @@ export interface VoyageNow {
   day: number;
   left?: number | null;
   order?: SavedOrder | null;
+  back?: SavedBack | null;
   toGoKm?: number | null;
   rate?: number | typeof REAL_TIME | null;
   sim?: string | null;
@@ -103,6 +127,31 @@ function okOrder(x: unknown): SavedOrder | null {
   return { heading, power: o.power, sails: typeof o.sails === "string" && o.sails.length <= 40 ? o.sails : null, engine: typeof o.engine === "boolean" ? o.engine : null };
 }
 
+/** A slow-down's "go back to" that can be used, or null. */
+function okBack(x: unknown): SavedBack | null {
+  if (!x || typeof x !== "object") return null;
+  const b = x as Record<string, unknown>;
+  const to = okOrder({ heading: b.heading, power: b.power });
+  if (!to || (b.why !== "storm" && b.why !== "night") || !finite(b.h) || b.h < 0) return null;
+  return {
+    why: b.why,
+    heading: to.heading,
+    power: to.power,
+    h: b.h,
+    kind: b.kind === "gale" || b.kind === "waves" ? b.kind : null,
+    chose: b.chose === "slow" || b.chose === "hold" ? b.chose : null,
+    km: finite(b.km) && b.km >= 0 ? b.km : null,
+  };
+}
+
+/** Coming back to a saved voyage: the slow-down to take up again, or null. Only when the save is
+ *  this voyage's, and the helm has come back with the very order the save was written with (the
+ *  slow order). Any other order on the helm is the player's own, and stands. */
+export function backOnResume(v: SavedVoyage | null, code: string, helm: SavedOrder): SavedBack | null {
+  if (!v || v.code !== code || !v.back || !v.order) return null;
+  return sameOrder(v.order, helm) ? v.back : null;
+}
+
 /** Whether two orders are the same order (a heading to a tenth of a degree, a power to a
  *  thousandth). Coming back gives the saved order again only if the voyage came back with a
  *  different one. */
@@ -125,6 +174,7 @@ export function packVoyage(n: VoyageNow, now: Date = new Date()): SavedVoyage | 
     day: Math.round(n.day * 100) / 100,
     left: finite(n.left) && n.left >= 0 ? Math.round(n.left * 100) / 100 : null,
     order: okOrder(n.order),
+    back: okOrder(n.order) ? okBack(n.back) : null,
     toGoKm: finite(n.toGoKm) && n.toGoKm >= 0 ? Math.round(n.toGoKm) : null,
     rate: okRate(n.rate) ? n.rate : 0,
     sim: typeof n.sim === "string" ? n.sim.slice(0, 80) : "",
@@ -157,6 +207,7 @@ export function parseVoyage(raw: string | null | undefined): SavedVoyage | null 
     day: r.day,
     left: finite(r.left) && r.left >= 0 ? r.left : null,
     order: okOrder(r.order),
+    back: okOrder(r.order) ? okBack(r.back) : null,
     toGoKm: finite(r.toGoKm) && r.toGoKm >= 0 ? r.toGoKm : null,
     rate: okRate(r.rate) ? r.rate : 0,
     sim: typeof r.sim === "string" ? r.sim.slice(0, 80) : "",
