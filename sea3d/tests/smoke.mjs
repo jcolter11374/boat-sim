@@ -180,12 +180,14 @@ try {
     // Quality switch rebuilds the sea mesh with a different resolution.
     vLow = await page.evaluate(() => window.__sea3d.seaVertices);
     await page.selectOption("#quality", "high");
-    await page.waitForTimeout(500);
+    // The drawing is held while the new look's shaders are built (changeLook), then carries on.
+    await page.waitForFunction((v) => window.__sea3d.seaVertices !== v, vLow, { timeout: 30000 }).catch(() => {});
     vHigh = await page.evaluate(() => window.__sea3d.seaVertices);
     if (!(vLow > 0 && vLow < vHigh)) fail(`low quality should use fewer sea vertices (high ${vHigh}, low ${vLow})`);
     const pngHigh = await snap({ path: "test-output/sea-gale-high.png" });
     if (pngHigh.length < 20000) fail(`high-quality screenshot looks blank (${pngHigh.length} bytes)`);
     await page.selectOption("#quality", "low");
+    await page.waitForFunction((v) => window.__sea3d.seaVertices !== v, vHigh, { timeout: 30000 }).catch(() => {});
 
     // Every camera button works.
     for (const shot of ["kayak", "randolph", "low", "high", "side"]) await page.click(`#shots button[data-shot="${shot}"]`);
