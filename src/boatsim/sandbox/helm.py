@@ -69,10 +69,10 @@ from boatsim.autonomy.helm import (
 )
 from boatsim.autonomy.policy import GAME_POLICY, ODDS_POLICY
 from boatsim.autonomy.policy import policy as policy_for
-from boatsim.autonomy.sailing import tactician_for
+from boatsim.autonomy.sailing import open_water_km, tactician_for
 from boatsim.autonomy.sphere import destination
 from boatsim.basestation.base import HoldCoursePolicy
-from boatsim.geo import distance_m
+from boatsim.geo import bearing_deg, distance_m
 from boatsim.runner import arrival
 from boatsim.runner.simulate import (
     Voyage,
@@ -751,6 +751,10 @@ class Game:
             raise ValueError("auto is a hands-on order; from base, send the route instead")
         if sails is not None or engine is not None:
             raise ValueError("on auto the autopilot sets the sails and engine")
+        if self.via_azores:
+            # Back from steering herself: the islands stay on the route only where
+            # the way to the next mark is still open water (_azores_route).
+            self._route_auto(self._azores_route())
         self._trim.inner, self.mine.c.base = self._auto
         o = {
             "t": _iso(t),
@@ -767,17 +771,43 @@ class Game:
         with the Azores marks ahead of her as its planned route, then the finish.
         Base re-plans round weather and land along that route as it does along
         the straight one. The route stays for the rest of the voyage."""
+        if sails is not None or engine is not None:  # before anything is changed
+            raise ValueError("on auto the autopilot sets the sails and engine")
+        self.via_azores = True
+        o = self._order_auto(t, sails, engine)  # sets the route (_azores_route)
+        o["heading"] = "azores"
+        return o
+
+    def _azores_route(self) -> list[Waypoint]:
+        """The Azores marks still ahead of her, then the finish. A mark is kept
+        only if the straight line to it from where she is now is open water: after
+        a spell steering herself she may be where that line crosses an island, and
+        then the mark (and the detour, if none is left) is dropped."""
+        s = self.mine.state
+        marks = azores_marks_ahead(s.lon)
+        while marks:
+            km = distance_m(s.lat, s.lon, *marks[0]) / 1000.0
+            way = open_water_km(s.lat, s.lon, bearing_deg(s.lat, s.lon, *marks[0]), lookahead_km=km)
+            if way >= km:
+                break
+            marks = marks[1:]
+        self.via_azores = bool(marks)
+        return [Waypoint(*m) for m in (*marks, self.finish)]
+
+    def _route_auto(self, wps: list[Waypoint]) -> None:
+        """Give the autopilot and its base a new planned route, now (hands on is a
+        perfect link). Routes base sent for the old plan and the boat has not
+        collected yet are replaced too, at their own times, so an "all well" for
+        the straight route cannot undo this one a few hours later."""
         v = self.mine
-        wps = [Waypoint(*m) for m in (*azores_marks_ahead(v.state.lon), self.finish)]
         base = self._auto[1]
         if hasattr(base, "route"):
             base.route = list(wps)
-            base._current = None  # its last correction was for the straight route
+            base._current = None  # its last correction was for the old route
         v.mission = Mission(waypoints=list(wps), version=v.mission.version + 1)
-        o = self._order_auto(t, sails, engine)
-        o["heading"] = "azores"
-        self.via_azores = True
-        return o
+        v.pending_down = [
+            (when, Mission(waypoints=list(wps), version=m.version)) for when, m in v.pending_down
+        ]
 
     def _send(
         self, heading: float | str, power: float, sails: str | None, engine: bool | None
@@ -1111,7 +1141,8 @@ class Game:
             # None while orders can reach the boat; else why not ("main_box", "comms_silent").
             "no_link": self.link_lost(),
             "mode": self.mode,
-            "via_azores": self.via_azores,  # the autopilot's route goes by the Azores
+            # the autopilot is sailing its route by the Azores (order "azores")
+            "via_azores": self.via_azores and self.on_auto,
             "show_true_position": True,
             "order": (
                 {"heading": AUTO, "power": self._cruise()}

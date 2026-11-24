@@ -845,3 +845,33 @@ def test_the_azores_order_is_refused_too_far_east_and_goes_by_satellite_from_bas
     assert o["accepted"] and o["heading"] == "azores" and o["arrives"]
     _, m = b.mine.pending_down[-1]
     assert [(w.lat, w.lon) for w in m.waypoints] == [*AZORES_MARKS, FINISH] and m.power == 0.4
+
+
+def test_the_azores_order_replaces_routes_still_in_the_mailbox_and_checks_the_way_back(env):
+    """A route base sent for the straight course and the boat has not collected yet
+    must not undo the order; and handing back to the autopilot after steering
+    herself keeps a mark only where the straight line to it is open water."""
+    from boatsim.autonomy.helm import AZORES_MARKS
+
+    g = Game(env, launch_index=MAY1, max_days=2.0)
+    v = g.mine
+    stale = Mission(waypoints=[Waypoint(*FINISH)], version=7)
+    v.pending_down.append((v.state.t + timedelta(hours=6), stale))
+    g.order("azores", 0.5)
+    ((when, m),) = v.pending_down
+    assert when == v.state.t + timedelta(hours=6) and m.version == 7
+    assert [(w.lat, w.lon) for w in m.waypoints] == [*AZORES_MARKS, FINISH]
+    # Steering herself, she ends up north-west of Faial: the line to the mark off Pico crosses it.
+    g.order("finish", 0.5)
+    assert not g.status()["via_azores"]  # not while she steers herself
+    here = (v.state.lat, v.state.lon)
+    v.state.lat, v.state.lon = 39.2, -29.6
+    g.order("auto", 0.0)
+    assert [(w.lat, w.lon) for w in v.mission.waypoints] == [FINISH] and not g.via_azores
+    # From south-west of the islands the same hand-back keeps the mark off Pico.
+    g.via_azores = True
+    v.state.lat, v.state.lon = 38.2, -31.0
+    g.order("auto", 0.0)
+    assert [(w.lat, w.lon) for w in v.mission.waypoints] == [AZORES_MARKS[1], FINISH]
+    assert g.status()["via_azores"]
+    v.state.lat, v.state.lon = here

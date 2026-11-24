@@ -15,8 +15,8 @@ test("the call is due once, in mid-ocean, and never once she is going by the isl
 test("the words give the distance in round numbers and the measured price", () => {
   assert.match(azoresText(1234), /about 1,250 km/);
   assert.match(azoresYes(), new RegExp(`about ${AZORES_COST.typical} days longer, and a risk`));
-  assert.match(azoresText(1234), new RegExp(`1 crossing in ${AZORES_COST.lostOneIn} was lost`));
-  assert.match(azoresSmallPrint(), new RegExp(`${AZORES_COST.low} to ${AZORES_COST.high} days`));
+  assert.match(azoresText(1234), new RegExp(`1 crossing in ${AZORES_COST.lostOneIn} that went this way did not finish`));
+  assert.match(azoresSmallPrint(), new RegExp(`${AZORES_COST.low} to ${AZORES_COST.high} days longer.*the worst ${AZORES_COST.worst}`));
   assert.match(azoresSmallPrint(), /same finish line/);
   assert.match(azoresNote(0.2), /about 1 day\./);
   assert.match(azoresNote(9.6), /about 10 days\./);

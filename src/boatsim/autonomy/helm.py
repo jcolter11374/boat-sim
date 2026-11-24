@@ -56,7 +56,8 @@ HEADING_MODES = ("finish", "route")
 #  - 38.10N 28.35W, about 30 km south of Pico's south shore, with the mountain
 #    (2,351 m) 41 km to the north: outside base's 20 km land margin
 #    (basestation/replan.py), so base will still route her to it. From there the
-#    straight line to the finish passes about 45 km south of Sao Jorge and Terceira.
+#    straight line to the finish comes within about 22 km of land (measured on the
+#    land mask), just outside that margin.
 # Hands on, the order hands her to the autopilot with these marks as its planned
 # route (base re-plans round weather and land as ever); from base, they are the
 # uplinked waypoints.

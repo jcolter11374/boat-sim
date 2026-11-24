@@ -3059,6 +3059,12 @@ async function goByAzores(st: Status): Promise<void> {
     }
     order = "auto"; // the simulator has her on the autopilot, its route now by the islands
     orderSeq++;
+    // Back on the autopilot after a push: the panel's power goes back to what it was, as setOrder does.
+    if (powerBeforePush !== null) {
+      power = powerAfter("auto", power, powerBeforePush);
+      powerBeforePush = null;
+      $<HTMLInputElement>("power").value = String(Math.round(power * 100));
+    }
     showOrder();
     present();
     const pace = st.boat.stw > 0.2 ? st.boat.stw * 86.4 : 75; // km a day
@@ -4307,7 +4313,9 @@ async function begin(): Promise<void> {
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
-      if (o) [order, power] = [o.heading, o.power];
+      // "azores" is an order to the autopilot (its route by the islands), not a heading to show.
+      if (o) [order, power] = [(o.heading as string) === "azores" ? "auto" : o.heading, o.power];
+      if (v.status.via_azores) asked.azores = true;
       else order = mode === "base" ? "finish" : "auto";
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;

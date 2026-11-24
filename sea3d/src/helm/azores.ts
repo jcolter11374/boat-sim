@@ -13,11 +13,12 @@ export const AZORES_ASK = { west: -44, east: -36 };
 export const AZORES_OFF_PICO: [number, number] = [38.1, -28.35];
 /**
  * What going by the Azores cost against the autopilot's own route (measured, all 91 launch days of April to
- * June 2020; the order was taken on 71). Days: the middle crossing of the 58 that finished both ways, and
- * the range 8 in 10 of them fell in. Lost: of the 64 the autopilot's route finished, 6 did not finish by the
- * islands (5 taken or snagged by fishing boats, which the simulator risks within 150 km of any land; 1 timed out).
+ * June 2020; the order was taken on 71). Days: the middle crossing of the 58 that finished both ways (3.9),
+ * the range 8 in 10 of them fell in (1.3 to 7.0) and the worst (10.3). Lost: of the 64 the autopilot's route
+ * finished, 6 did not finish by the islands (5 taken or snagged by fishing boats, which the simulator risks
+ * within 150 km of any land; 1 disqualified, out of time).
  */
-export const AZORES_COST = { typical: 4, low: 1, high: 7, lostOneIn: 10 };
+export const AZORES_COST = { typical: 4, low: 1, high: 7, worst: 10, lostOneIn: 10 };
 
 /** Whether the call is due at this longitude. */
 export function azoresDue(lon: number, asked: boolean, via: boolean): boolean {
@@ -29,7 +30,7 @@ export function azoresText(km: number): string {
   const n = Math.round(km / 50) * 50;
   return (
     `The Azores are about ${n.toLocaleString("en-GB")} km ahead and to the south: volcanic islands, the only land between America and Europe. ` +
-    `The autopilot's route passes far to the north of them, out of sight. Going by them takes about ${AZORES_COST.typical} days longer, and near land there are fishing boats: about 1 crossing in ${AZORES_COST.lostOneIn} was lost there. Go by them?`
+    `The autopilot's route passes far to the north of them, out of sight. Going by them takes about ${AZORES_COST.typical} days longer, and near land there are fishing boats: about 1 crossing in ${AZORES_COST.lostOneIn} that went this way did not finish. Go by them?`
   );
 }
 
@@ -41,8 +42,8 @@ export function azoresYes(): string {
 export function azoresSmallPrint(): string {
   return (
     `The autopilot takes her 30 km south of Pico, under its 2,351 m mountain, then on to the same finish line. ` +
-    `In our test crossings this cost ${AZORES_COST.low} to ${AZORES_COST.high} days against the autopilot's own route, so the ghost will pull ahead. ` +
-    `Islands mean fishing boats and their gear: about 1 crossing in ${AZORES_COST.lostOneIn} that would have finished was lost near them.`
+    `Most of our test crossings took ${AZORES_COST.low} to ${AZORES_COST.high} days longer than the autopilot's own route, and the worst ${AZORES_COST.worst}, so the ghost will pull ahead. ` +
+    `Islands mean fishing boats and their gear: about 1 crossing in ${AZORES_COST.lostOneIn} that would have finished did not, most of them taken or snagged within 150 km of the islands.`
   );
 }
 
