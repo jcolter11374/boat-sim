@@ -58,6 +58,7 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { DOCK_LOOK, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, leavesFromDock } from "./helm/dock";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
@@ -169,6 +170,7 @@ void NearbyLand.create(quality).then((n) => {
   land = n;
   page.landKnown = n.known;
   scene.add(n.root);
+  if (dock && !n.has("annapolis")) endDock(); // no Annapolis on this copy of the site: the open sea, as before
 });
 /** How far the view reaches now (m): out to LAND_HORIZON while land is about, eased. */
 let reach = HORIZON;
@@ -603,6 +605,8 @@ const page = {
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
+  /** "" on the open sea; "tied" alongside the pier before a crossing; "leaving" on her way out. */
+  dock: "",
   /** How strongly the sea mirrors the land and boat now (0 off .. 1 calm). */
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
@@ -2022,6 +2026,54 @@ const PRACTICE_SHIFT_H = Number.isFinite(Number(params.get("hour"))) && params.g
 let practiceWind: { u: number; v: number } | null = null;
 let practiceN = 0;
 /** Where the practice spell began (the boat is there plus the wheel's x, y), or null. */
+/** At the dock before a crossing of your own, and on her way out of the harbour (helm/dock.ts): display
+ *  only. ?dock=0 starts on the open sea as before. */
+let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") !== "0" ? new Dock() : null;
+let dockAimed = false;
+let dockLeftAt = 0;
+/** Stand the camera this many times further from the boat, on the same line. */
+function pullCamera(k: number): void {
+  const off = camera.position.clone().sub(controls.target).multiplyScalar(k);
+  camera.position.copy(controls.target).add(off);
+}
+/** The dock is left behind: the picture is the open sea at the drop point from the next frame. */
+function endDock(): void {
+  if (!dock) return;
+  dock = null;
+  page.dock = "";
+  if (dockAimed) pullCamera(1 / DOCK_PULL); // back to the sea's own closer view
+  smoothYaw = null;
+  document.body.classList.remove("docked", "docking");
+  $("dockbanner").hidden = true;
+}
+/** The leaving is watched (a click or key moves on once the simulator is ready), then the view
+ *  fades to the drop point with the cut's words, which say plainly that the Bay is skipped. */
+async function dockCut(): Promise<void> {
+  if (!dock) return;
+  const skip = (ms: number) =>
+    new Promise<void>((done) => {
+      const end = () => {
+        clearTimeout(timer);
+        removeEventListener("keydown", end);
+        removeEventListener("pointerdown", end);
+        done();
+      };
+      const timer = setTimeout(end, ms);
+      addEventListener("keydown", end);
+      addEventListener("pointerdown", end);
+    });
+  // By the wall clock, not her own: a slow computer draws few frames, and must not wait longer for it.
+  await skip(Math.max(0, DOCK_MIN_S * 1000 - (performance.now() - dockLeftAt)));
+  const cut = $("dockcut");
+  cut.hidden = false;
+  requestAnimationFrame(() => cut.classList.add("in"));
+  await new Promise((r) => setTimeout(r, 650));
+  endDock();
+  $("loading").hidden = true;
+  await skip(2600);
+  cut.classList.remove("in");
+  setTimeout(() => (cut.hidden = true), 700);
+}
 let practiceAt: LatLon | null = null;
 /** The last place the boat was, so the view stays put between runs. */
 let practiceHere: LatLon | null = null;
@@ -4075,8 +4127,21 @@ async function begin(): Promise<void> {
   page.challenge = ch?.id ?? "";
   page.startPort = shared ? "" : $<HTMLSelectElement>("port").value;
   const hb = handBoat();
-  if (!shared && !SPECTATE && hb && !$("prologuepick").hidden && $<HTMLInputElement>("prologue").checked) await runPrologue(hb);
+  const prologue = !shared && !SPECTATE && !!hb && !$("prologuepick").hidden && $<HTMLInputElement>("prologue").checked;
+  // From the dock (helm/dock.ts): she casts off and motors out while the simulator loads. A challenge or
+  // another port has its own start, and the harbour prologue is its own leaving: those cut straight to the sea.
+  const leaving = !!dock && !prologue && leavesFromDock(page.startPort, !!ch);
+  if (!leaving) endDock();
+  if (prologue) await runPrologue(hb!);
   $("start").hidden = true;
+  if (leaving && dock) {
+    dock.cruise = spec.cruiseSpeed;
+    dock.leave();
+    dockLeftAt = performance.now();
+    document.body.classList.remove("docked");
+    document.body.classList.add("docking");
+    $("dockbanner").hidden = false;
+  }
   $("loading").hidden = false;
   setBusy(true, WATCH ? "Loading the voyage..." : RACE ? "Getting both boats ready..." : "Loading the simulator (about 30 MB the first time)...");
   if (!SPECTATE && !ONE_CLICK && !/%/.test($("loadtext").textContent ?? "")) $("loadtext").textContent = "Loading the simulator (about 30 MB the first time)...";
@@ -4138,6 +4203,7 @@ async function begin(): Promise<void> {
       else draft = true; // ready to send
       page.status = game.status;
     }
+    if (leaving) await dockCut();
     startMs = utc(game.boat!.start);
     page.ready = true;
     sailedAt = performance.now();
@@ -4202,6 +4268,13 @@ async function begin(): Promise<void> {
     askSoundLater();
   } catch (e) {
     $("loading").hidden = true;
+    // A start that failed on her way out: back alongside, behind the card and its message.
+    if (dock) {
+      dock.reset();
+      document.body.classList.remove("docking");
+      document.body.classList.add("docked");
+      $("dockbanner").hidden = true;
+    }
     const err = String(e);
     if (/NO_PORTS/.test(err)) {
       page.error = "no ports in the simulator";
@@ -5187,7 +5260,19 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     void finish().catch(fail);
   }
   poisReached();
-  const r = rep();
+  // At the dock and on the way out the picture is the harbour, whatever the simulator already holds.
+  const r = dock ? null : rep();
+  if (dock) {
+    dock.advance(dt);
+    page.dock = dock.castOff ? "leaving" : "tied";
+    if (!dockAimed) {
+      dockAimed = true;
+      document.body.classList.add("docked");
+      aimAt(DOCK_LOOK); // past her to the pier, the town and the State House dome
+      pullCamera(DOCK_PULL); // stood back, to take in the harbour and not just a wall of pier
+    }
+  }
+  const dockNow = dock?.state ?? null;
   const h = r ? Math.min(hour, lastHour(r)) : 0;
   // The sea: the deployed wind sea and swells for this hour and place when there
   // are any; else the replay's one combined sea. Before the start, the chosen
@@ -5202,7 +5287,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     // Forced for pictures: one wind sea of that height, running with the (forced) wind.
     const fw = r ? [valueAt(r, r.wind_u, h) ?? 0, valueAt(r, r.wind_v, h) ?? 0] : [0, -1];
     sys = { ws: forcedSea(page.force.hs, fw[0], fw[1]), s1: null, s2: null } as Systems;
-  }
+  } else if (dock) sys = { ws: { hs: DOCK_SEA.hs, tp: DOCK_SEA.tp, dirFrom: 250 }, s1: null, s2: null } as Systems; // the harbour's small chop, not the drop point's swell
   let hs: number;
   let tp: number;
   if (sys && (sys.ws || sys.s1 || sys.s2)) {
@@ -5242,7 +5327,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   // At the wheel, the bow, lean and speed are the player's (src/helm/wheel.ts).
   wheelNow = wheel.on ? wheel.frame(dt) : null;
   if (wheelNow) wheelLast = { x: wheelNow.x, y: wheelNow.y };
-  const hdg = wheelNow ? wheelNow.heading : r ? angleAt(r, r.heading, h) ?? 90 : 90;
+  const hdg = wheelNow ? wheelNow.heading : dockNow ? dockNow.heading : r ? angleAt(r, r.heading, h) ?? 90 : 90;
   const yaw = THREE.MathUtils.degToRad(90 - hdg);
   if (smoothYaw === null) smoothYaw = yaw;
   const dyaw = Math.atan2(Math.sin(yaw - smoothYaw), Math.cos(yaw - smoothYaw));
@@ -5267,7 +5352,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if (over && !motion.capsized) motion.capsized = motion.roll < 0 ? -1 : 1;
   if (!over) motion.capsized = 0;
   motion.advance(comps, t);
-  const stw = wheelNow ? wheelNow.speedMs : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
+  const stw = wheelNow ? wheelNow.speedMs : dockNow ? dockNow.stw : r ? Math.max(valueAt(r, r.stw, h) ?? 0, 0) : 0;
   flowStw = stw;
   film.stw = stw;
   if (model) {
@@ -5344,7 +5429,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     visitAimed = true;
     aimAt(VISIT.look); // look past her at the land, as the old page did
   }
-  const [lat, lon] = arrival ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  const [lat, lon] = arrival ?? (dockNow && !wheelNow ? [dockNow.lat, dockNow.lon] : null) ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
   // Every practice's marks, the drill's included: it has no course start (practiceAt), and its mark
   // never left the scene's origin, inside her hull at the foot of the mast (Elena, 15 Nov).
   if (wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
