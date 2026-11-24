@@ -47,3 +47,22 @@ Opened:
 Cloud sandbox, software graphics, a local build. Unit tests: 668 pass. The rows hidden on the
 short card and shown once opened were read from the page (`getClientRects`), and the two pictures
 above are from that run. Not run here: the full playtest and live site check, which run on the PR.
+
+## After an independent review (24 Nov)
+
+A second reader went through the change and found three faults. All three are fixed, and
+`sea3d/tools/qa/short-set-sail.mjs` now checks them at a desktop window (1280x800) and a phone's (390x844).
+
+| Fault | Before | After |
+| --- | --- | --- |
+| Opening "More ways to sail" scrolled the card down to the options, past the rows it had just shown (Who steers, Race against, today's weather). The first opened picture in this note showed it: the card began at "Launch day". | First shown row out of view | The card scrolls to the first row it has just shown (picture below, retaken) |
+| A link that shows the rows (`?who=autopilot`, or a challenge link) lost them the moment you pressed "You" or "None", so there was no way back without finding the disclosure. | Rows vanish under the click | Rows once shown stay for that visit |
+| Rows that arrive late (her recorded voyages, today's forecast) pushed an already open "More ways to sail" down without fitting it to the window again. | Not refitted | Refitted after each late row |
+
+`sea3d/tests/smoke.mjs` used to say the plain card shows Who steers; it now checks that the plain card
+hides it and that opening "More ways to sail" shows it with "You" picked.
+
+Script output, both windows: the plain card opens short (447 px desktop, 426 px phone), opening shows
+who, rival, challenges and today with the first in view, and `?who=autopilot` then "You" keeps Who steers.
+
+![Opened, phone](screens/short-set-sail-2026-11-24/card-open-phone.png)

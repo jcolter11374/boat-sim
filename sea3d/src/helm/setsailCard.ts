@@ -173,6 +173,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
     const whoShown = where === "ocean" && !!hooks.watch && sailed.length > 0;
     const auto = whoShown && who === "autopilot";
     const simple = !extras && where === "ocean" && !auto && !challenge.value;
+    // Rows a link or a pick has shown stay shown: pressing "You" or "None" must not take the row away from under the click.
+    if (!simple) extras = true;
     $("ss-who").hidden = !whoShown || simple;
     // Today's real weather: only for a crossing you sail (a watched voyage or a race is already 2020's).
     const todayBox = $("ss-today");
@@ -411,7 +413,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
   });
   // More options scrolls inside the card when it would run off the window (Elena). On a phone, where
   // the card sits low and little is left, the whole card scrolls instead, More options brought into view.
-  const fitMore = () => {
+  const fitMore = (first = false) => {
     const body = $("more-body");
     const card = $("ss-card");
     body.style.maxHeight = "";
@@ -421,30 +423,38 @@ export function mountSetSailCard(hooks: CardHooks): void {
     if (left >= 160) body.style.maxHeight = `${Math.floor(left)}px`;
     else {
       card.style.overflowY = "auto";
-      more.scrollIntoView({ block: "start" });
+      // The first opening also shows the rows above More ways to sail: start at the first of those, not past them.
+      const top = first ? ["ss-who", "ss-rival", "ss-ch", "ss-today"].map((id) => $(id)).filter((e) => !e.hidden).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0] : undefined;
+      (top ?? more).scrollIntoView({ block: "start" });
     }
   };
+  // A row that arrives late (her voyages, today's weather) moves an open More ways to sail: fit it again.
+  const refit = () => {
+    draw();
+    if (more.open) fitMore();
+  };
   more.addEventListener("toggle", () => {
-    if (more.open && !extras) {
+    const first = more.open && !extras;
+    if (first) {
       extras = true;
       draw();
     }
-    fitMore();
+    fitMore(first);
   });
-  window.addEventListener("resize", fitMore);
+  window.addEventListener("resize", () => fitMore());
   launch.addEventListener("change", draw);
   challenge.addEventListener("change", () => setTimeout(draw)); // after the helm's own showChallenge
   document.getElementById("boats")?.addEventListener("change", draw);
   draw();
-  void hooks.challengesReady.then(draw);
+  void hooks.challengesReady.then(refit);
   const todayIn = loadToday().then((f) => {
     if (!f) return;
     today = todayWords(f.header, samplesAt(f.header, f.data, DROP_POINT[0], DROP_POINT[1]), Date.now());
-    if (today) draw();
+    if (today) refit();
   });
   const sailedIn = hooks.voyages?.then((v) => {
     sailed = v;
-    draw();
+    refit();
   });
   // From the title the card opens at its full size, its rows' places kept (helm.html, ss-filling) until
   // all three of these have filled them; then the places nobody filled close up, once.
