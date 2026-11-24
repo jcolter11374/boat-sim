@@ -37,7 +37,7 @@ const say = async (label) => {
   await page.screenshot({ path: `${out}/${label}.png` });
   return s;
 };
-await page.goto(`${URL}helm.html?${query}`);
+await page.goto(`${URL}helm.html?${query}&dock=1`); // the harbour is off unless asked for (docs/qa/harbour-off-2026-11.md)
 await page.waitForFunction(() => window.__helm && window.__helm.frames > 2, null, { timeout: 120000 });
 // The town takes a moment to load and build.
 await page.waitForFunction(() => window.__helm.land?.buildings > 0, null, { timeout: 120000 }).catch(() => {});

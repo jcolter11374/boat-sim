@@ -2049,8 +2049,9 @@ let practiceWind: { u: number; v: number } | null = null;
 let practiceN = 0;
 /** Where the practice spell began (the boat is there plus the wheel's x, y), or null. */
 /** At the dock before a crossing of your own, and on her way out of the harbour (helm/dock.ts): display
- *  only. ?dock=0 starts on the open sea as before. */
-let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") !== "0" ? new Dock() : null;
+ *  only. Off unless asked for with ?dock=1 (John, 24 Nov 2026, of the harbour behind the Set sail card: "it looks
+ *  terrible"): the card opens on the open sea until the harbour is good enough to show. docs/qa/harbour-off-2026-11.md. */
+let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") === "1" ? new Dock() : null;
 /** Arriving at a dock in Portugal (helm/dock.ts): after the finish scene she comes alongside a pontoon at Cascais.
  *  Display only, after the clock has stopped. Null until then, and on a copy of the site without Cascais's town. */
 let landing: Dock | null = null;
