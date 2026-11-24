@@ -532,7 +532,12 @@ def effects(choices: dict | None) -> dict[str, dict]:
 # slots then don't apply. brain, sat, light, paint and spares share the kayak's ids.
 REV_B = "configs/randolph_rev_b.yaml"
 REV_C = "configs/randolph_rev_c.yaml"
-BASES = {"kayak": KAYAK, "revc": REV_C, "revb": REV_B}
+# Their current design (#50, 21 Nov 2026): Rev C5's hull, wing and slots, with sealed
+# servos, a bilge pump, a tail detent and a weed fairing (the yaml's header lists what
+# our format leaves out). Same slots and as-built picks as Rev C.
+REV_E1 = "configs/randolph_rev_e1.yaml"
+BASES = {"kayak": KAYAK, "revc": REV_C, "revb": REV_B, "reve1": REV_E1}
+RANDOLPH_BASES = ("revc", "revb", "reve1")
 # Ready-made boats you sail as they come, with no slots to change: the stock
 # vessels (vessel/keelboat.py) and the joke fleet (vessel/oddboats.py).
 STOCK_BASES = {
@@ -562,22 +567,27 @@ _SHARED_NO_EFFECT = "not modelled on the Randolph boat"
 def _rudder(n: int, base: str) -> Option:
     # One rudder 0.055 m^2 wetted; its broadside drag and lift as in the Rev C yaml
     # (two rudders: wetted +0.055, lateral +0.045, lift +0.10 over Rev B's one).
-    ref = 2 if base == "revc" else 1
+    ref = 1 if base == "revb" else 2
     d = n - ref
     yaml = {
         "revc": {"wetted": 0.77, "lat": 0.235, "lift": 0.52},
         "revb": {"wetted": 0.68, "lat": 0.19, "lift": 0.42},
+        "reve1": {"wetted": 0.78, "lat": 0.235, "lift": 0.52},
     }[base]
+    # Rev E1's sealed magnetic-encoder servos: half the rate, twin or single (their GUESS).
+    servo = 0.5 if base == "reve1" else 1.0
     return Option(
         (
             ("hull", "wetted_area_m2", round(yaml["wetted"] + 0.055 * d, 3)),
             ("hull", "lateral_cd_area_m2", round(yaml["lat"] + 0.045 * d, 3)),
             ("hull", "keel_lift_slope_area_m2", round(yaml["lift"] + 0.10 * d, 3)),
             # twin: either servo steers alone (Rev C 0.0021/day); single: Rev B 0.004/day
-            ("hazards", "steering_per_day", 0.0021 if n == 2 else 0.004),
+            ("hazards", "steering_per_day", round((0.0021 if n == 2 else 0.004) * servo, 5)),
         ),
         est=n != ref,
-        basis="Rev C (twin) and Rev B (single) yamls"
+        basis="the Rev E1 yaml (twin, sealed servos)"
+        if n == ref and base == "reve1"
+        else "Rev C (twin) and Rev B (single) yamls"
         if n == ref
         else "the other revision's rudder, scaled (GUESS)",
         kg=0.35 * d,  # GUESS: a rudder, stock and servo
@@ -585,9 +595,9 @@ def _rudder(n: int, base: str) -> Option:
 
 
 def _bulb(kg: float, base: str) -> Option:
-    ref = {"revc": 9.0, "revb": 8.2}[base]
-    heel = {"revc": 21.2, "revb": 17.4}[base]
-    mass = {"revc": 26.9, "revb": 20.8}[base]
+    ref = {"revc": 9.0, "revb": 8.2, "reve1": 9.0}[base]
+    heel = {"revc": 21.2, "revb": 17.4, "reve1": 21.5}[base]
+    mass = {"revc": 26.9, "revb": 20.8, "reve1": 28.5}[base]
     # GUESS: righting moment goes with the bulb's share of the weight; staying upside
     # down after a knockdown with the square of the shortfall (the kayak's bulb rule).
     p_stuck = 4.0e-5 * max(1.0, (ref / kg) ** 2)
@@ -614,7 +624,7 @@ def _rslots(base: str) -> dict[str, dict[str, Option]]:
         "drive": {
             "wing": Option(
                 basis="their Rev C5: 0.80 x 0.375 m free-rotating wing"
-                if base == "revc"
+                if base != "revb"
                 else "their design.py: 1.0 x 0.30 m free-rotating wing"
             ),
             "wing-thruster": Option(
@@ -773,19 +783,19 @@ def cruise_name(w: int, alone: bool = True) -> str:
     return f"{words} ({w} W)" if alone else words
 
 
-RSLOTS = {b: {k: v for k, v in _rslots(b).items() if v} for b in ("revc", "revb")}
+RSLOTS = {b: {k: v for k, v in _rslots(b).items() if v} for b in RANDOLPH_BASES}
 RDEFAULTS = {
     b: {
         "drive": "wing",
         "brain": "one-box",
-        "rudder": "twin" if b == "revc" else "single",
+        "rudder": "single" if b == "revb" else "twin",
         "rsol": "deck-40w",
         "rbat": "lfp-192wh",
-        "keel": "bulb-9kg" if b == "revc" else "bulb-8kg",
+        "keel": "bulb-8kg" if b == "revb" else "bulb-9kg",
         "tracker": "yb3",
         **{s: DEFAULTS[s] for s in ("sat", "light", "paint", "spares")},
     }
-    for b in ("revc", "revb")
+    for b in RANDOLPH_BASES
 }
 
 
@@ -1368,12 +1378,12 @@ GRID: tuple[dict, ...] = (
     # Randolph bases: as built, then one change each (a handful per base, Maya)
     *(
         {"base": b, **g}
-        for b in ("revc", "revb")
+        for b in RANDOLPH_BASES
         for g in (
             {},
             {"drive": "wing-thruster"},
             {"brain": "two-box"},
-            {"rudder": "single" if b == "revc" else "twin"},
+            {"rudder": "twin" if b == "revb" else "single"},
             {"rsol": "deck-60w", "rbat": "lfp-384wh"},
             {"tracker": "none"},
         )

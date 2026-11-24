@@ -30,6 +30,7 @@ PACK_FILES = (
     "configs/v4_kayak.yaml",
     "configs/randolph_rev_b.yaml",
     "configs/randolph_rev_c.yaml",
+    "configs/randolph_rev_e1.yaml",
     # Stock vessels and the joke fleet (sandbox/catalog.py STOCK_BASES) and the
     # keelboats' polars.
     "configs/stock_cruiser31.yaml",

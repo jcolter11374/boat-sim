@@ -135,3 +135,14 @@ def test_the_race_module_loads_without_pandas():
     code = "import sys, boatsim.sandbox.race; print('pandas' in sys.modules)"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == "False"
+
+
+def test_rev_e1_races_from_its_own_drop_off_hatteras(env):
+    """Their current boat (#50, 21 Nov 2026) is a base like Rev C: it has a name, sails
+    its own voyage, and its own drop is the yaml's, 45 km off Hatteras."""
+    e1 = {"base": "reve1"}
+    assert label(e1) == "Randolph Rev E1 (our model)"
+    r = Race(env, REVC, e1, launch_index=MAY1, max_days=0.9, drop="own")
+    assert r.drops[1] == (34.95, -75.35)
+    res = r.result()
+    assert len(res["boats"]) == 2 and res["boats"][1]["name"] == "Randolph Rev E1 (our model)"

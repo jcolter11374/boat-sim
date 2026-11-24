@@ -69,8 +69,10 @@ def test_every_slot_has_its_default_and_a_badge():
 
 def test_odds_grid_is_the_catalog_builds_and_nearest_finds_them():
     ids = [C.grid_id(g) for g in C.GRID]
-    assert len(set(ids)) == len(ids) == 73  # 41, plus 16 per keelboat (M4 waves 1-3)
-    assert len(Y.BUILDS) == 76 and Y.CURRENT in Y.BUILDS
+    assert (
+        len(set(ids)) == len(ids) == 79
+    )  # 47 (Rev E1 adds 6), plus 16 per keelboat (M4 waves 1-3)
+    assert len(Y.BUILDS) == 82 and Y.CURRENT in Y.BUILDS
     for g in C.GRID:
         assert C.nearest(g) == (C.grid_id(g), True)
     assert C.nearest({"ais": "none", "cruise_w": 20}) in (
@@ -404,12 +406,13 @@ def test_randolph_bases_start_from_their_own_yaml():
     for b, path in (
         ("revc", "configs/randolph_rev_c.yaml"),
         ("revb", "configs/randolph_rev_b.yaml"),
+        ("reve1", "configs/randolph_rev_e1.yaml"),
     ):
         assert C.design_changes({"base": b}) == ()
         assert C.grid_id({"base": b}) == b
         # The page always sends a cruise power; a sailboat ignores it.
         assert C.grid_id({"base": b, "cruise_w": 25, "paint": "none"}) == b
-        assert C.nearest({"base": b, "keel": "bulb-8kg" if b == "revc" else "bulb-9kg"}) == (
+        assert C.nearest({"base": b, "keel": "bulb-9kg" if b == "revb" else "bulb-8kg"}) == (
             b,
             False,
         )
@@ -427,6 +430,9 @@ def test_randolph_bases_start_from_their_own_yaml():
     one = C.design_for({"base": "revc", "rudder": "single"})
     assert one.hazards["steering_per_day"] == 0.004
     assert one.hull["lateral_cd_area_m2"] == 0.19
+    # Rev E1 keeps its sealed servos' halved rate on one rudder, and is its yaml as built.
+    assert C.design_for({"base": "reve1"}) == load_design("configs/randolph_rev_e1.yaml")
+    assert C.design_for({"base": "reve1", "rudder": "single"}).hazards["steering_per_day"] == 0.002
     with pytest.raises(ValueError, match="for base 'revc'"):
         C.normalise({"base": "revc", "thr": "one-t200"})
     with pytest.raises(ValueError, match="unknown base"):
