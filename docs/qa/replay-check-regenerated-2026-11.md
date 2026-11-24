@@ -37,8 +37,11 @@ and `index.json` changed; the other ten replays of those boats came out identica
 file and "commit" ticked; one boat at a time, because runs on one branch cancel each other.
 Then "Replay check" by hand on that branch.
 
-**Left open.** Three knockdowns in about 15 hours on the 2020-04-15 cruiser looks high against the comment in `configs/stock_cruiser31.yaml` (a one-in-three chance of a roll in a 12-hour storm of 8 m seas; here the seas were 7 to 10 m). It is one launch, so it proves nothing, but the knockdown rate from #529 is worth a look. Separately, and now closed: a change to the simulator could merge without the Replay check
-ever running on it, since the pull-request version only ran when a replay or
-`runner/replay.py` changed. That is how this stayed red for ten days. From 24 Nov the
-pull-request check also runs when anything under `src/boatsim/` or `configs/` changes
-(`.github/workflows/replay-check-pr.yml`), on one runner for about 11 minutes.
+**Left open.** Three knockdowns in about 15 hours on the 2020-04-15 cruiser looks high against the comment in `configs/stock_cruiser31.yaml` (a one-in-three chance of a roll in a 12-hour storm of 8 m seas; here the seas were 7 to 10 m). It is one launch, so it proves nothing, but the knockdown rate from #529 was worth a look:
+see `docs/qa/cruiser-knockdown-rate-2026-11.md`. Separately, and now partly closed: a change to the simulator could merge without the Replay
+check ever running on it, since the pull-request version only ran when a replay or
+`runner/replay.py` changed. That is how this stayed red for ten days. The pull-request check
+now also runs when anything under `src/boatsim/` or `configs/` changes
+(`.github/workflows/replay-check-pr.yml`), on one runner for about 11 minutes (the full run on
+#665 took 11 min 10 s). It shows red on the pull request; it only blocks a merge if it is made
+a required check in the branch rules, which has not been done.
