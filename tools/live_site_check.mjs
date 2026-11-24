@@ -236,6 +236,9 @@ const CHECKS = {
         const ids = await p.evaluate(() => [...document.querySelectorAll("#challenge option")].map((o) => o.value).filter(Boolean));
         const id = ids.find((i) => /dorian/i.test(i));
         must(id, `no Dorian challenge offered (offered: ${ids.join(", ")})`);
+        // The short card keeps the challenges behind "More ways to sail" (24 Nov 2026).
+        await p.evaluate(() => { const d = document.getElementById("more"); if (d) d.open = true; });
+        await p.waitForFunction(() => { const r = document.getElementById("ss-ch"); return r && !r.hidden; }, null, { timeout: MIN }).catch(() => {});
         must(await p.isVisible("#ss-ch"), "the Set sail card doesn't show its weather challenges");
         await pressPill(p, "#ss-ch-opts", /Dorian/i, "Dorian challenge");
         const got = await p.evaluate(() => document.getElementById("challenge").value);

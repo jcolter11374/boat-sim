@@ -105,6 +105,11 @@ export function mountSetSailCard(hooks: CardHooks): void {
   let breeze: string = at.breeze;
   let allChallenges = false;
   let allDays = false;
+  // The short card (John, 24 Nov 2026: "overly complicated"): a first view asks only for the boat, where and
+  // the launch day. Who steers, racing, the weather challenges, today's weather and the extra options wait
+  // behind the one disclosure at the foot of the card, "More ways to sail" (the old "More options"): opening
+  // it shows them all, and they stay. A link that already picked one of them opens with them showing.
+  let extras = false;
   // Who steers: you (as always), or the autopilot all the way. The row shows once we know she has voyages to watch.
   let who: Who = hooks.who?.who ?? "you";
   let day = hooks.who?.day ?? "";
@@ -167,10 +172,13 @@ export function mountSetSailCard(hooks: CardHooks): void {
     // Who steers: only for the crossing (practice is always you), and only when there are voyages to watch here.
     const whoShown = where === "ocean" && !!hooks.watch && sailed.length > 0;
     const auto = whoShown && who === "autopilot";
-    $("ss-who").hidden = !whoShown;
+    const simple = !extras && where === "ocean" && !auto && !challenge.value;
+    // Rows a link or a pick has shown stay shown: pressing "You" or "None" must not take the row away from under the click.
+    if (!simple) extras = true;
+    $("ss-who").hidden = !whoShown || simple;
     // Today's real weather: only for a crossing you sail (a watched voyage or a race is already 2020's).
     const todayBox = $("ss-today");
-    todayBox.hidden = !today || where !== "ocean" || auto;
+    todayBox.hidden = !today || where !== "ocean" || auto || simple;
     if (today && todayBox.childElementCount !== today.length) todayBox.replaceChildren(...today.map((t) => Object.assign(document.createElement("div"), { textContent: t })));
     // A new crossing takes the saved one's place; practice and watching the autopilot don't touch it.
     $("ss-continue-new").hidden = where !== "ocean" || auto || !!$("ss-continue").dataset.lost || !$("ss-ask").hidden;
@@ -188,7 +196,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
     // With a race picked the race line says it all, so the autopilot's own line makes room (Elena; the card must fit a phone).
     $("ss-who-line").textContent = racing ? "" : WHO_WORDS[auto ? "autopilot" : "you"].line;
     $("ss-who-line").hidden = racing;
-    $("ss-rival").hidden = !whoShown || !hooks.race || (auto && !mine);
+    $("ss-rival").hidden = !whoShown || !hooks.race || (auto && !mine) || simple;
     $("ss-rival-opts").hidden = !auto;
     if (auto)
       pills($("ss-rival-opts"), (["nobody", "boat"] as const).map((k) => ({ key: k, label: RIVAL_WORDS[k].pill })), racing ? "boat" : "nobody", (k) => {
@@ -291,7 +299,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("ss-rough").hidden = !rough;
     $("ss-rough").textContent = rough;
     // Weather challenge (optional): None, then each challenge; the one-line why under it.
-    $("ss-ch").hidden = where !== "ocean" || auto || challenge.options.length < 2;
+    $("ss-ch").hidden = where !== "ocean" || auto || challenge.options.length < 2 || simple;
     // None and the first three, then "More…" for the rest (Leo: "None · Gentle June · … · …"), so the card stays short.
     const all = Array.from(challenge.options).map((o) => ({ key: o.value, label: o.value ? o.textContent!.replace(/^(\d+\.|Bonus:)\s*/, "").replace(/\s*\(.*\)$/, "") : "None" }));
     const picked = all.findIndex((o) => o.key === challenge.value);
@@ -406,7 +414,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
   });
   // More options scrolls inside the card when it would run off the window (Elena). On a phone, where
   // the card sits low and little is left, the whole card scrolls instead, More options brought into view.
-  const fitMore = () => {
+  const fitMore = (first = false) => {
     const body = $("more-body");
     const card = $("ss-card");
     body.style.maxHeight = "";
@@ -416,24 +424,38 @@ export function mountSetSailCard(hooks: CardHooks): void {
     if (left >= 160) body.style.maxHeight = `${Math.floor(left)}px`;
     else {
       card.style.overflowY = "auto";
-      more.scrollIntoView({ block: "start" });
+      // The first opening also shows the rows above More ways to sail: start at the first of those, not past them.
+      const top = first ? ["ss-who", "ss-rival", "ss-ch", "ss-today"].map((id) => $(id)).filter((e) => !e.hidden).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0] : undefined;
+      (top ?? more).scrollIntoView({ block: "start" });
     }
   };
-  more.addEventListener("toggle", fitMore);
-  window.addEventListener("resize", fitMore);
+  // A row that arrives late (her voyages, today's weather) moves an open More ways to sail: fit it again.
+  const refit = () => {
+    draw();
+    if (more.open) fitMore();
+  };
+  more.addEventListener("toggle", () => {
+    const first = more.open && !extras;
+    if (first) {
+      extras = true;
+      draw();
+    }
+    fitMore(first);
+  });
+  window.addEventListener("resize", () => fitMore());
   launch.addEventListener("change", draw);
   challenge.addEventListener("change", () => setTimeout(draw)); // after the helm's own showChallenge
   document.getElementById("boats")?.addEventListener("change", draw);
   draw();
-  void hooks.challengesReady.then(draw);
+  void hooks.challengesReady.then(refit);
   const todayIn = loadToday().then((f) => {
     if (!f) return;
     today = todayWords(f.header, samplesAt(f.header, f.data, DROP_POINT[0], DROP_POINT[1]), Date.now());
-    if (today) draw();
+    if (today) refit();
   });
   const sailedIn = hooks.voyages?.then((v) => {
     sailed = v;
-    draw();
+    refit();
   });
   // From the title the card opens at its full size, its rows' places kept (helm.html, ss-filling) until
   // all three of these have filled them; then the places nobody filled close up, once.
