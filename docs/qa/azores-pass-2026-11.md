@@ -50,31 +50,32 @@ simulator with the browser's weather: on the autopilot all the way, and with the
 
 | | Autopilot's own route | By the Azores |
 | --- | --- | --- |
-| Launch days where she reached 42W with a working link and went by the islands | 68 | 68 |
-| Finished | 62 | 58 |
-| Lost (broke down, taken or snagged by fishing boats) | 5 | 7 |
+| Launch days where she reached 42W with a working link and took the order | 71 | 71 |
+| Finished | 64 | 58 |
+| Lost (broke down, taken or snagged by fishing boats) | 5 | 9 |
 | Ran aground | 0 | 1 |
-| Disqualified (out of time) | 0 | 1 |
+| Disqualified (out of time) | 1 | 2 |
 | Left the weather data | 1 | 1 |
-| Nearest to Pico's summit, median | 340 km or so | 41 km (35 to 43; one at 95) |
+| Nearest to Pico's summit, median | 366 km (162 to 501) | 41 km (39 to 43, of those that finished) |
 
 - **Days:** on the 58 launch days that finished both ways, going by the Azores took a median of
   4.1 days longer; 8 in 10 fell between 1.3 and 7.4 days; the least was 0.8 and the most 10.6.
-- **Risk:** of the 62 crossings the autopilot's route finished, 4 did not finish by the Azores
-  (about 1 in 15): three were "taken or snagged by fishermen", one ran out of time. The simulator
+- **Risk:** of the 64 crossings the autopilot's route finished, 6 did not finish by the Azores
+  (about 1 in 10): five were "taken or snagged by fishermen" (two of them on the way in, still
+  150 km from Pico), one ran out of time. The simulator
   puts that risk at 1% a day within 150 km of any land (`vessel/hazards.py`, from the race's own
   record: 4 boats taken in 215 boat-days near land), and she spends about a week that close to the
   islands. The one grounding (13 May) was a boat the autopilot's route also lost.
 - No crossing that failed on the autopilot's route was saved by going by the Azores.
-- On the other 23 launch days the order never applied: she was lost before 42W (13), or her link
-  to base was already dead there (10), when the game does not ask.
+- On the other 20 launch days the order never applied: her link to base was already dead at 42W
+  (13), when the game does not ask, or she was lost before she got there (7).
 
-**The default launch day is one of the four.** On 23 April 2020, the day a first game sails, going
+**The default launch day is one of the six.** On 23 April 2020, the day a first game sails, going
 by the Azores gets her taken by fishermen on day 41.8, two and a half days after Pico comes into
 view. On the autopilot's route that day she finishes in 54.4 days. The dice are fixed by the launch
 day, so it happens every time. This is put to John as a choice (see the PR).
 
-So the card says: about 4 days longer, and about 1 crossing in 15 lost near the islands.
+So the card says: about 4 days longer, and about 1 crossing in 10 lost near the islands.
 
 ## Played in the browser
 

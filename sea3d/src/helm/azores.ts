@@ -13,11 +13,11 @@ export const AZORES_ASK = { west: -44, east: -36 };
 export const AZORES_OFF_PICO: [number, number] = [38.1, -28.35];
 /**
  * What going by the Azores cost against the autopilot's own route (measured, all 91 launch days of April to
- * June 2020; she went by the islands on 68). Days: the middle crossing of the 58 that finished both ways, and
- * the range 8 in 10 of them fell in. Lost: of the 62 the autopilot's route finished, 4 did not finish by the
- * islands (3 taken or snagged by fishing boats, which the simulator risks within 150 km of any land; 1 timed out).
+ * June 2020; the order was taken on 71). Days: the middle crossing of the 58 that finished both ways, and
+ * the range 8 in 10 of them fell in. Lost: of the 64 the autopilot's route finished, 6 did not finish by the
+ * islands (5 taken or snagged by fishing boats, which the simulator risks within 150 km of any land; 1 timed out).
  */
-export const AZORES_COST = { typical: 4, low: 1, high: 7, lostOneIn: 15 };
+export const AZORES_COST = { typical: 4, low: 1, high: 7, lostOneIn: 10 };
 
 /** Whether the call is due at this longitude. */
 export function azoresDue(lon: number, asked: boolean, via: boolean): boolean {

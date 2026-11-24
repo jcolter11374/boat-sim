@@ -4,7 +4,8 @@ Sails every launch day asked for twice in the game's own simulator (boatsim.sand
 the browser's weather bundle): once on the autopilot all the way, once on the autopilot with the
 "azores" order given the first time she is east of 42W (where the game asks). One JSON line a
 voyage: how it ended, in how many days, and how near she came to Pico's summit (km). "refused" is
-an order the boat could not take (her link to base was already dead).
+an order the boat could not take (her link to base was already dead). An "s" field is the seconds
+the run took.
 
     PYTHONPATH=src python tools/azores_pass.py sea3d/public/sandbox/forcing_2020.npz [every_n_days] > out.jsonl
     PYTHONPATH=src python tools/azores_pass.py --summary out.jsonl
@@ -66,8 +67,13 @@ def summary(path: str) -> None:
             if line.startswith("{"):
                 r = json.loads(line)
                 by.setdefault(r["day"], {})[r["plan"]] = r
-    went = [d for d in by if by[d]["azores"]["near_pico_km"] < 100]
-    print(f"launch days: {len(by)}; she went by the Azores on {len(went)}")
+    # The order was taken where the two voyages differ at all (the dice are the same for both).
+    key = ("outcome", "days", "near_pico_km")
+    went = [d for d in by if any(by[d]["azores"][k] != by[d]["auto"][k] for k in key)]
+    dead = sum(by[d]["azores"]["refused"] for d in by)
+    print(
+        f"launch days: {len(by)}; the order was taken on {len(went)}; link already dead on {dead}"
+    )
     print("  autopilot's own route:", dict(Counter(by[d]["auto"]["outcome"] for d in went)))
     print("  by the Azores:        ", dict(Counter(by[d]["azores"]["outcome"] for d in went)))
     fin = [d for d in went if by[d]["auto"]["outcome"] == "arrived"]
@@ -86,7 +92,9 @@ def summary(path: str) -> None:
     print(
         f"  finished on the autopilot's route but not by the Azores: {len(bad)} of {len(fin)}: {bad}"
     )
-    near = sorted(by[d]["azores"]["near_pico_km"] for d in went)
+    near = sorted(
+        by[d]["azores"]["near_pico_km"] for d in went if by[d]["azores"]["outcome"] == "arrived"
+    )
     print(
         f"  nearest to Pico's summit: median {statistics.median(near):.0f} km, {near[0]} to {near[-1]}"
     )
