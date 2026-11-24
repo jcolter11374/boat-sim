@@ -389,7 +389,8 @@ export function mountSetSailCard(hooks: CardHooks): void {
         picked: other && other !== mine ? other : defaultRival(mine),
         entries: [
           { id: "kayak", group: "Ours" as const, name: rivalName("kayak", null), fact: "a 3 m solar robot boat: two small electric motors, no sail" },
-          { id: "revc", group: "The Randolph team's boats" as const, name: rivalName("revc", null), fact: "the Randolph team's wing-sail robot boat" },
+          { id: "reve1", group: "The Randolph team's boats" as const, name: rivalName("reve1", null), fact: "the Randolph team's current wing-sail robot boat design" },
+          { id: "revc", group: "The Randolph team's boats" as const, name: rivalName("revc", null), fact: "the Randolph team's Rev C5 design of the same boat" },
           { id: "revb", group: "The Randolph team's boats" as const, name: rivalName("revb", null), fact: "the Randolph team's Rev B design of the same boat" },
           ...(name ? [{ id: "mine", group: "Your designs" as const, name, fact: "your boat from the Boatyard" }] : []),
         ].filter((e) => e.id !== mine),

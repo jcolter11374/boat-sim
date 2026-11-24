@@ -35,7 +35,7 @@ import { BUILDERS, hasDetailedKayak, hasDetailedRandolph, loadDetailedModels, lo
 import { KAYAK, PLAYABLE_STOCK, RANDOLPH, STOCK, STOCK_HULL, isStock, playerName, type BoatSpec } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { apparentFlow, rudderFor } from "./boats/gear";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "./motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, RANDOLPH_REVE1, type HullParams } from "./motion";
 import { paintMine } from "./boats/paintApply";
 import { resultsBoatName, resultsRowLabel, saveMyCrossing } from "./myCrossing";
 import { loadMyBoat, onMyBoatChange, randolphAsBuilt, myBoatYardLink, saveMyBoat, type MyBoat } from "./myboat";
@@ -58,6 +58,7 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { LOOK, boardWords, dragLook, eyeFor, lensAfterWheel } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
@@ -214,6 +215,7 @@ const HULL: Partial<Record<string, HullParams>> = {
   kayak: KAYAK_V4,
   revc: RANDOLPH_REVC,
   revb: RANDOLPH_REVB,
+  reve1: RANDOLPH_REVE1,
   ...STOCK_HULL,
 };
 let hull: HullParams = KAYAK_V4;
@@ -371,7 +373,7 @@ function placeDeckLight(): void {
  *  Randolph boat, or a stock id); stand the camera back for a bigger one. */
 function useBoat(base: string): void {
   const k = isStock(base) ? base : null;
-  const next = k ? STOCK[k] : base === "revc" || base === "revb" ? RANDOLPH : KAYAK;
+  const next = k ? STOCK[k] : base === "revc" || base === "revb" || base === "reve1" ? RANDOLPH : KAYAK;
   const nextHull = HULL[base] ?? KAYAK_V4;
   if (next === spec && nextHull === hull) return;
   const scale = (b: BoatSpec) => THREE.MathUtils.clamp(b.length / KAYAK.length, 1, 3.4);
@@ -603,6 +605,8 @@ const page = {
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
+  /** The on-board view is up (helm/onboard.ts). */
+  onboard: false,
   /** How strongly the sea mirrors the land and boat now (0 off .. 1 calm). */
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
@@ -908,6 +912,7 @@ const LIFT = 3.5; // m
 let lifted = false;
 function setLookUp(on: boolean): void {
   if (on === lifted || (on && (!SPECTATE || cine.on))) return;
+  if (on) setOnboard(false, true); // looking up is the circling camera's: step off board first
   lifted = on;
   controls.target.y += on ? LIFT : -LIFT;
   if (on) {
@@ -928,7 +933,16 @@ function setLookUp(on: boolean): void {
   $("lookup").textContent = on ? "\u2B07 Back to the boat" : "\u2B06 Look up at the sky";
 }
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
-$("cinebtn").addEventListener("click", () => setLookUp(false), true); // the cinematic owns the lens
+$("cinebtn").addEventListener(
+  "click",
+  () => {
+    setLookUp(false);
+    // Step off board first: the cinematic saves the camera it finds and puts it back when it ends,
+    // and it must find (and put back) the camera beside her with its controls on, not the deck's.
+    setOnboard(false, true);
+  },
+  true,
+); // the cinematic owns the lens
 
 /** A race (M2 piece S4): both boats by name on the strip's lead cell, the big map's key and its camera pick. A Randolph boat is "(our model)" (B2). */
 function raceLook(names: [string, string]): void {
@@ -2336,6 +2350,80 @@ function lightAhead(): { bearing: number; distM: number; spanDeg?: number; leanD
   const hi = Math.max(...rel);
   return { bearing: (light + (lo + hi) / 2 + 360) % 360, distM, spanDeg: hi - lo, leanDeg: -(lo + hi) / 2 };
 }
+// ---------- the on-board view (helm/onboard.ts): the camera rides the boat ----------
+let onboard = false;
+const ob = { yaw: 0, pitch: 0, fov: LOOK.fov, hand: null as { off: THREE.Vector3; fov: number } | null, drag: null as { id: number; x: number; y: number } | null };
+const obEye = new THREE.Vector3();
+const obQ = new THREE.Quaternion();
+const obTurn = new THREE.Quaternion();
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+/** The view can be on board now: at sea in a game, with no other camera (the wheel's, the cinematic, the finish scene, a card) in charge. */
+function onboardOk(): boolean {
+  return page.ready && !!model && !wheel.on && !cine.on && !arrival && !page.card && page.scene !== "arrival" && !lifted;
+}
+function setOnboard(on: boolean, quiet = false): void {
+  if (on === onboard || (on && !onboardOk())) return;
+  onboard = on;
+  page.onboard = on;
+  controls.enabled = !on; // the drag is the head's now, not the orbit's
+  ob.drag = null;
+  document.body.classList.toggle("onboard", on);
+  $("boardbtn").setAttribute("aria-pressed", String(on));
+  if (on) {
+    ob.hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
+    ob.yaw = ob.pitch = 0;
+    camera.fov = ob.fov;
+    if (!quiet) note(boardWords(eyeFor(spec).kind), `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.info);
+  } else if (ob.hand) {
+    // Back to the camera beside her, where it was.
+    camera.fov = ob.hand.fov;
+    camera.position.copy(controls.target).add(ob.hand.off);
+    camera.up.set(0, 1, 0);
+    controls.update();
+  }
+  camera.updateProjectionMatrix();
+}
+/** One frame on board: the eye at its place on her, moving as she moves, the head turned as dragged. */
+function onboardCamera(): void {
+  if (!model) return;
+  const e = eyeFor(spec);
+  camera.position.copy(model.root.localToWorld(obEye.set(e.x, e.y, 0)));
+  // Reduced motion: her heading only, the horizon level.
+  if (stillCamera) obQ.setFromAxisAngle(AXIS_Y, smoothYaw ?? 0);
+  else model.root.getWorldQuaternion(obQ);
+  obQ.multiply(obTurn.setFromAxisAngle(AXIS_Y, -Math.PI / 2 - THREE.MathUtils.degToRad(ob.yaw)));
+  obQ.multiply(obTurn.setFromAxisAngle(AXIS_X, THREE.MathUtils.degToRad(ob.pitch - e.down)));
+  camera.quaternion.copy(obQ);
+  if (camera.fov !== ob.fov) {
+    camera.fov = ob.fov;
+    camera.updateProjectionMatrix();
+  }
+}
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  // One finger or the mouse turns the head: a second finger down is ignored, not a fight between the two.
+  if (onboard && !ob.drag) ob.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+});
+addEventListener("pointermove", (e) => {
+  if (!onboard || !ob.drag || e.pointerId !== ob.drag.id) return;
+  const v = dragLook(ob.yaw, ob.pitch, e.clientX - ob.drag.x, e.clientY - ob.drag.y, innerHeight, ob.fov);
+  ob.yaw = v.yaw;
+  ob.pitch = v.pitch;
+  ob.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+});
+const dragEnd = (e: PointerEvent) => {
+  if (ob.drag && e.pointerId === ob.drag.id) ob.drag = null;
+};
+addEventListener("pointerup", dragEnd);
+addEventListener("pointercancel", dragEnd);
+renderer.domElement.addEventListener(
+  "wheel",
+  (e) => {
+    if (onboard) ob.fov = lensAfterWheel(ob.fov, e.deltaY);
+  },
+  { passive: true },
+);
+$("boardbtn").addEventListener("click", () => setOnboard(!onboard));
 function wheelCamera(dt: number, t: number): void {
   if (cine.on) return; // the cinematic owns the lens
   const ours = !!wheelNow && chase.on;
@@ -2536,6 +2624,11 @@ addEventListener("keydown", (e) => {
   if (!e.repeat && e.code === "KeyC") {
     e.preventDefault();
     $("cinebtn").click();
+    return;
+  }
+  if (!e.repeat && e.code === "KeyV") {
+    e.preventDefault();
+    setOnboard(!onboard);
     return;
   }
   const ax = keyAxis(e.code);
@@ -3448,7 +3541,7 @@ function myRaceId(): string | null {
   const b = loadMyBoat();
   if (!b) return "kayak";
   if (b.kind !== "yard") return null;
-  return b.hash ? "mine" : ["kayak", "revc", "revb"].includes(b.base) ? b.base : null;
+  return b.hash ? "mine" : ["kayak", "reve1", "revc", "revb"].includes(b.base) ? b.base : null;
 }
 /** The ways on from this ending, the same ones in the same order on every card (M3): buttons first, the quiet links under them. */
 function showWays(mode: EndMode, ctx: Omit<WayCtx, "search">): void {
@@ -3953,6 +4046,7 @@ function placeArrivalBanner(banner: HTMLElement): void {
  *  swings slowly round the boat, and a banner says so. The results follow after a
  *  few seconds, or at once on a click or key. */
 async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
+  setOnboard(false, true); // the finish scene composes its own shot, and hands back the camera beside her
   showArrival();
   page.scene = "arrival";
   const ahead = c.margin_days !== null && c.margin_days > 0;
@@ -4336,7 +4430,7 @@ if (startMine) {
     // The name is the player's own text: textContent only.
     const b = Object.assign(document.createElement("b"), { textContent: startMine.name });
     const asBuilt = randolphAsBuilt(startMine);
-    const words = asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's Rev C5 wing-sail robot boat design (they have since moved on to Rev E1). Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
+    const words = asBuilt === "reve1" ? ": the Randolph team's current wing-sail robot boat design. Wind only: you steer." : asBuilt === "revb" ? ": the Randolph team's earlier wing-sail robot boat, as built. Wind only: you steer." : asBuilt === "revc" ? ": the Randolph team's Rev C5 wing-sail robot boat design (they have since moved on to Rev E1). Wind only: you steer." : startMine.kind === "yard" ? ": your boat from the Boatyard." : ": your boat.";
     label.append(input, " ", b, words);
     $("boats").querySelector("legend")!.after(label);
   }
@@ -5368,7 +5462,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if (her && (her.h.length ? !page.status?.over || h <= lastHour(her) + 1e-6 : !!her0) && page.race && modelsIn) {
     if (!rival.built) {
       const b = page.race.bases[1];
-      const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" ? RANDOLPH : KAYAK;
+      const rs = isStock(b) ? STOCK[b] : b === "revc" || b === "revb" || b === "reve1" ? RANDOLPH : KAYAK;
       // Her detailed model first, if she is the Randolph boat (it loads on demand): she is drawn once it is in.
       if (rs === RANDOLPH && !randolphSettled()) void loadRandolphModel();
       else {
@@ -5449,12 +5543,21 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
       camera.updateProjectionMatrix();
     }
     page.arrivalShot = { cape: s.cape, boat: s.boat };
+  } else if (onboard && onboardOk()) {
+    // On board (helm/onboard.ts): a knockdown is lived through from her deck, not cut away from.
+    if (knockCut) {
+      knockCut.cancel();
+      knockCut = null;
+    }
+    onboardCamera();
   } else {
+    if (onboard) setOnboard(false, true); // another camera took over (the wheel, the cinematic, a card)
     if (knockCut && (cine.on || wheelNow)) knockCut.cancel();
     if (knockCut && !knockCut.update(dt)) knockCut = null;
     if (!knockCut && !cine.update(dt)) controls.update();
   }
   frameBoat(dt);
+  if (onboard && camera.view?.enabled) camera.clearViewOffset(); // on board the lens is centred: the frame isn't composed round her
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
   // The other boat: a tag on the horizon in its direction, with the distance.

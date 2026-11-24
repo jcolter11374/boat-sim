@@ -113,7 +113,7 @@ export const AUTO_DAYS = { usual: WATCH_DEFAULT_DAY, calm: "2020-05-15", rough: 
 export const AUTO_DAY_WORDS = { usual: "Usual", calm: "Calm", rough: "Rough" } as const;
 
 /** The boats a race can run (the race link's own ids, raceSource's RACE_BOATS). */
-export const RACE_IDS = ["kayak", "revc", "revb", "mine"] as const;
+export const RACE_IDS = ["kayak", "reve1", "revc", "revb", "mine"] as const;
 export type RaceId = (typeof RACE_IDS)[number];
 /** The six launches a race can start on, in the race's own order (?launch=0..5). */
 export const RACE_DAYS = ["2020-04-01", "2020-04-15", "2020-05-01", "2020-05-15", "2020-06-01", "2020-06-15"];
@@ -131,7 +131,7 @@ export function raceId(cardBoat: string): RaceId | null {
 
 /** A rival's name. A Randolph boat is always "(our model)" (John, B2). `mine` is the player's name for their saved design. */
 export function rivalName(id: string, mine: string | null): string {
-  return id === "revc" ? "Randolph Rev C5 (our model)" : id === "revb" ? "Randolph Rev B (our model)" : id === "mine" ? (mine ?? "Your boat") : "Our kayak";
+  return id === "reve1" ? "Randolph Rev E1 (our model)" : id === "revc" ? "Randolph Rev C5 (our model)" : id === "revb" ? "Randolph Rev B (our model)" : id === "mine" ? (mine ?? "Your boat") : "Our kayak";
 }
 
 /** The rival offered first: our model of the Randolph Rev C5, or our kayak when that is the boat on the card. */
