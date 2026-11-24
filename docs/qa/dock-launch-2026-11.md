@@ -79,3 +79,30 @@ card (John's GTX 1660 Ti). The cloud has no graphics card. To be measured on the
 - The boat is whole and beside the card, not under it, at 1400x900 and on a phone.
 - The pier, the town and the dome are in the frame as she leaves.
 - No stutter when Set sail is pressed.
+
+![She leaves the pier (cloud picture, blurry: no graphics card)](screens/dock-launch-leaving-cloud.png)
+
+## After an independent review (24 Nov)
+
+A fresh reviewer traced every path through the start and found no way to leave the dock, its
+title, the loading note or the cut's card stuck, and nothing that reaches the simulator. Fixed
+from its findings:
+
+- **The open sea opened on a different view.** The first version turned and pulled back the
+  camera beside her for the dock and undid it at the cut by dividing the distance again. A change
+  of boat on the card (which sets the distance afresh) then left the sea view 1.7 times too close,
+  and the turn was never undone, so every start opened looking back at her bow. Now the dock's view
+  is made for each frame's picture from the camera beside her and put back after the picture is
+  drawn (`dockView`, `dockViewOff`): that camera is never changed by the dock, the turns she makes
+  on the way out are turned back at the cut, and the play-through script shows it in the same place
+  before, during and after (-6.5, 2.2, -3.5 from her, as on main).
+- **The picture-quality watch timed the harbour.** A middling computer could have been stepped
+  down to Low for good on the town, before a crossing it would have drawn well. The watch now
+  waits until she is at sea.
+- **A held key skipped the cut's words** in under a second. Held keys and bare Shift, Ctrl and Alt
+  no longer count as moving on.
+
+Left alone, as the review judged them harmless: a one-click start (`?sail`) can show "Leaving
+Annapolis" for a moment before the town has loaded; after a start that failed for a bad port or
+challenge the next try starts from the open sea; the playtest's "time to sailing" figures now
+include the 10 seconds of leaving.

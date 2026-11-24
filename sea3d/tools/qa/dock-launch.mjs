@@ -12,7 +12,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 const out = process.argv[2] || "test-output/dock";
-const query = process.argv[3] || "quality=low";
+const query = process.argv[3] || "quality=low&clock=paused";
 mkdirSync(out, { recursive: true });
 const PORT = 4181;
 const URL = `http://localhost:${PORT}/`;
@@ -32,7 +32,7 @@ if (process.env.PYODIDE_DIR) {
 const page = await context.newPage();
 page.on("pageerror", (e) => console.error("page error:", e.message));
 const say = async (label) => {
-  const s = await page.evaluate(() => ({ dock: window.__helm.dock, land: window.__helm.land?.place, km: Math.round((window.__helm.land?.km ?? 0) * 10) / 10, buildings: window.__helm.land?.buildings, scene: window.__helm.scene, ready: window.__helm.ready, at: window.__helm.status?.boat ? [window.__helm.status.boat.lat, window.__helm.status.boat.lon] : null }));
+  const s = await page.evaluate(() => ({ dock: window.__helm.dock, land: window.__helm.land?.place, km: Math.round((window.__helm.land?.km ?? 0) * 10) / 10, buildings: window.__helm.land?.buildings, scene: window.__helm.scene, ready: window.__helm.ready, cam: window.__helm.camView().cam, at: window.__helm.status?.boat ? [window.__helm.status.boat.lat, window.__helm.status.boat.lon] : null }));
   console.log(label, JSON.stringify(s));
   await page.screenshot({ path: `${out}/${label}.png` });
   return s;

@@ -2029,20 +2029,43 @@ let practiceN = 0;
 /** At the dock before a crossing of your own, and on her way out of the harbour (helm/dock.ts): display
  *  only. ?dock=0 starts on the open sea as before. */
 let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") !== "0" ? new Dock() : null;
-let dockAimed = false;
-let dockLeftAt = 0;
-/** Stand the camera this many times further from the boat, on the same line. */
-function pullCamera(k: number): void {
-  const off = camera.position.clone().sub(controls.target).multiplyScalar(k);
+/** The dock's own view (dockView): the camera beside her is left as it is, so a change of boat on the card, a
+ *  phone's step back and a drag all work on it as ever, and the open sea opens on the view it always had. */
+let dockSwing: number | null = null;
+/** How far she has turned since she lay at the pier (rad): the camera beside her turned with her, and turns back at the cut. */
+let dockTurn = 0;
+const dockHand = new THREE.Vector3();
+let dockViewOn = false;
+const DOCK_UP = new THREE.Vector3(0, 1, 0);
+/** For this frame's picture: from the camera beside her, swung round to look past her at the pier and the
+ *  town, and stood back to take in the harbour. Put back after the picture is drawn (dockViewOff). */
+function dockView(): void {
+  dockHand.copy(camera.position);
+  const off = camera.position.clone().sub(controls.target);
+  if (dockSwing === null) dockSwing = Math.atan2(-off.x, off.z) - THREE.MathUtils.degToRad(DOCK_LOOK);
+  off.applyAxisAngle(DOCK_UP, dockSwing).multiplyScalar(DOCK_PULL);
   camera.position.copy(controls.target).add(off);
+  camera.lookAt(controls.target);
+  dockViewOn = true;
 }
+function dockViewOff(): void {
+  if (!dockViewOn) return;
+  dockViewOn = false;
+  camera.position.copy(dockHand);
+  camera.lookAt(controls.target);
+}
+let dockLeftAt = 0;
 /** The dock is left behind: the picture is the open sea at the drop point from the next frame. */
 function endDock(): void {
   if (!dock) return;
   dock = null;
   page.dock = "";
-  if (dockAimed) pullCamera(1 / DOCK_PULL); // back to the sea's own closer view
-  smoothYaw = null;
+  // The camera beside her turned with her on the way out: turned back, and her bow where it points before
+  // any start (east), the open sea opens exactly as it does without the dock.
+  const off = camera.position.clone().sub(controls.target).applyAxisAngle(DOCK_UP, -dockTurn);
+  camera.position.copy(controls.target).add(off);
+  dockTurn = 0;
+  smoothYaw = 0;
   document.body.classList.remove("docked", "docking");
   $("dockbanner").hidden = true;
 }
@@ -2052,13 +2075,15 @@ async function dockCut(): Promise<void> {
   if (!dock) return;
   const skip = (ms: number) =>
     new Promise<void>((done) => {
-      const end = () => {
+      const end = (e?: Event) => {
+        // A held key, or a bare Shift or Ctrl, is not a wish to move on.
+        if (e instanceof KeyboardEvent && (e.repeat || ["Shift", "Control", "Alt", "Meta"].includes(e.key))) return;
         clearTimeout(timer);
         removeEventListener("keydown", end);
         removeEventListener("pointerdown", end);
         done();
       };
-      const timer = setTimeout(end, ms);
+      const timer = setTimeout(() => end(), ms);
       addEventListener("keydown", end);
       addEventListener("pointerdown", end);
     });
@@ -5214,7 +5239,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   }
   // Timed only once her shaders are built, never while the goal card's judge is timing, the tab is
   // hidden or the simulator's results are coming in.
-  const watchOn = qstat.source === "auto" && !qstat.stepped && qstat.level !== "low" && !judging && page.warmed && !document.hidden && !page.busy;
+  const watchOn = qstat.source === "auto" && !qstat.stepped && qstat.level !== "low" && !judging && page.warmed && !document.hidden && !page.busy && !dock; // not on the harbour: the town is heavier than the sea she will sail
   if (slowWatch.tick(t * 1000, watchOn)) {
     qstat.stepped = true;
     qstat.steppedBy = "later";
@@ -5265,12 +5290,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   if (dock) {
     dock.advance(dt);
     page.dock = dock.castOff ? "leaving" : "tied";
-    if (!dockAimed) {
-      dockAimed = true;
-      document.body.classList.add("docked");
-      aimAt(DOCK_LOOK); // past her to the pier, the town and the State House dome
-      pullCamera(DOCK_PULL); // stood back, to take in the harbour and not just a wall of pier
-    }
+    if (!dock.castOff) document.body.classList.add("docked");
   }
   const dockNow = dock?.state ?? null;
   const h = r ? Math.min(hour, lastHour(r)) : 0;
@@ -5337,6 +5357,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   motion.pose.yaw = smoothYaw;
   const off = camera.position.clone().sub(controls.target);
   off.applyAxisAngle(new THREE.Vector3(0, 1, 0), step);
+  if (dock) dockTurn += step;
   // A call coming: ease round (about 2 s) to look at the problem past the boat. Reduced motion: no turn.
   if (foresee?.look != null && hour >= foresee.from && !stillCamera && !wheel.on && !cine.on) {
     const cur = Math.atan2(-off.x, off.z);
@@ -5539,6 +5560,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     if (knockCut && !knockCut.update(dt)) knockCut = null;
     if (!knockCut && !cine.update(dt)) controls.update();
   }
+  if (dock && !wheelNow) dockView();
   frameBoat(dt);
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
@@ -5576,6 +5598,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   sea.setMirror(mirror.target.texture, mirror.textureMatrix, mirror.strength, mirror.level);
   page.mirror = mirror.strength;
   atmos.render();
+  dockViewOff();
   if (rivalTagDue) placeRivalTag();
   if (chart && game.boat && !game.ghost) {
     // A watched voyage: the one boat's track so far.
