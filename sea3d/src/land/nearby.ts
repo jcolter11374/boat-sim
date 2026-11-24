@@ -152,6 +152,11 @@ export class NearbyLand {
     return this.tiles.length + (this.squares?.known ? 1 : 0);
   }
 
+  /** Whether this copy of the site has a place's land (by the place's key). */
+  has(key: string): boolean {
+    return this.tiles.some((t) => t.place.key === key);
+  }
+
   /** True when land is in the scene (the view should reach out to LAND_HORIZON). */
   get active(): boolean {
     return this.now !== null || (this.squares?.count ?? 0) > 0;

@@ -1,5 +1,5 @@
 {
-  "about": "Speed guard baseline (tests/speedguard.mjs), measured on the PR runner (Chromium with SwiftShader software graphics, 1280x720, Low) on main plus #615, with the Blender boats the runner builds; a local build without them counts fewer programs and draws. A count may go up by its margin: add (a number) or share (a fraction of the baseline), whichever is larger. To update when an increase is intended: npm run build && npm run test:speed -- --update, or copy the counts the failed quick job printed.",
+  "about": "Speed guard baseline (tests/speedguard.mjs), measured on the PR runner (Chromium with SwiftShader software graphics, 1280x720, Low) on main plus #615, with the Blender boats the runner builds; a local build without them counts fewer programs and draws. A count may go up by its margin: add (a number) or share (a fraction of the baseline), whichever is larger. To update when an increase is intended: npm run build && npm run test:speed -- --update, or copy the counts the failed quick job printed. sailPrograms was raised from 100 to 125 on 24 Nov 2026 for the dock launch (the harbour's land loads behind the Set sail card; John chose \"Yes, raise the speed limit for it\"; docs/qa/dock-launch-2026-11.md), from the count the quick job printed on that change; the other counts are as measured.",
   "margins": {
     "default": {
       "add": 2,
@@ -25,7 +25,7 @@
     "titlePrograms": 56,
     "titleDraws": 78,
     "sailProgramsAfterSetSail": 0,
-    "sailPrograms": 100,
+    "sailPrograms": 125,
     "sailDraws": 58,
     "voyagePrograms": 67,
     "voyageDraws": 52

@@ -100,6 +100,14 @@ try {
   const open = async (path) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     await ctx.addInitScript(instrument);
+    // Thread sandboxes can't reach the Pyodide CDN: PYODIDE_DIR=<unpacked pyodide release> serves it from disk, as tests/smoke.mjs does.
+    if (process.env.PYODIDE_DIR) {
+      await ctx.route("https://cdn.jsdelivr.net/pyodide/v0.27.7/full/**", (route) => {
+        const name = new URL(route.request().url()).pathname.split("/").pop();
+        const type = name.endsWith(".mjs") || name.endsWith(".js") ? "text/javascript" : name.endsWith(".wasm") ? "application/wasm" : name.endsWith(".json") ? "application/json" : "application/octet-stream";
+        route.fulfill({ body: readFileSync(`${process.env.PYODIDE_DIR}/${name}`), contentType: type, headers: { "access-control-allow-origin": "*" } });
+      });
+    }
     const page = await ctx.newPage();
     page.on("pageerror", (e) => console.error(`page error (${path}): ${e}`));
     await page.goto(SITE + path, { timeout: 60_000 });
