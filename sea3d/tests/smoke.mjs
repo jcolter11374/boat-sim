@@ -953,10 +953,14 @@ try {
     // The Set sail card's "Who steers" row (M2, R2): with the autopilot picked, the card lists the days she
     // has sailed as plain dates, never says "recorded" or "replay", and Set sail opens that voyage here.
     // The launch day: named pills first, as yours (Elena): Usual (her 1 Jun), Calm, Rough, then the other dates.
-    // On for everyone since 13 Nov (John): the plain card shows the row with "You" picked and Set sail unchanged.
+    // On for everyone since 13 Nov (John); since 24 Nov the plain card keeps the row under "More ways to sail"
+    // (the short card), and opening that shows it with "You" picked and Set sail unchanged.
     await page.goto(`${URL}helm.html?quality=low`);
     await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 60000 });
     await page.waitForFunction(() => document.querySelector("#ss-who-opts .ss-pill"), null, { timeout: 60000 }).catch(() => fail("the plain Set sail card has no Who steers row"));
+    if (!(await page.evaluate(() => document.getElementById("ss-who").hidden))) fail("the plain Set sail card must open short, Who steers under More ways to sail");
+    await page.evaluate(() => (document.getElementById("more").open = true));
+    await page.waitForFunction(() => !document.getElementById("ss-who").hidden, null, { timeout: 10000 }).catch(() => fail("opening More ways to sail didn't show Who steers"));
     const plain = await page.evaluate(() => ({ who: document.querySelector('#ss-who-opts .ss-pill[aria-pressed="true"]')?.textContent, go: document.getElementById("go").textContent }));
     if (plain.who !== "You" || plain.go !== "Set sail") fail(`the plain Set sail card must open on You with Set sail: ${JSON.stringify(plain)}`);
     await page.goto(`${URL}helm.html?quality=low&who=autopilot`);

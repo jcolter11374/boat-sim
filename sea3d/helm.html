@@ -336,12 +336,9 @@
   .ss-opts { display: flex; flex-wrap: wrap; gap: 6px; }
   /* From the title (helm.html's first script): the card opens at its full size, each row's place kept
      until its pills arrive (setsailCard.ts takes the class off once all of them have), so nothing jumps. */
-  body.ss-filling #ss-who[hidden], body.ss-filling #ss-rival[hidden], body.ss-filling #ss-ch[hidden],
-  body.ss-filling #ss-today[hidden], body.ss-filling #ss-rival-soon[hidden] { display: block; }
-  body.ss-filling #ss-where-opts { min-height: 81px; } body.ss-filling #ss-today { min-height: 70px; }
-  body.ss-filling #ss-who-opts { min-height: 30px; } body.ss-filling #ss-when-opts { min-height: 45px; }
-  body.ss-filling #ss-ch-opts { min-height: 66px; }
-  body.ss-filling #ss-who-line, body.ss-filling #ss-rival-line, body.ss-filling #ss-rival-soon { min-height: 18px; }
+  body.ss-filling #ss-where-opts { min-height: 81px; } body.ss-filling #ss-when-opts { min-height: 45px; }
+  /* The short card (24 Nov): who steers, racing, challenges and today's weather open on "More ways to sail", so they hold no place. */
+  #more summary .muted { font-weight: 400; }
   .ss-pill { font: 600 13.5px system-ui, sans-serif; color: var(--ink); text-align: left; padding: 6px 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(27,51,82,.55); cursor: pointer; }
   .ss-pill small { font-weight: 400; color: var(--dim); margin-left: 6px; }
   .ss-pill:hover { border-color: #8ab4ff; }
@@ -926,7 +923,8 @@
       <p id="chnote" class="muted" hidden></p>
     </div>
     <details id="more">
-      <summary>More options</summary>
+      <!-- The short card (setsailCard.ts, extras): opening this also shows who steers, racing, the weather challenges and today's weather above. -->
+      <summary>More ways to sail <span class="muted">(challenges, watch or race the autopilot, options)</span></summary>
       <div id="more-body">
     <label id="portpick" hidden>Where to start <select id="port"><option value="">The drop point, off the Chesapeake Bay</option></select></label>
     <span id="porthint" class="muted"></span>

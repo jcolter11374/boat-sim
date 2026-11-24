@@ -267,13 +267,13 @@ const CHECKS = {
           addEventListener("click", (e) => { const at = e.timeStamp; requestAnimationFrame(() => window.__cw.clicks.push(performance.now() - at)); }, true);
         });
         for (let i = 0; i < 20; i++) {
-          const box = await p.locator("#ss-who-opts button").nth(i % 2).boundingBox().catch(() => null);
+          const box = await p.locator("#ss-when-opts button").nth(i % 2).boundingBox().catch(() => null);
           if (box) await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
           await p.waitForTimeout(500);
         }
         await p.waitForFunction(() => window.__cw.clicks.length >= 20, null, { timeout: 60_000 }).catch(() => {});
         const clicks = await p.evaluate(() => window.__cw.clicks.map(Math.round));
-        const first = await p.locator("#ss-who-opts button").first().boundingBox().catch(() => null);
+        const first = await p.locator("#ss-when-opts button").first().boundingBox().catch(() => null);
         if (first) await p.mouse.click(first.x + first.width / 2, first.y + first.height / 2);
         // Built when the page says so (helm.ts page.warmed), at most 150 s after the card.
         await p.waitForFunction(() => window.__helm?.warmed, null, { timeout: 150_000, polling: 250 }).catch(() => {});
@@ -330,7 +330,7 @@ const CHECKS = {
       });
       must(first.go && first.goInView, `"${first.label}" isn't visible without scrolling on the first screen`);
       must(!first.orders && !first.status && !first.timebar, `game controls show before you set sail (orders ${first.orders}, status ${first.status}, time bar ${first.timebar})`);
-      must(!first.moreOpen, `"More options" starts open`);
+      must(!first.moreOpen, `"More ways to sail" starts open`);
       await page.screenshot({ path: `play-${BROWSER}-first-screen.png` }).catch(() => {});
       await page.click("#go");
       const loading = await page.waitForFunction(() => !document.getElementById("loading").hidden || window.__helm.ready, null, { timeout: 10_000 }).then(() => page.evaluate(() => !document.getElementById("loading").hidden || "already ready")).catch(() => false);
