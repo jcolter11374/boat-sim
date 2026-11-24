@@ -250,7 +250,8 @@ export async function speedCheck(browser, { SITE, BROWSER }) {
         await (more.hasTouch ? page.tap("#t-setsail", { noWaitAfter: true, timeout: T(30_000) }) : page.click("#t-setsail", { noWaitAfter: true, timeout: T(30_000) }));
         await page.waitForFunction(() => /helm\.html/.test(location.pathname) && window.__helm && window.__helm.frames > 2 && !document.getElementById("go")?.disabled, null, { timeout: 3 * MIN, polling: 50 });
         j.toCardMs = Date.now() - left;
-        await page.click("#go", { noWaitAfter: true, timeout: T(30_000) });
+        // A first visit's Set sail goes straight to sea (helm.html?sail, sea3d/src/helm/guide.ts): no card to press.
+        if (await page.locator("#start").isVisible()) await page.click("#go", { noWaitAfter: true, timeout: T(30_000) });
         const ok = await page.waitForFunction(() => (window.__helm.ready && !window.__helm.busy) || window.__helm.error, null, { timeout: Number(process.env.SPEED_SIM_MS) || 8 * MIN, polling: 50 }).then(() => true).catch(() => false);
         j.toSailingMs = ok ? Date.now() - left : null;
         j.error = await page.evaluate(() => window.__helm.error || "");
