@@ -20,7 +20,7 @@ import * as THREE from "three";
 /** Material names of parts that are sheets, open or hair-thin, seen from both sides. The last five
  *  are the parts the render check (below) caught: the cat's trampoline, the drone's antenna dome,
  *  the rower's hatch and footplate trim, the Randolph boats' PVC mast tube and counterweight. */
-const TWO_SIDED_MATS = new Set(["sail", "wire", "wing", "glass", "flag", "trampoline", "dome", "trim", "pvc", "weight"]);
+const TWO_SIDED_MATS = new Set(["sail", "wire", "wing", "wing_hivis", "glass", "flag", "trampoline", "dome", "trim", "pvc", "weight"]);
 /** Mesh names of the same (the stock models name sails and battens per mesh). */
 const TWO_SIDED_MESH = /^(sail|batten|wing|flag|burgee|jib|main|genoa)/i;
 /** Parts thinner than this (m) on both short sides are wires and rods: left as they are. */

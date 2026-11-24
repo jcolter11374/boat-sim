@@ -60,7 +60,9 @@ npm run test:unit  # wave-motion gate: roll periods, righting curves, self-right
     solar cells, rounded fittings, and soft baked shadows (ambient occlusion,
     rendered once with Cycles).
   - `build_randolph.py` makes `public/models/randolph.glb`: our model of the
-    Randolph boat from their published Rev B measurements, with no markings.
+    Randolph boat. Hull, wing, keel and panels from their published measurements;
+    the fittings are their own published shapes, thinned (`randolph_fittings.json`,
+    made by `scripts/randolph_fittings.py`); their colours (hi-vis orange), no lettering.
     The wing hangs under an empty named `wing_pivot` and the stern wind vane
     under `vane_pivot`, so the page can turn them.
 

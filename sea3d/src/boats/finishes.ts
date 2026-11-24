@@ -114,30 +114,28 @@ const FINISHES: Record<string, Finish> = {
 };
 
 // Our model of the Randolph boat: generic finishes for what its parts look like
-// (a painted hull, a sailcloth wing on a dark spar), not a claim about their materials.
+// (a painted hull, a glass-skinned foam wing on a dark spar, printed plastic fittings), not a claim about their materials.
 const RANDOLPH_FINISHES: Record<string, Finish> = {
-  hull: (m) => {
-    m.roughness = 0.38;
-    m.clearcoat = 0.55;
-    m.clearcoatRoughness = 0.1;
-    withGrain(m, 30);
-  },
-  transom: (m) => RANDOLPH_FINISHES.hull(m),
+  // Painted glass over foam, hi-vis orange: the kayak's finish. The glossier coat this had when the
+  // model was white (clear coat 0.55) mirrored the pale sky and greyed the orange to brown.
+  hull: (m) => FINISHES.hull(m),
+  transom: (m) => FINISHES.hull(m),
   hatch: (m) => {
     m.roughness = 0.35;
     m.clearcoat = 0.4;
   },
-  teal: (m) => {
-    m.roughness = 0.35;
-    m.clearcoat = 0.5;
-    m.clearcoatRoughness = 0.1;
+  // Keel, bulb, fairing and rudders under copper bottom paint: flat, a little grainy.
+  antifoul: (m) => {
+    m.roughness = 0.78;
+    m.clearcoat = 0;
+    withGrain(m, 12);
   },
-  fin: (m) => FINISHES.g10(m),
-  lead: (m) => FINISHES.lead(m),
-  weight: (m) => FINISHES.lead(m),
+  // Their 3D-printed fittings (white ASA, blue PETG): satin plastic.
+  asa: (m) => RANDOLPH_FINISHES.pvc(m),
+  petg: (m) => RANDOLPH_FINISHES.pvc(m),
   panel_fwd: (m) => FINISHES.panel_fwd(m),
   panel_aft: (m) => FINISHES.panel_fwd(m),
-  // The wing: sailcloth stretched on a frame, soft sheen, no gloss.
+  // The wing: a painted skin over foam. Soft sheen, no gloss (a glossy white slab mirrors the sky and goes flat).
   wing: (m) => {
     m.roughness = 0.62;
     m.clearcoat = 0;
@@ -146,6 +144,8 @@ const RANDOLPH_FINISHES: Record<string, Finish> = {
     m.sheenColor.set(0xffffff);
     m.side = THREE.DoubleSide;
   },
+  // The hi-vis panel on the wing's lower half: the same skin, painted.
+  wing_hivis: (m) => RANDOLPH_FINISHES.wing(m),
   // Dark composite spar: satin with a thin coat.
   spar: (m) => {
     m.metalness = 0.1;
@@ -311,8 +311,13 @@ export function skyShade(m: THREE.MeshStandardMaterial): void {
     // The sky's light in shade, half its colour: white gelcoat facing away from a low sun took the
     // clear sky's full blue and read as a blue boat (Elena, 15 Nov), where the bright haze and the
     // sea's grey bounce keep a real white hull a pale blue-grey. Reflections keep the sky's colour.
-    float skyL = dot(reflectedLight.indirectDiffuse, vec3(0.2126, 0.7152, 0.0722));
-    reflectedLight.indirectDiffuse = mix(vec3(skyL), reflectedLight.indirectDiffuse, 0.5);
+    // Half the colour of the light, not of the paint (24 Nov): greying the lit paint itself was right
+    // for white, but turned an orange hull's shaded side brown. The paint's own colour is divided out
+    // first, so a white hull draws exactly as before and a coloured one keeps its colour in shade.
+    vec3 paint = max(material.diffuseColor, vec3(0.02));
+    vec3 skyIn = reflectedLight.indirectDiffuse / paint;
+    float skyL = dot(skyIn, vec3(0.2126, 0.7152, 0.0722));
+    reflectedLight.indirectDiffuse = mix(vec3(skyL), skyIn, 0.5) * paint;
     reflectedLight.indirectDiffuse *=mix(0.4, 1.1, up) * mix(1.0, 0.72, near) * mix(vec3(1.0), vec3(0.7, 0.9, 1.15), 0.7 * near);
     reflectedLight.directDiffuse *= mix(0.68, 1.0, up) * mix(1.0, 0.86, near);
   }`,
