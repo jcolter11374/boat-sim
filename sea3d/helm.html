@@ -327,7 +327,10 @@
   .ss-continue a[hidden] { display: none; }
   .ss-continue .muted { font-size: 12px; }
   #ss-ask-q { font-weight: 650; }
-  #go.asked { opacity: .4; filter: saturate(.5); }
+  /* A voyage at sea: "Continue your voyage" is the bright button and Set sail the plain one. Never dimmed (John, 24 Nov 2026). */
+  #go.second { background: rgba(27,51,82,.85); color: #e9f1fb; border: 1px solid rgba(160,200,255,.45); }
+  .ss-continue a#ss-continue-go { display: block; text-align: center; text-decoration: none; margin: 8px 0 6px; padding: 11px; border-radius: 10px; background: var(--orange, #ff8a2a); color: #1a0d02; font-size: 16px; }
+  .ss-continue a#ss-continue-go[hidden] { display: none; }
   .ss-ask-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .ss-ask-btns button { cursor: pointer; font: 650 13px system-ui, sans-serif; border-radius: 8px; padding: 7px 12px; color: #e9f1fb; background: rgba(27,51,82,.7); border: 1px solid rgba(160,200,255,.3); }
   .ss-ask-btns button:hover { border-color: #8ab4ff; }
