@@ -58,6 +58,7 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { AZORES_OFF_PICO, azoresDue, azoresNote, azoresSmallPrint, azoresText, azoresYes } from "./helm/azores";
 import { DOCK_LOOK, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, leavesFromDock } from "./helm/dock";
 import { LOOK, boardWords, dragLook, eyeFor, lensAfterWheel } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
@@ -2797,7 +2798,7 @@ type Decision = { kind: string; text: string; choices: Choice[]; look?: number; 
 const compassOf = (east: number, north: number): number => ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
 /** Hours after a storm call with no "wind is getting up" stop. */
 const STORM_QUIET_H = 36;
-const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
+const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false, azores: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 /** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
 /** now: the whole opening when told alone, before "she's now ... the ghost" (the push's words, Elena). */
@@ -3029,7 +3030,42 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       ],
     };
   }
+  // Going by the Azores (helm/azores.ts): once a crossing, in mid-ocean, on the usual finish only. A real
+  // order with a measured price; the finish itself is untouched. Not in a challenge (its start, goal and
+  // stars are its own).
+  if (!m && finishesOffLisbon() && azoresDue(st.boat.lon, asked.azores, !!st.via_azores) && h - lastCallH >= MIN_CALL_GAP_H) {
+    asked.azores = true;
+    return {
+      kind: "azores",
+      look: bearing([st.boat.lat, st.boat.lon], AZORES_OFF_PICO),
+      text: azoresText(kmTo([st.boat.lat, st.boat.lon], AZORES_OFF_PICO)),
+      choices: [
+        { label: azoresYes(), gist: "Going by the Azores", title: azoresSmallPrint(), act: () => goByAzores(st) },
+        { label: order === "auto" ? "Stay on the autopilot's route (same as the ghost)" : "Carry on as I am", title: "No land until Portugal, and no days lost", act: () => undefined, esc: "keep" },
+      ],
+    };
+  }
   return null;
+}
+
+/** "Go by the Azores": the autopilot takes her, with the islands on its route (helm/azores.ts). */
+async function goByAzores(st: Status): Promise<void> {
+  try {
+    const r = await game.order("azores", power);
+    page.status = game.status;
+    if (!r.accepted) {
+      note(r.too_far_east ? "Too far east to turn for the Azores now: she carries on." : "No link: she can't hear you.", `Day ${st.day.toFixed(1)}`, TONE_COLOUR.warn);
+      return;
+    }
+    order = "auto"; // the simulator has her on the autopilot, its route now by the islands
+    orderSeq++;
+    showOrder();
+    present();
+    const pace = st.boat.stw > 0.2 ? st.boat.stw * 86.4 : 75; // km a day
+    note(azoresNote(Math.max(0, kmTo([st.boat.lat, st.boat.lon], AZORES_OFF_PICO) - 60) / pace), `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info);
+  } catch (e) {
+    fail(e);
+  }
 }
 
 let decisionSeq = 0;

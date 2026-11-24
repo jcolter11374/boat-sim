@@ -803,3 +803,45 @@ def test_a_helm_spell_sets_the_trim_for_one_watch(env):
         )  # the kayak has no sails
     with pytest.raises(ValueError):
         Game(env, choices=cruiser, launch_index=MAY1, mode="base").order("finish", 0.5, trim=0.9)
+
+
+def test_going_by_the_azores_is_the_autopilot_on_a_route_by_the_islands(env):
+    """Hands on, "azores" hands her to the autopilot with the two marks, then the
+    finish, as its route and base's; the game status says so; a share link sails
+    the same voyage again; the finish itself is where it always was."""
+    from boatsim.autonomy.helm import AZORES_MARKS
+
+    g = Game(env, launch_index=MAY1, max_days=2.0)
+    g.order("finish", 0.5)
+    o = g.order("azores", 0.5)
+    assert o["accepted"] and o["heading"] == "azores"
+    assert g.on_auto and g.status()["order"]["heading"] == "auto" and g.status()["via_azores"]
+    route = [(w.lat, w.lon) for w in g.mine.mission.waypoints]
+    assert route == [*AZORES_MARKS, FINISH] and g.finish == FINISH
+    assert [(w.lat, w.lon) for w in g.mine.c.base.route] == route
+    assert not Game(env, launch_index=MAY1, max_days=2.0).status()["via_azores"]
+    g.run(hours=30, ghost_passes=False, land_within_km=None, breakdown=False)
+    h = Game.load(env, g.save())
+    assert h.via_azores and h.orders == g.orders
+    assert (h.mine.state.lat, h.mine.state.lon) == (g.mine.state.lat, g.mine.state.lon)
+    # With sails or an engine named it is refused like "auto": the autopilot sets those.
+    with pytest.raises(ValueError):
+        g.order("azores", 0.5, sails="down")
+
+
+def test_the_azores_order_is_refused_too_far_east_and_goes_by_satellite_from_base(env):
+    from boatsim.autonomy.helm import AZORES_MARKS, AZORES_TAKEN_WEST_OF, azores_marks_ahead
+
+    assert azores_marks_ahead(-40.0) == list(AZORES_MARKS)
+    assert azores_marks_ahead(-30.0) == [AZORES_MARKS[1]] and azores_marks_ahead(-20.0) == []
+    g = Game(env, launch_index=MAY1, max_days=2.0)
+    lon = g.mine.state.lon
+    g.mine.state.lon = AZORES_TAKEN_WEST_OF + 0.5  # the line to the mark off Pico could cross Faial
+    o = g.order("azores", 0.5)
+    assert not o["accepted"] and o["too_far_east"] and not g.via_azores and g.orders == []
+    g.mine.state.lon = lon
+    b = Game(env, launch_index=MAY1, mode="base", max_days=2.0)
+    o = b.order("azores", 0.4)
+    assert o["accepted"] and o["heading"] == "azores" and o["arrives"]
+    _, m = b.mine.pending_down[-1]
+    assert [(w.lat, w.lon) for w in m.waypoints] == [*AZORES_MARKS, FINISH] and m.power == 0.4

@@ -1111,6 +1111,7 @@ class Game:
             # None while orders can reach the boat; else why not ("main_box", "comms_silent").
             "no_link": self.link_lost(),
             "mode": self.mode,
+            "via_azores": self.via_azores,  # the autopilot's route goes by the Azores
             "show_true_position": True,
             "order": (
                 {"heading": AUTO, "power": self._cruise()}

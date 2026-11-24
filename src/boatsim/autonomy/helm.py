@@ -72,7 +72,6 @@ def azores_marks_ahead(lon: float) -> list[tuple[float, float]]:
     return [m for m in AZORES_MARKS if lon < m[1]]
 
 
-
 def sail_orders_for(vessel) -> tuple[tuple[str, ...], bool]:
     """What a player may order on this boat: its own sail plans (from its polar,
     biggest first, plus "down" for bare poles) and whether it has an engine.
