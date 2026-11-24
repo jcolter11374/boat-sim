@@ -89,14 +89,14 @@ simulator (Pyodide), says yes to the call and Esc to every other card. Log:
 | --- | --- |
 | The call comes in mid-ocean | Day 25.6, at 42.76N 42.50W, "about 1,300 km ahead" |
 | Saying yes | The order cell stays "Autopilot"; the status says she is going by the Azores |
-| Pico's land comes into the picture | Day 39.2, 32 km from the edge of its land files |
-| Nearest to the edge of Pico's land | 24 km |
+| Pico's land comes into the picture | Day 39.8, 31 km from the edge of its land files (the page looks every two days of game time) |
+| Nearest to the edge of Pico's land seen by the script | 31 km |
 | She finishes | No: taken by fishermen on day 41.8 (the default day, as above) |
+| She finishes | Expected no on this day, so the script exits 1 here; that is the measured loss, not a fault |
 | Unit tests (`npm run test:unit`) | 686 pass before, 688 after (two new) |
 | Simulator tests (`tests/test_sandbox_helm.py`) | 53 pass before, 56 after (three new) |
 
-The card and Pico from 41 km (the card's words were tightened after the review, below; the picture
-is from before),
+The card and Pico on the horizon, both taken after the review's fixes,
 cloud pictures in software graphics at Low:
 
 ![The call](screens/azores-pass-2026-11-24/card.png)

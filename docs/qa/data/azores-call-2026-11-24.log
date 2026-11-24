@@ -1,23 +1,23 @@
-day 0.3: 36.78N 74.61W, Autopilot
-day 5.3: 38.69N 68.50W, Autopilot
-day 10.3: 39.59N 65.01W, Autopilot
-day 15.3: 40.84N 57.68W, Autopilot
-day 20.3: 42.17N 51.01W, Autopilot
-day 25.6: 42.76N 42.50W, Autopilot
+day 0.3: 36.81N 74.53W, Autopilot
+day 6.3: 38.59N 67.84W, Autopilot
+day 11.3: 39.87N 64.06W, Autopilot
+day 16.3: 41.29N 56.20W, Autopilot
+day 21.3: 42.31N 49.48W, Autopilot
 
-Day 25.6 at 42.76N 42.50W: The Azores are about 1,300 km ahead and to the south: volcanic islands, the only land between America and Europe. The autopilot's route passes far to the north of them, out of sight. Go by them instead?
-  1. Go by the Azores: land in sight, about 3 days longer  [The autopilot takes her 30 km south of Pico, under its 2,351 m mountain, then on to the same finish line. In our test crossings this cost 1 to 8 days against the autopilot's own route, so the ghost will pull ahead.]
+Day 25.6 at 42.76N 42.50W: The Azores are about 1,300 km ahead and to the south: volcanic islands, the only land between America and Europe. The autopilot's route passes far to the north of them, out of sight. Going by them takes about 4 days longer, and near land there are fishing boats: about 1 crossing in 10 that went this way did not finish. Go by them?
+  1. Go by the Azores: land in sight, about 4 days longer, and a risk  [The autopilot takes her 30 km south of Pico, under its 2,351 m mountain, then on to the same finish line. Most of our test crossings took 1 to 7 days longer than the autopilot's own route, and the worst 10, so the ghost will pull ahead. Islands mean fishing boats and their gear: about 1 crossing in 10 that would have finished did not, most of them taken or snagged within 150 km of the islands.]
   2. Stay on the autopilot's route (same as the ghost)  [No land until Portugal, and no days lost]
   pressed 1: the order reads "Autopilot", by the Azores: true
 
-day 30.6: 40.60N 35.95W, Autopilot, by the Azores
-day 35.8: 38.30N 31.66W, Autopilot, by the Azores
-day 39.2: Pico's land is loaded, 32 km from its edge
-day 41.2: 38.06N 28.06W, Autopilot, by the Azores
+day 26.6: 41.87N 41.12W, Autopilot, by the Azores
+day 31.8: 39.45N 35.23W, Autopilot, by the Azores
+day 37.8: 38.10N 29.55W, Autopilot, by the Azores
+day 39.8: Pico's land is loaded, 31 km from its edge
 
 Ended day 41.8: lost.
 ok   the Azores call was asked in mid-ocean
 ok   said yes: the simulator has her going by the Azores
 ok   Pico's land came into the picture
-ok   nearest to the edge of Pico's land: 24 km
+ok   nearest to the edge of Pico's land: 31 km
 FAIL she finished (lost)
+exit 1
