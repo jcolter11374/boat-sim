@@ -146,3 +146,47 @@ def test_land_cover_greenness_then_osm_areas():
     assert cover[3, 4] == 2  # golf over canopy (row 3 = 38.97N, column 4 = 76.46W)
     assert cover[5, 7] == 4 and (cover[:, 8:] == 0).all()  # beach on land; the Bay stays 0
     assert trees == {"points": [[-76.47, 38.95, 9.0]], "rows": [[[-76.48, 38.95], [-76.46, 38.95]]]}
+
+
+def test_bake_town_cascais_in_its_own_frame(tmp_path):
+    """A town other than Annapolis bakes in metres from its own origin: a building
+    and a pier line 100 m east and 50 m south of Cascais's origin land there."""
+    pytest.importorskip("shapely")
+    import json
+
+    from shapely.geometry import LineString, box
+
+    lat0, lon0 = lv.CASCAIS_ORIGIN
+    mx = 111320.0 * np.cos(np.radians(lat0))
+    lon, lat = lon0 + 100 / mx, lat0 - 50 / lv.M_PER_DEG_LAT
+    d = 10 / mx
+    rows = {
+        ("buildings", "building"): [
+            {"id": "a", "geometry": box(lon - d, lat - 1e-4, lon + d, lat + 1e-4).wkb},
+            {"id": "b", "geometry": box(lon, lat, lon + d, lat + 1e-4).wkb, "is_underground": True},
+        ],
+        ("base", "infrastructure"): [
+            {"class": "pier", "geometry": LineString([(lon, lat), (lon + 3 * d, lat)]).wkb},
+            {"class": "breakwater", "geometry": LineString([(lon, lat), (lon + d, lat)]).wkb},
+        ],
+    }
+    paths = lv.bake_town(
+        "cascais",
+        tmp_path,
+        rows=lambda theme, typ, b: rows[(theme, typ)],
+        heights=lambda b, lons, lats: np.full((len(lats), len(lons)), 4.0),
+        log=lambda *_: None,
+    )
+    assert [p.name for p in paths] == ["cascais.json", "cascais_height.bin"]
+    doc = json.loads(paths[0].read_text())
+    assert doc["origin"] == list(lv.CASCAIS_ORIGIN) and "stateHouse" not in doc
+    assert len(doc["buildings"]) == 1 and len(doc["piers"]) == 1
+    xs = [q[0] for q in doc["buildings"][0]["p"]]
+    zs = [q[1] for q in doc["buildings"][0]["p"]]
+    assert abs(sum(xs) / len(xs) - 100) < 3 and abs(sum(zs) / len(zs) - 50) < 3
+    assert doc["buildings"][0]["b"] == 4.0
+    px = [q[0] for q in doc["piers"][0]]
+    assert 99 < min(px) < 101 and 129 < max(px) < 131  # a 30 m pier, 2.4 m wide
+    hgt = np.fromfile(paths[1], "<i2")
+    assert hgt.size == doc["nx"] * doc["ny"] and set(hgt) == {40}
+    assert {"annapolis", "cascais"} <= set(lv.TOWNS)

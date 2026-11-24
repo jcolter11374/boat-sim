@@ -303,6 +303,10 @@ Iris's land spikes read:
   from Overture Maps. Where Overture has no height or floor count, the height
   is a GUESS from the footprint size (7, 10 or 13 m). `annapolis.json` is a
   derived database under the ODbL and carries that notice.
+- **Cascais marina and old town** (`cascais.json`, `cascais_height.bin`): the
+  same bake as Annapolis (`bake_town`, towns listed in `TOWNS`), for the dock a
+  crossing ends at on the helm page. 3,623 buildings and 31 piers (the marina's
+  pontoons) from Overture 2026-10-21.0; the breakwaters are not in it.
 - **Chesapeake Bay coast squares** (`landtiles.py`, place `baytiles`): the Bay
   cut into 0.05 degree squares so a page can load just the ones near the boat.
   Per square `bay_<key>_meta.json`, `bay_<key>_height.bin` (int16 DECIMETRES,

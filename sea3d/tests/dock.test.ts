@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DOCK_RAMP_S, DOCK_WAY, Dock, dockSpeed, leavesFromDock } from "../src/helm/dock";
+import { DOCK_RAMP_S, DOCK_WAY, Dock, LANDING_WAY, dockSpeed, leavesFromDock } from "../src/helm/dock";
 import { toXY } from "../src/helm/course";
 
 test("tied up: she lies at the pier, pointing along it, not moving", () => {
@@ -60,4 +60,27 @@ test("which starts leave from the dock", () => {
   assert.equal(leavesFromDock("annapolis", false), true);
   assert.equal(leavesFromDock("boston", false), false);
   assert.equal(leavesFromDock("", true), false);
+});
+
+test("arriving: she slows for her berth, stops alongside and never overshoots", () => {
+  const d = new Dock(LANDING_WAY, 1.5, true);
+  d.leave();
+  let top = 0;
+  let t = 0;
+  for (; t < 120 && !d.alongside; t += 1 / 30) {
+    d.advance(1 / 30);
+    top = Math.max(top, d.speed);
+    assert.ok(d.sailed <= d.length + 1e-9, "never past her berth");
+  }
+  assert.ok(d.alongside, "she gets there");
+  assert.ok(t > 15 && t < 45, `in a watchable time: ${t.toFixed(0)} s`);
+  assert.ok(top <= dockSpeed(1.5) + 1e-9);
+  const s = d.state;
+  assert.equal(s.stw, 0);
+  const end = LANDING_WAY[LANDING_WAY.length - 1];
+  const v = toXY(end, s);
+  assert.ok(Math.hypot(v.x, v.y) < 0.01, "at the end of the way");
+  assert.ok(s.heading > 35 && s.heading < 55, `along the pontoon, north-east: ${s.heading}`);
+  d.advance(10);
+  assert.equal(d.state.lat, s.lat);
 });

@@ -241,6 +241,11 @@ stored in git. Resampled by us.
   code; any public copy keeps this notice.
   Shown at voyage.html?place=annapolis ("Annapolis harbour") as a produced
   work, with the OpenStreetMap / Overture credit on the page's credit line.
+- Cascais buildings and piers (`cascais.json`, the marina and old town west of
+  Lisbon): the same sources and licence as `annapolis.json` above (OpenStreetMap
+  and Overture Maps Foundation, ODbL 1.0), a derived database kept under the ODbL.
+  Shown on the helm page when a crossing ends at the dock in Cascais, with the
+  OpenStreetMap / Overture credit on the page's credit line.
 - The title's skyline (`sea3d/public/title-skyline.bin`, built by
   `sea3d/tools/title-skyline.py`; this one small file IS stored in git): the
   outline of the Annapolis shore seen from one spot on the water, worked out
