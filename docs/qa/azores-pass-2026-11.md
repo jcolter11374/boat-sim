@@ -32,6 +32,10 @@ finish as ever:
   or Pico. The card is only shown west of 36W.
 - From base (steering by satellite) the same order uplinks the marks as waypoints, like any route.
 - A share link or a saved voyage sails it again (the order is in the saved orders).
+- **Not on a first crossing** (John, 24 Nov 2026: "Offer it, not on the first crossing"). The call
+  waits until this browser has a finished crossing to its name (`finishedACrossing`,
+  `sea3d/src/helm/personalBest.ts`, the same storage as the personal bests). The reason is the
+  default launch day, below. A player who clears the browser's storage is a first-timer again.
 - Not asked in a challenge (its start, goal and stars are its own), nor on a voyage that does not
   finish on the usual line, nor when her link to base is dead.
 - The game side: `sea3d/src/helm/azores.ts` (when to ask, the words, the measured numbers), the
@@ -74,7 +78,8 @@ simulator with the browser's weather: on the autopilot all the way, and with the
 **The default launch day is one of the six.** On 23 April 2020, the day a first game sails, going
 by the Azores gets her taken by fishermen on day 41.8, two and a half days after Pico comes into
 view. On the autopilot's route that day she finishes in 54.4 days. The dice are fixed by the launch
-day, so it happens every time. This is put to John as a choice (see the PR).
+day, so it happens every time. Put to John as a choice, he chose to offer the call only after a
+first finished crossing; the risk stays on the card for everyone who is asked.
 
 So the card says: about 4 days longer, and about 1 crossing in 10 that went this way did not finish.
 The small print gives the spread honestly: most took 1 to 7 days longer, the worst 10.
@@ -82,7 +87,8 @@ The small print gives the spread honestly: most took 1 to 7 days longer, the wor
 ## Played in the browser
 
 `sea3d/tools/qa/azores-call.mjs` plays the default crossing in a headless browser with the real
-simulator (Pyodide), says yes to the call and Esc to every other card. Log:
+simulator (Pyodide), says yes to the call and Esc to every other card. It first gives the browser a finished crossing, as a
+returning player has. Log:
 `docs/qa/data/azores-call-2026-11-24.log`.
 
 | Check | Result |
@@ -92,8 +98,9 @@ simulator (Pyodide), says yes to the call and Esc to every other card. Log:
 | Pico's land comes into the picture | Day 39.8, 31 km from the edge of its land files (the page looks every two days of game time) |
 | Nearest to the edge of Pico's land seen by the script | 31 km |
 | She finishes | No: taken by fishermen on day 41.8 (the default day, as above) |
+| A first crossing (`--first`, no finished crossing in the browser) | Not asked: sailed to day 32.8 at 33.5W, past where the call is made, with no card. Log: `docs/qa/data/azores-call-first-2026-11-24.log` |
 | She finishes | Expected no on this day, so the script exits 1 here; that is the measured loss, not a fault |
-| Unit tests (`npm run test:unit`) | 686 pass before, 688 after (two new) |
+| Unit tests (`npm run test:unit`) | 686 pass before, 690 after (three new, one from the dock in Portugal on main) |
 | Simulator tests (`tests/test_sandbox_helm.py`) | 53 pass before, 56 after (three new) |
 
 The card and Pico on the horizon, both taken after the review's fixes,
