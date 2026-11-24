@@ -25,7 +25,9 @@ export const DOCK_WAY: LatLon[] = [
 /** Looking this way past the boat shows the pier, the town and the State House dome (compass degrees). */
 export const DOCK_LOOK = 262;
 /** At the dock the camera stands this many times further back than at sea (GUESS, by eye on the pictures). */
-export const DOCK_PULL = 1.7;
+export const DOCK_PULL = 1.3;
+/** ...and this much of its height above her (GUESS, by eye): 1.7 back at full height looked down on the town like a map (John, 24 Nov 2026). */
+export const DOCK_LOW = 0.6;
 /** The harbour's own small chop (m, s): sheltered water, not the ocean swell of the drop point (GUESS). */
 export const DOCK_SEA = { hs: 0.1, tp: 1.8 };
 /** She is up to speed this long after casting off (s). */

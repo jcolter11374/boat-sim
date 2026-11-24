@@ -502,7 +502,7 @@ export class Town {
     const merged = mergeGeometries(geos);
     for (const g of geos) g.dispose();
     if (!merged) return;
-    const mesh = new THREE.Mesh(merged, bendWithEarth(new THREE.MeshStandardMaterial({ color: 0x6b5a48, roughness: 0.9 }), "boatsim-town-piers-v1"));
+    const mesh = new THREE.Mesh(merged, bendWithEarth(new THREE.MeshStandardMaterial({ color: 0xa39682, roughness: 0.95 }), "boatsim-town-piers-v1"));
     mesh.name = "piers";
     mesh.frustumCulled = false;
     this.group.add(mesh);

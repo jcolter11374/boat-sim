@@ -185,11 +185,15 @@ export class Island {
           float steep = (1.0 - smoothstep(0.45, 0.8, abs(fn.y))) * smoothstep(3.0, 14.0, vH);
           vec3 stone = vec3(0.2, 0.155, 0.115) * (0.75 + 0.5 * br);
           diffuseColor.rgb = mix(diffuseColor.rgb, stone, steep * 0.7 * uCliff);
-          diffuseColor.rgb *= mix(1.0, 0.55, 1.0 - smoothstep(0.0, 2.5, vH)); // wet`,
+          // Wet at the waterline: on a rocky ocean shore the swell wets the first metres. A sheltered plain shore
+          // (a harbour town standing a metre or two above the water) is dry ground almost to the edge: darkened and
+          // shiny to 2.5 m, the whole waterfront read as water with buildings standing in it (John, 24 Nov 2026).
+          float wetTop = mix(0.35, 2.5, uRock);
+          diffuseColor.rgb *= mix(1.0, mix(0.8, 0.55, uRock), 1.0 - smoothstep(0.0, wetTop, vH));`,
         )
         .replace(
           "#include <roughnessmap_fragment>",
-          "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.35, 1.0 - smoothstep(0.0, 2.5, vH));",
+          "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, mix(0.8, 0.35, uRock), 1.0 - smoothstep(0.0, mix(0.35, 2.5, uRock), vH));",
         )
         .replace(
           "#include <fog_fragment>",
@@ -200,7 +204,7 @@ export class Island {
           #include <fog_fragment>`,
         );
     };
-    mat.customProgramCacheKey = () => "boatsim-land-v2";
+    mat.customProgramCacheKey = () => "boatsim-land-v3";
     const land = new THREE.Mesh(geo, mat);
     land.name = "island";
     land.frustumCulled = false; // the curve moves vertices after culling's bounds
@@ -259,7 +263,7 @@ export class Island {
       fog: true,
       uniforms: THREE.UniformsUtils.merge([
         THREE.UniformsLib.fog,
-        { uTime: { value: 0 }, uLight: { value: 1 }, uSea: { value: 1 } },
+        { uTime: { value: 0 }, uLight: { value: 1 }, uSea: { value: 1 }, uCalm: { value: place.shore === "plain" ? 1 : 0 } },
       ]),
       vertexShader: `
         attribute float depth;
@@ -285,6 +289,7 @@ export class Island {
         uniform float uTime;
         uniform float uLight;
         uniform float uSea;
+        uniform float uCalm;
         varying float vD;
         varying vec2 vXZ;
         #include <fog_pars_fragment>
@@ -302,6 +307,9 @@ export class Island {
           float wash = (1.0 - smoothstep(8.0, 22.0 + 22.0 * uSea, vD)) * smoothstep(-2.0, 2.0, vD);
           wash *= 0.6 + 0.4 * sin(uTime * 0.7 + n * 6.0);
           float a = clamp(max(bands * (0.35 + 0.5 * uSea), wash * 0.9), 0.0, 0.95);
+          // A sheltered plain shore (a harbour) has no breakers on a quiet day: the white water comes only as the
+          // sea gets up (uSea 0.2 is a calm, 1 a 2.5 m sea). On an ocean shore it is always there.
+          a *= mix(1.0, smoothstep(0.3, 0.9, uSea), uCalm);
           if (a < 0.01) discard;
           gl_FragColor = vec4(vec3(0.94, 0.97, 1.0) * uLight, a);
           #include <fog_fragment>
