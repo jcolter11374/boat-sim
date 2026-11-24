@@ -144,6 +144,7 @@ export function mountSetSailCard(hooks: CardHooks): void {
   let endIt = !kept;
   /** Set sail was pressed once with a voyage at sea: the question is up, and the next press is the yes. */
   let ended = false;
+  let askedAt = 0;
   if (kept) {
     $("ss-ask-keep").addEventListener("click", () => location.assign(`./${continueLink(kept)}`));
     $("ss-ask-new").addEventListener("click", () => {
@@ -367,6 +368,12 @@ export function mountSetSailCard(hooks: CardHooks): void {
         return;
       }
       if (ended && where === "ocean") {
+        // A double click, or Enter held down, is one press, not the question and its yes (review of #670):
+        // the yes counts only once the question has been up long enough to see.
+        if (e.detail > 1 || performance.now() - askedAt < 700) {
+          e.stopImmediatePropagation();
+          return;
+        }
         // The second press: the saved voyage ends here, and the crossing starts (#go's own listener carries on).
         ended = false;
         endIt = true;
@@ -382,7 +389,9 @@ export function mountSetSailCard(hooks: CardHooks): void {
         $("ss-ask").hidden = false;
         // The button itself now says yes: a second press starts the new crossing, the same as "Start a new one".
         ended = true;
+        askedAt = performance.now();
         draw();
+        $("go").setAttribute("aria-describedby", "ss-ask-q"); // the button is now the answer to this question
         $("ss-continue").scrollIntoView({ block: "nearest" });
         return;
       }

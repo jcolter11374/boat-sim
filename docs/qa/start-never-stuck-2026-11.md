@@ -30,12 +30,17 @@ changes: the button says "Set sail" and starts at once.
 ## Checked
 
 `sea3d/tools/qa/start-with-saved-voyage.mjs` (new) plays it in a headless browser with the real
-simulator: six checks, all pass (labels, not dimmed before or after the press, the question, the
-second press starts the crossing). Unit tests 690 pass before and after. Cloud pictures, software
+simulator: eight checks, all pass (labels, not dimmed before or after the press, the question, a
+double click counting as one press, the second press starting the crossing, the old voyage gone). Unit tests 690 pass before and after. Cloud pictures, software
 graphics at Low:
 
 ![Before, after pressing Set sail](screens/start-never-stuck-2026-11-24/before-pressed.png)
 ![After: the card](screens/start-never-stuck-2026-11-24/after-card.png)
 ![After: one press](screens/start-never-stuck-2026-11-24/after-pressed.png)
+
+An independent review found two things, both fixed: a double click (or Enter held down) would have
+asked and answered in one go and ended the voyage unread, so the yes now counts only 0.7 s after the
+question appears and never on the second click of a double click; and the question is now announced to
+screen readers (`role="alert"`, and the button points at it).
 
 Not checked: on John's PC, and with his Beneteau (the path is the same for every boat).

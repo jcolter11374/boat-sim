@@ -45,13 +45,17 @@ check((await page.textContent("#go")).trim() === "Start a new crossing", `the st
 check(await page.isVisible("#ss-continue-go"), '"Continue your voyage" is offered');
 check(!(await dim()), "the start button is not dimmed");
 const t0 = Date.now();
-await page.click("#go");
+// The first press is a double click: it must count as one press, so the question is read before the yes counts.
+await page.click("#go", { clickCount: 2 });
 await page.waitForTimeout(500);
 check(await page.isVisible("#ss-ask"), "one press asks before ending the voyage at sea");
+check(await page.evaluate(() => !!localStorage.getItem("boatsim.voyage.v1")), "a double click is one press: the voyage at sea is still saved");
 check((await page.textContent("#go")).trim() === "Yes, end it and start a new one" && !(await dim()), `the same button is now the yes, and not dimmed: "${(await page.textContent("#go")).trim()}"`);
 await shot("2-ask");
+await page.waitForTimeout(900);
 await page.click("#go");
 const started = await page.waitForFunction(() => window.__helm.ready && !window.__helm.busy && (window.__helm.status?.day ?? 9) < 1, null, { timeout: 120000 }).then(() => true).catch(() => false);
 check(started, `a second press starts the new crossing (${((Date.now() - t0) / 1000).toFixed(0)} s after the first press)`);
 await shot("3-started");
+check(await page.evaluate(() => { const v = localStorage.getItem("boatsim.voyage.v1"); return !v || !/"day":2/.test(v); }), "the old voyage is no longer the saved one");
 await browser.close(); server.kill(); process.exit(bad ? 1 : 0);
