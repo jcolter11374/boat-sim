@@ -6,7 +6,18 @@ on:
   pull_request:
     paths:
       - "sea3d/public/voyages/**"
-      - "src/boatsim/runner/replay.py"
+      # Any simulator or boat change, not only the replay writer: three changes on 14 Nov
+      # (#529, #547, #552) each made replays stale, none ran this check, and main stayed red
+      # for ten days (docs/qa/replay-check-regenerated-2026-11.md). One runner, about 11 min.
+      # If your change is meant to alter voyages, this goes red. Then, on your branch: run
+      # "Voyage replays" once per boat whose files it lists, with that boat's design file and
+      # "commit" ticked, one run at a time (voyage_31-ft-cruiser_* is configs/stock_cruiser31.yaml,
+      # voyage_randolph-rev-b_* is configs/randolph_rev_b.yaml, plain voyage_2020-* is the kayak).
+      # The bot's commit does not restart this check, so afterwards run "Replay check" by hand
+      # on the branch, or push another commit.
+      # If it fails on restoring the currents cache, not on a replay: run "Replay check" on main.
+      - "src/boatsim/**"
+      - "configs/**"
       - ".github/workflows/replay-check.yml"
       - ".github/workflows/replay-check-run.yml"
       - ".github/workflows/replay-check-pr.yml"
