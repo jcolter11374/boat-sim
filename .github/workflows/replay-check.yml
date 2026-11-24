@@ -16,7 +16,8 @@ on:
   push:
     branches: [main]
     paths:
-      # After any simulator change lands, report whether the replays went stale.
+      # After any simulator change lands, report whether the replays went stale
+      # (pull requests that change the simulator run the same check: replay-check-pr.yml).
       - "src/boatsim/**"
       - "configs/**"
       - "sea3d/public/voyages/**"

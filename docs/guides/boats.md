@@ -11,7 +11,7 @@ One YAML file per boat, loaded by `boatsim.config.load_design`:
 | File | Boat |
 | --- | --- |
 | `v4_kayak.yaml` | Our kayak: the 3.05 m solar-electric kayak drone this whole project is about |
-| `randolph_rev_b.yaml`, `randolph_rev_c.yaml` | Our model of the Randolph team's wing-sail drone (from their published MIT files) |
+| `randolph_rev_b.yaml`, `randolph_rev_c.yaml`, `randolph_rev_e1.yaml` | Our model of the Randolph team's wing-sail drone (from their published MIT files) |
 | `stock_*.yaml` | Stock boats from real published specs: cruiser, Pearson 31-2, 14 ft dinghy (Sunfish), 16 ft beach cat, sail drone, ocean rowing boat |
 | `joke_*.yaml` | The joke fleet (bathtub, canoe, flamingo, pedalo, robot kayak, wheelie bin), with honest physics |
 | `polars/*.json` | Speed tables for the sailing yachts, written by the VPP (below) |
@@ -62,6 +62,13 @@ The model origin is the centre of gravity, with +x towards the bow, +y up and
 `common.py`). CI builds them into `public/models/*.glb` (cached on the
 scripts' hash); they are not kept in git. Without them the pages draw boats in
 code; `?models=simple` forces that.
+The Randolph boat's fittings are the Randolph team's own published shapes, thinned
+(`sea3d/blender/randolph_fittings.json`, made by `sea3d/scripts/randolph_fittings.py`).
+
+**Pictures of a boat from a cloud browser** need `?gl=full` on the page address, or every edge is
+a staircase (no graphics card there, so the pages draw small with smoothing off).
+`sea3d/tools/qa/boat-look.mjs` takes close-ups that way; see
+[docs/qa/boat-look-2026-11.md](../qa/boat-look-2026-11.md).
 
 ## Adding or changing a boat
 

@@ -48,6 +48,7 @@ BASE_NAMES = {
     "kayak": "Our kayak",
     "revc": "Randolph Rev C (our model)",
     "revb": "Randolph Rev B (our model)",
+    "reve1": "Randolph Rev E1 (our model)",
 }
 
 

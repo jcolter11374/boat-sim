@@ -18,7 +18,7 @@ import { Atmosphere, softwareGraphics } from "./atmosphere";
 import { BUILDERS, hasDetailedRandolph, loadDetailedModels, loadRandolphModel, type BoatModel } from "./boats/model";
 import type { Quality } from "./boats/parts";
 import { KAYAK } from "./boats/specs";
-import { RANDOLPH_REVB, RANDOLPH_REVC } from "./motion";
+import { RANDOLPH_REVB, RANDOLPH_REVC, RANDOLPH_REVE1 } from "./motion";
 import { Contact } from "./contact";
 import { BoatMotion, KAYAK_V4 } from "./motion";
 import { shadowsOn } from "./ultra";
@@ -43,7 +43,7 @@ import {
   type CatalogSlot,
   type Design,
 } from "./yard/design";
-import { BASE_LONG, KEEL_KEYS, baseFromHash, isKeel, keelCatalog, randolphCatalog, type BaseKey } from "./yard/bases";
+import { BASE_LONG, KEEL_KEYS, RANDOLPH_KEYS, baseFromHash, isKeel, isRandolphBase, keelCatalog, randolphCatalog, type BaseKey, type RandolphBase } from "./yard/bases";
 import { STOCK_HULL } from "./boats/specs";
 import { hasDetailedStock, loadStockModel } from "./boats/stock";
 import { Outfit, VIEW_FOR, type View } from "./yard/dress";
@@ -148,7 +148,7 @@ function build(): void {
     model = BUILDERS.randolph(quality);
     shadowsOn(model.root);
     scene.add(model.root);
-    motion = new BoatMotion(base === "revc" ? RANDOLPH_REVC : RANDOLPH_REVB, place);
+    motion = new BoatMotion(base === "reve1" ? RANDOLPH_REVE1 : base === "revc" ? RANDOLPH_REVC : RANDOLPH_REVB, place);
     rdress = new RandolphDress(model);
     paintMine(model); // the player's paint on their copy of our model; looks only
     if (cat) redraw();
@@ -201,7 +201,9 @@ let design: Design;
 /** The parts catalog per boat (the kayak's from parts-catalog.json; the Randolph boats' from bases.ts). */
 const catalogs = new Map<BaseKey, Catalog>();
 const grid = new GridLauncher(() => cat);
-const asBuilt: Record<"revc" | "revb", AsBuiltLauncher> = {
+const asBuilt: Record<RandolphBase, AsBuiltLauncher> = {
+  // No recorded voyages of Rev E1 yet, so this finds nothing and says so; the simulator in the browser sails her.
+  reve1: new AsBuiltLauncher("Randolph Rev E1", BASE_LONG.reve1, (d) => isAsBuilt(d), grid, "reve1"),
   revc: new AsBuiltLauncher("Randolph Rev C", BASE_LONG.revc, (d) => isAsBuilt(d), grid, null),
   revb: new AsBuiltLauncher("Randolph Rev B", BASE_LONG.revb, (d) => isAsBuilt(d), grid, "revb"),
 };
@@ -685,7 +687,7 @@ void sandboxReady.then((inBrowser) => {
 });
 
 // ---------- my boat (remembered in this browser, carried to the other pages) ----------
-const SHORT: Record<BaseKey, string> = { kayak: "kayak", revc: "Rev C5", revb: "Rev B", stock_pearson31_2: "Pearson 31-2", stock_cruiser31: "First 31.7" };
+const SHORT: Record<BaseKey, string> = { kayak: "kayak", reve1: "Rev E1", revc: "Rev C5", revb: "Rev B", stock_pearson31_2: "Pearson 31-2", stock_cruiser31: "First 31.7" };
 let nameTyped = false; // the player has typed a name: keep it while they change parts
 const defaultName = () => `My ${SHORT[base]}`;
 function drawMine(): void {
@@ -756,6 +758,7 @@ window.addEventListener("hashchange", () => {
 // ---------- the boat to start from ----------
 const INTRO: Record<BaseKey, string> = {
   kayak: "Build your own version of our kayak. Swap a part and watch the boat and its odds of finishing change.",
+  reve1: "Our model of the Randolph team's current design, Rev E1: the Rev C5 boat with sealed steering servos, a bilge pump and a weed fairing on the keel. Swap a part and watch its odds change.",
   revc: "Our model of the Randolph team's Rev C5: a 1.5 m self-righting boat with a rigid wing sail and two rudders. Swap a part and watch its odds change.",
   revb: "Our model of the Randolph team's earlier Rev B: the same wing sail, one rudder and an 8.2 kg keel.",
   stock_pearson31_2: "Our model of Randolph and Becky's own boat, a 31 ft cruising yacht sailed by an autopilot. Change her sails and rig and watch her odds change.",
@@ -764,6 +767,7 @@ const INTRO: Record<BaseKey, string> = {
 /** Behind the intro's "i" (Leo): where the parts come from. No prices (John: no money in the game). */
 const INTRO_NOTE: Record<BaseKey, string> = {
   kayak: "The parts are real ones you can buy. A ~ before a number means it's our estimate: nobody has weighed or measured it yet.",
+  reve1: "Built from the file they wrote for us (21 Nov 2026), not their own simulator. Our model leaves out their bilge pump, tail detent, backup controller and weed-shedding manoeuvre, so their own odds are higher. ~ marks our estimates.",
   revc: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
   revb: "Built from their published build plan (11 Nov 2026), not their own simulator. ~ marks our estimates.",
   stock_pearson31_2: "From Pearson's published specs, not Randolph's measurements. Each sail part gets its own speed table from our sail program. ~ marks our estimates.",
@@ -884,13 +888,13 @@ $("launch").addEventListener("click", async () => {
     const onProgress = (text: string, done: number, total: number) =>
       say(done ? `The autopilot is sailing your design from ${total} real 2020 start dates: ${done} done so far.` : `${text} This takes a minute or two.`);
     r = await launcher.launch(design, summarise(cat, design), onProgress, live("yours"));
-    if (!r && (base === "revc" || base === "revb")) {
+    if (!r && isRandolphBase(base)) {
       launcher = asBuilt[base];
       r = await launcher.launch(design, summarise(cat, design), onProgress, live("yours"));
     }
     status.backend = launcher.name;
     // The planned (or as-built) build on the same launches, to compare with (once per back end and boat).
-    if (r && launcher !== asBuilt.revc && launcher !== asBuilt.revb && encodeDesign(cat, design) !== "") {
+    if (r && launcher !== asBuilt.reve1 && launcher !== asBuilt.revc && launcher !== asBuilt.revb && encodeDesign(cat, design) !== "") {
       const plan = plannedDesign(cat);
       const key = `${launcher.name}|${base}`;
       let p = plannedRuns.get(key);
@@ -1180,7 +1184,7 @@ Promise.all([
   .then(([catalog, sim]) => {
     const c = withSim(catalog, sim);
     catalogs.set("kayak", tidyCatalog(c));
-    for (const k of ["revc", "revb"] as const) {
+    for (const k of RANDOLPH_KEYS) {
       const rc = randolphCatalog(k, sim, c);
       if (rc) catalogs.set(k, tidyCatalog(rc));
     }

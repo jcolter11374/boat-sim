@@ -61,7 +61,7 @@ class HullPaint:
 
 # --------------------------------------------------------------- helpers ---
 def P(x: float, y: float, z: float) -> tuple[float, float, float]:
-    """Builder frame (x aft, y up, z starboard) -> Blender (z up)."""
+    """Builder frame (x aft, y up, z to port, as src/boats/model.ts) -> Blender (z up)."""
     return (x, -z, y)
 
 

@@ -219,3 +219,14 @@ def test_a_stubbier_wing_stalls_later_not_sooner():
     assert math.degrees(S.CL_AT_STALL / slope) == pytest.approx(13.55, abs=0.05)
     # A very stubby wing is capped, and the curve stays smooth and finite.
     assert all(math.isfinite(c) for c in S.foil_coeffs(math.radians(60), 0.3, 0.012))
+
+
+def test_rev_e1_loads_as_their_current_boat():
+    """Their Rev E1 file (#50, 21 Nov 2026): heavier than Rev C5, launched off Hatteras."""
+    d = load_design("configs/randolph_rev_e1.yaml")
+    assert d.name == "Randolph Rev E1"
+    v = KayakVessel(d)
+    assert v.sail is not None and v.thrusters.count == 0
+    assert d.hull["mass_kg"] == 28.5 > load_design(REV_C).hull["mass_kg"]
+    assert (d.voyage["drop_lat"], d.voyage["drop_lon"]) == (34.95, -75.35)
+    assert 0.8 * KN < _speed(v, 90.0).surge < 2.0 * KN  # sails on a beam reach, like Rev C

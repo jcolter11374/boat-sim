@@ -14,7 +14,7 @@ import { BUILDERS, hasDetailedRandolph, loadRandolphModel, type BoatModel } from
 import { KAYAK, RANDOLPH, STOCK, STOCK_HULL, isStock, type BoatSpec } from "../boats/specs";
 import { hasDetailedStock, loadStockModel } from "../boats/stock";
 import { apparentFlow, rudderFor } from "../boats/gear";
-import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, type HullParams } from "../motion";
+import { BoatMotion, KAYAK_V4, RANDOLPH_REVB, RANDOLPH_REVC, RANDOLPH_REVE1, type HullParams } from "../motion";
 import { Wake } from "../wake";
 import { Contact } from "../contact";
 import { applyPaint, myPaint } from "../boats/paintApply";
@@ -37,6 +37,7 @@ export interface ViewState {
 /** Which model and righting curve a race boat gets, from its Boatyard choices. */
 export function boatFor(choices: Record<string, string>): { spec: BoatSpec; hull: HullParams } {
   const base = choices.base ?? "kayak";
+  if (base === "reve1") return { spec: RANDOLPH, hull: RANDOLPH_REVE1 };
   if (base === "revb") return { spec: RANDOLPH, hull: RANDOLPH_REVB };
   if (base === "revc") return { spec: RANDOLPH, hull: RANDOLPH_REVC };
   if (isStock(base)) return { spec: STOCK[base], hull: STOCK_HULL[base] };

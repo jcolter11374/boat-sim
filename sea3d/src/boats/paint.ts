@@ -74,7 +74,7 @@ export interface BuiltPaint {
 /** Keep in step with the PAINT lines of blender/build_kayak.py, build_randolph.py, build_stock.py, build_shapes.py. */
 export const BUILT: Record<string, BuiltPaint> = {
   kayak: { top: 0xf26a1b, deck: 0xe0601a, boot: 0xf4f4ee, bottom: 0x2f383f, nt: 32, nd: 18, ink: 0x1b2430 },
-  randolph: { top: 0xf1f3f4, deck: 0xdfe5e8, boot: 0x0f8a8a, bottom: 0x2e5566, nt: 32, nd: 18 },
+  randolph: { top: 0xff5b12, deck: 0xdfe5e8, boot: 0xf4f4f0, bottom: 0x5a1712, nt: 32, nd: 18 },
   stock_cruiser31: { top: 0xf4f3ef, deck: 0xe8e5dc, boot: 0x1d2f4d, bottom: 0x23344f, nt: 32, nd: 18 },
   stock_pearson31_2: { top: 0xf3f0e6, deck: 0xe9e5da, boot: 0x1a2a4a, bottom: 0x2b3a55, nt: 32, nd: 18 },
   stock_dinghy14: { top: 0xf5f4ef, deck: 0xf0efea, boot: 0x2c6fb5, bottom: 0xedebe6, nt: 20, nd: 20 },
@@ -239,7 +239,7 @@ export function retint(px: Uint8ClampedArray, from: number, to: number): Uint8Cl
 /**
  * The plain-coloured parts that take a scheme's paint, by the material's name in the
  * models: [which paint, the colour it was built in for a retint or null to set it outright].
- * Everything else (cabin, teak, rigging, the Randolph boat's teal trim) is left alone.
+ * Everything else (cabin, teak, rigging, the Randolph boat's printed fittings) is left alone.
  */
 export const PAINTED_PARTS: Record<string, "hull" | "deck" | "boot" | "bottom"> = {
   transom: "hull",

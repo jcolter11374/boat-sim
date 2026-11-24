@@ -15,7 +15,7 @@ export interface BoatSummary {
 }
 
 /** The Randolph team's boats as the Boatyard names them (B2: always "our model" of them). */
-const RANDOLPH: Record<string, string> = { revc: "Rev C5", revb: "Rev B" };
+const RANDOLPH: Record<string, string> = { reve1: "Rev E1", revc: "Rev C5", revb: "Rev B" };
 
 /**
  * How "my boat" is named in the top bar's chip and on the title card (Elena, 13 Nov; B2). A design built on
@@ -27,7 +27,7 @@ export function boatNaming(b: Pick<MyBoat, "kind" | "base" | "name"> | null): { 
   const model = b.kind === "yard" ? RANDOLPH[b.base] : undefined;
   if (!model) return { name: b.name };
   if (/our model/i.test(b.name)) return { name: b.name };
-  const stock = /^(my\s+)?(randolph\s+)?rev\s*[bc]\d*$/i.test(b.name.trim());
+  const stock = /^(my\s+)?(randolph\s+)?rev\s*[bce]\d*$/i.test(b.name.trim());
   return stock ? { name: `${model} (our model)` } : { name: b.name, note: `based on our model of the Randolph team's ${model}` };
 }
 

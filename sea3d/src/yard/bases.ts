@@ -11,13 +11,18 @@
 import type { Catalog, CatalogOption, CatalogSlot, SimSlots } from "./design";
 
 export type KeelKey = "stock_pearson31_2" | "stock_cruiser31";
-export type BaseKey = "kayak" | "revc" | "revb" | KeelKey;
+export type BaseKey = "kayak" | RandolphBase | KeelKey;
+/** Our models of the Randolph team's boats, newest first. */
+export type RandolphBase = "reve1" | "revc" | "revb";
+export const RANDOLPH_KEYS: RandolphBase[] = ["reve1", "revc", "revb"];
+export const isRandolphBase = (b: string): b is RandolphBase => (RANDOLPH_KEYS as string[]).includes(b);
 /** The two keelboats you can start a design from (M4 wave 1): their sails and rig. */
 export const KEEL_KEYS: KeelKey[] = ["stock_pearson31_2", "stock_cruiser31"];
 export const isKeel = (b: string): b is KeelKey => (KEEL_KEYS as string[]).includes(b);
-export const BASE_KEYS: BaseKey[] = ["kayak", "revc", "revb", ...KEEL_KEYS];
+export const BASE_KEYS: BaseKey[] = ["kayak", ...RANDOLPH_KEYS, ...KEEL_KEYS];
 export const BASE_NAMES: Record<BaseKey, string> = {
   kayak: "Our v4 kayak",
+  reve1: "Randolph Rev E1 (our model)",
   revc: "Randolph Rev C5 (our model)",
   revb: "Randolph Rev B (our model)",
   stock_pearson31_2: "Pearson 31-2 (our model)",
@@ -26,6 +31,7 @@ export const BASE_NAMES: Record<BaseKey, string> = {
 /** The long name, for wherever the boat is described. */
 export const BASE_LONG: Record<BaseKey, string> = {
   kayak: "our v4 kayak",
+  reve1: "our model of the Randolph team's Rev E1",
   revc: "our model of the Randolph team's Rev C5",
   revb: "our model of the Randolph team's Rev B",
   stock_pearson31_2: "our model of Randolph and Becky's Pearson 31-2",
@@ -84,13 +90,17 @@ const FIGURES: Record<string, Record<string, Figures>> = {
 };
 
 /** Their parts not in any slot (autopilot, sensors, charge controller, bearings, glands, radar reflector, hull, wiring, lake prototype). */
-const REST: Record<"revc" | "revb", { cost: number; kg: number; label: string }> = {
+const REST: Record<RandolphBase, { cost: number; kg: number; label: string }> = {
   // Frozen to their designs/boat-sim/randolph_rev_c.yaml as of 11 Nov 2026 20:40 UTC (Rev C5,
   // sha256 23cd0c98dc1d...; C4 changed the mast bearings and C5 the wing's shape, not the mass).
   // 177 + 37 + 18 + 20 + 10 + 35 + 104 + 93 + 55 + 78 + 38 + 350 + 55 + 85 + 100. Rev C3 (11 Nov 2026):
   // 26.9 kg all up (their randolph_rev_c.yaml; C2 fin +1.1, C3 structural changes +0.5). Their
   // build plan prices no C2/C3 parts yet, so the cost stays at Rev C's.
   revc: { cost: 1255, kg: 26.9, label: "Rest of their boat (foam-filled hull, hardwood keel fin, autopilot and sensors, charge controller, wiring)" },
+  // Rev E1 (their randolph_rev_e1.yaml, 21 Nov 2026): 28.5 kg all up. Their header puts Rev E at
+  // about $360 over Rev D; Rev D's own parts aren't priced in the build plan, so the cost is Rev C's
+  // plus that 360 (GUESS; no money shows in the game).
+  reve1: { cost: 1615, kg: 28.5, label: "Rest of their boat (foam-filled hull, hardwood keel fin, bilge pump, sealed servos, backup controller, autopilot and sensors, wiring)" },
   // As the first Rev C (25.2 kg) without the hull fill and battery box (55).
   revb: { cost: 1200, kg: 20.8, label: "Rest of their boat (hull, autopilot and sensors, charge controller, wiring)" },
 };
@@ -103,7 +113,7 @@ const MM_PER_KG_RANDOLPH = 1000 / (1025 * 0.38);
  * The catalog for a Randolph base, from Theo's slots and the kayak catalog's
  * shared slots. null when the slot table has no such base.
  */
-export function randolphCatalog(key: "revc" | "revb", sim: SimSlots | null, kayak: Catalog): Catalog | null {
+export function randolphCatalog(key: RandolphBase, sim: SimSlots | null, kayak: Catalog): Catalog | null {
   const b = sim?.bases?.[key];
   if (!b) return null;
   const slots: CatalogSlot[] = [];

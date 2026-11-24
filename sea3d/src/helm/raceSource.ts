@@ -240,7 +240,7 @@ export function raceWorker(real: () => Worker, pick: RacePick, loaded: (info: Ra
 }
 
 /** The boat ids a race link may name (the race page's own picks, plus "mine"). */
-export const RACE_BOATS = ["kayak", "revc", "revb", "mine"] as const;
+export const RACE_BOATS = ["kayak", "reve1", "revc", "revb", "mine"] as const;
 
 /**
  * The race a link asks for: ?race=<a>,<b> (ids from RACE_BOATS; "mine" is the player's saved

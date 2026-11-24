@@ -67,8 +67,11 @@ The 23 extra shader programs are the land's (ground, surf, town, trees, lights, 
 reflection's copies). They build behind the Set sail card, a few a frame, as Practice has always
 built them. None builds after Set sail, so the first seconds of the voyage are as they were.
 The speed guard's baseline for `sailPrograms` (100 on the runner, limit 105) is exceeded by this.
-The baseline is left untouched in this change: raising it is John's call (the merge rule of 23 Nov
-keeps it fixed), and he has been asked.
+Raising it was John's call (the merge rule of 23 Nov keeps it fixed). He was asked on 24 Nov, "Allow
+the dock launch to load the harbour before Set sail?", and chose "Yes, raise the speed limit for it".
+So `sea3d/tests/speed-baseline.json` now has `sailPrograms: 125` (was 100), the count the runner's
+quick job printed for this change; the limit becomes 131. Every other count is unchanged, and
+`sailProgramsAfterSetSail` stays at 0 with no margin, so nothing may build after Set sail.
 
 **Not measured yet:** the frame rate at the dock and the wait behind the card on a real graphics
 card (John's GTX 1660 Ti). The cloud has no graphics card. To be measured on the live site with

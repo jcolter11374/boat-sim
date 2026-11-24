@@ -301,6 +301,26 @@ export const RANDOLPH_REVC: HullParams = {
     "drone-boat designs/boat-sim/randolph_rev_c.yaml (mass), docs/data/revC_gz_curve.csv (GZ), designs/revC_geometry.json (masses, inertias and CG)",
 };
 
+// --- Randolph team Rev E1 (drone-boat designs/boat-sim/randolph_rev_e1.yaml, MIT) ---
+// Their current design (21 Nov 2026): Rev C5's hull, wing and keel with a bilge pump,
+// sealed servos, a weed fairing and a stouter tail boom. 28.5 kg all up, waterline
+// 0.106 m above the bottom, GM 0.180 m (their docs/Design_RevE.md). They publish no
+// Rev E1 GZ curve or inertias yet, so those are GUESSES from Rev C5: its GZ curve
+// scaled by the two GMs, its inertias scaled by the weights, its CG position kept.
+export const REVE1_GM = 0.18;
+const REVE1_WATERLINE = 0.106;
+export const RANDOLPH_REVE1: HullParams = {
+  ...RANDOLPH_REVC,
+  name: "Randolph Rev E1",
+  mass: 28.5,
+  gzTable: revcGz.map(([a, gz]) => [a, +((gz * REVE1_GM) / REVC_GM).toFixed(4)]),
+  rollInertia: (REVC_IXX * 28.5) / 26.9,
+  pitchInertia: (REVC_IYY * 28.5) / 26.9,
+  cgBelowWaterline: REVE1_WATERLINE + REVC_CG_BELOW_BOTTOM,
+  source:
+    "drone-boat designs/boat-sim/randolph_rev_e1.yaml (mass), docs/Design_RevE.md (waterline, GM); GZ curve, inertias and CG scaled from Rev C5 (GUESS)",
+};
+
 // --- Stock vessels (Theo, configs/stock_*.yaml) ---------------------------------
 // The GZ curves are the configs' own (vpp.gz, as the simulator uses them), so the
 // boat leans and rights itself in the picture the way it does in the simulator.
