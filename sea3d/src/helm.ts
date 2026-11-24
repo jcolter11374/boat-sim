@@ -58,7 +58,7 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
-import { CREWED_M, LOOK, boardWords, dragLook, eyeFor } from "./helm/onboard";
+import { LOOK, boardWords, dragLook, eyeFor, lensAfterWheel } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
@@ -911,6 +911,7 @@ const LIFT = 3.5; // m
 let lifted = false;
 function setLookUp(on: boolean): void {
   if (on === lifted || (on && (!SPECTATE || cine.on))) return;
+  if (on) setOnboard(false, true); // looking up is the circling camera's: step off board first
   lifted = on;
   controls.target.y += on ? LIFT : -LIFT;
   if (on) {
@@ -931,7 +932,16 @@ function setLookUp(on: boolean): void {
   $("lookup").textContent = on ? "\u2B07 Back to the boat" : "\u2B06 Look up at the sky";
 }
 $("lookup").addEventListener("click", () => setLookUp(!lifted));
-$("cinebtn").addEventListener("click", () => setLookUp(false), true); // the cinematic owns the lens
+$("cinebtn").addEventListener(
+  "click",
+  () => {
+    setLookUp(false);
+    // Step off board first: the cinematic saves the camera it finds and puts it back when it ends,
+    // and it must find (and put back) the camera beside her with its controls on, not the deck's.
+    setOnboard(false, true);
+  },
+  true,
+); // the cinematic owns the lens
 
 /** A race (M2 piece S4): both boats by name on the strip's lead cell, the big map's key and its camera pick. A Randolph boat is "(our model)" (B2). */
 function raceLook(names: [string, string]): void {
@@ -2341,7 +2351,7 @@ function lightAhead(): { bearing: number; distM: number; spanDeg?: number; leanD
 }
 // ---------- the on-board view (helm/onboard.ts): the camera rides the boat ----------
 let onboard = false;
-const ob = { yaw: 0, pitch: 0, fov: LOOK.fov, hand: null as { off: THREE.Vector3; fov: number } | null, drag: null as { x: number; y: number } | null };
+const ob = { yaw: 0, pitch: 0, fov: LOOK.fov, hand: null as { off: THREE.Vector3; fov: number } | null, drag: null as { id: number; x: number; y: number } | null };
 const obEye = new THREE.Vector3();
 const obQ = new THREE.Quaternion();
 const obTurn = new THREE.Quaternion();
@@ -2363,7 +2373,7 @@ function setOnboard(on: boolean, quiet = false): void {
     ob.hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
     ob.yaw = ob.pitch = 0;
     camera.fov = ob.fov;
-    if (!quiet) note(boardWords(eyeFor(spec).kind, spec.length >= CREWED_M), `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.info);
+    if (!quiet) note(boardWords(eyeFor(spec).kind), `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.info);
   } else if (ob.hand) {
     // Back to the camera beside her, where it was.
     camera.fov = ob.hand.fov;
@@ -2390,21 +2400,25 @@ function onboardCamera(): void {
   }
 }
 renderer.domElement.addEventListener("pointerdown", (e) => {
-  if (onboard) ob.drag = { x: e.clientX, y: e.clientY };
+  // One finger or the mouse turns the head: a second finger down is ignored, not a fight between the two.
+  if (onboard && !ob.drag) ob.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
 });
 addEventListener("pointermove", (e) => {
-  if (!onboard || !ob.drag) return;
+  if (!onboard || !ob.drag || e.pointerId !== ob.drag.id) return;
   const v = dragLook(ob.yaw, ob.pitch, e.clientX - ob.drag.x, e.clientY - ob.drag.y, innerHeight, ob.fov);
   ob.yaw = v.yaw;
   ob.pitch = v.pitch;
-  ob.drag = { x: e.clientX, y: e.clientY };
+  ob.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
 });
-addEventListener("pointerup", () => (ob.drag = null));
-addEventListener("pointercancel", () => (ob.drag = null));
+const dragEnd = (e: PointerEvent) => {
+  if (ob.drag && e.pointerId === ob.drag.id) ob.drag = null;
+};
+addEventListener("pointerup", dragEnd);
+addEventListener("pointercancel", dragEnd);
 renderer.domElement.addEventListener(
   "wheel",
   (e) => {
-    if (onboard) ob.fov = THREE.MathUtils.clamp(ob.fov + Math.sign(e.deltaY) * 3, LOOK.fovMin, LOOK.fovMax);
+    if (onboard) ob.fov = lensAfterWheel(ob.fov, e.deltaY);
   },
   { passive: true },
 );
@@ -4031,6 +4045,7 @@ function placeArrivalBanner(banner: HTMLElement): void {
  *  swings slowly round the boat, and a banner says so. The results follow after a
  *  few seconds, or at once on a click or key. */
 async function arrivalScene(c: Card, seconds = ARRIVAL_S): Promise<void> {
+  setOnboard(false, true); // the finish scene composes its own shot, and hands back the camera beside her
   showArrival();
   page.scene = "arrival";
   const ahead = c.margin_days !== null && c.margin_days > 0;

@@ -59,7 +59,24 @@ const steered = await view("4-steered");
 await page.keyboard.press("KeyV");
 await page.waitForTimeout(1200);
 const off = await view("5-stepped-off");
+// On board, then the cinematic, then out of it: the camera beside her must come back with its drag working
+// (the cinematic saves the camera it finds; the review of 24 Nov found it saved the deck's, controls off).
+await page.keyboard.press("KeyV");
+await page.waitForTimeout(800);
+await page.keyboard.press("KeyC");
+await page.waitForTimeout(2500);
+await page.keyboard.press("Escape");
+await page.waitForTimeout(1500);
+const afterFilm = await view("6-after-cinematic");
+await page.mouse.move(700, 300);
+await page.mouse.down();
+await page.mouse.move(500, 300, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(800);
+const dragged = await view("7-dragged-round");
+const orbits = !afterFilm.onboard && Math.hypot(dragged.cam[0] - afterFilm.cam[0], dragged.cam[2] - afterFilm.cam[2]) > 0.5 && afterFilm.d > 3;
+console.log("after the cinematic the drag circles her:", orbits);
 await browser.close();
-const ok = !before.onboard && on.onboard && on.d < 12 && !off.onboard && Math.abs(off.d - before.d) < 1.5 && steered.order !== before.order;
+const ok = orbits && !before.onboard && on.onboard && on.d < 12 && !off.onboard && Math.abs(off.d - before.d) < 1.5 && steered.order !== before.order;
 console.log(ok ? "OK" : "FAIL");
 done(ok ? 0 : 1);

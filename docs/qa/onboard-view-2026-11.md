@@ -17,9 +17,9 @@ crossing, on every boat.
 
 - The camera rides her. It heaves, rolls and pitches as she does, and looks along her bow, with
   her own deck in the bottom of the picture.
-- On a boat that carries a person (3.5 m and longer) the eye is at the helm, aft. On a small
-  unmanned boat (our kayak, the Randolph drone) it is a camera on her stern mast, looking forward
-  over her deck. The note on screen says which.
+- On a boat that carries a person the eye is at the helm, aft (a rower's seated eye on the ocean
+  rowing boat). On an unmanned boat (our kayak, the Randolph drone, the 7 m sail drone) it is a
+  camera on her stern mast, looking forward over her deck. The note on screen says which.
 - Drag to look around (up to 170 degrees each way, 50 up, 40 down). The mouse wheel widens or
   narrows the lens (40 to 80 degrees; it opens at 62).
 - The steering is unchanged: the arrow keys steer and set the power as in any other view, and the
@@ -55,9 +55,31 @@ not the Blender models).
 Pictures: `docs/qa/screens/onboard-kayak-cloud.png`, `docs/qa/screens/onboard-yacht-cloud.png`
 (blurry: the cloud has no graphics card).
 
-Unit tests: 671 pass (668 before, 3 new).
+Unit tests: 673 pass (668 before, 5 new).
 
 **Not checked yet:** how the eye sits on the Blender models on a real graphics card (the kayak's
 aerial is 25 cm behind the eye and should be out of the picture; a yacht's boom and sail fill the
 left of the frame on one tack, as they would for a person at the helm). To look at on the live
 site.
+
+## After an independent review (24 Nov)
+
+A fresh reviewer read the change. Fixed from its findings:
+
+- **On board, then the cinematic, then out of it: the drag was dead and the lens stuck wide.** The
+  cinematic saves the camera it finds and puts it back when it ends, and it found the deck's, with
+  the circling controls off. Now the view steps off board before the cinematic starts. The
+  play-through script checks it: after the cinematic a drag circles her again.
+- **Watching a voyage, on board, then "Look up at the sky"** gave a broken view. Looking up now
+  steps off board first.
+- **Finishing while on board** lost the turn towards the coast behind the results card. The finish
+  scene now steps off board before it composes its shot.
+- **Two fingers on a touch screen made the view judder.** One finger (or the mouse) turns the head;
+  a second is ignored.
+- **A trackpad slammed the lens to its limit.** The lens now changes with how far the wheel or pad
+  moved (a mouse notch is about 3 degrees).
+- **The 7 m sail drone is unmanned** but got a helm 2 m up. It now gets a mast camera like the
+  other unmanned boats, and the ocean rowing boat a seated eye at 1.3 m.
+
+Left alone: after a big change of course on board, stepping off puts the camera on the same compass
+side as before, not the same side of the boat. There is no pinch to change the lens on a touch screen.
