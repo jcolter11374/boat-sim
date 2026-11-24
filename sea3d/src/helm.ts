@@ -2131,6 +2131,13 @@ async function dockCut(): Promise<void> {
  *  the site (or with ?dock=0) there is no scene, and the results come up off Cabo da Roca as before. */
 async function landingScene(): Promise<void> {
   if (!land?.has("lisbon") || params.get("dock") === "0") return;
+  // Is the town on this copy of the site at all? Asked before anything is shown, so a site without it
+  // goes straight to the results as it always did, with no dark card promising Cascais.
+  const there = await fetch("./land/cascais.json", { method: "HEAD" })
+    .then((r) => r.ok && !(r.headers.get("content-type") ?? "").includes("text/html"))
+    .catch(() => false);
+  if (!there) return;
+  land.askTown("lisbon");
   const cut = $("landcut");
   cut.hidden = false;
   requestAnimationFrame(() => cut.classList.add("in"));
@@ -2138,7 +2145,7 @@ async function landingScene(): Promise<void> {
   landing = new Dock(LANDING_WAY, spec.cruiseSpeed, true);
   // Behind the words: the town is fetched and stood on its ground. No town within a few seconds: no scene.
   const t0 = performance.now();
-  while (!(land.shown.place === "lisbon" && land.shown.buildings > 0) && performance.now() - t0 < 8000) await new Promise((r) => setTimeout(r, 100));
+  while (!(land.shown.place === "lisbon" && land.shown.detail === "done") && performance.now() - t0 < 8000) await new Promise((r) => setTimeout(r, 100));
   const town = land.shown.place === "lisbon" && land.shown.buildings > 0;
   if (!town) landing = null;
   else await skip(Math.max(0, 2600 - (performance.now() - t0)));
@@ -2146,6 +2153,7 @@ async function landingScene(): Promise<void> {
   setTimeout(() => (cut.hidden = true), 700);
   if (!landing) return;
   landing.leave();
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) landing.sailed = landing.length; // no moving scene: she is alongside at once
   page.scene = "landing";
   page.landing = true;
   document.body.classList.add("arriving");
@@ -5385,7 +5393,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   }
   // Timed only once her shaders are built, never while the goal card's judge is timing, the tab is
   // hidden or the simulator's results are coming in.
-  const watchOn = qstat.source === "auto" && !qstat.stepped && qstat.level !== "low" && !judging && page.warmed && !document.hidden && !page.busy && !dock; // not on the harbour: the town is heavier than the sea she will sail
+  const watchOn = qstat.source === "auto" && !qstat.stepped && qstat.level !== "low" && !judging && page.warmed && !document.hidden && !page.busy && !dock && !landing; // not on the harbour: the town is heavier than the sea she will sail
   if (slowWatch.tick(t * 1000, watchOn)) {
     qstat.stepped = true;
     qstat.steppedBy = "later";
@@ -5432,7 +5440,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
   }
   poisReached();
   // At the dock and on the way out the picture is the harbour, whatever the simulator already holds.
-  const r = dock ? null : rep();
+  const r = dock || landing ? null : rep(); // in a harbour the wind, lean and rain of the open sea's last hour have no place
   if (dock) {
     dock.advance(dt);
     page.dock = dock.castOff ? "leaving" : "tied";

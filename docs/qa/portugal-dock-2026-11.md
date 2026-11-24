@@ -69,13 +69,27 @@ Timing, from `Dock` itself (the new unit test): at our kayak's 1.5 m/s she cover
 coming alongside behind the card.
 
 Without the town's files (any copy of the site built before `cascais*` is on the `land-data`
-release), `landingScene` waits up to 8 s behind the cut, finds no town and returns: the results come
-up off Cabo da Roca exactly as before. `?dock=0` also skips it.
+release), `landingScene` asks for `cascais.json` first, finds none and returns before anything is
+shown: the results come up off Cabo da Roca exactly as before (measured: 0.4 s, no dark card).
+`?dock=0` also skips it.
 
 Cloud pictures, software graphics at Low (jagged; the real thing is smoother):
 
 ![Coming in](screens/portugal-dock-2026-11-24/coming-in.png)
 ![Alongside](screens/portugal-dock-2026-11-24/alongside.png)
+
+## After an independent review (24 Nov)
+
+A second reader went through the change. Six findings; four fixed, two left and noted.
+
+| Finding | What was done |
+| --- | --- |
+| The automatic step down to Low was timing frames in the harbour (it is switched off at the Annapolis dock, because a town is heavier than the sea). | Switched off while she is at Cascais too. |
+| On a site without the town's files, every finish showed 8 s of dark card promising Cascais, then Cabo da Roca. | The scene asks whether `cascais.json` exists before showing anything; without it there is no card (0.4 s, measured). The wait also ends as soon as the land's detail has loaded, town or no town. |
+| The town loaded wherever the Lisbon place is used: "Watch from: Cascais", `voyage.html?place=lisbon`. 1.9 MB and 3,623 buildings for a whole watched voyage, with moored boats standing in the open sea's swell. | The Lisbon place's town is `townOnAsk`: it loads only when the landing asks for it (`NearbyLand.askTown`). Those pages are as they were. |
+| In the harbour the wind, lean, rain and spray were still the finish line's last hour: a yacht could arrive heeled in a gale over a 0.1 m chop. | While she is at Cascais the frame takes nothing from the finished voyage, as at the Annapolis dock: upright, no rain, the harbour's chop. The light is the launch day's noon. |
+| A sideways drag does nothing during the scene and behind the results (the view holds its compass bearing), and a phone's step back is not applied. | Left: the Annapolis dock behaves the same way. To look at on a real phone. |
+| The banner said "an ocean away from Annapolis" for any start, and the scene ignored the reduced-motion setting. | The banner now says "Coming alongside in the marina. The crossing is done." With reduced motion she is alongside at once. |
 
 ## Not measured, and to check by eye on a real graphics card
 

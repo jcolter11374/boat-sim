@@ -17,6 +17,8 @@ export interface Place {
   land?: string;
   /** A town's buildings and piers (<town>.json and <town>_height.bin) to stand on the land. */
   town?: string;
+  /** The town is heavy and only wanted for one scene: it loads when asked for (NearbyLand.askTown), not whenever the boat is near. */
+  townOnAsk?: boolean;
   /** The town's look: Annapolis's brick and clapboard (the default), or a Portuguese town's whitewash and tiled roofs. */
   walls?: "brick" | "whitewash";
   /** "plain" for a shore without Pico's black basalt band (bulkheads, lawns, marsh). */
@@ -73,6 +75,7 @@ export const PLACES: Record<string, Place> = {
     cliffs: true, // Cabo da Roca's 140 m face, in the finish scene
     town: "cascais", // the marina and old town, where a crossing ends at a dock (helm/dock.ts)
     walls: "whitewash",
+    townOnAsk: true, // a watched voyage or the place page off Cascais stays as light as it was
   },
   annapolis: {
     key: "annapolis",

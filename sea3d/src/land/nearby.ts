@@ -103,7 +103,13 @@ export class NearbyLand {
   /** The place's land, moved each frame so it stays put as the boat sails. */
   private readonly placeRoot = new THREE.Group();
   /** What's loaded (for tests and the page): the place's key, its distance (km), the town and trees. */
-  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0, seamarks: 0, bridge: false };
+  readonly shown = { place: "", km: Infinity, buildings: 0, trees: 0, squares: 0, landmarks: 0, seamarks: 0, bridge: false, detail: "no" as "no" | "loading" | "done" };
+  /** Places whose town has been asked for (a place with `townOnAsk` keeps its town back until then). */
+  private readonly asked = new Set<string>();
+  /** Ask for a place's town (by the place's key): it loads once the boat is close. */
+  askTown(key: string): void {
+    this.asked.add(key);
+  }
   /** The Bay's coast squares (squares.ts), around and between the places. */
   private squares: CoastSquares | null = null;
   /** Lighthouses and the like at their true spots (landmarks.ts). */
@@ -199,7 +205,8 @@ export class NearbyLand {
     const { place } = l.tile;
     const o = placeOffset(place, lat, lon, (l.tile.lat0 + l.tile.lat1) / 2);
     this.placeRoot.position.set(o.x, 0, o.z);
-    if (l.detail === "no" && Math.hypot(o.x, o.z) < DETAIL_KM * 1000) void this.loadDetail(l);
+    if (l.detail === "no" && Math.hypot(o.x, o.z) < DETAIL_KM * 1000 && (!place.townOnAsk || this.asked.has(place.key))) void this.loadDetail(l);
+    this.shown.detail = l.detail;
     l.island.update(t, a.haze, a.light, a.hs, a.storm);
     l.town?.update(t, a.sunEl, a.hs, a.wu, a.wv);
     l.trees?.update(t, Math.hypot(a.wu, a.wv), a.haze, a.storm);
@@ -257,7 +264,7 @@ export class NearbyLand {
       release(g);
     }
     this.now = null;
-    Object.assign(this.shown, { place: "", km: Infinity, buildings: 0, trees: 0 });  // squares and landmarks: kept, they're counted each frame
+    Object.assign(this.shown, { place: "", km: Infinity, buildings: 0, trees: 0, detail: "no" });  // squares and landmarks: kept, they're counted each frame
   }
 
   dispose(): void {
