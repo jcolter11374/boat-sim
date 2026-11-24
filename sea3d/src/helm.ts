@@ -2131,7 +2131,7 @@ async function dockCut(): Promise<void> {
 /** After the finish scene: the view moves on to Cascais and she comes alongside in the marina, the old town
  *  behind her; the results follow, with her still in view behind them. Nothing here is timed or simulated: the
  *  clock stopped at the finish line, 330 km out, and the words say so. Without Cascais's town on this copy of
- *  the site (or with ?dock=0) there is no scene, and the results come up off Cabo da Roca as before. */
+ *  the site (or with ?dock=0) there is no scene (this arrival is on by default; only the harbour at the start needs ?dock=1), and the results come up off Cabo da Roca as before. */
 async function landingScene(): Promise<void> {
   if (!land?.has("lisbon") || params.get("dock") === "0") return;
   // Is the town on this copy of the site at all? Asked before anything is shown, so a site without it
