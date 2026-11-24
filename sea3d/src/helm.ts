@@ -796,9 +796,10 @@ async function setOrder(h: Heading, p = power): Promise<void> {
   showOrder();
   if (!page.ready) return;
   try {
-    await game.order(h, p, sailOrder, engineOrder);
+    const r = await game.order(h, p, sailOrder, engineOrder);
     page.status = game.status;
     present();
+    if (r.azores_dropped) note("An island is now between her and the Azores route, so the autopilot is going straight for the finish.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.info);
   } catch (e) {
     fail(e);
   }
@@ -3085,7 +3086,7 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
   // stars are its own). And not on a first crossing (John, 24 Nov 2026: "Offer it, not on the first crossing"):
   // the default launch day is one where going by the islands loses the boat, so the offer waits until this
   // browser has a finished crossing to its name (helm/personalBest.ts).
-  if (!m && finishesOffLisbon() && finishedACrossing() && azoresDue(st.boat.lon, asked.azores, !!st.via_azores) && h - lastCallH >= MIN_CALL_GAP_H) {
+  if (!m && finishesOffLisbon() && azoresDue(st.boat.lon, asked.azores, !!st.via_azores) && h - lastCallH >= MIN_CALL_GAP_H && finishedACrossing()) {
     asked.azores = true;
     return {
       kind: "azores",
@@ -4377,8 +4378,9 @@ async function begin(): Promise<void> {
       const o = v.orders.at(-1);
       // "azores" is an order to the autopilot (its route by the islands), not a heading to show.
       if (o) [order, power] = [(o.heading as string) === "azores" ? "auto" : o.heading, o.power];
-      if (v.status.via_azores) asked.azores = true;
       else order = mode === "base" ? "finish" : "auto";
+      // Once taken, the Azores call is not made again, even if she has steered herself since.
+      if (v.orders.some((x) => (x.heading as string) === "azores")) asked.azores = true;
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
       if (RESUMED) {

@@ -866,12 +866,18 @@ def test_the_azores_order_replaces_routes_still_in_the_mailbox_and_checks_the_wa
     assert not g.status()["via_azores"]  # not while she steers herself
     here = (v.state.lat, v.state.lon)
     v.state.lat, v.state.lon = 39.2, -29.6
-    g.order("auto", 0.0)
+    assert g.order("auto", 0.0).get("azores_dropped") is True  # and she is told
     assert [(w.lat, w.lon) for w in v.mission.waypoints] == [FINISH] and not g.via_azores
     # From south-west of the islands the same hand-back keeps the mark off Pico.
+    g.order("finish", 0.5)
     g.via_azores = True
     v.state.lat, v.state.lon = 38.2, -31.0
-    g.order("auto", 0.0)
+    assert "azores_dropped" not in g.order("auto", 0.0)
     assert [(w.lat, w.lon) for w in v.mission.waypoints] == [AZORES_MARKS[1], FINISH]
     assert g.status()["via_azores"]
+    # Already on the autopilot (the end of a spell at the wheel): "auto" again leaves
+    # the route and base's corrections alone.
+    version = v.mission.version
+    g.order("auto", 0.0)
+    assert v.mission.version == version
     v.state.lat, v.state.lon = here

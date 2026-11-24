@@ -20,6 +20,8 @@ export interface Report {
 export interface OrderResult {
   accepted: boolean;
   /** "azores" refused: she is too far east to turn for the islands safely. */
+  /** An "auto" order after steering herself found an island between her and the Azores marks: the detour is off. */
+  azores_dropped?: boolean;
   too_far_east?: boolean;
   /** Refused because orders can't reach the boat any more: "main_box" or "comms_silent". */
   no_link?: string;

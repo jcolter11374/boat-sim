@@ -125,6 +125,19 @@ above is the measurement run again after the fixes.
 
 Known and left: a player who says no, saves, and loads again west of 36W is asked once more.
 
+### Second review (24 Nov, of the fixes above and the first-crossing rule)
+
+| Finding | Fix |
+| --- | --- |
+| Must fix: the load fix above had split an `if`/`else`, so every loaded voyage not going by the Azores would have shown and re-sent "Autopilot" (or "aim at the finish" from base) whatever its last order was. Caught before merge; never on the live site | The line is moved after the `else`; `asked.azores` is now set from the saved orders, so the call is not made twice after a spell of steering yourself |
+| Every "auto" while going by the Azores re-made the route, also at the end of each spell at the wheel, throwing away base's weather corrections; and it could drop the detour without a word | The route is re-made only on the order itself or when coming back from steering herself. If an island is then in the way the order result says `azores_dropped` and the player gets a note |
+| The first-crossing check read the browser's storage on every tick | It is now the last test, read only when the call is otherwise due |
+
+Left as they are: with browser storage switched off the finished crossing is forgotten on reload, so
+that player is not offered the call; and the status still says "by the Azores" after Pico, to the finish.
+The measurement gives the order once on the autopilot, which these changes do not touch, so the
+numbers stand (simulator tests 56 pass; unit tests 690 pass).
+
 ## Not done, not measured
 
 - Nothing on a real graphics card. Pico's land is the same that `voyage.html?place=pico` has always

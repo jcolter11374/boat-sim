@@ -744,17 +744,24 @@ class Game:
         prop = self.design.propulsion
         return float(prop["cruise_drive_w"]) / float(prop["max_drive_w"])
 
-    def _order_auto(self, t: datetime, sails: str | None, engine: bool | None) -> dict:
+    def _order_auto(
+        self, t: datetime, sails: str | None, engine: bool | None, reroute: bool = False
+    ) -> dict:
         """Hand the boat back to the autopilot (hands on only): the same
         steering, power, safe mode and base route corrections as the ghost."""
         if self.mode != "hands_on":
             raise ValueError("auto is a hands-on order; from base, send the route instead")
         if sails is not None or engine is not None:
             raise ValueError("on auto the autopilot sets the sails and engine")
-        if self.via_azores:
-            # Back from steering herself: the islands stay on the route only where
-            # the way to the next mark is still open water (_azores_route).
+        dropped = False
+        if self.via_azores and (reroute or not self.on_auto):
+            # A new order to go by the islands, or back from steering herself: the
+            # islands stay on the route only where the way to the next mark is still
+            # open water (_azores_route). An "auto" while she is already on the
+            # autopilot (the end of a spell at the wheel) leaves the route, and
+            # base's corrections to it, alone.
             self._route_auto(self._azores_route())
+            dropped = not self.via_azores
         self._trim.inner, self.mine.c.base = self._auto
         o = {
             "t": _iso(t),
@@ -763,6 +770,8 @@ class Game:
             "power": self._cruise(),
             "accepted": True,
         }
+        if dropped:
+            o["azores_dropped"] = True  # an island is in the way now: straight for the finish
         self.orders.append(o)
         return o
 
@@ -774,7 +783,7 @@ class Game:
         if sails is not None or engine is not None:  # before anything is changed
             raise ValueError("on auto the autopilot sets the sails and engine")
         self.via_azores = True
-        o = self._order_auto(t, sails, engine)  # sets the route (_azores_route)
+        o = self._order_auto(t, sails, engine, reroute=True)  # sets the route (_azores_route)
         o["heading"] = "azores"
         return o
 
