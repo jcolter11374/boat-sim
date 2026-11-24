@@ -141,14 +141,42 @@ const BODY_LITE = /* glsl */ `
 }
 `;
 
+/**
+ * The uniforms each patched material's shader reads. A boat built again from the same loaded model
+ * shares its materials with the one before, and a material is patched only once, so its shader
+ * keeps the first boat's uniforms: the new boat must drive those too. Without this the hull kept
+ * the sea plane from the moment of the rebuild, and on Low our kayak went dark as if under water
+ * whenever she rode below it (the sea demo after the Randolph model loaded; live check, 18-20 Nov).
+ */
+const WATER_UNIFORMS = new WeakMap<THREE.Material, { u: WaterUniforms; lite: boolean }>();
+type WaterUniforms = {
+  uWetH: { value: number };
+  uWetK: { value: number };
+  uWetFoam: { value: number };
+  uWetLight: { value: number };
+  uSeaRough: { value: number };
+  uWaterTint: { value: THREE.Vector3 };
+  uSeaPlane: { value: THREE.Vector4 };
+  uSeaPlaneY: { value: number };
+};
+
+/**
+ * A copy of a material that carries its shader hook too (the player's paint, paintApply.ts) reads the
+ * same uniforms as the one it was copied from: say so, so a boat built on the copy drives them.
+ */
+export function sameWater(copy: THREE.Material, from: THREE.Material): void {
+  const w = WATER_UNIFORMS.get(from);
+  if (w) WATER_UNIFORMS.set(copy, w);
+}
+
 const TINT = new THREE.Color(0x0b3a52); // GUESS: about the sea's own colour looking down into it
 
 /**
  * Teach every lit material under `root` where the water is. Returns the uniforms to
  * drive each frame. Materials are patched once (a flag stops a second patch).
  */
-export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySet<THREE.Material>): { update(look: InWaterLook): void } {
-  const u = {
+export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySet<THREE.Material>): { update(look: InWaterLook): void; needsPlane: boolean } {
+  const u: WaterUniforms = {
     uWetH: { value: 0.05 },
     uWetK: { value: 1 },
     uWetFoam: { value: 0.5 },
@@ -158,6 +186,9 @@ export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySe
     uSeaPlane: { value: new THREE.Vector4() },
     uSeaPlaneY: { value: 0 },
   };
+  // A material first patched on Low keeps the Low shader, which reads the sea plane, at any quality.
+  let needsPlane = lite;
+  const all = new Set<WaterUniforms>([u]); // ours, and those of materials an earlier boat patched
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -166,8 +197,17 @@ export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySe
     for (const m of mats) {
       const std = m as THREE.MeshStandardMaterial;
       if (!std || !(std.isMeshStandardMaterial || (m as THREE.MeshLambertMaterial).isMeshLambertMaterial || (m as THREE.MeshPhongMaterial).isMeshPhongMaterial)) continue;
-      if (m.userData.inWater || (only && !only.has(m))) continue;
+      if (only && !only.has(m)) continue;
+      if (m.userData.inWater) {
+        const theirs = WATER_UNIFORMS.get(m);
+        if (theirs) {
+          all.add(theirs.u);
+          needsPlane ||= theirs.lite;
+        }
+        continue;
+      }
       m.userData.inWater = true;
+      WATER_UNIFORMS.set(m, { u, lite });
       const prev = m.onBeforeCompile.bind(m);
       m.onBeforeCompile = (sh, r) => {
         prev(sh, r);
@@ -194,16 +234,19 @@ export function putInWater(root: THREE.Object3D, lite = false, only?: ReadonlySe
     }
   });
   return {
+    needsPlane,
     update(look: InWaterLook): void {
-      u.uWetH.value = look.wetH;
-      u.uWetFoam.value = look.foam;
-      u.uWetLight.value = look.light;
-      u.uSeaRough.value = look.rough ?? 0;
-      u.uWetK.value = look.strength ?? 1;
       const pl = look.plane;
-      if (pl) {
-        u.uSeaPlane.value.set(pl.x, pl.z, pl.gx, pl.gz);
-        u.uSeaPlaneY.value = pl.y;
+      for (const w of all) {
+        w.uWetH.value = look.wetH;
+        w.uWetFoam.value = look.foam;
+        w.uWetLight.value = look.light;
+        w.uSeaRough.value = look.rough ?? 0;
+        w.uWetK.value = look.strength ?? 1;
+        if (pl) {
+          w.uSeaPlane.value.set(pl.x, pl.z, pl.gx, pl.gz);
+          w.uSeaPlaneY.value = pl.y;
+        }
       }
     },
   };

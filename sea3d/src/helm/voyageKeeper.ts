@@ -112,7 +112,7 @@ export class VoyageKeeper {
     const st = this.state();
     if (!st || !this.last) return false;
     if (st.over) return this.end();
-    const v = packVoyage({ ...this.last, left: st.seen, rate: st.rate, order: st.order }, new Date());
+    const v = packVoyage({ ...this.last, left: st.seen, rate: st.rate, order: st.order, back: st.back }, new Date());
     if (!v) return false;
     saveVoyage(v, this.storage);
     this.last = v;

@@ -105,7 +105,7 @@ export function standingText(s: Standing): { head: string; detail: string } {
     const o = s.build.odds!;
     const yrs = s.years ? ` (${s.years[0]} to ${s.years[1]})` : "";
     return {
-      head: `Not on the leaderboard yet. The simulator gives it ${pct(o.odds)} over ${o.voyages} launch days${yrs}.`,
+      head: `Not one of the boats the leaderboard ranks. The simulator gives it ${pct(o.odds)} over ${o.voyages} launch days${yrs}.`,
       detail: `Likely range ${pct(o.low95)} to ${pct(o.high95)}. One voyage is one roll of the dice; these odds are the better guide.`,
     };
   }
