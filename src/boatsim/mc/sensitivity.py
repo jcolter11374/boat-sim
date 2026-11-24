@@ -181,7 +181,13 @@ VARIANTS: dict[str, Variant] = {
     "randolph_way": Variant(
         "finish rule",
         "Randolph team's scoring: Ocean City to SW Ireland, any landfall in Europe counts",
-        route=((38.32, -74.97), (51.4, -10.0)),
+        # For configs/randolph_rev_c.yaml only: the route starts at Rev C's drop off Ocean
+        # City and ends at its target. Rev E1 drops off Hatteras for Cornwall and needs
+        # its own route (their waypoints are in docs/qa/randolph-rescore-2026-11.md).
+        # Their 48.0% run (#50, 21 Nov 2026): one waypoint south of the Grand Banks, then
+        # the target off Mizen Head. A straight line from the drop crosses Nova Scotia
+        # and Newfoundland (run 44881885941: 29 of 46 voyages aground).
+        route=((38.32, -74.97), (42.0, -48.0), (51.35, -9.70)),
         finish="europe",
         until=(11, 30),
     ),

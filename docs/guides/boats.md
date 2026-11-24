@@ -11,7 +11,7 @@ One YAML file per boat, loaded by `boatsim.config.load_design`:
 | File | Boat |
 | --- | --- |
 | `v4_kayak.yaml` | Our kayak: the 3.05 m solar-electric kayak drone this whole project is about |
-| `randolph_rev_b.yaml`, `randolph_rev_c.yaml` | Our model of the Randolph team's wing-sail drone (from their published MIT files) |
+| `randolph_rev_b.yaml`, `randolph_rev_c.yaml`, `randolph_rev_e1.yaml` | Our model of the Randolph team's wing-sail drone (from their published MIT files) |
 | `stock_*.yaml` | Stock boats from real published specs: cruiser, Pearson 31-2, 14 ft dinghy (Sunfish), 16 ft beach cat, sail drone, ocean rowing boat |
 | `joke_*.yaml` | The joke fleet (bathtub, canoe, flamingo, pedalo, robot kayak, wheelie bin), with honest physics |
 | `polars/*.json` | Speed tables for the sailing yachts, written by the VPP (below) |

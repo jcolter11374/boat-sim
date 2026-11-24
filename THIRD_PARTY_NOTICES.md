@@ -19,7 +19,9 @@ rules) follows their `simulator/drone_sim/vpp.py` and `autopilot.py`, and
 their `simulator/drone_sim/design.py`, `failures.py`, `build-files/source/design.py`
 and docs. `configs/randolph_rev_c.yaml` was written by the Randolph team in our
 format (their `designs/boat-sim/randolph_rev_c.yaml`, 10 Nov 2026, shared on #50) and is
-kept as they wrote it; the Rev C righting-arm curve and point masses in
+kept as they wrote it (apart from our model note and `tactician: false`), as is
+`configs/randolph_rev_e1.yaml` (their `designs/boat-sim/randolph_rev_e1.yaml`, 21 Nov 2026,
+shared on #50); the Rev C righting-arm curve and point masses in
 `sea3d/src/motion.ts` come from their `docs/data/revC_gz_curve.csv` and
 `simulator/drone_sim/design.py`. The Boatyard's Randolph Rev B and Rev C
 starting designs (`sea3d/src/yard/bases.ts`) take their parts, prices and weights
