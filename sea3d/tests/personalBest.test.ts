@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PERSONAL_BEST_KEY, bestId, bestWords, loadPersonalBest, savePersonalBest, tidyBests, toBeatWords } from "../src/helm/personalBest.ts";
+import { PERSONAL_BEST_KEY, bestId, finishedACrossing, bestWords, loadPersonalBest, savePersonalBest, tidyBests, toBeatWords } from "../src/helm/personalBest.ts";
 
 const box = () => {
   const m = new Map<string, string>();
@@ -91,4 +91,13 @@ test("with storage off, this page still remembers", () => {
   const s = box();
   savePersonalBest(DAY, { finished: true, days: 70 }, {}, s);
   assert.equal(loadPersonalBest({ ...DAY, launch: "2021-05-05" }, s)?.days, 66);
+});
+
+test("a finished crossing is remembered whatever its launch day, and a lost one is not one", () => {
+  const s = box();
+  assert.equal(finishedACrossing(s), false);
+  savePersonalBest(DAY, { finished: false, days: 41.8 }, {}, s);
+  assert.equal(finishedACrossing(s), false, "lost at sea is not a finish");
+  savePersonalBest({ ...DAY, launch: "2020-06-01" }, { finished: true, days: 54.4 }, {}, s);
+  assert.equal(finishedACrossing(s), true);
 });

@@ -102,6 +102,14 @@ export function loadPersonalBest(c: CrossingId, s: StorageLike | null = store())
   return id ? loadAll(s)[id] ?? null : null;
 }
 
+/**
+ * Whether this browser has a finished crossing of the ocean to its name, from any launch day. The
+ * riskier offers wait for it (the Azores call, helm/azores.ts). Never throws.
+ */
+export function finishedACrossing(s: StorageLike | null = store()): boolean {
+  return Object.keys(loadAll(s)).length > 0;
+}
+
 export interface BestResult {
   /** The best before this crossing, or null if there was none. */
   before: PersonalBest | null;

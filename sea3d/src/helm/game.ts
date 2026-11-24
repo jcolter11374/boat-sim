@@ -19,6 +19,10 @@ export interface Report {
 /** What happened to an order: in base mode it can be refused (one a day) or be on its way. */
 export interface OrderResult {
   accepted: boolean;
+  /** "azores" refused: she is too far east to turn for the islands safely. */
+  /** An "auto" order after steering herself found an island between her and the Azores marks: the detour is off. */
+  azores_dropped?: boolean;
+  too_far_east?: boolean;
   /** Refused because orders can't reach the boat any more: "main_box" or "comms_silent". */
   no_link?: string;
   next_allowed?: string;
@@ -43,6 +47,8 @@ export interface Status {
   over: boolean;
   /** Why orders can no longer reach the boat ("main_box", "comms_silent"), or null/absent while they can. */
   no_link?: string | null;
+  /** The autopilot's route goes by the Azores (the "azores" order was given). */
+  via_azores?: boolean;
   boat: BoatNow;
   ghost: BoatNow;
   lead_km: number;
@@ -330,7 +336,7 @@ export class HelmGame {
   /** sails and engine: sailboats only; null or left out lets the boat decide.
    * trim: a "Take the wheel" spell's share of the best speed (sailboats only): the
    * simulator sails at it for the next watch instead of the autopilot's own trim. */
-  async order(heading: Heading, power: number, sails?: string | null, engine?: boolean | null, trim?: number | null): Promise<OrderResult> {
+  async order(heading: Heading | "azores", power: number, sails?: string | null, engine?: boolean | null, trim?: number | null): Promise<OrderResult> {
     const extra: Record<string, unknown> = sails != null || engine != null ? { sails: sails ?? null, engine: engine ?? null } : {};
     if (trim != null) extra.trim = trim;
     const v = await this.ask<{ order: OrderResult; status: Status; code?: string }>({ type: "order", heading, power, ...extra });

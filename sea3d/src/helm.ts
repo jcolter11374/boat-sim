@@ -58,13 +58,14 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { AZORES_OFF_PICO, azoresDue, azoresNote, azoresSmallPrint, azoresText, azoresYes } from "./helm/azores";
 import { DOCK_LOOK, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, LANDING_LOOK, LANDING_S, LANDING_WAY, leavesFromDock } from "./helm/dock";
 import { LOOK, boardWords, dragLook, eyeFor, lensAfterWheel } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
 import { MilestoneWatch, crossingMilestones, fraction, milestoneNote, nextWords } from "./helm/milestones";
-import { bestWords, loadPersonalBest, savePersonalBest, toBeatWords } from "./helm/personalBest";
+import { bestWords, finishedACrossing, loadPersonalBest, savePersonalBest, toBeatWords } from "./helm/personalBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
 import { raceGone, raceHeadline, raceLabel, racePick, raceWorker, seasonCell, seasonWords, swapSides, type RaceCard, type RaceInfo, type SeasonRun, type SeasonVerdict } from "./helm/raceSource";
@@ -795,9 +796,10 @@ async function setOrder(h: Heading, p = power): Promise<void> {
   showOrder();
   if (!page.ready) return;
   try {
-    await game.order(h, p, sailOrder, engineOrder);
+    const r = await game.order(h, p, sailOrder, engineOrder);
     page.status = game.status;
     present();
+    if (r.azores_dropped) note("An island is now between her and the Azores route, so the autopilot is going straight for the finish.", `Day ${(page.status?.day ?? 0).toFixed(1)}`, TONE_COLOUR.info);
   } catch (e) {
     fail(e);
   }
@@ -2847,7 +2849,7 @@ type Decision = { kind: string; text: string; choices: Choice[]; look?: number; 
 const compassOf = (east: number, north: number): number => ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
 /** Hours after a storm call with no "wind is getting up" stop. */
 const STORM_QUIET_H = 36;
-const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false };
+const asked = { gale: -Infinity, night: -Infinity, stream: false, mission: false, azores: false };
 /** The Stream call, to say what it bought three days later (Leo): when, what, and the lead then. */
 /** since: how the payoff opens when later calls are folded in; after: hours until it is told. */
 /** now: the whole opening when told alone, before "she's now ... the ghost" (the push's words, Elena). */
@@ -3079,7 +3081,50 @@ function decisionDue(st: Status, fc: ForecastRow[] | null): Decision | null {
       ],
     };
   }
+  // Going by the Azores (helm/azores.ts): once a crossing, in mid-ocean, on the usual finish only. A real
+  // order with a measured price; the finish itself is untouched. Not in a challenge (its start, goal and
+  // stars are its own). And not on a first crossing (John, 24 Nov 2026: "Offer it, not on the first crossing"):
+  // the default launch day is one where going by the islands loses the boat, so the offer waits until this
+  // browser has a finished crossing to its name (helm/personalBest.ts).
+  if (!m && finishesOffLisbon() && azoresDue(st.boat.lon, asked.azores, !!st.via_azores) && h - lastCallH >= MIN_CALL_GAP_H && finishedACrossing()) {
+    asked.azores = true;
+    return {
+      kind: "azores",
+      look: bearing([st.boat.lat, st.boat.lon], AZORES_OFF_PICO),
+      text: azoresText(kmTo([st.boat.lat, st.boat.lon], AZORES_OFF_PICO)),
+      choices: [
+        { label: azoresYes(), gist: "Going by the Azores", title: azoresSmallPrint(), act: () => goByAzores(st) },
+        { label: order === "auto" ? "Stay on the autopilot's route (same as the ghost)" : "Carry on as I am", title: "No land until Portugal, and no days lost", act: () => undefined, esc: "keep" },
+      ],
+    };
+  }
   return null;
+}
+
+/** "Go by the Azores": the autopilot takes her, with the islands on its route (helm/azores.ts). */
+async function goByAzores(st: Status): Promise<void> {
+  try {
+    const r = await game.order("azores", power);
+    page.status = game.status;
+    if (!r.accepted) {
+      note(r.too_far_east ? "Too far east to turn for the Azores now: she carries on." : "No link: she can't hear you.", `Day ${st.day.toFixed(1)}`, TONE_COLOUR.warn);
+      return;
+    }
+    order = "auto"; // the simulator has her on the autopilot, its route now by the islands
+    orderSeq++;
+    // Back on the autopilot after a push: the panel's power goes back to what it was, as setOrder does.
+    if (powerBeforePush !== null) {
+      power = powerAfter("auto", power, powerBeforePush);
+      powerBeforePush = null;
+      $<HTMLInputElement>("power").value = String(Math.round(power * 100));
+    }
+    showOrder();
+    present();
+    const pace = st.boat.stw > 0.2 ? st.boat.stw * 86.4 : 75; // km a day
+    note(azoresNote(Math.max(0, kmTo([st.boat.lat, st.boat.lon], AZORES_OFF_PICO) - 60) / pace), `Day ${st.day.toFixed(1)}`, TONE_COLOUR.info);
+  } catch (e) {
+    fail(e);
+  }
 }
 
 let decisionSeq = 0;
@@ -4331,8 +4376,11 @@ async function begin(): Promise<void> {
       page.status = v.status;
       mode = v.status.mode ?? "hands_on";
       const o = v.orders.at(-1);
-      if (o) [order, power] = [o.heading, o.power];
+      // "azores" is an order to the autopilot (its route by the islands), not a heading to show.
+      if (o) [order, power] = [(o.heading as string) === "azores" ? "auto" : o.heading, o.power];
       else order = mode === "base" ? "finish" : "auto";
+      // Once taken, the Azores call is not made again, even if she has steered herself since.
+      if (v.orders.some((x) => (x.heading as string) === "azores")) asked.azores = true;
       sailOrder = v.status.order.sails ?? null;
       engineOrder = v.status.order.engine ?? null;
       if (RESUMED) {

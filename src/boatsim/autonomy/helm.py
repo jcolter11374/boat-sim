@@ -48,6 +48,30 @@ from boatsim.vessel.keelboat import DOWN
 
 HEADING_MODES = ("finish", "route")
 
+# Going by the Azores (John, 24 Nov 2026: "Azores and a dock in Portugal"): a way
+# to the finish that passes in sight of land. Two marks, sailed in order from the
+# west, then the finish as ever (the finish rule is untouched):
+#  - 38.30N 32.50W, in open water 120 km south of Flores, so the turn in towards
+#    the islands is made well clear of Flores and Corvo;
+#  - 38.10N 28.35W, about 30 km south of Pico's south shore, with the mountain
+#    (2,351 m) 41 km to the north: outside base's 20 km land margin
+#    (basestation/replan.py), so base will still route her to it. From there the
+#    straight line to the finish comes within about 22 km of land (measured on the
+#    land mask), just outside that margin.
+# Hands on, the order hands her to the autopilot with these marks as its planned
+# route (base re-plans round weather and land as ever); from base, they are the
+# uplinked waypoints.
+# The order is only taken west of AZORES_TAKEN_WEST_OF: from further east the
+# straight line to the second mark can cross Faial or Pico.
+AZORES_MARKS = ((38.30, -32.50), (38.10, -28.35))
+AZORES_TAKEN_WEST_OF = -33.0
+
+
+def azores_marks_ahead(lon: float) -> list[tuple[float, float]]:
+    """The Azores marks still to be passed by a boat at this longitude (she has
+    passed a mark once she is east of it), nearest first."""
+    return [m for m in AZORES_MARKS if lon < m[1]]
+
 
 def sail_orders_for(vessel) -> tuple[tuple[str, ...], bool]:
     """What a player may order on this boat: its own sail plans (from its polar,
@@ -152,6 +176,7 @@ class HelmAutopilot:
         elif self.heading == "finish":
             heading = bearing_deg(sensors.lat, sensors.lon, *self.finish)
             mark = self.finish
+
         else:
             heading, mark = self.heading, None
         tacking = False
