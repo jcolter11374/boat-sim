@@ -60,7 +60,13 @@ import zlib
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from boatsim.autonomy.helm import HelmAutopilot, OrderMission, sail_orders_for
+from boatsim.autonomy.helm import (
+    AZORES_TAKEN_WEST_OF,
+    HelmAutopilot,
+    OrderMission,
+    azores_marks_ahead,
+    sail_orders_for,
+)
 from boatsim.autonomy.policy import GAME_POLICY, ODDS_POLICY
 from boatsim.autonomy.policy import policy as policy_for
 from boatsim.autonomy.sailing import tactician_for
@@ -77,7 +83,7 @@ from boatsim.runner.simulate import (
 from boatsim.sandbox import catalog
 from boatsim.sandbox.endings import ending
 from boatsim.sandbox.run import MAX_DAYS, launches
-from boatsim.types import EventKind, Message, Outcome, Waypoint
+from boatsim.types import EventKind, Message, Mission, Outcome, Waypoint
 
 BREAKDOWNS = {EventKind.PART_FAILED, EventKind.CAPSIZE, EventKind.SHIP_STRIKE}
 DRAW_DAYS = 1.0  # a margin under this is "a draw, within the weather's luck" (docs/sandbox.md)
@@ -422,6 +428,7 @@ class Game:
         self.close_armed = self._land_km() > LAND_CLOSE_KM
         self.last_close = False
         self._events_seen = 0  # mine's log events already looked at (_step)
+        self.via_azores = False  # the autopilot's route goes by the Azores (order "azores")
         self.silence_warned: set[str] = set()  # "row" and/or "total": warned already
         self.last_silence: str | None = None
         self._route = default_mission(self.drop).waypoints
@@ -436,7 +443,7 @@ class Game:
         engine: bool | None = None,
         trim: float | None = None,
     ) -> dict:
-        """heading: degrees, "finish", "route" or "auto"; power: 0 to 1 of full
+        """heading: degrees, "finish", "route", "azores" or "auto"; power: 0 to 1 of full
         drive power. "auto" (hands on only, where every game starts) hands the
         boat back to the ghost's own autopilot, power and all, so with no other
         orders both boats sail the same voyage; power is then ignored.
@@ -472,9 +479,22 @@ class Game:
             }
         if heading == AUTO:
             return self._set_trim(self._order_auto(t, sails, engine), share, t)
+        if heading == "azores" and v.state.lon >= AZORES_TAKEN_WEST_OF:
+            # Too far east: the straight line to the mark off Pico could cross an island.
+            return {
+                "t": _iso(t),
+                "min": round((t - self.start).total_seconds() / 60),
+                "heading": heading,
+                "power": power,
+                "accepted": False,
+                "too_far_east": True,
+            }
+        if heading == "azores" and self.mode == "hands_on":
+            return self._set_trim(self._order_azores(t, sails, engine), share, t)
         check = HelmAutopilot(self.finish, sail_plans=self.sail_plans, has_engine=self.has_engine)
-        check.set_order(heading, power, sails, engine)  # same validation in both modes
-        heading, power = check.heading, check.power
+        # same validation in both modes; from base "azores" is a route like any other
+        check.set_order("route" if heading == "azores" else heading, power, sails, engine)
+        heading, power = ("azores" if heading == "azores" else check.heading), check.power
         o = {
             "t": _iso(t),
             "min": round((t - self.start).total_seconds() / 60),
@@ -742,6 +762,23 @@ class Game:
         self.orders.append(o)
         return o
 
+    def _order_azores(self, t: datetime, sails: str | None, engine: bool | None) -> dict:
+        """Go by the Azores (hands on): the autopilot takes her, as on "auto",
+        with the Azores marks ahead of her as its planned route, then the finish.
+        Base re-plans round weather and land along that route as it does along
+        the straight one. The route stays for the rest of the voyage."""
+        v = self.mine
+        wps = [Waypoint(*m) for m in (*azores_marks_ahead(v.state.lon), self.finish)]
+        base = self._auto[1]
+        if hasattr(base, "route"):
+            base.route = list(wps)
+            base._current = None  # its last correction was for the straight route
+        v.mission = Mission(waypoints=list(wps), version=v.mission.version + 1)
+        o = self._order_auto(t, sails, engine)
+        o["heading"] = "azores"
+        self.via_azores = True
+        return o
+
     def _send(
         self, heading: float | str, power: float, sails: str | None, engine: bool | None
     ) -> dict:
@@ -756,6 +793,8 @@ class Game:
             wps = list(ahead_of(self._route, lon))
         elif heading == "finish":
             wps = [Waypoint(*self.finish)]
+        elif heading == "azores":
+            wps = [Waypoint(*m) for m in (*azores_marks_ahead(lon), self.finish)]
         else:
             wps = [Waypoint(*destination(lat, lon, heading, COMPASS_LEG_M))]
         m = OrderMission(wps, power=power, sails=sails, engine=engine)
