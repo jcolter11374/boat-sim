@@ -51,7 +51,20 @@ hundred bytes of text in the helm page's own script.
 - `sea3d/tests/guide.test.ts`: the newcomer rule, the words, and that the title's early copy in
   `index.html` has the same rule and words.
 - `sea3d/tools/qa/first-crossing.mjs [picture folder]`: plays the first visit on a desktop and a
-  phone window and a returning player's start. 34 checks; all pass on this branch (cloud sandbox, software graphics).
+  phone window and a returning player's start, and a reload at sea. 36 checks; all pass on this branch (cloud sandbox, software graphics).
+
+## Independent review (24 Nov), and what was fixed
+
+- A reload of a first crossing (its address keeps `?sail`) would have set sail again over the voyage at sea. Now `?sail` only starts by itself when no voyage is saved; otherwise the card comes up with Continue.
+- The tips stopped for good after a reload or Continue. Now the ones not yet shown still come (`isLearning`).
+- The steering tip named the up and down keys, which do nothing while the autopilot has her. It now names left and right only, and says they take her off the autopilot.
+- "Bow" in a tooltip is now "the front of the boat".
+- A returning player's goal card could be cut short by a decision; that is back as it was. The short wait for the harbour to be drawn is for a first visit only.
+- If no decision comes, the steering tip still appears about 40 s after "Nothing to do yet" goes.
+
+Known and left: at window widths under about 1,150 px a note at the top centre can overlap the tip for a few seconds.
+
+The older smoke test (`tests/smoke.mjs`) was run in a cloud sandbox against this branch and stopped at its Boatyard launch step (30 s timeout on software graphics with the full weather file present), which this change does not touch.
 
 ## Not done here
 

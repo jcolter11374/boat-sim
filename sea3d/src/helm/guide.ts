@@ -65,15 +65,13 @@ export function markSeen(tip: TipId, s: StorageLike | null = store()): void {
   }
 }
 
-export const wasSeen = (tip: TipId, s: StorageLike | null = store()): boolean => seen(s).includes(tip);
+/** A first crossing was begun here and the last tip (steering) has not been shown yet. */
+export const isLearning = (s: StorageLike | null = store()): boolean => {
+  const all = seen(s);
+  return all.length > 0 && !all.includes("steer");
+};
 
-/** What the boat is driven by, for the steering tip: a motor boat has power, a sailing boat does not. */
-export interface TipBoat {
-  /** She has motors the player sets the power of. */
-  power: boolean;
-  /** A touch screen with no keyboard. */
-  touch: boolean;
-}
+export const wasSeen = (tip: TipId, s: StorageLike | null = store()): boolean => seen(s).includes(tip);
 
 export interface Tip {
   head: string;
@@ -92,7 +90,7 @@ export function goalWords(km: number): Tip {
 }
 
 /** The tips after the goal. */
-export function tipWords(tip: Exclude<TipId, "goal">, boat: TipBoat = { power: true, touch: false }): Tip {
+export function tipWords(tip: Exclude<TipId, "goal">, touch = false): Tip {
   if (tip === "time")
     return {
       head: "Nothing to do yet.",
@@ -103,14 +101,13 @@ export function tipWords(tip: Exclude<TipId, "goal">, boat: TipBoat = { power: t
       head: "Your first decision.",
       body: "Time has stopped. Read the choices and pick one. The ghost always takes the autopilot's choice, so picking differently is how you get ahead of it, or fall behind.",
     };
-  const keys = boat.touch
-    ? "Open Orders, on the left, to turn her or change her speed."
-    : boat.power
-      ? "Press ← or → to turn her and ↑ or ↓ for more or less motor power. Space pauses."
-      : "Press ← or → to turn her. Space pauses.";
+  // Only the keys that do something while the autopilot has her: left and right take her over, and
+  // the power keys wait until she is off the autopilot, so they are not named here.
   return {
     head: "You can steer her yourself, any time.",
-    body: `${keys} The Orders panel on the left hands her back to the autopilot. More decisions are coming.`,
+    body: touch
+      ? "Open Orders, on the left, to turn her yourself or hand her back to the autopilot. More decisions are coming."
+      : "Press \u2190 or \u2192 to turn her: that takes her off the autopilot. Space pauses. The Orders panel on the left hands her back. More decisions are coming.",
   };
 }
 

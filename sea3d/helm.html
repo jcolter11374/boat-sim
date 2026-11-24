@@ -388,7 +388,7 @@
   #goalcard.first p { font-size: clamp(15px, 1.3vw, 19px); text-wrap: pretty; }
   #goalmore { margin-top: 10px !important; font-size: 13px !important; color: rgba(255,255,255,.7) !important; }
   #goalmore[hidden] { display: none; }
-  #tip { position: fixed; left: var(--edge, 12px); top: var(--edge, 12px); z-index: 7; box-sizing: border-box; width: min(340px, calc(100vw - 24px)); padding: 12px 16px 12px; border-radius: 14px;
+  #tip { position: fixed; left: var(--edge, 12px); top: calc(var(--bar, 0px) + var(--edge, 12px)); z-index: 7; box-sizing: border-box; width: min(340px, calc(100vw - 24px)); padding: 12px 16px 12px; border-radius: 14px;
     background: rgba(8,18,32,.78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.18); border-left: 3px solid #ff8a2a; color: #fff;
     font: 400 14px/1.45 system-ui, sans-serif; opacity: 0; transform: translateY(6px); transition: opacity .4s ease, transform .4s ease; }
   #tip.in { opacity: 1; transform: none; }
@@ -398,7 +398,7 @@
   #tip button { margin-top: 9px; font: 500 13px system-ui, sans-serif; color: #fff; background: rgba(27,51,82,.9); border: 1px solid rgba(160,200,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
   #tip button:hover, #tip button:focus-visible { background: rgba(40,72,112,.95); }
   /* Out of the way of anything bigger: the open drawer sits where it is, and the wheel, the ending and a bare screen have no tips. */
-  body.orders-open #tip, body.at-wheel #tip, body.results #tip, body.arriving #tip, body.bare #tip, body.goal #tip, body.cinema #tip { display: none; }
+  body.orders-open #tip, body.at-wheel #tip, body.results #tip, body.arriving #tip, body.bare #tip, body.goal #tip, body.cinema #tip, body:has(#mapbox.big) #tip { display: none; }
   @media (prefers-reduced-motion: reduce) { #tip { transition: opacity .3s; transform: none; } }
   #tip button[hidden] { display: none; }
   @media (max-width: 760px) { #tip { width: min(340px, calc(100vw - 64px)); } } /* clear of the hide button in the corner */
@@ -816,7 +816,7 @@
     </div>
   </div>
   <button class="cell c-order" id="c-order" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span class="v" id="c-orderv">Autopilot</span><span class="l">order</span></button>
-  <div class="cell" id="c-head" title="Which way her bow points, as a compass direction: 0° is north, 90° east, 180° south, 270° west"><span class="v" id="c-headv">–</span><span class="l">heading</span></div>
+  <div class="cell" id="c-head" title="Which way the front of the boat points, as a compass direction: 0° is north, 90° east, 180° south, 270° west"><span class="v" id="c-headv">–</span><span class="l">heading</span></div>
   <div class="cell" id="c-speed" title="How fast she is going, in knots. One knot is 1.85 km/h, a slow walk is about 2"><span class="v" id="c-speedv">–</span><span class="l">speed</span></div>
   <div class="cell" id="c-bat"><span class="v" id="c-batv">–</span><span class="l" id="c-batl">battery</span><span class="meter"><i id="c-batbar"></i></span></div>
   <button class="cell" id="c-wind" aria-controls="fcbox" aria-expanded="false" title="The 5-day forecast (F)"><span class="v" id="c-windv">–</span><span class="l" id="c-wavel">wind</span></button>

@@ -4,7 +4,8 @@
 //  2. at sea the goal card says what the game is and who the ghost is, and the orders drawer stays shut;
 //  3. after it, one tip: time runs by itself, nothing to do yet;
 //  4. the first decision card says what a decision is; choosing brings the steering tip, and steering ends it;
-//  5. back on the title she is no longer new: Continue is offered and Set sail opens the card;
+//  5. back on the title she is no longer new: Continue is offered and Set sail opens the card; a reload at sea
+//     does not start a new crossing over the one at sea;
 //  6. someone who has played before gets none of it: the drawer opens with its coach line, as before.
 //
 //   tools/build_site.sh   (from the repo root: the page and the simulator)
@@ -108,6 +109,11 @@ for (const [name, viewport] of [["desktop", { width: 1280, height: 720 }], ["pho
   const back = await page.evaluate(() => { const a = document.getElementById("t-setsail"); return { href: a.getAttribute("href"), first: a.classList.contains("first"), cont: !document.getElementById("t-continue").hidden }; });
   check(!back.first && /helm\.html$/.test(back.href), `${name}: after that, Set sail opens the card (${back.href})`);
   check(back.cont, `${name}: and Continue your voyage is offered`);
+  // A reload of the crossing's own address (it keeps ?sail) must not start a new one over the voyage at sea.
+  await page.goto(`${URL}helm.html?sail&quality=${Q}`);
+  await page.waitForFunction(() => document.querySelector("#ss-when-opts .ss-pill"), null, { timeout: 120000 }).catch(() => {});
+  await page.waitForTimeout(1500);
+  check((await shown(page, "start")) && (await shown(page, "ss-continue")), `${name}: a reload with her at sea shows the card with Continue, and does not set sail again`);
   await context.close();
 }
 

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { GUIDE_KEY, PLAYED_KEYS, START_HERE, TIPS, TIP_MS, goalWords, isNewcomer, markSeen, setSailLink, tipWords, wasSeen } from "../src/helm/guide.ts";
+import { GUIDE_KEY, PLAYED_KEYS, START_HERE, TIPS, TIP_MS, goalWords, isLearning, isNewcomer, markSeen, setSailLink, tipWords, wasSeen } from "../src/helm/guide.ts";
 
 // A first crossing, guided (John, 24 Nov 2026: "New players will have no idea what to do").
 
@@ -56,14 +56,25 @@ test("the goal says what the game is, where to, and who the ghost is", () => {
   assert.match(g.body, /get there before it\.$/);
 });
 
-test("the steering tip names only the keys this boat and this screen have", () => {
-  assert.match(tipWords("steer", { power: true, touch: false }).body, /← or → to turn her and ↑ or ↓ for more or less motor power\. Space pauses\./);
-  const wing = tipWords("steer", { power: false, touch: false }).body;
-  assert.match(wing, /← or → to turn her\. Space pauses\./);
-  assert.doesNotMatch(wing, /power/);
-  const phone = tipWords("steer", { power: true, touch: true }).body;
+test("the steering tip names only keys that do something on the autopilot, and none on a touch screen", () => {
+  const keys = tipWords("steer").body;
+  assert.match(keys, /← or → to turn her: that takes her off the autopilot\. Space pauses\./);
+  assert.doesNotMatch(keys, /↑|↓|power/);
+  const phone = tipWords("steer", true).body;
   assert.doesNotMatch(phone, /Press|Space|←/);
   assert.match(phone, /Open Orders/);
+});
+
+test("a first crossing left part-way is still learning until the steering tip has been shown", () => {
+  const s = box();
+  assert.equal(isLearning(s), false);
+  markSeen("goal", s);
+  assert.equal(isLearning(s), true);
+  markSeen("call", s);
+  assert.equal(isLearning(s), true);
+  markSeen("steer", s);
+  assert.equal(isLearning(s), false);
+  assert.equal(isLearning(null), false);
 });
 
 test("plain words: no tip is long, and none uses a sailor's word unexplained", () => {
@@ -71,7 +82,7 @@ test("plain words: no tip is long, and none uses a sailor's word unexplained", (
   for (const t of all) {
     assert.ok(t.head.length <= 40, t.head);
     assert.ok(t.body.length <= 240, `${t.head}: ${t.body.length} characters`);
-    assert.doesNotMatch(`${t.head} ${t.body}`, /\b(knots?|heading|helm|leeward|windward|tack|reef|trim)\b/i);
+    assert.doesNotMatch(`${t.head} ${t.body}`, /\b(knots?|heading|helm|bow|stern|leeward|windward|tack|reef|trim)\b/i);
     assert.doesNotMatch(`${t.head} ${t.body}`, /—/, "no long dashes");
   }
   // The decision's tip waits for the decision; the others go by themselves.
@@ -95,6 +106,7 @@ test("the sailing page has the tip card, and helm.ts keeps the drawer shut on a 
   assert.match(html, /<div id="tip" role="status" aria-live="polite" hidden>/);
   assert.match(html, /body\.orders-open #tip[^{]*\{ display: none; \}/);
   const src = read("../src/helm.ts");
-  assert.match(src, /guided = NEWCOMER;/);
-  assert.match(src, /\.then\(guided \? \(\) => showTip\("time"\) : opening\)/);
+  assert.match(src, /guided = NEWCOMER \|\| LEARNING;/);
+  // A reload of a first crossing must not start a new one over the voyage at sea.
+  assert.match(src, /const ONE_CLICK = [^;]*&& !loadVoyage\(\);/);
 });
