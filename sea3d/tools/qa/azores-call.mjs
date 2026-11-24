@@ -7,6 +7,8 @@
 //   [PYODIDE_DIR=...] node tools/qa/azores-call.mjs [picture folder] [--no]
 //
 // --no: turn the call down, and check she never goes near the islands.
+// --first: a browser with no finished crossing (a first game): check the call is never made (stops at day 32).
+// Otherwise the script first gives the browser a finished crossing, as a returning player has.
 // Exits 1 if the call never came, or (on yes) she didn't pass Pico at 15 to 35 km from its land's edge and finish.
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -14,6 +16,7 @@ import { chromium } from "playwright";
 
 const out = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : null;
 const no = process.argv.includes("--no");
+const first = process.argv.includes("--first");
 if (out) mkdirSync(out, { recursive: true });
 const PORT = 4186;
 const URL = `http://localhost:${PORT}/`;
@@ -30,6 +33,12 @@ if (process.env.PYODIDE_DIR) {
     const name = new globalThis.URL(route.request().url()).pathname.split("/").pop();
     const type = name.endsWith(".mjs") || name.endsWith(".js") ? "text/javascript" : name.endsWith(".wasm") ? "application/wasm" : name.endsWith(".json") ? "application/json" : "application/octet-stream";
     route.fulfill({ body: readFileSync(`${process.env.PYODIDE_DIR}/${name}`), contentType: type, headers: { "access-control-allow-origin": "*" } });
+  });
+}
+// The call waits for a finished crossing in this browser (helm/personalBest.ts): give it one, unless --first.
+if (!first) {
+  await context.addInitScript(() => {
+    localStorage.setItem("boatsim.crossing.best.v1", JSON.stringify({ "2020-05-01_367_-749": { days: 60, boat: "Our kayak", at: "2026-11-01T00:00:00Z", finishes: 1 } }));
   });
 }
 const page = await context.newPage();
@@ -60,7 +69,7 @@ await run();
 const t0 = Date.now();
 for (;;) {
   const s = await state();
-  if (s.over || s.day >= 90 || Date.now() - t0 > 40 * 60e3) break;
+  if (s.over || s.day >= (first ? 32 : 90) || Date.now() - t0 > 40 * 60e3) break;
   if (s.day - lastDay >= 5) { lastDay = s.day; console.log(`day ${s.day.toFixed(1)}: ${s.at[0].toFixed(2)}N ${(-s.at[1]).toFixed(2)}W, ${s.order}${s.via ? ", by the Azores" : ""}`); }
   if (s.land?.place === "pico") {
     nearest = Math.min(nearest, s.land.km);
@@ -94,8 +103,11 @@ for (;;) {
 }
 const end = await state();
 console.log(`\nEnded day ${end.day.toFixed(1)}: ${end.outcome}.`);
-check(!!asked, "the Azores call was asked in mid-ocean");
-if (no) check(!end.via && !seen, "said no: she never went near the islands");
+if (first) check(!asked && !end.via && end.at[1] > -36, `a first crossing is not asked (day ${end.day.toFixed(1)}, ${(-end.at[1]).toFixed(1)}W, past where the call is made)`);
+else check(!!asked, "the Azores call was asked in mid-ocean");
+if (first) {
+  /* nothing more to check */
+} else if (no) check(!end.via && !seen, "said no: she never went near the islands");
 else {
   check(end.via, "said yes: the simulator has her going by the Azores");
   check(!!seen, "Pico's land came into the picture");

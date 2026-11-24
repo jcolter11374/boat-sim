@@ -1113,7 +1113,7 @@ if (PLACE) {
   $("landcredit").textContent = `${PLACE.credit} · `;
   $("osm").hidden = !/OpenStreetMap|Overture/.test(PLACE.credit); // the OSM line stays in view (Maya's ruling)
   const shown = status as unknown as { land: boolean; surf: number; town: Town["shown"] | null; trees: number };
-  void Promise.all([Island.load(PLACE, quality), Town.load(PLACE, quality)]).then(async ([isl, tn]) => {
+  void Promise.all([Island.load(PLACE, quality), PLACE.townOnAsk ? null : Town.load(PLACE, quality)]).then(async ([isl, tn]) => {
     island = isl;
     town = tn;
     if (isl) {

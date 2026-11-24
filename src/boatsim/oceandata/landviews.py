@@ -128,6 +128,18 @@ ANNAPOLIS_BOX = (-76.505, -76.472, 38.968, 38.990)  # lon0, lon1, lat0, lat1
 ANNAPOLIS_ORIGIN = (38.9725, -76.4800)  # lat, lon: the boat, in the harbour mouth
 ANNAPOLIS_NX = 900  # about 3 m spacing
 
+# Cascais, the harbour town west of Lisbon where a crossing ends at a dock (John, 24 Nov 2026:
+# "Azores and a dock in Portugal"): the marina, the bay and the old town behind it.
+CASCAIS_BOX = (-9.432, -9.404, 38.686, 38.704)
+CASCAIS_ORIGIN = (38.6915, -9.4150)  # lat, lon: in the bay, off the marina's mouth
+CASCAIS_NX = 800  # about 3 m spacing
+
+# The towns: name -> (box, origin, columns). Each bakes <name>.json and <name>_height.bin.
+TOWNS = {
+    "annapolis": (ANNAPOLIS_BOX, ANNAPOLIS_ORIGIN, ANNAPOLIS_NX),
+    "cascais": (CASCAIS_BOX, CASCAIS_ORIGIN, CASCAIS_NX),
+}
+
 CREDITS = {
     "terrain": "Terrain: AWS Terrain Tiles (Mapzen/Tilezen; SRTM, GMTED2010, ETOPO1, USGS 3DEP "
     "and others, https://github.com/tilezen/joerd/blob/master/docs/attribution.md)",
@@ -540,7 +552,7 @@ def _num(x):
     return None if x is None or math.isnan(float(x)) else float(x)
 
 
-def building_record(geom, row: dict, ground) -> list[dict]:
+def building_record(geom, row: dict, ground, origin=ANNAPOLIS_ORIGIN) -> list[dict]:
     """Footprints in the local frame with a height (GUESS by footprint when
     Overture has none) and a roof type. ground(lon, lat) gives terrain height."""
     from shapely.geometry import MultiPolygon, Polygon
@@ -553,7 +565,7 @@ def building_record(geom, row: dict, ground) -> list[dict]:
     for p in parts:
         if not isinstance(p, Polygon) or isinstance(p, MultiPolygon) or p.area < 1e-10:
             continue
-        ext = [local_xz(x, y) for x, y in p.exterior.coords[:-1]]
+        ext = [local_xz(x, y, origin) for x, y in p.exterior.coords[:-1]]
         area = Polygon(ext).area
         if area < 12:  # sheds and slivers
             continue
@@ -592,14 +604,14 @@ def building_record(geom, row: dict, ground) -> list[dict]:
     return out
 
 
-def pier_polygons(geom) -> list[list[list[float]]]:
+def pier_polygons(geom, origin=ANNAPOLIS_ORIGIN) -> list[list[list[float]]]:
     """Pier lines become 2.4 m wide strips; pier areas stay as drawn (local frame)."""
     from shapely.geometry import LineString, Polygon
 
     if isinstance(geom, LineString):
-        g = LineString([local_xz(x, y) for x, y in geom.coords]).buffer(1.2, cap_style=2)
+        g = LineString([local_xz(x, y, origin) for x, y in geom.coords]).buffer(1.2, cap_style=2)
     elif isinstance(geom, Polygon):
-        g = Polygon([local_xz(x, y) for x, y in geom.exterior.coords])
+        g = Polygon([local_xz(x, y, origin) for x, y in geom.exterior.coords])
     else:
         return []
     parts = [g] if isinstance(g, Polygon) else list(g.geoms)
@@ -609,14 +621,32 @@ def pier_polygons(geom) -> list[list[list[float]]]:
 def bake_annapolis(
     out: Path, cache: Path | None = None, release: str = OVERTURE_RELEASE, log=print
 ) -> list[Path]:
+    return bake_town("annapolis", out, cache, release, log)
+
+
+def bake_town(
+    town: str,
+    out: Path,
+    cache: Path | None = None,
+    release: str = OVERTURE_RELEASE,
+    log=print,
+    rows=None,
+    heights=None,
+) -> list[Path]:
+    """A town's buildings and piers on its own fine ground: <town>.json and
+    <town>_height.bin. rows(theme, typ, box) and heights(box, lons, lats) stand in
+    for Overture and the terrain tiles in tests."""
     from shapely import wkb
+
+    tbox, origin, tnx = TOWNS[town]
+    rows = rows or (lambda theme, typ, b: overture(theme, typ, b, release).to_pylist())
 
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    lons, lats, w, h = grid(ANNAPOLIS_BOX, ANNAPOLIS_NX)
-    hgt = terrain(ANNAPOLIS_BOX, 15, lons, lats, cache)
-    log(f"annapolis: {len(lons)} x {len(lats)} heights, {hgt.min():.1f} to {hgt.max():.1f} m")
-    lon0, lon1, lat0, lat1 = ANNAPOLIS_BOX
+    lons, lats, w, h = grid(tbox, tnx)
+    hgt = heights(tbox, lons, lats) if heights else terrain(tbox, 15, lons, lats, cache)
+    log(f"{town}: {len(lons)} x {len(lats)} heights, {hgt.min():.1f} to {hgt.max():.1f} m")
+    lon0, lon1, lat0, lat1 = tbox
 
     # Ground under a building: nearest terrain cell.
     def ground(lon: float, lat: float) -> float:
@@ -626,25 +656,25 @@ def bake_annapolis(
 
     box = (lon0, lon1, lat0, lat1)
     blds = []
-    for row in overture("buildings", "building", box, release).to_pylist():
+    for row in rows("buildings", "building", box):
         if row.get("is_underground"):
             continue
-        blds += building_record(wkb.loads(row["geometry"]), row, ground)
+        blds += building_record(wkb.loads(row["geometry"]), row, ground, origin)
     piers = []
-    for row in overture("base", "infrastructure", box, release).to_pylist():
+    for row in rows("base", "infrastructure", box):
         if row.get("class") == "pier":
-            piers += pier_polygons(wkb.loads(row["geometry"]))
-    log(f"annapolis: {len(blds)} buildings, {len(piers)} piers (Overture {release})")
-    x0, z0 = local_xz(lon0, lat1)
+            piers += pier_polygons(wkb.loads(row["geometry"]), origin)
+    log(f"{town}: {len(blds)} buildings, {len(piers)} piers (Overture {release})")
+    x0, z0 = local_xz(lon0, lat1, origin)
     doc = {
-        "origin": list(ANNAPOLIS_ORIGIN),
+        "origin": list(origin),
         "nx": len(lons),
         "ny": len(lats),
         "x0": x0,
         "z0": z0,
         "w": w,
         "h": h,
-        "height": "annapolis_height.bin: int16 little-endian DECIMETRES, row 0 north",
+        "height": f"{town}_height.bin: int16 little-endian DECIMETRES, row 0 north",
         "frame": "metres from origin, x east, z south",
         "buildings": blds,
         "piers": piers,
@@ -660,7 +690,7 @@ def bake_annapolis(
             "z": sum(q[1] for q in p) / len(p),
             "base": sh[0]["b"] + sh[0]["h"],
         }
-    paths = [out / "annapolis.json", out / "annapolis_height.bin"]
+    paths = [out / f"{town}.json", out / f"{town}_height.bin"]
     paths[0].write_text(json.dumps(doc, separators=(",", ":")))
     np.round(hgt * 10).astype("<i2").tofile(paths[1])
     return paths
@@ -679,8 +709,8 @@ def main(argv: list[str] | None = None) -> None:
     for place in a.places:
         if place in REGIONS:
             paths = bake_region(place, a.out, cache, release=a.overture_release)
-        elif place == "annapolis":
-            paths = bake_annapolis(a.out, cache, a.overture_release)
+        elif place in TOWNS:
+            paths = bake_town(place, a.out, cache, a.overture_release)
         elif place == "baytiles":  # the Bay as coast squares (landtiles.py)
             from boatsim.oceandata import landtiles
 
