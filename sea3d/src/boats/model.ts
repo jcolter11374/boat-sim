@@ -375,7 +375,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     kit.cyl(pivot, spar, 0.015, 0, 0.05, 1.11); // Rev C3: 30 mm spar (was 25)
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
     kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
-    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.318, 0.518, 0.12), wingWhite, pivot).name = "tail_flap";
+    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), wingWhite, pivot).name = "tail_flap";
     kit.rod(pivot, glass, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]); // 12 mm solid fibreglass rod
     kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
     // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
@@ -397,7 +397,7 @@ export function buildRandolph(quality: Quality): BoatModel {
   addNavLights(g, "all_round", V(1.575, 0.615, 0));
   const gear = new Gear(g, {
     props: [], // no motors: the wing sails it
-    light: V(1.53, 0.585, 0), // on the antenna platform
+    light: V(1.46, 0.591, 0), // on the forward end of the antenna platform, clear of the light clamp round the post
     spots: {
       rudder: V(1.42, -0.06, 0),
       sail: V(0.6, 1.42, 0),

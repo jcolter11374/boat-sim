@@ -63,7 +63,11 @@ the real boat is hi-vis orange, and they publish every part in 3D:
 - Left out on purpose, because each material and moving group is one more thing to draw every
   frame: the membrane vent, tail detent, the lead inside the pod, the rod inside the tail fin,
   and everything inside the hull.
-- The navigation light moved 45 mm aft to where their clamp holds it.
+- The navigation light moved 45 mm aft to where their clamp holds it, and the comms status lamp
+  moved to the forward end of the antenna platform, clear of the clamp (the independent review
+  found the clamp would have hidden most of it).
+- Two orange boats: her hull is now close to the kayak's orange. On charts she keeps her teal
+  track colour (`specs.ts`), and in 3D her wing sets her apart, so nothing else was changed.
 - Every hook the game uses is kept: `wing_pivot`, `vane_pivot`, `rudder_pivot`, `tail_flap`,
   `panel_*`, `hull`, `keel`, `bulb`. The Boatyard's twin rudder, YB3 tracker and thruster dress
   work as before, and so do heel, pitch and repaint.
@@ -85,9 +89,11 @@ wing our numbers describe.
   the sky's light on a hull so that white topsides would not read blue. It did that to the lit
   paint, not to the light, which is the same thing on white but greys any colour. The first
   orange Randolph hull drew as brown, about (125, 84, 80) on screen. The paint's own colour is
-  now divided out first and put back after, so white hulls draw exactly as before (the sum is
-  the same when red, green and blue are equal) and a coloured hull keeps its colour in shade:
-  about (200, 70, 40). This also helps any boat painted navy, green or red in the Boatyard.
+  now divided out first and put back after, so a pure white or grey hull draws exactly as before
+  (the sum is the same when red, green and blue are equal; the stock boats' off-whites move by a
+  hair) and a coloured hull keeps its colour in shade: about (200, 70, 40). This changes every
+  coloured hull, not only this one: the kayak's shaded side, the stock boats' navy stripes and
+  bottoms, and any boat painted navy, green or red in the Boatyard are a little more saturated in shade.
   The kayak, checked from two sides after the change, looks as it did:
 
   ![The kayak after the change](screens/boat-look-2026-11-24/kayak-after.jpg)

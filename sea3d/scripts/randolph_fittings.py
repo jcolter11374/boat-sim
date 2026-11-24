@@ -112,8 +112,9 @@ def main(src: Path, out: Path) -> None:
             v[:, 1] -= J["rudder"]["y"][1]  # the port rudder, onto the centreline
         v, f = thin(v, f, most)
         ours = np.stack([v[:, 0], v[:, 2], v[:, 1]], axis=1) / 1000.0  # (x aft, y up, z port), m
+        assert np.abs(ours * 10000.0).max() < 32767, f"{a['id']}: too far from the bow for int16"
+        assert len(ours) < 65536, f"{a['id']}: too many points for uint16 corners"
         q16 = np.round(ours * 10000.0).astype("<i2")
-        assert np.abs(ours * 10000.0).max() < 32767
         parts.append(
             {
                 "id": a["id"],
