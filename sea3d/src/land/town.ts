@@ -55,6 +55,9 @@ export interface LightSource {
 
 const WALLS = [0x8a3b2a, 0x9b4a35, 0x7c3426, 0xa65a42, 0xd8cbb0, 0xe9e4d8, 0xc9b79a, 0x8e8a80, 0xb7a58a, 0x6f6a62];
 const ROOFS = [0x3a3d42, 0x2f3236, 0x4a3f3a, 0x55504a, 0x3d4a52];
+// A Portuguese town (Cascais): whitewash and pale washes of ochre, pink and blue under terracotta tiles (GUESS, by photographs).
+const WALLS_WHITEWASH = [0xf2efe6, 0xf6f3ea, 0xe9e2d0, 0xefe6c8, 0xf0d9a8, 0xe8c9b4, 0xdfe6ea, 0xf4f1e8, 0xece7dc, 0xe6d6b0];
+const ROOFS_TILE = [0xb5573a, 0xa84e33, 0xc0633f, 0x9c4a34, 0xb86a48];
 const NO_WINDOWS = new Set(["garage", "garages", "shed", "parking", "carport", "storage_tank", "silo", "roof"]);
 const WATER_DM = 4.5; // ground below this (dm) is water in the town's height grid
 const FLOOR = 3.2; // m per storey
@@ -321,9 +324,11 @@ export class Town {
     return i >= 0 && j >= 0 && i < W && j < H && m[j * W + i] === 1;
   }
 
+  private walls: "brick" | "whitewash" = "brick";
   private build(d: TownFile, hgt: Int16Array, place: Place, quality: Quality): void {
     this.d = d;
     this.hgt = hgt;
+    this.walls = place.walls ?? "brick";
     // The town's frame from the boat's: metres east and south of the place.
     const { mx, my } = metresPerDegree(place.lat);
     this.group.position.set((d.origin[1] - place.lon) * mx, 0, -(d.origin[0] - place.lat) * my);
@@ -348,6 +353,9 @@ export class Town {
   }
 
   private buildings(d: TownFile, toWater: (x: number, z: number) => number, lights: LightSource[], quality: Quality): void {
+    const white = this.walls === "whitewash";
+    const wallCols = white ? WALLS_WHITEWASH : WALLS;
+    const roofCols = white ? ROOFS_TILE : ROOFS;
     const wp: number[] = [];
     const wn: number[] = [];
     const wc: number[] = [];
@@ -373,8 +381,8 @@ export class Town {
       const p = ringArea(b.p) > 0 ? b.p.slice().reverse() : b.p;
       if (p.length < 3) continue;
       const r = rnd(b.s);
-      const wall = new THREE.Color(WALLS[Math.floor(r() * WALLS.length)]).multiplyScalar(0.85 + 0.3 * r());
-      const roof = new THREE.Color(ROOFS[Math.floor(r() * ROOFS.length)]);
+      const wall = new THREE.Color(wallCols[Math.floor(r() * wallCols.length)]).multiplyScalar(white ? 0.9 + 0.12 * r() : 0.85 + 0.3 * r());
+      const roof = new THREE.Color(roofCols[Math.floor(r() * roofCols.length)]);
       const y0 = b.b - 3; // down into the ground, whose grid is coarser than the footprints
       const eave = b.b + b.h * (b.r === "gable" ? 0.78 : 1);
       const windows = NO_WINDOWS.has(b.c) ? 0 : 1;

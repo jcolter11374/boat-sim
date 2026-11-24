@@ -58,7 +58,7 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
-import { DOCK_LOOK, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, leavesFromDock } from "./helm/dock";
+import { DOCK_LOOK, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, LANDING_LOOK, LANDING_S, LANDING_WAY, leavesFromDock } from "./helm/dock";
 import { LOOK, boardWords, dragLook, eyeFor, lensAfterWheel } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
@@ -615,12 +615,18 @@ const page = {
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
   arrival: false,
+  /** True once she is coming alongside (or lies) at the dock in Cascais, after the finish. */
+  landing: false,
+  /** Where the picture has her at the dock in Cascais ([lat, lon]; null elsewhere), for tests. */
+  landingAt: null as [number, number] | null,
   /** The finish scene's shot: where the cape and the boat sit across the frame, -1 left .. 1 right (for tests). */
   arrivalShot: null as { cape: number; boat: number } | null,
   /** Where the finish banner was put, and how much of the boat or the cape it still covers in square pixels (0 when clear; for tests). */
   arrivalBanner: null as { where: string; covers: number } | null,
   /** Play the finish scene now, as after a crossing of `days`, for `seconds` (for pictures and tests). */
   arrive: (days = 59.3, seconds = ARRIVAL_S) => arrivalScene({ boat: { days }, margin_days: null } as Card, seconds),
+  /** For tests and pictures: the arrival at the dock in Cascais, as after a finish. */
+  comeAlongside: () => landingScene(),
   /** "arrival" while the finish scene plays, before the results card (for tests). */
   scene: "",
   /** Look the given compass bearing past the boat (for pictures and tests). */
@@ -2043,6 +2049,9 @@ let practiceN = 0;
 /** At the dock before a crossing of your own, and on her way out of the harbour (helm/dock.ts): display
  *  only. ?dock=0 starts on the open sea as before. */
 let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") !== "0" ? new Dock() : null;
+/** Arriving at a dock in Portugal (helm/dock.ts): after the finish scene she comes alongside a pontoon at Cascais.
+ *  Display only, after the clock has stopped. Null until then, and on a copy of the site without Cascais's town. */
+let landing: Dock | null = null;
 /** The dock's own view (dockView): the camera beside her is left as it is, so a change of boat on the card, a
  *  phone's step back and a drag all work on it as ever, and the open sea opens on the view it always had. */
 let dockSwing: number | null = null;
@@ -2056,7 +2065,9 @@ const DOCK_UP = new THREE.Vector3(0, 1, 0);
 function dockView(): void {
   dockHand.copy(camera.position);
   const off = camera.position.clone().sub(controls.target);
-  if (dockSwing === null) dockSwing = Math.atan2(-off.x, off.z) - THREE.MathUtils.degToRad(DOCK_LOOK);
+  // Leaving, the view turns with her from where it first looked; arriving, it holds its compass bearing, the town behind her all the way in.
+  if (landing) dockSwing = Math.atan2(-off.x, off.z) - THREE.MathUtils.degToRad(LANDING_LOOK);
+  else if (dockSwing === null) dockSwing = Math.atan2(-off.x, off.z) - THREE.MathUtils.degToRad(DOCK_LOOK);
   off.applyAxisAngle(DOCK_UP, dockSwing).multiplyScalar(DOCK_PULL);
   camera.position.copy(controls.target).add(off);
   camera.lookAt(controls.target);
@@ -2083,24 +2094,25 @@ function endDock(): void {
   document.body.classList.remove("docked", "docking");
   $("dockbanner").hidden = true;
 }
+/** Wait this long, or until a key or a click. */
+const skip = (ms: number) =>
+  new Promise<void>((done) => {
+    const end = (e?: Event) => {
+      // A held key, or a bare Shift or Ctrl, is not a wish to move on.
+      if (e instanceof KeyboardEvent && (e.repeat || ["Shift", "Control", "Alt", "Meta"].includes(e.key))) return;
+      clearTimeout(timer);
+      removeEventListener("keydown", end);
+      removeEventListener("pointerdown", end);
+      done();
+    };
+    const timer = setTimeout(() => end(), ms);
+    addEventListener("keydown", end);
+    addEventListener("pointerdown", end);
+  });
 /** The leaving is watched (a click or key moves on once the simulator is ready), then the view
  *  fades to the drop point with the cut's words, which say plainly that the Bay is skipped. */
 async function dockCut(): Promise<void> {
   if (!dock) return;
-  const skip = (ms: number) =>
-    new Promise<void>((done) => {
-      const end = (e?: Event) => {
-        // A held key, or a bare Shift or Ctrl, is not a wish to move on.
-        if (e instanceof KeyboardEvent && (e.repeat || ["Shift", "Control", "Alt", "Meta"].includes(e.key))) return;
-        clearTimeout(timer);
-        removeEventListener("keydown", end);
-        removeEventListener("pointerdown", end);
-        done();
-      };
-      const timer = setTimeout(() => end(), ms);
-      addEventListener("keydown", end);
-      addEventListener("pointerdown", end);
-    });
   // By the wall clock, not her own: a slow computer draws few frames, and must not wait longer for it.
   await skip(Math.max(0, DOCK_MIN_S * 1000 - (performance.now() - dockLeftAt)));
   const cut = $("dockcut");
@@ -2112,6 +2124,36 @@ async function dockCut(): Promise<void> {
   await skip(2600);
   cut.classList.remove("in");
   setTimeout(() => (cut.hidden = true), 700);
+}
+/** After the finish scene: the view moves on to Cascais and she comes alongside in the marina, the old town
+ *  behind her; the results follow, with her still in view behind them. Nothing here is timed or simulated: the
+ *  clock stopped at the finish line, 330 km out, and the words say so. Without Cascais's town on this copy of
+ *  the site (or with ?dock=0) there is no scene, and the results come up off Cabo da Roca as before. */
+async function landingScene(): Promise<void> {
+  if (!land?.has("lisbon") || params.get("dock") === "0") return;
+  const cut = $("landcut");
+  cut.hidden = false;
+  requestAnimationFrame(() => cut.classList.add("in"));
+  await new Promise((r) => setTimeout(r, 650));
+  landing = new Dock(LANDING_WAY, spec.cruiseSpeed, true);
+  // Behind the words: the town is fetched and stood on its ground. No town within a few seconds: no scene.
+  const t0 = performance.now();
+  while (!(land.shown.place === "lisbon" && land.shown.buildings > 0) && performance.now() - t0 < 8000) await new Promise((r) => setTimeout(r, 100));
+  const town = land.shown.place === "lisbon" && land.shown.buildings > 0;
+  if (!town) landing = null;
+  else await skip(Math.max(0, 2600 - (performance.now() - t0)));
+  cut.classList.remove("in");
+  setTimeout(() => (cut.hidden = true), 700);
+  if (!landing) return;
+  landing.leave();
+  page.scene = "landing";
+  page.landing = true;
+  document.body.classList.add("arriving");
+  $("landbanner").hidden = false;
+  await skip(LANDING_S * 1000);
+  $("landbanner").hidden = true;
+  document.body.classList.remove("arriving");
+  page.scene = "";
 }
 let practiceAt: LatLon | null = null;
 /** The last place the boat was, so the view stays put between runs. */
@@ -3774,7 +3816,10 @@ async function finish(): Promise<void> {
   hud.orders(false);
   // Over the line off Lisbon: first the arrival itself, then the results (the finish scene, #329).
   // Any other ending gets a quiet beat on the boat's last moment before the card (Leo's plan).
-  if (c.boat.outcome === "arrived" && finishesOffLisbon() && !THEIRS) await arrivalScene(c);
+  if (c.boat.outcome === "arrived" && finishesOffLisbon() && !THEIRS) {
+    await arrivalScene(c);
+    await landingScene();
+  }
   else if (!THEIRS) await new Promise((ok) => setTimeout(ok, 2000));
   page.card = c;
   const me = c.boat;
@@ -3872,7 +3917,11 @@ async function finish(): Promise<void> {
   // Over the line off Lisbon: the scene moves on to the coast it points at (the line itself is far out at sea).
   if (me.outcome === "arrived" && finishesOffLisbon()) {
     showArrival();
-    bits.push("Behind this card: the arrival, off Cabo da Roca, west of Lisbon: the lighthouse on its cliff (the westernmost point of mainland Europe) and the Sintra hills behind. The finish line itself is about 330 km out to sea, too far to see land from.");
+    bits.push(
+      landing
+        ? "Behind this card: she comes alongside in the marina at Cascais, west of Lisbon. The finish line itself is about 330 km out to sea, too far to see land from; your time stopped there, and the trip in from it is not timed or simulated."
+        : "Behind this card: the arrival, off Cabo da Roca, west of Lisbon: the lighthouse on its cliff (the westernmost point of mainland Europe) and the Sintra hills behind. The finish line itself is about 330 km out to sea, too far to see land from.",
+    );
   }
   // #335: the browser sails on a lighter weather file than the full runs behind the voyage replays.
   $("r-caveat").textContent = "Sailed in your browser on lighter weather data, so on a long voyage it can differ by days from the full-data voyage replays.";
@@ -4218,6 +4267,9 @@ async function begin(): Promise<void> {
   foresee = null;
   arrival = null;
   page.arrival = false;
+  landing = null;
+  page.landing = false;
+  page.landingAt = null;
   // An index into the six odds launches, or a day: the default is 23 Apr 2020, a good
   // day (Hs 0.9 m, 12 kt from the SW, Sam's pick); 1 Apr, the tail of a gale, is "Rough start".
   const lv = $<HTMLSelectElement>("launch").value;
@@ -5386,7 +5438,11 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     page.dock = dock.castOff ? "leaving" : "tied";
     if (!dock.castOff) document.body.classList.add("docked");
   }
-  const dockNow = dock?.state ?? null;
+  if (landing) {
+    landing.advance(dt);
+    page.landingAt = [landing.state.lat, landing.state.lon];
+  }
+  const dockNow = (landing ?? dock)?.state ?? null;
   const h = r ? Math.min(hour, lastHour(r)) : 0;
   // The sea: the deployed wind sea and swells for this hour and place when there
   // are any; else the replay's one combined sea. Before the start, the chosen
@@ -5401,7 +5457,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     // Forced for pictures: one wind sea of that height, running with the (forced) wind.
     const fw = r ? [valueAt(r, r.wind_u, h) ?? 0, valueAt(r, r.wind_v, h) ?? 0] : [0, -1];
     sys = { ws: forcedSea(page.force.hs, fw[0], fw[1]), s1: null, s2: null } as Systems;
-  } else if (dock) sys = { ws: { hs: DOCK_SEA.hs, tp: DOCK_SEA.tp, dirFrom: 250 }, s1: null, s2: null } as Systems; // the harbour's small chop, not the drop point's swell
+  } else if (dock || landing) sys = { ws: { hs: DOCK_SEA.hs, tp: DOCK_SEA.tp, dirFrom: 250 }, s1: null, s2: null } as Systems; // the harbour's small chop, not the drop point's swell
   let hs: number;
   let tp: number;
   if (sys && (sys.ws || sys.s1 || sys.s2)) {
@@ -5544,7 +5600,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     visitAimed = true;
     aimAt(VISIT.look); // look past her at the land, as the old page did
   }
-  const [lat, lon] = arrival ?? (dockNow && !wheelNow ? [dockNow.lat, dockNow.lon] : null) ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
+  const [lat, lon] = (landing && dockNow ? [dockNow.lat, dockNow.lon] : null) ?? arrival ?? (dockNow && !wheelNow ? [dockNow.lat, dockNow.lon] : null) ?? (VISIT ? [VISIT.lat, VISIT.lon] : null) ?? (r && r.h.length ? positionAt(r, h) : st0 ? [st0.lat, st0.lon] : prac ? [prac.lat, prac.lon] : (SPOT ?? [36.65, -74.94]));
   // Every practice's marks, the drill's included: it has no course start (practiceAt), and its mark
   // never left the scene's origin, inside her hull at the foot of the mast (Elena, 15 Nov).
   if (wheelNow) buoys.update(wheelNow, t, wheel.wheel?.s.mark ?? 0, comps, wu, wv);
@@ -5662,7 +5718,7 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
     if (knockCut && !knockCut.update(dt)) knockCut = null;
     if (!knockCut && !cine.update(dt)) controls.update();
   }
-  if (dock && !wheelNow) dockView();
+  if ((dock || landing) && !wheelNow) dockView();
   frameBoat(dt);
   if (onboard && camera.view?.enabled) camera.clearViewOffset(); // on board the lens is centred: the frame isn't composed round her
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;

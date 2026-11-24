@@ -383,15 +383,15 @@
   #strip, #mapbox, #orders-tab { transition: opacity .8s; }
   #goalcard[hidden] { display: none; }
   /* Launching from the dock: a small title over her leaving, then a dark card between the harbour and the open sea. */
-  #dockbanner { position: fixed; left: 6vw; top: calc(var(--bar, 0px) + 5vh); z-index: 7; pointer-events: none; padding: 14px 22px 16px; border-radius: 14px; background: rgba(8,18,32,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.14); color: #fff; }
-  #dockbanner b { display: block; font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 144; font-weight: 800; font-size: clamp(22px, 2.6vw, 38px); line-height: 1.1; }
-  #dockbanner span { font-size: clamp(14px, 1.3vw, 19px); color: rgba(255,255,255,.9); }
-  #dockbanner[hidden], #dockcut[hidden] { display: none; }
-  #dockcut { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; text-align: center; background: #050c16; color: #fff; opacity: 0; transition: opacity .6s ease; }
-  #dockcut.in { opacity: 1; }
-  #dockcut > div { max-width: min(80vw, 640px); padding: 0 20px; }
-  #dockcut h1 { margin: 0 0 10px; font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 144; font-weight: 800; font-size: clamp(28px, 3.6vw, 52px); }
-  #dockcut p { margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.45; color: rgba(255,255,255,.9); text-wrap: balance; }
+  #dockbanner, #landbanner { position: fixed; left: 6vw; top: calc(var(--bar, 0px) + 5vh); z-index: 7; pointer-events: none; padding: 14px 22px 16px; border-radius: 14px; background: rgba(8,18,32,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.14); color: #fff; }
+  #dockbanner b, #landbanner b { display: block; font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 144; font-weight: 800; font-size: clamp(22px, 2.6vw, 38px); line-height: 1.1; }
+  #dockbanner span, #landbanner span { font-size: clamp(14px, 1.3vw, 19px); color: rgba(255,255,255,.9); }
+  #dockbanner[hidden], #dockcut[hidden], #landbanner[hidden], #landcut[hidden] { display: none; }
+  #dockcut, #landcut { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; text-align: center; background: #050c16; color: #fff; opacity: 0; transition: opacity .6s ease; }
+  #dockcut.in, #landcut.in { opacity: 1; }
+  #dockcut > div, #landcut > div { max-width: min(80vw, 640px); padding: 0 20px; }
+  #dockcut h1, #landcut h1 { margin: 0 0 10px; font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 144; font-weight: 800; font-size: clamp(28px, 3.6vw, 52px); }
+  #dockcut p, #landcut p { margin: 0; font-size: clamp(15px, 1.45vw, 21px); line-height: 1.45; color: rgba(255,255,255,.9); text-wrap: balance; }
   /* While she leaves, the simulator's loading note is a small pill at the bottom, clear of the boat. */
   body.docking #loading { top: auto; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 16px; min-width: 0; border-radius: 999px; }
   body.docking #loading .spin { width: 14px; height: 14px; margin: 0; border-width: 2px; }
@@ -896,6 +896,9 @@
 <!-- Launching from the dock (helm/dock.ts): the words over her leaving, and the cut to the open sea. -->
 <div id="dockbanner" hidden><b>Leaving Annapolis</b><span>Next stop: a finish line off Portugal.</span></div>
 <div id="dockcut" hidden><div><h1>Four days later</h1><p>Off the mouth of the Chesapeake Bay. The crossing starts here; the trip down the Bay doesn't count toward your time.</p></div></div>
+<!-- Arriving at a dock in Portugal (helm/dock.ts): after the finish scene, the cut to Cascais and the words over her coming in. -->
+<div id="landcut" hidden><div><h1>On to Cascais</h1><p>Your time stopped at the finish line, 330 km out to sea. From there she is brought in to the harbour town of Cascais, near Lisbon. This last part isn't timed or simulated.</p></div></div>
+<div id="landbanner" hidden><b>Cascais, Portugal</b><span>Coming alongside in the marina, an ocean away from Annapolis.</span></div>
 <div id="prologue-end" class="overlay" hidden><div class="card glass">
   <h1>Four days later: the Bay mouth</h1>
   <p id="prologue-sum"></p>

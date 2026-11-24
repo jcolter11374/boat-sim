@@ -35,6 +35,28 @@ export const DOCK_MIN_S = 7;
 /** Leaving speed (m/s): her own cruising speed, but no slower than a walk and no faster than a harbour allows (6 knots). */
 export const dockSpeed = (cruise: number): number => Math.min(3.1, Math.max(1.2, cruise));
 
+// Arriving at a dock in Portugal (John, 24 Nov 2026: "Azores and a dock in Portugal"). The finish line
+// is 330 km out to sea and stays exactly where the race's rules put it (John, 9 Nov). After it, and
+// after the clock has stopped, the view moves on to Cascais, the harbour town west of Lisbon, where
+// she comes alongside a pontoon of the marina with the old town behind. Display only, like the leaving.
+
+/**
+ * The way in: the last 40 m to the marina's outer pontoon (the town file's piers[9], its bay side,
+ * 3 m off, half way along), from the open bay. Checked against the town's ground and its other piers
+ * (docs/qa/portugal-dock-2026-11.md).
+ */
+export const LANDING_WAY: LatLon[] = [
+  { lat: 38.691477, lon: -9.41731 }, // in the bay, 14 m off the pontoon
+  { lat: 38.691694, lon: -9.417265 }, // on the line of her berth
+  { lat: 38.691785, lon: -9.417153 }, // alongside, 3 m off the pontoon
+];
+/** Looking this way past the boat shows the pontoon, the marina and the old town (compass degrees). */
+export const LANDING_LOOK = 315;
+/** She is watched coming in for this long (s), then the results come up with her still in view behind them; a click or a key brings them sooner. */
+export const LANDING_S = 14;
+/** How hard she slows for her berth (m/s2, GUESS: gentle, by eye). */
+export const LANDING_SLOW = 0.12;
+
 const bearingOf = (a: LatLon, b: LatLon): number => {
   const v = toXY(a, b);
   return ((Math.atan2(v.x, v.y) * 180) / Math.PI + 360) % 360;
@@ -62,6 +84,8 @@ export class Dock {
     readonly way: LatLon[] = DOCK_WAY,
     /** Her cruising speed through the water (m/s). */
     public cruise = 1.5,
+    /** An arrival: she slows as the way runs out and stops at its end, where a leaving carries on. */
+    readonly stops = false,
   ) {
     for (let i = 1; i < way.length; i++) {
       const v = toXY(way[i - 1], way[i]);
@@ -88,7 +112,23 @@ export class Dock {
     this.away += dt;
     const k = Math.min(1, this.away / DOCK_RAMP_S);
     this.speed = dockSpeed(this.cruise) * k * k * (3 - 2 * k);
+    if (this.stops) {
+      // No faster than she can lose again by her berth; never past it.
+      const left = Math.max(0, this.length - this.sailed);
+      this.speed = Math.min(this.speed, Math.sqrt(2 * LANDING_SLOW * left));
+      this.sailed = Math.min(this.length, this.sailed + Math.max(this.speed, left > 0 ? 0.05 : 0) * dt);
+      if (this.sailed >= this.length) this.speed = 0;
+      return;
+    }
     this.sailed += this.speed * dt;
+  }
+  /** The whole way (m). */
+  get length(): number {
+    return this.legs.reduce((a, g) => a + g.m, 0);
+  }
+  /** An arrival has reached her berth. */
+  get alongside(): boolean {
+    return this.stops && this.sailed >= this.length;
   }
   /** Where she is now. Past the end of the way she carries on down the last leg. */
   get state(): DockState {

@@ -17,6 +17,8 @@ export interface Place {
   land?: string;
   /** A town's buildings and piers (<town>.json and <town>_height.bin) to stand on the land. */
   town?: string;
+  /** The town's look: Annapolis's brick and clapboard (the default), or a Portuguese town's whitewash and tiled roofs. */
+  walls?: "brick" | "whitewash";
   /** "plain" for a shore without Pico's black basalt band (bulkheads, lawns, marsh). */
   shore?: "basalt" | "plain";
   /** Sea cliffs: steep faces are drawn as warm, darker rock (the photo stretched down a cliff is pale and flat). */
@@ -67,8 +69,10 @@ export const PLACES: Record<string, Place> = {
     lat: 38.668,
     lon: -9.42,
     look: 340,
-    credit: CREDIT,
+    credit: `${CREDIT} · ${ODBL}`,
     cliffs: true, // Cabo da Roca's 140 m face, in the finish scene
+    town: "cascais", // the marina and old town, where a crossing ends at a dock (helm/dock.ts)
+    walls: "whitewash",
   },
   annapolis: {
     key: "annapolis",
