@@ -329,7 +329,7 @@ export function buildRandolph(quality: Quality): BoatModel {
     g.add(m);
   } else {
     const hullMat = kit.keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.02, side: THREE.DoubleSide }));
-    kit.mesh(kit.hull(R, { top: 0xf1f3f4, deck: 0xdfe5e8, bottom: 0x2e5566, boot: 0x0f8a8a }), hullMat, g);
+    kit.mesh(kit.hull(R, { top: 0xff5b12, deck: 0xdfe5e8, bottom: 0x5a1712, boot: 0xf4f4f0 }), hullMat, g);
     const rDeck = (x: number, z: number) => {
       const s = x / R.L;
       const b = R.hb(s);
@@ -337,14 +337,16 @@ export function buildRandolph(quality: Quality): BoatModel {
     };
 
     // Keel fin (root 170, tip 150 mm chord, 430 mm deep) and the Rev C D72 lead bulb (about 9.2 kg; Rev B had D68, 8.2 kg).
-    kit.mesh(kit.foil(0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12), kit.std(0x30373c), g);
-    kit.bulb(g, kit.std(0x6d7378, { roughness: 0.4, metalness: 0.5 }), 0.32, 0.072, 0.4, 0.579, -0.434, 0);
+    // Their colours (blender/build_randolph.py): hi-vis topsides, dark red bottom paint on keel, bulb and rudder.
+    const antifoul = kit.std(0x5a1712, { roughness: 0.78 });
+    kit.mesh(kit.foil(0.17, 0.15, 0.657, 0.67, 0.02, -0.43, 0.12), antifoul, g);
+    kit.bulb(g, antifoul, 0.32, 0.072, 0.4, 0.579, -0.434, 0);
     // Rudder, stock at x = 1400.
     const rp = new THREE.Group();
     rp.name = "rudder_pivot";
     rp.position.x = 1.4;
     g.add(rp);
-    kit.mesh(kit.foil(0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12), kit.std(0x30373c), rp).position.x = -1.4;
+    kit.mesh(kit.foil(0.12, 0.12, 1.378, 1.378, 0.05, -0.19, 0.12), antifoul, rp).position.x = -1.4;
     // Two solar panels on the aft deck.
     kit.panel(g, 0.65, 1.07, 0.28, rDeck, 4, 2);
     kit.panel(g, 1.08, 1.48, 0.28, rDeck, 4, 2);
@@ -365,11 +367,15 @@ export function buildRandolph(quality: Quality): BoatModel {
     g.add(pivot);
     // Rev C5 wing (Wing_Shape_Study.md): 0.80 m span x 0.375 m chord, same area as the old 1.00 x 0.30,
     // on the spar at 22% chord as before. GUESS: the spar now stops just above the shorter wing.
-    kit.mesh(kit.foil(0.375, 0.375, -0.0825, -0.0825, 0.3, 1.1, 0.15), kit.std(0xfbfbf7, { roughness: 0.45 }), pivot);
+    // White, with their hi-vis panel on the lower half (GUESS: its exact edges, as in the Blender build).
+    const wingWhite = kit.std(0xf7f7f4, { roughness: 0.45 });
+    kit.mesh(kit.foil(0.375, 0.375, -0.0825, -0.0825, 0.3, 0.36, 0.15), wingWhite, pivot);
+    kit.mesh(kit.foil(0.375, 0.375, -0.0825, -0.0825, 0.36, 0.66, 0.15), kit.std(0xff5b12, { roughness: 0.45 }), pivot);
+    kit.mesh(kit.foil(0.375, 0.375, -0.0825, -0.0825, 0.66, 1.1, 0.15), wingWhite, pivot);
     kit.cyl(pivot, spar, 0.015, 0, 0.05, 1.11); // Rev C3: 30 mm spar (was 25)
     kit.rod(pivot, spar, 0.006, [0, 0.276, 0], [0.6, 0.276, 0]);
     kit.cyl(pivot, dark, 0.016, 0.6, 0.255, 0.3);
-    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), kit.std(0x0f8a8a), pivot).name = "tail_flap";
+    kit.mesh(kit.foil(0.12, 0.12, 0.576, 0.576, 0.3, 0.5, 0.12), wingWhite, pivot).name = "tail_flap";
     kit.rod(pivot, glass, 0.006, [0, 0.276, 0], [-0.3, 0.276, 0]); // 12 mm solid fibreglass rod
     kit.cyl(pivot, kit.std(0x5f666b, { metalness: 0.5 }), 0.032, -0.3, 0.264, 0.338);
     // Stern pole: transom bracket, antenna platform at 560, wind vane at 650.
@@ -382,15 +388,16 @@ export function buildRandolph(quality: Quality): BoatModel {
     vane.position.set(1.53, 0.68, 0);
     g.add(vane);
     kit.rod(vane, dark, 0.004, [0, 0, 0], [0.16, 0, 0]);
-    kit.box(vane, kit.std(0x0f8a8a), 0.1, 0.17, -0.03, 0.04, -0.002, 0.002);
+    kit.box(vane, kit.std(0xefefea), 0.1, 0.17, -0.03, 0.04, -0.002, 0.002);
   }
 
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-  // Its navigation light: an all-round white on the antenna platform (GUESS: where Randolph's would go).
-  addNavLights(g, "all_round", V(1.53, 0.62, 0));
+  // Its navigation light: the all-round white in their printed clamp, just aft of the stern post
+  // (their model: lens at x 1560 to 1590 mm, 596 to 612 mm up).
+  addNavLights(g, "all_round", V(1.575, 0.615, 0));
   const gear = new Gear(g, {
     props: [], // no motors: the wing sails it
-    light: V(1.53, 0.585, 0), // on the antenna platform
+    light: V(1.46, 0.591, 0), // on the forward end of the antenna platform, clear of the light clamp round the post
     spots: {
       rudder: V(1.42, -0.06, 0),
       sail: V(0.6, 1.42, 0),

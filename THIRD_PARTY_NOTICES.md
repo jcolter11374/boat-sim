@@ -28,7 +28,12 @@ starting designs (`sea3d/src/yard/bases.ts`) take their parts, prices and weight
 from the parts table in their `docs/Build_Plan.md` (Nov 2026); its Rev C5 refresh (26.9 kg, a shorter, wider wing, acetal mast bearings,
 the YB3 in a foredeck well, fibreglass stern post and counterweight arm, servo-savers, a
 stronger fin and spar) follows their Rev C5 `randolph_rev_c.yaml`, `docs/data/revC_gz_curve.csv`, `docs/Design_RevC.md`,
-`docs/Structural_Review.md` and `docs/Wing_Shape_Study.md` (11 Nov 2026). All under the same licence:
+`docs/Structural_Review.md` and `docs/Wing_Shape_Study.md` (11 Nov 2026). The fittings on our 3D model of their boat
+(`sea3d/blender/randolph_fittings.json`: stern post brackets, radar reflector, antenna platform, light clamp and lens,
+wind-vane housing and arm, modem bowl, hatch lid, spar clamp, tail servo housing and fin, counterweight pod, weed fairing,
+printed rudder) are their own shapes, copied from their viewer file `build-files/viewer/model.json` (version E3, 23 Nov 2026,
+commit 24cb8fe) and thinned by `sea3d/scripts/randolph_fittings.py`; the model's colours follow that viewer and their
+`docs/Launch_Plan.md`. All under the same licence:
 
 ```
 MIT License

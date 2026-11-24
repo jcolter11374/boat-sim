@@ -62,6 +62,13 @@ The model origin is the centre of gravity, with +x towards the bow, +y up and
 `common.py`). CI builds them into `public/models/*.glb` (cached on the
 scripts' hash); they are not kept in git. Without them the pages draw boats in
 code; `?models=simple` forces that.
+The Randolph boat's fittings are the Randolph team's own published shapes, thinned
+(`sea3d/blender/randolph_fittings.json`, made by `sea3d/scripts/randolph_fittings.py`).
+
+**Pictures of a boat from a cloud browser** need `?gl=full` on the page address, or every edge is
+a staircase (no graphics card there, so the pages draw small with smoothing off).
+`sea3d/tools/qa/boat-look.mjs` takes close-ups that way; see
+[docs/qa/boat-look-2026-11.md](../qa/boat-look-2026-11.md).
 
 ## Adding or changing a boat
 
