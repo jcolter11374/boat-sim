@@ -13,6 +13,7 @@ import json
 import math
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 from boatsim.config import load_design
 from boatsim.vessel.hazards import HazardParams, knockdown_rate_per_hour
@@ -41,7 +42,7 @@ print(
     "\nSaved 31 ft cruiser replays: knockdowns expected from the voyage's own hourly sea and wind, and shown"
 )
 for f in sorted(glob.glob("sea3d/public/voyages/voyage_31-ft-cruiser_*.json")):
-    v = json.load(open(f))
+    v = json.loads(Path(f).read_text())
     n = len(v["h"])
     expected = 0.0
     for i in range(n):
