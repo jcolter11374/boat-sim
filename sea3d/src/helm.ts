@@ -58,6 +58,7 @@ import { drainStep, inStretch, lookExpect, lookPace, runHours, runOutStep, stopS
 import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
+import { CREWED_M, LOOK, boardWords, dragLook, eyeFor } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
@@ -603,6 +604,8 @@ const page = {
   reach: HORIZON,
   /** How many places' land files this copy of the site has (-1 until known). */
   landKnown: -1,
+  /** The on-board view is up (helm/onboard.ts). */
+  onboard: false,
   /** How strongly the sea mirrors the land and boat now (0 off .. 1 calm). */
   mirror: 0,
   /** True when the view shows the arrival off Lisbon. */
@@ -2336,6 +2339,76 @@ function lightAhead(): { bearing: number; distM: number; spanDeg?: number; leanD
   const hi = Math.max(...rel);
   return { bearing: (light + (lo + hi) / 2 + 360) % 360, distM, spanDeg: hi - lo, leanDeg: -(lo + hi) / 2 };
 }
+// ---------- the on-board view (helm/onboard.ts): the camera rides the boat ----------
+let onboard = false;
+const ob = { yaw: 0, pitch: 0, fov: LOOK.fov, hand: null as { off: THREE.Vector3; fov: number } | null, drag: null as { x: number; y: number } | null };
+const obEye = new THREE.Vector3();
+const obQ = new THREE.Quaternion();
+const obTurn = new THREE.Quaternion();
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+/** The view can be on board now: at sea in a game, with no other camera (the wheel's, the cinematic, the finish scene, a card) in charge. */
+function onboardOk(): boolean {
+  return page.ready && !!model && !wheel.on && !cine.on && !arrival && !page.card && page.scene !== "arrival" && !lifted;
+}
+function setOnboard(on: boolean, quiet = false): void {
+  if (on === onboard || (on && !onboardOk())) return;
+  onboard = on;
+  page.onboard = on;
+  controls.enabled = !on; // the drag is the head's now, not the orbit's
+  ob.drag = null;
+  document.body.classList.toggle("onboard", on);
+  $("boardbtn").setAttribute("aria-pressed", String(on));
+  if (on) {
+    ob.hand = { off: camera.position.clone().sub(controls.target), fov: camera.fov };
+    ob.yaw = ob.pitch = 0;
+    camera.fov = ob.fov;
+    if (!quiet) note(boardWords(eyeFor(spec).kind, spec.length >= CREWED_M), `Day ${(hour / 24).toFixed(1)}`, TONE_COLOUR.info);
+  } else if (ob.hand) {
+    // Back to the camera beside her, where it was.
+    camera.fov = ob.hand.fov;
+    camera.position.copy(controls.target).add(ob.hand.off);
+    camera.up.set(0, 1, 0);
+    controls.update();
+  }
+  camera.updateProjectionMatrix();
+}
+/** One frame on board: the eye at its place on her, moving as she moves, the head turned as dragged. */
+function onboardCamera(): void {
+  if (!model) return;
+  const e = eyeFor(spec);
+  camera.position.copy(model.root.localToWorld(obEye.set(e.x, e.y, 0)));
+  // Reduced motion: her heading only, the horizon level.
+  if (stillCamera) obQ.setFromAxisAngle(AXIS_Y, smoothYaw ?? 0);
+  else model.root.getWorldQuaternion(obQ);
+  obQ.multiply(obTurn.setFromAxisAngle(AXIS_Y, -Math.PI / 2 - THREE.MathUtils.degToRad(ob.yaw)));
+  obQ.multiply(obTurn.setFromAxisAngle(AXIS_X, THREE.MathUtils.degToRad(ob.pitch - e.down)));
+  camera.quaternion.copy(obQ);
+  if (camera.fov !== ob.fov) {
+    camera.fov = ob.fov;
+    camera.updateProjectionMatrix();
+  }
+}
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (onboard) ob.drag = { x: e.clientX, y: e.clientY };
+});
+addEventListener("pointermove", (e) => {
+  if (!onboard || !ob.drag) return;
+  const v = dragLook(ob.yaw, ob.pitch, e.clientX - ob.drag.x, e.clientY - ob.drag.y, innerHeight, ob.fov);
+  ob.yaw = v.yaw;
+  ob.pitch = v.pitch;
+  ob.drag = { x: e.clientX, y: e.clientY };
+});
+addEventListener("pointerup", () => (ob.drag = null));
+addEventListener("pointercancel", () => (ob.drag = null));
+renderer.domElement.addEventListener(
+  "wheel",
+  (e) => {
+    if (onboard) ob.fov = THREE.MathUtils.clamp(ob.fov + Math.sign(e.deltaY) * 3, LOOK.fovMin, LOOK.fovMax);
+  },
+  { passive: true },
+);
+$("boardbtn").addEventListener("click", () => setOnboard(!onboard));
 function wheelCamera(dt: number, t: number): void {
   if (cine.on) return; // the cinematic owns the lens
   const ours = !!wheelNow && chase.on;
@@ -2536,6 +2609,11 @@ addEventListener("keydown", (e) => {
   if (!e.repeat && e.code === "KeyC") {
     e.preventDefault();
     $("cinebtn").click();
+    return;
+  }
+  if (!e.repeat && e.code === "KeyV") {
+    e.preventDefault();
+    setOnboard(!onboard);
     return;
   }
   const ax = keyAxis(e.code);
@@ -5449,12 +5527,21 @@ startWhenBuilt(renderer, scene, camera, () => renderer.setAnimationLoop(() => {
       camera.updateProjectionMatrix();
     }
     page.arrivalShot = { cape: s.cape, boat: s.boat };
+  } else if (onboard && onboardOk()) {
+    // On board (helm/onboard.ts): a knockdown is lived through from her deck, not cut away from.
+    if (knockCut) {
+      knockCut.cancel();
+      knockCut = null;
+    }
+    onboardCamera();
   } else {
+    if (onboard) setOnboard(false, true); // another camera took over (the wheel, the cinematic, a card)
     if (knockCut && (cine.on || wheelNow)) knockCut.cancel();
     if (knockCut && !knockCut.update(dt)) knockCut = null;
     if (!knockCut && !cine.update(dt)) controls.update();
   }
   frameBoat(dt);
+  if (onboard && camera.view?.enabled) camera.clearViewOffset(); // on board the lens is centred: the frame isn't composed round her
   const floor = heightAt(comps, camera.position.x, camera.position.z, t) + 0.35;
   if (camera.position.y < floor) camera.position.y = floor;
   // The other boat: a tag on the horizon in its direction, with the distance.
