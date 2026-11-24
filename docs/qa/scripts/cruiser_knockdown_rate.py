@@ -1,6 +1,6 @@
 """How often the knockdown model (vessel/hazards.py) rolls a keelboat, against what it was fitted to.
 
-    PYTHONPATH=src python docs/qa/scripts/cruiser_knockdown_rate.py [configs/stock_cruiser31.yaml]
+    PYTHONPATH=src python docs/qa/scripts/cruiser_knockdown_rate.py
 
 Prints (1) expected knockdowns and the chance of at least one in a 12-hour storm, by sea height,
 for a 10 m yacht (the size the fit used) and for the boat's own length; (2) for each saved replay
@@ -11,14 +11,13 @@ next to the number the replay shows. See docs/qa/cruiser-knockdown-rate-2026-11.
 import glob
 import json
 import math
-import sys
 from dataclasses import replace
 from pathlib import Path
 
 from boatsim.config import load_design
 from boatsim.vessel.hazards import HazardParams, knockdown_rate_per_hour
 
-design = sys.argv[1] if len(sys.argv) > 1 else "configs/stock_cruiser31.yaml"
+design = "configs/stock_cruiser31.yaml"  # the saved replays below are hers
 p = HazardParams.from_config(load_design(design).hazards)
 TP, WIND, HOURS = 11.0, 25.0, 12.0  # the fit's storm (tests/test_keelboat_knockdowns.py), Hs varied
 
@@ -53,7 +52,12 @@ for f in sorted(glob.glob("sea3d/public/voyages/voyage_31-ft-cruiser_*.json")):
             )
             * dt
         )
-    shown = sum(int(e["detail"].split()[0]) for e in v["events"] if e["kind"] == "capsize")
+    # Wave knockdowns only ("2 knockdown(s), Hs 3.5 m"): a broach or a gust is not this formula's.
+    shown = sum(
+        int(e["detail"].split()[0])
+        for e in v["events"]
+        if e["kind"] == "capsize" and "knockdown(s)" in e["detail"]
+    )
     print(
         f"{v['start'][:10]}: expected {expected:5.2f}, shown {shown}, highest sea {max(v['hs']):.1f} m"
     )
