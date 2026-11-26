@@ -327,7 +327,10 @@
   .ss-continue a[hidden] { display: none; }
   .ss-continue .muted { font-size: 12px; }
   #ss-ask-q { font-weight: 650; }
-  #go.asked { opacity: .4; filter: saturate(.5); }
+  /* A voyage at sea: "Continue your voyage" is the bright button and Set sail the plain one. Never dimmed (John, 24 Nov 2026). */
+  #go.second { background: rgba(27,51,82,.85); color: #e9f1fb; border: 1px solid rgba(160,200,255,.45); }
+  .ss-continue a#ss-continue-go { display: block; text-align: center; text-decoration: none; margin: 8px 0 6px; padding: 11px; border-radius: 10px; background: var(--orange, #ff8a2a); color: #1a0d02; font-size: 16px; }
+  .ss-continue a#ss-continue-go[hidden] { display: none; }
   .ss-ask-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .ss-ask-btns button { cursor: pointer; font: 650 13px system-ui, sans-serif; border-radius: 8px; padding: 7px 12px; color: #e9f1fb; background: rgba(27,51,82,.7); border: 1px solid rgba(160,200,255,.3); }
   .ss-ask-btns button:hover { border-color: #8ab4ff; }
@@ -928,7 +931,7 @@
 <div id="start" class="overlay">
   <div class="card glass" id="ss-card">
     <h1>Set sail</h1>
-    <div class="ss-row ss-continue" id="ss-continue" hidden><div id="ss-continue-words"></div><a id="ss-continue-go" href="./helm.html">Continue your voyage</a><div class="muted" id="ss-continue-new">Starting a new crossing ends that one.</div><div id="ss-ask" role="alertdialog" aria-labelledby="ss-ask-q" hidden><div id="ss-ask-q"></div><div class="ss-ask-btns"><button type="button" id="ss-ask-keep">Keep sailing</button><button type="button" id="ss-ask-new">Start a new one</button></div></div></div>
+    <div class="ss-row ss-continue" id="ss-continue" hidden><div id="ss-continue-words"></div><a id="ss-continue-go" href="./helm.html">Continue your voyage</a><div class="muted" id="ss-continue-new">Starting a new crossing ends that one.</div><div id="ss-ask" role="alertdialog" aria-labelledby="ss-ask-q" hidden><div id="ss-ask-q" role="alert"></div><div class="ss-ask-btns"><button type="button" id="ss-ask-keep">Keep sailing</button><button type="button" id="ss-ask-new">Start a new one</button></div></div></div>
     <div class="ss-row" id="ss-boat"><div class="ss-l">Your boat</div><b id="ss-boatname">Our kayak</b> &middot; <button type="button" class="ss-link" id="ss-change">Change</button></div>
     <div class="ss-row" id="ss-practiceboat" hidden><div class="ss-l">Your boat</div><b>Beneteau First 31.7 (our model)</b> <span class="muted">(practice is sailed in a sailing yacht)</span></div>
     <div class="ss-row"><div class="ss-l">Where</div><div class="ss-opts" id="ss-where-opts"></div><div class="ss-line muted" id="ss-today" hidden></div></div>

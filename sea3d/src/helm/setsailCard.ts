@@ -12,6 +12,8 @@ import type { IndexEntry } from "../replay/data";
 import { clearVoyage, continueLink, endWords, loadVoyage, offerWords } from "./voyageSave";
 import { DROP_POINT, loadToday, samplesAt, todayWords } from "./today";
 import { AUTO_DAYS, AUTO_DAY_WORDS, RACE_DAYS, RIVAL_WORDS, WHO_WORDS, dayLabel, defaultRival, raceId, rivalName, watchDay, watchDays, type RaceId, type Who, SCENERY, SCENERY_WORDS } from "./whoSteers";
+/** The start button's words while a voyage of yours is at sea: what it does, then the yes to its one question. */
+export const NEW_WORDS = { go: "Start a new crossing", yes: "Yes, end it and start a new one" };
 import { roughStartLine } from "./roughStart";
 
 /** Leo's words for the card (one-game-words.md §3); SET_SAIL's keys are Rosa's contract. */
@@ -140,13 +142,17 @@ export function mountSetSailCard(hooks: CardHooks): void {
   }
   // A new crossing ends the saved one, and that can't be undone: Set sail asks once first (Elena).
   let endIt = !kept;
+  /** Set sail was pressed once with a voyage at sea: the question is up, and the next press is the yes. */
+  let ended = false;
+  let askedAt = 0;
   if (kept) {
     $("ss-ask-keep").addEventListener("click", () => location.assign(`./${continueLink(kept)}`));
     $("ss-ask-new").addEventListener("click", () => {
       endIt = true;
-      $("go").classList.remove("asked");
+      ended = false;
       clearVoyage();
       $("ss-continue").hidden = true;
+      draw();
       $("go").click();
     });
   }
@@ -182,8 +188,6 @@ export function mountSetSailCard(hooks: CardHooks): void {
     if (today && todayBox.childElementCount !== today.length) todayBox.replaceChildren(...today.map((t) => Object.assign(document.createElement("div"), { textContent: t })));
     // A new crossing takes the saved one's place; practice and watching the autopilot don't touch it.
     $("ss-continue-new").hidden = where !== "ocean" || auto || !!$("ss-continue").dataset.lost || !$("ss-ask").hidden;
-    // Set sail is dimmed only while its question is the thing to answer: practice and watching end nothing.
-    $("go").classList.toggle("asked", !$("ss-ask").hidden && where === "ocean" && !auto);
     pills($("ss-who-opts"), (["you", "autopilot"] as const).map((k) => ({ key: k, label: WHO_WORDS[k].pill })), auto ? "autopilot" : "you", (k) => {
       who = k as Who;
       draw();
@@ -248,6 +252,11 @@ export function mountSetSailCard(hooks: CardHooks): void {
     $("ss-when").querySelector(".ss-l")!.textContent = auto && days.length ? `${WHO_WORDS.dayLabel}, ${days[0].year}` : WHO_WORDS.dayLabel;
     // Watching her sail herself is not setting sail, and nor is a race: the button says what happens (Elena).
     $("go").textContent = racing ? RIVAL_WORDS.boat.go : auto ? WHO_WORDS.autopilot.go : WHO_WORDS.go;
+    // With a voyage at sea the bright button is "Continue your voyage"; this one says what it would do, and
+    // is never dimmed or dead (John, 24 Nov 2026: "this doesn't start"): pressed, it asks once; pressed again, it starts.
+    const ends = !!kept && !endIt && where === "ocean" && !auto;
+    if (ends) $("go").textContent = ended ? NEW_WORDS.yes : NEW_WORDS.go;
+    $("go").classList.toggle("second", ends && !ended);
     const lv = launch.value;
     const named = lv === "2020-04-23" ? "calm" : lv === "0" ? "rough" : lv;
     // "Pick a day…" opens the other launch days as pills of their own, like the challenges' "More…"
@@ -358,14 +367,32 @@ export function mountSetSailCard(hooks: CardHooks): void {
         else if (voyage) hooks.watch(voyage, scenery);
         return;
       }
+      if (ended && where === "ocean") {
+        // A double click, or Enter held down, is one press, not the question and its yes (review of #670):
+        // the yes counts only once the question has been up long enough to see.
+        if (e.detail > 1 || performance.now() - askedAt < 700) {
+          e.stopImmediatePropagation();
+          return;
+        }
+        // The second press: the saved voyage ends here, and the crossing starts (#go's own listener carries on).
+        ended = false;
+        endIt = true;
+        clearVoyage();
+        $("ss-continue").hidden = true;
+        draw();
+        return;
+      }
       if (where === "ocean" && !endIt && kept) {
         e.stopImmediatePropagation();
         $("ss-ask-q").textContent = endWords(kept);
         for (const id of ["ss-continue-words", "ss-continue-go", "ss-continue-new"]) $(id).hidden = true;
         $("ss-ask").hidden = false;
-        $("go").classList.add("asked"); // already pressed: "Keep sailing" is the one bright button now (Leo)
+        // The button itself now says yes: a second press starts the new crossing, the same as "Start a new one".
+        ended = true;
+        askedAt = performance.now();
+        draw();
+        $("go").setAttribute("aria-describedby", "ss-ask-q"); // the button is now the answer to this question
         $("ss-continue").scrollIntoView({ block: "nearest" });
-        $("ss-ask-keep").focus();
         return;
       }
       if (where !== "annapolis") return;
