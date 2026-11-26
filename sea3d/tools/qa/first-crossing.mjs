@@ -72,6 +72,12 @@ for (const [name, viewport] of [["desktop", { width: 1280, height: 720 }], ["pho
   await page.waitForTimeout(900);
   check((await shown(page, "tip")) && /^Nothing to do yet\./.test(await text(page, "tip")), `${name}: then one tip: "${(await text(page, "tip")).slice(0, 60)}..."`);
   check(!(await page.evaluate(() => document.getElementById("orders").classList.contains("open"))), `${name}: the drawer is still shut`);
+  // A note at the top centre must not sit under the tip (seen on the live site in a 1,024 px window).
+  await page.setViewportSize({ width: Math.min(viewport.width, 1024), height: viewport.height });
+  await page.waitForTimeout(300);
+  const clearOfNotes = await page.evaluate(() => { const t = document.getElementById("tip").getBoundingClientRect(); const n = document.getElementById("notes").getBoundingClientRect(); return n.top >= t.bottom || n.left >= t.right; });
+  check(clearOfNotes, `${name}: at ${Math.min(viewport.width, 1024)} px wide the notes start clear of the tip`);
+  await page.setViewportSize(viewport);
   await shot(page, `3-tip-time${sfx}`);
   // 4. The first decision.
   await page.waitForFunction(() => !document.getElementById("decide").hidden, null, { timeout: 400000 });

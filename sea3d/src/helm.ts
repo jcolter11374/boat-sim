@@ -4081,6 +4081,7 @@ function showTip(tip: Exclude<TipId, "goal">): void {
   t.querySelector("b")!.textContent = w.head;
   t.querySelector("span")!.textContent = w.body;
   t.hidden = false;
+  document.body.style.setProperty("--tip-h", `${t.offsetHeight}px`); // the notes step down under it in a narrow window (helm.html)
   tipUp = tip;
   requestAnimationFrame(() => t.classList.add("in"));
   clearTimeout(tipTimer);
