@@ -385,6 +385,26 @@
   body.goal #strip, body.goal #mapbox, body.goal #orders-tab, body.goal #orders, body.goal #poidock { opacity: 0; pointer-events: none; }
   #strip, #mapbox, #orders-tab { transition: opacity .8s; }
   #goalcard[hidden] { display: none; }
+  /* A first crossing (helm/guide.ts): the goal card carries more words, so they are set smaller; then the tips, one at a time, in its place. */
+  #goalcard.first { max-width: min(80vw, 620px); }
+  #goalcard.first h2 { font-size: clamp(24px, 2.8vw, 40px); }
+  #goalcard.first p { font-size: clamp(15px, 1.3vw, 19px); text-wrap: pretty; }
+  #goalmore { margin-top: 10px !important; font-size: 13px !important; color: rgba(255,255,255,.7) !important; }
+  #goalmore[hidden] { display: none; }
+  #tip { position: fixed; left: var(--edge, 12px); top: calc(var(--bar, 0px) + var(--edge, 12px)); z-index: 7; box-sizing: border-box; width: min(340px, calc(100vw - 24px)); padding: 12px 16px 12px; border-radius: 14px;
+    background: rgba(8,18,32,.78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.18); border-left: 3px solid #ff8a2a; color: #fff;
+    font: 400 14px/1.45 system-ui, sans-serif; opacity: 0; transform: translateY(6px); transition: opacity .4s ease, transform .4s ease; }
+  #tip.in { opacity: 1; transform: none; }
+  #tip[hidden] { display: none; }
+  #tip b { display: block; font-size: 16px; font-weight: 650; margin-bottom: 3px; }
+  #tip span { display: block; color: rgba(255,255,255,.92); }
+  #tip button { margin-top: 9px; font: 500 13px system-ui, sans-serif; color: #fff; background: rgba(27,51,82,.9); border: 1px solid rgba(160,200,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  #tip button:hover, #tip button:focus-visible { background: rgba(40,72,112,.95); }
+  /* Out of the way of anything bigger: the open drawer sits where it is, and the wheel, the ending and a bare screen have no tips. */
+  body.orders-open #tip, body.at-wheel #tip, body.results #tip, body.arriving #tip, body.bare #tip, body.goal #tip, body.cinema #tip, body:has(#mapbox.big) #tip { display: none; }
+  @media (prefers-reduced-motion: reduce) { #tip { transition: opacity .3s; transform: none; } }
+  #tip button[hidden] { display: none; }
+  @media (max-width: 760px) { #tip { width: min(340px, calc(100vw - 64px)); } } /* clear of the hide button in the corner */
   /* Launching from the dock: a small title over her leaving, then a dark card between the harbour and the open sea. */
   #dockbanner, #landbanner { position: fixed; left: 6vw; top: calc(var(--bar, 0px) + 5vh); z-index: 7; pointer-events: none; padding: 14px 22px 16px; border-radius: 14px; background: rgba(8,18,32,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.14); color: #fff; }
   #dockbanner b, #landbanner b { display: block; font-family: "Fraunces", Georgia, serif; font-variation-settings: "SOFT" 50, "opsz" 144; font-weight: 800; font-size: clamp(22px, 2.6vw, 38px); line-height: 1.1; }
@@ -799,12 +819,12 @@
     </div>
   </div>
   <button class="cell c-order" id="c-order" aria-controls="orders" aria-expanded="false" title="Your orders (O)"><span class="v" id="c-orderv">Autopilot</span><span class="l">order</span></button>
-  <div class="cell" id="c-head"><span class="v" id="c-headv">–</span><span class="l">heading</span></div>
-  <div class="cell" id="c-speed"><span class="v" id="c-speedv">–</span><span class="l">speed</span></div>
+  <div class="cell" id="c-head" title="Which way the front of the boat points, as a compass direction: 0° is north, 90° east, 180° south, 270° west"><span class="v" id="c-headv">–</span><span class="l">heading</span></div>
+  <div class="cell" id="c-speed" title="How fast she is going, in knots. One knot is 1.85 km/h, a slow walk is about 2"><span class="v" id="c-speedv">–</span><span class="l">speed</span></div>
   <div class="cell" id="c-bat"><span class="v" id="c-batv">–</span><span class="l" id="c-batl">battery</span><span class="meter"><i id="c-batbar"></i></span></div>
   <button class="cell" id="c-wind" aria-controls="fcbox" aria-expanded="false" title="The 5-day forecast (F)"><span class="v" id="c-windv">–</span><span class="l" id="c-wavel">wind</span></button>
-  <div class="cell" id="c-eq"><div id="eq"></div><span class="l">equipment</span></div>
-  <div class="cell" id="c-lead"><span class="v" id="c-leadv">level</span><span class="l">vs the ghost</span></div>
+  <div class="cell" id="c-eq" title="Her equipment. A part that has broken down is marked here"><div id="eq"></div><span class="l">equipment</span></div>
+  <div class="cell" id="c-lead" title="How far ahead of the ghost you are, or behind. The ghost is the same boat sailed by the autopilot, from the same start"><span class="v" id="c-leadv">level</span><span class="l">vs the ghost</span></div>
   <button id="keysbtn" aria-expanded="false" aria-controls="keylist" title="All the keys (?)">?</button>
 </section>
 <div id="keylist" class="hud" hidden>
@@ -981,7 +1001,10 @@
 <div id="goalcard" role="status" aria-live="polite" hidden>
   <h2>Beat the autopilot to Portugal.</h2>
   <p><b id="goalkm">5,256 km.</b> It&rsquo;s sailing the same boat, from the same start.</p>
+  <p id="goalmore" hidden>Click or press any key to carry on.</p>
 </div>
+<!-- A first crossing's tips (helm/guide.ts): one at a time, where the goal card was. -->
+<div id="tip" role="status" aria-live="polite" hidden><b></b><span></span><button type="button" id="tip-x">Got it</button></div>
 <button id="r-back" hidden>Back to the ending</button>
 <div id="result" class="overlay" hidden>
   <div class="card glass rc" role="dialog" aria-labelledby="r-head">

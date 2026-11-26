@@ -79,7 +79,8 @@
   /* Set sail is the main action: the gold of the wordmark's "Blue", the menu's one accent (Elena, live look). A returning
      player's Continue takes the gold instead, so there is only ever one gold line. */
   #title nav #t-continue[hidden] + #t-setsail { color: var(--gold); font-weight: 520; }
-  #title nav #t-continue small { display: block; text-transform: none; letter-spacing: 0; margin-top: 6px;
+  /* A first visit: one line under Set sail says where to start (helm/guide.ts). */
+  #title nav #t-continue small, #title nav #t-setsail.first small { display: block; text-transform: none; letter-spacing: 0; margin-top: 6px;
     font: italic 400 clamp(15px, 1.25vw, 21px)/1.2 "Fraunces", Georgia, serif; color: rgba(242,232,213,.85); }
   #title a:focus-visible, #title button:focus-visible, #title summary:focus-visible { outline: 1px solid var(--gold); outline-offset: 4px; }
   #title details { align-self: stretch; display: flex; flex-direction: column; align-items: center; margin-top: clamp(4px, 1.5vh, 16px); }
@@ -133,7 +134,7 @@
     #title nav { gap: 10px; margin-top: 18px; }
     #title nav a, #title nav button { font-size: 25px; padding: 4px 4px 7px; min-height: 30px; }
     #title nav .main#t-continue { font-size: 26px; }
-    #title nav #t-continue small { font-size: 15px; margin-top: 3px; }
+    #title nav #t-continue small, #title nav #t-setsail.first small { font-size: 15px; margin-top: 3px; }
     #title details::before { margin-bottom: 8px; }
     #title details summary { font-size: 21px; padding: 6px 12px; }
     #title .myboat { margin-top: 14px; font-size: 14px; }
@@ -236,6 +237,17 @@
       document.body.classList.remove("title");
     }
   } catch (e) { /* private mode: the title shows, as title.ts would */ }
+  // Before the first paint too: a first visit's "Start here" line under Set sail, and its link straight to
+  // sea, so the menu doesn't move when the scripts load (the same rule and words as helm/guide.ts).
+  try {
+    var played = ["boatsim.guide.v1", "boatsim.voyage.v1", "boatsim.lastcrossing.v1", "boatsim.crossing.best.v1", "boatsim.myboat.v1", "boatsim.challenge.best.v1"];
+    if (played.every(function (k) { return localStorage.getItem(k) === null; })) {
+      var first = document.getElementById("t-setsail");
+      first.classList.add("first");
+      first.href = "./helm.html?sail";
+      first.querySelector("small").textContent = "Start here. Your first crossing takes about five minutes.";
+    }
+  } catch (e) { /* storage off: the plain menu, as title.ts would */ }
 </script>
 <div id="panel">
   <h1>Both boats on a live sea</h1>
