@@ -4069,6 +4069,7 @@ function hideTip(): void {
   // A crossing that brings no decision for a long while: the steering tip comes anyway, once "nothing to do yet" has gone.
   if (tipUp === "time") window.setTimeout(() => { if (!tipUp && $("decide").hidden) showTip("steer"); }, 40_000);
   tipUp = null;
+  document.body.classList.remove("tip-over-notes");
   const t = $("tip");
   t.classList.remove("in");
   window.setTimeout(() => { if (!tipUp) t.hidden = true; }, 500);
@@ -4087,6 +4088,11 @@ function showTip(tip: Exclude<TipId, "goal">): void {
   clearTimeout(tipTimer);
   // The decision's tip stays until the decision is made: time is stopped, there is no hurry.
   $("tip-x").hidden = tip === "call";
+  // In a narrow window the notes step down under the tip (helm.html), by its height as it now stands. Not
+  // beside a decision: the card is where they would land, and the notes keep their place above it. A tip that
+  // is not drawn just now (the drawer is open) has no height to give: the style sheet's own guess stands.
+  if (t.offsetHeight > 0) document.body.style.setProperty("--tip-h", `${t.offsetHeight}px`);
+  document.body.classList.toggle("tip-over-notes", tip !== "call");
   if (TIP_MS[tip] > 0) tipTimer = window.setTimeout(hideTip, TIP_MS[tip]);
   // The keys it names are on the small line above the instruments too, from now on.
   if (tip === "steer") {

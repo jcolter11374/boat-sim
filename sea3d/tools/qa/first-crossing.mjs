@@ -72,6 +72,12 @@ for (const [name, viewport] of [["desktop", { width: 1280, height: 720 }], ["pho
   await page.waitForTimeout(900);
   check((await shown(page, "tip")) && /^Nothing to do yet\./.test(await text(page, "tip")), `${name}: then one tip: "${(await text(page, "tip")).slice(0, 60)}..."`);
   check(!(await page.evaluate(() => document.getElementById("orders").classList.contains("open"))), `${name}: the drawer is still shut`);
+  // A note at the top centre must not sit under the tip (seen on the live site in a 1,024 px window).
+  await page.setViewportSize({ width: Math.min(viewport.width, 1024), height: viewport.height });
+  await page.waitForTimeout(300);
+  const clearOfNotes = await page.evaluate(() => { const t = document.getElementById("tip").getBoundingClientRect(); const n = document.getElementById("notes").getBoundingClientRect(); return n.top >= t.bottom || n.left >= t.right; });
+  check(clearOfNotes, `${name}: at ${Math.min(viewport.width, 1024)} px wide the notes start clear of the tip`);
+  await page.setViewportSize(viewport);
   await shot(page, `3-tip-time${sfx}`);
   // 4. The first decision.
   await page.waitForFunction(() => !document.getElementById("decide").hidden, null, { timeout: 400000 });
@@ -79,6 +85,7 @@ for (const [name, viewport] of [["desktop", { width: 1280, height: 720 }], ["pho
   check((await shown(page, "tip")) && /^Your first decision\./.test(await text(page, "tip")), `${name}: the first decision comes with one tip that says what a decision is`);
   const fits = await page.evaluate(() => { const last = document.querySelector("#decidebtns button:last-child").getBoundingClientRect(); const strip = document.getElementById("strip").getBoundingClientRect(); const tip = document.getElementById("tip").getBoundingClientRect(); const card = document.getElementById("decide").getBoundingClientRect(); return { options: last.bottom <= Math.min(innerHeight, strip.top) + 1 || last.bottom <= innerHeight && (last.left >= strip.right || last.right <= strip.left), clear: tip.bottom <= card.top || tip.right <= card.left || tip.left >= card.right }; });
   check(fits.clear, `${name}: the tip is clear of the decision card`);
+  check(!(await page.evaluate(() => document.body.classList.contains("tip-over-notes"))), `${name}: beside a decision the notes keep their place`);
   if (name === "desktop") check(fits.options, "desktop: every option is on the screen, above the instruments");
   await shot(page, `4-first-decision${sfx}`);
   await page.click("#decidebtns button:last-child");
@@ -87,6 +94,13 @@ for (const [name, viewport] of [["desktop", { width: 1280, height: 720 }], ["pho
   const steer = await text(page, "tip");
   check((await shown(page, "tip")) && /^You can steer her yourself/.test(steer), `${name}: then the steering tip: "${steer.slice(0, 70)}..."`);
   await shot(page, `5-tip-steer${sfx}`);
+  {
+    await page.setViewportSize({ width: Math.min(viewport.width, 1024), height: viewport.height });
+    await page.waitForTimeout(300);
+    const clear = await page.evaluate(() => { const t = document.getElementById("tip").getBoundingClientRect(); const n = document.getElementById("notes").getBoundingClientRect(); return n.top >= t.bottom || n.left >= t.right; });
+    check(clear, `${name}: the notes are clear of the steering tip too, with its button`);
+    await page.setViewportSize(viewport);
+  }
   if (name === "desktop") {
     check(await shown(page, "keyhint"), "desktop: the key line is up with it");
     await page.keyboard.press("ArrowRight");

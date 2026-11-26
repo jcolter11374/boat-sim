@@ -404,6 +404,8 @@
   body.orders-open #tip, body.at-wheel #tip, body.results #tip, body.arriving #tip, body.bare #tip, body.goal #tip, body.cinema #tip, body:has(#mapbox.big) #tip { display: none; }
   @media (prefers-reduced-motion: reduce) { #tip { transition: opacity .3s; transform: none; } }
   #tip button[hidden] { display: none; }
+  /* In a window too narrow for both side by side, the notes at the top centre step down under the tip (seen on the live site at 1,024 px, 26 Nov: the tip covered a note). */
+  @media (max-width: 1180px) { body.tip-over-notes:not(.orders-open):not(.goal):not(.at-wheel):not(.results):not(.arriving):not(.bare):not(.cinema):not(:has(#mapbox.big)) #notes { top: calc(var(--bar, 0px) + var(--edge, 12px) + var(--tip-h, 140px) + 8px); } }
   @media (max-width: 760px) { #tip { width: min(340px, calc(100vw - 64px)); } } /* clear of the hide button in the corner */
   /* Launching from the dock: a small title over her leaving, then a dark card between the harbour and the open sea. */
   #dockbanner, #landbanner { position: fixed; left: 6vw; top: calc(var(--bar, 0px) + 5vh); z-index: 7; pointer-events: none; padding: 14px 22px 16px; border-radius: 14px; background: rgba(8,18,32,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(160,200,255,.14); color: #fff; }

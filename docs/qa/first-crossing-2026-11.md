@@ -62,7 +62,7 @@ hundred bytes of text in the helm page's own script.
 - A returning player's goal card could be cut short by a decision; that is back as it was. The short wait for the harbour to be drawn is for a first visit only.
 - If no decision comes, the steering tip still appears about 40 s after "Nothing to do yet" goes.
 
-Known and left: at window widths under about 1,150 px a note at the top centre can overlap the tip for a few seconds.
+Fixed after the merge (26 Nov): on the live site in a 1,024 px window the tip covered a note at the top centre. In windows under 1,180 px the notes now step down under the tip while it is up.
 
 The older smoke test (`tests/smoke.mjs`) was run in a cloud sandbox against this branch and stopped at its Boatyard launch step (30 s timeout on software graphics with the full weather file present), which this change does not touch.
 
