@@ -65,6 +65,7 @@ import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen,
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
 import { saveChallengeRun } from "./helm/challengeBest";
 import { MilestoneWatch, crossingMilestones, fraction, milestoneNote, nextWords } from "./helm/milestones";
+import { TIP_MS, goalWords, isLearning, isNewcomer, markSeen, tipWords, wasSeen, type TipId } from "./helm/guide";
 import { bestWords, finishedACrossing, loadPersonalBest, savePersonalBest, toBeatWords } from "./helm/personalBest";
 import { outcomeLine } from "./replay/story";
 import { drawPostcard, savePng } from "./replay/postcard";
@@ -491,7 +492,14 @@ const LOST_KEY = "boatsim.helm.lostvoyage";
 /** A game someone else shared with you. */
 const THEIRS = !!shared && !RESUMED;
 /** The title's one-click Set sail (F1): helm.html?sail. */
-const ONE_CLICK = params.has("sail") && !shared && !params.has("practice") && !SPECTATE;
+// Not with a voyage already at sea: a reload of a first crossing (its address keeps ?sail) would start a new
+// one over it without asking. The card comes up, with Continue your voyage and its question.
+const ONE_CLICK = params.has("sail") && !shared && !params.has("practice") && !SPECTATE && !loadVoyage();
+/** Nobody has played in this browser before (helm/guide.ts), asked before this page saves anything. A first
+ *  crossing gets one plain tip at a time in place of the open orders drawer. ?guide=1 forces it, ?guide=0 never. */
+const NEWCOMER = params.get("guide") === "1" || (params.get("guide") !== "0" && isNewcomer());
+/** A first crossing was begun here and its tips are not all shown yet (a reload, or Continue your voyage): the rest still come. */
+const LEARNING = !NEWCOMER && params.get("guide") !== "0" && isLearning() && !finishedACrossing();
 // Weather challenges (challenge-data release, copied to public/challenges/).
 const challengesBase = new URL(params.get("challenges") ?? "./challenges/", location.href).href;
 let challenges: Challenge[] = [];
@@ -610,6 +618,8 @@ const page = {
   landKnown: -1,
   /** "" on the open sea; "tied" alongside the pier before a crossing; "leaving" on her way out. */
   dock: "",
+  /** A first crossing, with its tips (helm/guide.ts). */
+  guided: false,
   /** The on-board view is up (helm/onboard.ts). */
   onboard: false,
   /** How strongly the sea mirrors the land and boat now (0 off .. 1 calm). */
@@ -1777,6 +1787,7 @@ function setRate(r: number, drain = false): void {
   drainRate = drain && rate > 0 ? rate : 0;
   if (r > 0) {
     $("decide").hidden = true;
+    if (tipUp === "call") hideTip(); // the decision went without a choice (the wheel was taken): its tip goes too
     $("fcbox").classList.remove("lit");
     hud.unstick();
     hud.clockRuns();
@@ -3485,6 +3496,14 @@ let drawDecisionMap: ((lit: number) => void) | null = null;
 
 function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []): void {
   $("decidetext").textContent = d.text;
+  // A first crossing's first decision says what a decision is, on the card itself (helm/guide.ts).
+  if (guided) endGoal?.();
+  // The words go in the tips' place at the top left, clear of the card: on the card they pushed its
+  // second option off a laptop's screen.
+  // A decision that replaces the first one before it is answered keeps the tip.
+  const helped = guided && (!wasSeen("call") || tipUp === "call");
+  if (helped && tipUp !== "call") showTip("call");
+  else if (!helped && tipUp) hideTip();
   const box = $("decidebtns");
   box.replaceChildren();
   // The card is a map first (Rosa's cards, Elena's plan note 1): each option's forecast line in
@@ -3531,6 +3550,7 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
     b.addEventListener("blur", () => lightUp(false));
     b.addEventListener("click", async () => {
       $("decide").hidden = true;
+      if (tipUp === "call") hideTip();
       page.outlook = null;
       drawDecisionMap = null;
       // For the results card's "your calls": what was chosen, and the lead on the ghost then.
@@ -3541,7 +3561,8 @@ function showDecision(d: Decision, o: Outlook | null = null, has: boolean[] = []
       const acted = c.act();
       setRate(lastRate);
       await acted;
-      if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
+      if (helped) window.setTimeout(() => showTip("steer"), 1500); // the first decision is made: now, how to steer
+      else if (!soundAsked) window.setTimeout(askSound, 4000); // after the first call, once the clock is running again
     });
     box.append(b);
   }
@@ -4033,9 +4054,62 @@ async function showStanding(build: string): Promise<void> {
  * its own on the sea (it's a tag on the horizon once apart), so the words say "from the same start" (Leo). Eight seconds over
  * the opening view, in the clear sky at the top left; a click or a key lets it go early. */
 const GOAL_MS = 8000;
-function goalCard(km: number): Promise<void> {
+/** Lets the goal card go early (a decision has come up under it). Null when it isn't up. */
+let endGoal: (() => void) | null = null;
+
+/** A touch screen or a phone-width window: no keys to name. */
+const TOUCH = matchMedia("(hover: none) and (pointer: coarse), (max-width: 760px)");
+/** A first crossing's tips (helm/guide.ts): one small card at the top left, one at a time, each once ever. */
+let guided = false;
+let tipUp: TipId | null = null;
+let tipTimer = 0;
+function hideTip(): void {
+  clearTimeout(tipTimer);
+  // A crossing that brings no decision for a long while: the steering tip comes anyway, once "nothing to do yet" has gone.
+  if (tipUp === "time") window.setTimeout(() => { if (!tipUp && $("decide").hidden) showTip("steer"); }, 40_000);
+  tipUp = null;
+  const t = $("tip");
+  t.classList.remove("in");
+  window.setTimeout(() => { if (!tipUp) t.hidden = true; }, 500);
+}
+function showTip(tip: Exclude<TipId, "goal">): void {
+  if (!guided || wasSeen(tip) || page.status?.over) return;
+  if (tip === "time" && !$("decide").hidden) return; // a decision is already up: it has its own words
+  markSeen(tip);
+  const w = tipWords(tip, TOUCH.matches);
+  const t = $("tip");
+  t.querySelector("b")!.textContent = w.head;
+  t.querySelector("span")!.textContent = w.body;
+  t.hidden = false;
+  tipUp = tip;
+  requestAnimationFrame(() => t.classList.add("in"));
+  clearTimeout(tipTimer);
+  // The decision's tip stays until the decision is made: time is stopped, there is no hurry.
+  $("tip-x").hidden = tip === "call";
+  if (TIP_MS[tip] > 0) tipTimer = window.setTimeout(hideTip, TIP_MS[tip]);
+  // The keys it names are on the small line above the instruments too, from now on.
+  if (tip === "steer") {
+    $("keyhint").hidden = false;
+    setTimeout(hideKeyHint, 60_000);
+  }
+}
+$("tip-x").addEventListener("click", hideTip);
+// Doing what the steering tip says ends it.
+addEventListener("keydown", (e) => {
+  if (tipUp === "steer" && ["ArrowLeft", "ArrowRight", "Space"].includes(e.code)) hideTip();
+});
+function goalCard(km: number, first = false): Promise<void> {
   const card = $("goalcard");
   $("goalkm").textContent = `${Math.round(km).toLocaleString("en-US")} km.`;
+  // A first crossing: what the game is and who the ghost is, and it waits to be read (helm/guide.ts).
+  if (first) {
+    const w = goalWords(km);
+    card.querySelector("h2")!.textContent = w.head;
+    card.querySelector("p")!.textContent = w.body;
+    $("goalmore").textContent = TOUCH.matches ? "Tap to carry on." : "Click or press any key to carry on.";
+    $("goalmore").hidden = false;
+    card.classList.add("first");
+  }
   card.hidden = false;
   document.body.classList.add("goal");
   judging = qstat.source === "auto" && !qstat.stepped;
@@ -4053,10 +4127,12 @@ function goalCard(km: number): Promise<void> {
       document.body.classList.remove("goal");
       page.scene = "";
       setTimeout(() => (card.hidden = true), 800);
+      endGoal = null;
       done();
     };
+    endGoal = end;
     // ?hold=goal keeps it up, for frames on slow software graphics.
-    const timer = params.get("hold") === "goal" ? 0 : setTimeout(end, GOAL_MS);
+    const timer = params.get("hold") === "goal" ? 0 : setTimeout(end, first ? TIP_MS.goal : GOAL_MS);
     addEventListener("keydown", end);
     addEventListener("pointerdown", end);
   });
@@ -4490,8 +4566,17 @@ async function begin(): Promise<void> {
     };
     if (!shared && !SPECTATE && mode === "hands_on" && !chosenChallenge() && finishesOffLisbon() && !page.status?.over) {
       hud.sailing(null); // the bar steps away; the drawer waits for the card
-      void goalCard(page.status!.boat.km_to_finish).then(opening);
-    } else opening();
+      // A first crossing (helm/guide.ts): the goal in full, then one tip at a time. The drawer stays shut
+      // until the player opens it: its dial, buttons, slider and forecast all at once were a wall (John, 24 Nov).
+      guided = NEWCOMER || LEARNING;
+      page.guided = guided;
+      if (guided) markSeen("goal");
+      void goalCard(page.status!.boat.km_to_finish, guided).then(guided ? () => showTip(wasSeen("call") ? "steer" : "time") : opening);
+    } else {
+      opening();
+      // A first crossing picked up again (Continue your voyage): the tips not yet shown still come.
+      if (LEARNING && RESUMED && mode === "hands_on" && !page.status?.over) guided = page.guided = true;
+    }
     askSoundLater();
   } catch (e) {
     $("loading").hidden = true;
@@ -4591,7 +4676,14 @@ if (ONE_CLICK) {
   $("start").hidden = true;
   $("loadtext").textContent = "Getting the weather ready…";
   $("loading").hidden = false;
-  void challengesReady.finally(() => void begin());
+  // She is seen lying at the pier before she casts off: begin() waits for the harbour to be drawn, but
+  // never long (a slow connection casts off into a harbour still arriving, as a quick press of Set sail does).
+  const harbourDrawn = new Promise<void>((done) => {
+    const t0 = performance.now();
+    const look = () => (!NEWCOMER || !dock || (page.frames > 2 && page.land.buildings > 0) || performance.now() - t0 > 2500 ? done() : void setTimeout(look, 100));
+    look();
+  });
+  void Promise.allSettled([challengesReady, harbourDrawn]).then(() => void begin());
 }
 $("send").addEventListener("click", () => void sendOrder());
 $("share").addEventListener("click", () => void shareLink());

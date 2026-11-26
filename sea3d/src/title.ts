@@ -5,6 +5,7 @@
  */
 import { currentBoat, onBoatChange } from "./ui/myboatAdapter";
 import { continueLink, loadVoyage, offerWords } from "./helm/voyageSave";
+import { START_HERE, isNewcomer, setSailLink } from "./helm/guide";
 
 const KEY = "boatsim.title.dismissed";
 
@@ -61,7 +62,17 @@ export function mountTitle(): void {
     const v = loadVoyage();
     a.hidden = !v;
     el.classList.toggle("has-voyage", !!v); // a phone drops the intro line: a returning player has read it (Elena)
-    document.getElementById("t-setsail")?.classList.toggle("main", !v);
+    const set = document.getElementById("t-setsail") as HTMLAnchorElement | null;
+    set?.classList.toggle("main", !v);
+    // Someone who has never played goes straight to sea, with one line that says so (helm/guide.ts);
+    // anyone else gets the Set sail card and its choices, as before.
+    const first = isNewcomer();
+    if (set) {
+      set.href = `./${setSailLink(first)}`;
+      set.classList.toggle("first", first);
+      const line = set.querySelector("small");
+      if (line && first) line.textContent = START_HERE;
+    }
     if (!v) return;
     a.href = `./${continueLink(v)}`;
     document.getElementById("t-continue-sub")!.textContent = offerWords(v); // the boat's name is the player's text
