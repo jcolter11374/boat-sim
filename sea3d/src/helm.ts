@@ -59,7 +59,7 @@ import { statusAtPicture } from "./helm/readings";
 import { waysOn, type EndMode, type WayCtx, type WayId } from "./helm/ending";
 import { LANDMARKS, offsetOf as landmarkOffset } from "./land/landmarks";
 import { AZORES_OFF_PICO, azoresDue, azoresNote, azoresSmallPrint, azoresText, azoresYes } from "./helm/azores";
-import { DOCK_LOOK, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, LANDING_LOOK, LANDING_S, LANDING_WAY, leavesFromDock } from "./helm/dock";
+import { DOCK_LOOK, DOCK_LOW, DOCK_MIN_S, DOCK_PULL, DOCK_SEA, Dock, LANDING_LOOK, LANDING_S, LANDING_WAY, leavesFromDock } from "./helm/dock";
 import { LOOK, boardWords, dragLook, eyeFor, lensAfterWheel } from "./helm/onboard";
 import { ARRIVAL_AT, ARRIVAL_S, CABO_DA_ROCA, arrivalShot, bannerSpot, onScreen, type Box } from "./helm/arrivalShot";
 import { HIGHLIGHT_WORDS, raceHighlights, watchHighlights } from "./helm/highlights";
@@ -2083,8 +2083,12 @@ function dockView(): void {
   if (landing) dockSwing = Math.atan2(-off.x, off.z) - THREE.MathUtils.degToRad(LANDING_LOOK);
   else if (dockSwing === null) dockSwing = Math.atan2(-off.x, off.z) - THREE.MathUtils.degToRad(DOCK_LOOK);
   off.applyAxisAngle(DOCK_UP, dockSwing).multiplyScalar(DOCK_PULL);
+  off.y *= DOCK_LOW; // from nearer the water: the town is a waterfront behind her, not a map seen from above
   camera.position.copy(controls.target).add(off);
   camera.lookAt(controls.target);
+  // frameBoat places her on the screen by projecting through this camera: its matrices must be this view's,
+  // not the last one drawn (without this she slid to the corner of the picture: John, 24 Nov 2026).
+  camera.updateMatrixWorld();
   dockViewOn = true;
 }
 function dockViewOff(): void {
