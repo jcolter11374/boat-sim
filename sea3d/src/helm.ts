@@ -2060,8 +2060,9 @@ let practiceWind: { u: number; v: number } | null = null;
 let practiceN = 0;
 /** Where the practice spell began (the boat is there plus the wheel's x, y), or null. */
 /** At the dock before a crossing of your own, and on her way out of the harbour (helm/dock.ts): display
- *  only. ?dock=0 starts on the open sea as before. */
-let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") !== "0" ? new Dock() : null;
+ *  only. Off unless asked for with ?dock=1 (John, 24 Nov 2026, of the harbour behind the Set sail card: "it looks
+ *  terrible"): the card opens on the open sea until the harbour is good enough to show. docs/qa/harbour-off-2026-11.md. */
+let dock: Dock | null = !shared && !SPECTATE && !PRACTICE && !SPOT && params.get("dock") === "1" ? new Dock() : null;
 /** Arriving at a dock in Portugal (helm/dock.ts): after the finish scene she comes alongside a pontoon at Cascais.
  *  Display only, after the clock has stopped. Null until then, and on a copy of the site without Cascais's town. */
 let landing: Dock | null = null;
@@ -2141,7 +2142,7 @@ async function dockCut(): Promise<void> {
 /** After the finish scene: the view moves on to Cascais and she comes alongside in the marina, the old town
  *  behind her; the results follow, with her still in view behind them. Nothing here is timed or simulated: the
  *  clock stopped at the finish line, 330 km out, and the words say so. Without Cascais's town on this copy of
- *  the site (or with ?dock=0) there is no scene, and the results come up off Cabo da Roca as before. */
+ *  the site (or with ?dock=0) there is no scene (this arrival is on by default; only the harbour at the start needs ?dock=1), and the results come up off Cabo da Roca as before. */
 async function landingScene(): Promise<void> {
   if (!land?.has("lisbon") || params.get("dock") === "0") return;
   // Is the town on this copy of the site at all? Asked before anything is shown, so a site without it
